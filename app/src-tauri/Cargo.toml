@@ -1,0 +1,23 @@
+[package]
+name = "quiz-show"
+description = "Desktop quiz show with hardware buzzers"
+version.workspace = true
+edition.workspace = true
+
+[lib]
+# The `_lib` suffix keeps the lib name distinct from the bin name, which matters
+# on Windows: https://github.com/rust-lang/cargo/issues/8519
+name = "quiz_show_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+quiz-core = { path = "../../crates/quiz-core" }
+buzzers = { path = "../../crates/buzzers" }
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true

@@ -1,0 +1,119 @@
+feature,area,priority,original,clone,notes
+Create save and reopen a quiz,studio,must,yes,no,§3.2; original uses .qx files
+Slide list with drag to reorder duplicate and delete,studio,must,yes,no,§3.2.4 thumbnails panel
+Multiple-choice question with 2 to 6 answers and one correct answer,studio,must,yes,no,§3.4.1.1
+Picture on a question slide,studio,must,yes,no,§3.7.1; also show it on phones (§4.2.1 option)
+Info slide without interaction (billboard),studio,must,yes,no,§3.4.2; round intros and announcements
+End-of-round slide that shows the leaderboard,studio,must,yes,no,§3.4.3; rounds are derived from these slides
+Answer time per question including untimed questions,studio,must,yes,no,§3.2.5.1 Answer time 0 = untimed
+Points for a correct answer and optional penalty for a wrong one,scoring,must,yes,no,§3.4.1 points section
+Everyone-answers mode,scoring,must,yes,no,§3.4.1 voting
+Fastest-finger mode with the quizmaster judging a verbal answer,scoring,must,yes,no,§5.4.5.1; wrong answer locks the player out and the clock resumes
+Quizmaster notes per slide visible in the Director,studio,must,yes,no,§3.2.8
+Players join from a phone browser with a PIN or QR code and a name,player,must,yes,no,§5.2.3; no app install
+Rejoin after the phone sleeps keeps the same player and score,player,must,yes,no,original documents it for bingo cards (§3.4.14.2.2); we need it for every game
+Phone shows the question and the right input for its type,player,must,yes,no,§5.2.4.1 question types
+Phone confirms that the answer was received,player,must,yes,no,§5.7.8.3 confirmation messages
+Lobby on the host screen with PIN QR and the joined players,host screen,must,yes,no,§5.4.2 welcome screen; Q key for the QR code §5.2.3
+Question screen with clock answered count and points available,host screen,must,yes,no,§5.4.5 information panel
+Reveal the correct answer after a question,host screen,must,yes,no,§4.7 end-of-question actions
+Fastest-finger buzz bar with name and a big right or wrong verdict,host screen,must,yes,no,§5.4.5.1
+Leaderboard top 20,host screen,must,yes,no,§5.4.6
+Final scores with a 3-2-1 reveal,host screen,must,yes,no,§5.4.9 and the Show top three option §4.6
+Host screen scales to the projector at 16:9,host screen,must,yes,no,§3.14.11; 4:3 and 16:10 exist in the original
+Next and advance control from the Director,director,must,yes,no,§5.7 command panel; Space key on host
+Director runs on a second device (laptop tablet or phone),director,must,yes,no,§5.7 and §5.2.4.4; native in a web app
+Judge right or wrong from the Director,director,must,yes,no,§5.2.4.4 Right/Wrong buttons
+Edit a player's score and add or subtract points,director,must,yes,no,§5.7.2
+Teams table with name score and enabled state,director,must,yes,no,§5.7.2 Teams view
+Resume a live show after a crash or reload,reliability,must,yes,no,§9.1 recovery mode: snapshot after every completed question; not in test mode
+Test run of a quiz with simulated players,studio,must,yes,no,§3.15 Simulate keypads; also our way to test the realtime layer
+Unique player names in one session,player,must,yes,no,§5.2.3 asks for a unique name
+Points decrease over the countdown (start and end values),scoring,should,yes,no,§3.4.1 interpolation
+Speed bonus for the three fastest correct players,scoring,should,yes,no,§3.4.1 Speed Bonus
+Penalty when no answer is given,scoring,should,yes,no,§3.2.5.1 Points to lose on no answer
+Number answer with exact value or range,studio,should,yes,no,§3.4.1.3.1 e.g. 80-90
+Number answer where the nearest n players win,scoring,should,yes,no,§3.4.1.3.1 Nearest wins
+Text answer with alternatives and typo tolerance,scoring,should,yes,no,§3.4.1.3.2; we add Czech diacritics handling
+Test question that does not count,studio,should,yes,no,§5.4.5.4
+Audience poll that does not score plus a chart,studio,should,yes,no,§3.4.6
+Delay before answers appear so the quizmaster can read the question,studio,should,yes,no,§3.2.5.1 Delay before answer
+Sound clip on a question,studio,should,yes,no,§3.7.4
+Background image per slide,studio,should,yes,no,§3.2.5.1 Background image
+Spreadsheet import of questions (one sheet per round),studio,should,yes,no,§3.10.1 columns Q A1..A6 CAT NOTES; CSV first
+Table view to edit all questions at once,studio,should,yes,no,§3.2.6.2
+Full-screen slide preview,studio,should,yes,no,§3.2.6.1 F5
+Response chart per answer,host screen,should,yes,no,§5.4.8 key C
+Phone shows correct or incorrect and points won,player,should,yes,no,§5.2.4.1 feedback screens
+Phone shows own score and rank,player,should,yes,no,§5.2.4.1 intermediate and final scores
+Pause and resume the countdown,director,should,yes,no,§5.5.1 key P
+Stop a paused question,director,should,yes,no,§5.2.4.4 Stop
+Question list with current and visited state and jump to a question,director,should,yes,no,§5.7.1
+Undo the score changes of the last question,director,should,yes,no,§5.7.2
+Live responses view showing who has not answered,director,should,yes,no,§5.7.4
+Disable enable and remove a player,director,should,yes,no,§5.7.2
+Keyboard shortcuts on the host screen (Space next S scores P pause),host screen,should,yes,no,§5.5.1
+Show settings: show correct answer and allow revising answers,settings,should,yes,no,§4.6
+Show settings: run the clock for the full time,settings,should,yes,no,§4.6
+Configurable end-of-question steps,settings,should,yes,no,§4.7
+Sounds for countdown correct incorrect and background music,settings,should,yes,no,§4.4; we need our own royalty-free sounds
+Play in groups or teams with group scoring,settings,should,yes,no,§4.2.2.1 and §4.3.2.1 lockout and first/sum/average
+Round scores and round winners,host screen,should,yes,no,§5.4.6 Ctrl+S and §5.4.7 Ctrl+E
+Works without internet on a local network,reliability,should,yes,no,§4.2.1 local Wi-Fi mode; decide in /replica-architect
+Export results to a spreadsheet,results,should,yes,no,§7.1 Analyzer export
+Reversed leaderboard (lowest first),host screen,could,yes,no,§5.4.6 Shift+S
+Multiple correct answers with correctness percentages,studio,could,yes,no,§3.4.1.2
+Ordered answers with exact or partial scoring,studio,could,yes,no,§3.4.1.2
+Answers revealed one by one,studio,could,yes,no,§3.2.5.1 Show answers action
+First-letter answer with an A-Z grid,studio,could,yes,no,§3.4.1.3.3
+Multi-field text answer (e.g. artist and title),studio,could,yes,no,§3.4.1.3.2.1
+Video on a question,studio,could,yes,no,§3.7.5
+Text reveal animation word by word,studio,could,yes,no,§3.14.3
+Categories as reusable slide styles,studio,could,yes,no,§3.3
+Steal points on a wrong buzz,scoring,could,yes,no,§3.2.5.1
+Next in line may answer after a wrong buzz,scoring,could,yes,no,§4.6 Allow the next in line to answer
+Wager slide,studio,could,yes,no,§5.4.5.8
+Majority-rules question,studio,could,yes,no,§3.4.8
+Last-man-standing question,studio,could,yes,no,§5.4.5.6
+Demographic groups formed during the show,studio,could,yes,no,§5.4.5.5
+End-of-round elimination of the lowest or chosen players,host screen,could,yes,no,§5.4.5.3
+Topic board round (pick topic and points),studio,could,yes,no,§3.4.10; do not call it Jeopardy
+Ladder round with safety nets,studio,could,yes,no,§3.4.11; do not call it Millionaire
+Survey round where players guess the most popular answers,studio,could,yes,no,§3.4.12; do not call it Family Feud
+Speed round for one player,studio,could,yes,no,§3.4.13
+Bingo round (number trivia or music),studio,could,yes,no,§3.4.14
+Jokers (time warp free ride point boost),player,could,yes,no,§3.14.4
+Thumbs up or down poll on a verbal answer,player,could,yes,no,§5.2.4.3
+Chat between players and the quizmaster,director,could,yes,no,§5.7.8.2
+Waiting room where the host admits players,settings,could,yes,no,§4.2.3
+Entry codes checked when joining,settings,could,yes,no,§5.2.6 tickets; useful for paid fundraisers
+Branding of the player page (logo and colour),player,could,yes,no,§5.2.5
+Personal jingles for players,player,could,yes,no,§4.4
+Sound pad for the quizmaster,director,could,yes,no,§5.2.4.4
+Media player in the Director (show a picture or video full screen),director,could,yes,no,§5.7.7
+Edit a question during the show,director,could,yes,no,§5.7.1 Edit question
+Per-question history of every answer,director,could,yes,no,§5.7.3 Analyzer view
+Slide routing based on a vote,studio,could,yes,no,§3.14.2
+Bilingual quiz shown side by side,studio,could,yes,no,§3.9
+Playlists of several quizzes with scores carried over,studio,could,yes,no,§3.14.14
+Quiz Wizard for round skeletons,studio,could,yes,no,§3.2.7
+Shuffle questions with a percentage to play,settings,could,yes,no,§4.6 Randomize questions
+Headless mode without a projector,settings,could,yes,no,§4.2.1
+Mini games (random winner draw wheel auction and others),mini games,could,yes,no,§3.5; randomizer and auction fit fundraisers; the rest is post-MVP
+AI question generation,studio,could,yes,no,§3.8; original sells AI credits; would use our own API key
+Read questions aloud with text-to-speech,studio,could,yes,no,§3.7.3; Web Speech API in the browser
+Connection quality test for players,director,could,yes,no,§5.7.8.1
+Generic USB buzzers in the browser,hardware,could,yes,no,via WebHID in Chromium only; not their proprietary receivers
+Proprietary keypads buzzers and receivers,hardware,could,yes,skip,vendor RF hardware and drivers; not rebuildable as software
+Galaxy LED devices and wireless scoreboards,hardware,could,yes,skip,vendor hardware
+Cloud servers buzzerpad.com and buzzerpad.eu,services,could,yes,skip,their hosted service; we run our own backend
+Quiz Center content subscriptions,services,could,yes,skip,their content distribution business
+Licensing activation DRM and quiz expiry,services,could,yes,skip,commercial licensing; not needed
+Example quizzes sounds skins and mini game assets,content,could,yes,skip,their copyrighted content
+TV-format names for rounds,content,could,yes,skip,trademarks; use generic names
+QuizXpress Solo trade-show kiosk,other,could,yes,skip,lead capture for trade shows; not needed for our events
+Spotify import,studio,could,yes,skip,depends on Spotify API terms
+PowerPoint toggle on the presenter remote,other,could,yes,skip,Windows-only integration
+Runs in any browser on any OS for host director and editor,platform,must,no,no,the reason this project exists
+Czech user interface,platform,should,no,no,original UI languages not checked; our audience is Czech
+Diacritics-insensitive text matching,scoring,should,no,no,e.g. Plzen matches Plzeň; decide the tolerance rules

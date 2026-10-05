@@ -1,0 +1,9 @@
+[package]
+name = "buzzers"
+description = "Buzzer drivers behind one trait: virtual (keyboard and on-screen) and hardware receivers."
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+quiz-core = { path = "../quiz-core" }
+thiserror.workspace = true

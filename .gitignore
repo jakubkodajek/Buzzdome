@@ -1,0 +1,21 @@
+# Claude Code personal files
+CLAUDE.local.md
+.claude/settings.local.json
+
+# Reference material from the original app: copyrighted, never committed or shipped
+replica/sources/
+replica/screens/
+# USB captures of the original software talking to the buzzer receiver
+replica/captures/
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# OS and tooling
+.DS_Store
+node_modules/
+target/
+__pycache__/
+*.pyc
