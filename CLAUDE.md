@@ -47,6 +47,8 @@ on `PATH` first (macOS dev machine).
 | core + driver tests | `cargo test --workspace` |
 | lint Rust | `cargo clippy --workspace --all-targets` |
 | type-check UI | `cd app && npx tsc --noEmit` |
+| UI preview in a browser (mocked backend) | `cd app && npm run dev`, then `/preview.html?window=host&scene=running` (scenes in `app/src/dev/preview.tsx`) |
+| Windows installer | CI: `.github/workflows/windows-build.yml` on every push, artifact `quiz-show-windows` |
 | build installer | `cd app && npm run tauri build` (Windows build must run on Windows) |
 
 Layout: `crates/quiz-core` (model, game state machine, scoring, view),

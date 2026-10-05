@@ -25,13 +25,13 @@ Status keys: `[x]` done, `[~]` in progress, `[ ]` not started.
 - [x] Game state machine and scoring rules, documented next to the code
 - [x] Persistence and crash recovery: append-only command journal, replayed on resume
 - [~] `BuzzerDriver` trait: keyboard and virtual done, hardware receiver to do
-- [ ] Screen designs: host screen (question, fastest finger, judged, leaderboard, final), Director, editor
+- [~] Screen designs: host screen and Director follow the reference layout (done); editor to do
 
 ## Phase 3: Build
 
 ### M0: Skeleton (week 1)
 - [x] Tauri app with Director window and a full-screen Host window on a chosen monitor
-- [~] Pure Rust core crate with unit tests (done); CI build for Windows (to do)
+- [~] Pure Rust core crate with unit tests (done); CI build for Windows (`.github/workflows/windows-build.yml`, waits for the first push)
 - [x] Keyboard and on-screen virtual buzzers feeding the same event stream
 
 ### M1: Playable core (week 1-2)

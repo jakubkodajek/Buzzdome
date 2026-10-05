@@ -25,6 +25,12 @@ export type SlideContent =
 
 export type Slide = SlideContent & { id: string; notes: string };
 
+export interface Quiz {
+  schemaVersion: number;
+  title: string;
+  slides: Slide[];
+}
+
 export interface Clock {
   limitMs: number | null;
   elapsedBeforeMs: number;
@@ -57,8 +63,12 @@ export interface PlayerView {
   name: string;
   score: number;
   enabled: boolean;
+  totalAnswerMs: number;
   rank: number | null;
   answered: boolean;
+  /** Director only: never show before the question closes. */
+  answer: Button | null;
+  answerMs: number | null;
   lockedOut: boolean;
   delta: number | null;
 }

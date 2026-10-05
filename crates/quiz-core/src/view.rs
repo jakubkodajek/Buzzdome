@@ -1,6 +1,6 @@
 //! What the windows render: a read-only snapshot of the game at one moment.
 
-use crate::game::{BuzzerId, Game, Phase, QuestionStep};
+use crate::game::{BuzzerId, Button, Game, Phase, QuestionStep};
 use crate::model::{SlideContent, Slide};
 use serde::Serialize;
 
@@ -40,9 +40,14 @@ pub struct PlayerView {
     pub name: String,
     pub score: i32,
     pub enabled: bool,
+    pub total_answer_ms: u64,
     /// 1-based position in the ranking; `None` for disabled players.
     pub rank: Option<usize>,
     pub answered: bool,
+    /// The player's answer in the current question. For the Director only;
+    /// the projector must not show it before the question closes.
+    pub answer: Option<Button>,
+    pub answer_ms: Option<u64>,
     pub locked_out: bool,
     /// Score change from the current question.
     pub delta: Option<i32>,
@@ -66,8 +71,11 @@ impl Game {
                 name: p.name.clone(),
                 score: p.score,
                 enabled: p.enabled,
+                total_answer_ms: p.total_answer_ms,
                 rank: rank_of(p.buzzer),
                 answered: self.responses().contains_key(&p.buzzer),
+                answer: self.responses().get(&p.buzzer).map(|r| r.button),
+                answer_ms: self.responses().get(&p.buzzer).map(|r| r.elapsed_ms),
                 locked_out: self.locked_out().contains(&p.buzzer),
                 delta: self.deltas().get(&p.buzzer).copied(),
             })

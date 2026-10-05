@@ -1,19 +1,22 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useEffect, useState } from "react";
-import type { Command, Cue, GameView, MonitorInfo, SessionSummary } from "./types";
+import type { Command, Cue, GameView, MonitorInfo, Quiz, SessionSummary } from "./types";
 
 export const api = {
   getView: () => invoke<GameView | null>("get_view"),
+  getQuiz: () => invoke<Quiz | null>("get_quiz"),
   startShowFromFile: (path: string) => invoke<void>("start_show_from_file", { path }),
   startDemoShow: () => invoke<void>("start_demo_show"),
   lastSession: () => invoke<SessionSummary | null>("last_session"),
   resumeLastSession: () => invoke<void>("resume_last_session"),
+  endShow: () => invoke<void>("end_show"),
   dispatch: (command: Command) => invoke<void>("dispatch", { command }),
   listMonitors: () => invoke<MonitorInfo[]>("list_monitors"),
   openHostWindow: (monitor: number | null, fullscreen: boolean) =>
     invoke<void>("open_host_window", { monitor, fullscreen }),
   closeHostWindow: () => invoke<void>("close_host_window"),
+  hostWindowOpen: () => invoke<boolean>("host_window_open"),
 };
 
 /** The latest game state, pushed by the backend after every change. */
@@ -59,4 +62,30 @@ export function useRemainingMs(view: GameView | null, receivedAt: number): numbe
   if (!clock || clock.remainingMs === null) return null;
   if (!clock.running) return clock.remainingMs;
   return Math.max(0, clock.remainingMs - Math.max(0, now - receivedAt));
+}
+
+/** The loaded quiz; refetched when a different show starts. */
+export function useQuiz(view: GameView | null): Quiz | null {
+  const [quiz, setQuiz] = useState<Quiz | null>(null);
+  const key = view ? `${view.quizTitle}:${view.slideCount}` : null;
+  useEffect(() => {
+    if (!key) {
+      setQuiz(null);
+      return;
+    }
+    let alive = true;
+    api.getQuiz().then((q) => alive && setQuiz(q));
+    return () => {
+      alive = false;
+    };
+  }, [key]);
+  return quiz;
+}
+
+/** Number of this question among all question slides, e.g. 3 of 12. */
+export function questionNumber(quiz: Quiz | null, slideIndex: number): { n: number; total: number } | null {
+  if (!quiz) return null;
+  const questions = quiz.slides.map((s, i) => [s.type, i] as const).filter(([type]) => type === "question");
+  const n = questions.findIndex(([, i]) => i === slideIndex);
+  return n < 0 ? null : { n: n + 1, total: questions.length };
 }

@@ -85,6 +85,13 @@ fn get_view(state: State<AppState>) -> Option<GameView> {
     inner.game.as_ref().map(|g| g.view(now_ms()))
 }
 
+/// The whole quiz, for the Director's slide list and previews.
+#[tauri::command]
+fn get_quiz(state: State<AppState>) -> Option<Quiz> {
+    let inner = state.0.lock().unwrap();
+    inner.game.as_ref().map(|g| g.quiz().clone())
+}
+
 #[tauri::command]
 fn start_show_from_file(app: AppHandle, state: State<AppState>, path: String) -> CmdResult<()> {
     let json = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
@@ -120,6 +127,15 @@ fn resume_last_session(app: AppHandle, state: State<AppState>) -> CmdResult<()> 
             Ok(())
         }
     }
+}
+
+/// Closes the running show. Its journal stays on disk, so it can be resumed.
+#[tauri::command]
+fn end_show(app: AppHandle, state: State<AppState>) {
+    let mut inner = state.0.lock().unwrap();
+    inner.game = None;
+    inner.session = None;
+    emit_state(&app, None);
 }
 
 #[tauri::command]
@@ -174,6 +190,11 @@ fn open_host_window(app: AppHandle, monitor: Option<usize>, fullscreen: bool) ->
 }
 
 #[tauri::command]
+fn host_window_open(app: AppHandle) -> bool {
+    app.get_webview_window(HOST_LABEL).is_some()
+}
+
+#[tauri::command]
 fn close_host_window(app: AppHandle) -> CmdResult<()> {
     match app.get_webview_window(HOST_LABEL) {
         Some(window) => window.close().map_err(|e| e.to_string()),
@@ -211,14 +232,17 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             get_view,
+            get_quiz,
             start_show_from_file,
             start_demo_show,
             last_session,
             resume_last_session,
+            end_show,
             dispatch,
             list_monitors,
             open_host_window,
             close_host_window,
+            host_window_open,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
