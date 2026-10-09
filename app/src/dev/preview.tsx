@@ -130,6 +130,14 @@ const sceneQuiz: Quiz = {
   slides: quiz.slides.map((slide, i) => (current?.slide && i === current.slideIndex ? current.slide : slide)),
 };
 
+// The quiz the editor opens: the demo quiz, with media on its first question.
+const editorQuiz: Quiz = {
+  ...quiz,
+  slides: quiz.slides.map((slide, i) =>
+    i === 1 ? { ...slide, picture: "media/landscape.svg", sound: { file: "media/song.mp3", start: "onDemand", repeat: false, volume: 80 } } : slide,
+  ),
+};
+
 clearMocks();
 mockWindows(windowLabel, windowLabel === "host" ? "director" : "host");
 mockIPC((cmd) => {
@@ -152,6 +160,10 @@ mockIPC((cmd) => {
       return { meta: { quizTitle: quiz.title, sourcePath: null, startedMs: Date.now() - 3_600_000 }, commandCount: 57 };
     case "plugin:event|listen":
       return 1;
+    case "editor_load":
+      return { quiz: editorQuiz, sourcePath: "C:\\Kvizy\\hospodsky-kviz.quiz", unsaved: false, mediaRoot: "/src/dev/", problems: [] };
+    case "editor_update":
+      return [];
     default:
       return null;
   }

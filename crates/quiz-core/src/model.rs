@@ -153,8 +153,13 @@ impl Question {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// A problem that keeps a quiz from being played, for the editor and for
+/// error messages.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
+#[serde(rename_all = "camelCase")]
 pub struct ValidationError {
+    /// The slide it is on; none for problems of the whole quiz.
     pub slide_id: Option<String>,
     pub message: String,
 }

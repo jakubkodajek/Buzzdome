@@ -246,6 +246,16 @@ fn final_scores_reveal_step_by_step() {
 }
 
 #[test]
+fn go_to_final_skips_the_remaining_slides() {
+    let mut show = Show::new(vec![question("q1", AnswerMode::Everyone), question("q2", AnswerMode::Everyone)]);
+    show.run(0, Command::Next).unwrap();
+    show.run(10, Command::Next).unwrap();
+    show.run(20, Command::GoToFinal).unwrap();
+    assert_eq!(show.game.phase(), &Phase::Final { step: 0 });
+    assert!(show.game.current_slide().is_none());
+}
+
+#[test]
 fn clock_view_carries_the_falling_points() {
     let mut show = Show::new(vec![question("q1", AnswerMode::Everyone)]);
     show.press(0, 1, Button::Big);

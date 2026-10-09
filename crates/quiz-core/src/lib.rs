@@ -8,5 +8,5 @@ pub mod view;
 
 pub use game::{BuzzerId, Button, Clock, Command, Cue, Effect, Game, GameError, Light, Phase, QuestionStep, Stamped};
 pub use media::{is_safe_reference, MediaKind, SoundClip, SoundStart, VideoClip, MEDIA_PREFIX};
-pub use model::{AnswerMode, Question, Quiz, Slide, SlideContent};
+pub use model::{AnswerMode, Question, Quiz, Slide, SlideContent, ValidationError, SCHEMA_VERSION};
 pub use view::GameView;

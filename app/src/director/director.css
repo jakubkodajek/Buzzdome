@@ -214,6 +214,13 @@
   font-variant-numeric: tabular-nums;
 }
 
+.status-test-run {
+  padding: 0 10px;
+  border-radius: 9px;
+  color: #2b1b00;
+  background: #ffc94d;
+}
+
 /* Data grids */
 
 .table-wrap {
@@ -314,8 +321,79 @@
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
 }
 
-.split > .table-wrap {
+.split.vertical {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.split.horizontal > .table-wrap {
   border-right: 1px solid var(--line);
+}
+
+.split.vertical > .table-wrap {
+  border-bottom: 1px solid var(--line);
+}
+
+.slide-grid td {
+  vertical-align: middle;
+}
+
+.grid .thumb-cell {
+  width: 104px;
+  padding: 3px 4px;
+}
+
+.grid-thumbnail {
+  position: relative;
+  width: 96px;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  background: #000;
+  pointer-events: none;
+}
+
+/* Dark icon toolbar above the slide table */
+
+.dark-toolbar {
+  gap: 2px;
+  padding: 3px 6px;
+  background: linear-gradient(#4b4b4b, #3a3a3a);
+}
+
+.director .tool-button {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: #f2f2f2;
+}
+
+.director .tool-button svg {
+  width: 18px;
+  height: 18px;
+}
+
+.director .tool-button:hover:not(:disabled) {
+  border-color: #6f6f6f;
+  background: #575757;
+}
+
+.director .tool-button[aria-pressed="true"] {
+  border-color: #7d7d7d;
+  background: #5f5f5f;
+}
+
+.director .tool-button:disabled {
+  color: #8d8d8d;
+}
+
+.toolbar-separator {
+  width: 1px;
+  height: 20px;
+  margin: 0 6px;
+  background: #6a6a6a;
 }
 
 .preview {
@@ -533,7 +611,7 @@
   background: var(--bad);
   border-radius: 4px;
   white-space: pre-line;
-  z-index: 10;
+  z-index: 30;
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
 }
 

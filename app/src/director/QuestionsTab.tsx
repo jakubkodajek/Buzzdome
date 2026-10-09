@@ -1,18 +1,27 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ANSWER_LETTERS } from "../answers";
 import { useApp, useDispatch } from "../app-context";
+import { SlideThumbnail } from "../host/SlideThumbnail";
 import type { StringKey } from "../i18n";
-import { questionNumbers, slideTitle } from "../quiz";
+import { NextIcon, TrophyIcon } from "../icons";
+import { mediaFileName } from "../media";
+import { questionNumbers, SLIDE_TYPE_LABEL, slideTitle } from "../quiz";
 import { SlideMedia } from "../slide-media";
 import type { GameView, Quiz, Slide } from "../types";
 
-const TYPE_LABEL: Record<Slide["type"], StringKey> = {
-  billboard: "typeBillboard",
-  question: "typeQuestion",
-  endOfRound: "typeEndOfRound",
-};
+type Layout = "horizontal" | "vertical";
 
-/** Slide table with the current slide highlighted, and a preview pane. */
+const LAYOUT_KEY = "quiz-show.questions-layout";
+
+function readLayout(): Layout {
+  try {
+    return localStorage.getItem(LAYOUT_KEY) === "vertical" ? "vertical" : "horizontal";
+  } catch {
+    return "horizontal";
+  }
+}
+
+/** Slide table with the current slide highlighted, and a preview pane beside or under it. */
 export function QuestionsTab({ view, quiz }: { view: GameView; quiz: Quiz | null }) {
   const { t } = useApp();
   const dispatch = useDispatch();
@@ -23,6 +32,15 @@ export function QuestionsTab({ view, quiz }: { view: GameView; quiz: Quiz | null
   const setSelected = (slide: number) => setSelection({ slide, madeOn: current });
   const shown = selected ?? current ?? 0;
   const currentRow = useRef<HTMLTableRowElement>(null);
+  const [layout, setLayoutState] = useState<Layout>(readLayout);
+  const setLayout = (next: Layout) => {
+    setLayoutState(next);
+    try {
+      localStorage.setItem(LAYOUT_KEY, next);
+    } catch {
+      // The layout then lasts only until the window closes.
+    }
+  };
 
   useEffect(() => {
     currentRow.current?.scrollIntoView({ block: "nearest" });
@@ -30,24 +48,38 @@ export function QuestionsTab({ view, quiz }: { view: GameView; quiz: Quiz | null
 
   if (!quiz) return null;
   const numbers = questionNumbers(quiz);
+  const questionCount = numbers.filter((n) => n !== null).length;
   const preview = quiz.slides[shown];
   const goTo = (slide: number) => dispatch({ type: "goTo", slide });
 
   return (
     <div className="questions-tab">
-      <div className="toolbar">
-        <button disabled={selected === null || selected === current} onClick={() => selected !== null && goTo(selected)}>
+      <div className="toolbar dark-toolbar">
+        <ToolButton icon={<NextIcon />} disabled={selected === null || selected === current} onClick={() => selected !== null && goTo(selected)}>
           {t("goToSelected")}
-        </button>
+        </ToolButton>
+        <ToolButton icon={<TrophyIcon />} disabled={view.phase.phase === "final"} onClick={() => dispatch({ type: "goToFinal" })}>
+          {t("goToFinal")}
+        </ToolButton>
+        <span className="toolbar-separator" />
+        <span>{t("layout")}</span>
+        <ToolButton icon={<LayoutIcon vertical={false} />} pressed={layout === "horizontal"} onClick={() => setLayout("horizontal")}>
+          {t("layoutHorizontal")}
+        </ToolButton>
+        <ToolButton icon={<LayoutIcon vertical />} pressed={layout === "vertical"} onClick={() => setLayout("vertical")}>
+          {t("layoutVertical")}
+        </ToolButton>
+        <span className="spacer" />
         {view.nextSlideTitle && <span className="muted">{t("nextUp", { title: view.nextSlideTitle })}</span>}
       </div>
-      <div className="split">
+      <div className={`split ${layout}`}>
         <div className="table-wrap">
-          <table className="grid">
+          <table className="grid slide-grid">
             <thead>
               <tr>
                 <th>{t("colIndex")}</th>
                 <th>{t("colQuestionNo")}</th>
+                <th>{t("colThumbnail")}</th>
                 <th>{t("colType")}</th>
                 <th>{t("colContent")}</th>
               </tr>
@@ -63,7 +95,17 @@ export function QuestionsTab({ view, quiz }: { view: GameView; quiz: Quiz | null
                 >
                   <td className="num">{i + 1}</td>
                   <td className="num">{numbers[i] ?? ""}</td>
-                  <td>{t(TYPE_LABEL[slide.type])}</td>
+                  <td className="thumb-cell">
+                    <SlideThumbnail
+                      className="grid-thumbnail"
+                      slide={slide}
+                      index={i}
+                      count={quiz.slides.length}
+                      questionNumber={numbers[i]}
+                      questionCount={questionCount}
+                    />
+                  </td>
+                  <td>{t(SLIDE_TYPE_LABEL[slide.type])}</td>
                   <td className="ellipsis">{slideTitle(slide)}</td>
                 </tr>
               ))}
@@ -76,13 +118,33 @@ export function QuestionsTab({ view, quiz }: { view: GameView; quiz: Quiz | null
   );
 }
 
+function ToolButton(props: { icon: ReactNode; pressed?: boolean; disabled?: boolean; onClick: () => void; children: ReactNode }) {
+  const { icon, pressed, disabled, onClick, children } = props;
+  return (
+    <button type="button" className="tool-button" aria-pressed={pressed} disabled={disabled} onClick={onClick}>
+      {icon}
+      {children}
+    </button>
+  );
+}
+
+/** Table and preview side by side, or one above the other. */
+function LayoutIcon({ vertical }: { vertical: boolean }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <rect x="3" y="4" width="18" height="16" rx="1" />
+      {vertical ? <path d="M3 12h18" /> : <path d="M12 4v16" />}
+    </svg>
+  );
+}
+
 function SlidePreview({ slide, counts }: { slide: Slide; counts: number[] | null }) {
   const { t } = useApp();
   return (
     <>
       <div className="preview-card">
         <h2 className="preview-title">{slideTitle(slide)}</h2>
-        <SlideMedia slide={slide} className="preview-media" preview />
+        <SlideMedia slide={slide} className="preview-media" mode="preview" />
         {slide.type === "question" && (
           <>
             <p className="muted center">
@@ -128,7 +190,7 @@ function MediaList({ slide }: { slide: Slide }) {
       {present.map(([label, file]) => (
         <div key={label}>
           <dt>{t(label)}</dt>
-          <dd>{file.slice("media/".length)}</dd>
+          <dd>{mediaFileName(file)}</dd>
         </div>
       ))}
     </dl>

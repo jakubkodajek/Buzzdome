@@ -7,7 +7,7 @@
 //! working (and resumes after a crash) even if the original file is moved,
 //! and opening the same file twice reuses the same folder.
 
-use quiz_core::{is_safe_reference, Quiz, MEDIA_PREFIX};
+use quiz_core::{is_safe_reference, Quiz, ValidationError, MEDIA_PREFIX};
 use sha2::{Digest, Sha256};
 use std::fs::{self, File};
 use std::io::{self, Read, Write};
@@ -66,13 +66,11 @@ pub struct Package {
 }
 
 /// Opens a quiz file (`.quiz`, or a plain `quiz.json`), checks it, and unpacks
-/// it into a package folder under `cache`.
+/// it into a package folder under `cache`. The folder is named by the content
+/// hash and must not be changed afterwards; opening the same file reuses it.
 pub fn open(path: &Path, cache: &Path) -> Result<Package> {
-    fs::create_dir_all(cache).context(|| format!("cannot create {}", cache.display()))?;
-    let incoming = cache.join(format!("{INCOMING_PREFIX}{}-{}", std::process::id(), unique_suffix()));
-    let unpacked = if is_zip(path)? { unpack_zip(path, &incoming) } else { copy_json(path, &incoming) };
-    let result = unpacked.and_then(|hash| {
-        let quiz = read_checked(&incoming)?;
+    let incoming = incoming_dir(cache)?;
+    let result = unpack(path, &incoming).and_then(|(quiz, hash)| {
         let root = cache.join(hash);
         if root.exists() {
             // The same content was opened before.
@@ -86,6 +84,33 @@ pub fn open(path: &Path, cache: &Path) -> Result<Package> {
         remove_dir(&incoming);
     }
     result
+}
+
+/// Opens a quiz file into `dest`, which must not exist, replacing nothing
+/// until the file has been unpacked and checked. For a package that will be
+/// edited (the editor's draft).
+pub fn open_into(path: &Path, dest: &Path) -> Result<Quiz> {
+    let parent = dest.parent().unwrap_or(Path::new("."));
+    let incoming = incoming_dir(parent)?;
+    let result = unpack(path, &incoming).and_then(|(quiz, _)| {
+        fs::rename(&incoming, dest).context(|| format!("cannot move the quiz into {}", dest.display()))?;
+        Ok(quiz)
+    });
+    if result.is_err() {
+        remove_dir(&incoming);
+    }
+    result
+}
+
+/// Unpacks into `dest` and checks the result; returns the quiz and the content hash.
+fn unpack(path: &Path, dest: &Path) -> Result<(Quiz, String)> {
+    let hash = if is_zip(path)? { unpack_zip(path, dest)? } else { copy_json(path, dest)? };
+    Ok((read_checked(dest)?, hash))
+}
+
+fn incoming_dir(parent: &Path) -> Result<PathBuf> {
+    fs::create_dir_all(parent).context(|| format!("cannot create {}", parent.display()))?;
+    Ok(parent.join(format!("{INCOMING_PREFIX}{}-{}", std::process::id(), unique_suffix())))
 }
 
 /// Reads and checks the package in `root`: the quiz is valid and every media
@@ -102,54 +127,142 @@ pub fn read_checked(root: &Path) -> Result<Quiz> {
 
 /// Checks the quiz and that every media file it uses exists under `root`.
 pub fn check(quiz: &Quiz, root: &Path) -> Result<()> {
-    let mut problems: Vec<String> = match quiz.validate() {
-        Ok(()) => Vec::new(),
-        Err(errors) => errors.iter().map(ToString::to_string).collect(),
-    };
-    if problems.is_empty() {
-        // References are safe paths now, so joining them stays inside `root`.
-        problems.extend(
-            quiz.media_files()
-                .into_iter()
-                .filter(|file| !root.join(file).is_file())
-                .map(|file| format!("media file missing: {file}")),
-        );
-    }
-    if problems.is_empty() {
+    let found = problems(quiz, root);
+    if found.is_empty() {
         Ok(())
     } else {
-        Err(QuizFileError::Invalid(problems))
+        Err(QuizFileError::Invalid(found.iter().map(ToString::to_string).collect()))
     }
 }
 
-/// Writes `quiz` with the media it uses (read from `media_root`) to `dest` as
-/// a quiz file. The file is replaced only once the new one is complete.
-pub fn save(quiz: &Quiz, media_root: &Path, dest: &Path) -> Result<()> {
-    check(quiz, media_root)?;
+/// Everything that keeps the quiz from being played: the core's rules, then
+/// media files missing under `root`.
+pub fn problems(quiz: &Quiz, root: &Path) -> Vec<ValidationError> {
+    if let Err(errors) = quiz.validate() {
+        return errors;
+    }
+    // References are safe paths now, so joining them stays inside `root`.
+    quiz.slides
+        .iter()
+        .flat_map(|slide| slide.media().into_iter().map(move |(file, _)| (slide, file)))
+        .filter(|(_, file)| !root.join(file).is_file())
+        .map(|(slide, file)| ValidationError { slide_id: Some(slide.id.clone()), message: format!("media file missing: {file}") })
+        .collect()
+}
+
+/// Writes `quiz.json` into the package folder `root` (see `write_atomic`).
+/// The quiz is not checked: a draft may be unfinished.
+pub fn write_quiz_json(root: &Path, quiz: &Quiz) -> Result<()> {
+    let json = serde_json::to_string_pretty(quiz).map_err(|e| QuizFileError::Json(e.to_string()))?;
+    write_atomic(&root.join(QUIZ_JSON), json.as_bytes())
+}
+
+/// Replaces the file `dest` with `contents` so that a crash leaves either the
+/// old file or the new one, never a torn one.
+pub fn write_atomic(dest: &Path, contents: &[u8]) -> Result<()> {
+    replace_file(dest, |temp| {
+        let mut file = File::create(temp).context(|| format!("cannot write {}", temp.display()))?;
+        file.write_all(contents)
+            .and_then(|()| file.sync_all())
+            .context(|| format!("cannot write {}", temp.display()))
+    })
+}
+
+/// Writes `dest` through a temporary file next to it, renamed over `dest`
+/// only once `write` has finished.
+fn replace_file(dest: &Path, write: impl FnOnce(&Path) -> Result<()>) -> Result<()> {
     let name = dest.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
     let temp = dest.with_file_name(format!(".{name}.saving"));
-    let written = write_zip(quiz, media_root, &temp).and_then(|()| {
-        fs::rename(&temp, dest).context(|| format!("cannot replace {}", dest.display()))
-    });
+    let written = write(&temp).and_then(|()| fs::rename(&temp, dest).context(|| format!("cannot replace {}", dest.display())));
     if written.is_err() {
         let _ = fs::remove_file(&temp);
     }
     written
 }
 
+/// Copies a media file into the package folder `root` and returns its
+/// reference (`media/<name>`). A file with the same name and contents is
+/// reused; a different one with the same name gets a number added.
+pub fn import_media(root: &Path, source: &Path) -> Result<String> {
+    let original = source.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+    let (stem, extension) = match original.rsplit_once('.') {
+        Some((stem, ext)) if !stem.is_empty() => (safe_name(stem), format!(".{}", safe_name(ext))),
+        _ => (safe_name(&original), String::new()),
+    };
+    let read_error = || format!("cannot read {}", source.display());
+    for n in 1.. {
+        let name = if n == 1 { format!("{stem}{extension}") } else { format!("{stem}-{n}{extension}") };
+        let reference = format!("{MEDIA_PREFIX}{name}");
+        let path = root.join(&reference);
+        if !path.exists() {
+            let mut file = File::open(source).context(read_error)?;
+            write_file(root, &reference, &mut file, MAX_UNPACKED_BYTES, &mut Sha256::new())?;
+            return Ok(reference);
+        }
+        if same_contents(&path, source).context(read_error)? {
+            return Ok(reference);
+        }
+    }
+    unreachable!("the loop returns")
+}
+
+/// Compares two files without reading either whole into memory.
+fn same_contents(a: &Path, b: &Path) -> io::Result<bool> {
+    const CHUNK: u64 = 1 << 20;
+    if fs::metadata(a)?.len() != fs::metadata(b)?.len() {
+        return Ok(false);
+    }
+    let (mut a, mut b) = (File::open(a)?, File::open(b)?);
+    let (mut x, mut y) = (Vec::new(), Vec::new());
+    loop {
+        x.clear();
+        y.clear();
+        (&mut a).take(CHUNK).read_to_end(&mut x)?;
+        (&mut b).take(CHUNK).read_to_end(&mut y)?;
+        if x != y {
+            return Ok(false);
+        }
+        if x.is_empty() {
+            return Ok(true);
+        }
+    }
+}
+
+/// A file name part without path separators or characters some systems refuse.
+fn safe_name(name: &str) -> String {
+    let cleaned: String = name
+        .chars()
+        .map(|c| if c.is_control() || "/\\:*?\"<>|".contains(c) { '_' } else { c })
+        .collect();
+    let trimmed = cleaned.trim().trim_matches('.');
+    if trimmed.is_empty() { "file".into() } else { trimmed.into() }
+}
+
+/// Writes `quiz` with the media it uses (read from `media_root`) to `dest` as
+/// a quiz file. The file is replaced only once the new one is complete.
+pub fn save(quiz: &Quiz, media_root: &Path, dest: &Path) -> Result<()> {
+    check(quiz, media_root)?;
+    replace_file(dest, |temp| write_zip(quiz, media_root, temp))
+}
+
 /// Deletes every package folder in `cache` except `keep`, and leftovers of
-/// interrupted opens.
+/// interrupted opens. A folder that cannot be deleted yet (on Windows, a
+/// file in it is still open) is left for the next time; the first such error
+/// is returned once the others are gone.
 pub fn prune(cache: &Path, keep: &[&Path]) -> io::Result<()> {
     if !cache.exists() {
         return Ok(());
     }
+    let mut first_error = None;
     for entry in fs::read_dir(cache)? {
         let path = entry?.path();
         if path.is_dir() && !keep.iter().any(|k| *k == path) {
-            fs::remove_dir_all(&path)?;
+            if let Err(e) = fs::remove_dir_all(&path) {
+                first_error.get_or_insert(e);
+            }
         }
     }
-    Ok(())
+    first_error.map_or(Ok(()), Err)
 }
 
 fn write_zip(quiz: &Quiz, media_root: &Path, temp: &Path) -> Result<()> {
@@ -351,7 +464,7 @@ mod tests {
         let quiz = quiz_with_picture("media/flag.png");
         let file = temp("save-missing").join("test.quiz");
         let err = save(&quiz, &temp("save-missing-media"), &file).unwrap_err();
-        assert!(matches!(err, QuizFileError::Invalid(ref p) if p == &["media file missing: media/flag.png"]), "{err}");
+        assert!(matches!(err, QuizFileError::Invalid(ref p) if p == &["slide intro: media file missing: media/flag.png"]), "{err}");
         assert!(!file.exists());
     }
 
@@ -364,7 +477,7 @@ mod tests {
         );
         let cache = temp("unsafe-cache");
         let err = open(&file, &cache).unwrap_err();
-        assert!(matches!(err, QuizFileError::Invalid(ref p) if p == &["media file missing: media/flag.png"]), "{err}");
+        assert!(matches!(err, QuizFileError::Invalid(ref p) if p == &["slide intro: media file missing: media/flag.png"]), "{err}");
         assert!(!cache.parent().unwrap().join("evil.png").exists());
         // A failed open leaves nothing behind.
         assert_eq!(fs::read_dir(&cache).unwrap().count(), 0);
@@ -400,6 +513,42 @@ mod tests {
         let err = write_file(&dest, "media/big.mp4", &mut &[0u8; 100][..], 99, &mut hasher).unwrap_err();
         assert!(matches!(err, QuizFileError::TooLarge));
         assert_eq!(write_file(&dest, "media/ok.mp4", &mut &[0u8; 100][..], 100, &mut hasher).unwrap(), 100);
+    }
+
+    #[test]
+    fn imports_media_under_safe_unique_names() {
+        let root = temp("import");
+        let sources = media_folder("import-src", &[("a/Flag.png", b"one"), ("b/Flag.png", b"two"), ("c/we:ird?.jpg", b"x")]);
+        assert_eq!(import_media(&root, &sources.join("a/Flag.png")).unwrap(), "media/Flag.png");
+        // Same name, same contents: reused. Same name, other contents: numbered.
+        assert_eq!(import_media(&root, &sources.join("a/Flag.png")).unwrap(), "media/Flag.png");
+        assert_eq!(import_media(&root, &sources.join("b/Flag.png")).unwrap(), "media/Flag-2.png");
+        assert_eq!(fs::read(root.join("media/Flag-2.png")).unwrap(), b"two");
+        let weird = import_media(&root, &sources.join("c/we:ird?.jpg")).unwrap();
+        assert_eq!(weird, "media/we_ird_.jpg");
+        assert!(is_safe_reference(&weird));
+    }
+
+    #[test]
+    fn a_draft_is_written_and_reopened_for_editing() {
+        let media = media_folder("draft-media", &[("media/flag.png", b"png")]);
+        let file = temp("draft-file").join("test.quiz");
+        save(&quiz_with_picture("media/flag.png"), &media, &file).unwrap();
+
+        let draft = temp("draft").join("draft");
+        let mut quiz = open_into(&file, &draft).unwrap();
+        quiz.title = "Edited".into();
+        write_quiz_json(&draft, &quiz).unwrap();
+        assert_eq!(read_checked(&draft).unwrap().title, "Edited");
+        // Opening into an existing folder is refused, nothing is replaced.
+        assert!(open_into(&file, &draft).is_err());
+    }
+
+    #[test]
+    fn problems_name_the_slide_with_missing_media() {
+        let found = problems(&quiz_with_picture("media/flag.png"), &temp("problems"));
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].slide_id.as_deref(), Some("intro"));
     }
 
     #[test]

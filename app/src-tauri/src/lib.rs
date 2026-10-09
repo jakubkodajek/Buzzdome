@@ -1,6 +1,7 @@
 //! Desktop shell: owns the live game, journals every accepted command before
 //! the windows see it, drives the buzzer lights and the projector window.
 
+mod editor;
 mod hardware;
 mod session;
 
@@ -33,13 +34,13 @@ struct Inner {
 
 struct AppState(Mutex<Inner>);
 
-type CmdResult<T> = Result<T, String>;
+pub(crate) type CmdResult<T> = Result<T, String>;
 
 fn now_ms() -> u64 {
     SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| d.as_millis() as u64)
 }
 
-fn app_data(app: &AppHandle, folder: &str) -> CmdResult<PathBuf> {
+pub(crate) fn app_data(app: &AppHandle, folder: &str) -> CmdResult<PathBuf> {
     app.path().app_data_dir().map(|dir| dir.join(folder)).map_err(|e| e.to_string())
 }
 
@@ -151,10 +152,28 @@ fn media_root(state: State<AppState>) -> Option<String> {
 
 /// Opens a quiz file (`.quiz` or a plain quiz JSON) and starts a show with it.
 #[tauri::command]
-fn start_show_from_file(app: AppHandle, state: State<AppState>, path: String) -> CmdResult<()> {
-    // Unpacking can take a moment for big media; the show is not locked meanwhile.
+async fn start_show_from_file(app: AppHandle, state: State<'_, AppState>, path: String) -> CmdResult<()> {
+    // Unpacking big media takes a moment: it runs off the UI thread and
+    // before the show is locked.
     let package = quiz_file::open(Path::new(&path), &quizzes_cache(&app)?).map_err(|e| e.to_string())?;
     start_show(&app, &mut state.0.lock().unwrap(), package.quiz, Some(path), Some(package.root))
+}
+
+/// Plays the editor's quiz without a journal, so the last real show stays
+/// the one that can be resumed.
+#[tauri::command]
+fn editor_test_run(app: AppHandle, state: State<AppState>, quiz: Quiz) -> CmdResult<()> {
+    let root = editor::draft_root(&app)?;
+    quiz_file::check(&quiz, &root).map_err(|e| e.to_string())?;
+    let mut inner = state.0.lock().unwrap();
+    if inner.game.is_some() {
+        return Err("a show is running; end it before a test run".into());
+    }
+    serve_media(&app, &mut inner, Some(root))?;
+    inner.game = Some(Game::new(quiz));
+    inner.session = None;
+    emit_show_changed(&app, &inner);
+    Ok(())
 }
 
 #[tauri::command]
@@ -315,6 +334,7 @@ fn spawn_ticker(app: AppHandle) {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .manage(editor::EditorLock::default())
         .manage(AppState(Mutex::new(Inner {
             game: None,
             session: None,
@@ -344,6 +364,14 @@ pub fn run() {
             open_host_window,
             close_host_window,
             host_window_open,
+            editor::editor_load,
+            editor::editor_new,
+            editor::editor_open,
+            editor::editor_update,
+            editor::editor_save,
+            editor::editor_add_media,
+            editor::editor_close,
+            editor_test_run,
             hardware::receiver_info,
             hardware::receiver_devices,
             hardware::receiver_select,

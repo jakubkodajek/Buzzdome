@@ -3,13 +3,19 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { api, type BackendEvents } from "./api";
 import type { ClockView, GameView, Quiz, SessionSummary } from "./types";
 
+/** A ref that always holds the latest `value`, for callbacks that outlive a render. */
+export function useLatest<T>(value: T): { readonly current: T } {
+  const ref = useRef(value);
+  useLayoutEffect(() => {
+    ref.current = value;
+  });
+  return ref;
+}
+
 /** Calls `handler` for every `event` from the backend while mounted. */
 export function useBackendEvent<E extends keyof BackendEvents>(event: E, handler: (payload: BackendEvents[E]) => void) {
   // The latest handler runs without re-subscribing on every render.
-  const latest = useRef(handler);
-  useLayoutEffect(() => {
-    latest.current = handler;
-  });
+  const latest = useLatest(handler);
   useEffect(() => {
     let alive = true;
     let stop: (() => void) | null = null;
@@ -21,7 +27,7 @@ export function useBackendEvent<E extends keyof BackendEvents>(event: E, handler
       alive = false;
       stop?.();
     };
-  }, [event]);
+  }, [event, latest]);
 }
 
 /**
@@ -71,10 +77,7 @@ export function useGameView(): GameView | null {
 
 /** The clock of the current question: from the game state, then from ticks. */
 export function useClock(view: GameView | null): ClockView | null {
-  const viewRef = useRef(view);
-  useLayoutEffect(() => {
-    viewRef.current = view;
-  });
+  const viewRef = useLatest(view);
   const [tick, setTick] = useState<{ view: GameView | null; clock: ClockView } | null>(null);
   useBackendEvent("clock-tick", (clock) => setTick({ view: viewRef.current, clock }));
   // A tick belongs to the state it arrived in; a newer state replaces it.

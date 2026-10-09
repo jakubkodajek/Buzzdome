@@ -1,15 +1,15 @@
 feature,area,priority,original,clone,notes
-Create save and reopen a quiz,studio,must,yes,no,§3.2; original uses .qx files
-Slide list with drag to reorder duplicate and delete,studio,must,yes,no,§3.2.4 thumbnails panel
-Multiple-choice question with 2 to 6 answers and one correct answer,studio,must,yes,no,§3.4.1.1
-Picture on a question slide,studio,must,yes,no,§3.7.1; also show it on phones (§4.2.1 option)
-Info slide without interaction (billboard),studio,must,yes,no,§3.4.2; round intros and announcements
-End-of-round slide that shows the leaderboard,studio,must,yes,no,§3.4.3; rounds are derived from these slides
-Answer time per question including untimed questions,studio,must,yes,no,§3.2.5.1 Answer time 0 = untimed
+Create save and reopen a quiz,studio,must,yes,yes,§3.2; original uses .qx files; clone: .quiz files; crash-safe draft; File page with recent files
+Slide list with drag to reorder duplicate and delete,studio,must,yes,yes,§3.2.4 thumbnails panel
+Multiple-choice question with 2 to 6 answers and one correct answer,studio,must,yes,yes,§3.4.1.1; clone: fastest finger may have 0 answers or no correct one
+Picture on a question slide,studio,must,yes,yes,§3.7.1; also show it on phones (§4.2.1 option); clone: projector only; phones out of scope
+Info slide without interaction (billboard),studio,must,yes,yes,§3.4.2; round intros and announcements
+End-of-round slide that shows the leaderboard,studio,must,yes,yes,§3.4.3; rounds are derived from these slides
+Answer time per question including untimed questions,studio,must,yes,yes,§3.2.5.1 Answer time 0 = untimed
 Points for a correct answer and optional penalty for a wrong one,scoring,must,yes,no,§3.4.1 points section
 Everyone-answers mode,scoring,must,yes,no,§3.4.1 voting
 Fastest-finger mode with the quizmaster judging a verbal answer,scoring,must,yes,no,§5.4.5.1; wrong answer locks the player out and the clock resumes
-Quizmaster notes per slide visible in the Director,studio,must,yes,no,§3.2.8
+Quizmaster notes per slide visible in the Director,studio,must,yes,yes,§3.2.8
 Players join from a phone browser with a PIN or QR code and a name,player,must,yes,no,§5.2.3; no app install
 Rejoin after the phone sleeps keeps the same player and score,player,must,yes,no,original documents it for bingo cards (§3.4.14.2.2); we need it for every game
 Phone shows the question and the right input for its type,player,must,yes,no,§5.2.4.1 question types
@@ -27,7 +27,7 @@ Judge right or wrong from the Director,director,must,yes,no,§5.2.4.4 Right/Wron
 Edit a player's score and add or subtract points,director,must,yes,no,§5.7.2
 Teams table with name score and enabled state,director,must,yes,no,§5.7.2 Teams view
 Resume a live show after a crash or reload,reliability,must,yes,no,§9.1 recovery mode: snapshot after every completed question; not in test mode
-Test run of a quiz with simulated players,studio,must,yes,no,§3.15 Simulate keypads; also our way to test the realtime layer
+Test run of a quiz with simulated players,studio,must,yes,partial,§3.15 Simulate keypads; also our way to test the realtime layer; clone: F5 / Shift+F5 from the editor with keyboard and on-screen buzzers; no automatic players
 Unique player names in one session,player,must,yes,no,§5.2.3 asks for a unique name
 Points decrease over the countdown (start and end values),scoring,should,yes,no,§3.4.1 interpolation
 Speed bonus for the three fastest correct players,scoring,should,yes,no,§3.4.1 Speed Bonus
@@ -38,11 +38,11 @@ Text answer with alternatives and typo tolerance,scoring,should,yes,no,§3.4.1.3
 Test question that does not count,studio,should,yes,no,§5.4.5.4
 Audience poll that does not score plus a chart,studio,should,yes,no,§3.4.6
 Delay before answers appear so the quizmaster can read the question,studio,should,yes,no,§3.2.5.1 Delay before answer
-Sound clip on a question,studio,should,yes,no,§3.7.4
-Background image per slide,studio,should,yes,no,§3.2.5.1 Background image
+Sound clip on a question,studio,should,yes,yes,"§3.7.4; clone: played by the Director: on slide, with the clock or on demand"
+Background image per slide,studio,should,yes,yes,§3.2.5.1 Background image; clone: image or video
 Spreadsheet import of questions (one sheet per round),studio,should,yes,no,§3.10.1 columns Q A1..A6 CAT NOTES; CSV first
-Table view to edit all questions at once,studio,should,yes,no,§3.2.6.2
-Full-screen slide preview,studio,should,yes,no,§3.2.6.1 F5
+Table view to edit all questions at once,studio,should,yes,yes,§3.2.6.2
+Full-screen slide preview,studio,should,yes,partial,§3.2.6.1 F5; clone: Shift+F5 test-runs from the selected slide on the projector
 Response chart per answer,host screen,should,yes,no,§5.4.8 key C
 Phone shows correct or incorrect and points won,player,should,yes,no,§5.2.4.1 feedback screens
 Phone shows own score and rank,player,should,yes,no,§5.2.4.1 intermediate and final scores
@@ -67,7 +67,7 @@ Ordered answers with exact or partial scoring,studio,could,yes,no,§3.4.1.2
 Answers revealed one by one,studio,could,yes,no,§3.2.5.1 Show answers action
 First-letter answer with an A-Z grid,studio,could,yes,no,§3.4.1.3.3
 Multi-field text answer (e.g. artist and title),studio,could,yes,no,§3.4.1.3.2.1
-Video on a question,studio,could,yes,no,§3.7.5
+Video on a question,studio,could,yes,yes,§3.7.5
 Text reveal animation word by word,studio,could,yes,no,§3.14.3
 Categories as reusable slide styles,studio,could,yes,no,§3.3
 Steal points on a wrong buzz,scoring,could,yes,no,§3.2.5.1

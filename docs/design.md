@@ -8,7 +8,8 @@ How the app is built, with the buzzer link in most detail. Requirements are in
 ```text
 ┌──────────────── Tauri app (one process) ────────────────┐
 │  React UI                                               │
-│  ├── Director window  (control, setup, Receiver tab)    │
+│  ├── Director window  (control, setup, Receiver tab,    │
+│  │                     quiz editor)                     │
 │  └── Host window      (projector, full screen)          │
 │            ▲ events: game-state, clock-tick, ...        │
 │            │ commands: invoke(...)                      │
@@ -16,6 +17,7 @@ How the app is built, with the buzzer link in most detail. Requirements are in
 │  ├── lib.rs       AppState { game, session, driver }    │
 │  │                execute(): apply → journal → effects  │
 │  ├── session.rs   append-only journal per show          │
+│  ├── editor.rs    the editor's crash-safe draft         │
 │  └── hardware.rs  receiver setup, learn mode, raw log   │
 │  Rust crates                                            │
 │  ├── quiz-core    pure game state machine, scoring      │
@@ -86,6 +88,56 @@ empty and the shell allows exactly the current quiz folder
 else on the disk. `media_root` returns the folder with a trailing separator;
 `media.ts` appends a reference to it and calls `convertFileSrc`. Media
 references are checked in the core (`media.rs`) to stay inside `media/`.
+
+### 1.3 Quiz editor
+
+The editor is a screen of the Director window (`app/src/editor/`), laid out
+like the reference's: ribbon with a File page, slide thumbnails, the slide
+canvas with notes under it, the properties panel, and a status bar with a
+table view toggle. It edits a quiz; it never touches a running show.
+
+- **Draft.** `editor.rs` keeps the quiz being edited unpacked in
+  `<app data>/editor/draft-*/` and `draft.json` points at the current
+  folder, so a crash or a closed window loses nothing. A new or opened quiz
+  gets its own folder and the pointer switches only once the folder is
+  complete. Saving packs the draft into a `.quiz` file with `quiz-file`.
+  Every change is written through one `DraftQueue` (`draft-queue.ts`):
+  writes run in order, and writes still waiting collapse into the latest.
+  The backend answers each write with the quiz's problems
+  (`quiz_file::problems`: the core's checks plus missing media), shown on
+  the thumbnails, in the status bar and on the File page.
+- **State.** `history.ts` is a pure undo history of `Edit`s (set title,
+  insert, update, remove, move a slide). Typing into one field of one slide
+  merges into one undo step through a merge key (`<slide id>:<field>`).
+  `editor-state.ts` reduces that history together with what the backend
+  reported (loaded, saved, checked). The selection is a slide id with its
+  index as a fallback once the slide is gone, plus the part of the slide
+  (`elements.ts`: question, answer *n*, title, picture, video, sound, ...),
+  which the canvas, the panel and the context menu share.
+- **Slide changes.** `slides.ts` holds every change to a slide as a pure
+  function that keeps the slide playable (an everyone-answers question
+  always has 2 to 6 answers and a correct one, and so on). Nothing in the
+  UI edits a slide object by hand. Tested in `slides.test.ts`.
+- **Actions.** `actions.ts` defines an `Action` (label, icon, keys,
+  disabled, checked, run). `EditorScreen.tsx` builds the one record of all
+  actions, and the ribbon, context menus, the quick access bar, the status
+  bar and the keyboard (`useActionKeys`) all read it, so a command, its
+  shortcut and its enabled state are defined once.
+- **Properties.** `properties.tsx` turns the selected slide into labelled
+  rows (label, description, control). The properties panel, the ribbon's
+  Question tab and the table view lay out the same rows, so a field is
+  built and validated in one place. The Edit dialog (double click, Enter)
+  edits a local copy and applies it as one undo step.
+- **Rendering.** The canvas, the thumbnails (editor and Director) and the
+  projector all draw a slide with `SlideScreen` inside a 16:9 `Stage`
+  (`app/src/host/`). The editor and thumbnails feed it `previewView`, a
+  `GameView` built from the slide alone. `MediaRootContext` sits above
+  every screen that resolves media, so the editor, the Director and their
+  sound hooks agree on the folder.
+- **Test run.** F5 (from the start) and Shift+F5 (from the selected slide)
+  start a show of the draft with keyboard and on-screen buzzers. The
+  Director shows a test run badge and "Back to the editor" ends the show
+  and returns. A quiz with problems opens the File page instead.
 
 ## 2. Buzzer link
 
@@ -301,6 +353,7 @@ them.
 | App builds and starts with the HID backend | Linux, under a virtual display; Receiver tab lists devices (none attached) | pass |
 | Linux `.deb` | built locally | pass |
 | UI screens (Director, projector) render without errors, incl. a slide picture | preview with a mocked backend, headless Chromium | pass |
+| Editor: typing, undo and redo, copy and paste, delete, keys, Edit dialog, ribbon fields, layout gallery, drag reorder, table view, File page | `npm test` (history, draft queue, slide changes, layouts) and 22 flows in headless Chromium against the preview | pass |
 | Quiz files: save, open, reuse, unsafe entries, size limit, missing media | `cargo test -p quiz-file` | pass |
 | Media through the asset protocol, autoplay of video and sound | needs the installed app on each OS | **not tested** |
 | Windows and macOS installers | CI | see the PR's checks |

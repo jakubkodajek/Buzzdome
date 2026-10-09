@@ -83,6 +83,8 @@ pub enum Command {
     /// Jump to a slide; a question there starts from the beginning.
     #[serde(rename_all = "camelCase")]
     GoTo { slide: usize },
+    /// Skip the remaining slides and show the final scores.
+    GoToFinal,
     PauseClock,
     ResumeClock,
     /// End the running question now (time up, or the quizmaster ends it).
@@ -367,6 +369,7 @@ impl Game {
                 }
                 Ok(self.enter_slide(*slide))
             }
+            Command::GoToFinal => Ok(self.enter_slide(self.quiz.slides.len())),
             Command::PauseClock => match &mut self.phase {
                 Phase::Question(QuestionStep::Running { clock }) if clock.is_running() => {
                     clock.pause(now);

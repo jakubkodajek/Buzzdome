@@ -26,7 +26,7 @@ Status keys: `[x]` done, `[~]` in progress, `[ ]` not started.
 - [x] Game state machine and scoring rules, documented next to the code
 - [x] Persistence and crash recovery: append-only command journal, replayed on resume
 - [x] `BuzzerDriver` trait: keyboard, virtual and USB-HID receiver (`crates/buzzers`)
-- [~] Screen designs: host screen and Director follow the reference layout (done); editor to do
+- [x] Screen designs: host screen, Director and quiz editor follow the reference layout
 
 ## Phase 3: Build
 
@@ -55,7 +55,7 @@ Status keys: `[x]` done, `[~]` in progress, `[ ]` not started.
 - [ ] Fallback: vendor keystroke mode through the keyboard driver
 
 ### M3: Authoring (week 2-3)
-- [ ] Editor: slide list (add, reorder, duplicate, delete), question form, answers, correct answer, time, points, picture, sound, video, notes
+- [x] Editor in the reference's layout: ribbon, thumbnails, slide canvas, properties panel, Edit question form, table view, File page; undo, crash-safe draft, test run
 - [x] Pictures, videos and backgrounds per slide on the projector; slide sounds from the Director (on slide, with the clock, on demand)
 - [ ] Excel import of questions
 - [ ] Show settings: team names, sounds, welcome screen, end-of-question actions

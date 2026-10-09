@@ -3,10 +3,13 @@ import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { api } from "../api";
 import { AppProvider, useApp, useDispatch, useRun } from "../app-context";
 import { clockSeconds } from "../format";
-import { useBackendEvent, useClock, useGameView, useLastSession, useQuiz } from "../hooks";
+import { EditorScreen } from "../editor/EditorScreen";
+import { useBackendEvent, useClock, useGameView, useLastSession, useMediaRoot, useQuiz } from "../hooks";
 import {
+  BackIcon,
   CheckIcon,
   CrossIcon,
+  EditIcon,
   FolderIcon,
   ListIcon,
   NextIcon,
@@ -18,6 +21,7 @@ import {
   StopIcon,
 } from "../icons";
 import { useShortcuts } from "../keyboard";
+import { MediaRootContext } from "../media";
 import { phaseLabel } from "../phase";
 import { questionPosition } from "../quiz";
 import { useSlideSound, type SlideSound } from "../slide-sound";
@@ -33,6 +37,9 @@ import "./director.css";
 
 type Tab = "questions" | "teams" | "responses" | "buzzers" | "receiver" | "settings";
 
+/** The show controls, the quiz editor, or the show controls for a test run of the edited quiz. */
+type Screen = "show" | "editor" | "testRun";
+
 /** The quizmaster's window. */
 export function Director() {
   const [error, setError] = useState<string | null>(null);
@@ -46,7 +53,7 @@ export function Director() {
 
   return (
     <AppProvider notify={notify}>
-      <DirectorLayout />
+      <DirectorScreens />
       {error && (
         <div className="toast" role="alert">
           {error}
@@ -56,7 +63,23 @@ export function Director() {
   );
 }
 
-function DirectorLayout() {
+function DirectorScreens() {
+  const [screen, setScreen] = useState<Screen>("show");
+  // Provided above the show controls: their hooks (the slide sound) resolve media too.
+  const mediaRoot = useMediaRoot();
+  if (screen === "editor") return <EditorScreen onTestRun={() => setScreen("testRun")} onExit={() => setScreen("show")} />;
+  return (
+    <MediaRootContext value={mediaRoot}>
+      <DirectorLayout testRun={screen === "testRun"} onEditor={() => setScreen("editor")} />
+    </MediaRootContext>
+  );
+}
+
+/**
+ * The show controls. In a test run the show ends back in the editor;
+ * `onEditor` opens it.
+ */
+function DirectorLayout({ testRun, onEditor }: { testRun: boolean; onEditor: () => void }) {
   const { t } = useApp();
   const view = useGameView();
   const quiz = useQuiz();
@@ -78,7 +101,7 @@ function DirectorLayout() {
 
   return (
     <div className="director">
-      <CommandPanel view={view} projector={projector} sound={sound} />
+      <CommandPanel view={view} projector={projector} sound={sound} testRun={testRun} onEditor={onEditor} />
       <div className="workspace">
         <nav className="tabs">
           {tabs.map(([id, label]) => (
@@ -90,7 +113,7 @@ function DirectorLayout() {
         <div className="tab-body">
           <TabBody tab={tab} view={view} quiz={quiz} projector={projector} />
         </div>
-        <StatusBar view={view} quiz={quiz} />
+        <StatusBar view={view} quiz={quiz} testRun={testRun} />
       </div>
     </div>
   );
@@ -127,7 +150,8 @@ function CommandButton(props: { icon: ReactNode; label: string; hint?: string; t
 }
 
 /** Left command area: only the commands that make sense right now. */
-function CommandPanel({ view, projector, sound }: { view: GameView | null; projector: ProjectorSettings; sound: SlideSound }) {
+function CommandPanel(props: { view: GameView | null; projector: ProjectorSettings; sound: SlideSound; testRun: boolean; onEditor: () => void }) {
+  const { view, projector, sound, testRun, onEditor } = props;
   const { t, notify } = useApp();
   const dispatch = useDispatch();
   const run = useRun();
@@ -148,6 +172,7 @@ function CommandPanel({ view, projector, sound }: { view: GameView | null; proje
         <>
           <CommandButton icon={<FolderIcon />} label={t("openQuiz")} onClick={openQuiz} />
           <CommandButton icon={<PlayIcon />} label={t("demoQuiz")} onClick={() => run(api.startDemoShow())} />
+          <CommandButton icon={<EditIcon />} label={t("quizEditor")} onClick={onEditor} />
           {last && (
             <CommandButton
               icon={<NextIcon />}
@@ -197,12 +222,17 @@ function CommandPanel({ view, projector, sound }: { view: GameView | null; proje
         onClick={projector.toggle}
       />
       <span className="spacer" />
-      {view && <CommandButton icon={<PowerIcon />} label={t("endShow")} tone="bad" onClick={() => run(api.endShow())} />}
+      {view &&
+        (testRun ? (
+          <CommandButton icon={<BackIcon />} label={t("backToEditor")} onClick={() => run(api.endShow().then(onEditor))} />
+        ) : (
+          <CommandButton icon={<PowerIcon />} label={t("endShow")} tone="bad" onClick={() => run(api.endShow())} />
+        ))}
     </aside>
   );
 }
 
-function StatusBar({ view, quiz }: { view: GameView | null; quiz: Quiz | null }) {
+function StatusBar({ view, quiz, testRun }: { view: GameView | null; quiz: Quiz | null; testRun: boolean }) {
   const { t } = useApp();
   const clock = useClock(view);
   if (!view) return <footer className="status-bar">{t("noShow")}</footer>;
@@ -219,6 +249,7 @@ function StatusBar({ view, quiz }: { view: GameView | null; quiz: Quiz | null })
       <span className="status-phase">{phaseLabel(t, view)}</span>
       {clock && <span className="status-clock">{clock.remainingMs === null ? t("untimed") : clockSeconds(clock.remainingMs)}</span>}
       <span className="spacer" />
+      {testRun && <span className="status-test-run">{t("testRunActive")}</span>}
       <span>{t("registered", { n: view.players.length })}</span>
     </footer>
   );

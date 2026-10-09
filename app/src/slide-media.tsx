@@ -1,30 +1,34 @@
 import { useState } from "react";
-import { useMediaUrl } from "./media";
+import { isVideo, useMediaUrl } from "./media";
 import type { Slide } from "./types";
 
 /**
- * The slide's video, or else its picture; nothing if it has neither or the
- * file fails. A `preview` (in the Director) never plays sound on its own.
+ * Where a slide is drawn: on the projector during the show, as a preview
+ * the quizmaster works with (videos wait for a click and stay muted), or as
+ * a small thumbnail (videos show their first frame).
  */
-export function SlideMedia({ slide, className, preview = false }: { slide: Slide; className: string; preview?: boolean }) {
+export type ScreenMode = "show" | "preview" | "thumbnail";
+
+/** The slide's video, or else its picture; nothing if it has neither or the file fails. */
+export function SlideMedia({ slide, className, mode = "show" }: { slide: Slide; className: string; mode?: ScreenMode }) {
   const toUrl = useMediaUrl();
   const video = slide.video;
   const videoUrl = toUrl(video?.file ?? null);
   const pictureUrl = toUrl(slide.picture);
   if (video && videoUrl) {
     return (
-      <div className={className}>
-        {preview ? (
-          <video key={videoUrl} src={videoUrl} muted controls playsInline />
-        ) : (
+      <div className={className} data-element="video">
+        {mode === "show" ? (
           <video key={videoUrl} src={videoUrl} autoPlay={video.autoplay} muted={video.muted} loop={video.repeat} playsInline />
+        ) : (
+          <video key={videoUrl} src={videoUrl} muted controls={mode === "preview"} preload="metadata" playsInline />
         )}
       </div>
     );
   }
   if (pictureUrl) {
     return (
-      <div className={className}>
+      <div className={className} data-element="picture">
         <Picture key={pictureUrl} src={pictureUrl} />
       </div>
     );
@@ -33,14 +37,17 @@ export function SlideMedia({ slide, className, preview = false }: { slide: Slide
 }
 
 /** A picture or looping video filling the stage behind the slide. */
-export function SlideBackground({ slide }: { slide: Slide }) {
+export function SlideBackground({ slide, mode = "show" }: { slide: Slide; mode?: ScreenMode }) {
   const toUrl = useMediaUrl();
   const url = toUrl(slide.background);
   if (!url || !slide.background) return null;
-  const isVideo = /\.(mp4|webm)$/i.test(slide.background);
   return (
     <div className="slide-background">
-      {isVideo ? <video key={url} src={url} autoPlay muted loop playsInline /> : <Picture key={url} src={url} />}
+      {isVideo(slide.background) ? (
+        <video key={url} src={url} autoPlay={mode !== "thumbnail"} muted loop playsInline preload="metadata" />
+      ) : (
+        <Picture key={url} src={url} />
+      )}
     </div>
   );
 }

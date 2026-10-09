@@ -48,6 +48,7 @@ on `PATH` first (macOS dev machine).
 | lint Rust | `cargo clippy --workspace --all-targets` |
 | lint UI (incl. React hooks rules) | `cd app && npm run lint` |
 | type-check and build UI | `cd app && npm run build` |
+| UI logic tests (editor history, draft queue, slide changes) | `cd app && npm test` |
 | UI preview in a browser (mocked backend) | `cd app && npm run dev`, then `/preview.html?window=host&scene=running` (scenes in `app/src/dev/preview.tsx`) |
 | installers | CI: `.github/workflows/build.yml` on `main`, tags `v*` and "Run workflow"; artifacts `quiz-show-windows`, `quiz-show-macos`, `quiz-show-linux` |
 | receiver probe (no app) | `cargo run -p buzzers --example hid-monitor [-- VID:PID]` |
@@ -56,8 +57,8 @@ on `PATH` first (macOS dev machine).
 Layout: `crates/quiz-core` (model, game state machine, scoring, view),
 `crates/quiz-file` (`.quiz` files: ZIP with media, unpack cache, save),
 `crates/buzzers` (driver trait, USB-HID receiver thread, protocols, learn mode),
-`app/src-tauri` (Tauri shell, session journal, `hardware.rs` receiver setup),
-`app/src` (React UI: `director/`, `host/`), `samples/demo-quiz.json`.
+`app/src-tauri` (Tauri shell, session journal, `editor.rs` draft, `hardware.rs` receiver setup),
+`app/src` (React UI: `director/`, `host/`, `editor/`), `samples/demo-quiz.json`.
 Show sessions are journaled under the OS app-data dir in `sessions/<start ms>/`.
 
 UI conventions (keep one way of doing each thing):
@@ -70,6 +71,12 @@ UI conventions (keep one way of doing each thing):
   `useDispatch()` (`app/src/app-context.tsx`); language and `t` come from `useApp()`.
 - Shared helpers: `answers.ts` (buttons, letters), `format.ts` (times, scores),
   `quiz.ts` (slide titles, question numbers), `keyboard.ts` (shortcuts).
+- Slides are drawn only by `host/SlideScreen.tsx` in a `host/Stage.tsx`
+  (projector, editor canvas, thumbnails via `host/SlideThumbnail.tsx`).
+- Editor: a slide changes only through the pure functions in
+  `editor/slides.ts`; editor commands are `Action`s in the one record built in
+  `editor/EditorScreen.tsx` (ribbon, menus and keys read it); slide fields are
+  rows from `editor/properties.tsx` (panel, ribbon and table view share them).
 
 ## Where things live
 

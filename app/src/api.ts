@@ -6,6 +6,7 @@ import type {
   Command,
   Cue,
   DeviceInfo,
+  EditorDraft,
   GameView,
   LearnProgress,
   MonitorInfo,
@@ -15,6 +16,7 @@ import type {
   ReceiverInfo,
   ReceiverStatus,
   SessionSummary,
+  ValidationError,
 } from "./types";
 
 /** The backend commands (`#[tauri::command]` in app/src-tauri). */
@@ -44,6 +46,18 @@ export const api = {
   receiverForgetLearned: () => invoke<void>("receiver_forget_learned"),
   receiverExportLog: (path: string) => invoke<void>("receiver_export_log", { path }),
   receiverUdevRule: () => invoke<string>("receiver_udev_rule"),
+  /** The quiz editor's draft left from last time, if any. */
+  editorLoad: () => invoke<EditorDraft | null>("editor_load"),
+  editorNew: (title: string) => invoke<EditorDraft>("editor_new", { title }),
+  editorOpen: (path: string) => invoke<EditorDraft>("editor_open", { path }),
+  /** Stores the edited quiz; returns what keeps it from being played. */
+  editorUpdate: (quiz: Quiz, unsaved: boolean) => invoke<ValidationError[]>("editor_update", { quiz, unsaved }),
+  editorSave: (quiz: Quiz, path: string) => invoke<void>("editor_save", { quiz, path }),
+  /** Copies a media file into the draft; returns its reference (`media/...`). */
+  editorAddMedia: (path: string) => invoke<string>("editor_add_media", { path }),
+  editorClose: () => invoke<void>("editor_close"),
+  /** Plays the editor's quiz as a show that is not kept for resuming. */
+  editorTestRun: (quiz: Quiz) => invoke<void>("editor_test_run", { quiz }),
 };
 
 /** Events the backend emits (`app.emit` in app/src-tauri), with their payloads. */

@@ -41,6 +41,10 @@ jobs:
         working-directory: app
         run: npm run lint
 
+      - name: Test the UI logic
+        working-directory: app
+        run: npm test
+
       # Tauri embeds the built UI, so it must exist before the Rust crates compile.
       - name: Type-check and build the UI
         working-directory: app
