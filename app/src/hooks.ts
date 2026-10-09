@@ -86,6 +86,11 @@ export function useQuiz(): Quiz | null {
   return useBackendValue(api.getQuiz, null, "show-changed");
 }
 
+/** Folder of the running quiz's media (see `media.ts`). */
+export function useMediaRoot(): string | null {
+  return useBackendValue(api.mediaRoot, null, "show-changed");
+}
+
 /** The show that can be resumed after a crash, if any. */
 export function useLastSession(): SessionSummary | null {
   return useBackendValue(api.lastSession, null, "show-changed");

@@ -124,6 +124,13 @@ const strings = {
     selectedPlayers: "Vybráno: {n}",
     noResponses: "Zatím žádné odpovědi.",
     welcome: "Otevřete kvíz nebo pokračujte v poslední show.",
+    quizFiles: "Kvízy",
+    playSound: "Přehrát zvuk",
+    stopSound: "Zastavit zvuk",
+    mediaPicture: "Obrázek",
+    mediaVideo: "Video",
+    mediaSound: "Zvuk",
+    mediaBackground: "Pozadí",
   },
   en: {
     appTitle: "Quiz Show",
@@ -244,6 +251,13 @@ const strings = {
     selectedPlayers: "Selected: {n}",
     noResponses: "No responses yet.",
     welcome: "Open a quiz or resume the last show.",
+    quizFiles: "Quizzes",
+    playSound: "Play sound",
+    stopSound: "Stop sound",
+    mediaPicture: "Picture",
+    mediaVideo: "Video",
+    mediaSound: "Sound",
+    mediaBackground: "Background",
   },
 } as const;
 

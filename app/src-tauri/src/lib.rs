@@ -10,8 +10,8 @@ use hardware::Hardware;
 use quiz_core::{Command, Effect, Game, GameView, Quiz, Stamped};
 use serde::Serialize;
 use ts_rs::TS;
-use session::{Session, SessionMeta, SessionSummary};
-use std::path::PathBuf;
+use session::{Resumed, Session, SessionMeta, SessionSummary};
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder};
@@ -26,6 +26,8 @@ const CLOCK_EVENT_EVERY: Duration = Duration::from_millis(250);
 struct Inner {
     game: Option<Game>,
     session: Option<Session>,
+    /// Folder with the running quiz's media files, served to the windows.
+    media_root: Option<PathBuf>,
     driver: Box<dyn BuzzerDriver>,
 }
 
@@ -37,8 +39,26 @@ fn now_ms() -> u64 {
     SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| d.as_millis() as u64)
 }
 
+fn app_data(app: &AppHandle, folder: &str) -> CmdResult<PathBuf> {
+    app.path().app_data_dir().map(|dir| dir.join(folder)).map_err(|e| e.to_string())
+}
+
 fn sessions_root(app: &AppHandle) -> CmdResult<PathBuf> {
-    app.path().app_data_dir().map(|dir| dir.join("sessions")).map_err(|e| e.to_string())
+    app_data(app, "sessions")
+}
+
+/// Unpacked quiz files (quiz-file packages).
+fn quizzes_cache(app: &AppHandle) -> CmdResult<PathBuf> {
+    app_data(app, "quizzes")
+}
+
+/// Lets the windows load files from `root` (and nothing else of the disk).
+fn serve_media(app: &AppHandle, inner: &mut Inner, root: Option<PathBuf>) -> CmdResult<()> {
+    if let Some(root) = &root {
+        app.asset_protocol_scope().allow_directory(root, true).map_err(|e| e.to_string())?;
+    }
+    inner.media_root = root;
+    Ok(())
 }
 
 fn emit_state(app: &AppHandle, game: Option<&Game>) {
@@ -80,15 +100,31 @@ fn execute(app: &AppHandle, inner: &mut Inner, command: Command) -> CmdResult<()
     Ok(())
 }
 
-fn start_show(app: &AppHandle, inner: &mut Inner, quiz: Quiz, source_path: Option<String>) -> CmdResult<()> {
-    quiz.validate().map_err(|errors| {
-        errors.iter().map(ToString::to_string).collect::<Vec<_>>().join("\n")
-    })?;
-    let meta = SessionMeta { quiz_title: quiz.title.clone(), source_path, started_ms: now_ms() };
+/// Starts a show of `quiz`, whose media (if any) are in `media_root`.
+fn start_show(
+    app: &AppHandle,
+    inner: &mut Inner,
+    quiz: Quiz,
+    source_path: Option<String>,
+    media_root: Option<PathBuf>,
+) -> CmdResult<()> {
+    quiz_file::check(&quiz, media_root.as_deref().unwrap_or(Path::new(""))).map_err(|e| e.to_string())?;
+    let meta = SessionMeta {
+        quiz_title: quiz.title.clone(),
+        source_path,
+        started_ms: now_ms(),
+        media_root: media_root.as_ref().map(|root| root.to_string_lossy().into_owned()),
+    };
     let session = Session::create(&sessions_root(app)?, &quiz, &meta).map_err(|e| e.to_string())?;
+    serve_media(app, inner, media_root)?;
     inner.game = Some(Game::new(quiz));
     inner.session = Some(session);
     emit_show_changed(app, inner);
+    // Only the latest show can be resumed, so other unpacked quizzes can go.
+    let keep: Vec<&Path> = inner.media_root.iter().map(PathBuf::as_path).collect();
+    if let Err(e) = quiz_file::prune(&quizzes_cache(app)?, &keep) {
+        eprintln!("cleaning unpacked quizzes: {e}");
+    }
     Ok(())
 }
 
@@ -105,17 +141,26 @@ fn get_quiz(state: State<AppState>) -> Option<Quiz> {
     inner.game.as_ref().map(|g| g.quiz().clone())
 }
 
+/// Folder of the running quiz's media, ending with a path separator, so the
+/// windows can append a media reference to it.
+#[tauri::command]
+fn media_root(state: State<AppState>) -> Option<String> {
+    let inner = state.0.lock().unwrap();
+    inner.media_root.as_ref().map(|root| root.join("").to_string_lossy().into_owned())
+}
+
+/// Opens a quiz file (`.quiz` or a plain quiz JSON) and starts a show with it.
 #[tauri::command]
 fn start_show_from_file(app: AppHandle, state: State<AppState>, path: String) -> CmdResult<()> {
-    let json = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
-    let quiz = Quiz::from_json(&json)?;
-    start_show(&app, &mut state.0.lock().unwrap(), quiz, Some(path))
+    // Unpacking can take a moment for big media; the show is not locked meanwhile.
+    let package = quiz_file::open(Path::new(&path), &quizzes_cache(&app)?).map_err(|e| e.to_string())?;
+    start_show(&app, &mut state.0.lock().unwrap(), package.quiz, Some(path), Some(package.root))
 }
 
 #[tauri::command]
 fn start_demo_show(app: AppHandle, state: State<AppState>) -> CmdResult<()> {
     let quiz = Quiz::from_json(DEMO_QUIZ)?;
-    start_show(&app, &mut state.0.lock().unwrap(), quiz, None)
+    start_show(&app, &mut state.0.lock().unwrap(), quiz, None, None)
 }
 
 #[tauri::command]
@@ -123,21 +168,30 @@ fn last_session(app: AppHandle) -> CmdResult<Option<SessionSummary>> {
     Session::latest_summary(&sessions_root(&app)?).map_err(|e| e.to_string())
 }
 
+/// Resumes the last show. Returns a warning for the quizmaster when the show
+/// runs but something is missing (its media were deleted).
 #[tauri::command]
-fn resume_last_session(app: AppHandle, state: State<AppState>) -> CmdResult<()> {
-    let (session, quiz, journal) = Session::resume_latest(&sessions_root(&app)?)
+fn resume_last_session(app: AppHandle, state: State<AppState>) -> CmdResult<Option<String>> {
+    let Resumed { session, quiz, journal, meta } = Session::resume_latest(&sessions_root(&app)?)
         .map_err(|e| e.to_string())?
         .ok_or("there is no show to resume")?;
+    let media_root = meta.media_root.map(PathBuf::from);
+    // The show must go on: without its media it still runs, and the Director says why.
+    let warning = match &media_root {
+        Some(root) => quiz_file::check(&quiz, root).err().map(|e| e.to_string()),
+        None => None,
+    };
     let mut inner = state.0.lock().unwrap();
+    serve_media(&app, &mut inner, media_root.filter(|root| root.is_dir()))?;
     let game = Game::replay(quiz, &journal);
     let recovery = game.recovery_command();
     inner.game = Some(game);
     inner.session = Some(session);
     emit_show_changed(&app, &inner);
-    match recovery {
-        Some(command) => execute(&app, &mut inner, command),
-        None => Ok(()),
+    if let Some(command) = recovery {
+        execute(&app, &mut inner, command)?;
     }
+    Ok(warning)
 }
 
 /// Closes the running show. Its journal stays on disk, so it can be resumed.
@@ -146,6 +200,7 @@ fn end_show(app: AppHandle, state: State<AppState>) {
     let mut inner = state.0.lock().unwrap();
     inner.game = None;
     inner.session = None;
+    inner.media_root = None;
     emit_show_changed(&app, &inner);
 }
 
@@ -263,6 +318,7 @@ pub fn run() {
         .manage(AppState(Mutex::new(Inner {
             game: None,
             session: None,
+            media_root: None,
             driver: Box::new(VirtualDriver),
         })))
         .setup(|app| {
@@ -277,6 +333,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             get_view,
             get_quiz,
+            media_root,
             start_show_from_file,
             start_demo_show,
             last_session,

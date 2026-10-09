@@ -20,6 +20,9 @@ pub struct SessionMeta {
     pub quiz_title: String,
     pub source_path: Option<String>,
     pub started_ms: u64,
+    /// Folder with the quiz's unpacked media (see the quiz-file crate).
+    #[serde(default)]
+    pub media_root: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, TS)]
@@ -34,6 +37,14 @@ pub struct Session {
     journal: File,
 }
 
+/// A session reopened after a restart, with everything needed to rebuild the show.
+pub struct Resumed {
+    pub session: Session,
+    pub quiz: Quiz,
+    pub journal: Vec<Stamped>,
+    pub meta: SessionMeta,
+}
+
 impl Session {
     /// Starts a new session folder under `root`.
     pub fn create(root: &Path, quiz: &Quiz, meta: &SessionMeta) -> std::io::Result<Session> {
@@ -46,15 +57,16 @@ impl Session {
     }
 
     /// Reopens the most recent session for appending, with its quiz and journal.
-    pub fn resume_latest(root: &Path) -> std::io::Result<Option<(Session, Quiz, Vec<Stamped>)>> {
+    pub fn resume_latest(root: &Path) -> std::io::Result<Option<Resumed>> {
         let Some(dir) = latest_dir(root)? else { return Ok(None) };
         let quiz = Quiz::from_json(&fs::read_to_string(dir.join(QUIZ_FILE))?)
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+        let meta: SessionMeta = serde_json::from_str(&fs::read_to_string(dir.join(META_FILE))?)?;
         let (journal, valid_len) = read_journal(&dir.join(JOURNAL_FILE))?;
         let file = OpenOptions::new().create(true).append(true).open(dir.join(JOURNAL_FILE))?;
         // Cut off a torn last line so new commands start on a clean line.
         file.set_len(valid_len)?;
-        Ok(Some((Session { journal: file }, quiz, journal)))
+        Ok(Some(Resumed { session: Session { journal: file }, quiz, journal, meta }))
     }
 
     pub fn latest_summary(root: &Path) -> std::io::Result<Option<SessionSummary>> {
@@ -141,7 +153,12 @@ mod tests {
         let root = temp_root("resume");
         let quiz = Quiz { schema_version: 1, title: "T".into(), slides: vec![] };
         for started_ms in [1, 2] {
-            let meta = SessionMeta { quiz_title: format!("show {started_ms}"), source_path: None, started_ms };
+            let meta = SessionMeta {
+                quiz_title: format!("show {started_ms}"),
+                source_path: None,
+                started_ms,
+                media_root: Some(format!("/media/{started_ms}")),
+            };
             let mut session = Session::create(&root, &quiz, &meta).unwrap();
             session.append(&Stamped { at_ms: 5, command: Command::Next }).unwrap();
             session
@@ -153,9 +170,10 @@ mod tests {
 
         let summary = Session::latest_summary(&root).unwrap().unwrap();
         assert_eq!((summary.meta.quiz_title.as_str(), summary.command_count), ("show 2", 2));
-        let (mut session, _, journal) = Session::resume_latest(&root).unwrap().unwrap();
-        assert_eq!(journal.len(), 2);
-        session.append(&Stamped { at_ms: 8, command: Command::Next }).unwrap();
+        let mut resumed = Session::resume_latest(&root).unwrap().unwrap();
+        assert_eq!(resumed.journal.len(), 2);
+        assert_eq!(resumed.meta.media_root.as_deref(), Some("/media/2"));
+        resumed.session.append(&Stamped { at_ms: 8, command: Command::Next }).unwrap();
         assert_eq!(Session::latest_summary(&root).unwrap().unwrap().command_count, 3);
         fs::remove_dir_all(&root).unwrap();
     }

@@ -21,7 +21,11 @@
       }
     ],
     "security": {
-      "csp": null
+      "csp": null,
+      "assetProtocol": {
+        "enable": true,
+        "scope": []
+      }
     }
   },
   "bundle": {
@@ -32,7 +36,8 @@
     },
     "linux": {
       "deb": {
-        "depends": ["libudev1"]
+        "depends": ["libudev1"],
+        "recommends": ["gstreamer1.0-plugins-good", "gstreamer1.0-plugins-bad", "gstreamer1.0-libav"]
       }
     },
     "icon": [

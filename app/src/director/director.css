@@ -395,6 +395,43 @@
 .dot-4 { background: var(--answer-4); }
 .dot-5 { background: var(--answer-5); }
 
+.preview-media {
+  display: flex;
+  justify-content: center;
+  margin: 8px 0 10px;
+}
+
+.preview-media img,
+.preview-media video {
+  max-width: 100%;
+  max-height: 220px;
+  object-fit: contain;
+}
+
+.media-list {
+  margin: 0 10px 10px;
+  display: grid;
+  gap: 2px;
+}
+
+.media-list > div {
+  display: flex;
+  gap: 8px;
+}
+
+.media-list dt {
+  min-width: 70px;
+  color: var(--muted);
+}
+
+.media-list dd {
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  user-select: text;
+}
+
 .notes-box {
   margin: 0 10px 10px;
   padding: 8px 10px;

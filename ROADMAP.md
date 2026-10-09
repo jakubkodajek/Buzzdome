@@ -22,7 +22,7 @@ Status keys: `[x]` done, `[~]` in progress, `[ ]` not started.
 
 - [x] Stack: Tauri 2, Rust core, React + TypeScript UI
 - [x] Specification and design: `docs/specification.md`, `docs/design.md` (incl. theme and plugin formats)
-- [~] Quiz file format v1: JSON model done (`crates/quiz-core/src/model.rs`); ZIP with `media/` and `docs/quiz-format.md` to do
+- [x] Quiz file format v1: `.quiz` ZIP with `quiz.json` and `media/` (`docs/quiz-format.md`, `crates/quiz-file`)
 - [x] Game state machine and scoring rules, documented next to the code
 - [x] Persistence and crash recovery: append-only command journal, replayed on resume
 - [x] `BuzzerDriver` trait: keyboard, virtual and USB-HID receiver (`crates/buzzers`)
@@ -55,13 +55,14 @@ Status keys: `[x]` done, `[~]` in progress, `[ ]` not started.
 - [ ] Fallback: vendor keystroke mode through the keyboard driver
 
 ### M3: Authoring (week 2-3)
-- [ ] Editor: slide list (add, reorder, duplicate, delete), question form, answers, correct answer, time, points, picture, notes
+- [ ] Editor: slide list (add, reorder, duplicate, delete), question form, answers, correct answer, time, points, picture, sound, video, notes
+- [x] Pictures, videos and backgrounds per slide on the projector; slide sounds from the Director (on slide, with the clock, on demand)
 - [ ] Excel import of questions
 - [ ] Show settings: team names, sounds, welcome screen, end-of-question actions
 
 ### M4: Show polish (week 3-4)
 - [ ] Sounds, countdown, transitions, branding of the welcome screen
-- [ ] Czech and English UI
+- [x] Czech and English UI (switchable in Settings)
 - [ ] Should-haves from `features.csv` that the first event needs
 
 ### M5: Extensions (after the first event)

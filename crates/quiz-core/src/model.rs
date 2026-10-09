@@ -1,9 +1,10 @@
 //! Quiz file model (schema version 1). This is the contract with quiz authors:
 //! change it only with a schema version bump and a migration.
 
+use crate::media::{check_reference, MediaKind, SoundClip, VideoClip};
 use serde::{Deserialize, Serialize};
+use std::collections::{BTreeSet, HashSet};
 use ts_rs::TS;
-use std::collections::HashSet;
 
 pub const SCHEMA_VERSION: u32 = 1;
 
@@ -28,8 +29,47 @@ pub struct Slide {
     /// Shown only to the quizmaster in the Director.
     #[serde(default)]
     pub notes: String,
+    #[serde(default)]
+    pub picture: Option<String>,
+    /// Shown in place of a picture; a slide has one or the other.
+    #[serde(default)]
+    pub video: Option<VideoClip>,
+    #[serde(default)]
+    pub sound: Option<SoundClip>,
+    /// Picture or looping video behind the slide; the theme's otherwise.
+    #[serde(default)]
+    pub background: Option<String>,
     #[serde(flatten)]
     pub content: SlideContent,
+}
+
+impl Slide {
+    /// A slide without notes or media.
+    pub fn new(id: impl Into<String>, content: SlideContent) -> Slide {
+        Slide { id: id.into(), notes: String::new(), picture: None, video: None, sound: None, background: None, content }
+    }
+
+    /// The media files this slide uses, with the kinds each may be.
+    pub fn media(&self) -> Vec<(&str, &'static [MediaKind])> {
+        const IMAGE: &[MediaKind] = &[MediaKind::Image];
+        const AUDIO: &[MediaKind] = &[MediaKind::Audio];
+        const VIDEO: &[MediaKind] = &[MediaKind::Video];
+        const BACKGROUND: &[MediaKind] = &[MediaKind::Image, MediaKind::Video];
+        let mut media = Vec::new();
+        if let Some(file) = &self.picture {
+            media.push((file.as_str(), IMAGE));
+        }
+        if let Some(video) = &self.video {
+            media.push((video.file.as_str(), VIDEO));
+        }
+        if let Some(sound) = &self.sound {
+            media.push((sound.file.as_str(), AUDIO));
+        }
+        if let Some(file) = &self.background {
+            media.push((file.as_str(), BACKGROUND));
+        }
+        media
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
@@ -42,8 +82,6 @@ pub enum SlideContent {
         title: String,
         #[serde(default)]
         text: String,
-        #[serde(default)]
-        picture: Option<String>,
     },
     Question(Question),
     /// Closes a round and shows the leaderboard.
@@ -86,8 +124,6 @@ pub struct Question {
     /// Points taken for a wrong answer (a positive number).
     #[serde(default)]
     pub penalty: i32,
-    #[serde(default)]
-    pub picture: Option<String>,
 }
 
 fn default_time_limit() -> u32 {
@@ -144,6 +180,11 @@ impl Quiz {
         Ok(quiz)
     }
 
+    /// Every media file the quiz uses, each once.
+    pub fn media_files(&self) -> BTreeSet<&str> {
+        self.slides.iter().flat_map(|s| s.media()).map(|(file, _)| file).collect()
+    }
+
     pub fn validate(&self) -> Result<(), Vec<ValidationError>> {
         let mut errors = Vec::new();
         let mut ids = HashSet::new();
@@ -154,6 +195,17 @@ impl Quiz {
             };
             if !ids.insert(slide.id.as_str()) {
                 errors.push(err("duplicate slide id".into()));
+            }
+            for (file, kinds) in slide.media() {
+                if let Err(message) = check_reference(file, kinds) {
+                    errors.push(err(message));
+                }
+            }
+            if slide.picture.is_some() && slide.video.is_some() {
+                errors.push(err("a slide shows a picture or a video, not both".into()));
+            }
+            if slide.sound.as_ref().is_some_and(|s| s.volume > 100) {
+                errors.push(err("sound volume is a percentage, 0 to 100".into()));
             }
             if let SlideContent::Question(q) = &slide.content {
                 if q.answers.len() > MAX_ANSWERS {
@@ -199,7 +251,6 @@ mod tests {
             points,
             points_end,
             penalty: 0,
-            picture: None,
         }
     }
 
@@ -242,7 +293,32 @@ mod tests {
         let mut quiz = Quiz { schema_version: 1, title: "x".into(), slides: vec![] };
         let mut q = question(10, None, 10);
         q.correct = Some(5);
-        quiz.slides.push(Slide { id: "a".into(), notes: String::new(), content: SlideContent::Question(q) });
+        quiz.slides.push(Slide::new("a", SlideContent::Question(q)));
         assert_eq!(quiz.validate().unwrap_err().len(), 1);
+    }
+
+    #[test]
+    fn reads_slide_media_and_checks_it() {
+        let json = r#"{
+            "schemaVersion": 1,
+            "title": "Media",
+            "slides": [
+                {"id": "q1", "type": "question", "mode": "fastestFinger", "text": "Which song?",
+                 "picture": "media/cover.jpg", "background": "media/stage.mp4",
+                 "sound": {"file": "media/song.mp3", "start": "withClock"}}
+            ]
+        }"#;
+        let quiz = Quiz::from_json(json).unwrap();
+        let slide = &quiz.slides[0];
+        let sound = slide.sound.as_ref().unwrap();
+        assert_eq!((sound.start, sound.repeat, sound.volume), (crate::media::SoundStart::WithClock, false, 100));
+        assert_eq!(quiz.media_files().into_iter().collect::<Vec<_>>(), ["media/cover.jpg", "media/song.mp3", "media/stage.mp4"]);
+        assert!(quiz.validate().is_ok());
+
+        let mut broken = quiz.clone();
+        broken.slides[0].picture = Some("../secret.jpg".into());
+        broken.slides[0].video = Some(VideoClip { file: "media/clip.mp4".into(), autoplay: true, muted: false, repeat: false });
+        // A bad path, and a picture together with a video.
+        assert_eq!(broken.validate().unwrap_err().len(), 2);
     }
 }

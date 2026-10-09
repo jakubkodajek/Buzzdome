@@ -4,10 +4,9 @@ use quiz_core::{
 };
 
 fn question(id: &str, mode: AnswerMode) -> Slide {
-    Slide {
-        id: id.into(),
-        notes: String::new(),
-        content: SlideContent::Question(Question {
+    Slide::new(
+        id,
+        SlideContent::Question(Question {
             text: format!("{id}?"),
             mode,
             answers: vec!["A".into(), "B".into(), "C".into(), "D".into()],
@@ -16,9 +15,8 @@ fn question(id: &str, mode: AnswerMode) -> Slide {
             points: 100,
             points_end: Some(50),
             penalty: 20,
-            picture: None,
         }),
-    }
+    )
 }
 
 fn quiz(slides: Vec<Slide>) -> Quiz {

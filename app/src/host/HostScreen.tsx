@@ -7,7 +7,8 @@ import { playerName } from "../i18n";
 import { CheckIcon, CrossIcon, PeopleIcon, QuestionIcon, TrophyIcon } from "../icons";
 import { useShortcuts } from "../keyboard";
 import { questionPosition } from "../quiz";
-import type { GameView, PlayerView, Question } from "../types";
+import { SlideBackground, SlideMedia } from "../slide-media";
+import type { GameView, PlayerView, Question, Slide } from "../types";
 import "./host.css";
 
 const STAGE_W = 1920;
@@ -34,6 +35,7 @@ function HostLayout() {
     <Stage>
       {view && (
         <>
+          {view.slide && <SlideBackground slide={view.slide} />}
           <HostContent view={view} />
           {verdict && <div className={`verdict verdict-${verdict}`}>{verdict === "correct" ? <CheckIcon /> : <CrossIcon />}</div>}
           {view.leaderboardVisible && (
@@ -93,6 +95,7 @@ function HostContent({ view }: { view: GameView }) {
       return view.slide?.type === "billboard" ? (
         <div className="center-slide">
           <h1 className="slide-title">{view.slide.title}</h1>
+          <SlideMedia slide={view.slide} className="slide-media" />
           {view.slide.text && <p className="slide-text">{view.slide.text}</p>}
         </div>
       ) : null;
@@ -106,7 +109,7 @@ function HostContent({ view }: { view: GameView }) {
     case "final":
       return <FinalScores players={ranked(view)} step={phase.step} />;
     case "question":
-      return view.slide?.type === "question" ? <QuestionScreen view={view} question={view.slide} /> : null;
+      return view.slide?.type === "question" ? <QuestionScreen view={view} slide={view.slide} question={view.slide} /> : null;
   }
 }
 
@@ -133,7 +136,7 @@ function Welcome({ view }: { view: GameView }) {
   );
 }
 
-function QuestionScreen({ view, question }: { view: GameView; question: Question }) {
+function QuestionScreen({ view, slide, question }: { view: GameView; slide: Slide; question: Question }) {
   const { t } = useApp();
   const quiz = useQuiz();
   const clock = useClock(view);
@@ -163,9 +166,10 @@ function QuestionScreen({ view, question }: { view: GameView; question: Question
   const buzzed = view.players.find((p) => p.buzzer === view.buzzed);
   const winner = step === "revealed" && question.mode === "fastestFinger" ? view.players.find((p) => (p.delta ?? 0) > 0) : undefined;
   const barPlayer = buzzed ?? winner;
+  const hasMedia = slide.picture !== null || slide.video !== null;
 
   return (
-    <div className="question-screen">
+    <div className={hasMedia ? "question-screen has-media" : "question-screen"}>
       <div className="info-panel">
         <ClockGauge
           seconds={step === "ready" ? question.timeLimitS || null : closed ? 0 : remaining === null ? null : Math.ceil(remaining / 1000)}
@@ -186,6 +190,7 @@ function QuestionScreen({ view, question }: { view: GameView; question: Question
       </div>
 
       <h1 className="question-text">{question.text}</h1>
+      {hasMedia && <SlideMedia slide={slide} className="question-media" />}
 
       {question.answers.length > 0 && (
         <div className={`answers answers-${question.answers.length > 4 ? "6" : "4"}`}>

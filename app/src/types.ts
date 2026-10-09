@@ -21,6 +21,8 @@ export type { ReceiverInfo } from "./bindings/ReceiverInfo";
 export type { ReceiverStatus } from "./bindings/ReceiverStatus";
 export type { SessionSummary } from "./bindings/SessionSummary";
 export type { Slide } from "./bindings/Slide";
+export type { SoundClip } from "./bindings/SoundClip";
+export type { VideoClip } from "./bindings/VideoClip";
 
 /** Buzzer number as the hardware reports it (`BuzzerId` in Rust). */
 export type BuzzerId = number;

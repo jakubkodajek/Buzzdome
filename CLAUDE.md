@@ -54,6 +54,7 @@ on `PATH` first (macOS dev machine).
 | build installer | `cd app && npm run tauri build` (each OS builds its own installer) |
 
 Layout: `crates/quiz-core` (model, game state machine, scoring, view),
+`crates/quiz-file` (`.quiz` files: ZIP with media, unpack cache, save),
 `crates/buzzers` (driver trait, USB-HID receiver thread, protocols, learn mode),
 `app/src-tauri` (Tauri shell, session journal, `hardware.rs` receiver setup),
 `app/src` (React UI: `director/`, `host/`), `samples/demo-quiz.json`.
@@ -74,7 +75,8 @@ UI conventions (keep one way of doing each thing):
 
 - `ROADMAP.md`: phases, milestones and what is done.
 - `docs/specification.md`: requirements with IDs (buzzer link, themes, plugins).
-  `docs/design.md`: architecture, buzzer stack. `docs/hardware-test.md`:
+  `docs/design.md`: architecture, buzzer stack. `docs/quiz-format.md`: the quiz
+  file format. `docs/hardware-test.md`:
   checklist for the real receiver. Jakub keeps a copy of the reference manual
   in `docs/` locally; it is gitignored and must never be committed.
 - `replica/recon.md`: screens (S01..S42), flows (F01..F10), components, data model and

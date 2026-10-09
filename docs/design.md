@@ -60,9 +60,32 @@ two windows cannot disagree with each other or with the score.
   loads (`useBackendEvent`, `useGameView`, `useClock`, `useQuiz`,
   `useLastSession`). Small shared helpers live in `answers.ts`, `format.ts`,
   `quiz.ts` and `keyboard.ts`. ESLint with the React hooks rules runs in CI.
-- **Sound.** The Director window plays the cues, because it stays open for
-  the whole show and the projector window may not. Spec SN-5 moves playback
-  into the Rust shell later.
+- **Sound.** The Director window plays the cues and the slides' sound
+  clips (`slide-sound.ts`), because it stays open for the whole show and the
+  projector window may not. Spec SN-5 moves playback into the Rust shell later.
+
+### 1.2 Quiz files and media
+
+Format: [`quiz-format.md`](quiz-format.md). `crates/quiz-file` opens a `.quiz`
+file (or a plain `quiz.json` with `media/` next to it) by unpacking it into
+`<app data>/quizzes/<hash>/`, where the hash covers every file name and byte.
+Unpacking writes into a temporary folder, syncs each file, checks the quiz
+(`Quiz::validate` plus "every media file is there") and only then renames the
+folder into place, so a half-unpacked quiz is never used. Opening the same
+file again reuses the folder.
+
+The session's `meta.json` records that folder (`mediaRoot`), so a resumed
+show finds its media even if the original file was moved. When a show
+starts, every other unpacked quiz is deleted, because only the latest show can
+be resumed. If the folder is gone on resume, the show still resumes and the
+Director shows a warning.
+
+The windows load media through Tauri's asset protocol. Its scope starts
+empty and the shell allows exactly the current quiz folder
+(`asset_protocol_scope().allow_directory`), so a page cannot read anything
+else on the disk. `media_root` returns the folder with a trailing separator;
+`media.ts` appends a reference to it and calls `convertFileSrc`. Media
+references are checked in the core (`media.rs`) to stay inside `media/`.
 
 ## 2. Buzzer link
 
@@ -243,7 +266,7 @@ conflict detection. None of this proves the real receiver's format: see
 Signing and notarization need a Windows code-signing certificate and an Apple
 Developer ID; until then builds are unsigned (macOS ad-hoc), see PL-5.
 
-## 5. Extension points (for sections 5, 6, 9 and 10 of the specification)
+## 5. Extension points (for sections 5, 6 and 10 of the specification)
 
 Not built yet; this is where they will attach, so current code does not block
 them.
@@ -265,11 +288,6 @@ them.
   game state and the press stream the app already emits.
 - **Light colours** move from the protocol into the theme
   (`buzzerColors`), passed to `encode_lights` for RGB buzzers.
-- **Quiz files with media** (spec section 9). A `.quiz` file is a ZIP with
-  `quiz.json` and `media/`. Opening one extracts it into
-  `<app data>/quizzes/<content hash>/`, which the session records, so a
-  resumed show finds its media even if the original file moved. Media are
-  served to the web views through the asset protocol, limited to that folder.
 - **Sounds** (spec section 10). Cues already come out of the core as effects.
   The shell maps each cue to a file (show setting, else theme, else built-in)
   and plays it with a Rust audio library chosen when this is built, so
@@ -282,7 +300,9 @@ them.
 | Receiver thread, protocols, learn mode, edge filter | Rust unit and integration tests with a fake HID backend, repeated runs | pass |
 | App builds and starts with the HID backend | Linux, under a virtual display; Receiver tab lists devices (none attached) | pass |
 | Linux `.deb` | built locally | pass |
-| UI screens (Director, projector) render without errors | preview with a mocked backend, headless Chromium | pass |
+| UI screens (Director, projector) render without errors, incl. a slide picture | preview with a mocked backend, headless Chromium | pass |
+| Quiz files: save, open, reuse, unsafe entries, size limit, missing media | `cargo test -p quiz-file` | pass |
+| Media through the asset protocol, autoplay of video and sound | needs the installed app on each OS | **not tested** |
 | Windows and macOS installers | CI | see the PR's checks |
 | Real receiver: detection, raw reports, learn mode, presses in a show | needs the hardware | **not tested** |
 | Lights, press times, battery | need the vendor protocol | **not built** |

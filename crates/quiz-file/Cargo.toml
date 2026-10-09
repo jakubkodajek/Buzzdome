@@ -1,0 +1,13 @@
+[package]
+name = "quiz-file"
+description = "Quiz files: a ZIP with quiz.json and its media, unpacked into a content-addressed cache."
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+quiz-core = { path = "../quiz-core" }
+serde_json.workspace = true
+thiserror.workspace = true
+sha2 = "0.11"
+# Deflate only: quiz.json is compressed, media files are stored as they are.
+zip = { version = "9", default-features = false, features = ["deflate-flate2-zlib-rs"] }

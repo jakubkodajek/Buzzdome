@@ -342,13 +342,13 @@ the Host screen.
 
 | ID | Requirement | Status |
 | --- | --- | --- |
-| SF-1 | Start: open a quiz file (or a recent one) and start the show. The last unfinished show can be resumed instead. | done for JSON quizzes; quiz files with media in section 9 |
+| SF-1 | Start: open a quiz file (or a recent one) and start the show. The last unfinished show can be resumed instead. | done (`.quiz` files and plain JSON); recent files planned |
 | SF-2 | Launch check before the welcome screen: receiver connected (or keyboard only), projector window open on the chosen monitor, sound output working. Problems are listed with a fix; the show can start anyway. | planned |
 | SF-3 | Welcome screen on the projector: quiz title, the theme's background and logo, optional welcome music (section 10). A small sign while the receiver is not connected (BZ-15). | partial: title and background colour only |
 | SF-4 | Registration: players press any button; their buzzer numbers light up in a grid on the projector and appear in the Director's Teams tab with an editable name. Late presses still register. | done |
 | SF-5 | Team names can be prepared before the show (buzzer number to name) and loaded with it, so a registered buzzer shows its team name at once. | planned |
 | SF-6 | Slides, questions, judging, scores and the final ranking as in the reference app; all keyboard shortcuts work. | done for billboard, multiple choice and fastest finger |
-| SF-7 | The projector screen is the user's own: theme, backgrounds and per-slide pictures or videos (section 5 and 9). | planned |
+| SF-7 | The projector screen is the user's own: theme, backgrounds and per-slide pictures or videos (section 5 and 9). | partial: per-slide pictures, videos and backgrounds done; themes planned |
 
 ## 9. Quiz authoring and media
 
@@ -357,9 +357,9 @@ the Host screen.
 | QZ-1 | Quiz editor in the Director, after the reference editor's layout: slide list (add, duplicate, delete, reorder by drag), and a form for the selected slide. Undo and redo. | planned |
 | QZ-2 | Slide types: billboard, question (2 to 6 answers, multiple choice or fastest finger), end of round. More types come with the reference's other formats. | done in the game core; editor planned |
 | QZ-3 | Per question: text, answers, correct answer, time limit, points (fixed or falling from a start to an end value), penalty, notes for the quizmaster. | done in the game core; editor planned |
-| QZ-4 | Media per slide: a picture, a sound clip and a video, each with its options (sound: play when the slide opens or on demand, loop, volume; video: autoplay, muted). A background per slide overrides the theme's (BG rules in section 5). | planned |
-| QZ-5 | Quiz file: one file (`.quiz`, a ZIP) with `quiz.json` and a `media/` folder, so a quiz with all its pictures and sounds can be copied to the event laptop as one file. Format version in `quiz.json`; older versions keep opening. | planned |
-| QZ-6 | The editor checks a quiz before saving and before starting (missing media, no correct answer, empty answers) with the same rules the game core uses. | planned |
+| QZ-4 | Media per slide: a picture, a sound clip and a video, each with its options (sound: when the slide opens, with the clock or on demand, loop, volume; video: autoplay, muted, loop). A background per slide overrides the theme's (BG rules in section 5). | done in the file format, on the projector and in the Director; editor planned |
+| QZ-5 | Quiz file: one file (`.quiz`, a ZIP) with `quiz.json` and a `media/` folder, so a quiz with all its pictures and sounds can be copied to the event laptop as one file. Format version in `quiz.json`; older versions keep opening. | done: [`quiz-format.md`](quiz-format.md) |
+| QZ-6 | The editor checks a quiz before saving and before starting (missing media, no correct answer, empty answers) with the same rules the game core uses. | done for opening and saving files (`quiz-core` and `quiz-file`); editor planned |
 | QZ-7 | Test run: play the quiz from the editor with virtual buzzers, without touching the last real show. | planned |
 
 ## 10. Sounds and music

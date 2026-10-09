@@ -21,10 +21,13 @@ import type {
 export const api = {
   getView: () => invoke<GameView | null>("get_view"),
   getQuiz: () => invoke<Quiz | null>("get_quiz"),
+  /** Folder of the running quiz's media, ending with a path separator. */
+  mediaRoot: () => invoke<string | null>("media_root"),
   startShowFromFile: (path: string) => invoke<void>("start_show_from_file", { path }),
   startDemoShow: () => invoke<void>("start_demo_show"),
   lastSession: () => invoke<SessionSummary | null>("last_session"),
-  resumeLastSession: () => invoke<void>("resume_last_session"),
+  /** Resumes the last show; returns a warning when something is missing. */
+  resumeLastSession: () => invoke<string | null>("resume_last_session"),
   endShow: () => invoke<void>("end_show"),
   dispatch: (command: Command) => invoke<void>("dispatch", { command }),
   listMonitors: () => invoke<MonitorInfo[]>("list_monitors"),

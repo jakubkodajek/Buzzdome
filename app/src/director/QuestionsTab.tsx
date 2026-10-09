@@ -3,6 +3,7 @@ import { ANSWER_LETTERS } from "../answers";
 import { useApp, useDispatch } from "../app-context";
 import type { StringKey } from "../i18n";
 import { questionNumbers, slideTitle } from "../quiz";
+import { SlideMedia } from "../slide-media";
 import type { GameView, Quiz, Slide } from "../types";
 
 const TYPE_LABEL: Record<Slide["type"], StringKey> = {
@@ -81,6 +82,7 @@ function SlidePreview({ slide, counts }: { slide: Slide; counts: number[] | null
     <>
       <div className="preview-card">
         <h2 className="preview-title">{slideTitle(slide)}</h2>
+        <SlideMedia slide={slide} className="preview-media" preview />
         {slide.type === "question" && (
           <>
             <p className="muted center">
@@ -101,10 +103,34 @@ function SlidePreview({ slide, counts }: { slide: Slide; counts: number[] | null
         )}
         {slide.type === "billboard" && slide.text && <p className="center">{slide.text}</p>}
       </div>
+      <MediaList slide={slide} />
       <div className="notes-box">
         <b>{t("notes")}</b>
         <p>{slide.notes || "—"}</p>
       </div>
     </>
+  );
+}
+
+/** The slide's media files by name, so the quizmaster knows what will play. */
+function MediaList({ slide }: { slide: Slide }) {
+  const { t } = useApp();
+  const items: [StringKey, string | null | undefined][] = [
+    ["mediaPicture", slide.picture],
+    ["mediaVideo", slide.video?.file],
+    ["mediaSound", slide.sound?.file],
+    ["mediaBackground", slide.background],
+  ];
+  const present = items.filter((item): item is [StringKey, string] => Boolean(item[1]));
+  if (present.length === 0) return null;
+  return (
+    <dl className="media-list">
+      {present.map(([label, file]) => (
+        <div key={label}>
+          <dt>{t(label)}</dt>
+          <dd>{file.slice("media/".length)}</dd>
+        </div>
+      ))}
+    </dl>
   );
 }

@@ -26,4 +26,4 @@ pointsEnd: number | null,
 /**
  * Points taken for a wrong answer (a positive number).
  */
-penalty: number, picture: string | null, };
+penalty: number, };

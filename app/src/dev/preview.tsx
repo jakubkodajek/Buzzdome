@@ -18,6 +18,9 @@ const quiz = {
     pointsEnd: null,
     penalty: 0,
     picture: null,
+    video: null,
+    sound: null,
+    background: null,
     text: "",
     ...slide,
   })),
@@ -113,6 +116,18 @@ const SCENES: Record<string, GameView | null> = {
   leaderboard: view({ phase: { phase: "endOfRound" }, slideIndex: 4, slide: quiz.slides[4] }),
   overlay: view({ leaderboardVisible: true }),
   final3: view({ phase: { phase: "final", step: 3 }, slide: null }),
+  picture: view({
+    phase: { phase: "question", step: "ready" },
+    slide: { ...quiz.slides[1], picture: "media/landscape.svg", sound: { file: "media/song.mp3", start: "onDemand", repeat: false, volume: 80 } },
+  }),
+  billboardPicture: view({ phase: { phase: "billboard" }, slideIndex: 0, slide: { ...quiz.slides[0], picture: "media/landscape.svg" } }),
+};
+
+// The quiz as the scene's view shows it (scenes may add media to a slide).
+const current = SCENES[scene] ?? null;
+const sceneQuiz: Quiz = {
+  ...quiz,
+  slides: quiz.slides.map((slide, i) => (current?.slide && i === current.slideIndex ? current.slide : slide)),
 };
 
 clearMocks();
@@ -120,9 +135,9 @@ mockWindows(windowLabel, windowLabel === "host" ? "director" : "host");
 mockIPC((cmd) => {
   switch (cmd) {
     case "get_view":
-      return SCENES[scene] ?? null;
+      return current;
     case "get_quiz":
-      return quiz;
+      return sceneQuiz;
     case "list_monitors":
       return [
         { index: 0, name: "Built-in Display", width: 2560, height: 1600 },
@@ -130,6 +145,9 @@ mockIPC((cmd) => {
       ];
     case "host_window_open":
       return false;
+    case "media_root":
+      // Served by Vite from this folder (see the convertFileSrc mock below).
+      return "/src/dev/";
     case "last_session":
       return { meta: { quizTitle: quiz.title, sourcePath: null, startedMs: Date.now() - 3_600_000 }, commandCount: 57 };
     case "plugin:event|listen":
@@ -138,6 +156,9 @@ mockIPC((cmd) => {
       return null;
   }
 });
+
+// The real app loads media through Tauri's asset protocol; here Vite serves them.
+(window as unknown as { __TAURI_INTERNALS__: { convertFileSrc: (path: string) => string } }).__TAURI_INTERNALS__.convertFileSrc = (path) => path;
 
 const { default: App } = await import("../App");
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(

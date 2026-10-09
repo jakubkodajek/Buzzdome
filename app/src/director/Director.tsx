@@ -14,11 +14,13 @@ import {
   PlayIcon,
   PowerIcon,
   ScreenIcon,
+  SoundIcon,
   StopIcon,
 } from "../icons";
 import { useShortcuts } from "../keyboard";
 import { phaseLabel } from "../phase";
 import { questionPosition } from "../quiz";
+import { useSlideSound, type SlideSound } from "../slide-sound";
 import { playCue } from "../sound";
 import type { GameView, Quiz } from "../types";
 import { QuestionsTab } from "./QuestionsTab";
@@ -63,6 +65,7 @@ function DirectorLayout() {
   useShortcuts(view, projector.toggle);
   // Sounds play here: this window is open for the whole show, the projector may not be.
   useBackendEvent("sound-cue", playCue);
+  const sound = useSlideSound(view);
 
   const tabs: [Tab, string][] = [
     ["questions", t("tabQuestions")],
@@ -75,7 +78,7 @@ function DirectorLayout() {
 
   return (
     <div className="director">
-      <CommandPanel view={view} projector={projector} />
+      <CommandPanel view={view} projector={projector} sound={sound} />
       <div className="workspace">
         <nav className="tabs">
           {tabs.map(([id, label]) => (
@@ -124,14 +127,14 @@ function CommandButton(props: { icon: ReactNode; label: string; hint?: string; t
 }
 
 /** Left command area: only the commands that make sense right now. */
-function CommandPanel({ view, projector }: { view: GameView | null; projector: ProjectorSettings }) {
-  const { t } = useApp();
+function CommandPanel({ view, projector, sound }: { view: GameView | null; projector: ProjectorSettings; sound: SlideSound }) {
+  const { t, notify } = useApp();
   const dispatch = useDispatch();
   const run = useRun();
   const last = useLastSession();
 
   const openQuiz = async () => {
-    const path = await open({ multiple: false, filters: [{ name: "Quiz", extensions: ["json"] }] });
+    const path = await open({ multiple: false, filters: [{ name: t("quizFiles"), extensions: ["quiz", "json"] }] });
     if (typeof path === "string") run(api.startShowFromFile(path));
   };
 
@@ -150,7 +153,7 @@ function CommandPanel({ view, projector }: { view: GameView | null; projector: P
               icon={<NextIcon />}
               label={t("resume")}
               hint={t("resumeInfo", { title: last.meta.quizTitle, count: last.commandCount })}
-              onClick={() => run(api.resumeLastSession())}
+              onClick={() => run(api.resumeLastSession().then((warning) => warning && notify(warning)))}
             />
           )}
         </>
@@ -173,6 +176,12 @@ function CommandPanel({ view, projector }: { view: GameView | null; projector: P
               <CommandButton icon={<StopIcon />} label={t("endQuestion")} onClick={() => dispatch({ type: "closeQuestion" })} />
             </>
           )}
+          {sound.available &&
+            (sound.playing ? (
+              <CommandButton icon={<StopIcon />} label={t("stopSound")} onClick={sound.stop} />
+            ) : (
+              <CommandButton icon={<SoundIcon />} label={t("playSound")} onClick={sound.play} />
+            ))}
           <CommandButton
             icon={<ListIcon />}
             label={t("leaderboard")}
