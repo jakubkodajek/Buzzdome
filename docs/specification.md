@@ -77,8 +77,9 @@ Until the SDK arrives the exact report format is unknown. The app is
 therefore built to work in three stages, each a fallback for the next:
 
 1. **Learned mapping** (works now, no vendor information needed): the user
-   teaches the app which USB report each button sends. Presses work; lights
-   do not.
+   teaches the app which USB report each button of each buzzer sends.
+   Presses work; lights do not. Teaching is per buzzer, which is fine for a
+   test with a few buzzers but too slow for a full event.
 2. **Vendor protocol** (when the SDK arrives): presses with buzzer ID and
    press time, lights, battery level. Selected automatically by the
    receiver's USB vendor and product ID.
@@ -105,6 +106,8 @@ therefore built to work in three stages, each a fallback for the next:
 | BZ-14 | Battery level of each buzzer, shown in the buzzer test view. | planned, needs the protocol |
 | BZ-15 | Host screen shows a small "buzzers not connected" sign on the welcome screen while the chosen receiver is not connected (the reference app does this too). | planned |
 | BZ-16 | Buzzer test view: a grid of buzzer numbers that light up with the pressed button, for range tests in the venue. | partial (Receiver tab shows presses as a list) |
+| BZ-17 | Buzzer panel in the Director during a show: every known buzzer number with its state (registered, last button and when, light, battery when the protocol gives it), and the receiver state on top. A buzzer not seen for a long time is marked. | planned |
+| BZ-18 | If the receiver reports which buzzers are switched on and in range without a press (open question, section 11), the registration screen and the buzzer panel show them as "on" before anyone presses. | waits for the protocol |
 
 ### 4.3 Light states
 
@@ -330,7 +333,48 @@ running show.
 | LN-1 | All UI text in Czech (default) and English, switchable at run time. | done for existing screens, including the Receiver tab |
 | LN-2 | Theme and plugin names and labels are given per language (`{ "cs": ..., "en": ... }`); a missing language falls back to English, then to the first one given. | planned |
 
-## 8. Open questions
+## 8. Show flow
+
+This is the path through a live show, as in the reference app (recon map
+S13 to S20). The quizmaster prepares the quiz at home, then at the venue
+opens it, starts it and runs it from the Director while the projector shows
+the Host screen.
+
+| ID | Requirement | Status |
+| --- | --- | --- |
+| SF-1 | Start: open a quiz file (or a recent one) and start the show. The last unfinished show can be resumed instead. | done for JSON quizzes; quiz files with media in section 9 |
+| SF-2 | Launch check before the welcome screen: receiver connected (or keyboard only), projector window open on the chosen monitor, sound output working. Problems are listed with a fix; the show can start anyway. | planned |
+| SF-3 | Welcome screen on the projector: quiz title, the theme's background and logo, optional welcome music (section 10). A small sign while the receiver is not connected (BZ-15). | partial: title and background colour only |
+| SF-4 | Registration: players press any button; their buzzer numbers light up in a grid on the projector and appear in the Director's Teams tab with an editable name. Late presses still register. | done |
+| SF-5 | Team names can be prepared before the show (buzzer number to name) and loaded with it, so a registered buzzer shows its team name at once. | planned |
+| SF-6 | Slides, questions, judging, scores and the final ranking as in the reference app; all keyboard shortcuts work. | done for billboard, multiple choice and fastest finger |
+| SF-7 | The projector screen is the user's own: theme, backgrounds and per-slide pictures or videos (section 5 and 9). | planned |
+
+## 9. Quiz authoring and media
+
+| ID | Requirement | Status |
+| --- | --- | --- |
+| QZ-1 | Quiz editor in the Director, after the reference editor's layout: slide list (add, duplicate, delete, reorder by drag), and a form for the selected slide. Undo and redo. | planned |
+| QZ-2 | Slide types: billboard, question (2 to 6 answers, multiple choice or fastest finger), end of round. More types come with the reference's other formats. | done in the game core; editor planned |
+| QZ-3 | Per question: text, answers, correct answer, time limit, points (fixed or falling from a start to an end value), penalty, notes for the quizmaster. | done in the game core; editor planned |
+| QZ-4 | Media per slide: a picture, a sound clip and a video, each with its options (sound: play when the slide opens or on demand, loop, volume; video: autoplay, muted). A background per slide overrides the theme's (BG rules in section 5). | planned |
+| QZ-5 | Quiz file: one file (`.quiz`, a ZIP) with `quiz.json` and a `media/` folder, so a quiz with all its pictures and sounds can be copied to the event laptop as one file. Format version in `quiz.json`; older versions keep opening. | planned |
+| QZ-6 | The editor checks a quiz before saving and before starting (missing media, no correct answer, empty answers) with the same rules the game core uses. | planned |
+| QZ-7 | Test run: play the quiz from the editor with virtual buzzers, without touching the last real show. | planned |
+
+## 10. Sounds and music
+
+| ID | Requirement | Status |
+| --- | --- | --- |
+| SN-1 | Built-in default sounds for every game event: clock start, last 5 seconds countdown, buzz, correct, wrong, time up, answer reveal, leaderboard, final ranking. They ship with the app, are our own or CC0, and their licence is recorded in the repository. | partial: placeholder tones for six events |
+| SN-2 | Background music: one track or playlist for the welcome screen and one for between questions, looped, faded out when a question starts and back in after it. | planned |
+| SN-3 | Every built-in sound and music slot can be replaced by the user's own file (MP3, WAV, OGG, M4A) in the show settings; the choice is saved with the quiz or with the show settings, not in the app. | planned |
+| SN-4 | Volume per group (effects, music, question clips) and one master mute key in the Director. | planned |
+| SN-5 | Sounds play from the app itself, not from a window, so they keep playing when the projector window is closed or moved, and they never play twice. | planned |
+| SN-6 | A theme can bring its own sound set (section 5.2) that replaces the defaults. | planned |
+| SN-7 | Sound pad: up to 12 short sounds the quizmaster can fire from the Director. Jingle per team when it buzzes first. | planned (could) |
+
+## 11. Open questions
 
 | Question | Who | Why it matters |
 | --- | --- | --- |
@@ -339,3 +383,4 @@ running show.
 | The SDK files and protocol documentation for that model and the HID cable. | Jakub, from Enjoy | Lights, press times, battery level. |
 | SDK terms for using it in this app. Decided 2026-10-09: the app is a private copy for Jakub, not open source and not distributed, so publishing the protocol is no longer a question; Enjoy is asked for the SDK for personal use. | Jakub, from Enjoy | The vendor protocol may then live in this (private) repository. |
 | Does the receiver report one press per USB report, or several? | hardware test | Affects how ties within one report are ordered. |
+| Does the receiver know which buzzers are switched on and in range before anyone presses, and their battery level? Not asked in the October email; worth a follow-up if the SDK does not say. | Jakub, from Enjoy | Shows connected buzzers before registration (BZ-18). |
