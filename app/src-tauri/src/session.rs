@@ -4,6 +4,7 @@
 
 use quiz_core::{Quiz, Stamped};
 use serde::{Deserialize, Serialize};
+use ts_rs::TS;
 use std::fs::{self, File, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -12,7 +13,8 @@ const QUIZ_FILE: &str = "quiz.json";
 const META_FILE: &str = "meta.json";
 const JOURNAL_FILE: &str = "journal.jsonl";
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
 #[serde(rename_all = "camelCase")]
 pub struct SessionMeta {
     pub quiz_title: String,
@@ -20,7 +22,8 @@ pub struct SessionMeta {
     pub started_ms: u64,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, TS)]
+#[ts(export)]
 #[serde(rename_all = "camelCase")]
 pub struct SessionSummary {
     pub meta: SessionMeta,

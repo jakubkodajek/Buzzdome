@@ -1,12 +1,15 @@
-import { playerName, type Translate } from "../i18n";
+import { buttonLabel } from "../answers";
+import { useApp } from "../app-context";
+import { seconds } from "../format";
+import { playerName } from "../i18n";
 import type { GameView } from "../types";
 
 /** Answers of the current question as they arrive, fastest first. */
-export function ResponsesTab({ t, view }: { t: Translate; view: GameView }) {
+export function ResponsesTab({ view }: { view: GameView }) {
+  const { t } = useApp();
   const responses = view.players
-    .filter((p) => p.answer !== null)
-    .sort((a, b) => (a.answerMs ?? 0) - (b.answerMs ?? 0));
-  const question = view.slide?.type === "question" ? view.slide : null;
+    .flatMap((p) => (p.answer === null ? [] : [{ player: p, answer: p.answer }]))
+    .sort((a, b) => (a.player.answerMs ?? 0) - (b.player.answerMs ?? 0));
 
   if (responses.length === 0 && view.buzzed === null) return <p className="empty">{t("noResponses")}</p>;
   return (
@@ -21,18 +24,14 @@ export function ResponsesTab({ t, view }: { t: Translate; view: GameView }) {
           </tr>
         </thead>
         <tbody>
-          {responses.map((p) => {
-            const index = { a: 0, b: 1, c: 2, d: 3, big: -1 }[p.answer!];
-            const correct = question?.correct === index;
-            return (
-              <tr key={p.buzzer}>
-                <td className="num">{p.buzzer}</td>
-                <td>{playerName(t, p)}</td>
-                <td className={correct ? "good-text strong" : ""}>{p.answer!.toUpperCase()}</td>
-                <td className="num">{((p.answerMs ?? 0) / 1000).toFixed(2)} s</td>
-              </tr>
-            );
-          })}
+          {responses.map(({ player, answer }) => (
+            <tr key={player.buzzer}>
+              <td className="num">{player.buzzer}</td>
+              <td>{playerName(t, player)}</td>
+              <td className={player.answerCorrect ? "good-text strong" : ""}>{buttonLabel(answer)}</td>
+              <td className="num">{seconds(player.answerMs ?? 0, 2)} s</td>
+            </tr>
+          ))}
         </tbody>
       </table>
     </div>

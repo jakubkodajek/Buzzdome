@@ -6,6 +6,7 @@
 
 use crate::model::{AnswerMode, Question, Quiz, Slide, SlideContent};
 use serde::{Deserialize, Serialize};
+use ts_rs::TS;
 use std::collections::{BTreeMap, BTreeSet};
 
 pub type BuzzerId = u16;
@@ -13,7 +14,8 @@ pub type BuzzerId = u16;
 /// Steps of the final score reveal: drum roll, 3rd, 2nd, 1st, full ranking.
 pub const FINAL_LAST_STEP: u8 = 4;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
 #[serde(rename_all = "camelCase")]
 pub enum Button {
     A,
@@ -37,7 +39,8 @@ impl Button {
 }
 
 /// What the buzzer lights should show. Drivers map these to their hardware.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
 #[serde(rename_all = "camelCase")]
 pub enum Light {
     Off,
@@ -48,7 +51,8 @@ pub enum Light {
     Wrong,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
 #[serde(rename_all = "camelCase")]
 pub enum Cue {
     ClockStart,
@@ -67,7 +71,8 @@ pub enum Effect {
     Sound { cue: Cue },
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum Command {
     /// A buzzer button was pressed. Drivers deliver presses in hardware order.
@@ -116,7 +121,8 @@ pub enum GameError {
 }
 
 /// A countdown that can pause. `limit_ms == None` means untimed.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
 #[serde(rename_all = "camelCase")]
 pub struct Clock {
     pub limit_ms: Option<u64>,
@@ -161,7 +167,8 @@ impl Clock {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
 #[serde(tag = "step", rename_all = "camelCase")]
 pub enum QuestionStep {
     /// Question on screen, clock not started.
@@ -176,7 +183,8 @@ pub enum QuestionStep {
     Revealed,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
 #[serde(tag = "phase", rename_all = "camelCase")]
 pub enum Phase {
     /// Before the first slide: buzzers register by pressing any button.
@@ -324,7 +332,7 @@ impl Game {
         }
     }
 
-    fn question(&self) -> Option<&Question> {
+    pub(crate) fn question(&self) -> Option<&Question> {
         match &self.quiz.slides.get(self.slide)?.content {
             SlideContent::Question(q) => Some(q),
             _ => None,

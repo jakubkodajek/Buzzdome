@@ -3,8 +3,10 @@
 use crate::game::{BuzzerId, Button, Game, Phase, QuestionStep};
 use crate::model::{SlideContent, Slide};
 use serde::Serialize;
+use ts_rs::TS;
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, TS)]
+#[ts(export)]
 #[serde(rename_all = "camelCase")]
 pub struct GameView {
     pub quiz_title: String,
@@ -24,16 +26,20 @@ pub struct GameView {
     pub leaderboard_visible: bool,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, TS)]
+#[ts(export)]
 #[serde(rename_all = "camelCase")]
 pub struct ClockView {
     pub limit_ms: Option<u64>,
     pub remaining_ms: Option<u64>,
     pub elapsed_ms: u64,
     pub running: bool,
+    /// Points a correct answer earns at this moment (they can fall over time).
+    pub points: i32,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, TS)]
+#[ts(export)]
 #[serde(rename_all = "camelCase")]
 pub struct PlayerView {
     pub buzzer: BuzzerId,
@@ -47,6 +53,8 @@ pub struct PlayerView {
     /// The player's answer in the current question. For the Director only;
     /// the projector must not show it before the question closes.
     pub answer: Option<Button>,
+    /// Whether `answer` is right; for the Director only, like `answer`.
+    pub answer_correct: Option<bool>,
     pub answer_ms: Option<u64>,
     pub locked_out: bool,
     /// Score change from the current question.
@@ -61,9 +69,25 @@ pub fn slide_title(slide: &Slide) -> String {
 }
 
 impl Game {
+    /// The question clock at `now`, with the points a correct answer earns then.
+    /// The app sends it on every tick while the clock runs, so no window has to
+    /// compute time or points itself.
+    pub fn clock_view(&self, now: u64) -> Option<ClockView> {
+        let clock = self.clock()?;
+        let elapsed_ms = clock.elapsed_ms(now);
+        Some(ClockView {
+            limit_ms: clock.limit_ms,
+            remaining_ms: clock.remaining_ms(now),
+            elapsed_ms,
+            running: clock.is_running(),
+            points: self.question().map_or(0, |q| q.points_at(elapsed_ms)),
+        })
+    }
+
     pub fn view(&self, now: u64) -> GameView {
         let ranking = self.ranking();
         let rank_of = |buzzer: BuzzerId| ranking.iter().position(|p| p.buzzer == buzzer).map(|i| i + 1);
+        let correct = self.question().and_then(|q| q.correct);
         let mut players: Vec<PlayerView> = self
             .players()
             .map(|p| PlayerView {
@@ -75,6 +99,10 @@ impl Game {
                 rank: rank_of(p.buzzer),
                 answered: self.responses().contains_key(&p.buzzer),
                 answer: self.responses().get(&p.buzzer).map(|r| r.button),
+                answer_correct: self
+                    .responses()
+                    .get(&p.buzzer)
+                    .map(|r| r.button.answer_index().is_some_and(|i| Some(i) == correct)),
                 answer_ms: self.responses().get(&p.buzzer).map(|r| r.elapsed_ms),
                 locked_out: self.locked_out().contains(&p.buzzer),
                 delta: self.deltas().get(&p.buzzer).copied(),
@@ -111,12 +139,7 @@ impl Game {
             phase: self.phase().clone(),
             slide: self.current_slide().cloned(),
             next_slide_title: self.quiz().slides.get(next_index).map(slide_title),
-            clock: self.clock().map(|c| ClockView {
-                limit_ms: c.limit_ms,
-                remaining_ms: c.remaining_ms(now),
-                elapsed_ms: c.elapsed_ms(now),
-                running: c.is_running(),
-            }),
+            clock: self.clock_view(now),
             enabled_count: players.iter().filter(|p| p.enabled).count(),
             answered_count: self.responses().len(),
             answer_counts,

@@ -1,34 +1,28 @@
-import { listen } from "@tauri-apps/api/event";
 import { save } from "@tauri-apps/plugin-dialog";
 import { useCallback, useEffect, useState } from "react";
+import { BUTTONS, buttonLabel } from "../answers";
 import { api } from "../api";
-import type { Translate } from "../i18n";
-import type { Button, DeviceInfo, LearnProgress, Press, RawReport, ReceiverInfo, ReceiverStatus } from "../types";
+import { useApp, useRun } from "../app-context";
+import { useBackendEvent } from "../hooks";
+import type { Button, DeviceInfo, LearnProgress, Press, PressEvent, RawReport, ReceiverInfo, ReceiverStatus } from "../types";
 
-const BUTTONS: Button[] = ["a", "b", "c", "d", "big"];
 const LOG_LEN = 40;
 
 const hex4 = (n: number) => n.toString(16).padStart(4, "0");
 const vidPid = (d: { vendorId: number; productId: number }) => `${hex4(d.vendorId)}:${hex4(d.productId)}`;
 const hexBytes = (bytes: number[]) => bytes.map((b) => b.toString(16).padStart(2, "0")).join(" ");
-const buttonLabel = (b: Button) => (b === "big" ? "●" : b.toUpperCase());
 const pressLabel = (p: Press) => `${p.buzzer} ${buttonLabel(p.button)}`;
 const isKeyboardOrMouse = (d: DeviceInfo) => d.usagePage === 1 && (d.usage === 2 || d.usage === 6);
 
-function listenTo<T>(event: string, handler: (payload: T) => void): () => void {
-  const unlisten = listen<T>(event, (e) => handler(e.payload));
-  return () => {
-    unlisten.then((stop) => stop());
-  };
-}
-
 /** Receiver setup and diagnostics: pick the USB receiver, watch its raw data, teach buttons. */
-export function ReceiverTab({ t, onError }: { t: Translate; onError: (m: string) => void }) {
+export function ReceiverTab() {
+  const { t } = useApp();
+  const run = useRun();
   const [info, setInfo] = useState<ReceiverInfo | null>(null);
   const [status, setStatus] = useState<ReceiverStatus | null>(null);
   const [devices, setDevices] = useState<DeviceInfo[]>([]);
   const [raw, setRaw] = useState<RawReport[]>([]);
-  const [presses, setPresses] = useState<{ press: Press; used: boolean; at: number }[]>([]);
+  const [presses, setPresses] = useState<(PressEvent & { at: number })[]>([]);
   const [learn, setLearn] = useState<LearnProgress | null>(null);
   const [buzzer, setBuzzer] = useState(1);
   const [button, setButton] = useState<Button>("a");
@@ -36,44 +30,36 @@ export function ReceiverTab({ t, onError }: { t: Translate; onError: (m: string)
   const [udev, setUdev] = useState("");
 
   const reload = useCallback(() => {
-    api
-      .receiverInfo()
-      .then((i) => {
+    run(
+      api.receiverInfo().then((i) => {
         setInfo(i);
         setStatus(i.status);
         setLearn(i.learn);
         setRaw([...i.recent].reverse().slice(0, LOG_LEN));
-      })
-      .catch((e) => onError(String(e)));
-  }, [onError]);
+      }),
+    );
+  }, [run]);
 
-  const refreshDevices = useCallback(() => {
-    api.receiverDevices().then(setDevices).catch((e) => onError(String(e)));
-  }, [onError]);
+  const refreshDevices = useCallback(() => run(api.receiverDevices().then(setDevices)), [run]);
 
   useEffect(() => {
     reload();
     refreshDevices();
-    const offs = [
-      listenTo<ReceiverStatus>("receiver-status", (s) => {
-        setStatus(s);
-        reload();
-      }),
-      listenTo<RawReport>("receiver-raw", (r) => setRaw((l) => [r, ...l].slice(0, LOG_LEN))),
-      listenTo<{ press: Press; used: boolean }>("receiver-press", (p) =>
-        setPresses((l) => [{ ...p, at: Date.now() }, ...l].slice(0, LOG_LEN)),
-      ),
-      listenTo<LearnProgress>("receiver-learn", setLearn),
-    ];
-    return () => offs.forEach((off) => off());
   }, [reload, refreshDevices]);
+
+  useBackendEvent("receiver-status", (next) => {
+    setStatus(next);
+    reload();
+  });
+  useBackendEvent("receiver-raw", (report) => setRaw((list) => [report, ...list].slice(0, LOG_LEN)));
+  useBackendEvent("receiver-press", (event) => setPresses((list) => [{ ...event, at: Date.now() }, ...list].slice(0, LOG_LEN)));
+  useBackendEvent("receiver-learn", setLearn);
 
   useEffect(() => {
     if (info?.platform === "linux") api.receiverUdevRule().then(setUdev).catch(() => setUdev(""));
   }, [info?.platform, status]);
 
   const connected = status?.kind === "connected" ? status.device : null;
-  const run = (p: Promise<unknown>) => p.catch((e) => onError(String(e)));
 
   const exportLog = async () => {
     const path = await save({ defaultPath: "receiver-log.txt", filters: [{ name: "Text", extensions: ["txt"] }] });

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 export type Lang = "cs" | "en";
 
@@ -265,14 +265,14 @@ export function useLang(): [Lang, (lang: Lang) => void] {
     window.addEventListener("storage", onStorage);
     return () => window.removeEventListener("storage", onStorage);
   }, []);
-  const setLang = (next: Lang) => {
+  const setLang = useCallback((next: Lang) => {
     try {
       localStorage.setItem(STORAGE_KEY, next);
     } catch {
       // Language then lasts only for this window.
     }
     setLangState(next);
-  };
+  }, []);
   return [lang, setLang];
 }
 

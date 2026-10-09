@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from "react";
-import { api } from "../api";
-import type { StringKey, Translate } from "../i18n";
-import { ANSWER_LETTERS, type GameView, type Quiz, type Slide } from "../types";
+import { ANSWER_LETTERS } from "../answers";
+import { useApp, useDispatch } from "../app-context";
+import type { StringKey } from "../i18n";
+import { questionNumbers, slideTitle } from "../quiz";
+import type { GameView, Quiz, Slide } from "../types";
 
 const TYPE_LABEL: Record<Slide["type"], StringKey> = {
   billboard: "typeBillboard",
@@ -9,32 +11,31 @@ const TYPE_LABEL: Record<Slide["type"], StringKey> = {
   endOfRound: "typeEndOfRound",
 };
 
-function slideText(slide: Slide): string {
-  return slide.type === "question" ? slide.text : slide.title;
-}
-
 /** Slide table with the current slide highlighted, and a preview pane. */
-export function QuestionsTab(props: { t: Translate; view: GameView; quiz: Quiz | null; onError: (m: string) => void }) {
-  const { t, view, quiz, onError } = props;
-  const [selected, setSelected] = useState<number | null>(null);
+export function QuestionsTab({ view, quiz }: { view: GameView; quiz: Quiz | null }) {
+  const { t } = useApp();
+  const dispatch = useDispatch();
   const current = view.phase.phase === "lobby" || view.phase.phase === "final" ? null : view.slideIndex;
+  // A selection lasts until the show moves on; then the current slide is shown again.
+  const [selection, setSelection] = useState<{ slide: number; madeOn: number | null } | null>(null);
+  const selected = selection !== null && selection.madeOn === current ? selection.slide : null;
+  const setSelected = (slide: number) => setSelection({ slide, madeOn: current });
   const shown = selected ?? current ?? 0;
   const currentRow = useRef<HTMLTableRowElement>(null);
 
-  // Follow the show: when it moves on, select the new current slide.
   useEffect(() => {
-    setSelected(null);
     currentRow.current?.scrollIntoView({ block: "nearest" });
   }, [current]);
 
   if (!quiz) return null;
-  let questionNo = 0;
+  const numbers = questionNumbers(quiz);
   const preview = quiz.slides[shown];
+  const goTo = (slide: number) => dispatch({ type: "goTo", slide });
 
   return (
     <div className="questions-tab">
       <div className="toolbar">
-        <button disabled={selected === null || selected === current} onClick={() => selected !== null && api.dispatch({ type: "goTo", slide: selected }).catch((e) => onError(String(e)))}>
+        <button disabled={selected === null || selected === current} onClick={() => selected !== null && goTo(selected)}>
           {t("goToSelected")}
         </button>
         {view.nextSlideTitle && <span className="muted">{t("nextUp", { title: view.nextSlideTitle })}</span>}
@@ -51,34 +52,35 @@ export function QuestionsTab(props: { t: Translate; view: GameView; quiz: Quiz |
               </tr>
             </thead>
             <tbody>
-              {quiz.slides.map((slide, i) => {
-                if (slide.type === "question") questionNo += 1;
-                const classes = [i === current ? "current" : "", i === selected ? "selected" : ""].join(" ");
-                return (
-                  <tr key={slide.id} ref={i === current ? currentRow : undefined} className={classes} onClick={() => setSelected(i)} onDoubleClick={() => api.dispatch({ type: "goTo", slide: i }).catch((e) => onError(String(e)))}>
-                    <td className="num">{i + 1}</td>
-                    <td className="num">{slide.type === "question" ? questionNo : ""}</td>
-                    <td>{t(TYPE_LABEL[slide.type])}</td>
-                    <td className="ellipsis">{slideText(slide)}</td>
-                  </tr>
-                );
-              })}
+              {quiz.slides.map((slide, i) => (
+                <tr
+                  key={slide.id}
+                  ref={i === current ? currentRow : undefined}
+                  className={[i === current ? "current" : "", i === selected ? "selected" : ""].join(" ")}
+                  onClick={() => setSelected(i)}
+                  onDoubleClick={() => goTo(i)}
+                >
+                  <td className="num">{i + 1}</td>
+                  <td className="num">{numbers[i] ?? ""}</td>
+                  <td>{t(TYPE_LABEL[slide.type])}</td>
+                  <td className="ellipsis">{slideTitle(slide)}</td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
-        <div className="preview">
-          {preview && <SlidePreview t={t} slide={preview} counts={shown === current ? view.answerCounts : null} />}
-        </div>
+        <div className="preview">{preview && <SlidePreview slide={preview} counts={shown === current ? view.answerCounts : null} />}</div>
       </div>
     </div>
   );
 }
 
-function SlidePreview({ t, slide, counts }: { t: Translate; slide: Slide; counts: number[] | null }) {
+function SlidePreview({ slide, counts }: { slide: Slide; counts: number[] | null }) {
+  const { t } = useApp();
   return (
     <>
       <div className="preview-card">
-        <h2 className="preview-title">{slideText(slide)}</h2>
+        <h2 className="preview-title">{slideTitle(slide)}</h2>
         {slide.type === "question" && (
           <>
             <p className="muted center">

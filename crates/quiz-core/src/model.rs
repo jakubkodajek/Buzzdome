@@ -2,6 +2,7 @@
 //! change it only with a schema version bump and a migration.
 
 use serde::{Deserialize, Serialize};
+use ts_rs::TS;
 use std::collections::HashSet;
 
 pub const SCHEMA_VERSION: u32 = 1;
@@ -9,7 +10,8 @@ pub const SCHEMA_VERSION: u32 = 1;
 /// Buzzers have four answer buttons (A-D); keypads in the original have six.
 pub const MAX_ANSWERS: usize = 6;
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export)]
 #[serde(rename_all = "camelCase")]
 pub struct Quiz {
     pub schema_version: u32,
@@ -18,7 +20,8 @@ pub struct Quiz {
     pub slides: Vec<Slide>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export)]
 #[serde(rename_all = "camelCase")]
 pub struct Slide {
     pub id: String,
@@ -29,7 +32,8 @@ pub struct Slide {
     pub content: SlideContent,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum SlideContent {
     /// Information slide without interaction: round intros, announcements.
@@ -47,7 +51,8 @@ pub enum SlideContent {
     EndOfRound { title: String },
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
 #[serde(rename_all = "camelCase")]
 pub enum AnswerMode {
     /// Every player answers with A-D before the clock runs out.
@@ -56,7 +61,8 @@ pub enum AnswerMode {
     FastestFinger,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export)]
 #[serde(rename_all = "camelCase")]
 pub struct Question {
     pub text: String,

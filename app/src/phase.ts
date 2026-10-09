@@ -30,7 +30,3 @@ export function phaseLabel(t: Translate, view: GameView): string {
       }
   }
 }
-
-export function formatSeconds(ms: number): string {
-  return String(Math.ceil(ms / 1000));
-}

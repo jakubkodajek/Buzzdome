@@ -3,9 +3,11 @@
 
 use crate::DriverError;
 use serde::{Deserialize, Serialize};
+use ts_rs::TS;
 
 /// A HID interface as the OS lists it.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
 #[serde(rename_all = "camelCase")]
 pub struct DeviceInfo {
     /// OS-specific path used to open this interface.
@@ -32,7 +34,8 @@ impl DeviceInfo {
 }
 
 /// Which receiver to use. Stable across unplugging and restarts, unlike the path.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
 #[serde(rename_all = "camelCase")]
 pub struct DeviceSelector {
     pub vendor_id: u16,

@@ -12,12 +12,14 @@ use crate::protocol::{Protocol, ProtocolResolver};
 use crate::{BuzzerDriver, DriverError, Press};
 use quiz_core::{BuzzerId, Light};
 use serde::Serialize;
+use ts_rs::TS;
 use std::sync::mpsc::{self, Receiver as ChannelRx, RecvTimeoutError, Sender, TryRecvError};
 use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum ReceiverStatus {
     /// No receiver chosen.
@@ -32,7 +34,8 @@ pub enum ReceiverStatus {
 }
 
 /// One input report as received, with what the protocol made of it.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
 #[serde(rename_all = "camelCase")]
 pub struct RawReport {
     /// Wall-clock time, ms since the Unix epoch.

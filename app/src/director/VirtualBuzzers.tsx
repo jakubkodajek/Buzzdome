@@ -1,15 +1,12 @@
 import { useState } from "react";
-import { api } from "../api";
-import type { Translate } from "../i18n";
-import type { Button } from "../types";
-
-const BUTTONS: Button[] = ["a", "b", "c", "d", "big"];
+import { BUTTONS, buttonLabel } from "../answers";
+import { useApp, useDispatch } from "../app-context";
 
 /** On-screen buzzers for testing a quiz without hardware. */
-export function VirtualBuzzers({ t, onError }: { t: Translate; onError: (m: string) => void }) {
+export function VirtualBuzzers() {
+  const { t } = useApp();
+  const dispatch = useDispatch();
   const [count, setCount] = useState(6);
-  const press = (buzzer: number, button: Button) =>
-    api.dispatch({ type: "press", buzzer, button }).catch((e) => onError(String(e)));
 
   return (
     <div className="virtual-buzzers">
@@ -32,8 +29,8 @@ export function VirtualBuzzers({ t, onError }: { t: Translate; onError: (m: stri
           <div key={buzzer} className="buzzer">
             <span className="buzzer-id">{buzzer}</span>
             {BUTTONS.map((button) => (
-              <button key={button} className={`small key-${button}`} onClick={() => press(buzzer, button)}>
-                {button === "big" ? "●" : button.toUpperCase()}
+              <button key={button} className={`small key-${button}`} onClick={() => dispatch({ type: "press", buzzer, button })}>
+                {buttonLabel(button)}
               </button>
             ))}
           </div>

@@ -225,7 +225,7 @@
   stroke: #ff8a1f;
   stroke-width: 14;
   stroke-linecap: round;
-  transition: stroke-dashoffset 0.12s linear;
+  transition: stroke-dashoffset 0.25s linear; /* one clock tick */
 }
 
 .clock-gauge.urgent .gauge-fill {

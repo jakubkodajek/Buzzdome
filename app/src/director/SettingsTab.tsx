@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "../api";
-import type { Lang, Translate } from "../i18n";
+import { useApp, useRun } from "../app-context";
+import type { Lang } from "../i18n";
 import type { MonitorInfo } from "../types";
 
 export interface ProjectorSettings {
@@ -13,28 +14,28 @@ export interface ProjectorSettings {
   toggle: () => void;
 }
 
-export function useProjectorSettings(onError: (m: string) => void): ProjectorSettings {
+export function useProjectorSettings(): ProjectorSettings {
+  const run = useRun();
   const [monitors, setMonitors] = useState<MonitorInfo[]>([]);
   const [monitor, setMonitor] = useState(0);
   const [fullscreen, setFullscreen] = useState(true);
   const [isOpen, setIsOpen] = useState(false);
 
   useEffect(() => {
-    api
-      .listMonitors()
-      .then((list) => {
+    run(
+      api.listMonitors().then((list) => {
         setMonitors(list);
         // The second display is usually the projector.
         if (list.length > 1) setMonitor(list[1].index);
-      })
-      .catch((e) => onError(String(e)));
-    api.hostWindowOpen().then(setIsOpen);
-  }, [onError]);
+      }),
+    );
+    run(api.hostWindowOpen().then(setIsOpen));
+  }, [run]);
 
   const toggle = useCallback(() => {
     const action = isOpen ? api.closeHostWindow() : api.openHostWindow(monitor, fullscreen);
-    action.then(() => setIsOpen(!isOpen)).catch((e) => onError(String(e)));
-  }, [isOpen, monitor, fullscreen, onError]);
+    run(action.then(() => setIsOpen(!isOpen)));
+  }, [isOpen, monitor, fullscreen, run]);
 
   return useMemo(
     () => ({ monitors, monitor, setMonitor, fullscreen, setFullscreen, isOpen, toggle }),
@@ -42,8 +43,8 @@ export function useProjectorSettings(onError: (m: string) => void): ProjectorSet
   );
 }
 
-export function SettingsTab(props: { t: Translate; lang: Lang; setLang: (l: Lang) => void; projector: ProjectorSettings }) {
-  const { t, lang, setLang, projector } = props;
+export function SettingsTab({ projector }: { projector: ProjectorSettings }) {
+  const { t, lang, setLang } = useApp();
   return (
     <div className="settings">
       <fieldset>

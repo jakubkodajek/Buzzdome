@@ -13,6 +13,7 @@ use buzzers::receiver::{self, RawReport, ReceiverConfig, ReceiverEvent, Receiver
 use buzzers::Press;
 use quiz_core::{BuzzerId, Button, Command};
 use serde::{Deserialize, Serialize};
+use ts_rs::TS;
 use std::collections::VecDeque;
 use std::path::PathBuf;
 use std::sync::mpsc;
@@ -33,7 +34,8 @@ struct ReceiverSettings {
     learned: Vec<LearnedMapping>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, TS)]
+#[ts(export)]
 #[serde(rename_all = "camelCase")]
 pub struct LearnProgress {
     active: bool,
@@ -42,7 +44,8 @@ pub struct LearnProgress {
     samples: usize,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, TS)]
+#[ts(export)]
 #[serde(rename_all = "camelCase")]
 pub struct ReceiverInfo {
     /// None when USB-HID could not be initialised on this system.
@@ -54,7 +57,8 @@ pub struct ReceiverInfo {
     platform: &'static str,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, TS)]
+#[ts(export)]
 #[serde(rename_all = "camelCase")]
 struct PressEvent {
     press: Press,

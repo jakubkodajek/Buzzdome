@@ -38,6 +38,7 @@ function players(overrides: Partial<PlayerView>[] = []): PlayerView[] {
     rank: i + 1,
     answered: false,
     answer: null,
+    answerCorrect: null,
     answerMs: null,
     lockedOut: false,
     delta: null,
@@ -66,11 +67,11 @@ function view(partial: Partial<GameView>): GameView {
 }
 
 const answered: Partial<PlayerView>[] = [
-  { answered: true, answer: "b", answerMs: 3200 },
-  { answered: true, answer: "b", answerMs: 4100 },
-  { answered: true, answer: "a", answerMs: 5200 },
+  { answered: true, answer: "b", answerCorrect: true, answerMs: 3200 },
+  { answered: true, answer: "b", answerCorrect: true, answerMs: 4100 },
+  { answered: true, answer: "a", answerCorrect: false, answerMs: 5200 },
   {},
-  { answered: true, answer: "c", answerMs: 7900 },
+  { answered: true, answer: "c", answerCorrect: false, answerMs: 7900 },
 ];
 
 const SCENES: Record<string, GameView | null> = {
@@ -80,7 +81,7 @@ const SCENES: Record<string, GameView | null> = {
   ready: view({}),
   running: view({
     phase: { phase: "question", step: "running", clock: { limitMs: 20000, elapsedBeforeMs: 0, runningSinceMs: 0 } },
-    clock: { limitMs: 20000, remainingMs: 12400, elapsedMs: 7600, running: true },
+    clock: { limitMs: 20000, remainingMs: 12400, elapsedMs: 7600, running: true, points: 81 },
     players: players(answered),
     answeredCount: 4,
   }),
@@ -100,7 +101,7 @@ const SCENES: Record<string, GameView | null> = {
     phase: { phase: "question", step: "buzzed", buzzer: 3, clock: { limitMs: 30000, elapsedBeforeMs: 4300, runningSinceMs: null } },
     slideIndex: 6,
     slide: quiz.slides[6],
-    clock: { limitMs: 30000, remainingMs: 25700, elapsedMs: 4300, running: false },
+    clock: { limitMs: 30000, remainingMs: 25700, elapsedMs: 4300, running: false, points: 129 },
     buzzed: 3,
   }),
   ffRevealed: view({

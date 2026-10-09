@@ -14,6 +14,7 @@ hidapi = ["dep:hidapi"]
 quiz-core = { path = "../quiz-core" }
 serde.workspace = true
 thiserror.workspace = true
+ts-rs.workspace = true
 hidapi = { version = "2.6", optional = true }
 
 [dev-dependencies]

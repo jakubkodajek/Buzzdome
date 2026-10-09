@@ -1,173 +1,26 @@
-// Mirrors of the Rust types in crates/quiz-core, as serialized by serde.
+// Types shared with the Rust side. They are generated from the Rust code into
+// ./bindings by `cargo test` (ts-rs); change the Rust type, never these files.
 
+export type { AnswerMode } from "./bindings/AnswerMode";
+export type { Button } from "./bindings/Button";
+export type { ClockView } from "./bindings/ClockView";
+export type { Command } from "./bindings/Command";
+export type { Cue } from "./bindings/Cue";
+export type { DeviceInfo } from "./bindings/DeviceInfo";
+export type { GameView } from "./bindings/GameView";
+export type { LearnProgress } from "./bindings/LearnProgress";
+export type { MonitorInfo } from "./bindings/MonitorInfo";
+export type { Phase } from "./bindings/Phase";
+export type { PlayerView } from "./bindings/PlayerView";
+export type { Press } from "./bindings/Press";
+export type { PressEvent } from "./bindings/PressEvent";
+export type { Question } from "./bindings/Question";
+export type { Quiz } from "./bindings/Quiz";
+export type { RawReport } from "./bindings/RawReport";
+export type { ReceiverInfo } from "./bindings/ReceiverInfo";
+export type { ReceiverStatus } from "./bindings/ReceiverStatus";
+export type { SessionSummary } from "./bindings/SessionSummary";
+export type { Slide } from "./bindings/Slide";
+
+/** Buzzer number as the hardware reports it (`BuzzerId` in Rust). */
 export type BuzzerId = number;
-export type Button = "a" | "b" | "c" | "d" | "big";
-export type AnswerMode = "everyone" | "fastestFinger";
-export type Cue = "clockStart" | "buzz" | "correct" | "wrong" | "timeUp" | "reveal";
-
-export interface Question {
-  type: "question";
-  text: string;
-  mode: AnswerMode;
-  answers: string[];
-  correct: number | null;
-  timeLimitS: number;
-  points: number;
-  pointsEnd: number | null;
-  penalty: number;
-  picture: string | null;
-}
-
-export type SlideContent =
-  | { type: "billboard"; title: string; text: string; picture: string | null }
-  | Question
-  | { type: "endOfRound"; title: string };
-
-export type Slide = SlideContent & { id: string; notes: string };
-
-export interface Quiz {
-  schemaVersion: number;
-  title: string;
-  slides: Slide[];
-}
-
-export interface Clock {
-  limitMs: number | null;
-  elapsedBeforeMs: number;
-  runningSinceMs: number | null;
-}
-
-export type QuestionStep =
-  | { step: "ready" }
-  | { step: "running"; clock: Clock }
-  | { step: "buzzed"; buzzer: BuzzerId; clock: Clock }
-  | { step: "closed" }
-  | { step: "revealed" };
-
-export type Phase =
-  | { phase: "lobby" }
-  | { phase: "billboard" }
-  | { phase: "endOfRound" }
-  | ({ phase: "question" } & QuestionStep)
-  | { phase: "final"; step: number };
-
-export interface ClockView {
-  limitMs: number | null;
-  remainingMs: number | null;
-  elapsedMs: number;
-  running: boolean;
-}
-
-export interface PlayerView {
-  buzzer: BuzzerId;
-  name: string;
-  score: number;
-  enabled: boolean;
-  totalAnswerMs: number;
-  rank: number | null;
-  answered: boolean;
-  /** Director only: never show before the question closes. */
-  answer: Button | null;
-  answerMs: number | null;
-  lockedOut: boolean;
-  delta: number | null;
-}
-
-export interface GameView {
-  quizTitle: string;
-  slideIndex: number;
-  slideCount: number;
-  phase: Phase;
-  slide: Slide | null;
-  nextSlideTitle: string | null;
-  clock: ClockView | null;
-  players: PlayerView[];
-  enabledCount: number;
-  answeredCount: number;
-  answerCounts: number[] | null;
-  buzzed: BuzzerId | null;
-  leaderboardVisible: boolean;
-}
-
-export type Command =
-  | { type: "press"; buzzer: BuzzerId; button: Button }
-  | { type: "next" }
-  | { type: "goTo"; slide: number }
-  | { type: "pauseClock" }
-  | { type: "resumeClock" }
-  | { type: "closeQuestion" }
-  | { type: "judgeRight" }
-  | { type: "judgeWrong" }
-  | { type: "addPlayer"; buzzer: BuzzerId; name: string }
-  | { type: "renamePlayer"; buzzer: BuzzerId; name: string }
-  | { type: "setPlayerEnabled"; buzzer: BuzzerId; enabled: boolean }
-  | { type: "adjustScore"; buzzer: BuzzerId; delta: number }
-  | { type: "showLeaderboard"; visible: boolean };
-
-export interface SessionSummary {
-  meta: { quizTitle: string; sourcePath: string | null; startedMs: number };
-  commandCount: number;
-}
-
-export interface MonitorInfo {
-  index: number;
-  name: string;
-  width: number;
-  height: number;
-}
-
-export const ANSWER_LETTERS = ["A", "B", "C", "D", "E", "F"];
-
-// Mirrors of the receiver types in crates/buzzers and app/src-tauri/src/hardware.rs.
-
-export interface DeviceInfo {
-  path: string;
-  vendorId: number;
-  productId: number;
-  manufacturer: string | null;
-  product: string | null;
-  serialNumber: string | null;
-  usagePage: number;
-  usage: number;
-  interfaceNumber: number;
-}
-
-export interface DeviceSelector {
-  vendorId: number;
-  productId: number;
-  usagePage: number | null;
-  interfaceNumber: number | null;
-}
-
-export type ReceiverStatus =
-  | { kind: "off" }
-  | { kind: "searching"; selector: DeviceSelector }
-  | { kind: "connected"; device: DeviceInfo; protocol: string; hasLights: boolean }
-  | { kind: "error"; message: string };
-
-export interface Press {
-  buzzer: BuzzerId;
-  button: Button;
-}
-
-export interface RawReport {
-  atMs: number;
-  bytes: number[];
-  decoded: Press[];
-}
-
-export interface LearnProgress {
-  active: boolean;
-  buzzer: BuzzerId | null;
-  button: Button | null;
-  samples: number;
-}
-
-export interface ReceiverInfo {
-  status: ReceiverStatus | null;
-  initError: string | null;
-  learnedButtons: number;
-  learn: LearnProgress;
-  recent: RawReport[];
-  platform: string;
-}

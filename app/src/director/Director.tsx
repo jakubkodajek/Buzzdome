@@ -1,7 +1,9 @@
 import { open } from "@tauri-apps/plugin-dialog";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
-import { api, questionNumber, useGameView, useQuiz, useRemainingMs } from "../api";
-import { translator, useLang, type Translate } from "../i18n";
+import { api } from "../api";
+import { AppProvider, useApp, useDispatch, useRun } from "../app-context";
+import { clockSeconds } from "../format";
+import { useBackendEvent, useClock, useGameView, useLastSession, useQuiz } from "../hooks";
 import {
   CheckIcon,
   CrossIcon,
@@ -14,29 +16,25 @@ import {
   ScreenIcon,
   StopIcon,
 } from "../icons";
-import { formatSeconds, phaseLabel } from "../phase";
-import { useShortcuts } from "../shortcuts";
-import type { Command, GameView, SessionSummary } from "../types";
+import { useShortcuts } from "../keyboard";
+import { phaseLabel } from "../phase";
+import { questionPosition } from "../quiz";
+import { playCue } from "../sound";
+import type { GameView, Quiz } from "../types";
 import { QuestionsTab } from "./QuestionsTab";
 import { ReceiverTab } from "./ReceiverTab";
 import { ResponsesTab } from "./ResponsesTab";
-import { SettingsTab, useProjectorSettings } from "./SettingsTab";
+import { SettingsTab, useProjectorSettings, type ProjectorSettings } from "./SettingsTab";
 import { TeamsTab } from "./TeamsTab";
 import { VirtualBuzzers } from "./VirtualBuzzers";
 import "./director.css";
 
 type Tab = "questions" | "teams" | "responses" | "buzzers" | "receiver" | "settings";
 
+/** The quizmaster's window. */
 export function Director() {
-  const [lang, setLang] = useLang();
-  const t = translator(lang);
-  const { view, receivedAt } = useGameView();
-  const quiz = useQuiz(view);
-  const [tab, setTab] = useState<Tab>("questions");
   const [error, setError] = useState<string | null>(null);
-  const showError = useCallback((message: string) => setError(message), []);
-  const projector = useProjectorSettings(showError);
-  useShortcuts(view, showError);
+  const notify = useCallback((message: string) => setError(message), []);
 
   useEffect(() => {
     if (!error) return;
@@ -44,16 +42,27 @@ export function Director() {
     return () => clearTimeout(timer);
   }, [error]);
 
-  // M toggles the projector, as in the original.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      const target = e.target as HTMLElement | null;
-      if (target && ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName)) return;
-      if (e.key.toLowerCase() === "m" && !e.metaKey && !e.ctrlKey) projector.toggle();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [projector]);
+  return (
+    <AppProvider notify={notify}>
+      <DirectorLayout />
+      {error && (
+        <div className="toast" role="alert">
+          {error}
+        </div>
+      )}
+    </AppProvider>
+  );
+}
+
+function DirectorLayout() {
+  const { t } = useApp();
+  const view = useGameView();
+  const quiz = useQuiz();
+  const projector = useProjectorSettings();
+  const [tab, setTab] = useState<Tab>("questions");
+  useShortcuts(view, projector.toggle);
+  // Sounds play here: this window is open for the whole show, the projector may not be.
+  useBackendEvent("sound-cue", playCue);
 
   const tabs: [Tab, string][] = [
     ["questions", t("tabQuestions")],
@@ -66,7 +75,7 @@ export function Director() {
 
   return (
     <div className="director">
-      <CommandPanel t={t} view={view} projectorOpen={projector.isOpen} onProjector={projector.toggle} onError={showError} />
+      <CommandPanel view={view} projector={projector} />
       <div className="workspace">
         <nav className="tabs">
           {tabs.map(([id, label]) => (
@@ -76,31 +85,30 @@ export function Director() {
           ))}
         </nav>
         <div className="tab-body">
-          {tab === "settings" ? (
-            <SettingsTab t={t} lang={lang} setLang={setLang} projector={projector} />
-          ) : tab === "receiver" ? (
-            <ReceiverTab t={t} onError={showError} />
-          ) : !view ? (
-            <p className="empty">{t("welcome")}</p>
-          ) : tab === "questions" ? (
-            <QuestionsTab t={t} view={view} quiz={quiz} onError={showError} />
-          ) : tab === "teams" ? (
-            <TeamsTab t={t} view={view} onError={showError} />
-          ) : tab === "responses" ? (
-            <ResponsesTab t={t} view={view} />
-          ) : (
-            <VirtualBuzzers t={t} onError={showError} />
-          )}
+          <TabBody tab={tab} view={view} quiz={quiz} projector={projector} />
         </div>
-        <StatusBar t={t} view={view} receivedAt={receivedAt} questionNo={view ? questionNumber(quiz, view.slideIndex) : null} />
+        <StatusBar view={view} quiz={quiz} />
       </div>
-      {error && (
-        <div className="toast" role="alert">
-          {error}
-        </div>
-      )}
     </div>
   );
+}
+
+function TabBody({ tab, view, quiz, projector }: { tab: Tab; view: GameView | null; quiz: Quiz | null; projector: ProjectorSettings }) {
+  const { t } = useApp();
+  // Setup tabs work without a show; the others need one.
+  if (tab === "settings") return <SettingsTab projector={projector} />;
+  if (tab === "receiver") return <ReceiverTab />;
+  if (!view) return <p className="empty">{t("welcome")}</p>;
+  switch (tab) {
+    case "questions":
+      return <QuestionsTab view={view} quiz={quiz} />;
+    case "teams":
+      return <TeamsTab view={view} />;
+    case "responses":
+      return <ResponsesTab view={view} />;
+    case "buzzers":
+      return <VirtualBuzzers />;
+  }
 }
 
 function CommandButton(props: { icon: ReactNode; label: string; hint?: string; tone?: "good" | "bad"; onClick: () => void }) {
@@ -115,25 +123,16 @@ function CommandButton(props: { icon: ReactNode; label: string; hint?: string; t
   );
 }
 
-interface CommandPanelProps {
-  t: Translate;
-  view: GameView | null;
-  projectorOpen: boolean;
-  onProjector: () => void;
-  onError: (message: string) => void;
-}
-
 /** Left command area: only the commands that make sense right now. */
-function CommandPanel({ t, view, projectorOpen, onProjector, onError }: CommandPanelProps) {
-  const run = (command: Command) => api.dispatch(command).catch((e) => onError(String(e)));
-  const [last, setLast] = useState<SessionSummary | null>(null);
-  useEffect(() => {
-    if (!view) api.lastSession().then(setLast).catch(() => setLast(null));
-  }, [view]);
+function CommandPanel({ view, projector }: { view: GameView | null; projector: ProjectorSettings }) {
+  const { t } = useApp();
+  const dispatch = useDispatch();
+  const run = useRun();
+  const last = useLastSession();
 
   const openQuiz = async () => {
     const path = await open({ multiple: false, filters: [{ name: "Quiz", extensions: ["json"] }] });
-    if (typeof path === "string") api.startShowFromFile(path).catch((e) => onError(String(e)));
+    if (typeof path === "string") run(api.startShowFromFile(path));
   };
 
   const phase = view?.phase;
@@ -145,70 +144,71 @@ function CommandPanel({ t, view, projectorOpen, onProjector, onError }: CommandP
       {!view ? (
         <>
           <CommandButton icon={<FolderIcon />} label={t("openQuiz")} onClick={openQuiz} />
-          <CommandButton icon={<PlayIcon />} label={t("demoQuiz")} onClick={() => api.startDemoShow().catch((e) => onError(String(e)))} />
+          <CommandButton icon={<PlayIcon />} label={t("demoQuiz")} onClick={() => run(api.startDemoShow())} />
           {last && (
             <CommandButton
               icon={<NextIcon />}
               label={t("resume")}
               hint={t("resumeInfo", { title: last.meta.quizTitle, count: last.commandCount })}
-              onClick={() => api.resumeLastSession().catch((e) => onError(String(e)))}
+              onClick={() => run(api.resumeLastSession())}
             />
           )}
         </>
       ) : (
         <>
-          {!buzzed && <CommandButton icon={<NextIcon />} label={t("next")} hint="Space" onClick={() => run({ type: "next" })} />}
+          {!buzzed && <CommandButton icon={<NextIcon />} label={t("next")} hint="Space" onClick={() => dispatch({ type: "next" })} />}
           {buzzed && (
             <>
-              <CommandButton icon={<CheckIcon />} label={t("right")} hint="Y" tone="good" onClick={() => run({ type: "judgeRight" })} />
-              <CommandButton icon={<CrossIcon />} label={t("wrong")} hint="N" tone="bad" onClick={() => run({ type: "judgeWrong" })} />
+              <CommandButton icon={<CheckIcon />} label={t("right")} hint="Y" tone="good" onClick={() => dispatch({ type: "judgeRight" })} />
+              <CommandButton icon={<CrossIcon />} label={t("wrong")} hint="N" tone="bad" onClick={() => dispatch({ type: "judgeWrong" })} />
             </>
           )}
           {running && (
             <>
               {view.clock?.running ? (
-                <CommandButton icon={<PauseIcon />} label={t("pause")} hint="P" onClick={() => run({ type: "pauseClock" })} />
+                <CommandButton icon={<PauseIcon />} label={t("pause")} hint="P" onClick={() => dispatch({ type: "pauseClock" })} />
               ) : (
-                <CommandButton icon={<PlayIcon />} label={t("resumeClock")} hint="P" onClick={() => run({ type: "resumeClock" })} />
+                <CommandButton icon={<PlayIcon />} label={t("resumeClock")} hint="P" onClick={() => dispatch({ type: "resumeClock" })} />
               )}
-              <CommandButton icon={<StopIcon />} label={t("endQuestion")} onClick={() => run({ type: "closeQuestion" })} />
+              <CommandButton icon={<StopIcon />} label={t("endQuestion")} onClick={() => dispatch({ type: "closeQuestion" })} />
             </>
           )}
           <CommandButton
             icon={<ListIcon />}
             label={t("leaderboard")}
             hint="S"
-            onClick={() => run({ type: "showLeaderboard", visible: !view.leaderboardVisible })}
+            onClick={() => dispatch({ type: "showLeaderboard", visible: !view.leaderboardVisible })}
           />
         </>
       )}
       <CommandButton
         icon={<ScreenIcon />}
-        label={`${t("projectorToggle")}: ${projectorOpen ? t("closeProjector") : t("openProjector")}`}
+        label={`${t("projectorToggle")}: ${projector.isOpen ? t("closeProjector") : t("openProjector")}`}
         hint="M"
-        onClick={onProjector}
+        onClick={projector.toggle}
       />
       <span className="spacer" />
-      {view && <CommandButton icon={<PowerIcon />} label={t("endShow")} tone="bad" onClick={() => api.endShow().catch((e) => onError(String(e)))} />}
+      {view && <CommandButton icon={<PowerIcon />} label={t("endShow")} tone="bad" onClick={() => run(api.endShow())} />}
     </aside>
   );
 }
 
-function StatusBar(props: { t: Translate; view: GameView | null; receivedAt: number; questionNo: { n: number; total: number } | null }) {
-  const { t, view, receivedAt, questionNo } = props;
-  const remaining = useRemainingMs(view, receivedAt);
+function StatusBar({ view, quiz }: { view: GameView | null; quiz: Quiz | null }) {
+  const { t } = useApp();
+  const clock = useClock(view);
   if (!view) return <footer className="status-bar">{t("noShow")}</footer>;
+  const position = questionPosition(quiz, view.slideIndex);
   return (
     <footer className="status-bar">
       <span>{view.quizTitle}</span>
       <span>{t("slide", { n: view.slideIndex + 1, total: view.slideCount })}</span>
-      {questionNo && (
+      {position && (
         <span>
-          {t("colQuestionNo")} {questionNo.n}/{questionNo.total}
+          {t("colQuestionNo")} {position.n}/{position.total}
         </span>
       )}
       <span className="status-phase">{phaseLabel(t, view)}</span>
-      {view.clock && <span className="status-clock">{remaining === null ? t("untimed") : formatSeconds(remaining)}</span>}
+      {clock && <span className="status-clock">{clock.remainingMs === null ? t("untimed") : clockSeconds(clock.remainingMs)}</span>}
       <span className="spacer" />
       <span>{t("registered", { n: view.players.length })}</span>
     </footer>

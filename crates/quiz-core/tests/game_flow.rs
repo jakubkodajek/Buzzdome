@@ -246,3 +246,38 @@ fn final_scores_reveal_step_by_step() {
     }
     assert_eq!(show.run(0, Command::Next), Err(GameError::NotNow));
 }
+
+#[test]
+fn clock_view_carries_the_falling_points() {
+    let mut show = Show::new(vec![question("q1", AnswerMode::Everyone)]);
+    show.press(0, 1, Button::Big);
+    show.run(1_000, Command::Next).unwrap(); // to q1, Ready
+    assert_eq!(show.game.clock_view(1_000), None);
+    show.run(2_000, Command::Next).unwrap(); // clock starts at 2.0 s, 10 s limit
+
+    let clock = show.game.clock_view(7_000).unwrap();
+    assert_eq!(clock.elapsed_ms, 5_000);
+    assert_eq!(clock.remaining_ms, Some(5_000));
+    assert!(clock.running);
+    // 100 falling to 50 over 10 s: halfway is 75.
+    assert_eq!(clock.points, 75);
+    assert_eq!(show.game.view(7_000).clock, Some(clock));
+}
+
+#[test]
+fn view_marks_each_answer_right_or_wrong() {
+    let mut show = Show::new(vec![question("q1", AnswerMode::Everyone)]);
+    for b in 1..=3 {
+        show.press(0, b, Button::Big);
+    }
+    show.run(1_000, Command::Next).unwrap();
+    show.run(2_000, Command::Next).unwrap();
+    show.press(3_000, 1, Button::B); // correct is index 1
+    show.press(3_500, 2, Button::D);
+
+    let view = show.game.view(4_000);
+    let correct = |buzzer: u16| view.players.iter().find(|p| p.buzzer == buzzer).unwrap().answer_correct;
+    assert_eq!(correct(1), Some(true));
+    assert_eq!(correct(2), Some(false));
+    assert_eq!(correct(3), None);
+}

@@ -9,16 +9,19 @@ use buzzers::{BuzzerDriver, VirtualDriver};
 use hardware::Hardware;
 use quiz_core::{Command, Effect, Game, GameView, Quiz, Stamped};
 use serde::Serialize;
+use ts_rs::TS;
 use session::{Session, SessionMeta, SessionSummary};
 use std::path::PathBuf;
 use std::sync::Mutex;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder};
 
 const DEMO_QUIZ: &str = include_str!("../../../samples/demo-quiz.json");
 const HOST_LABEL: &str = "host";
 const DIRECTOR_LABEL: &str = "director";
 const TICK: Duration = Duration::from_millis(50);
+/// How often the windows get the running clock (seconds and points on screen).
+const CLOCK_EVENT_EVERY: Duration = Duration::from_millis(250);
 
 struct Inner {
     game: Option<Game>,
@@ -41,6 +44,13 @@ fn sessions_root(app: &AppHandle) -> CmdResult<PathBuf> {
 fn emit_state(app: &AppHandle, game: Option<&Game>) {
     let view = game.map(|g| g.view(now_ms()));
     let _ = app.emit("game-state", view);
+}
+
+/// Tells the windows that a different show (or none) is loaded, so they
+/// reload the quiz.
+fn emit_show_changed(app: &AppHandle, inner: &Inner) {
+    let _ = app.emit("show-changed", ());
+    emit_state(app, inner.game.as_ref());
 }
 
 /// Applies a command on a copy, journals it, then commits. The show never
@@ -78,7 +88,7 @@ fn start_show(app: &AppHandle, inner: &mut Inner, quiz: Quiz, source_path: Optio
     let session = Session::create(&sessions_root(app)?, &quiz, &meta).map_err(|e| e.to_string())?;
     inner.game = Some(Game::new(quiz));
     inner.session = Some(session);
-    emit_state(app, inner.game.as_ref());
+    emit_show_changed(app, inner);
     Ok(())
 }
 
@@ -123,12 +133,10 @@ fn resume_last_session(app: AppHandle, state: State<AppState>) -> CmdResult<()> 
     let recovery = game.recovery_command();
     inner.game = Some(game);
     inner.session = Some(session);
+    emit_show_changed(&app, &inner);
     match recovery {
         Some(command) => execute(&app, &mut inner, command),
-        None => {
-            emit_state(&app, inner.game.as_ref());
-            Ok(())
-        }
+        None => Ok(()),
     }
 }
 
@@ -138,7 +146,7 @@ fn end_show(app: AppHandle, state: State<AppState>) {
     let mut inner = state.0.lock().unwrap();
     inner.game = None;
     inner.session = None;
-    emit_state(&app, None);
+    emit_show_changed(&app, &inner);
 }
 
 #[tauri::command]
@@ -163,7 +171,8 @@ pub(crate) fn press_from_hardware(app: &AppHandle, command: Command) -> bool {
     }
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, TS)]
+#[ts(export)]
 #[serde(rename_all = "camelCase")]
 struct MonitorInfo {
     index: usize,
@@ -222,16 +231,26 @@ fn close_host_window(app: AppHandle) -> CmdResult<()> {
     }
 }
 
-/// Issues time-driven commands such as "time is up".
+/// Issues time-driven commands such as "time is up", and sends the running
+/// clock to the windows.
 fn spawn_ticker(app: AppHandle) {
-    std::thread::spawn(move || loop {
-        std::thread::sleep(TICK);
-        let state = app.state::<AppState>();
-        let mut inner = state.0.lock().unwrap();
-        let due = inner.game.as_ref().and_then(|g| g.due_command(now_ms()));
-        if let Some(command) = due {
-            if let Err(e) = execute(&app, &mut inner, command) {
-                eprintln!("ticker: {e}");
+    std::thread::spawn(move || {
+        let mut last_clock_event = Instant::now();
+        loop {
+            std::thread::sleep(TICK);
+            let state = app.state::<AppState>();
+            let mut inner = state.0.lock().unwrap();
+            let now = now_ms();
+            if let Some(command) = inner.game.as_ref().and_then(|g| g.due_command(now)) {
+                if let Err(e) = execute(&app, &mut inner, command) {
+                    eprintln!("ticker: {e}");
+                }
+            } else if last_clock_event.elapsed() >= CLOCK_EVENT_EVERY {
+                last_clock_event = Instant::now();
+                let clock = inner.game.as_ref().and_then(|g| g.clock_view(now)).filter(|c| c.running);
+                if let Some(clock) = clock {
+                    let _ = app.emit("clock-tick", clock);
+                }
             }
         }
     });

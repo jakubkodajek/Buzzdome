@@ -1,34 +1,44 @@
-import { useCallback, useEffect, useLayoutEffect, useState, type ReactNode } from "react";
-import { questionNumber, useGameView, useQuiz, useRemainingMs, useSoundCues } from "../api";
-import { playerName, translator, useLang, type Translate } from "../i18n";
-import { useShortcuts } from "../shortcuts";
-import { playCue } from "../sound";
-import { ANSWER_LETTERS, type Cue, type GameView, type PlayerView, type Question } from "../types";
+import { useEffect, useLayoutEffect, useState, type ReactNode } from "react";
+import { ANSWER_LETTERS } from "../answers";
+import { AppProvider, useApp } from "../app-context";
+import { scoreDigits, signed } from "../format";
+import { useBackendEvent, useClock, useGameView, useQuiz } from "../hooks";
+import { playerName } from "../i18n";
 import { CheckIcon, CrossIcon, PeopleIcon, QuestionIcon, TrophyIcon } from "../icons";
+import { useShortcuts } from "../keyboard";
+import { questionPosition } from "../quiz";
+import type { GameView, PlayerView, Question } from "../types";
 import "./host.css";
 
 const STAGE_W = 1920;
 const STAGE_H = 1080;
 
+// The projector has nowhere to show errors; the Director reports them.
+const logError = (message: string) => console.error(message);
+
 /** The projector. Renders the game state; owns nothing. */
 export function HostScreen() {
-  const [lang] = useLang();
-  const t = translator(lang);
-  const { view, receivedAt } = useGameView();
-  const quiz = useQuiz(view);
-  const ignore = useCallback(() => {}, []);
-  useShortcuts(view, ignore);
+  return (
+    <AppProvider notify={logError}>
+      <HostLayout />
+    </AppProvider>
+  );
+}
+
+function HostLayout() {
+  const view = useGameView();
+  useShortcuts(view);
   const verdict = useVerdict();
 
   return (
     <Stage>
       {view && (
         <>
-          <HostContent t={t} view={view} receivedAt={receivedAt} questionNo={questionNumber(quiz, view.slideIndex)} />
+          <HostContent view={view} />
           {verdict && <div className={`verdict verdict-${verdict}`}>{verdict === "correct" ? <CheckIcon /> : <CrossIcon />}</div>}
           {view.leaderboardVisible && (
             <div className="overlay">
-              <Leaderboard t={t} players={ranked(view)} />
+              <Leaderboard players={ranked(view)} />
             </div>
           )}
         </>
@@ -37,14 +47,12 @@ export function HostScreen() {
   );
 }
 
-/** Plays sound cues and flashes a big check or cross after a verdict. */
+/** A big check or cross for a moment after the quizmaster judges an answer. */
 function useVerdict(): "correct" | "wrong" | null {
   const [verdict, setVerdict] = useState<"correct" | "wrong" | null>(null);
-  const onCue = useCallback((cue: Cue) => {
-    playCue(cue);
+  useBackendEvent("sound-cue", (cue) => {
     if (cue === "correct" || cue === "wrong") setVerdict(cue);
-  }, []);
-  useSoundCues(onCue);
+  });
   useEffect(() => {
     if (!verdict) return;
     const timer = setTimeout(() => setVerdict(null), 1600);
@@ -75,22 +83,12 @@ function ranked(view: GameView): PlayerView[] {
   return view.players.filter((p) => p.rank !== null);
 }
 
-function pad3(n: number): string {
-  return n < 0 ? `-${String(-n).padStart(2, "0")}` : String(n).padStart(3, "0");
-}
-
-interface ContentProps {
-  t: Translate;
-  view: GameView;
-  receivedAt: number;
-  questionNo: { n: number; total: number } | null;
-}
-
-function HostContent({ t, view, receivedAt, questionNo }: ContentProps) {
+function HostContent({ view }: { view: GameView }) {
+  const { t } = useApp();
   const phase = view.phase;
   switch (phase.phase) {
     case "lobby":
-      return <Welcome t={t} view={view} />;
+      return <Welcome view={view} />;
     case "billboard":
       return view.slide?.type === "billboard" ? (
         <div className="center-slide">
@@ -102,19 +100,18 @@ function HostContent({ t, view, receivedAt, questionNo }: ContentProps) {
       return (
         <div className="center-slide">
           <h1 className="slide-title small">{view.slide?.type === "endOfRound" ? view.slide.title : t("endOfRound")}</h1>
-          <Leaderboard t={t} players={ranked(view)} />
+          <Leaderboard players={ranked(view)} />
         </div>
       );
     case "final":
-      return <FinalScores t={t} players={ranked(view)} step={phase.step} />;
+      return <FinalScores players={ranked(view)} step={phase.step} />;
     case "question":
-      return view.slide?.type === "question" ? (
-        <QuestionScreen t={t} view={view} question={view.slide} receivedAt={receivedAt} questionNo={questionNo} />
-      ) : null;
+      return view.slide?.type === "question" ? <QuestionScreen view={view} question={view.slide} /> : null;
   }
 }
 
-function Welcome({ t, view }: { t: Translate; view: GameView }) {
+function Welcome({ view }: { view: GameView }) {
+  const { t } = useApp();
   const registered = new Set(view.players.map((p) => p.buzzer));
   const highest = Math.max(20, ...view.players.map((p) => p.buzzer));
   const cells = Array.from({ length: Math.min(highest, 100) }, (_, i) => i + 1);
@@ -136,21 +133,15 @@ function Welcome({ t, view }: { t: Translate; view: GameView }) {
   );
 }
 
-/** Points available right now; mirrors Question::points_at in the core. */
-function pointsAt(q: Question, elapsedMs: number): number {
-  if (q.pointsEnd === null || q.timeLimitS === 0) return q.points;
-  const limit = q.timeLimitS * 1000;
-  return Math.round(q.points + ((q.pointsEnd - q.points) * Math.min(elapsedMs, limit)) / limit);
-}
-
-function QuestionScreen(props: ContentProps & { question: Question }) {
-  const { t, view, question, receivedAt, questionNo } = props;
-  const remaining = useRemainingMs(view, receivedAt);
-  const phase = view.phase;
-  const step = phase.phase === "question" ? phase.step : "ready";
+function QuestionScreen({ view, question }: { view: GameView; question: Question }) {
+  const { t } = useApp();
+  const quiz = useQuiz();
+  const clock = useClock(view);
+  const position = questionPosition(quiz, view.slideIndex);
+  const step = view.phase.phase === "question" ? view.phase.step : "ready";
   const closed = step === "closed" || step === "revealed";
-  const limitMs = question.timeLimitS * 1000;
-  const elapsed = remaining === null ? (view.clock?.elapsedMs ?? 0) : limitMs - remaining;
+  const remaining = clock?.remainingMs ?? null;
+  const limit = clock?.limitMs ?? null;
   const enabled = view.players.filter((p) => p.enabled);
   const waiting = enabled.filter((p) => !p.answered);
 
@@ -177,9 +168,9 @@ function QuestionScreen(props: ContentProps & { question: Question }) {
     <div className="question-screen">
       <div className="info-panel">
         <ClockGauge
-          seconds={step === "ready" ? question.timeLimitS : closed ? 0 : remaining === null ? null : Math.ceil(remaining / 1000)}
-          fraction={closed ? 0 : step === "ready" || limitMs === 0 || remaining === null ? 1 : remaining / limitMs}
-          label={questionNo ? `${questionNo.n}/${questionNo.total}` : ""}
+          seconds={step === "ready" ? question.timeLimitS || null : closed ? 0 : remaining === null ? null : Math.ceil(remaining / 1000)}
+          fraction={closed ? 0 : remaining === null || !limit ? 1 : remaining / limit}
+          label={position ? `${position.n}/${position.total}` : ""}
         />
         <div className="info-middle">{middle}</div>
         {question.mode === "everyone" && (
@@ -190,7 +181,7 @@ function QuestionScreen(props: ContentProps & { question: Question }) {
         )}
         <div className="info-stat">
           <TrophyIcon />
-          <span className="digits">{pointsAt(question, elapsed)}</span>
+          <span className="digits">{clock?.points ?? question.points}</span>
         </div>
       </div>
 
@@ -217,18 +208,12 @@ function QuestionScreen(props: ContentProps & { question: Question }) {
         <div className="buzz-bar">
           <span className="buzz-name">{playerName(t, barPlayer)}</span>
           {barPlayer.delta !== null && barPlayer.delta !== 0 && (
-            <span className={`buzz-delta ${barPlayer.delta > 0 ? "plus" : "minus"}`}>
-              {barPlayer.delta > 0 ? `+${barPlayer.delta}` : barPlayer.delta}
-            </span>
+            <span className={`buzz-delta ${barPlayer.delta > 0 ? "plus" : "minus"}`}>{signed(barPlayer.delta)}</span>
           )}
         </div>
       )}
-      {question.mode === "fastestFinger" && step === "running" && !barPlayer && (
-        <div className="buzz-bar idle">{t("waitingForBuzz")}</div>
-      )}
-      {step === "closed" && remaining === 0 && question.mode === "fastestFinger" && (
-        <div className="buzz-bar idle">{t("timeUp")}</div>
-      )}
+      {question.mode === "fastestFinger" && step === "running" && !barPlayer && <div className="buzz-bar idle">{t("waitingForBuzz")}</div>}
+      {question.mode === "fastestFinger" && step === "closed" && remaining === 0 && <div className="buzz-bar idle">{t("timeUp")}</div>}
     </div>
   );
 }
@@ -281,7 +266,8 @@ function ResultBars({ right, wrong, none, total }: { right: number; wrong: numbe
   );
 }
 
-function Leaderboard({ t, players }: { t: Translate; players: PlayerView[] }) {
+function Leaderboard({ players }: { players: PlayerView[] }) {
+  const { t } = useApp();
   const top = players.slice(0, 20);
   const columns = [top.slice(0, 10), top.slice(10, 20)].filter((c) => c.length > 0);
   return (
@@ -292,7 +278,7 @@ function Leaderboard({ t, players }: { t: Translate; players: PlayerView[] }) {
             <li key={p.buzzer} className={p.rank !== null && p.rank <= 3 ? `top top-${p.rank}` : ""}>
               <span className="rank">{p.rank}</span>
               <span className="name">{playerName(t, p)}</span>
-              <span className="score">{pad3(p.score)}</span>
+              <span className="score">{scoreDigits(p.score)}</span>
             </li>
           ))}
         </ol>
@@ -301,12 +287,13 @@ function Leaderboard({ t, players }: { t: Translate; players: PlayerView[] }) {
   );
 }
 
-function FinalScores({ t, players, step }: { t: Translate; players: PlayerView[]; step: number }) {
+function FinalScores({ players, step }: { players: PlayerView[]; step: number }) {
+  const { t } = useApp();
   if (step >= 4) {
     return (
       <div className="center-slide">
         <h1 className="slide-title small">{t("final")}</h1>
-        <Leaderboard t={t} players={players} />
+        <Leaderboard players={players} />
       </div>
     );
   }
@@ -325,7 +312,7 @@ function FinalScores({ t, players, step }: { t: Translate; players: PlayerView[]
                 {shown && p && (
                   <>
                     <span className="name">{playerName(t, p)}</span>
-                    <span className="score">{pad3(p.score)}</span>
+                    <span className="score">{scoreDigits(p.score)}</span>
                   </>
                 )}
               </div>

@@ -1,22 +1,34 @@
 import { useEffect } from "react";
-import { api } from "./api";
+import { useDispatch } from "./app-context";
 import type { Command, GameView } from "./types";
 
-/** Quizmaster keys, the same in the Director and on the projector window. */
-export function useShortcuts(view: GameView | null, onError: (message: string) => void) {
+/** True when a key press is meant for a text field, not for the show. */
+export function isTypingTarget(target: EventTarget | null): boolean {
+  return target instanceof HTMLElement && (["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName) || target.isContentEditable);
+}
+
+/**
+ * Quizmaster keys, the same in the Director and on the projector window.
+ * `onToggleProjector` adds M, which only the Director handles.
+ */
+export function useShortcuts(view: GameView | null, onToggleProjector?: () => void) {
+  const dispatch = useDispatch();
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      const target = event.target as HTMLElement | null;
-      if (target && ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName)) return;
-      if (event.metaKey || event.ctrlKey || event.altKey) return;
+      if (isTypingTarget(event.target) || event.metaKey || event.ctrlKey || event.altKey) return;
+      if (event.key.toLowerCase() === "m" && onToggleProjector) {
+        event.preventDefault();
+        onToggleProjector();
+        return;
+      }
       const command = commandForKey(event.key, view);
       if (!command) return;
       event.preventDefault();
-      api.dispatch(command).catch((e) => onError(String(e)));
+      dispatch(command);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [view, onError]);
+  }, [view, dispatch, onToggleProjector]);
 }
 
 function commandForKey(key: string, view: GameView | null): Command | null {
