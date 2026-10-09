@@ -402,11 +402,6 @@
   padding: 0 40px;
 }
 
-.answers-6 {
-  grid-auto-rows: 120px;
-  gap: 24px 40px;
-}
-
 .answer {
   position: relative;
   display: flex;
@@ -443,8 +438,6 @@
 .answer-1 { background: linear-gradient(180deg, #ff9a3d, #ea6a0c); }
 .answer-2 { background: linear-gradient(180deg, #7fd64a, #45a51c); }
 .answer-3 { background: linear-gradient(180deg, #ffe94d, #e8c400); color: #2b2400; }
-.answer-4 { background: linear-gradient(180deg, #b27cff, #7d3ce0); }
-.answer-5 { background: linear-gradient(180deg, #ff6b7d, #d92742); }
 
 .answer-3 .letter {
   color: #2b2400;
@@ -699,10 +692,6 @@
   flex: 0 0 auto;
   grid-auto-rows: 120px;
   gap: 24px 46px;
-}
-
-.question-screen.has-media .answers-6 {
-  grid-auto-rows: 96px;
 }
 
 .question-screen.has-media .question-text {

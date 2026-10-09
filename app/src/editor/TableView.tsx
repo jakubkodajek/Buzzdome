@@ -7,7 +7,7 @@ import type { Quiz, Slide } from "../types";
 import type { Action } from "./actions";
 import { ContextMenu } from "./controls";
 import { slideProperties, type SlideEditing } from "./properties";
-import { MAX_ANSWERS, setAnswerAt, setHeadline } from "./slides";
+import { setAnswerAt, setHeadline } from "./slides";
 
 type ColumnId = "answers" | "correct" | "time" | "points" | "pointsEnd" | "penalty" | "notes";
 
@@ -64,7 +64,7 @@ export function TableView({ quiz, selected, onSelect, onOpen, editingFor }: Tabl
             <th>#</th>
             <th>{t("colType")}</th>
             <th className="wide">{t("colContent")}</th>
-            {shown("answers") && ANSWER_LETTERS.slice(0, MAX_ANSWERS).map((letter) => <th key={letter}>{t("elementAnswer", { letter })}</th>)}
+            {shown("answers") && ANSWER_LETTERS.map((letter) => <th key={letter}>{t("elementAnswer", { letter })}</th>)}
             {COLUMNS.slice(1).map(([column, label]) => shown(column) && <th key={column}>{t(label)}</th>)}
           </tr>
         </thead>
@@ -113,7 +113,7 @@ function SlideRow(props: { index: number; selected: boolean; editing: SlideEditi
         />
       </td>
       {shown("answers") &&
-        ANSWER_LETTERS.slice(0, MAX_ANSWERS).map((letter, i) => (
+        ANSWER_LETTERS.map((letter, i) => (
           <td key={letter} className={q && i <= q.answers.length ? (i === q.correct ? "correct" : "") : "na"}>
             {q && i <= q.answers.length && (
               <input

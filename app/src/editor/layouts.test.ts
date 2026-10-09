@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { LAYOUT_GROUPS, slideFromLayout } from "./layouts";
-import { MAX_ANSWERS, MIN_EVERYONE_ANSWERS } from "./slides";
+import { MAX_ANSWERS, MIN_EVERYONE_ANSWERS } from "../bindings/Constants";
 
 describe("layouts", () => {
   it("only makes questions the show can play", () => {

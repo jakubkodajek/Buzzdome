@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
+import { MAX_ANSWERS } from "../bindings/Constants";
 import type { QuestionSlide, Quiz } from "../types";
 import {
   addAnswer,
   convertSlide,
   freshSlideId,
-  MAX_ANSWERS,
   newSlide,
   removeAnswer,
   setAnswerAt,
@@ -62,13 +62,14 @@ describe("slides", () => {
     expect(setAnswerAt(q, 1, "B").answers).toEqual(["a", "B"]);
     expect(setAnswerAt(q, 2, "c").answers).toEqual(["a", "b", "c"]);
     expect(setAnswerAt(q, 3, "d")).toBe(q);
-    const full = question({ answers: ["a", "b", "c", "d", "e", "f"] });
-    expect(setAnswerAt(full, MAX_ANSWERS, "g")).toBe(full);
+    const full = question({ answers: ["a", "b", "c", "d"] });
+    expect(setAnswerAt(full, MAX_ANSWERS, "e")).toBe(full);
   });
 
   it("sets the number of answers as far as the mode allows", () => {
     const q = question({ answers: ["a", "b", "c", "d"], correct: 3 });
-    expect(withAnswerCount(q, 6).answers).toEqual(["a", "b", "c", "d", "", ""]);
+    expect(withAnswerCount(question({ answers: ["a", "b"] }), 4).answers).toEqual(["a", "b", "", ""]);
+    expect(withAnswerCount(q, MAX_ANSWERS + 2)).toBe(q);
     expect(withAnswerCount(q, 2)).toMatchObject({ answers: ["a", "b"], correct: 0 });
     expect(withAnswerCount(q, 0).answers).toHaveLength(2);
     expect(withAnswerCount(q, 4)).toBe(q);

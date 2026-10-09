@@ -5,7 +5,7 @@ import { SLIDE_TYPE_LABEL } from "../quiz";
 import type { QuestionSlide, Slide } from "../types";
 import { Dialog } from "./controls";
 import type { ElementId } from "./elements";
-import { MAX_ANSWERS, removeAnswer, setAnswerAt, setCorrect } from "./slides";
+import { removeAnswer, setAnswerAt, setCorrect } from "./slides";
 
 const FORM_ID = "edit-slide";
 
@@ -105,7 +105,7 @@ function QuestionFields({ question, onChange }: { question: QuestionSlide; onCha
       </label>
       <fieldset className="answer-rows">
         <legend>{t("answersField")}</legend>
-        {ANSWER_LETTERS.slice(0, MAX_ANSWERS).map((letter, i) => {
+        {ANSWER_LETTERS.map((letter, i) => {
           // Rows past the answers are greyed; the first of them takes a new answer.
           const used = i < count;
           return (

@@ -44,8 +44,6 @@ export const LAYOUT_GROUPS: LayoutGroup[] = [
   },
   { title: "layouts2", layouts: withAndWithoutPicture(2) },
   { title: "layouts3", layouts: withAndWithoutPicture(3) },
-  { title: "layouts5", layouts: withAndWithoutPicture(5) },
-  { title: "layouts6", layouts: withAndWithoutPicture(6) },
 ];
 
 /** A new slide laid out as `layout` (its media still to be chosen). */

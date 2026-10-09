@@ -3,6 +3,7 @@
 
 import type { ReactNode } from "react";
 import { ANSWER_LETTERS } from "../answers";
+import { MAX_ANSWERS, MIN_EVERYONE_ANSWERS } from "../bindings/Constants";
 import type { StringKey, Translate } from "../i18n";
 import { SoundIcon } from "../icons";
 import type { MediaKind } from "../media";
@@ -10,10 +11,8 @@ import { SLIDE_TYPE_LABEL, type SlideContext } from "../quiz";
 import type { QuestionSlide, Slide, SlideType, SoundStart } from "../types";
 import { MediaPicker, NumberBox, Select, Switch } from "./controls";
 import {
-  MAX_ANSWERS,
   MAX_POINTS,
   MAX_TIME_LIMIT_S,
-  MIN_EVERYONE_ANSWERS,
   convertSlide,
   removeAnswer,
   setAnswer,

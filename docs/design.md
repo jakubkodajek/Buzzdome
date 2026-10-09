@@ -40,7 +40,10 @@ two windows cannot disagree with each other or with the score.
 - **Types.** Every type that crosses the boundary is defined once in Rust and
   exported to TypeScript by ts-rs (`#[derive(TS)] #[ts(export)]`) into
   `app/src/bindings` when `cargo test` runs. `app/src/types.ts` re-exports
-  them. CI fails when the committed bindings differ from the Rust types.
+  them. Constants the UI needs (`MAX_ANSWERS`, question defaults,
+  `FINAL_LAST_STEP`) go to `bindings/Constants.ts` the same way, and media
+  extensions to `bindings/MediaExtensions.ts`. CI fails when the committed
+  bindings differ from the Rust types.
 - **Commands** (UI to Rust) are the `api` object in `app/src/api.ts`, one
   entry per `#[tauri::command]`. Game actions all go through one command,
   `dispatch(Command)`, the same for buttons, keys, virtual and real buzzers.
@@ -116,7 +119,7 @@ table view toggle. It edits a quiz; it never touches a running show.
   which the canvas, the panel and the context menu share.
 - **Slide changes.** `slides.ts` holds every change to a slide as a pure
   function that keeps the slide playable (an everyone-answers question
-  always has 2 to 6 answers and a correct one, and so on). Nothing in the
+  always has 2 to 4 answers and a correct one, and so on). Nothing in the
   UI edits a slide object by hand. Tested in `slides.test.ts`.
 - **Actions.** `actions.ts` defines an `Action` (label, icon, keys,
   disabled, checked, run). `EditorScreen.tsx` builds the one record of all

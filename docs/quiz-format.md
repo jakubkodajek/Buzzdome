@@ -99,7 +99,7 @@ was moved or deleted.
 | --- | --- | --- | --- |
 | `text` | text | required | The question. |
 | `mode` | `everyone`, `fastestFinger` | required | Everyone answers with A-D; or the first to buzz answers and the quizmaster judges. |
-| `answers` | list of text | `[]` | 2 to 6 for `everyone`; may be empty for `fastestFinger` (verbal answer). |
+| `answers` | list of text | `[]` | 2 to 4 for `everyone` (one per answer button A-D), at most 4 for `fastestFinger`, where it may be empty (verbal answer). |
 | `correct` | number | none | Index into `answers`, from 0. Required for `everyone`. |
 | `timeLimitS` | number | `20` | Seconds; `0` means no clock (the quizmaster ends the question). |
 | `points` | number | `10` | Points for a correct answer at the start of the clock. |

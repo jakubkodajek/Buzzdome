@@ -2,16 +2,12 @@
 // way to make a question the show would refuse (see `Quiz::validate` in
 // crates/quiz-core/src/model.rs).
 
-import { ANSWER_LETTERS } from "../answers";
+import { DEFAULT_POINTS, DEFAULT_TIME_LIMIT_S, MAX_ANSWERS, MIN_EVERYONE_ANSWERS } from "../bindings/Constants";
 import { slideTitle } from "../quiz";
 import type { AnswerMode, Quiz, QuestionSlide, Slide, SlideType, SoundClip, VideoClip } from "../types";
 
-/** Most answers a question can have (`MAX_ANSWERS` in Rust). */
-export const MAX_ANSWERS = ANSWER_LETTERS.length;
-/** Fewest answers an everyone-answers question can have. */
-export const MIN_EVERYONE_ANSWERS = 2;
 /** Answers a new everyone-answers question starts with: one per buzzer button. */
-const DEFAULT_ANSWERS = 4;
+const DEFAULT_ANSWERS = MAX_ANSWERS;
 
 /** A new, empty slide. */
 export function newSlide(type: SlideType, id: string): Slide {
@@ -28,8 +24,8 @@ export function newSlide(type: SlideType, id: string): Slide {
         mode: "everyone",
         answers: Array<string>(DEFAULT_ANSWERS).fill(""),
         correct: 0,
-        timeLimitS: 20,
-        points: 10,
+        timeLimitS: DEFAULT_TIME_LIMIT_S,
+        points: DEFAULT_POINTS,
         pointsEnd: null,
         penalty: 0,
       };

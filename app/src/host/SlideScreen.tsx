@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { ANSWER_LETTERS } from "../answers";
 import { useApp } from "../app-context";
+import { FINAL_LAST_STEP } from "../bindings/Constants";
 import { scoreDigits, signed } from "../format";
 import { playerName } from "../i18n";
 import { CheckIcon, CrossIcon, PeopleIcon, QuestionIcon, TrophyIcon } from "../icons";
@@ -186,7 +187,7 @@ function QuestionScreen(props: {
       {hasMedia && <SlideMedia slide={question} className="question-media" mode={mode} />}
 
       {question.answers.length > 0 && (
-        <div className={`answers answers-${question.answers.length > 4 ? "6" : "4"}`}>
+        <div className="answers">
           {question.answers.map((answer, i) => {
             const revealed = step === "revealed";
             const isCorrect = i === question.correct;
@@ -291,7 +292,7 @@ export function Leaderboard({ players }: { players: PlayerView[] }) {
 
 function FinalScores({ players, step }: { players: PlayerView[]; step: number }) {
   const { t } = useApp();
-  if (step >= 4) {
+  if (step >= FINAL_LAST_STEP) {
     return (
       <div className="center-slide">
         <h1 className="slide-title small">{t("final")}</h1>
@@ -307,7 +308,7 @@ function FinalScores({ players, step }: { players: PlayerView[]; step: number })
       <div className="podium">
         {places.map((place) => {
           const p = players[place - 1];
-          const shown = step >= 4 - place;
+          const shown = step >= FINAL_LAST_STEP - place;
           return (
             <div key={place} className={`podium-step place-${place}`}>
               <div className={`podium-name ${shown && p ? "shown" : ""}`}>

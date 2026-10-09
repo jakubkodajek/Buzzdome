@@ -9,8 +9,14 @@ use ts_rs::TS;
 /// 1: first version. 2: adds explanation slides; version 1 files read unchanged.
 pub const SCHEMA_VERSION: u32 = 2;
 
-/// Buzzers have four answer buttons (A-D); keypads in the original have six.
-pub const MAX_ANSWERS: usize = 6;
+/// Most answers a question can have: one per answer button of a buzzer (A-D).
+pub const MAX_ANSWERS: usize = 4;
+/// Fewest answers an everyone-answers question can have.
+pub const MIN_EVERYONE_ANSWERS: usize = 2;
+/// Seconds to answer when a quiz file leaves `timeLimitS` out.
+pub const DEFAULT_TIME_LIMIT_S: u32 = 20;
+/// Points when a quiz file leaves `points` out.
+pub const DEFAULT_POINTS: i32 = 10;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[ts(export)]
@@ -136,11 +142,11 @@ pub struct Question {
 }
 
 fn default_time_limit() -> u32 {
-    20
+    DEFAULT_TIME_LIMIT_S
 }
 
 fn default_points() -> i32 {
-    10
+    DEFAULT_POINTS
 }
 
 impl Question {
@@ -228,8 +234,8 @@ impl Quiz {
                     errors.push(err(format!("more than {MAX_ANSWERS} answers")));
                 }
                 if q.mode == AnswerMode::Everyone {
-                    if q.answers.len() < 2 {
-                        errors.push(err("an everyone-answers question needs at least 2 answers".into()));
+                    if q.answers.len() < MIN_EVERYONE_ANSWERS {
+                        errors.push(err(format!("an everyone-answers question needs at least {MIN_EVERYONE_ANSWERS} answers")));
                     }
                     if q.correct.is_none() {
                         errors.push(err("an everyone-answers question needs a correct answer".into()));
@@ -256,6 +262,7 @@ impl Quiz {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::game::Button;
 
     fn question(points: i32, points_end: Option<i32>, time_limit_s: u32) -> Question {
         Question {
@@ -310,6 +317,17 @@ mod tests {
         let mut q = question(10, None, 10);
         q.correct = Some(5);
         quiz.slides.push(Slide::new("a", SlideContent::Question(q)));
+        assert_eq!(quiz.validate().unwrap_err().len(), 1);
+    }
+
+    #[test]
+    fn a_question_has_at_most_one_answer_per_button() {
+        // Every answer must be one a buzzer button can choose.
+        let buttons = [Button::A, Button::B, Button::C, Button::D, Button::Big];
+        assert!((0..MAX_ANSWERS).all(|i| buttons.iter().any(|b| b.answer_index() == Some(i))));
+        let mut q = question(10, None, 10);
+        q.answers = vec!["a".into(); MAX_ANSWERS + 1];
+        let quiz = Quiz { schema_version: SCHEMA_VERSION, title: "x".into(), slides: vec![Slide::new("a", SlideContent::Question(q))] };
         assert_eq!(quiz.validate().unwrap_err().len(), 1);
     }
 
