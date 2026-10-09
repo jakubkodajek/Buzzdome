@@ -7,7 +7,7 @@ import { playerName } from "../i18n";
 import { CheckIcon, CrossIcon, PeopleIcon, QuestionIcon, TrophyIcon } from "../icons";
 import type { QuestionPosition, SlideContext } from "../quiz";
 import { SlideMedia, type ScreenMode } from "../slide-media";
-import type { ClockView, GameView, PlayerView, QuestionSlide } from "../types";
+import type { AnswerResults, ClockView, GameView, PlayerView, QuestionSlide } from "../types";
 import "./slide.css";
 
 export function ranked(view: GameView): PlayerView[] {
@@ -141,10 +141,8 @@ function QuestionScreen(props: {
   const waiting = enabled.filter((p) => !p.answered);
 
   let middle: ReactNode = null;
-  if (question.mode === "everyone" && closed && view.answerCounts) {
-    const right = question.correct === null ? 0 : view.answerCounts[question.correct];
-    const answered = view.answerCounts.reduce((a, b) => a + b, 0);
-    middle = <ResultBars right={right} wrong={answered - right} none={enabled.length - answered} total={enabled.length} />;
+  if (view.results) {
+    middle = <ResultBars results={view.results} />;
   } else if (question.mode === "everyone") {
     middle = (
       <div className="responders">
@@ -156,7 +154,8 @@ function QuestionScreen(props: {
   }
 
   const buzzed = view.players.find((p) => p.buzzer === view.buzzed);
-  const winner = step === "revealed" && question.mode === "fastestFinger" ? view.players.find((p) => (p.delta ?? 0) > 0) : undefined;
+  const winnerId = view.phase.phase === "question" && view.phase.step === "revealed" ? view.phase.winner : null;
+  const winner = view.players.find((p) => p.buzzer === winnerId);
   const barPlayer = buzzed ?? winner;
   const hasMedia = question.picture !== null || question.video !== null;
 
@@ -246,7 +245,9 @@ function ClockGauge({ seconds, fraction, label }: { seconds: number | null; frac
   );
 }
 
-function ResultBars({ right, wrong, none, total }: { right: number; wrong: number; none: number; total: number }) {
+function ResultBars({ results }: { results: AnswerResults }) {
+  const { right, wrong, none } = results;
+  const total = right + wrong + none;
   const width = (n: number) => `${total > 0 ? (n / total) * 100 : 0}%`;
   return (
     <div className="result-bars">

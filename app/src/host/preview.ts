@@ -17,6 +17,7 @@ export function previewView(slide: Slide, slideIndex: number, slideCount: number
     enabledCount: 0,
     answeredCount: 0,
     answerCounts: null,
+    results: null,
     buzzed: null,
     leaderboardVisible: false,
   };

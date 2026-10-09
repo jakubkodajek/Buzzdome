@@ -4,6 +4,7 @@
 import type { Slide } from "./bindings/Slide";
 
 export type { AnswerMode } from "./bindings/AnswerMode";
+export type { AnswerResults } from "./bindings/AnswerResults";
 export type { Button } from "./bindings/Button";
 export type { ClockView } from "./bindings/ClockView";
 export type { Command } from "./bindings/Command";

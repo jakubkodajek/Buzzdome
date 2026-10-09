@@ -194,8 +194,9 @@ pub enum QuestionStep {
     Buzzed { buzzer: BuzzerId, clock: Clock },
     /// Answers are in; points are applied.
     Closed,
-    /// The correct answer is on screen.
-    Revealed,
+    /// The correct answer is on screen. In fastest finger, `winner` is the
+    /// buzzer judged right, if any.
+    Revealed { winner: Option<BuzzerId> },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -543,7 +544,7 @@ impl Game {
             player.score += delta;
             player.total_answer_ms += elapsed;
             *self.deltas.entry(buzzer).or_default() += delta;
-            self.phase = Phase::Question(QuestionStep::Revealed);
+            self.phase = Phase::Question(QuestionStep::Revealed { winner: Some(buzzer) });
             return Ok(vec![
                 Effect::Lights { lights: vec![(buzzer, Light::Correct)] },
                 Effect::Sound { cue: Cue::Correct },
@@ -581,14 +582,14 @@ impl Game {
                 QuestionStep::Running { .. } => Ok(self.close_question()),
                 QuestionStep::Buzzed { .. } => Err(GameError::NotNow),
                 QuestionStep::Closed => {
-                    self.phase = Phase::Question(QuestionStep::Revealed);
+                    self.phase = Phase::Question(QuestionStep::Revealed { winner: None });
                     let mut effects = vec![Effect::Sound { cue: Cue::Reveal }];
                     if let Some(lights) = self.result_lights() {
                         effects.insert(0, lights);
                     }
                     Ok(effects)
                 }
-                QuestionStep::Revealed => Ok(self.enter_slide(self.slide + 1)),
+                QuestionStep::Revealed { .. } => Ok(self.enter_slide(self.slide + 1)),
             },
             Phase::Final { step } if step < FINAL_LAST_STEP => {
                 self.phase = Phase::Final { step: step + 1 };

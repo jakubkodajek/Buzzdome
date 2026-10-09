@@ -2,6 +2,7 @@ use quiz_core::{
     AnswerMode, Button, Command, Cue, Effect, Game, GameError, Light, Phase, Question, QuestionStep, Quiz, Slide,
     SlideContent, Stamped, PRESS_GRACE_MS,
 };
+use quiz_core::view::AnswerResults;
 
 fn question(id: &str, mode: AnswerMode) -> Slide {
     Slide::new(
@@ -87,7 +88,7 @@ fn everyone_answers_scores_by_speed_and_closes_when_all_answered() {
     assert_eq!((show.score(1), show.score(2), show.score(3)), (100, 75, -20));
 
     let effects = show.run(9_000, Command::Next).unwrap();
-    assert_eq!(step(&show.game), QuestionStep::Revealed);
+    assert_eq!(step(&show.game), QuestionStep::Revealed { winner: None });
     assert!(effects.contains(&Effect::Lights {
         lights: vec![(1, Light::Correct), (2, Light::Correct), (3, Light::Wrong)]
     }));
@@ -199,7 +200,24 @@ fn fastest_finger_wrong_locks_out_and_resumes_then_right_ends() {
     show.run(25_000, Command::JudgeRight).unwrap();
     // Buzzed after 3 s of clock: 100 - 50 * 3/10 = 85.
     assert_eq!(show.score(3), 85);
-    assert_eq!(step(&show.game), QuestionStep::Revealed);
+    assert_eq!(step(&show.game), QuestionStep::Revealed { winner: Some(3) });
+}
+
+#[test]
+fn a_fastest_finger_reveal_names_the_winner_whatever_the_points() {
+    let mut slide = question("q1", AnswerMode::FastestFinger);
+    if let SlideContent::Question(q) = &mut slide.content {
+        q.points = 0;
+        q.points_end = None;
+    }
+    let mut show = Show::new(vec![slide]);
+    show.press(0, 1, Button::Big);
+    show.run(0, Command::Next).unwrap();
+    show.run(0, Command::Next).unwrap();
+    show.press(1_000, 1, Button::Big);
+    show.run(2_000, Command::JudgeRight).unwrap();
+    assert_eq!(step(&show.game), QuestionStep::Revealed { winner: Some(1) });
+    assert_eq!(show.score(1), 0);
 }
 
 #[test]
@@ -350,4 +368,22 @@ fn view_marks_each_answer_right_or_wrong() {
     assert_eq!(correct(1), Some(true));
     assert_eq!(correct(2), Some(false));
     assert_eq!(correct(3), None);
+}
+
+#[test]
+fn view_counts_results_of_enabled_players_only() {
+    let mut show = Show::new(vec![question("q1", AnswerMode::Everyone)]);
+    for b in 1..=3 {
+        show.press(0, b, Button::Big);
+    }
+    show.run(1_000, Command::Next).unwrap();
+    show.run(2_000, Command::Next).unwrap();
+    show.press(3_000, 1, Button::B); // right
+    show.press(3_500, 2, Button::D); // wrong, then switched off
+    show.run(4_000, Command::SetPlayerEnabled { buzzer: 2, enabled: false }).unwrap();
+    assert_eq!(show.game.view(4_000).results, None);
+    show.run(5_000, Command::CloseQuestion).unwrap();
+    let view = show.game.view(5_000);
+    assert_eq!(view.results, Some(AnswerResults { right: 1, wrong: 0, none: 1 }));
+    assert_eq!(view.answered_count, 1);
 }

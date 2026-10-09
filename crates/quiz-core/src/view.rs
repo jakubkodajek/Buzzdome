@@ -1,7 +1,7 @@
 //! What the windows render: a read-only snapshot of the game at one moment.
 
 use crate::game::{BuzzerId, Button, Game, Phase, QuestionStep};
-use crate::model::{SlideContent, Slide};
+use crate::model::{AnswerMode, Slide, SlideContent};
 use serde::Serialize;
 use ts_rs::TS;
 
@@ -19,11 +19,25 @@ pub struct GameView {
     pub clock: Option<ClockView>,
     pub players: Vec<PlayerView>,
     pub enabled_count: usize,
+    /// Enabled players who answered the current question.
     pub answered_count: usize,
     /// Answers per button (A, B, ...), only once the question is closed.
     pub answer_counts: Option<Vec<usize>>,
+    /// Everyone-answers: how the enabled players did, once the question is closed.
+    pub results: Option<AnswerResults>,
     pub buzzed: Option<BuzzerId>,
     pub leaderboard_visible: bool,
+}
+
+/// Enabled players by outcome of an everyone-answers question.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
+#[serde(rename_all = "camelCase")]
+pub struct AnswerResults {
+    pub right: usize,
+    pub wrong: usize,
+    /// No answer.
+    pub none: usize,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, TS)]
@@ -113,8 +127,17 @@ impl Game {
 
         let closed = matches!(
             self.phase(),
-            Phase::Question(QuestionStep::Closed | QuestionStep::Revealed)
+            Phase::Question(QuestionStep::Closed | QuestionStep::Revealed { .. })
         );
+        let enabled: Vec<&PlayerView> = players.iter().filter(|p| p.enabled).collect();
+        let results = match self.question() {
+            Some(q) if closed && q.mode == AnswerMode::Everyone => {
+                let right = enabled.iter().filter(|p| p.answer_correct == Some(true)).count();
+                let answered = enabled.iter().filter(|p| p.answered).count();
+                Some(AnswerResults { right, wrong: answered - right, none: enabled.len() - answered })
+            }
+            _ => None,
+        };
         let answer_counts = match self.current_slide().map(|s| &s.content) {
             Some(SlideContent::Question(q)) if closed && !q.answers.is_empty() => {
                 let mut counts = vec![0; q.answers.len()];
@@ -141,9 +164,10 @@ impl Game {
             slide: self.current_slide().cloned(),
             next_slide_title: self.quiz().slides.get(next_index).map(slide_title),
             clock: self.clock_view(now),
-            enabled_count: players.iter().filter(|p| p.enabled).count(),
-            answered_count: self.responses().len(),
+            enabled_count: enabled.len(),
+            answered_count: enabled.iter().filter(|p| p.answered).count(),
             answer_counts,
+            results,
             buzzed: match self.phase() {
                 Phase::Question(QuestionStep::Buzzed { buzzer, .. }) => Some(*buzzer),
                 _ => None,
