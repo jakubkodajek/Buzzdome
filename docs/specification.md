@@ -337,5 +337,5 @@ running show.
 | Which model is it: 215 (dome) or 303S (RGB)? Label under the buzzer base. | Jakub | Decides the protocol and whether lights are colours. |
 | USB vendor and product ID of the cable (Receiver tab or `hid-monitor`). | Jakub | Selects the protocol automatically. |
 | The SDK files and protocol documentation for that model and the HID cable. | Jakub, from Enjoy | Lights, press times, battery level. |
-| SDK terms: may we implement the protocol in this app, and may that code be published openly, or must it stay private? Enjoy said the SDK is free of charge; the email did not say what we may do with it. | Jakub, from Enjoy | Decides whether the vendor protocol lives in this repository or in a private add-on. Not decided here. |
+| SDK terms for using it in this app. Decided 2026-10-09: the app is a private copy for Jakub, not open source and not distributed, so publishing the protocol is no longer a question; Enjoy is asked for the SDK for personal use. | Jakub, from Enjoy | The vendor protocol may then live in this (private) repository. |
 | Does the receiver report one press per USB report, or several? | hardware test | Affects how ties within one report are ordered. |

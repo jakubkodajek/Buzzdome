@@ -97,9 +97,9 @@ Enjoy Tech replied to Jakub's email:
   hardware times, not just arrival order).
 - Different versions use different protocols (dome and RGB differ).
 - The SDK is free of charge ("not licence charged"); the reference app is the
-  paid part. They asked why we want it open source and which part. What the
-  SDK terms allow (implementing the protocol in this app, publishing that
-  code) is still unanswered.
+  paid part. They asked why we want it open source and which part.
+- Decided 2026-10-09: the app stays a private copy for Jakub, not open source
+  and not distributed. The SDK is requested for personal use on that basis.
 
 ## How we get the protocol
 
