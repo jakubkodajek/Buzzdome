@@ -1,17 +1,37 @@
 //! Buzzer drivers. Presses flow into the app over a channel in hardware order;
 //! lights flow out through `BuzzerDriver::set_lights`.
 //!
-//! Hardware receivers are not implemented yet: see `replica/hardware.md`.
+//! The hardware path is layered so each part can be tested without a device:
+//!
+//! - [`hid`]: a minimal USB-HID backend trait, implemented with `hidapi` in
+//!   production and with fakes in tests.
+//! - [`protocol`]: turns raw input reports into presses and light commands into
+//!   output reports. Vendor protocols plug in here; until the receiver's protocol
+//!   is documented, [`learned`] maps reports recorded from real presses.
+//! - [`receiver`]: owns one receiver on an I/O thread: connect, read, decode,
+//!   write lights, reconnect after unplugging.
+//!
+//! See `docs/design.md` and `replica/hardware.md`.
+
+pub mod edge;
+pub mod hid;
+#[cfg(feature = "hidapi")]
+pub mod hidapi_backend;
+pub mod learned;
+pub mod protocol;
+pub mod receiver;
 
 use quiz_core::{BuzzerId, Button, Light};
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Press {
     pub buzzer: BuzzerId,
     pub button: Button,
 }
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum DriverError {
     #[error("receiver not connected")]
     NotConnected,

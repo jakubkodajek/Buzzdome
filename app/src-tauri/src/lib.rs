@@ -1,9 +1,12 @@
 //! Desktop shell: owns the live game, journals every accepted command before
 //! the windows see it, drives the buzzer lights and the projector window.
 
+mod hardware;
 mod session;
 
+use buzzers::receiver::HardwareDriver;
 use buzzers::{BuzzerDriver, VirtualDriver};
+use hardware::Hardware;
 use quiz_core::{Command, Effect, Game, GameView, Quiz, Stamped};
 use serde::Serialize;
 use session::{Session, SessionMeta, SessionSummary};
@@ -143,6 +146,23 @@ fn dispatch(app: AppHandle, state: State<AppState>, command: Command) -> CmdResu
     execute(&app, &mut state.0.lock().unwrap(), command)
 }
 
+/// Feeds a press from the buzzer receiver into the running show, if any.
+/// Returns whether the show took it.
+pub(crate) fn press_from_hardware(app: &AppHandle, command: Command) -> bool {
+    let state = app.state::<AppState>();
+    let mut inner = state.0.lock().unwrap();
+    if inner.game.is_none() {
+        return false;
+    }
+    match execute(app, &mut inner, command) {
+        Ok(()) => true,
+        Err(e) => {
+            eprintln!("buzzer press: {e}");
+            false
+        }
+    }
+}
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct MonitorInfo {
@@ -227,6 +247,11 @@ pub fn run() {
             driver: Box::new(VirtualDriver),
         })))
         .setup(|app| {
+            let hardware = Hardware::start(app.handle());
+            if let Some(handle) = hardware.handle() {
+                app.state::<AppState>().0.lock().unwrap().driver = Box::new(HardwareDriver(handle));
+            }
+            app.manage(hardware);
             spawn_ticker(app.handle().clone());
             Ok(())
         })
@@ -243,6 +268,15 @@ pub fn run() {
             open_host_window,
             close_host_window,
             host_window_open,
+            hardware::receiver_info,
+            hardware::receiver_devices,
+            hardware::receiver_select,
+            hardware::receiver_learn_start,
+            hardware::receiver_learn_cancel,
+            hardware::receiver_learn_finish,
+            hardware::receiver_forget_learned,
+            hardware::receiver_export_log,
+            hardware::receiver_udev_rule,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

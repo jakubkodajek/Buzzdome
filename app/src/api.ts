@@ -1,7 +1,18 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useEffect, useState } from "react";
-import type { Command, Cue, GameView, MonitorInfo, Quiz, SessionSummary } from "./types";
+import type {
+  Button,
+  BuzzerId,
+  Command,
+  Cue,
+  DeviceInfo,
+  GameView,
+  MonitorInfo,
+  Quiz,
+  ReceiverInfo,
+  SessionSummary,
+} from "./types";
 
 export const api = {
   getView: () => invoke<GameView | null>("get_view"),
@@ -17,6 +28,15 @@ export const api = {
     invoke<void>("open_host_window", { monitor, fullscreen }),
   closeHostWindow: () => invoke<void>("close_host_window"),
   hostWindowOpen: () => invoke<boolean>("host_window_open"),
+  receiverInfo: () => invoke<ReceiverInfo>("receiver_info"),
+  receiverDevices: () => invoke<DeviceInfo[]>("receiver_devices"),
+  receiverSelect: (device: DeviceInfo | null) => invoke<void>("receiver_select", { device }),
+  receiverLearnStart: (buzzer: BuzzerId, button: Button) => invoke<void>("receiver_learn_start", { buzzer, button }),
+  receiverLearnCancel: () => invoke<void>("receiver_learn_cancel"),
+  receiverLearnFinish: () => invoke<string>("receiver_learn_finish"),
+  receiverForgetLearned: () => invoke<void>("receiver_forget_learned"),
+  receiverExportLog: (path: string) => invoke<void>("receiver_export_log", { path }),
+  receiverUdevRule: () => invoke<string>("receiver_udev_rule"),
 };
 
 /** The latest game state, pushed by the backend after every change. */

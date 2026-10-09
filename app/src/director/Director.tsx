@@ -18,13 +18,14 @@ import { formatSeconds, phaseLabel } from "../phase";
 import { useShortcuts } from "../shortcuts";
 import type { Command, GameView, SessionSummary } from "../types";
 import { QuestionsTab } from "./QuestionsTab";
+import { ReceiverTab } from "./ReceiverTab";
 import { ResponsesTab } from "./ResponsesTab";
 import { SettingsTab, useProjectorSettings } from "./SettingsTab";
 import { TeamsTab } from "./TeamsTab";
 import { VirtualBuzzers } from "./VirtualBuzzers";
 import "./director.css";
 
-type Tab = "questions" | "teams" | "responses" | "buzzers" | "settings";
+type Tab = "questions" | "teams" | "responses" | "buzzers" | "receiver" | "settings";
 
 export function Director() {
   const [lang, setLang] = useLang();
@@ -59,6 +60,7 @@ export function Director() {
     ["teams", t("tabTeams")],
     ["responses", t("tabResponses")],
     ["buzzers", t("tabBuzzers")],
+    ["receiver", t("tabReceiver")],
     ["settings", t("tabSettings")],
   ];
 
@@ -76,6 +78,8 @@ export function Director() {
         <div className="tab-body">
           {tab === "settings" ? (
             <SettingsTab t={t} lang={lang} setLang={setLang} projector={projector} />
+          ) : tab === "receiver" ? (
+            <ReceiverTab t={t} onError={showError} />
           ) : !view ? (
             <p className="empty">{t("welcome")}</p>
           ) : tab === "questions" ? (

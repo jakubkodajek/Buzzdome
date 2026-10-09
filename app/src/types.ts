@@ -117,3 +117,57 @@ export interface MonitorInfo {
 }
 
 export const ANSWER_LETTERS = ["A", "B", "C", "D", "E", "F"];
+
+// Mirrors of the receiver types in crates/buzzers and app/src-tauri/src/hardware.rs.
+
+export interface DeviceInfo {
+  path: string;
+  vendorId: number;
+  productId: number;
+  manufacturer: string | null;
+  product: string | null;
+  serialNumber: string | null;
+  usagePage: number;
+  usage: number;
+  interfaceNumber: number;
+}
+
+export interface DeviceSelector {
+  vendorId: number;
+  productId: number;
+  usagePage: number | null;
+  interfaceNumber: number | null;
+}
+
+export type ReceiverStatus =
+  | { kind: "off" }
+  | { kind: "searching"; selector: DeviceSelector }
+  | { kind: "connected"; device: DeviceInfo; protocol: string; hasLights: boolean }
+  | { kind: "error"; message: string };
+
+export interface Press {
+  buzzer: BuzzerId;
+  button: Button;
+}
+
+export interface RawReport {
+  atMs: number;
+  bytes: number[];
+  decoded: Press[];
+}
+
+export interface LearnProgress {
+  active: boolean;
+  buzzer: BuzzerId | null;
+  button: Button | null;
+  samples: number;
+}
+
+export interface ReceiverInfo {
+  status: ReceiverStatus | null;
+  initError: string | null;
+  learnedButtons: number;
+  learn: LearnProgress;
+  recent: RawReport[];
+  platform: string;
+}
