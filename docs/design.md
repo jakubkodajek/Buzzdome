@@ -10,7 +10,7 @@ How the app is built, with the buzzer link in most detail. Requirements are in
 │  React UI                                               │
 │  ├── Director window  (control, setup, Receiver tab)    │
 │  └── Host window      (projector, full screen)          │
-│            ▲ events: game-state, receiver-*             │
+│            ▲ events: game-state, clock-tick, ...        │
 │            │ commands: invoke(...)                      │
 │  Rust shell  app/src-tauri                              │
 │  ├── lib.rs       AppState { game, session, driver }    │
@@ -27,6 +27,42 @@ How the app is built, with the buzzer link in most detail. Requirements are in
 applied to `Game`, which returns `Effect`s (lights, sound cues). The shell
 journals each command to disk before the new state is emitted to the windows,
 and a crashed show is rebuilt by replaying the journal.
+
+### 1.1 Between Rust and the UI
+
+The game core is the only place that knows the rules. Everything a window
+shows is either the `GameView` the core builds or a value the core computes
+(the points a correct answer earns now, whether an answer is right), so the
+two windows cannot disagree with each other or with the score.
+
+- **Types.** Every type that crosses the boundary is defined once in Rust and
+  exported to TypeScript by ts-rs (`#[derive(TS)] #[ts(export)]`) into
+  `app/src/bindings` when `cargo test` runs. `app/src/types.ts` re-exports
+  them. CI fails when the committed bindings differ from the Rust types.
+- **Commands** (UI to Rust) are the `api` object in `app/src/api.ts`, one
+  entry per `#[tauri::command]`. Game actions all go through one command,
+  `dispatch(Command)`, the same for buttons, keys, virtual and real buzzers.
+- **Events** (Rust to UI) are typed in `BackendEvents` in the same file:
+
+| Event | Payload | When |
+| --- | --- | --- |
+| `game-state` | `GameView` or null | after every journaled command |
+| `show-changed` | none | a show starts, resumes or ends (reload the quiz) |
+| `clock-tick` | `ClockView` | every 250 ms while a question clock runs |
+| `sound-cue` | `Cue` | a game effect that has a sound |
+| `receiver-status`, `receiver-raw`, `receiver-press`, `receiver-learn` | see `hardware.rs` | receiver setup and diagnostics |
+
+- **Clock.** A ticker thread in the shell applies due timer commands (time
+  up) and otherwise sends `clock-tick` with the core's `ClockView`. The UI
+  never measures time itself; the gauge animates between ticks with CSS.
+- **React side.** `app-context.tsx` gives each window its language, `t` and
+  error reporting (`useRun`, `useDispatch`). `hooks.ts` wraps events and
+  loads (`useBackendEvent`, `useGameView`, `useClock`, `useQuiz`,
+  `useLastSession`). Small shared helpers live in `answers.ts`, `format.ts`,
+  `quiz.ts` and `keyboard.ts`. ESLint with the React hooks rules runs in CI.
+- **Sound.** The Director window plays the cues, because it stays open for
+  the whole show and the projector window may not. Spec SN-5 moves playback
+  into the Rust shell later.
 
 ## 2. Buzzer link
 
@@ -193,11 +229,13 @@ conflict detection. None of this proves the real receiver's format: see
 
 ## 4. Build and release
 
-`.github/workflows/build.yml` runs on every push:
+`.github/workflows/build.yml`:
 
-1. `check` (Ubuntu 22.04): build the UI, `cargo clippy -D warnings`, `cargo
-   test --workspace`.
-2. `installers` (matrix, after `check`): Windows NSIS, macOS universal DMG
+1. `check` (Ubuntu 22.04, every push): ESLint, type-check and build the UI,
+   `cargo clippy -D warnings`, `cargo test --workspace` from an empty
+   bindings folder, then fail if `app/src/bindings` changed.
+2. `installers` (matrix, after `check`, on `main`, tags `v*` and manual
+   runs, because macOS minutes are expensive): Windows NSIS, macOS universal DMG
    (`aarch64` and `x86_64` targets), Linux deb and AppImage on Ubuntu 22.04
    so the AppImage runs on older distributions. Each uploads its files as a
    run artifact (`quiz-show-windows`, `quiz-show-macos`, `quiz-show-linux`).
@@ -205,7 +243,7 @@ conflict detection. None of this proves the real receiver's format: see
 Signing and notarization need a Windows code-signing certificate and an Apple
 Developer ID; until then builds are unsigned (macOS ad-hoc), see PL-5.
 
-## 5. Extension points (for sections 5 and 6 of the specification)
+## 5. Extension points (for sections 5, 6, 9 and 10 of the specification)
 
 Not built yet; this is where they will attach, so current code does not block
 them.
@@ -227,6 +265,15 @@ them.
   game state and the press stream the app already emits.
 - **Light colours** move from the protocol into the theme
   (`buzzerColors`), passed to `encode_lights` for RGB buzzers.
+- **Quiz files with media** (spec section 9). A `.quiz` file is a ZIP with
+  `quiz.json` and `media/`. Opening one extracts it into
+  `<app data>/quizzes/<content hash>/`, which the session records, so a
+  resumed show finds its media even if the original file moved. Media are
+  served to the web views through the asset protocol, limited to that folder.
+- **Sounds** (spec section 10). Cues already come out of the core as effects.
+  The shell maps each cue to a file (show setting, else theme, else built-in)
+  and plays it with a Rust audio library chosen when this is built, so
+  playback does not depend on a window.
 
 ## 6. Verification status
 
@@ -235,6 +282,7 @@ them.
 | Receiver thread, protocols, learn mode, edge filter | Rust unit and integration tests with a fake HID backend, repeated runs | pass |
 | App builds and starts with the HID backend | Linux, under a virtual display; Receiver tab lists devices (none attached) | pass |
 | Linux `.deb` | built locally | pass |
+| UI screens (Director, projector) render without errors | preview with a mocked backend, headless Chromium | pass |
 | Windows and macOS installers | CI | see the PR's checks |
 | Real receiver: detection, raw reports, learn mode, presses in a show | needs the hardware | **not tested** |
 | Lights, press times, battery | need the vendor protocol | **not built** |

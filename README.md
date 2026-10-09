@@ -23,9 +23,11 @@ buzzers: [`docs/hardware-test.md`](docs/hardware-test.md).
 
 ## Install
 
-Every push builds installers (GitHub > Actions > Build > a run > Artifacts):
-`quiz-show-windows` (`.exe` installer), `quiz-show-macos` (universal `.dmg`)
-and `quiz-show-linux` (`.deb` and `.AppImage`). They are not code-signed yet:
+CI builds installers on `main`, on version tags and on demand (GitHub >
+Actions > Build > Run workflow, pick the branch). Download them from the
+run's Artifacts: `quiz-show-windows` (`.exe` installer), `quiz-show-macos`
+(universal `.dmg`) and `quiz-show-linux` (`.deb` and `.AppImage`). They are
+not code-signed yet:
 
 - Windows: SmartScreen warns on first start; choose "More info", then
   "Run anyway".

@@ -1,7 +1,9 @@
 name: Build
 
-# Tests the workspace, then builds installers for Windows, macOS and Linux on
-# every push and on demand. Download them from the run's "Artifacts" section.
+# Checks every push. Installers for Windows, macOS and Linux are built on
+# main, on version tags (v*) and on demand ("Run workflow" in the Actions tab),
+# because macOS runner minutes are the most expensive on a private repository.
+# Download them from the run's "Artifacts" section.
 on:
   push:
   workflow_dispatch:
@@ -35,6 +37,10 @@ jobs:
         working-directory: app
         run: npm ci
 
+      - name: Lint the UI
+        working-directory: app
+        run: npm run lint
+
       # Tauri embeds the built UI, so it must exist before the Rust crates compile.
       - name: Type-check and build the UI
         working-directory: app
@@ -43,11 +49,24 @@ jobs:
       - name: Lint Rust
         run: cargo clippy --workspace --all-targets -- -D warnings
 
+      # The tests also write the TypeScript bindings (ts-rs); start from an empty
+      # folder so a type removed in Rust is noticed too.
       - name: Test the Rust workspace
-        run: cargo test --workspace
+        run: |
+          rm -rf app/src/bindings
+          cargo test --workspace
+
+      - name: Check the TypeScript bindings are up to date
+        run: |
+          if [ -n "$(git status --porcelain -- app/src/bindings)" ]; then
+            git status --short -- app/src/bindings
+            echo "::error::app/src/bindings is out of date. Run 'cargo test --workspace' and commit the result."
+            exit 1
+          fi
 
   installers:
     needs: check
+    if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
     strategy:
       fail-fast: false
       matrix:
