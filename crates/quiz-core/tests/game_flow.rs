@@ -242,6 +242,83 @@ fn judging_needs_a_buzz_and_next_waits_for_the_verdict() {
     assert_eq!(show.run(1_001, Command::Next), Err(GameError::NotNow));
 }
 
+/// Asserts that `Game::controls` says yes exactly to the step commands
+/// `apply` takes, so the Director never offers one the show refuses.
+fn assert_controls_match_apply(game: &Game, at_ms: u64) {
+    let controls = game.controls();
+    let offered = [
+        (controls.next, Command::Next),
+        (controls.judge, Command::JudgeRight),
+        (controls.judge, Command::JudgeWrong),
+        (controls.pause_clock, Command::PauseClock),
+        (controls.resume_clock, Command::ResumeClock),
+        (controls.close_question, Command::CloseQuestion),
+    ];
+    for (allowed, command) in offered {
+        let taken = game.clone().apply(&Stamped { at_ms, command: command.clone() }).is_ok();
+        assert_eq!(allowed, taken, "{command:?} in {:?}", game.phase());
+    }
+}
+
+#[test]
+fn controls_offer_exactly_the_commands_each_step_takes() {
+    let mut show = Show::new(vec![
+        Slide::new("intro", SlideContent::Billboard { title: "Round 1".into(), text: String::new() }),
+        question("q1", AnswerMode::FastestFinger),
+        Slide::new("why", SlideContent::Explanation { text: "Because.".into() }),
+        Slide::new("end", SlideContent::EndOfRound { title: "End".into() }),
+    ]);
+    show.press(0, 1, Button::Big);
+    show.press(0, 2, Button::Big);
+    let buzz = |buzzer| Command::Press { buzzer, button: Button::Big };
+    let script = [
+        Command::Next,        // intro
+        Command::Next,        // q1 ready
+        Command::Next,        // running
+        Command::PauseClock,  // paused
+        Command::ResumeClock, // running
+        buzz(1),              // buzzed
+        Command::JudgeWrong,  // running again, 1 locked out
+        buzz(2),              // buzzed
+        Command::JudgeRight,  // revealed
+        Command::Next,        // explanation
+        Command::Next,        // end of round
+        Command::Next,        // final scores
+    ];
+    let mut at_ms = 0;
+    assert_controls_match_apply(&show.game, at_ms);
+    for command in script {
+        at_ms += 1_000;
+        show.run(at_ms, command).unwrap();
+        assert_controls_match_apply(&show.game, at_ms);
+    }
+    while show.game.controls().next {
+        show.run(at_ms, Command::Next).unwrap();
+        assert_controls_match_apply(&show.game, at_ms);
+    }
+    assert!(matches!(show.game.phase(), Phase::Final { .. }));
+
+    // A question closed by its clock, then revealed.
+    let mut show = Show::new(vec![question("q1", AnswerMode::Everyone)]);
+    show.press(0, 1, Button::Big);
+    for (at_ms, command) in [(0, Command::Next), (0, Command::Next), (11_000, Command::CloseQuestion), (12_000, Command::Next)] {
+        show.run(at_ms, command).unwrap();
+        assert_controls_match_apply(&show.game, at_ms);
+    }
+}
+
+#[test]
+fn scores_stop_at_the_limits_instead_of_wrapping() {
+    let mut show = Show::new(vec![question("q1", AnswerMode::Everyone)]);
+    show.run(0, Command::AddPlayer { buzzer: 1, name: String::new() }).unwrap();
+    show.run(0, Command::AdjustScore { buzzer: 1, delta: i32::MAX }).unwrap();
+    show.run(0, Command::AdjustScore { buzzer: 1, delta: 1 }).unwrap();
+    assert_eq!(show.score(1), i32::MAX);
+    show.run(0, Command::AdjustScore { buzzer: 1, delta: i32::MIN }).unwrap();
+    show.run(0, Command::AdjustScore { buzzer: 1, delta: i32::MIN }).unwrap();
+    assert_eq!(show.score(1), i32::MIN);
+}
+
 #[test]
 fn ranking_breaks_ties_on_total_answer_time() {
     let mut show = Show::new(vec![question("q1", AnswerMode::Everyone)]);

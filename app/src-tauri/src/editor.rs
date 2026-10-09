@@ -9,8 +9,10 @@
 //! folders are deleted afterwards; one the web view still reads a file from
 //! (Windows refuses that) goes the next time.
 
-use crate::{app_data, CmdResult};
+use crate::app_data;
+use crate::error::{AppError, CmdResult};
 use quiz_core::{Quiz, ValidationError, SCHEMA_VERSION};
+use quiz_file::FileAction;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -50,10 +52,6 @@ pub struct EditorDraft {
     pub problems: Vec<ValidationError>,
 }
 
-fn err(e: impl ToString) -> String {
-    e.to_string()
-}
-
 fn editor_dir(app: &AppHandle) -> CmdResult<PathBuf> {
     app_data(app, "editor")
 }
@@ -67,14 +65,14 @@ fn read_pointer(dir: &Path) -> Option<Pointer> {
 }
 
 fn write_pointer(dir: &Path, pointer: &Pointer) -> CmdResult<()> {
-    let json = serde_json::to_string_pretty(pointer).map_err(err)?;
-    quiz_file::write_atomic(&dir.join(POINTER_FILE), json.as_bytes()).map_err(err)
+    let json = serde_json::to_string_pretty(pointer).expect("a pointer serializes: strings and a flag");
+    Ok(quiz_file::write_atomic(&dir.join(POINTER_FILE), json.as_bytes())?)
 }
 
 /// The current draft's folder and its pointer.
 fn current(app: &AppHandle) -> CmdResult<(PathBuf, Pointer)> {
     let dir = editor_dir(app)?;
-    let pointer = read_pointer(&dir).ok_or("no quiz is open in the editor")?;
+    let pointer = read_pointer(&dir).ok_or(AppError::NoDraft)?;
     Ok((dir.join(&pointer.folder), pointer))
 }
 
@@ -100,7 +98,7 @@ fn switch_to(dir: &Path, pointer: &Pointer) -> CmdResult<()> {
 
 /// Lets the windows show the draft's media, and describes the draft.
 fn describe(app: &AppHandle, root: &Path, pointer: Pointer, quiz: Quiz) -> CmdResult<EditorDraft> {
-    app.asset_protocol_scope().allow_directory(root, true).map_err(err)?;
+    app.asset_protocol_scope().allow_directory(root, true)?;
     Ok(EditorDraft {
         problems: quiz_file::problems(&quiz, root),
         quiz,
@@ -115,8 +113,7 @@ fn describe(app: &AppHandle, root: &Path, pointer: Pointer, quiz: Quiz) -> CmdRe
 pub async fn editor_load(app: AppHandle, lock: State<'_, EditorLock>) -> CmdResult<Option<EditorDraft>> {
     let _one_at_a_time = lock.0.lock().unwrap();
     let Ok((root, pointer)) = current(&app) else { return Ok(None) };
-    let json = fs::read_to_string(root.join(quiz_file::QUIZ_JSON)).map_err(err)?;
-    let quiz = Quiz::from_json(&json)?;
+    let quiz = quiz_file::read_quiz_json(&root)?;
     describe(&app, &root, pointer, quiz).map(Some)
 }
 
@@ -128,8 +125,8 @@ pub async fn editor_new(app: AppHandle, lock: State<'_, EditorLock>, title: Stri
     let folder = new_folder(&dir);
     let root = dir.join(&folder);
     let quiz = Quiz { schema_version: SCHEMA_VERSION, title, slides: Vec::new() };
-    fs::create_dir_all(&root).map_err(err)?;
-    quiz_file::write_quiz_json(&root, &quiz).map_err(err)?;
+    fs::create_dir_all(&root).map_err(|e| AppError::file(FileAction::CreateFolder, &root, e))?;
+    quiz_file::write_quiz_json(&root, &quiz)?;
     let pointer = Pointer { folder, source_path: None, unsaved: false };
     switch_to(&dir, &pointer)?;
     describe(&app, &root, pointer, quiz)
@@ -142,7 +139,7 @@ pub async fn editor_open(app: AppHandle, lock: State<'_, EditorLock>, path: Stri
     let dir = editor_dir(&app)?;
     let folder = new_folder(&dir);
     let root = dir.join(&folder);
-    let quiz = quiz_file::open_into(Path::new(&path), &root).map_err(err)?;
+    let quiz = quiz_file::open_into(Path::new(&path), &root)?;
     let pointer = Pointer { folder, source_path: Some(path), unsaved: false };
     switch_to(&dir, &pointer)?;
     describe(&app, &root, pointer, quiz)
@@ -159,7 +156,7 @@ pub async fn editor_update(
 ) -> CmdResult<Vec<ValidationError>> {
     let _one_at_a_time = lock.0.lock().unwrap();
     let (root, pointer) = current(&app)?;
-    quiz_file::write_quiz_json(&root, &quiz).map_err(err)?;
+    quiz_file::write_quiz_json(&root, &quiz)?;
     if pointer.unsaved != unsaved {
         write_pointer(&editor_dir(&app)?, &Pointer { unsaved, ..pointer })?;
     }
@@ -171,8 +168,8 @@ pub async fn editor_update(
 pub async fn editor_save(app: AppHandle, lock: State<'_, EditorLock>, quiz: Quiz, path: String) -> CmdResult<()> {
     let _one_at_a_time = lock.0.lock().unwrap();
     let (root, pointer) = current(&app)?;
-    quiz_file::write_quiz_json(&root, &quiz).map_err(err)?;
-    quiz_file::save(&quiz, &root, Path::new(&path)).map_err(err)?;
+    quiz_file::write_quiz_json(&root, &quiz)?;
+    quiz_file::save(&quiz, &root, Path::new(&path))?;
     write_pointer(&editor_dir(&app)?, &Pointer { source_path: Some(path), unsaved: false, ..pointer })
 }
 
@@ -181,7 +178,7 @@ pub async fn editor_save(app: AppHandle, lock: State<'_, EditorLock>, quiz: Quiz
 pub async fn editor_add_media(app: AppHandle, lock: State<'_, EditorLock>, path: String) -> CmdResult<String> {
     let _one_at_a_time = lock.0.lock().unwrap();
     let (root, _) = current(&app)?;
-    quiz_file::import_media(&root, Path::new(&path)).map_err(err)
+    Ok(quiz_file::import_media(&root, Path::new(&path))?)
 }
 
 /// Discards the draft.
@@ -189,8 +186,9 @@ pub async fn editor_add_media(app: AppHandle, lock: State<'_, EditorLock>, path:
 pub async fn editor_close(app: AppHandle, lock: State<'_, EditorLock>) -> CmdResult<()> {
     let _one_at_a_time = lock.0.lock().unwrap();
     let dir = editor_dir(&app)?;
-    match fs::remove_file(dir.join(POINTER_FILE)) {
-        Err(e) if e.kind() != std::io::ErrorKind::NotFound => return Err(err(e)),
+    let pointer = dir.join(POINTER_FILE);
+    match fs::remove_file(&pointer) {
+        Err(e) if e.kind() != std::io::ErrorKind::NotFound => return Err(AppError::file(FileAction::Write, &pointer, e)),
         _ => {}
     }
     if let Err(e) = quiz_file::prune(&dir, &[]) {

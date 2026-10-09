@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { EditorDraft, Quiz } from "../types";
+import type { EditorDraft, Quiz, ValidationError } from "../types";
 import { editorReducer, isUnsaved, LOADING, type EditorState, type OpenQuiz } from "./editor-state";
 
 const quiz: Quiz = { schemaVersion: 1, title: "Quiz", slides: [] };
@@ -30,7 +30,7 @@ describe("editor state", () => {
     let state = editorReducer(LOADING, { type: "loaded", draft: draft(false) });
     const before = opened(state).history.present;
     state = editorReducer(state, { type: "edit", edit: { type: "setTitle", title: "New" }, at: 0 });
-    const problem = [{ slideId: null, message: "x" }];
+    const problem: ValidationError[] = [{ slideId: null, problem: { code: "duplicateSlideId" } }];
     expect(editorReducer(state, { type: "checked", quiz: before, problems: problem })).toBe(state);
     state = editorReducer(state, { type: "checked", quiz: opened(state).history.present, problems: problem });
     expect(opened(state).problems).toEqual(problem);

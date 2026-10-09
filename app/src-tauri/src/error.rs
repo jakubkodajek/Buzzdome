@@ -1,0 +1,162 @@
+//! Errors of the app's commands. Each has a code and parameters, never an
+//! English sentence: the UI words them in the quizmaster's language
+//! (`errorText` in `app/src/i18n.ts`). `detail` fields carry the system's own
+//! message, which the UI shows as it is.
+
+use buzzers::learned::LearnError;
+use quiz_core::{BuzzerId, Button, GameError, QuizJsonError, ValidationError};
+use quiz_file::{FileAction, QuizFileError};
+use serde::Serialize;
+use std::path::Path;
+use ts_rs::TS;
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS, thiserror::Error)]
+#[ts(export)]
+#[serde(tag = "code", rename_all = "camelCase")]
+pub enum AppError {
+    // The show.
+    #[error("no show is running")]
+    NoShow,
+    #[error("a show is running; end it first")]
+    ShowRunning,
+    #[error("there is no show to resume")]
+    NoShowToResume,
+    #[error("this command does not apply in the current step")]
+    NotNow,
+    #[error("unknown buzzer {buzzer}")]
+    UnknownBuzzer { buzzer: BuzzerId },
+    #[error("no slide {slide}")]
+    NoSuchSlide { slide: usize },
+    #[error("buzzer {buzzer} already exists")]
+    DuplicateBuzzer { buzzer: BuzzerId },
+    /// The show's journal cannot be written, so the change was not made.
+    #[error("the show cannot be saved: {detail}")]
+    ShowNotSaved { detail: String },
+    #[error("the last show cannot be read: {detail}")]
+    ShowNotRead { detail: String },
+
+    // Quiz files and the editor.
+    #[error("cannot {action:?} {path}: {detail}")]
+    File { action: FileAction, path: String, detail: String },
+    #[error("the file is not a quiz file: {detail}")]
+    NotAQuizFile { detail: String },
+    #[error("the quiz file has no quiz.json")]
+    MissingQuizJson,
+    #[error("quiz.json cannot be read: {detail}")]
+    BadQuizJson { detail: String },
+    #[error("the quiz file uses schema version {found}, this app supports up to {supported}")]
+    NewerSchema { found: u32, supported: u32 },
+    #[error("the quiz file unpacks to more than {max_mb} MB")]
+    #[serde(rename_all = "camelCase")]
+    TooLarge { max_mb: u64 },
+    #[error("the quiz file has more than {max} files")]
+    TooManyFiles { max: usize },
+    #[error("the quiz has problems: {problems:?}")]
+    QuizInvalid { problems: Vec<ValidationError> },
+    #[error("no quiz is open in the editor")]
+    NoDraft,
+
+    // The buzzer receiver.
+    #[error("USB-HID is not available")]
+    UsbUnavailable,
+    #[error("USB devices cannot be listed: {detail}")]
+    UsbListFailed { detail: String },
+    #[error("the receiver is not connected")]
+    ReceiverNotConnected,
+    #[error("learning was not started")]
+    LearnNotStarted,
+    #[error("press the button at least {min} times")]
+    LearnTooFewPresses { min: usize },
+    #[error("the recorded presses differ in length")]
+    LearnInconsistent,
+    #[error("these presses look the same as buzzer {buzzer} button {button:?}")]
+    LearnConflict { buzzer: BuzzerId, button: Button },
+
+    // Windows and the operating system.
+    #[error("monitor {index} not found")]
+    NoSuchMonitor { index: usize },
+    /// Something the app cannot do anything about (a window or a system
+    /// folder failed); `detail` is the system's message.
+    #[error("{detail}")]
+    System { detail: String },
+}
+
+pub type CmdResult<T> = Result<T, AppError>;
+
+impl AppError {
+    /// A file operation that failed with `error`.
+    pub fn file(action: FileAction, path: &Path, error: impl ToString) -> AppError {
+        AppError::File { action, path: path.display().to_string(), detail: error.to_string() }
+    }
+
+    pub fn system(error: impl ToString) -> AppError {
+        AppError::System { detail: error.to_string() }
+    }
+}
+
+impl From<GameError> for AppError {
+    fn from(e: GameError) -> AppError {
+        match e {
+            GameError::NotNow => AppError::NotNow,
+            GameError::UnknownBuzzer(buzzer) => AppError::UnknownBuzzer { buzzer },
+            GameError::NoSuchSlide(slide) => AppError::NoSuchSlide { slide },
+            GameError::DuplicateBuzzer(buzzer) => AppError::DuplicateBuzzer { buzzer },
+        }
+    }
+}
+
+impl From<QuizJsonError> for AppError {
+    fn from(e: QuizJsonError) -> AppError {
+        match e {
+            QuizJsonError::NewerSchema { found, supported } => AppError::NewerSchema { found, supported },
+            QuizJsonError::Syntax(detail) => AppError::BadQuizJson { detail },
+        }
+    }
+}
+
+impl From<QuizFileError> for AppError {
+    fn from(e: QuizFileError) -> AppError {
+        match e {
+            QuizFileError::Io { action, path, source } => AppError::file(action, &path, source),
+            QuizFileError::Zip(e) => AppError::NotAQuizFile { detail: e.to_string() },
+            QuizFileError::Json(e) => e.into(),
+            QuizFileError::MissingQuizJson => AppError::MissingQuizJson,
+            QuizFileError::TooLarge => AppError::TooLarge { max_mb: quiz_file::MAX_UNPACKED_BYTES >> 20 },
+            QuizFileError::TooManyFiles => AppError::TooManyFiles { max: quiz_file::MAX_ENTRIES },
+            QuizFileError::Invalid(problems) => AppError::QuizInvalid { problems },
+        }
+    }
+}
+
+impl From<LearnError> for AppError {
+    fn from(e: LearnError) -> AppError {
+        match e {
+            LearnError::TooFewPresses => AppError::LearnTooFewPresses { min: buzzers::learned::MIN_SAMPLES },
+            LearnError::Inconsistent => AppError::LearnInconsistent,
+            LearnError::Conflict { buzzer, button } => AppError::LearnConflict { buzzer, button },
+        }
+    }
+}
+
+impl From<tauri::Error> for AppError {
+    fn from(e: tauri::Error) -> AppError {
+        AppError::system(e)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn errors_reach_the_ui_as_codes_with_parameters() {
+        let json = |e: AppError| serde_json::to_value(e).unwrap();
+        assert_eq!(json(AppError::NotNow), serde_json::json!({ "code": "notNow" }));
+        assert_eq!(json(AppError::TooLarge { max_mb: 4096 }), serde_json::json!({ "code": "tooLarge", "maxMb": 4096 }));
+        let file = AppError::file(FileAction::CreateFolder, Path::new("x"), "denied");
+        assert_eq!(
+            json(file),
+            serde_json::json!({ "code": "file", "action": "createFolder", "path": "x", "detail": "denied" })
+        );
+    }
+}

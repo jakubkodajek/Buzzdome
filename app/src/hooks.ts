@@ -84,6 +84,11 @@ export function useGameView(): GameView | null {
 }
 
 /** Whether a buzzer button is being learned; presses do not play meanwhile. */
+/** Whether the projector window is open, however it was opened or closed. */
+export function useHostWindowOpen(): boolean {
+  return usePushedValue("host-window", api.hostWindowOpen) ?? false;
+}
+
 export function useLearnProgress(): LearnProgress | null {
   return usePushedValue("receiver-learn", () => api.receiverInfo().then((info) => info.learn));
 }

@@ -1,7 +1,7 @@
 import { ask, open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
 import { useEffect, useReducer, useRef, useState } from "react";
 import { api } from "../api";
-import { useApp } from "../app-context";
+import { useApp, useDispatch, useReport } from "../app-context";
 import { useLatest } from "../hooks";
 import type { StringKey } from "../i18n";
 import { MEDIA_EXTENSIONS, type MediaKind } from "../media";
@@ -63,9 +63,10 @@ export interface QuizEditor {
  * a test show has started.
  */
 export function useQuizEditor(onTestRun: () => void): QuizEditor {
-  const { t, notify } = useApp();
+  const { t } = useApp();
   const [state, dispatch] = useReducer(editorReducer, LOADING);
-  const report = useLatest((error: unknown) => notify(String(error)));
+  const report = useLatest(useReport());
+  const dispatchCommand = useDispatch();
   const [recentFiles, setRecentFiles] = useState(readRecentFiles);
   // The quiz the backend has; nothing is written back that came from it.
   const written = useRef<Quiz | null>(null);
@@ -185,7 +186,7 @@ export function useQuizEditor(onTestRun: () => void): QuizEditor {
         await draftQueue.run(() => api.editorTestRun(quiz));
         // The show runs now, whatever happens next: the Director shows it.
         onTestRun();
-        if (from !== undefined) await api.dispatch({ type: "goTo", slide: from });
+        if (from !== undefined) dispatchCommand({ type: "goTo", slide: from });
         return true;
       }),
   };

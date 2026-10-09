@@ -7,7 +7,9 @@ use ts_rs::TS;
 /// Prefix of every media reference, the folder inside a quiz file.
 pub const MEDIA_PREFIX: &str = "media/";
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
+#[serde(rename_all = "camelCase")]
 pub enum MediaKind {
     Image,
     Audio,
@@ -23,43 +25,78 @@ impl MediaKind {
             MediaKind::Video => &["mp4", "webm"],
         }
     }
-
-    fn name(self) -> &'static str {
-        match self {
-            MediaKind::Image => "picture",
-            MediaKind::Audio => "sound",
-            MediaKind::Video => "video",
-        }
-    }
 }
 
 /// True when `reference` names a file inside the media folder with no way out
-/// of it: `media/` followed by plain names separated by `/`.
+/// of it: `media/` followed by portable names (see `is_portable_name`)
+/// separated by `/`.
 pub fn is_safe_reference(reference: &str) -> bool {
-    let Some(name) = reference.strip_prefix(MEDIA_PREFIX) else { return false };
-    let plain = |part: &str| !part.is_empty() && part != "." && part != "..";
-    name.split('/').all(plain) && !reference.contains(['\\', ':']) && !reference.chars().any(char::is_control)
+    reference.strip_prefix(MEDIA_PREFIX).is_some_and(|name| name.split('/').all(is_portable_name))
+}
+
+/// Characters some supported system refuses in a file name.
+fn is_forbidden_in_names(c: char) -> bool {
+    c.is_control() || "\\/:*?\"<>|".contains(c)
+}
+
+/// True when `part` (one folder or file name) can be stored on Windows, macOS
+/// and Linux alike: not empty, no forbidden character, no trailing dot or
+/// space (which also rules out `.` and `..`), and not a reserved device name.
+fn is_portable_name(part: &str) -> bool {
+    !part.is_empty() && !part.ends_with(['.', ' ']) && !part.chars().any(is_forbidden_in_names) && !is_reserved_on_windows(part)
+}
+
+/// Device names Windows reserves with any extension, per Microsoft's "Naming
+/// Files, Paths, and Namespaces": CON, PRN, AUX, NUL, COM0-9, LPT0-9 (and the
+/// superscript digits).
+fn is_reserved_on_windows(part: &str) -> bool {
+    let stem = part.split('.').next().unwrap_or(part).trim_end().to_ascii_uppercase();
+    let numbered = |prefix| stem.strip_prefix(prefix).is_some_and(|n: &str| n.chars().count() == 1 && "0123456789¹²³".contains(n));
+    matches!(stem.as_str(), "CON" | "PRN" | "AUX" | "NUL") || numbered("COM") || numbered("LPT")
+}
+
+/// Turns any file name into a portable one, as close to it as possible, so
+/// that `media/<result>` is a safe reference.
+pub fn portable_name(name: &str) -> String {
+    let replaced: String = name.chars().map(|c| if is_forbidden_in_names(c) { '_' } else { c }).collect();
+    let trimmed = replaced.trim_end_matches(['.', ' ']);
+    match trimmed {
+        "" => "file".into(),
+        reserved if is_reserved_on_windows(reserved) => format!("_{reserved}"),
+        fine => fine.into(),
+    }
+}
+
+/// What is wrong with a media reference.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS, thiserror::Error)]
+#[ts(export)]
+#[serde(tag = "type", rename_all = "camelCase")]
+pub enum MediaIssue {
+    #[error("not in the {MEDIA_PREFIX} folder")]
+    NotInMediaFolder,
+    #[error("not a valid media file name")]
+    BadName,
+    #[error("must be one of {expected:?}")]
+    WrongType { expected: Vec<MediaKind> },
+    #[error("the file is missing")]
+    Missing,
 }
 
 /// Checks that `reference` is a safe media file name (see `is_safe_reference`)
 /// and that its type is one of `kinds`.
-pub fn check_reference(reference: &str, kinds: &[MediaKind]) -> Result<(), String> {
+pub fn check_reference(reference: &str, kinds: &[MediaKind]) -> Result<(), MediaIssue> {
     if !reference.starts_with(MEDIA_PREFIX) {
-        return Err(format!("\"{reference}\" is not in the {MEDIA_PREFIX} folder"));
+        return Err(MediaIssue::NotInMediaFolder);
     }
     if !is_safe_reference(reference) {
-        return Err(format!("\"{reference}\" is not a valid media file name"));
+        return Err(MediaIssue::BadName);
     }
     let name = &reference[MEDIA_PREFIX.len()..];
     let extension = name.rsplit_once('.').map(|(_, ext)| ext.to_ascii_lowercase()).unwrap_or_default();
     if kinds.iter().any(|kind| kind.extensions().contains(&extension.as_str())) {
         return Ok(());
     }
-    let expected: Vec<String> = kinds
-        .iter()
-        .map(|kind| format!("{} ({})", kind.name(), kind.extensions().join(", ")))
-        .collect();
-    Err(format!("\"{reference}\" must be a {}", expected.join(" or ")))
+    Err(MediaIssue::WrongType { expected: kinds.to_vec() })
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -130,24 +167,41 @@ mod tests {
 
     #[test]
     fn refuses_paths_that_leave_the_media_folder() {
-        for bad in [
-            "flag.png",
-            "/media/flag.png",
-            "media/../quiz.png",
-            "media/./flag.png",
-            "media//flag.png",
-            "media/",
-            "media\\flag.png",
-            "media/C:flag.png",
-        ] {
-            assert!(check_reference(bad, IMAGE).is_err(), "{bad}");
+        for bad in ["flag.png", "/media/flag.png", "media\\flag.png"] {
+            assert_eq!(check_reference(bad, IMAGE), Err(MediaIssue::NotInMediaFolder), "{bad}");
+        }
+        for bad in ["media/../quiz.png", "media/./flag.png", "media//flag.png", "media/", "media/C:flag.png"] {
+            assert_eq!(check_reference(bad, IMAGE), Err(MediaIssue::BadName), "{bad}");
         }
     }
 
     #[test]
+    fn refuses_names_some_system_cannot_store() {
+        for bad in ["media/a?.png", "media/a*b.png", "media/x\".png", "media/x.", "media/x ", "media/CON.png", "media/com1", "media/Lpt9.mp3", "media/nul .png"] {
+            assert_eq!(check_reference(bad, IMAGE), Err(MediaIssue::BadName), "{bad}");
+        }
+        for fine in ["media/CONSOLE.png", "media/com10.png", "media/a.b.png", "media/ leading.png"] {
+            assert!(is_safe_reference(fine), "{fine}");
+        }
+    }
+
+    #[test]
+    fn portable_names_are_safe_references() {
+        let names = ["Flag.png", "we:ird?.jpg", "CON.png", "aux", "dots...", " . ", "", "a/b\\c.mp3", "tab\there", "COM¹.wav"];
+        for name in names {
+            let portable = portable_name(name);
+            assert!(is_safe_reference(&format!("{MEDIA_PREFIX}{portable}")), "{name:?} -> {portable:?}");
+        }
+        assert_eq!(portable_name("Flag.png"), "Flag.png");
+        assert_eq!(portable_name("we:ird?.jpg"), "we_ird_.jpg");
+        assert_eq!(portable_name("CON.png"), "_CON.png");
+    }
+
+    #[test]
     fn refuses_the_wrong_file_type() {
-        assert!(check_reference("media/song.mp3", IMAGE).is_err());
-        assert!(check_reference("media/noextension", IMAGE).is_err());
+        let wrong = Err(MediaIssue::WrongType { expected: vec![MediaKind::Image] });
+        assert_eq!(check_reference("media/song.mp3", IMAGE), wrong);
+        assert_eq!(check_reference("media/noextension", IMAGE), wrong);
     }
 
     /// The UI's file pickers and players need the extensions too. ts-rs

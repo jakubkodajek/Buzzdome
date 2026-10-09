@@ -2,11 +2,13 @@
 //! the windows see it, drives the buzzer lights and the projector window.
 
 mod editor;
+mod error;
 mod hardware;
 mod session;
 
 use buzzers::receiver::HardwareDriver;
 use buzzers::{BuzzerDriver, VirtualDriver};
+use error::{AppError, CmdResult};
 use hardware::Hardware;
 use quiz_core::{Command, Effect, Game, GameView, Quiz, Stamped};
 use serde::Serialize;
@@ -15,11 +17,10 @@ use session::{Resumed, Session, SessionMeta, SessionSummary};
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, MutexGuard};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
-use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder};
+use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder, WindowEvent};
 
 const DEMO_QUIZ: &str = include_str!("../../../samples/demo-quiz.json");
 const HOST_LABEL: &str = "host";
-const DIRECTOR_LABEL: &str = "director";
 const TICK: Duration = Duration::from_millis(50);
 /// How often the windows get the running clock (seconds and points on screen).
 const CLOCK_EVENT_EVERY: Duration = Duration::from_millis(250);
@@ -34,14 +35,12 @@ struct Inner {
 
 struct AppState(Mutex<Inner>);
 
-pub(crate) type CmdResult<T> = Result<T, String>;
-
 fn now_ms() -> u64 {
     SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| d.as_millis() as u64)
 }
 
 pub(crate) fn app_data(app: &AppHandle, folder: &str) -> CmdResult<PathBuf> {
-    app.path().app_data_dir().map(|dir| dir.join(folder)).map_err(|e| e.to_string())
+    Ok(app.path().app_data_dir()?.join(folder))
 }
 
 fn sessions_root(app: &AppHandle) -> CmdResult<PathBuf> {
@@ -56,7 +55,7 @@ fn quizzes_cache(app: &AppHandle) -> CmdResult<PathBuf> {
 /// Lets the windows load files from `root` (and nothing else of the disk).
 fn serve_media(app: &AppHandle, inner: &mut Inner, root: Option<PathBuf>) -> CmdResult<()> {
     if let Some(root) = &root {
-        app.asset_protocol_scope().allow_directory(root, true).map_err(|e| e.to_string())?;
+        app.asset_protocol_scope().allow_directory(root, true)?;
     }
     inner.media_root = root;
     Ok(())
@@ -82,12 +81,12 @@ fn execute(app: &AppHandle, inner: &mut Inner, command: Command) -> CmdResult<()
 /// Applies a command that happened at `at_ms` on a copy, journals it, then
 /// commits. The show never shows a state that is not on disk.
 fn execute_at(app: &AppHandle, inner: &mut Inner, command: Command, at_ms: u64) -> CmdResult<()> {
-    let game = inner.game.as_ref().ok_or("no show is running")?;
+    let game = inner.game.as_ref().ok_or(AppError::NoShow)?;
     let stamped = Stamped { at_ms, command };
     let mut next = game.clone();
-    let effects = next.apply(&stamped).map_err(|e| e.to_string())?;
+    let effects = next.apply(&stamped)?;
     if let Some(session) = inner.session.as_mut() {
-        session.append(&stamped).map_err(|e| format!("could not save the show: {e}"))?;
+        session.append(&stamped).map_err(|e| AppError::ShowNotSaved { detail: e.to_string() })?;
     }
     inner.game = Some(next);
     for effect in effects {
@@ -114,7 +113,7 @@ fn lock_for_new_show<'a>(app: &AppHandle, state: &'a AppState) -> CmdResult<Mute
     hardware::end_learning(app);
     let inner = state.0.lock().unwrap();
     if inner.game.is_some() {
-        return Err("a show is running; end it first".into());
+        return Err(AppError::ShowRunning);
     }
     Ok(inner)
 }
@@ -127,14 +126,14 @@ fn start_show(
     source_path: Option<String>,
     media_root: Option<PathBuf>,
 ) -> CmdResult<()> {
-    quiz_file::check(&quiz, media_root.as_deref().unwrap_or(Path::new(""))).map_err(|e| e.to_string())?;
+    quiz_file::check(&quiz, media_root.as_deref().unwrap_or(Path::new("")))?;
     let meta = SessionMeta {
         quiz_title: quiz.title.clone(),
         source_path,
         started_ms: now_ms(),
         media_root: media_root.as_ref().map(|root| root.to_string_lossy().into_owned()),
     };
-    let session = Session::create(&sessions_root(app)?, &quiz, &meta).map_err(|e| e.to_string())?;
+    let session = Session::create(&sessions_root(app)?, &quiz, &meta).map_err(|e| AppError::ShowNotSaved { detail: e.to_string() })?;
     serve_media(app, inner, media_root)?;
     inner.game = Some(Game::new(quiz));
     inner.session = Some(session);
@@ -173,7 +172,7 @@ fn media_root(state: State<AppState>) -> Option<String> {
 async fn start_show_from_file(app: AppHandle, state: State<'_, AppState>, path: String) -> CmdResult<()> {
     // Unpacking big media takes a moment: it runs off the UI thread and
     // before the show is locked.
-    let package = quiz_file::open(Path::new(&path), &quizzes_cache(&app)?).map_err(|e| e.to_string())?;
+    let package = quiz_file::open(Path::new(&path), &quizzes_cache(&app)?)?;
     start_show(&app, &mut *lock_for_new_show(&app, &state)?, package.quiz, Some(path), Some(package.root))
 }
 
@@ -182,7 +181,7 @@ async fn start_show_from_file(app: AppHandle, state: State<'_, AppState>, path: 
 #[tauri::command]
 fn editor_test_run(app: AppHandle, state: State<AppState>, quiz: Quiz) -> CmdResult<()> {
     let root = editor::draft_root(&app)?;
-    quiz_file::check(&quiz, &root).map_err(|e| e.to_string())?;
+    quiz_file::check(&quiz, &root)?;
     let mut inner = lock_for_new_show(&app, &state)?;
     serve_media(&app, &mut inner, Some(root))?;
     inner.game = Some(Game::new(quiz));
@@ -199,22 +198,22 @@ fn start_demo_show(app: AppHandle, state: State<AppState>) -> CmdResult<()> {
 
 #[tauri::command]
 fn last_session(app: AppHandle) -> CmdResult<Option<SessionSummary>> {
-    Session::latest_summary(&sessions_root(&app)?).map_err(|e| e.to_string())
+    Session::latest_summary(&sessions_root(&app)?).map_err(|e| AppError::ShowNotRead { detail: e.to_string() })
 }
 
 /// Resumes the last show. Returns a warning for the quizmaster when the show
 /// runs but something is missing (its media were deleted).
 #[tauri::command]
-fn resume_last_session(app: AppHandle, state: State<AppState>) -> CmdResult<Option<String>> {
+fn resume_last_session(app: AppHandle, state: State<AppState>) -> CmdResult<Option<AppError>> {
     // Locked first: the running show's journal must not be reopened.
     let mut inner = lock_for_new_show(&app, &state)?;
     let Resumed { session, quiz, journal, meta } = Session::resume_latest(&sessions_root(&app)?)
-        .map_err(|e| e.to_string())?
-        .ok_or("there is no show to resume")?;
+        .map_err(|e| AppError::ShowNotRead { detail: e.to_string() })?
+        .ok_or(AppError::NoShowToResume)?;
     let media_root = meta.media_root.map(PathBuf::from);
     // The show must go on: without its media it still runs, and the Director says why.
     let warning = match &media_root {
-        Some(root) => quiz_file::check(&quiz, root).err().map(|e| e.to_string()),
+        Some(root) => quiz_file::check(&quiz, root).err().map(AppError::from),
         None => None,
     };
     serve_media(&app, &mut inner, media_root.filter(|root| root.is_dir()))?;
@@ -266,7 +265,8 @@ pub(crate) fn press_from_hardware(app: &AppHandle, command: Command, at_ms: u64)
 #[serde(rename_all = "camelCase")]
 struct MonitorInfo {
     index: usize,
-    name: String,
+    /// None when the system gives no name; the UI numbers the monitor then.
+    name: Option<String>,
     width: u32,
     height: u32,
 }
@@ -277,14 +277,13 @@ struct MonitorInfo {
 
 #[tauri::command]
 async fn list_monitors(app: AppHandle) -> CmdResult<Vec<MonitorInfo>> {
-    let window = app.get_webview_window(DIRECTOR_LABEL).ok_or("director window missing")?;
-    let monitors = window.available_monitors().map_err(|e| e.to_string())?;
+    let monitors = app.available_monitors()?;
     Ok(monitors
         .iter()
         .enumerate()
         .map(|(index, m)| MonitorInfo {
             index,
-            name: m.name().cloned().unwrap_or_else(|| format!("Display {}", index + 1)),
+            name: m.name().cloned(),
             width: m.size().width,
             height: m.size().height,
         })
@@ -299,17 +298,18 @@ async fn open_host_window(app: AppHandle, monitor: Option<usize>, fullscreen: bo
         None => WebviewWindowBuilder::new(&app, HOST_LABEL, WebviewUrl::App("index.html".into()))
             .title("Quiz Show")
             .inner_size(1280.0, 720.0)
-            .build()
-            .map_err(|e| e.to_string())?,
+            .build()?,
     };
-    window.set_fullscreen(false).map_err(|e| e.to_string())?;
+    window.set_fullscreen(false)?;
     if let Some(index) = monitor {
-        let monitors = window.available_monitors().map_err(|e| e.to_string())?;
-        let target = monitors.get(index).ok_or("monitor not found")?;
-        window.set_position(*target.position()).map_err(|e| e.to_string())?;
+        let monitors = window.available_monitors()?;
+        let target = monitors.get(index).ok_or(AppError::NoSuchMonitor { index })?;
+        window.set_position(*target.position())?;
     }
-    window.set_fullscreen(fullscreen).map_err(|e| e.to_string())?;
-    window.set_focus().map_err(|e| e.to_string())
+    window.set_fullscreen(fullscreen)?;
+    window.set_focus()?;
+    let _ = app.emit("host-window", true);
+    Ok(())
 }
 
 #[tauri::command]
@@ -320,7 +320,7 @@ fn host_window_open(app: AppHandle) -> bool {
 #[tauri::command]
 async fn close_host_window(app: AppHandle) -> CmdResult<()> {
     match app.get_webview_window(HOST_LABEL) {
-        Some(window) => window.close().map_err(|e| e.to_string()),
+        Some(window) => Ok(window.close()?),
         None => Ok(()),
     }
 }
@@ -354,6 +354,12 @@ fn spawn_ticker(app: AppHandle) {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        // However the projector closes (also from its title bar), the Director hears of it.
+        .on_window_event(|window, event| {
+            if window.label() == HOST_LABEL && matches!(event, WindowEvent::Destroyed) {
+                let _ = window.app_handle().emit("host-window", false);
+            }
+        })
         .manage(editor::EditorLock::default())
         .manage(AppState(Mutex::new(Inner {
             game: None,

@@ -6,8 +6,10 @@ edition.workspace = true
 
 [dependencies]
 quiz-core = { path = "../quiz-core" }
+serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
+ts-rs.workspace = true
 sha2 = "0.11"
 # Deflate only: quiz.json is compressed, media files are stored as they are.
 zip = { version = "9", default-features = false, features = ["deflate-flate2-zlib-rs"] }

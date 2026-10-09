@@ -8,7 +8,7 @@
 
 use crate::edge::EdgeFilter;
 use crate::hid::{DeviceInfo, DeviceSelector, HidBackend, HidDevice};
-use crate::protocol::{Protocol, ProtocolResolver};
+use crate::protocol::{Protocol, ProtocolKind, ProtocolResolver};
 use crate::{BuzzerDriver, DriverError, Press};
 use quiz_core::{BuzzerId, Light};
 use serde::Serialize;
@@ -28,9 +28,22 @@ pub enum ReceiverStatus {
     #[serde(rename_all = "camelCase")]
     Searching { selector: DeviceSelector },
     #[serde(rename_all = "camelCase")]
-    Connected { device: DeviceInfo, protocol: String, has_lights: bool },
-    #[serde(rename_all = "camelCase")]
-    Error { message: String },
+    Connected { device: DeviceInfo, protocol: ProtocolKind, has_lights: bool },
+    /// The receiver cannot be used now; the thread keeps retrying. `detail`
+    /// is the system's own message.
+    Error { problem: ReceiverProblem, detail: String },
+}
+
+/// Why the receiver cannot be used, for the Director (which words it and,
+/// for `CannotOpen`, says what to check on the platform).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
+#[serde(rename_all = "camelCase")]
+pub enum ReceiverProblem {
+    CannotList,
+    CannotOpen,
+    ConnectionLost,
+    WriteFailed,
 }
 
 /// One input report as received, with what the protocol made of it.
@@ -193,7 +206,7 @@ impl Worker {
                 match conn.device.read_timeout(&mut buf, self.config.read_timeout_ms) {
                     Ok(0) => {}
                     Ok(n) => self.report(&buf[..n]),
-                    Err(e) => self.lost(format!("Receiver connection lost ({e}). Reconnecting…")),
+                    Err(e) => self.lost(ReceiverProblem::ConnectionLost, &e),
                 }
                 continue;
             }
@@ -246,14 +259,14 @@ impl Worker {
         self.next_try = Instant::now() + self.config.retry;
         let devices = match self.backend.list() {
             Ok(d) => d,
-            Err(e) => return self.set_status(ReceiverStatus::Error { message: format!("Cannot list USB devices: {e}") }),
+            Err(e) => return self.set_status(error_status(ReceiverProblem::CannotList, &e)),
         };
         let Some(info) = devices.into_iter().find(|d| selector.matches(d)) else {
             return self.set_status(ReceiverStatus::Searching { selector });
         };
         let device = match self.backend.open(&info.path) {
             Ok(d) => d,
-            Err(e) => return self.set_status(ReceiverStatus::Error { message: open_error_hint(&e) }),
+            Err(e) => return self.set_status(error_status(ReceiverProblem::CannotOpen, &e)),
         };
         let protocol = (self.resolver)(&info);
         let init = protocol.init_reports();
@@ -286,16 +299,16 @@ impl Worker {
                 None => return,
             };
             if let Err(e) = result {
-                return self.lost(format!("Writing to the receiver failed ({e}). Reconnecting…"));
+                return self.lost(ReceiverProblem::WriteFailed, &e);
             }
         }
     }
 
-    fn lost(&mut self, message: String) {
+    fn lost(&mut self, problem: ReceiverProblem, error: &DriverError) {
         self.conn = None;
         self.edge.reset();
         self.next_try = Instant::now() + self.config.retry;
-        self.set_status(ReceiverStatus::Error { message });
+        self.set_status(error_status(problem, error));
     }
 
     fn set_status(&mut self, status: ReceiverStatus) {
@@ -310,18 +323,11 @@ impl Worker {
 fn connected_status(conn: &Connection) -> ReceiverStatus {
     ReceiverStatus::Connected {
         device: conn.info.clone(),
-        protocol: conn.protocol.name(),
+        protocol: conn.protocol.kind(),
         has_lights: conn.protocol.has_lights(),
     }
 }
 
-fn open_error_hint(e: &DriverError) -> String {
-    let hint = if cfg!(target_os = "linux") {
-        "On Linux, install the udev rule shown on the Receiver tab so your user may open the device."
-    } else if cfg!(target_os = "macos") {
-        "On macOS, allow the app under System Settings > Privacy & Security > Input Monitoring if asked."
-    } else {
-        "Close other programs that may be using the receiver (for example the vendor's quiz software)."
-    };
-    format!("Cannot open the receiver: {e}. {hint}")
+fn error_status(problem: ReceiverProblem, error: &DriverError) -> ReceiverStatus {
+    ReceiverStatus::Error { problem, detail: error.to_string() }
 }

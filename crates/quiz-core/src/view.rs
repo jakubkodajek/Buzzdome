@@ -1,6 +1,6 @@
 //! What the windows render: a read-only snapshot of the game at one moment.
 
-use crate::game::{BuzzerId, Button, Game, Phase, QuestionStep};
+use crate::game::{BuzzerId, Button, Controls, Game, Phase, QuestionStep};
 use crate::model::{AnswerMode, Slide, SlideContent};
 use serde::Serialize;
 use ts_rs::TS;
@@ -27,6 +27,8 @@ pub struct GameView {
     pub results: Option<AnswerResults>,
     pub buzzed: Option<BuzzerId>,
     pub leaderboard_visible: bool,
+    /// The quizmaster commands the current step takes.
+    pub controls: Controls,
 }
 
 /// Enabled players by outcome of an everyone-answers question.
@@ -173,6 +175,7 @@ impl Game {
                 _ => None,
             },
             leaderboard_visible: self.leaderboard_visible(),
+            controls: self.controls(),
             players,
         }
     }

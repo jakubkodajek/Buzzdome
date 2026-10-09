@@ -8,10 +8,24 @@
 //! counter, are ignored when matching.
 
 use crate::hid::DeviceInfo;
-use crate::protocol::Protocol;
+use crate::protocol::{Protocol, ProtocolKind, RawOnly};
 use crate::Press;
 use quiz_core::{BuzzerId, Button};
 use serde::{Deserialize, Serialize};
+
+/// Fewest recorded presses that make a signature (three is better).
+pub const MIN_SAMPLES: usize = 2;
+
+/// Why recorded presses cannot be saved as a button.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+pub enum LearnError {
+    #[error("press the button at least {MIN_SAMPLES} times")]
+    TooFewPresses,
+    #[error("the recorded reports have different lengths")]
+    Inconsistent,
+    #[error("these presses look the same as buzzer {buzzer} button {button:?}")]
+    Conflict { buzzer: BuzzerId, button: Button },
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -32,10 +46,10 @@ impl Signature {
         self.mask.iter().filter(|m| **m).count()
     }
 
-    pub fn from_samples(buzzer: BuzzerId, button: Button, samples: &[Vec<u8>]) -> Result<Signature, String> {
-        let first = samples.first().ok_or("no presses recorded")?;
+    pub fn from_samples(buzzer: BuzzerId, button: Button, samples: &[Vec<u8>]) -> Result<Signature, LearnError> {
+        let first = samples.first().ok_or(LearnError::TooFewPresses)?;
         if samples.iter().any(|s| s.len() != first.len()) {
-            return Err("the recorded reports have different lengths".into());
+            return Err(LearnError::Inconsistent);
         }
         let mask = (0..first.len()).map(|i| samples.iter().all(|s| s[i] == first[i])).collect();
         Ok(Signature { buzzer, button, bytes: first.clone(), mask })
@@ -74,9 +88,18 @@ impl LearnedProtocol {
     }
 }
 
+/// The protocol for `device`: its learned buttons, or raw reports only.
+/// Vendor protocols go first here once the receiver protocol is documented.
+pub fn protocol_for(mappings: &[LearnedMapping], device: &DeviceInfo) -> Box<dyn Protocol> {
+    match mappings.iter().find(|m| m.for_device(device) && !m.signatures.is_empty()) {
+        Some(mapping) => Box::new(LearnedProtocol::new(mapping.clone())),
+        None => Box::new(RawOnly),
+    }
+}
+
 impl Protocol for LearnedProtocol {
-    fn name(&self) -> String {
-        format!("learned buttons ({})", self.mapping.signatures.len())
+    fn kind(&self) -> ProtocolKind {
+        ProtocolKind::Learned { buttons: self.mapping.signatures.len() }
     }
 
     fn decode(&mut self, report: &[u8]) -> Vec<Press> {
@@ -126,6 +149,11 @@ impl Recorder {
         self.samples.len()
     }
 
+    /// Enough presses are recorded to save the button (see `save_into`).
+    pub fn can_save(&self) -> bool {
+        self.sample_count() >= MIN_SAMPLES
+    }
+
     /// Feeds a raw report. Returns true when it was kept as a new sample.
     pub fn feed(&mut self, report: &[u8], at_ms: u64) -> bool {
         let idle = is_idle_report(report);
@@ -139,7 +167,7 @@ impl Recorder {
         true
     }
 
-    pub fn finish(&self, existing: &[Signature]) -> Result<LearnOutcome, String> {
+    pub fn finish(&self, existing: &[Signature]) -> Result<LearnOutcome, LearnError> {
         let signature = Signature::from_samples(self.buzzer, self.button, &self.samples)?;
         let conflicts = existing
             .iter()
@@ -149,6 +177,25 @@ impl Recorder {
             .cloned()
             .collect();
         Ok(LearnOutcome { signature, conflicts })
+    }
+
+    /// Saves the recorded presses as the signature of this button of the
+    /// receiver `device`, unless they would be mistaken for another button.
+    pub fn save_into(&self, mappings: &mut Vec<LearnedMapping>, device: &DeviceInfo) -> Result<(), LearnError> {
+        if !self.can_save() {
+            return Err(LearnError::TooFewPresses);
+        }
+        let index = mappings.iter().position(|m| m.for_device(device));
+        let outcome = self.finish(index.map_or(&[][..], |i| &mappings[i].signatures))?;
+        if let Some(c) = outcome.conflicts.first() {
+            return Err(LearnError::Conflict { buzzer: c.buzzer, button: c.button });
+        }
+        let index = index.unwrap_or_else(|| {
+            mappings.push(LearnedMapping { vendor_id: device.vendor_id, product_id: device.product_id, signatures: vec![] });
+            mappings.len() - 1
+        });
+        mappings[index].upsert(outcome.signature);
+        Ok(())
     }
 }
 
@@ -176,8 +223,43 @@ mod tests {
 
     #[test]
     fn rejects_samples_of_different_lengths() {
-        assert!(Signature::from_samples(1, Button::A, &[vec![1, 2], vec![1, 2, 3]]).is_err());
-        assert!(Signature::from_samples(1, Button::A, &[]).is_err());
+        assert_eq!(Signature::from_samples(1, Button::A, &[vec![1, 2], vec![1, 2, 3]]), Err(LearnError::Inconsistent));
+        assert_eq!(Signature::from_samples(1, Button::A, &[]), Err(LearnError::TooFewPresses));
+    }
+
+    fn device(vendor_id: u16) -> DeviceInfo {
+        DeviceInfo {
+            path: "p".into(),
+            vendor_id,
+            product_id: 2,
+            manufacturer: None,
+            product: None,
+            serial_number: None,
+            usage_page: 0,
+            usage: 0,
+            interface_number: 0,
+        }
+    }
+
+    #[test]
+    fn saves_learned_buttons_per_receiver_model_and_refuses_lookalikes() {
+        let mut mappings = Vec::new();
+        let mut r = Recorder::new(1, Button::A);
+        r.feed(&[1, 1, 0x10], 0);
+        assert_eq!(r.save_into(&mut mappings, &device(1)), Err(LearnError::TooFewPresses));
+        assert!(mappings.is_empty(), "nothing is saved for a refused button");
+        r.feed(&[1, 1, 0x11], 1000);
+        r.save_into(&mut mappings, &device(1)).unwrap();
+        // Another model gets a mapping of its own.
+        r.save_into(&mut mappings, &device(9)).unwrap();
+        assert_eq!(mappings.len(), 2);
+        assert_eq!(protocol_for(&mappings, &device(1)).kind(), ProtocolKind::Learned { buttons: 1 });
+        assert_eq!(protocol_for(&[], &device(1)).kind(), ProtocolKind::RawOnly);
+
+        let mut same = Recorder::new(2, Button::B);
+        same.feed(&[1, 1, 0x12], 0);
+        same.feed(&[1, 1, 0x13], 1000);
+        assert_eq!(same.save_into(&mut mappings, &device(1)), Err(LearnError::Conflict { buzzer: 1, button: Button::A }));
     }
 
     #[test]

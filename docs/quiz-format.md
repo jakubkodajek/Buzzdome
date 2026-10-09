@@ -19,15 +19,23 @@ Rules for readers and writers (implemented in `crates/quiz-file`):
 
 - `quiz.json` is UTF-8 JSON at the root of the archive. Its fields are below.
 - Media files live under `media/`. Slides refer to them by their path in the
-  archive, for example `"media/flag.png"`. Names may contain sub-folders;
-  `.` and `..` parts, backslashes and `:` are refused.
+  archive, for example `"media/flag.png"`. Names may contain sub-folders.
+  Every part must work on Windows, macOS and Linux alike, so these are
+  refused: empty parts, `\ : * ? " < > |` and control characters, a
+  trailing dot or space (which also rules out `.` and `..`), and names
+  Windows reserves (`CON`, `PRN`, `AUX`, `NUL`, `COM0`-`COM9`,
+  `LPT0`-`LPT9`, with any extension). The editor renames imported files to
+  fit.
+- ZIP entry names written with backslashes (some Windows tools do that) are
+  read with `/` in their place.
 - Entries outside `quiz.json` and `media/` (for example the `__MACOSX/`
   folder some ZIP tools add) are ignored.
 - A file is refused if it unpacks to more than 4 GB or has more than 10,000
   entries, if `quiz.json` is missing or invalid, or if a slide refers to a
   media file that is not in the archive.
-- Writers store media uncompressed (they are compressed already) and save
-  only the media the quiz uses.
+- Writers store media uncompressed (they are compressed already), save
+  only the media the quiz uses, and refuse to write a file that readers
+  would refuse for its size or number of entries.
 
 When a show starts, the app unpacks the file into its data folder
 (`quizzes/<content hash>/`) and plays the media from there, so the show
@@ -101,10 +109,10 @@ was moved or deleted.
 | `mode` | `everyone`, `fastestFinger` | required | Everyone answers with A-D; or the first to buzz answers and the quizmaster judges. |
 | `answers` | list of text | `[]` | 2 to 4 for `everyone` (one per answer button A-D), at most 4 for `fastestFinger`, where it may be empty (verbal answer). |
 | `correct` | number | none | Index into `answers`, from 0. Required for `everyone`. |
-| `timeLimitS` | number | `20` | Seconds; `0` means no clock (the quizmaster ends the question). |
-| `points` | number | `10` | Points for a correct answer at the start of the clock. |
-| `pointsEnd` | number | none | Points when the clock runs out; points fall evenly from `points` to this. |
-| `penalty` | number | `0` | Points taken for a wrong answer (0 or more). |
+| `timeLimitS` | number | `20` | Seconds, at most 3600; `0` means no clock (the quizmaster ends the question). |
+| `points` | number | `10` | Points for a correct answer at the start of the clock, -100000 to 100000. |
+| `pointsEnd` | number | none | Points when the clock runs out, same range; points fall evenly from `points` to this. |
+| `penalty` | number | `0` | Points taken for a wrong answer, 0 to 100000. |
 
 ### `explanation`
 

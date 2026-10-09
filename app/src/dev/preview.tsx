@@ -5,6 +5,7 @@ import { clearMocks, mockIPC, mockWindows } from "@tauri-apps/api/mocks";
 import React from "react";
 import ReactDOM from "react-dom/client";
 import demoQuiz from "../../../samples/demo-quiz.json";
+import { NO_CONTROLS } from "../host/preview";
 import type { GameView, PlayerView, Quiz } from "../types";
 import "../styles.css";
 
@@ -66,6 +67,7 @@ function view(partial: Partial<GameView>): GameView {
     results: null,
     buzzed: null,
     leaderboardVisible: false,
+    controls: { ...NO_CONTROLS, next: true },
     ...partial,
   };
 }
@@ -88,6 +90,7 @@ const SCENES: Record<string, GameView | null> = {
     clock: { limitMs: 20000, remainingMs: 12400, elapsedMs: 7600, running: true, points: 81 },
     players: players(answered),
     answeredCount: 4,
+    controls: { ...NO_CONTROLS, next: true, pauseClock: true, closeQuestion: true },
   }),
   closed: view({
     phase: { phase: "question", step: "closed" },
@@ -109,6 +112,7 @@ const SCENES: Record<string, GameView | null> = {
     slide: quiz.slides[7],
     clock: { limitMs: 30000, remainingMs: 25700, elapsedMs: 4300, running: false, points: 129 },
     buzzed: 3,
+    controls: { ...NO_CONTROLS, judge: true },
   }),
   ffRevealed: view({
     phase: { phase: "question", step: "revealed", winner: 3 },
@@ -168,6 +172,20 @@ mockIPC((cmd) => {
       return { quiz: editorQuiz, sourcePath: "C:\\Kvizy\\hospodsky-kviz.quiz", unsaved: false, mediaRoot: "/src/dev/", problems: [] };
     case "editor_update":
       return [];
+    case "receiver_info":
+      return {
+        status: { kind: "error", problem: "cannotOpen", detail: "access denied" },
+        initError: null,
+        settingsError: null,
+        learnedButtons: 0,
+        learn: { active: false, buzzer: null, button: null, samples: 0, canSave: false },
+        recent: [],
+        platform: "linux",
+      };
+    case "receiver_devices":
+      return [];
+    case "receiver_udev_rule":
+      return 'SUBSYSTEM=="hidraw", ATTRS{idVendor}=="VVVV", MODE="0660", TAG+="uaccess"';
     default:
       return null;
   }

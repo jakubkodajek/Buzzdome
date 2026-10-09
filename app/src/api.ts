@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
+  AppError,
   Button,
   BuzzerId,
   ClockView,
@@ -10,6 +11,7 @@ import type {
   GameView,
   LearnProgress,
   MonitorInfo,
+  Press,
   PressEvent,
   Quiz,
   RawReport,
@@ -29,7 +31,7 @@ export const api = {
   startDemoShow: () => invoke<void>("start_demo_show"),
   lastSession: () => invoke<SessionSummary | null>("last_session"),
   /** Resumes the last show; returns a warning when something is missing. */
-  resumeLastSession: () => invoke<string | null>("resume_last_session"),
+  resumeLastSession: () => invoke<AppError | null>("resume_last_session"),
   endShow: () => invoke<void>("end_show"),
   dispatch: (command: Command) => invoke<void>("dispatch", { command }),
   listMonitors: () => invoke<MonitorInfo[]>("list_monitors"),
@@ -42,7 +44,8 @@ export const api = {
   receiverSelect: (device: DeviceInfo | null) => invoke<void>("receiver_select", { device }),
   receiverLearnStart: (buzzer: BuzzerId, button: Button) => invoke<void>("receiver_learn_start", { buzzer, button }),
   receiverLearnCancel: () => invoke<void>("receiver_learn_cancel"),
-  receiverLearnFinish: () => invoke<string>("receiver_learn_finish"),
+  /** Saves the button being learned and returns it. */
+  receiverLearnFinish: () => invoke<Press>("receiver_learn_finish"),
   receiverForgetLearned: () => invoke<void>("receiver_forget_learned"),
   receiverExportLog: (path: string) => invoke<void>("receiver_export_log", { path }),
   receiverUdevRule: () => invoke<string>("receiver_udev_rule"),
@@ -73,4 +76,6 @@ export interface BackendEvents {
   "receiver-raw": RawReport;
   "receiver-press": PressEvent;
   "receiver-learn": LearnProgress;
+  /** The projector window opened (true) or closed (false). */
+  "host-window": boolean;
 }

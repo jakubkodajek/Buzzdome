@@ -4,6 +4,7 @@ import { api } from "../api";
 import { AppProvider, useApp, useDispatch, useRun } from "../app-context";
 import { clockSeconds } from "../format";
 import { EditorScreen } from "../editor/EditorScreen";
+import { errorText } from "../messages";
 import { useBackendEvent, useClock, useGameView, useLastSession, useLearnProgress, useMediaRoot, useQuiz } from "../hooks";
 import {
   BackIcon,
@@ -20,7 +21,7 @@ import {
   SoundIcon,
   StopIcon,
 } from "../icons";
-import { useShortcuts } from "../keyboard";
+import { keyHint, KEYS, useShortcuts } from "../keyboard";
 import { MediaRootContext } from "../media";
 import { phaseLabel } from "../phase";
 import { slideContext } from "../quiz";
@@ -177,9 +178,8 @@ function CommandPanel(props: { view: GameView | null; projector: ProjectorSettin
     if (typeof path === "string") run(api.startShowFromFile(path));
   };
 
-  const phase = view?.phase;
-  const buzzed = phase?.phase === "question" && phase.step === "buzzed";
-  const running = phase?.phase === "question" && phase.step === "running";
+  const controls = view?.controls;
+  const hint = (key: string) => keyHint(t, key);
 
   return (
     <aside className="command-panel">
@@ -193,28 +193,27 @@ function CommandPanel(props: { view: GameView | null; projector: ProjectorSettin
               icon={<NextIcon />}
               label={t("resume")}
               hint={t("resumeInfo", { title: last.meta.quizTitle, count: last.commandCount })}
-              onClick={() => run(api.resumeLastSession().then((warning) => warning && notify(warning)))}
+              onClick={() => run(api.resumeLastSession().then((warning) => warning && notify(errorText(t, warning))))}
             />
           )}
         </>
       ) : (
         <>
-          {!buzzed && <CommandButton icon={<NextIcon />} label={t("next")} hint="Space" onClick={() => dispatch({ type: "next" })} />}
-          {buzzed && (
+          {controls?.next && <CommandButton icon={<NextIcon />} label={t("next")} hint={hint(KEYS.next)} onClick={() => dispatch({ type: "next" })} />}
+          {controls?.judge && (
             <>
-              <CommandButton icon={<CheckIcon />} label={t("right")} hint="Y" tone="good" onClick={() => dispatch({ type: "judgeRight" })} />
-              <CommandButton icon={<CrossIcon />} label={t("wrong")} hint="N" tone="bad" onClick={() => dispatch({ type: "judgeWrong" })} />
+              <CommandButton icon={<CheckIcon />} label={t("right")} hint={hint(KEYS.right)} tone="good" onClick={() => dispatch({ type: "judgeRight" })} />
+              <CommandButton icon={<CrossIcon />} label={t("wrong")} hint={hint(KEYS.wrong)} tone="bad" onClick={() => dispatch({ type: "judgeWrong" })} />
             </>
           )}
-          {running && (
-            <>
-              {view.clock?.running ? (
-                <CommandButton icon={<PauseIcon />} label={t("pause")} hint="P" onClick={() => dispatch({ type: "pauseClock" })} />
-              ) : (
-                <CommandButton icon={<PlayIcon />} label={t("resumeClock")} hint="P" onClick={() => dispatch({ type: "resumeClock" })} />
-              )}
-              <CommandButton icon={<StopIcon />} label={t("endQuestion")} onClick={() => dispatch({ type: "closeQuestion" })} />
-            </>
+          {controls?.pauseClock && (
+            <CommandButton icon={<PauseIcon />} label={t("pause")} hint={hint(KEYS.clock)} onClick={() => dispatch({ type: "pauseClock" })} />
+          )}
+          {controls?.resumeClock && (
+            <CommandButton icon={<PlayIcon />} label={t("resumeClock")} hint={hint(KEYS.clock)} onClick={() => dispatch({ type: "resumeClock" })} />
+          )}
+          {controls?.closeQuestion && (
+            <CommandButton icon={<StopIcon />} label={t("endQuestion")} onClick={() => dispatch({ type: "closeQuestion" })} />
           )}
           {sound.available &&
             (sound.playing ? (
@@ -225,7 +224,7 @@ function CommandPanel(props: { view: GameView | null; projector: ProjectorSettin
           <CommandButton
             icon={<ListIcon />}
             label={t("leaderboard")}
-            hint="S"
+            hint={hint(KEYS.leaderboard)}
             onClick={() => dispatch({ type: "showLeaderboard", visible: !view.leaderboardVisible })}
           />
         </>
@@ -233,7 +232,7 @@ function CommandPanel(props: { view: GameView | null; projector: ProjectorSettin
       <CommandButton
         icon={<ScreenIcon />}
         label={`${t("projectorToggle")}: ${projector.isOpen ? t("closeProjector") : t("openProjector")}`}
-        hint="M"
+        hint={hint(KEYS.projector)}
         onClick={projector.toggle}
       />
       <span className="spacer" />

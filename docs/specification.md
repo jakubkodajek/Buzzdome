@@ -330,7 +330,7 @@ running show.
 
 | ID | Requirement | Status |
 | --- | --- | --- |
-| LN-1 | All UI text in Czech (default) and English, switchable at run time. | done for existing screens, including the Receiver tab |
+| LN-1 | All UI text in Czech (default) and English, switchable at run time, including errors, quiz problems and receiver states (the backend sends codes, the UI words them). | done for existing screens, including the Receiver tab |
 | LN-2 | Theme and plugin names and labels are given per language (`{ "cs": ..., "en": ... }`); a missing language falls back to English, then to the first one given. | planned |
 
 ## 8. Show flow

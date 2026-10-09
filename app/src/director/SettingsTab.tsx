@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "../api";
 import { useApp, useRun } from "../app-context";
+import { useHostWindowOpen } from "../hooks";
 import type { Lang } from "../i18n";
 import type { MonitorInfo } from "../types";
 
@@ -19,7 +20,7 @@ export function useProjectorSettings(): ProjectorSettings {
   const [monitors, setMonitors] = useState<MonitorInfo[]>([]);
   const [monitor, setMonitor] = useState(0);
   const [fullscreen, setFullscreen] = useState(true);
-  const [isOpen, setIsOpen] = useState(false);
+  const isOpen = useHostWindowOpen();
 
   useEffect(() => {
     run(
@@ -29,12 +30,10 @@ export function useProjectorSettings(): ProjectorSettings {
         if (list.length > 1) setMonitor(list[1].index);
       }),
     );
-    run(api.hostWindowOpen().then(setIsOpen));
   }, [run]);
 
   const toggle = useCallback(() => {
-    const action = isOpen ? api.closeHostWindow() : api.openHostWindow(monitor, fullscreen);
-    run(action.then(() => setIsOpen(!isOpen)));
+    run(isOpen ? api.closeHostWindow() : api.openHostWindow(monitor, fullscreen));
   }, [isOpen, monitor, fullscreen, run]);
 
   return useMemo(
@@ -50,11 +49,11 @@ export function SettingsTab({ projector }: { projector: ProjectorSettings }) {
       <fieldset>
         <legend>{t("projector")}</legend>
         <label>
-          <span>Monitor</span>
+          <span>{t("monitor")}</span>
           <select value={projector.monitor} onChange={(e) => projector.setMonitor(Number(e.target.value))}>
             {projector.monitors.map((m) => (
               <option key={m.index} value={m.index}>
-                {m.name} ({m.width}×{m.height})
+                {m.name ?? t("displayN", { n: m.index + 1 })} ({m.width}×{m.height})
               </option>
             ))}
           </select>

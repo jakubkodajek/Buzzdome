@@ -7,11 +7,13 @@
 
 use buzzers::hid::{udev_rule, DeviceInfo, DeviceSelector, HidBackend};
 use buzzers::hidapi_backend::HidapiBackend;
-use buzzers::learned::{LearnedMapping, LearnedProtocol, Recorder};
-use buzzers::protocol::{format_hex, Protocol, RawOnly};
+use crate::error::{AppError, CmdResult};
+use buzzers::learned::{self, LearnedMapping, Recorder};
+use buzzers::protocol::{format_hex, Protocol};
 use buzzers::receiver::{self, RawReport, ReceiverConfig, ReceiverEvent, ReceiverHandle, ReceiverStatus};
 use buzzers::Press;
 use quiz_core::{BuzzerId, Button, Command};
+use quiz_file::FileAction;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 use std::collections::VecDeque;
@@ -42,6 +44,8 @@ pub struct LearnProgress {
     buzzer: Option<BuzzerId>,
     button: Option<Button>,
     samples: usize,
+    /// Enough presses are recorded to save the button.
+    can_save: bool,
 }
 
 #[derive(Debug, Clone, Serialize, TS)]
@@ -50,13 +54,25 @@ pub struct LearnProgress {
 pub struct ReceiverInfo {
     /// None when USB-HID could not be initialised on this system.
     status: Option<ReceiverStatus>,
+    /// Why USB-HID could not be initialised: the system's message.
     init_error: Option<String>,
-    /// The saved receiver settings could not be read; they were set aside.
-    settings_error: Option<String>,
+    settings_error: Option<SettingsLost>,
     learned_buttons: usize,
     learn: LearnProgress,
     recent: Vec<RawReport>,
     platform: &'static str,
+}
+
+/// The saved receiver settings could not be read, so learned buttons are
+/// gone until learned again.
+#[derive(Debug, Clone, Serialize, TS)]
+#[ts(export)]
+#[serde(rename_all = "camelCase")]
+pub struct SettingsLost {
+    /// The system's message.
+    detail: String,
+    /// Where the unreadable file was kept, if it could be moved aside.
+    kept_as: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, TS)]
@@ -72,14 +88,12 @@ pub struct Hardware {
     backend: Option<Arc<HidapiBackend>>,
     handle: Option<ReceiverHandle>,
     init_error: Option<String>,
-    settings_error: Option<String>,
+    settings_error: Option<SettingsLost>,
     settings: Arc<Mutex<ReceiverSettings>>,
     settings_path: PathBuf,
     learn: Mutex<Option<Recorder>>,
     raw_log: Mutex<VecDeque<RawReport>>,
 }
-
-type CmdResult<T> = Result<T, String>;
 
 /// Receiver events waiting for `spawn_event_pump`.
 pub type ReceiverEvents = mpsc::Receiver<ReceiverEvent>;
@@ -100,7 +114,7 @@ impl Hardware {
                 let hardware = Hardware {
                     backend: None,
                     handle: None,
-                    init_error: Some(format!("USB-HID is not available: {e}")),
+                    init_error: Some(e.to_string()),
                     settings_error,
                     settings,
                     settings_path,
@@ -113,12 +127,7 @@ impl Hardware {
 
         let resolver_settings = settings.clone();
         let resolver = Arc::new(move |device: &DeviceInfo| -> Box<dyn Protocol> {
-            // Vendor protocols go first here once the receiver protocol is documented.
-            let settings = resolver_settings.lock().unwrap();
-            match settings.learned.iter().find(|m| m.for_device(device) && !m.signatures.is_empty()) {
-                Some(mapping) => Box::new(LearnedProtocol::new(mapping.clone())),
-                None => Box::new(RawOnly),
-            }
+            learned::protocol_for(&resolver_settings.lock().unwrap().learned, device)
         });
         let (tx, rx) = mpsc::channel();
         let (handle, _join) = receiver::spawn(backend.clone(), resolver, tx, ReceiverConfig::default());
@@ -142,11 +151,12 @@ impl Hardware {
     }
 
     fn save_settings(&self) -> CmdResult<()> {
-        let json = serde_json::to_string_pretty(&*self.settings.lock().unwrap()).map_err(|e| e.to_string())?;
+        let json = serde_json::to_string_pretty(&*self.settings.lock().unwrap())
+            .expect("receiver settings serialize: no maps and no custom serializers");
         if let Some(dir) = self.settings_path.parent() {
-            std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+            std::fs::create_dir_all(dir).map_err(|e| AppError::file(FileAction::CreateFolder, dir, e))?;
         }
-        quiz_file::write_atomic(&self.settings_path, json.as_bytes()).map_err(|e| e.to_string())
+        Ok(quiz_file::write_atomic(&self.settings_path, json.as_bytes())?)
     }
 
     /// Ends learn mode, if on, so presses play again.
@@ -158,8 +168,14 @@ impl Hardware {
 
     fn learn_progress(&self) -> LearnProgress {
         match self.learn.lock().unwrap().as_ref() {
-            Some(r) => LearnProgress { active: true, buzzer: Some(r.buzzer), button: Some(r.button), samples: r.sample_count() },
-            None => LearnProgress { active: false, buzzer: None, button: None, samples: 0 },
+            Some(r) => LearnProgress {
+                active: true,
+                buzzer: Some(r.buzzer),
+                button: Some(r.button),
+                samples: r.sample_count(),
+                can_save: r.can_save(),
+            },
+            None => LearnProgress { active: false, buzzer: None, button: None, samples: 0, can_save: false },
         }
     }
 
@@ -174,18 +190,18 @@ impl Hardware {
 /// Reads the remembered receiver settings. A file that cannot be read is
 /// renamed aside (so learned buttons can still be recovered by hand) and
 /// reported, instead of being silently replaced by defaults.
-fn load_settings(path: &Path) -> (ReceiverSettings, Option<String>) {
+fn load_settings(path: &Path) -> (ReceiverSettings, Option<SettingsLost>) {
     let text = match std::fs::read_to_string(path) {
         Ok(text) => text,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return (ReceiverSettings::default(), None),
-        Err(e) => return (ReceiverSettings::default(), Some(format!("{}: {e}", path.display()))),
+        Err(e) => return (ReceiverSettings::default(), Some(SettingsLost { detail: e.to_string(), kept_as: None })),
     };
     match serde_json::from_str(&text) {
         Ok(settings) => (settings, None),
         Err(e) => {
             let aside = path.with_extension("json.broken");
-            let _ = std::fs::rename(path, &aside);
-            (ReceiverSettings::default(), Some(format!("{}: {e}; kept as {}", path.display(), aside.display())))
+            let kept_as = std::fs::rename(path, &aside).ok().map(|()| aside.display().to_string());
+            (ReceiverSettings::default(), Some(SettingsLost { detail: e.to_string(), kept_as }))
         }
     }
 }
@@ -256,8 +272,8 @@ pub fn receiver_info(hw: tauri::State<Hardware>) -> ReceiverInfo {
 
 #[tauri::command]
 pub fn receiver_devices(hw: tauri::State<Hardware>) -> CmdResult<Vec<DeviceInfo>> {
-    let backend = hw.backend.as_ref().ok_or("USB-HID is not available")?;
-    let mut devices = backend.list().map_err(|e| e.to_string())?;
+    let backend = hw.backend.as_ref().ok_or(AppError::UsbUnavailable)?;
+    let mut devices = backend.list().map_err(|e| AppError::UsbListFailed { detail: e.to_string() })?;
     devices.sort_by_key(|d| (d.is_keyboard_or_mouse(), d.vendor_id, d.product_id, d.interface_number));
     Ok(devices)
 }
@@ -268,14 +284,14 @@ pub fn receiver_select(hw: tauri::State<Hardware>, device: Option<DeviceInfo>) -
     let selector = device.as_ref().map(DeviceSelector::for_device);
     hw.settings.lock().unwrap().receiver = selector.clone();
     hw.save_settings()?;
-    hw.handle.as_ref().ok_or("USB-HID is not available")?.select(selector);
+    hw.handle.as_ref().ok_or(AppError::UsbUnavailable)?.select(selector);
     Ok(())
 }
 
 #[tauri::command]
 pub fn receiver_learn_start(app: AppHandle, hw: tauri::State<Hardware>, buzzer: BuzzerId, button: Button) -> CmdResult<()> {
     if hw.connected_device().is_none() {
-        return Err("connect the receiver first".into());
+        return Err(AppError::ReceiverNotConnected);
     }
     *hw.learn.lock().unwrap() = Some(Recorder::new(buzzer, button));
     let _ = app.emit("receiver-learn", hw.learn_progress());
@@ -287,39 +303,20 @@ pub fn receiver_learn_cancel(app: AppHandle, hw: tauri::State<Hardware>) {
     hw.end_learning(&app);
 }
 
-/// Saves the recorded presses as the signature of the button being learned.
+/// Saves the recorded presses as the signature of the button being learned,
+/// and returns that button.
 #[tauri::command]
-pub fn receiver_learn_finish(app: AppHandle, hw: tauri::State<Hardware>) -> CmdResult<String> {
-    let device = hw.connected_device().ok_or("the receiver is not connected")?;
-    let recorder = hw.learn.lock().unwrap().clone().ok_or("learning was not started")?;
-    if recorder.sample_count() < 2 {
-        return Err("press the button at least twice (three times is best)".into());
-    }
-    {
-        let mut settings = hw.settings.lock().unwrap();
-        let index = match settings.learned.iter().position(|m| m.for_device(&device)) {
-            Some(i) => i,
-            None => {
-                settings.learned.push(LearnedMapping { vendor_id: device.vendor_id, product_id: device.product_id, signatures: vec![] });
-                settings.learned.len() - 1
-            }
-        };
-        let outcome = recorder.finish(&settings.learned[index].signatures)?;
-        if let Some(c) = outcome.conflicts.first() {
-            return Err(format!(
-                "these presses look the same as buzzer {} button {:?}; try again or re-learn that button",
-                c.buzzer, c.button
-            ));
-        }
-        settings.learned[index].upsert(outcome.signature);
-    }
+pub fn receiver_learn_finish(app: AppHandle, hw: tauri::State<Hardware>) -> CmdResult<Press> {
+    let device = hw.connected_device().ok_or(AppError::ReceiverNotConnected)?;
+    let recorder = hw.learn.lock().unwrap().clone().ok_or(AppError::LearnNotStarted)?;
+    recorder.save_into(&mut hw.settings.lock().unwrap().learned, &device)?;
     hw.save_settings()?;
     *hw.learn.lock().unwrap() = None;
     if let Some(handle) = hw.handle.as_ref() {
         handle.reload_protocol();
     }
     let _ = app.emit("receiver-learn", hw.learn_progress());
-    Ok(format!("Learned buzzer {} button {:?}.", recorder.buzzer, recorder.button))
+    Ok(Press { buzzer: recorder.buzzer, button: recorder.button })
 }
 
 #[tauri::command]
@@ -347,7 +344,7 @@ pub fn receiver_export_log(hw: tauri::State<Hardware>, path: String) -> CmdResul
         let decoded: Vec<String> = r.decoded.iter().map(|p| format!("{}{:?}", p.buzzer, p.button)).collect();
         out.push_str(&format!("{}\t{}\t{}\n", r.at_ms, format_hex(&r.bytes), decoded.join(",")));
     }
-    std::fs::write(path, out).map_err(|e| e.to_string())
+    std::fs::write(&path, out).map_err(|e| AppError::file(FileAction::Write, Path::new(&path), e))
 }
 
 #[tauri::command]

@@ -4,6 +4,7 @@ import { BUTTONS, buttonLabel } from "../answers";
 import { api } from "../api";
 import { useApp, useRun } from "../app-context";
 import { useBackendEvent, useLearnProgress } from "../hooks";
+import { errorText, protocolText, receiverProblemText } from "../messages";
 import type { Button, DeviceInfo, Press, PressEvent, RawReport, ReceiverInfo, ReceiverStatus } from "../types";
 
 const LOG_LEN = 40;
@@ -68,7 +69,8 @@ export function ReceiverTab() {
 
   const finishLearn = async () => {
     try {
-      setMessage(await api.receiverLearnFinish());
+      const learned = await api.receiverLearnFinish();
+      setMessage(t("learned", { buzzer: learned.buzzer, button: buttonLabel(learned.button) }));
       // Move on to the next button, then the next buzzer.
       const i = BUTTONS.indexOf(button);
       if (i < BUTTONS.length - 1) setButton(BUTTONS[i + 1]);
@@ -78,7 +80,7 @@ export function ReceiverTab() {
       }
       reload();
     } catch (e) {
-      setMessage(String(e));
+      setMessage(errorText(t, e));
     }
   };
 
@@ -93,16 +95,17 @@ export function ReceiverTab() {
         ) : (
           <p className={`receiver-state ${status?.kind ?? "off"}`}>
             {status?.kind === "connected" &&
-              t("receiverConnected", { name: status.device.product ?? "HID", id: vidPid(status.device), protocol: status.protocol })}
+              t("receiverConnected", { name: status.device.product ?? "HID", id: vidPid(status.device), protocol: protocolText(t, status.protocol) })}
             {status?.kind === "searching" && t("receiverSearching", { id: vidPid(status.selector) })}
-            {status?.kind === "error" && status.message}
+            {status?.kind === "error" && receiverProblemText(t, status.problem, status.detail, info?.platform ?? "")}
             {(!status || status.kind === "off") && t("receiverOff")}
           </p>
         )}
         {status?.kind === "connected" && !status.hasLights && <p className="muted">{t("receiverNoLights")}</p>}
         {info?.settingsError && (
           <p className="receiver-state error">
-            {t("receiverSettingsLost")} {info.settingsError}
+            {t("receiverSettingsLost")} {info.settingsError.detail}
+            {info.settingsError.keptAs && ` ${t("receiverSettingsKeptAs", { path: info.settingsError.keptAs })}`}
           </p>
         )}
         {status && status.kind !== "off" && (
@@ -170,7 +173,7 @@ export function ReceiverTab() {
         {learn?.active ? (
           <div className="row learn-active">
             <span>{t("learnPress", { button: buttonLabel(learn.button ?? "a"), buzzer: learn.buzzer ?? 0, n: learn.samples })}</span>
-            <button disabled={learn.samples < 2} onClick={finishLearn}>
+            <button disabled={!learn.canSave} onClick={finishLearn}>
               {t("learnSave")}
             </button>
             <button onClick={() => run(api.receiverLearnCancel())}>{t("learnCancel")}</button>

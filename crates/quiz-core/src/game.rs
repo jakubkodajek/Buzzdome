@@ -127,6 +127,20 @@ pub enum GameError {
     DuplicateBuzzer(BuzzerId),
 }
 
+/// Which step-dependent quizmaster commands the current step takes
+/// (see `Game::controls`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
+#[serde(rename_all = "camelCase")]
+pub struct Controls {
+    pub next: bool,
+    /// `JudgeRight` and `JudgeWrong`.
+    pub judge: bool,
+    pub pause_clock: bool,
+    pub resume_clock: bool,
+    pub close_question: bool,
+}
+
 /// A countdown that can pause. `limit_ms == None` means untimed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[ts(export)]
@@ -222,6 +236,13 @@ pub struct Player {
     pub enabled: bool,
     /// Sum of answering times; breaks ties in the ranking.
     pub total_answer_ms: u64,
+}
+
+impl Player {
+    /// Scores never wrap around, whatever the quizmaster adds.
+    fn add_score(&mut self, delta: i32) {
+        self.score = self.score.saturating_add(delta);
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -341,6 +362,28 @@ impl Game {
         }
     }
 
+    /// The quizmaster commands the current step takes; `apply` refuses the
+    /// others with `NotNow`. Buttons and keys offer only these.
+    pub fn controls(&self) -> Controls {
+        let step = match &self.phase {
+            Phase::Question(step) => Some(step),
+            _ => None,
+        };
+        let running = match step {
+            Some(QuestionStep::Running { clock }) => Some(clock),
+            _ => None,
+        };
+        let buzzed = matches!(step, Some(QuestionStep::Buzzed { .. }));
+        let last_final_step = matches!(self.phase, Phase::Final { step } if step >= FINAL_LAST_STEP);
+        Controls {
+            next: !buzzed && !last_final_step,
+            judge: buzzed,
+            pause_clock: running.is_some_and(Clock::is_running),
+            resume_clock: running.is_some_and(|clock| !clock.is_running()),
+            close_question: running.is_some(),
+        }
+    }
+
     /// A command the app must issue on its own at `now`, such as time up
     /// (`PRESS_GRACE_MS` after the clock runs out).
     pub fn due_command(&self, now: u64) -> Option<Command> {
@@ -432,7 +475,7 @@ impl Game {
                 Ok(vec![Effect::Lights { lights: vec![(*buzzer, light)] }])
             }
             Command::AdjustScore { buzzer, delta } => {
-                self.player_mut(*buzzer)?.score += delta;
+                self.player_mut(*buzzer)?.add_score(*delta);
                 Ok(vec![])
             }
             Command::ShowLeaderboard { visible } => {
@@ -524,12 +567,17 @@ impl Game {
             }
             let is_correct = response.button.answer_index() == q.correct;
             let delta = if is_correct { q.points_at(response.elapsed_ms) } else { -q.penalty };
-            player.score += delta;
+            player.add_score(delta);
             player.total_answer_ms += response.elapsed_ms;
             self.deltas.insert(buzzer, delta);
         }
         // The lights show the result only at the reveal; until then they go dark.
         vec![self.lights_all(Light::Off)]
+    }
+
+    fn add_delta(&mut self, buzzer: BuzzerId, delta: i32) {
+        let total = self.deltas.entry(buzzer).or_default();
+        *total = total.saturating_add(delta);
     }
 
     fn judge(&mut self, right: bool, now: u64) -> Result<Vec<Effect>, GameError> {
@@ -541,17 +589,17 @@ impl Game {
         let player = self.player_mut(buzzer)?;
         if right {
             let delta = q.points_at(elapsed);
-            player.score += delta;
+            player.add_score(delta);
             player.total_answer_ms += elapsed;
-            *self.deltas.entry(buzzer).or_default() += delta;
+            self.add_delta(buzzer, delta);
             self.phase = Phase::Question(QuestionStep::Revealed { winner: Some(buzzer) });
             return Ok(vec![
                 Effect::Lights { lights: vec![(buzzer, Light::Correct)] },
                 Effect::Sound { cue: Cue::Correct },
             ]);
         }
-        player.score -= q.penalty;
-        *self.deltas.entry(buzzer).or_default() -= q.penalty;
+        player.add_score(-q.penalty);
+        self.add_delta(buzzer, -q.penalty);
         self.locked_out.insert(buzzer);
         let mut effects = vec![
             Effect::Lights { lights: vec![(buzzer, Light::Wrong)] },

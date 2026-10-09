@@ -2,7 +2,7 @@
 // way to make a question the show would refuse (see `Quiz::validate` in
 // crates/quiz-core/src/model.rs).
 
-import { DEFAULT_POINTS, DEFAULT_TIME_LIMIT_S, MAX_ANSWERS, MIN_EVERYONE_ANSWERS } from "../bindings/Constants";
+import { DEFAULT_POINTS, DEFAULT_TIME_LIMIT_S, MAX_ANSWERS, MAX_POINTS, MAX_TIME_LIMIT_S, MIN_EVERYONE_ANSWERS } from "../bindings/Constants";
 import { slideTitle } from "../quiz";
 import type { AnswerMode, Quiz, QuestionSlide, Slide, SlideType, SoundClip, VideoClip } from "../types";
 
@@ -125,11 +125,6 @@ export function setCorrect(question: QuestionSlide, index: number | null): Quest
 }
 
 type Scoring = Pick<QuestionSlide, "timeLimitS" | "points" | "pointsEnd" | "penalty">;
-
-/** Longest clock, in seconds. */
-export const MAX_TIME_LIMIT_S = 3600;
-/** Largest number of points either way; far inside the backend's 32-bit range. */
-export const MAX_POINTS = 100_000;
 
 /** Sets the clock and points, kept to whole numbers in range. */
 export function setScoring(question: QuestionSlide, scoring: Partial<Scoring>): QuestionSlide {

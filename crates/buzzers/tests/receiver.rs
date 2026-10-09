@@ -2,8 +2,8 @@
 //! unplug and replug.
 
 use buzzers::hid::{DeviceInfo, DeviceSelector, HidBackend, HidDevice};
-use buzzers::protocol::Protocol;
-use buzzers::receiver::{spawn, ReceiverConfig, ReceiverEvent, ReceiverHandle, ReceiverStatus};
+use buzzers::protocol::{Protocol, ProtocolKind};
+use buzzers::receiver::{spawn, ReceiverConfig, ReceiverEvent, ReceiverHandle, ReceiverProblem, ReceiverStatus};
 use buzzers::{DriverError, Press};
 use quiz_core::{BuzzerId, Button, Light};
 use std::collections::VecDeque;
@@ -88,8 +88,8 @@ impl HidDevice for FakeDevice {
 struct TestProtocol;
 
 impl Protocol for TestProtocol {
-    fn name(&self) -> String {
-        "test".into()
+    fn kind(&self) -> ProtocolKind {
+        ProtocolKind::RawOnly
     }
 
     fn decode(&mut self, r: &[u8]) -> Vec<Press> {
@@ -237,7 +237,10 @@ fn reports_open_failures_and_retries() {
     let (handle, rx) = start(&backend);
     handle.select(Some(selector()));
     match wait_for(&rx, |e| matches!(e, ReceiverEvent::Status(ReceiverStatus::Error { .. }))) {
-        ReceiverEvent::Status(ReceiverStatus::Error { message }) => assert!(message.contains("access denied")),
+        ReceiverEvent::Status(ReceiverStatus::Error { problem, detail }) => {
+            assert_eq!(problem, ReceiverProblem::CannotOpen);
+            assert!(detail.contains("access denied"), "{detail}");
+        }
         _ => unreachable!(),
     }
     backend.0.lock().unwrap().fail_open = false;

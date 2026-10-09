@@ -40,10 +40,23 @@ two windows cannot disagree with each other or with the score.
 - **Types.** Every type that crosses the boundary is defined once in Rust and
   exported to TypeScript by ts-rs (`#[derive(TS)] #[ts(export)]`) into
   `app/src/bindings` when `cargo test` runs. `app/src/types.ts` re-exports
-  them. Constants the UI needs (`MAX_ANSWERS`, question defaults,
+  them. Constants the UI needs (`MAX_ANSWERS`, question defaults and limits,
   `FINAL_LAST_STEP`) go to `bindings/Constants.ts` the same way, and media
   extensions to `bindings/MediaExtensions.ts`. CI fails when the committed
   bindings differ from the Rust types.
+- **Errors and messages.** No Rust code sends the UI an English sentence.
+  A failed command returns an `AppError` (`app/src-tauri/src/error.rs`): a
+  code with parameters, such as `{ code: "file", action: "read", path,
+  detail }`. Quiz problems are `Problem`s (`quiz-core`), receiver failures
+  `ReceiverProblem`s and protocols `ProtocolKind`s (`buzzers`).
+  `app/src/messages.ts` words them in the quizmaster's language from
+  `i18n.ts`; `detail` fields carry the system's own message as it is.
+  `Display` on these types is for logs and tests only.
+- **Step controls.** `GameView.controls` says which step commands (next,
+  judge, pause, resume, end question) the current step takes;
+  `Game::controls` is checked against `apply` by a test over a whole show.
+  The Director shows only those buttons and `keyboard.ts` sends only those
+  keys, so no key produces "not now" in a show.
 - **Commands** (UI to Rust) are the `api` object in `app/src/api.ts`, one
   entry per `#[tauri::command]`. Game actions all go through one command,
   `dispatch(Command)`, the same for buttons, keys, virtual and real buzzers.
@@ -56,15 +69,16 @@ two windows cannot disagree with each other or with the score.
 | `clock-tick` | `ClockView` | every 250 ms while a question clock runs |
 | `sound-cue` | `Cue` | a game effect that has a sound |
 | `receiver-status`, `receiver-raw`, `receiver-press`, `receiver-learn` | see `hardware.rs` | receiver setup and diagnostics |
+| `host-window` | bool | the projector window opened or closed (also from its title bar) |
 
 - **Clock.** A ticker thread in the shell applies due timer commands (time
   up) and otherwise sends `clock-tick` with the core's `ClockView`. The UI
   never measures time itself; the gauge animates between ticks with CSS.
 - **React side.** `app-context.tsx` gives each window its language, `t` and
-  error reporting (`useRun`, `useDispatch`). `hooks.ts` wraps events and
+  error reporting (`useReport`, `useRun`, `useDispatch`). `hooks.ts` wraps events and
   loads (`useBackendEvent`, `useGameView`, `useClock`, `useQuiz`,
   `useLastSession`). Small shared helpers live in `answers.ts`, `format.ts`,
-  `quiz.ts` and `keyboard.ts`. ESLint with the React hooks rules runs in CI.
+  `quiz.ts`, `keyboard.ts` and `messages.ts`. ESLint with the React hooks rules runs in CI.
 - **Sound.** The Director window plays the cues and the slides' sound
   clips (`slide-sound.ts`), because it stays open for the whole show and the
   projector window may not. Spec SN-5 moves playback into the Rust shell later.
@@ -195,23 +209,24 @@ Loop, every iteration:
 2. If connected: `read_timeout(20 ms)`. A report goes through the protocol
    and the edge filter; the thread sends `Raw` (bytes, time, decoded presses)
    and then one `Press` event per press, in the order the protocol returned
-   them. A read error closes the device and reports `Error` ("connection
-   lost, reconnecting").
+   them. A read error closes the device and reports `Error`
+   (`ConnectionLost`; the thread reconnects).
 3. If not connected and a receiver is selected: every 2 seconds list devices,
    open the first match, send the protocol's init reports, then report
    `Connected` (init goes first so lights work as soon as the UI says
    "connected").
 
 Statuses: `Off` (nothing selected), `Searching` (selected, not plugged in),
-`Connected` (with protocol name and whether it drives lights), `Error`
-(with an OS-specific hint: udev rule on Linux, Input Monitoring on macOS,
-"another program has it" on Windows).
+`Connected` (with the `ProtocolKind` and whether it drives lights), `Error`
+(a `ReceiverProblem` and the system's message; for `CannotOpen` the
+Director adds what to check: the udev rule on Linux, Input Monitoring on
+macOS, another program holding the receiver on Windows).
 
 ### 2.4 Protocols
 
 ```rust
 trait Protocol: Send {
-    fn name(&self) -> String;
+    fn kind(&self) -> ProtocolKind;
     fn decode(&mut self, report: &[u8]) -> Vec<Press>;
     fn init_reports(&self) -> Vec<Vec<u8>>;                        // default: none
     fn encode_lights(&self, lights: &[(BuzzerId, Light)]) -> Vec<Vec<u8>>; // default: none

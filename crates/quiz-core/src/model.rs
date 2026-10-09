@@ -1,7 +1,7 @@
 //! Quiz file model (schema version 1). This is the contract with quiz authors:
 //! change it only with a schema version bump and a migration.
 
-use crate::media::{check_reference, MediaKind, SoundClip, VideoClip};
+use crate::media::{check_reference, MediaIssue, MediaKind, SoundClip, VideoClip};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeSet, HashSet};
 use ts_rs::TS;
@@ -17,6 +17,11 @@ pub const MIN_EVERYONE_ANSWERS: usize = 2;
 pub const DEFAULT_TIME_LIMIT_S: u32 = 20;
 /// Points when a quiz file leaves `points` out.
 pub const DEFAULT_POINTS: i32 = 10;
+/// Largest number of points (or penalty) a question can give, either way, so
+/// scores cannot overflow.
+pub const MAX_POINTS: i32 = 100_000;
+/// Longest time limit of a question, in seconds.
+pub const MAX_TIME_LIMIT_S: u32 = 3_600;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[ts(export)]
@@ -159,43 +164,109 @@ impl Question {
         let (Some(end), Some(limit)) = (self.points_end, self.time_limit_ms()) else {
             return self.points;
         };
-        let elapsed = elapsed_ms.min(limit) as i64;
-        let start = i64::from(self.points);
-        let span = i64::from(end) - start;
+        // Wide enough that no field values can overflow.
+        let (elapsed, limit) = (i128::from(elapsed_ms.min(limit)), i128::from(limit));
+        let start = i128::from(self.points);
+        let span = i128::from(end) - start;
         // Round to the nearest point, symmetric for rising and falling scales.
-        let delta = (span * elapsed * 2 + limit as i64 * span.signum()) / (limit as i64 * 2);
+        let delta = (span * elapsed * 2 + limit * span.signum()) / (limit * 2);
+        // Between `points` and `points_end`, so within i32.
         (start + delta) as i32
+    }
+
+    /// Adds the problems of this question to `found`.
+    fn problems(&self, found: &mut impl FnMut(Problem)) {
+        if self.answers.len() > MAX_ANSWERS {
+            found(Problem::TooManyAnswers { max: MAX_ANSWERS });
+        }
+        if self.mode == AnswerMode::Everyone {
+            if self.answers.len() < MIN_EVERYONE_ANSWERS {
+                found(Problem::TooFewAnswers { min: MIN_EVERYONE_ANSWERS });
+            }
+            if self.correct.is_none() {
+                found(Problem::NoCorrectAnswer);
+            }
+        }
+        if self.correct.is_some_and(|c| c >= self.answers.len()) {
+            found(Problem::CorrectOutOfRange);
+        }
+        let points = -MAX_POINTS..=MAX_POINTS;
+        if !points.contains(&self.points) || self.points_end.is_some_and(|end| !points.contains(&end)) {
+            found(Problem::PointsOutOfRange { max: MAX_POINTS });
+        }
+        if !(0..=MAX_POINTS).contains(&self.penalty) {
+            found(Problem::PenaltyOutOfRange { max: MAX_POINTS });
+        }
+        if self.time_limit_s > MAX_TIME_LIMIT_S {
+            found(Problem::TimeLimitTooLong { max: MAX_TIME_LIMIT_S });
+        }
     }
 }
 
-/// A problem that keeps a quiz from being played, for the editor and for
-/// error messages.
+/// A problem that keeps a quiz from being played. The UI words it in the
+/// quizmaster's language; `Display` is for logs.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS, thiserror::Error)]
+#[ts(export)]
+#[serde(tag = "code", rename_all = "camelCase")]
+pub enum Problem {
+    #[error("duplicate slide id")]
+    DuplicateSlideId,
+    #[error("media file {file}: {issue}")]
+    Media { file: String, issue: MediaIssue },
+    #[error("a slide shows a picture or a video, not both")]
+    PictureAndVideo,
+    #[error("sound volume is a percentage, 0 to 100")]
+    SoundVolume,
+    #[error("more than {max} answers")]
+    TooManyAnswers { max: usize },
+    #[error("an everyone-answers question needs at least {min} answers")]
+    TooFewAnswers { min: usize },
+    #[error("an everyone-answers question needs a correct answer")]
+    NoCorrectAnswer,
+    #[error("the correct answer points past the answer list")]
+    CorrectOutOfRange,
+    #[error("points must be between -{max} and {max}")]
+    PointsOutOfRange { max: i32 },
+    #[error("penalty must be between 0 and {max}")]
+    PenaltyOutOfRange { max: i32 },
+    /// `max` in seconds.
+    #[error("time limit must be at most {max} s")]
+    TimeLimitTooLong { max: u32 },
+}
+
+/// A problem and where it is.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
 #[ts(export)]
 #[serde(rename_all = "camelCase")]
 pub struct ValidationError {
     /// The slide it is on; none for problems of the whole quiz.
     pub slide_id: Option<String>,
-    pub message: String,
+    pub problem: Problem,
 }
 
 impl std::fmt::Display for ValidationError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self.slide_id {
-            Some(id) => write!(f, "slide {id}: {}", self.message),
-            None => write!(f, "{}", self.message),
+            Some(id) => write!(f, "slide {id}: {}", self.problem),
+            None => write!(f, "{}", self.problem),
         }
     }
 }
 
+/// Why a quiz's JSON cannot be read.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum QuizJsonError {
+    #[error("quiz file uses schema version {found}, this app supports up to {supported}")]
+    NewerSchema { found: u32, supported: u32 },
+    #[error("{0}")]
+    Syntax(String),
+}
+
 impl Quiz {
-    pub fn from_json(json: &str) -> Result<Quiz, String> {
-        let mut quiz: Quiz = serde_json::from_str(json).map_err(|e| e.to_string())?;
+    pub fn from_json(json: &str) -> Result<Quiz, QuizJsonError> {
+        let mut quiz: Quiz = serde_json::from_str(json).map_err(|e| QuizJsonError::Syntax(e.to_string()))?;
         if quiz.schema_version > SCHEMA_VERSION {
-            return Err(format!(
-                "quiz file uses schema version {}, this app supports up to {SCHEMA_VERSION}",
-                quiz.schema_version
-            ));
+            return Err(QuizJsonError::NewerSchema { found: quiz.schema_version, supported: SCHEMA_VERSION });
         }
         // Every older version reads as the current one, so it is saved as such.
         quiz.schema_version = SCHEMA_VERSION;
@@ -211,44 +282,23 @@ impl Quiz {
         let mut errors = Vec::new();
         let mut ids = HashSet::new();
         for slide in &self.slides {
-            let err = |message: String| ValidationError {
-                slide_id: Some(slide.id.clone()),
-                message,
-            };
+            let mut found = |problem: Problem| errors.push(ValidationError { slide_id: Some(slide.id.clone()), problem });
             if !ids.insert(slide.id.as_str()) {
-                errors.push(err("duplicate slide id".into()));
+                found(Problem::DuplicateSlideId);
             }
             for (file, kinds) in slide.media() {
-                if let Err(message) = check_reference(file, kinds) {
-                    errors.push(err(message));
+                if let Err(issue) = check_reference(file, kinds) {
+                    found(Problem::Media { file: file.to_string(), issue });
                 }
             }
             if slide.picture.is_some() && slide.video.is_some() {
-                errors.push(err("a slide shows a picture or a video, not both".into()));
+                found(Problem::PictureAndVideo);
             }
             if slide.sound.as_ref().is_some_and(|s| s.volume > 100) {
-                errors.push(err("sound volume is a percentage, 0 to 100".into()));
+                found(Problem::SoundVolume);
             }
             if let SlideContent::Question(q) = &slide.content {
-                if q.answers.len() > MAX_ANSWERS {
-                    errors.push(err(format!("more than {MAX_ANSWERS} answers")));
-                }
-                if q.mode == AnswerMode::Everyone {
-                    if q.answers.len() < MIN_EVERYONE_ANSWERS {
-                        errors.push(err(format!("an everyone-answers question needs at least {MIN_EVERYONE_ANSWERS} answers")));
-                    }
-                    if q.correct.is_none() {
-                        errors.push(err("an everyone-answers question needs a correct answer".into()));
-                    }
-                }
-                if let Some(c) = q.correct {
-                    if c >= q.answers.len() {
-                        errors.push(err("the correct answer points past the answer list".into()));
-                    }
-                }
-                if q.penalty < 0 {
-                    errors.push(err("penalty must not be negative".into()));
-                }
+                q.problems(&mut found);
             }
         }
         if errors.is_empty() {
@@ -311,13 +361,78 @@ mod tests {
     }
 
     #[test]
-    fn rejects_a_newer_schema_and_broken_questions() {
-        assert!(Quiz::from_json(r#"{"schemaVersion": 99, "title": "x"}"#).is_err());
-        let mut quiz = Quiz { schema_version: 1, title: "x".into(), slides: vec![] };
+    fn points_never_overflow_whatever_the_fields_say() {
+        let q = question(i32::MAX, Some(i32::MIN), u32::MAX);
+        assert_eq!(q.points_at(0), i32::MAX);
+        assert_eq!(q.points_at(u64::MAX), i32::MIN);
+        assert!((i32::MIN..=i32::MAX).contains(&q.points_at(u64::from(u32::MAX) * 500)));
+    }
+
+    #[test]
+    fn rejects_a_newer_schema_and_broken_json() {
+        assert_eq!(
+            Quiz::from_json(r#"{"schemaVersion": 99, "title": "x"}"#),
+            Err(QuizJsonError::NewerSchema { found: 99, supported: SCHEMA_VERSION })
+        );
+        assert!(matches!(Quiz::from_json("{"), Err(QuizJsonError::Syntax(_))));
+    }
+
+    /// The problems `validate` finds in these slides.
+    fn problems_of(slides: Vec<Slide>) -> Vec<Problem> {
+        let quiz = Quiz { schema_version: SCHEMA_VERSION, title: "x".into(), slides };
+        quiz.validate().err().unwrap_or_default().into_iter().map(|e| e.problem).collect()
+    }
+
+    /// A change to a valid question.
+    type Edit = fn(&mut Question);
+
+    fn question_slide(edit: Edit) -> Slide {
         let mut q = question(10, None, 10);
-        q.correct = Some(5);
-        quiz.slides.push(Slide::new("a", SlideContent::Question(q)));
-        assert_eq!(quiz.validate().unwrap_err().len(), 1);
+        edit(&mut q);
+        Slide::new("a", SlideContent::Question(q))
+    }
+
+    #[test]
+    fn each_question_rule_names_its_problem() {
+        let cases: [(Edit, Problem); 9] = [
+            (|q| q.answers = vec!["a".into(); MAX_ANSWERS + 1], Problem::TooManyAnswers { max: MAX_ANSWERS }),
+            (|q| q.answers.truncate(1), Problem::TooFewAnswers { min: MIN_EVERYONE_ANSWERS }),
+            (|q| q.correct = None, Problem::NoCorrectAnswer),
+            (|q| q.correct = Some(2), Problem::CorrectOutOfRange),
+            (|q| q.points = MAX_POINTS + 1, Problem::PointsOutOfRange { max: MAX_POINTS }),
+            (|q| q.points_end = Some(-MAX_POINTS - 1), Problem::PointsOutOfRange { max: MAX_POINTS }),
+            (|q| q.penalty = -1, Problem::PenaltyOutOfRange { max: MAX_POINTS }),
+            (|q| q.penalty = MAX_POINTS + 1, Problem::PenaltyOutOfRange { max: MAX_POINTS }),
+            (|q| q.time_limit_s = MAX_TIME_LIMIT_S + 1, Problem::TimeLimitTooLong { max: MAX_TIME_LIMIT_S }),
+        ];
+        for (edit, problem) in cases {
+            assert_eq!(problems_of(vec![question_slide(edit)]), std::slice::from_ref(&problem), "{problem}");
+        }
+        // The limits themselves are fine.
+        let at_limits = question_slide(|q| {
+            (q.points, q.points_end, q.penalty, q.time_limit_s) = (MAX_POINTS, Some(-MAX_POINTS), MAX_POINTS, MAX_TIME_LIMIT_S)
+        });
+        assert_eq!(problems_of(vec![at_limits]), []);
+    }
+
+    #[test]
+    fn each_slide_rule_names_its_problem() {
+        let intro = || Slide::new("intro", SlideContent::Billboard { title: "x".into(), text: String::new() });
+        assert_eq!(problems_of(vec![intro(), intro()]), [Problem::DuplicateSlideId]);
+
+        let mut slide = intro();
+        slide.picture = Some("../secret.jpg".into());
+        let issue = MediaIssue::NotInMediaFolder;
+        assert_eq!(problems_of(vec![slide]), [Problem::Media { file: "../secret.jpg".into(), issue }]);
+
+        let mut slide = intro();
+        slide.picture = Some("media/a.png".into());
+        slide.video = Some(VideoClip { file: "media/clip.mp4".into(), autoplay: true, muted: false, repeat: false });
+        assert_eq!(problems_of(vec![slide]), [Problem::PictureAndVideo]);
+
+        let mut slide = intro();
+        slide.sound = Some(SoundClip { file: "media/a.mp3".into(), start: Default::default(), repeat: false, volume: 101 });
+        assert_eq!(problems_of(vec![slide]), [Problem::SoundVolume]);
     }
 
     #[test]
@@ -325,10 +440,6 @@ mod tests {
         // Every answer must be one a buzzer button can choose.
         let buttons = [Button::A, Button::B, Button::C, Button::D, Button::Big];
         assert!((0..MAX_ANSWERS).all(|i| buttons.iter().any(|b| b.answer_index() == Some(i))));
-        let mut q = question(10, None, 10);
-        q.answers = vec!["a".into(); MAX_ANSWERS + 1];
-        let quiz = Quiz { schema_version: SCHEMA_VERSION, title: "x".into(), slides: vec![Slide::new("a", SlideContent::Question(q))] };
-        assert_eq!(quiz.validate().unwrap_err().len(), 1);
     }
 
     #[test]
@@ -356,9 +467,9 @@ mod tests {
         assert!(quiz.validate().is_ok());
 
         let mut broken = quiz.clone();
-        broken.slides[0].picture = Some("../secret.jpg".into());
-        broken.slides[0].video = Some(VideoClip { file: "media/clip.mp4".into(), autoplay: true, muted: false, repeat: false });
-        // A bad path, and a picture together with a video.
-        assert_eq!(broken.validate().unwrap_err().len(), 2);
+        broken.slides[0].background = Some("media/stage.txt".into());
+        let issue = MediaIssue::WrongType { expected: vec![MediaKind::Image, MediaKind::Video] };
+        let problem = Problem::Media { file: "media/stage.txt".into(), issue };
+        assert_eq!(broken.validate().unwrap_err(), [ValidationError { slide_id: Some("q1".into()), problem }]);
     }
 }

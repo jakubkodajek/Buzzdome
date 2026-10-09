@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useMemo, type ReactNode } from "react";
 import { api } from "./api";
 import { translator, useLang, type Lang, type Translate } from "./i18n";
+import { errorText } from "./messages";
 import type { Command } from "./types";
 
 interface AppContextValue {
@@ -26,10 +27,16 @@ export function useApp(): AppContextValue {
   return value;
 }
 
+/** Shows a failed backend call to the quizmaster, in their language. */
+export function useReport(): (error: unknown) => void {
+  const { t, notify } = useApp();
+  return useCallback((error) => notify(errorText(t, error)), [t, notify]);
+}
+
 /** Runs a backend call; a failure is reported to the quizmaster, not thrown. */
 export function useRun(): (call: Promise<unknown>) => void {
-  const { notify } = useApp();
-  return useCallback((call) => void call.catch((e) => notify(String(e))), [notify]);
+  const report = useReport();
+  return useCallback((call) => void call.catch(report), [report]);
 }
 
 /** Sends a game command, the same way for every button, key and buzzer. */

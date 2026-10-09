@@ -1,5 +1,6 @@
 import { useApp } from "../app-context";
 import { BackIcon } from "../icons";
+import { problemText } from "../messages";
 import { questionCount } from "../quiz";
 import type { Action } from "./actions";
 import type { OpenQuiz } from "./editor-state";
@@ -99,7 +100,7 @@ function InfoPage({ open, unsaved, onTitle, onShowSlide }: BackstageProps & { op
                 ) : (
                   <b>{t("wholeQuiz")}</b>
                 )}
-                <span>{problem.message}</span>
+                <span>{problemText(t, problem.problem)}</span>
               </li>
             );
           })}

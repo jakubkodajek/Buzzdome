@@ -3,10 +3,23 @@
 use crate::hid::DeviceInfo;
 use crate::Press;
 use quiz_core::{BuzzerId, Light};
+use serde::Serialize;
+use ts_rs::TS;
+
+/// Which protocol reads the receiver, for the Director (which words it).
+/// Vendor protocols add a variant each.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
+#[serde(tag = "type", rename_all = "camelCase")]
+pub enum ProtocolKind {
+    /// Reports are shown but not decoded.
+    RawOnly,
+    /// Buttons learned from recorded presses (see `learned`).
+    Learned { buttons: usize },
+}
 
 pub trait Protocol: Send {
-    /// Short human-readable name for the Director.
-    fn name(&self) -> String;
+    fn kind(&self) -> ProtocolKind;
 
     /// Decodes one input report. Several presses in one report must be returned
     /// in the order the receiver registered them (earliest first), so the app
@@ -38,8 +51,8 @@ pub type ProtocolResolver = dyn Fn(&DeviceInfo) -> Box<dyn Protocol> + Send + Sy
 pub struct RawOnly;
 
 impl Protocol for RawOnly {
-    fn name(&self) -> String {
-        "raw reports only".into()
+    fn kind(&self) -> ProtocolKind {
+        ProtocolKind::RawOnly
     }
 
     fn decode(&mut self, _report: &[u8]) -> Vec<Press> {

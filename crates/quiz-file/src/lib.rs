@@ -7,12 +7,14 @@
 //! working (and resumes after a crash) even if the original file is moved,
 //! and opening the same file twice reuses the same folder.
 
-use quiz_core::{is_safe_reference, Quiz, ValidationError, MEDIA_PREFIX};
+use quiz_core::{is_safe_reference, portable_name, MediaIssue, Problem, Quiz, QuizJsonError, ValidationError, MEDIA_PREFIX};
+use serde::Serialize;
 use sha2::{Digest, Sha256};
 use std::fs::{self, File};
 use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
+use ts_rs::TS;
 use zip::write::SimpleFileOptions;
 use zip::{CompressionMethod, ZipArchive, ZipWriter};
 
@@ -27,34 +29,45 @@ pub const MAX_ENTRIES: usize = 10_000;
 const ZIP_MAGIC: &[u8; 4] = b"PK\x03\x04";
 const INCOMING_PREFIX: &str = ".incoming-";
 
+/// What was being done to a file when the disk failed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
+#[serde(rename_all = "camelCase")]
+pub enum FileAction {
+    Read,
+    Write,
+    CreateFolder,
+    Move,
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum QuizFileError {
-    #[error("{context}: {source}")]
-    Io { context: String, source: io::Error },
+    #[error("cannot {action:?} {}: {source}", path.display())]
+    Io { action: FileAction, path: PathBuf, source: io::Error },
     #[error("the file is not a valid quiz file: {0}")]
     Zip(#[from] zip::result::ZipError),
     #[error("{QUIZ_JSON} cannot be read: {0}")]
-    Json(String),
+    Json(#[from] QuizJsonError),
     #[error("the quiz file has no {QUIZ_JSON}")]
     MissingQuizJson,
     #[error("the quiz file unpacks to more than {} MB", MAX_UNPACKED_BYTES >> 20)]
     TooLarge,
     #[error("the quiz file has more than {MAX_ENTRIES} files")]
     TooManyFiles,
-    #[error("the quiz has problems:\n{}", .0.join("\n"))]
-    Invalid(Vec<String>),
+    #[error("the quiz has problems: {}", .0.iter().map(ToString::to_string).collect::<Vec<_>>().join("; "))]
+    Invalid(Vec<ValidationError>),
 }
 
 type Result<T> = std::result::Result<T, QuizFileError>;
 
-/// Adds what was being done to an I/O error.
+/// Adds what was being done, and to which file, to an I/O error.
 trait Context<T> {
-    fn context(self, what: impl FnOnce() -> String) -> Result<T>;
+    fn context(self, action: FileAction, path: &Path) -> Result<T>;
 }
 
 impl<T> Context<T> for io::Result<T> {
-    fn context(self, what: impl FnOnce() -> String) -> Result<T> {
-        self.map_err(|source| QuizFileError::Io { context: what(), source })
+    fn context(self, action: FileAction, path: &Path) -> Result<T> {
+        self.map_err(|source| QuizFileError::Io { action, path: path.to_path_buf(), source })
     }
 }
 
@@ -72,11 +85,13 @@ pub fn open(path: &Path, cache: &Path) -> Result<Package> {
     let incoming = incoming_dir(cache)?;
     let result = unpack(path, &incoming).and_then(|(quiz, hash)| {
         let root = cache.join(hash);
-        if root.exists() {
+        if read_checked(&root).is_ok() {
             // The same content was opened before.
             remove_dir(&incoming);
         } else {
-            fs::rename(&incoming, &root).context(|| format!("cannot move the quiz into {}", root.display()))?;
+            // Not there, or left half-deleted by a `prune` that could not finish.
+            remove_dir(&root);
+            fs::rename(&incoming, &root).context(FileAction::Move, &root)?;
         }
         Ok(Package { quiz, root })
     });
@@ -93,7 +108,7 @@ pub fn open_into(path: &Path, dest: &Path) -> Result<Quiz> {
     let parent = dest.parent().unwrap_or(Path::new("."));
     let incoming = incoming_dir(parent)?;
     let result = unpack(path, &incoming).and_then(|(quiz, _)| {
-        fs::rename(&incoming, dest).context(|| format!("cannot move the quiz into {}", dest.display()))?;
+        fs::rename(&incoming, dest).context(FileAction::Move, dest)?;
         Ok(quiz)
     });
     if result.is_err() {
@@ -109,20 +124,27 @@ fn unpack(path: &Path, dest: &Path) -> Result<(Quiz, String)> {
 }
 
 fn incoming_dir(parent: &Path) -> Result<PathBuf> {
-    fs::create_dir_all(parent).context(|| format!("cannot create {}", parent.display()))?;
+    fs::create_dir_all(parent).context(FileAction::CreateFolder, parent)?;
     Ok(parent.join(format!("{INCOMING_PREFIX}{}-{}", std::process::id(), unique_suffix())))
 }
 
 /// Reads and checks the package in `root`: the quiz is valid and every media
 /// file it uses is there.
 pub fn read_checked(root: &Path) -> Result<Quiz> {
-    let json = fs::read_to_string(root.join(QUIZ_JSON)).map_err(|e| match e.kind() {
-        io::ErrorKind::NotFound => QuizFileError::MissingQuizJson,
-        _ => QuizFileError::Io { context: format!("cannot read {QUIZ_JSON}"), source: e },
-    })?;
-    let quiz = Quiz::from_json(&json).map_err(QuizFileError::Json)?;
+    let quiz = read_quiz_json(root)?;
     check(&quiz, root)?;
     Ok(quiz)
+}
+
+/// Reads `quiz.json` from the package folder `root` without checking the
+/// quiz: a draft may be unfinished.
+pub fn read_quiz_json(root: &Path) -> Result<Quiz> {
+    let path = root.join(QUIZ_JSON);
+    let json = fs::read_to_string(&path).map_err(|e| match e.kind() {
+        io::ErrorKind::NotFound => QuizFileError::MissingQuizJson,
+        _ => QuizFileError::Io { action: FileAction::Read, path, source: e },
+    })?;
+    Ok(Quiz::from_json(&json)?)
 }
 
 /// Checks the quiz and that every media file it uses exists under `root`.
@@ -131,7 +153,7 @@ pub fn check(quiz: &Quiz, root: &Path) -> Result<()> {
     if found.is_empty() {
         Ok(())
     } else {
-        Err(QuizFileError::Invalid(found.iter().map(ToString::to_string).collect()))
+        Err(QuizFileError::Invalid(found))
     }
 }
 
@@ -146,25 +168,30 @@ pub fn problems(quiz: &Quiz, root: &Path) -> Vec<ValidationError> {
         .iter()
         .flat_map(|slide| slide.media().into_iter().map(move |(file, _)| (slide, file)))
         .filter(|(_, file)| !root.join(file).is_file())
-        .map(|(slide, file)| ValidationError { slide_id: Some(slide.id.clone()), message: format!("media file missing: {file}") })
+        .map(|(slide, file)| ValidationError {
+            slide_id: Some(slide.id.clone()),
+            problem: Problem::Media { file: file.to_string(), issue: MediaIssue::Missing },
+        })
         .collect()
 }
 
 /// Writes `quiz.json` into the package folder `root` (see `write_atomic`).
 /// The quiz is not checked: a draft may be unfinished.
 pub fn write_quiz_json(root: &Path, quiz: &Quiz) -> Result<()> {
-    let json = serde_json::to_string_pretty(quiz).map_err(|e| QuizFileError::Json(e.to_string()))?;
-    write_atomic(&root.join(QUIZ_JSON), json.as_bytes())
+    write_atomic(&root.join(QUIZ_JSON), quiz_json(quiz).as_bytes())
+}
+
+fn quiz_json(quiz: &Quiz) -> String {
+    serde_json::to_string_pretty(quiz).expect("a quiz serializes: it has no maps and no custom serializers that can fail")
 }
 
 /// Replaces the file `dest` with `contents` so that a crash leaves either the
 /// old file or the new one, never a torn one.
 pub fn write_atomic(dest: &Path, contents: &[u8]) -> Result<()> {
     replace_file(dest, |temp| {
-        let mut file = File::create(temp).context(|| format!("cannot write {}", temp.display()))?;
-        file.write_all(contents)
-            .and_then(|()| file.sync_all())
-            .context(|| format!("cannot write {}", temp.display()))
+        File::create(temp)
+            .and_then(|mut file| file.write_all(contents).and_then(|()| file.sync_all()))
+            .context(FileAction::Write, temp)
     })
 }
 
@@ -173,11 +200,15 @@ pub fn write_atomic(dest: &Path, contents: &[u8]) -> Result<()> {
 fn replace_file(dest: &Path, write: impl FnOnce(&Path) -> Result<()>) -> Result<()> {
     let name = dest.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
     let temp = dest.with_file_name(format!(".{name}.saving"));
-    let written = write(&temp).and_then(|()| fs::rename(&temp, dest).context(|| format!("cannot replace {}", dest.display())));
+    let written = write(&temp).and_then(|()| fs::rename(&temp, dest).context(FileAction::Write, dest));
     if written.is_err() {
         let _ = fs::remove_file(&temp);
     }
-    written?;
+    // Errors name the file being saved, not its temporary twin.
+    written.map_err(|e| match e {
+        QuizFileError::Io { action, path, source } if path == temp => QuizFileError::Io { action, path: dest.into(), source },
+        other => other,
+    })?;
     sync_dir(dest.parent().unwrap_or(Path::new(".")))
 }
 
@@ -185,7 +216,7 @@ fn replace_file(dest: &Path, write: impl FnOnce(&Path) -> Result<()>) -> Result<
 /// sync it; on Windows this does nothing.
 fn sync_dir(dir: &Path) -> Result<()> {
     #[cfg(unix)]
-    File::open(dir).and_then(|d| d.sync_all()).context(|| format!("cannot sync {}", dir.display()))?;
+    File::open(dir).and_then(|d| d.sync_all()).context(FileAction::Write, dir)?;
     #[cfg(not(unix))]
     let _ = dir;
     Ok(())
@@ -195,22 +226,22 @@ fn sync_dir(dir: &Path) -> Result<()> {
 /// reference (`media/<name>`). A file with the same name and contents is
 /// reused; a different one with the same name gets a number added.
 pub fn import_media(root: &Path, source: &Path) -> Result<String> {
-    let original = source.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+    let original = portable_name(&source.file_name().map(|n| n.to_string_lossy()).unwrap_or_default());
     let (stem, extension) = match original.rsplit_once('.') {
-        Some((stem, ext)) if !stem.is_empty() => (safe_name(stem), format!(".{}", safe_name(ext))),
-        _ => (safe_name(&original), String::new()),
+        Some((stem, ext)) if !stem.is_empty() => (stem, format!(".{ext}")),
+        _ => (original.as_str(), String::new()),
     };
-    let read_error = || format!("cannot read {}", source.display());
     for n in 1.. {
-        let name = if n == 1 { format!("{stem}{extension}") } else { format!("{stem}-{n}{extension}") };
+        // A number before the extension keeps the name portable.
+        let name = if n == 1 { original.clone() } else { format!("{stem}-{n}{extension}") };
         let reference = format!("{MEDIA_PREFIX}{name}");
         let path = root.join(&reference);
         if !path.exists() {
-            let mut file = File::open(source).context(read_error)?;
-            write_file(root, &reference, &mut file, MAX_UNPACKED_BYTES, &mut Sha256::new())?;
+            let mut file = File::open(source).context(FileAction::Read, source)?;
+            write_file(root, &reference, &mut file, source, MAX_UNPACKED_BYTES, &mut Sha256::new())?;
             return Ok(reference);
         }
-        if same_contents(&path, source).context(read_error)? {
+        if same_contents(&path, source).context(FileAction::Read, source)? {
             return Ok(reference);
         }
     }
@@ -239,21 +270,11 @@ fn same_contents(a: &Path, b: &Path) -> io::Result<bool> {
     }
 }
 
-/// A file name part without path separators or characters some systems refuse.
-fn safe_name(name: &str) -> String {
-    let cleaned: String = name
-        .chars()
-        .map(|c| if c.is_control() || "/\\:*?\"<>|".contains(c) { '_' } else { c })
-        .collect();
-    let trimmed = cleaned.trim().trim_matches('.');
-    if trimmed.is_empty() { "file".into() } else { trimmed.into() }
-}
-
 /// Writes `quiz` with the media it uses (read from `media_root`) to `dest` as
 /// a quiz file. The file is replaced only once the new one is complete.
 pub fn save(quiz: &Quiz, media_root: &Path, dest: &Path) -> Result<()> {
     check(quiz, media_root)?;
-    replace_file(dest, |temp| write_zip(quiz, media_root, temp))
+    replace_file(dest, |temp| write_zip(quiz, media_root, temp, MAX_UNPACKED_BYTES))
 }
 
 /// Deletes every package folder in `cache` except `keep`, and leftovers of
@@ -276,41 +297,87 @@ pub fn prune(cache: &Path, keep: &[&Path]) -> io::Result<()> {
     first_error.map_or(Ok(()), Err)
 }
 
-fn write_zip(quiz: &Quiz, media_root: &Path, temp: &Path) -> Result<()> {
-    let file = File::create(temp).context(|| format!("cannot write {}", temp.display()))?;
-    let mut zip = ZipWriter::new(file);
-    let json = serde_json::to_string_pretty(quiz).map_err(|e| QuizFileError::Json(e.to_string()))?;
-    zip.start_file(QUIZ_JSON, SimpleFileOptions::default().compression_method(CompressionMethod::Deflated))?;
-    zip.write_all(json.as_bytes()).context(|| format!("cannot write {QUIZ_JSON}"))?;
-    for reference in quiz.media_files() {
+/// Writes the quiz file to `temp`. Refuses a quiz larger than `max_bytes`
+/// unpacked or with too many files, which no reader would open.
+fn write_zip(quiz: &Quiz, media_root: &Path, temp: &Path, max_bytes: u64) -> Result<()> {
+    let media = quiz.media_files();
+    if media.len() + 1 > MAX_ENTRIES {
+        return Err(QuizFileError::TooManyFiles);
+    }
+    let json = quiz_json(quiz);
+    let mut total = json.len() as u64;
+    for reference in &media {
         let path = media_root.join(reference);
-        let mut media = File::open(&path).context(|| format!("cannot read {}", path.display()))?;
-        let size = media.metadata().context(|| format!("cannot read {}", path.display()))?.len();
+        total += fs::metadata(&path).context(FileAction::Read, &path)?.len();
+    }
+    if total > max_bytes {
+        return Err(QuizFileError::TooLarge);
+    }
+    // A failing ZIP writer is a failing disk here.
+    let write_error = |e: zip::result::ZipError| {
+        let source = match e {
+            zip::result::ZipError::Io(e) => e,
+            other => io::Error::other(other),
+        };
+        QuizFileError::Io { action: FileAction::Write, path: temp.into(), source }
+    };
+    let mut zip = ZipWriter::new(File::create(temp).context(FileAction::Write, temp)?);
+    zip.start_file(QUIZ_JSON, SimpleFileOptions::default().compression_method(CompressionMethod::Deflated))
+        .map_err(write_error)?;
+    zip.write_all(json.as_bytes()).context(FileAction::Write, temp)?;
+    for reference in media {
+        let path = media_root.join(reference);
+        let mut file = File::open(&path).context(FileAction::Read, &path)?;
+        let size = file.metadata().context(FileAction::Read, &path)?.len();
         // Pictures, sounds and videos are compressed already.
         let options = SimpleFileOptions::default()
             .compression_method(CompressionMethod::Stored)
             .large_file(size >= u64::from(u32::MAX));
-        zip.start_file(reference, options)?;
-        io::copy(&mut media, &mut zip).context(|| format!("cannot write {reference}"))?;
+        zip.start_file(reference, options).map_err(write_error)?;
+        copy(&mut file, &path, &mut zip, temp, |_| Ok(()))?;
     }
-    let file = zip.finish()?;
-    file.sync_all().context(|| format!("cannot write {}", temp.display()))
+    zip.finish().map_err(write_error)?.sync_all().context(FileAction::Write, temp)
+}
+
+/// Copies `from` (the file `source`) to `to` (the file `dest`), handing every
+/// chunk to `inspect` first, and returns the number of bytes. Unlike
+/// `io::copy`, an error names the side that failed.
+fn copy(
+    from: &mut impl Read,
+    source: &Path,
+    to: &mut impl Write,
+    dest: &Path,
+    mut inspect: impl FnMut(&[u8]) -> Result<()>,
+) -> Result<u64> {
+    let mut buffer = vec![0; 1 << 16];
+    let mut copied = 0;
+    loop {
+        let n = match from.read(&mut buffer) {
+            Ok(0) => return Ok(copied),
+            Ok(n) => n,
+            Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
+            Err(e) => return Err(e).context(FileAction::Read, source),
+        };
+        inspect(&buffer[..n])?;
+        to.write_all(&buffer[..n]).context(FileAction::Write, dest)?;
+        copied += n as u64;
+    }
 }
 
 fn is_zip(path: &Path) -> Result<bool> {
     let mut magic = [0u8; 4];
-    let mut file = File::open(path).context(|| format!("cannot open {}", path.display()))?;
+    let mut file = File::open(path).context(FileAction::Read, path)?;
     match file.read_exact(&mut magic) {
         Ok(()) => Ok(&magic == ZIP_MAGIC),
         Err(e) if e.kind() == io::ErrorKind::UnexpectedEof => Ok(false),
-        Err(e) => Err(e).context(|| format!("cannot read {}", path.display())),
+        Err(e) => Err(e).context(FileAction::Read, path),
     }
 }
 
 /// Unpacks `quiz.json` and `media/` into `dest` and returns the content hash.
 /// Other entries (folders, links, files some ZIP tools add) are skipped.
 fn unpack_zip(path: &Path, dest: &Path) -> Result<String> {
-    let file = File::open(path).context(|| format!("cannot open {}", path.display()))?;
+    let file = File::open(path).context(FileAction::Read, path)?;
     let mut archive = ZipArchive::new(file)?;
     if archive.len() > MAX_ENTRIES {
         return Err(QuizFileError::TooManyFiles);
@@ -326,7 +393,7 @@ fn unpack_zip(path: &Path, dest: &Path) -> Result<String> {
         if name != QUIZ_JSON && !(name.starts_with(MEDIA_PREFIX) && is_safe_reference(&name)) {
             continue;
         }
-        let copied = write_file(dest, &name, &mut entry, budget, &mut hasher)?;
+        let copied = write_file(dest, &name, &mut entry, path, budget, &mut hasher)?;
         budget -= copied;
     }
     Ok(finish(hasher))
@@ -335,63 +402,53 @@ fn unpack_zip(path: &Path, dest: &Path) -> Result<String> {
 /// Copies a plain quiz JSON file and the media it uses (next to it) into
 /// `dest` and returns the content hash.
 fn copy_json(path: &Path, dest: &Path) -> Result<String> {
-    let json = fs::read_to_string(path).context(|| format!("cannot read {}", path.display()))?;
-    let quiz = Quiz::from_json(&json).map_err(QuizFileError::Json)?;
+    let json = fs::read_to_string(path).context(FileAction::Read, path)?;
+    let quiz = Quiz::from_json(&json)?;
     let source_root = path.parent().unwrap_or(Path::new("."));
     // Check before copying, so a bad reference cannot point outside the folder.
-    if let Err(errors) = quiz.validate() {
-        return Err(QuizFileError::Invalid(errors.iter().map(ToString::to_string).collect()));
-    }
+    quiz.validate().map_err(QuizFileError::Invalid)?;
     let mut hasher = Sha256::new();
     let mut budget = MAX_UNPACKED_BYTES;
-    budget -= write_file(dest, QUIZ_JSON, &mut json.as_bytes(), budget, &mut hasher)?;
+    budget -= write_file(dest, QUIZ_JSON, &mut json.as_bytes(), path, budget, &mut hasher)?;
     for reference in quiz.media_files() {
         let source = source_root.join(reference);
         let Ok(mut media) = File::open(&source) else {
             // Reported as missing by the check after unpacking.
             continue;
         };
-        budget -= write_file(dest, reference, &mut media, budget, &mut hasher)?;
+        budget -= write_file(dest, reference, &mut media, &source, budget, &mut hasher)?;
     }
     Ok(finish(hasher))
 }
 
-/// Writes one file of a package, adds its name and contents to the hash and
-/// returns its size. Fails if it would exceed `budget` bytes.
-fn write_file(dest: &Path, name: &str, contents: &mut impl Read, budget: u64, hasher: &mut Sha256) -> Result<u64> {
+/// Writes one file of a package from `contents` (read from the file
+/// `source`), adds its name and contents to the hash and returns its size.
+/// Fails if it would exceed `budget` bytes.
+fn write_file(
+    dest: &Path,
+    name: &str,
+    contents: &mut impl Read,
+    source: &Path,
+    budget: u64,
+    hasher: &mut Sha256,
+) -> Result<u64> {
     let path = dest.join(name);
     if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent).context(|| format!("cannot create {}", parent.display()))?;
+        fs::create_dir_all(parent).context(FileAction::CreateFolder, parent)?;
     }
-    let file = File::create(&path).context(|| format!("cannot write {}", path.display()))?;
+    let mut file = File::create(&path).context(FileAction::Write, &path)?;
     hasher.update(name.as_bytes());
     hasher.update([0]);
-    let mut out = HashingWriter { inner: file, hasher };
-    let copied = io::copy(&mut contents.take(budget + 1), &mut out).context(|| format!("cannot unpack {name}"))?;
-    if copied > budget {
-        return Err(QuizFileError::TooLarge);
-    }
-    out.hasher.update(copied.to_le_bytes());
+    let mut left = budget;
+    let copied = copy(contents, source, &mut file, &path, |chunk| {
+        left = left.checked_sub(chunk.len() as u64).ok_or(QuizFileError::TooLarge)?;
+        hasher.update(chunk);
+        Ok(())
+    })?;
+    hasher.update(copied.to_le_bytes());
     // A package folder is used as it is after a restart, so it must be complete on disk.
-    out.inner.sync_all().context(|| format!("cannot write {}", path.display()))?;
+    file.sync_all().context(FileAction::Write, &path)?;
     Ok(copied)
-}
-
-struct HashingWriter<'a> {
-    inner: File,
-    hasher: &'a mut Sha256,
-}
-
-impl Write for HashingWriter<'_> {
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        let n = self.inner.write(buf)?;
-        self.hasher.update(&buf[..n]);
-        Ok(n)
-    }
-
-    fn flush(&mut self) -> io::Result<()> {
-        self.inner.flush()
-    }
 }
 
 /// 128 bits of the hash, as the package folder name.
@@ -415,6 +472,12 @@ fn remove_dir(path: &Path) {
 mod tests {
     use super::*;
     use quiz_core::{Slide, SlideContent};
+
+    /// The problem `check` reports when the quiz's flag picture is missing.
+    fn flag_missing() -> Vec<ValidationError> {
+        let problem = Problem::Media { file: "media/flag.png".into(), issue: MediaIssue::Missing };
+        vec![ValidationError { slide_id: Some("intro".into()), problem }]
+    }
 
     /// A fresh, empty folder for one test.
     fn temp(name: &str) -> PathBuf {
@@ -475,8 +538,27 @@ mod tests {
         let quiz = quiz_with_picture("media/flag.png");
         let file = temp("save-missing").join("test.quiz");
         let err = save(&quiz, &temp("save-missing-media"), &file).unwrap_err();
-        assert!(matches!(err, QuizFileError::Invalid(ref p) if p == &["slide intro: media file missing: media/flag.png"]), "{err}");
+        assert!(matches!(err, QuizFileError::Invalid(ref p) if *p == flag_missing()), "{err}");
         assert!(!file.exists());
+    }
+
+    #[test]
+    fn saving_refuses_a_quiz_no_reader_would_open() {
+        let quiz = quiz_with_picture("media/flag.png");
+        let media = media_folder("save-big", &[("media/flag.png", &[0u8; 1000])]);
+        let temp = temp("save-big-out").join("test.quiz");
+        assert!(matches!(write_zip(&quiz, &media, &temp, 1000), Err(QuizFileError::TooLarge)));
+        assert!(write_zip(&quiz, &media, &temp, 2000).is_ok());
+    }
+
+    #[test]
+    fn a_failed_save_names_the_file_not_its_temporary_copy() {
+        let folder = temp("save-blocked");
+        let dest = folder.join("test.quiz");
+        // A folder where the temporary file would go makes creating it fail.
+        fs::create_dir_all(folder.join(".test.quiz.saving")).unwrap();
+        let err = write_atomic(&dest, b"x").unwrap_err();
+        assert!(matches!(err, QuizFileError::Io { action: FileAction::Write, ref path, .. } if *path == dest), "{err}");
     }
 
     #[test]
@@ -488,10 +570,25 @@ mod tests {
         );
         let cache = temp("unsafe-cache");
         let err = open(&file, &cache).unwrap_err();
-        assert!(matches!(err, QuizFileError::Invalid(ref p) if p == &["slide intro: media file missing: media/flag.png"]), "{err}");
+        assert!(matches!(err, QuizFileError::Invalid(ref p) if *p == flag_missing()), "{err}");
         assert!(!cache.parent().unwrap().join("evil.png").exists());
         // A failed open leaves nothing behind.
         assert_eq!(fs::read_dir(&cache).unwrap().count(), 0);
+    }
+
+    #[test]
+    fn opening_again_repairs_a_package_folder_left_half_deleted() {
+        let media = media_folder("half-media", &[("media/flag.png", b"png bytes")]);
+        let file = temp("half-file").join("test.quiz");
+        save(&quiz_with_picture("media/flag.png"), &media, &file).unwrap();
+        let cache = temp("half-cache");
+        let package = open(&file, &cache).unwrap();
+        // A `prune` that stopped half way, e.g. at a file Windows kept locked.
+        fs::remove_file(package.root.join("media/flag.png")).unwrap();
+
+        let again = open(&file, &cache).unwrap();
+        assert_eq!(again.root, package.root);
+        assert_eq!(fs::read(again.root.join("media/flag.png")).unwrap(), b"png bytes");
     }
 
     #[test]
@@ -521,15 +618,19 @@ mod tests {
     fn unpacking_stops_at_the_size_limit() {
         let dest = temp("budget");
         let mut hasher = Sha256::new();
-        let err = write_file(&dest, "media/big.mp4", &mut &[0u8; 100][..], 99, &mut hasher).unwrap_err();
+        let source = Path::new("big.mp4");
+        let err = write_file(&dest, "media/big.mp4", &mut &[0u8; 100][..], source, 99, &mut hasher).unwrap_err();
         assert!(matches!(err, QuizFileError::TooLarge));
-        assert_eq!(write_file(&dest, "media/ok.mp4", &mut &[0u8; 100][..], 100, &mut hasher).unwrap(), 100);
+        assert_eq!(write_file(&dest, "media/ok.mp4", &mut &[0u8; 100][..], source, 100, &mut hasher).unwrap(), 100);
     }
 
     #[test]
     fn imports_media_under_safe_unique_names() {
         let root = temp("import");
-        let sources = media_folder("import-src", &[("a/Flag.png", b"one"), ("b/Flag.png", b"two"), ("c/we:ird?.jpg", b"x")]);
+        let sources = media_folder(
+            "import-src",
+            &[("a/Flag.png", b"one"), ("b/Flag.png", b"two"), ("c/we:ird?.jpg", b"x"), ("d/CON.png", b"x")],
+        );
         assert_eq!(import_media(&root, &sources.join("a/Flag.png")).unwrap(), "media/Flag.png");
         // Same name, same contents: reused. Same name, other contents: numbered.
         assert_eq!(import_media(&root, &sources.join("a/Flag.png")).unwrap(), "media/Flag.png");
@@ -538,6 +639,7 @@ mod tests {
         let weird = import_media(&root, &sources.join("c/we:ird?.jpg")).unwrap();
         assert_eq!(weird, "media/we_ird_.jpg");
         assert!(is_safe_reference(&weird));
+        assert_eq!(import_media(&root, &sources.join("d/CON.png")).unwrap(), "media/_CON.png");
     }
 
     #[test]
