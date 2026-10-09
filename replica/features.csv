@@ -104,7 +104,7 @@ AI question generation,studio,could,yes,no,§3.8; original sells AI credits; wou
 Read questions aloud with text-to-speech,studio,could,yes,no,§3.7.3; Web Speech API in the browser
 Connection quality test for players,director,could,yes,no,§5.7.8.1
 Generic USB buzzers in the browser,hardware,could,yes,no,via WebHID in Chromium only; not their proprietary receivers
-Proprietary keypads buzzers and receivers,hardware,could,yes,skip,vendor RF hardware and drivers; not rebuildable as software
+Proprietary keypads buzzers and receivers,hardware,must,yes,partial,scope changed 2026-10-05: USB-HID receiver driver with learn mode done; vendor protocol (lights / press time / battery) waits for the SDK; see docs/specification.md section 4
 Galaxy LED devices and wireless scoreboards,hardware,could,yes,skip,vendor hardware
 Cloud servers buzzerpad.com and buzzerpad.eu,services,could,yes,skip,their hosted service; we run our own backend
 Quiz Center content subscriptions,services,could,yes,skip,their content distribution business

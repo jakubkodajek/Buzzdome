@@ -1,7 +1,9 @@
 # Hardware: wireless buzzers
 
-Research notes, last updated 2026-10-05. Nothing here is verified on real
-hardware yet. Section numbers point into the v8.5 manual
+Research notes, last updated 2026-10-09. Nothing here is verified on real
+hardware yet. The driver built from these notes is described in
+`docs/design.md`; the test plan for the real receiver is
+`docs/hardware-test.md`. Section numbers point into the v8.5 manual
 (`replica/sources/manual-v8.5/`).
 
 ## What the events use
@@ -85,6 +87,20 @@ Vendor software model (from public descriptions of Enjoy's SDK "librf21x"):
   presses become key presses, with no light control and no lockout. The French
   iZiMiX / Enjoy Slam drives lights and lockout natively.
 
+## Manufacturer's answers (October 2026)
+
+Enjoy Tech replied to Jakub's email:
+
+- The model is either 215 or 303S; check the label under the base.
+- The protocol is described in their SDK.
+- The receiver reports the press **time** (so fastest-finger ranking can use
+  hardware times, not just arrival order).
+- Different versions use different protocols (dome and RGB differ).
+- The SDK is free of charge ("not licence charged"); the reference app is the
+  paid part. They asked why we want it open source and which part. What the
+  SDK terms allow (implementing the protocol in this app, publishing that
+  code) is still unanswered.
+
 ## How we get the protocol
 
 1. **Identify.** Photos of the receiver, the cable and the label under a
@@ -100,8 +116,9 @@ Vendor software model (from public descriptions of Enjoy's SDK "librf21x"):
    reports: connect, every button on two or three buzzers, a fastest-finger
    race, each light state, RGB colours, battery test, programming an ID.
    Captures go in `replica/captures/` (gitignored).
-4. **Spike in Rust.** A CLI on `hidapi` that prints button presses with buzzer
-   ID and timestamps and sets the lights. Milestone 0, before any UI.
+4. **Spike in Rust.** Done: `cargo run -p buzzers --example hid-monitor`
+   prints raw reports with timestamps, and the app's Receiver tab records and
+   exports them. Lights follow once the protocol is known.
 
 ## Design consequences
 

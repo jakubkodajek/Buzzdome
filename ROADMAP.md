@@ -14,24 +14,25 @@ Status keys: `[x]` done, `[~]` in progress, `[ ]` not started.
 - [x] Manuals converted to searchable Markdown (`replica/sources/`, gitignored)
 - [x] Scope decision: desktop app, Windows, hardware buzzers, Czech + English
 - [x] Hardware research: OEM, receiver, cable, SDK situation (`replica/hardware.md`)
-- [ ] Identify the colleague's buzzer model and the cable's USB VID/PID (photos, Device Manager)
-- [ ] Buzzer protocol: official SDK from the manufacturer, or captures of the USB traffic
+- [ ] Identify the colleague's buzzer model and the cable's USB VID/PID (steps in `docs/hardware-test.md`)
+- [~] Buzzer protocol: Enjoy says the SDK is free and covers it (dome and RGB differ); SDK and its terms requested. Raw report capture is built into the app
 - [ ] Re-prioritise `features.csv` for the desktop scope (phone rows to skip, buzzer rows to must)
 
 ## Phase 2: Design
 
 - [x] Stack: Tauri 2, Rust core, React + TypeScript UI
+- [x] Specification and design: `docs/specification.md`, `docs/design.md` (incl. theme and plugin formats)
 - [~] Quiz file format v1: JSON model done (`crates/quiz-core/src/model.rs`); ZIP with `media/` and `docs/quiz-format.md` to do
 - [x] Game state machine and scoring rules, documented next to the code
 - [x] Persistence and crash recovery: append-only command journal, replayed on resume
-- [~] `BuzzerDriver` trait: keyboard and virtual done, hardware receiver to do
+- [x] `BuzzerDriver` trait: keyboard, virtual and USB-HID receiver (`crates/buzzers`)
 - [~] Screen designs: host screen and Director follow the reference layout (done); editor to do
 
 ## Phase 3: Build
 
 ### M0: Skeleton (week 1)
 - [x] Tauri app with Director window and a full-screen Host window on a chosen monitor
-- [~] Pure Rust core crate with unit tests (done); CI build for Windows (`.github/workflows/windows-build.yml`, waits for the first push)
+- [x] Pure Rust core crate with unit tests; CI tests and builds installers for Windows, macOS and Linux (`.github/workflows/build.yml`)
 - [x] Keyboard and on-screen virtual buzzers feeding the same event stream
 
 ### M1: Playable core (week 1-2)
@@ -43,9 +44,14 @@ Status keys: `[x]` done, `[~]` in progress, `[ ]` not started.
 - [~] Crash recovery: resume the last show from the start screen (first version)
 
 ### M2: Real buzzers (as soon as the protocol is known)
-- [ ] Hardware driver: presses with buzzer ID and order/time
-- [ ] Buzzer lights: ready, locked out, first, correct, wrong (colours on RGB models)
-- [ ] Buzzer registration screen and a buzzer test tool
+- [x] Receiver connection: pick the USB device, remember it, reconnect after unplugging, OS hints (udev rule, Input Monitoring)
+- [x] Presses in receiver order through the journal, held buttons count once
+- [x] Learn mode: teach each button when the protocol is unknown (no lights)
+- [x] Receiver tab with live presses, raw reports and log export; `hid-monitor` CLI
+- [ ] First test with the real receiver (`docs/hardware-test.md`)
+- [ ] Vendor protocol from the SDK: buzzer ID, press time, lights, battery (dome and RGB)
+- [~] Buzzer lights: ready, locked out, first, correct, wrong; game sends them, encoding waits for the protocol
+- [~] Buzzer registration (any press registers in the lobby) and a buzzer test grid (list view done)
 - [ ] Fallback: vendor keystroke mode through the keyboard driver
 
 ### M3: Authoring (week 2-3)
@@ -58,6 +64,10 @@ Status keys: `[x]` done, `[~]` in progress, `[ ]` not started.
 - [ ] Czech and English UI
 - [ ] Should-haves from `features.csv` that the first event needs
 
+### M5: Extensions (after the first event)
+- [ ] Backgrounds and theme packages (`docs/specification.md` section 5)
+- [ ] Plugins: mini games and integrations (`docs/specification.md` section 6)
+
 ## Phase 4: Test
 
 - [ ] Unit tests for scoring and the state machine
@@ -68,7 +78,7 @@ Status keys: `[x]` done, `[~]` in progress, `[ ]` not started.
 
 ## Phase 5: Run
 
-- [ ] Windows installer and a portable build
+- [~] Installers for Windows, macOS and Linux from CI (unsigned); code signing and a portable build to do
 - [ ] Event checklist: laptop power, display settings, receiver, spare batteries, backup quiz file
 - [ ] First live event
 - [ ] Retrospective: what to fix and what to build next

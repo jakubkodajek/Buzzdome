@@ -48,17 +48,23 @@ on `PATH` first (macOS dev machine).
 | lint Rust | `cargo clippy --workspace --all-targets` |
 | type-check UI | `cd app && npx tsc --noEmit` |
 | UI preview in a browser (mocked backend) | `cd app && npm run dev`, then `/preview.html?window=host&scene=running` (scenes in `app/src/dev/preview.tsx`) |
-| Windows installer | CI: `.github/workflows/windows-build.yml` on every push, artifact `quiz-show-windows` |
-| build installer | `cd app && npm run tauri build` (Windows build must run on Windows) |
+| installers | CI: `.github/workflows/build.yml` on every push, artifacts `quiz-show-windows`, `quiz-show-macos`, `quiz-show-linux` |
+| receiver probe (no app) | `cargo run -p buzzers --example hid-monitor [-- VID:PID]` |
+| build installer | `cd app && npm run tauri build` (each OS builds its own installer) |
 
 Layout: `crates/quiz-core` (model, game state machine, scoring, view),
-`crates/buzzers` (driver trait), `app/src-tauri` (Tauri shell, session journal),
+`crates/buzzers` (driver trait, USB-HID receiver thread, protocols, learn mode),
+`app/src-tauri` (Tauri shell, session journal, `hardware.rs` receiver setup),
 `app/src` (React UI: `director/`, `host/`), `samples/demo-quiz.json`.
 Show sessions are journaled under the OS app-data dir in `sessions/<start ms>/`.
 
 ## Where things live
 
 - `ROADMAP.md`: phases, milestones and what is done.
+- `docs/specification.md`: requirements with IDs (buzzer link, themes, plugins).
+  `docs/design.md`: architecture, buzzer stack. `docs/hardware-test.md`:
+  checklist for the real receiver. Jakub keeps a copy of the reference manual
+  in `docs/` locally; it is gitignored and must never be committed.
 - `replica/recon.md`: screens (S01..S42), flows (F01..F10), components, data model and
   scoring rules of the reference app. Read it before designing or building a feature.
   Its phone, PIN/QR and cloud parts are out of scope now.
