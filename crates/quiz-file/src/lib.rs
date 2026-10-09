@@ -177,7 +177,18 @@ fn replace_file(dest: &Path, write: impl FnOnce(&Path) -> Result<()>) -> Result<
     if written.is_err() {
         let _ = fs::remove_file(&temp);
     }
-    written
+    written?;
+    sync_dir(dest.parent().unwrap_or(Path::new(".")))
+}
+
+/// Makes the renames in `dir` durable. Only Unix can open a directory to
+/// sync it; on Windows this does nothing.
+fn sync_dir(dir: &Path) -> Result<()> {
+    #[cfg(unix)]
+    File::open(dir).and_then(|d| d.sync_all()).context(|| format!("cannot sync {}", dir.display()))?;
+    #[cfg(not(unix))]
+    let _ = dir;
+    Ok(())
 }
 
 /// Copies a media file into the package folder `root` and returns its

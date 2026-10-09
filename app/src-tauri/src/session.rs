@@ -6,7 +6,7 @@ use quiz_core::{Quiz, Stamped};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 use std::fs::{self, File, OpenOptions};
-use std::io::Write;
+use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
 const QUIZ_FILE: &str = "quiz.json";
@@ -35,6 +35,10 @@ pub struct SessionSummary {
 
 pub struct Session {
     journal: File,
+    /// Bytes of whole, accepted lines in the journal.
+    len: u64,
+    /// A failed write could not be taken back; nothing more may be appended.
+    broken: bool,
 }
 
 /// A session reopened after a restart, with everything needed to rebuild the show.
@@ -47,56 +51,109 @@ pub struct Resumed {
 
 impl Session {
     /// Starts a new session folder under `root`.
-    pub fn create(root: &Path, quiz: &Quiz, meta: &SessionMeta) -> std::io::Result<Session> {
+    pub fn create(root: &Path, quiz: &Quiz, meta: &SessionMeta) -> io::Result<Session> {
         let dir = root.join(meta.started_ms.to_string());
         fs::create_dir_all(&dir)?;
-        write_synced(&dir.join(QUIZ_FILE), &to_json(quiz)?)?;
-        write_synced(&dir.join(META_FILE), &to_json(meta)?)?;
+        write_atomic(&dir.join(QUIZ_FILE), quiz)?;
+        write_atomic(&dir.join(META_FILE), meta)?;
         let journal = OpenOptions::new().create(true).append(true).open(dir.join(JOURNAL_FILE))?;
-        Ok(Session { journal })
+        let len = journal.metadata()?.len();
+        Ok(Session { journal, len, broken: false })
     }
 
     /// Reopens the most recent session for appending, with its quiz and journal.
-    pub fn resume_latest(root: &Path) -> std::io::Result<Option<Resumed>> {
+    pub fn resume_latest(root: &Path) -> io::Result<Option<Resumed>> {
         let Some(dir) = latest_dir(root)? else { return Ok(None) };
         let quiz = Quiz::from_json(&fs::read_to_string(dir.join(QUIZ_FILE))?)
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
         let meta: SessionMeta = serde_json::from_str(&fs::read_to_string(dir.join(META_FILE))?)?;
         let (journal, valid_len) = read_journal(&dir.join(JOURNAL_FILE))?;
         let file = OpenOptions::new().create(true).append(true).open(dir.join(JOURNAL_FILE))?;
         // Cut off a torn last line so new commands start on a clean line.
         file.set_len(valid_len)?;
-        Ok(Some(Resumed { session: Session { journal: file }, quiz, journal, meta }))
+        let session = Session { journal: file, len: valid_len, broken: false };
+        Ok(Some(Resumed { session, quiz, journal, meta }))
     }
 
-    pub fn latest_summary(root: &Path) -> std::io::Result<Option<SessionSummary>> {
+    pub fn latest_summary(root: &Path) -> io::Result<Option<SessionSummary>> {
         let Some(dir) = latest_dir(root)? else { return Ok(None) };
         let meta: SessionMeta = serde_json::from_str(&fs::read_to_string(dir.join(META_FILE))?)?;
         let command_count = read_journal(&dir.join(JOURNAL_FILE))?.0.len();
         Ok(Some(SessionSummary { meta, command_count }))
     }
 
-    /// Appends one accepted command and waits until it is on disk.
-    pub fn append(&mut self, stamped: &Stamped) -> std::io::Result<()> {
+    /// Appends one accepted command and waits until it is on disk. On an
+    /// error the command is not in the journal and must be rejected.
+    pub fn append(&mut self, stamped: &Stamped) -> io::Result<()> {
+        if self.broken {
+            return Err(io::Error::other("the show's journal could not be repaired after a failed write"));
+        }
         let mut line = serde_json::to_string(stamped)?;
         line.push('\n');
-        self.journal.write_all(line.as_bytes())?;
-        self.journal.sync_data()
+        append_line(&mut self.journal, &mut self.len, line.as_bytes()).inspect_err(|e| {
+            if let AppendError::Unrepaired(_) = e {
+                self.broken = true;
+            }
+        }).map_err(AppendError::into_io)
     }
 }
 
-fn to_json<T: Serialize>(value: &T) -> std::io::Result<String> {
-    Ok(serde_json::to_string_pretty(value)?)
+/// What the journal is written to; tests use a file that fails on purpose.
+trait JournalFile: Write {
+    fn sync(&mut self) -> io::Result<()>;
+    fn truncate(&mut self, len: u64) -> io::Result<()>;
 }
 
-fn write_synced(path: &Path, contents: &str) -> std::io::Result<()> {
-    let mut file = File::create(path)?;
-    file.write_all(contents.as_bytes())?;
-    file.sync_all()
+impl JournalFile for File {
+    fn sync(&mut self) -> io::Result<()> {
+        self.sync_data()
+    }
+
+    fn truncate(&mut self, len: u64) -> io::Result<()> {
+        self.set_len(len)
+    }
+}
+
+#[derive(Debug)]
+enum AppendError {
+    /// The line is not in the journal; the journal is as before.
+    Failed(io::Error),
+    /// The line could not be taken back off; the journal may end in a torn line.
+    Unrepaired(io::Error),
+}
+
+impl AppendError {
+    fn into_io(self) -> io::Error {
+        match self {
+            AppendError::Failed(e) | AppendError::Unrepaired(e) => e,
+        }
+    }
+}
+
+/// Appends `line` to a journal whose whole lines take `len` bytes, and syncs.
+/// A failed write or sync is taken back off, so the journal never holds a
+/// partial line (which would hide every later command on resume) nor a
+/// command that was rejected (which would be replayed).
+fn append_line(file: &mut impl JournalFile, len: &mut u64, line: &[u8]) -> Result<(), AppendError> {
+    match file.write_all(line).and_then(|()| file.sync()) {
+        Ok(()) => {
+            *len += line.len() as u64;
+            Ok(())
+        }
+        Err(e) => match file.truncate(*len).and_then(|()| file.sync()) {
+            Ok(()) => Err(AppendError::Failed(e)),
+            Err(_) => Err(AppendError::Unrepaired(e)),
+        },
+    }
+}
+
+fn write_atomic<T: Serialize>(path: &Path, value: &T) -> io::Result<()> {
+    let json = serde_json::to_string_pretty(value)?;
+    quiz_file::write_atomic(path, json.as_bytes()).map_err(io::Error::other)
 }
 
 /// Session folders are named by start time in milliseconds.
-fn latest_dir(root: &Path) -> std::io::Result<Option<PathBuf>> {
+fn latest_dir(root: &Path) -> io::Result<Option<PathBuf>> {
     if !root.exists() {
         return Ok(None);
     }
@@ -115,7 +172,7 @@ fn latest_dir(root: &Path) -> std::io::Result<Option<PathBuf>> {
 
 /// Reads the journal and returns the commands plus the byte length of the
 /// valid part. A torn last line (crash during a write) is dropped.
-fn read_journal(path: &Path) -> std::io::Result<(Vec<Stamped>, u64)> {
+fn read_journal(path: &Path) -> io::Result<(Vec<Stamped>, u64)> {
     if !path.exists() {
         return Ok((Vec::new(), 0));
     }
@@ -176,5 +233,66 @@ mod tests {
         resumed.session.append(&Stamped { at_ms: 8, command: Command::Next }).unwrap();
         assert_eq!(Session::latest_summary(&root).unwrap().unwrap().command_count, 3);
         fs::remove_dir_all(&root).unwrap();
+    }
+
+    /// A journal in memory that fails its next write after `fail_after` bytes,
+    /// or its next truncate.
+    #[derive(Default)]
+    struct FlakyJournal {
+        bytes: Vec<u8>,
+        fail_after: Option<usize>,
+        fail_truncate: bool,
+    }
+
+    impl Write for FlakyJournal {
+        fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+            match self.fail_after.take() {
+                Some(n) => {
+                    self.bytes.extend_from_slice(&buf[..n.min(buf.len())]);
+                    Err(io::Error::other("disk full"))
+                }
+                None => {
+                    self.bytes.extend_from_slice(buf);
+                    Ok(buf.len())
+                }
+            }
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
+
+    impl JournalFile for FlakyJournal {
+        fn sync(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+
+        fn truncate(&mut self, len: u64) -> io::Result<()> {
+            if self.fail_truncate {
+                return Err(io::Error::other("cannot truncate"));
+            }
+            self.bytes.truncate(len as usize);
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn a_failed_append_leaves_no_partial_line() {
+        let mut journal = FlakyJournal::default();
+        let mut len = 0;
+        append_line(&mut journal, &mut len, b"one\n").unwrap();
+        journal.fail_after = Some(2);
+        assert!(matches!(append_line(&mut journal, &mut len, b"two\n"), Err(AppendError::Failed(_))));
+        append_line(&mut journal, &mut len, b"three\n").unwrap();
+        assert_eq!(journal.bytes, b"one\nthree\n");
+        assert_eq!(len, 10);
+    }
+
+    #[test]
+    fn an_append_that_cannot_be_taken_back_says_so() {
+        let mut journal = FlakyJournal { fail_after: Some(2), fail_truncate: true, ..Default::default() };
+        let mut len = 0;
+        assert!(matches!(append_line(&mut journal, &mut len, b"one\n"), Err(AppendError::Unrepaired(_))));
     }
 }
