@@ -27,6 +27,7 @@ import { phaseLabel } from "../phase";
 import { slideContext } from "../quiz";
 import { useSlideSound, type SlideSound } from "../slide-sound";
 import { playCue } from "../sound";
+import { ThemeContext, useResolvedTheme } from "../theme/context";
 import type { GameView, Quiz } from "../types";
 import { QuestionsTab } from "./QuestionsTab";
 import { ReceiverTab } from "./ReceiverTab";
@@ -84,6 +85,7 @@ function DirectorLayout({ testRun, onEditor }: { testRun: boolean; onEditor: () 
   const { t } = useApp();
   const view = useGameView();
   const quiz = useQuiz();
+  const theme = useResolvedTheme(quiz?.theme ?? null);
   const projector = useProjectorSettings();
   const [tab, setTab] = useState<Tab>("questions");
   useShortcuts(view, projector.toggle);
@@ -113,7 +115,9 @@ function DirectorLayout({ testRun, onEditor }: { testRun: boolean; onEditor: () 
         </nav>
         <LearnBanner />
         <div className="tab-body">
-          <TabBody tab={tab} view={view} quiz={quiz} projector={projector} />
+          <ThemeContext value={theme}>
+            <TabBody tab={tab} view={view} quiz={quiz} projector={projector} />
+          </ThemeContext>
         </div>
         <StatusBar view={view} quiz={quiz} testRun={testRun} />
       </div>

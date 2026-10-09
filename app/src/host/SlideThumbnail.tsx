@@ -1,6 +1,7 @@
 import { memo } from "react";
 import { sameContext, type SlideContext } from "../quiz";
 import { SlideBackground } from "../slide-media";
+import { screenOf } from "../theme/themes";
 import type { Slide } from "../types";
 import { previewView } from "./preview";
 import { SlideScreen } from "./SlideScreen";
@@ -19,10 +20,11 @@ interface SlideThumbnailProps {
  * which sets its size). Drawn again only when what it shows changes.
  */
 export const SlideThumbnail = memo(function SlideThumbnail({ className, slide, index, count, context }: SlideThumbnailProps) {
+  const view = previewView(slide, index, count, "");
   return (
-    <Stage className={className}>
+    <Stage className={className} screen={screenOf(view)}>
       <SlideBackground slide={slide} mode="thumbnail" />
-      <SlideScreen view={previewView(slide, index, count, "")} context={context} clock={null} mode="thumbnail" />
+      <SlideScreen view={view} context={context} clock={null} mode="thumbnail" />
     </Stage>
   );
 }, sameThumbnail);

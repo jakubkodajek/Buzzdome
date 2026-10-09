@@ -489,7 +489,7 @@ mod tests {
     fn quiz_with_picture(picture: &str) -> Quiz {
         let mut slide = Slide::new("intro", SlideContent::Billboard { title: "Round 1".into(), text: String::new() });
         slide.picture = Some(picture.into());
-        Quiz { schema_version: quiz_core::SCHEMA_VERSION, title: "Test".into(), slides: vec![slide] }
+        Quiz::new("Test", vec![slide])
     }
 
     fn media_folder(name: &str, files: &[(&str, &[u8])]) -> PathBuf {

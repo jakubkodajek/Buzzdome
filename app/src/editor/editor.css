@@ -329,6 +329,45 @@
   background: var(--pressed);
 }
 
+/* Design tab: the themes, each drawn on a sample question */
+
+.theme-gallery {
+  display: flex;
+  gap: 2px;
+}
+
+.studio .theme-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 3px 3px 1px;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  font-size: 11px;
+  line-height: 1.2;
+}
+
+.studio .theme-tile:hover,
+.studio .theme-tile:focus-visible {
+  border-color: var(--hover-line);
+  background: var(--hover);
+}
+
+.studio .theme-tile[aria-pressed="true"] {
+  border-color: var(--accent);
+  background: var(--pressed);
+}
+
+.theme-thumbnail {
+  position: relative;
+  width: 96px;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  background: #000;
+  pointer-events: none;
+}
+
 .ribbon-fields {
   display: grid;
   grid-auto-flow: column;
@@ -1129,14 +1168,6 @@
 .sketch-media + .sketch-answers {
   grid-column: 2;
   grid-template-columns: 1fr;
-}
-
-.sketch-answers.six {
-  grid-template-columns: 1fr 1fr 1fr;
-}
-
-.sketch-media + .sketch-answers.six {
-  grid-template-columns: 1fr 1fr;
 }
 
 .sketch-answers span {

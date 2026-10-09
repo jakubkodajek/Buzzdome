@@ -6,6 +6,7 @@ import { newSlide } from "./slides";
 const quiz: Quiz = {
   schemaVersion: 1,
   title: "Quiz",
+  theme: "builtin.night",
   slides: [newSlide("billboard", "a"), newSlide("question", "b"), newSlide("endOfRound", "c")],
 };
 const ids = (h: History) => h.present.slides.map((s) => s.id);
@@ -43,6 +44,7 @@ describe("history", () => {
     const h = startHistory(quiz);
     expect(historyReducer(h, { type: "edit", edit: { type: "removeSlide", index: 9 }, at: 0 })).toBe(h);
     expect(historyReducer(h, { type: "edit", edit: { type: "setTitle", title: "Quiz" }, at: 0 })).toBe(h);
+    expect(historyReducer(h, { type: "edit", edit: { type: "setTheme", theme: "builtin.night" }, at: 0 })).toBe(h);
     expect(historyReducer(h, { type: "undo" })).toBe(h);
     expect(historyReducer(h, { type: "edit", edit: { type: "updateSlide", id: "a", update: (s) => s }, at: 0 })).toBe(h);
     expect(historyReducer(h, { type: "edit", edit: { type: "updateSlide", id: "gone", update: (s) => ({ ...s, notes: "x" }) }, at: 0 })).toBe(h);
@@ -50,6 +52,14 @@ describe("history", () => {
     changed = historyReducer(changed, { type: "undo" });
     changed = historyReducer(changed, { type: "edit", edit: { type: "setTitle", title: "B" }, at: 1 });
     expect(changed.future).toEqual([]);
+  });
+
+  it("changes the theme as one undo step", () => {
+    let h = startHistory(quiz);
+    h = historyReducer(h, { type: "edit", edit: { type: "setTheme", theme: "builtin.neon" }, at: 0 });
+    expect(h.present.theme).toBe("builtin.neon");
+    h = historyReducer(h, { type: "undo" });
+    expect(h.present.theme).toBe("builtin.night");
   });
 
   it("updates a slide as it is when the update lands", () => {

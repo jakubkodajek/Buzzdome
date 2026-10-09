@@ -129,12 +129,17 @@ The buzzer link is accepted when the checklist in
 [`hardware-test.md`](hardware-test.md) passes on the event laptop (Windows)
 and on one Mac, with at least four buzzers.
 
-## 5. Backgrounds and themes (planned)
+## 5. Backgrounds and themes
 
 Users bring their own wallpapers and looks. This mirrors what the reference
 app offers (background picture or looping video per slide, a gallery of
 backgrounds, skins that inherit from a built-in skin and override only what
 changes) with our own file format.
+
+Built so far: backgrounds per slide, and five built-in themes (Classic,
+Studio, Night, Showtime, Neon) chosen per quiz on the editor's Design tab,
+with a live preview while the pointer is on one. Theme packages, the
+background gallery and round or quiz backgrounds are planned.
 
 ### 5.1 Background files
 
@@ -206,10 +211,10 @@ autumn.qstheme
 | ID | Requirement |
 | --- | --- |
 | TH-1 | `format` is the theme format version; the app refuses a format it does not know, with a message. `id` is unique (reverse domain style); importing a theme with an existing `id` and a higher `version` updates it. |
-| TH-2 | Inheritance: every key that is missing, or set to `"default"`, comes from the `parent` theme, recursively, ending at a built-in theme. A theme only lists what it changes. |
+| TH-2 | Inheritance: every key that is missing, or set to `"default"`, comes from the `parent` theme, recursively, ending at a built-in theme. A theme only lists what it changes. Backgrounds are the exception: a screen the theme leaves out takes the theme's own background of the screen it falls back to (TH-5) before any parent's, so a theme that sets only `default` is not mixed with its parent's pictures. |
 | TH-3 | Paths are relative to the package root and must stay inside it. Every file is checked on import (format, size, BG-2). |
 | TH-4 | Colours are `#rrggbb` or `#rrggbbaa`. Fonts must be licensed for embedding; the import dialog reminds the user. |
-| TH-5 | Screen keys: `default`, `welcome`, `lobby`, `question`, `answer`, `leaderboard`, `roundEnd`, `final`. Unknown keys are ignored with a warning, so newer themes still load in older apps. |
+| TH-5 | Screen keys: `default` (every screen without its own), `welcome` (team registration before the first slide), `question` (a question being asked), `answer` (a question once its answer is shown, and explanation slides; falls back to `question`), `leaderboard` (the leaderboard shown over a slide), `roundEnd` (end-of-round slides; falls back to `leaderboard`), `final` (final results). Billboards use `default`. Unknown keys are ignored with a warning, so newer themes still load in older apps. |
 | TH-6 | Installed themes live in the app data folder under `themes/<id>/`; the quiz file stores the theme `id` and embeds the theme's files it uses (BG-7). |
 
 ### 5.3 What a designer gets

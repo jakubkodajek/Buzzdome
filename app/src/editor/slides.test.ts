@@ -113,7 +113,7 @@ describe("slides", () => {
   });
 
   it("makes ids no slide has", () => {
-    const quiz: Quiz = { schemaVersion: 1, title: "", slides: [newSlide("billboard", "s-a")] };
+    const quiz: Quiz = { schemaVersion: 1, title: "", theme: null, slides: [newSlide("billboard", "s-a")] };
     const ids = ["a", "a", "b"];
     expect(freshSlideId(quiz, () => ids.shift() as string)).toBe("s-b");
   });

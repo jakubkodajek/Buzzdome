@@ -25,8 +25,8 @@
   filter: drop-shadow(0 20px 40px rgba(0, 0, 0, 0.6));
 }
 
-.verdict-correct { color: #19b74f; }
-.verdict-wrong { color: #ee1c1c; }
+.verdict-correct { color: var(--theme-correct); }
+.verdict-wrong { color: var(--theme-wrong); }
 
 @keyframes verdict {
   0% { opacity: 0; transform: scale(0.4); }
@@ -36,7 +36,7 @@
   100% { opacity: 0; }
 }
 
-/* Leaderboard shown over any slide */
+/* Leaderboard shown over any slide, on the theme's leaderboard background */
 
 .overlay {
   position: absolute;
@@ -44,5 +44,8 @@
   z-index: 4;
   display: grid;
   place-items: center;
-  background: rgba(2, 5, 16, 0.9);
+}
+
+.overlay > .leaderboard {
+  position: relative;
 }

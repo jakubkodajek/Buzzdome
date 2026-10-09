@@ -7,6 +7,7 @@ import { SoundIcon } from "../icons";
 import { mediaFileName } from "../media";
 import type { SlideContext } from "../quiz";
 import { SlideBackground } from "../slide-media";
+import { screenOf } from "../theme/themes";
 import type { Quiz, Slide } from "../types";
 import { elementAt, type ElementId } from "./elements";
 
@@ -28,6 +29,7 @@ interface DesignAreaProps {
  */
 export function DesignArea({ quiz, index, slide, context, element, onSelect, onEdit, onMenu }: DesignAreaProps) {
   const { t } = useApp();
+  const view = previewView(slide, index, quiz.slides.length, quiz.title);
   return (
     <div
       className="design-area"
@@ -41,9 +43,9 @@ export function DesignArea({ quiz, index, slide, context, element, onSelect, onE
         onMenu(e, target);
       }}
     >
-      <Stage className="design-stage">
+      <Stage className="design-stage" screen={screenOf(view)}>
         <SlideBackground slide={slide} mode="preview" />
-        <SlideScreen view={previewView(slide, index, quiz.slides.length, quiz.title)} context={context} clock={null} mode="preview" />
+        <SlideScreen view={view} context={context} clock={null} mode="preview" />
         {slide.sound && (
           <div className="sound-badge" data-element="sound" title={t("mediaSound")}>
             <SoundIcon />

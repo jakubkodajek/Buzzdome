@@ -29,6 +29,10 @@ pub const MAX_TIME_LIMIT_S: u32 = 3_600;
 pub struct Quiz {
     pub schema_version: u32,
     pub title: String,
+    /// Id of the look the screens use (spec section 5.2); the app's default
+    /// when missing or not installed.
+    #[serde(default)]
+    pub theme: Option<String>,
     #[serde(default)]
     pub slides: Vec<Slide>,
 }
@@ -263,6 +267,11 @@ pub enum QuizJsonError {
 }
 
 impl Quiz {
+    /// A quiz of the current schema version in the default look.
+    pub fn new(title: impl Into<String>, slides: Vec<Slide>) -> Quiz {
+        Quiz { schema_version: SCHEMA_VERSION, title: title.into(), theme: None, slides }
+    }
+
     pub fn from_json(json: &str) -> Result<Quiz, QuizJsonError> {
         let mut quiz: Quiz = serde_json::from_str(json).map_err(|e| QuizJsonError::Syntax(e.to_string()))?;
         if quiz.schema_version > SCHEMA_VERSION {
@@ -357,7 +366,16 @@ mod tests {
         }"#;
         let quiz = Quiz::from_json(json).unwrap();
         assert_eq!(quiz.slides.len(), 4);
+        assert_eq!(quiz.theme, None);
         assert!(quiz.validate().is_ok());
+    }
+
+    #[test]
+    fn keeps_the_theme_id_even_when_it_is_not_installed() {
+        let quiz = Quiz::from_json(r#"{"schemaVersion": 2, "title": "x", "theme": "cz.example.gone"}"#).unwrap();
+        assert_eq!(quiz.theme.as_deref(), Some("cz.example.gone"));
+        assert!(quiz.validate().is_ok());
+        assert_eq!(Quiz::from_json(&serde_json::to_string(&quiz).unwrap()).unwrap(), quiz);
     }
 
     #[test]
@@ -379,7 +397,7 @@ mod tests {
 
     /// The problems `validate` finds in these slides.
     fn problems_of(slides: Vec<Slide>) -> Vec<Problem> {
-        let quiz = Quiz { schema_version: SCHEMA_VERSION, title: "x".into(), slides };
+        let quiz = Quiz::new("x", slides);
         quiz.validate().err().unwrap_or_default().into_iter().map(|e| e.problem).collect()
     }
 

@@ -82,6 +82,9 @@ UI conventions (keep one way of doing each thing):
   hints), `messages.ts` (backend codes in words).
 - Slides are drawn only by `host/SlideScreen.tsx` in a `host/Stage.tsx`
   (projector, editor canvas, thumbnails via `host/SlideThumbnail.tsx`).
+  Their look comes from the quiz's theme (`theme/themes.ts`, given by
+  `ThemeContext`): stage CSS takes colours and fonts only from `--theme-*`
+  variables, never a written colour that a theme should decide.
 - Editor: a slide changes only through the pure functions in
   `editor/slides.ts`; editor commands are `Action`s in the one record built in
   `editor/EditorScreen.tsx` (ribbon, menus and keys read it); slide fields are

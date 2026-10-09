@@ -6,6 +6,7 @@ import type { Quiz, SlideType } from "./types";
 const quizOf = (...types: SlideType[]): Quiz => ({
   schemaVersion: 2,
   title: "",
+  theme: null,
   slides: types.map((type, i) => newSlide(type, `s${i}`)),
 });
 

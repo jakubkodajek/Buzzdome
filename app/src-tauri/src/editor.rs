@@ -11,7 +11,7 @@
 
 use crate::app_data;
 use crate::error::{AppError, CmdResult};
-use quiz_core::{Quiz, ValidationError, SCHEMA_VERSION};
+use quiz_core::{Quiz, ValidationError};
 use quiz_file::FileAction;
 use serde::{Deserialize, Serialize};
 use std::fs;
@@ -124,7 +124,7 @@ pub async fn editor_new(app: AppHandle, lock: State<'_, EditorLock>, title: Stri
     let dir = editor_dir(&app)?;
     let folder = new_folder(&dir);
     let root = dir.join(&folder);
-    let quiz = Quiz { schema_version: SCHEMA_VERSION, title, slides: Vec::new() };
+    let quiz = Quiz::new(title, Vec::new());
     fs::create_dir_all(&root).map_err(|e| AppError::file(FileAction::CreateFolder, &root, e))?;
     quiz_file::write_quiz_json(&root, &quiz)?;
     let pointer = Pointer { folder, source_path: None, unsaved: false };

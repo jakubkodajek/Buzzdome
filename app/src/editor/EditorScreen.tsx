@@ -28,6 +28,7 @@ import {
 } from "../icons";
 import { MediaRootContext, type MediaKind } from "../media";
 import { NO_CONTEXT, slideContexts } from "../quiz";
+import { ThemeContext, useResolvedTheme } from "../theme/context";
 import type { Slide } from "../types";
 import { tooltip, useActionKeys, type Action, type Actions } from "./actions";
 import { Backstage, type BackstagePage } from "./Backstage";
@@ -99,8 +100,12 @@ function Studio({ editor, open, onExit }: { editor: QuizEditor; open: OpenQuiz |
   const [menu, setMenu] = useState<{ x: number; y: number; target: MenuTarget } | null>(null);
   const [gallery, setGallery] = useState<{ x: number; y: number } | null>(null);
   const [dialog, setDialog] = useState<{ id: string; focus: ElementId } | null>(null);
+  /** The theme pointed at in the ribbon, shown on the slide until the pointer leaves. */
+  const [previewTheme, setPreviewTheme] = useState<string | null>(null);
 
   const quiz = open?.history.present ?? null;
+  const theme = useResolvedTheme(quiz?.theme ?? null);
+  const slideTheme = useResolvedTheme(previewTheme ?? quiz?.theme ?? null);
   const slides = quiz?.slides ?? [];
   const contexts = useMemo(() => (quiz ? slideContexts(quiz) : []), [quiz]);
   const found = selection.id === null ? -1 : slides.findIndex((s) => s.id === selection.id);
@@ -341,140 +346,147 @@ function Studio({ editor, open, onExit }: { editor: QuizEditor; open: OpenQuiz |
 
   return (
     <MediaRootContext value={open?.mediaRoot ?? null}>
-      <div className="studio">
-        <header className="studio-titlebar">
-          <div className="quick-access">
-            {[actions.save, actions.undo, actions.redo].map((action) => (
-              <button
-                key={action.label}
-                type="button"
-                title={tooltip(action)}
-                aria-label={action.label}
-                disabled={action.disabled}
-                onClick={action.run}
-              >
+      <ThemeContext value={theme}>
+        <div className="studio">
+          <header className="studio-titlebar">
+            <div className="quick-access">
+              {[actions.save, actions.undo, actions.redo].map((action) => (
+                <button
+                  key={action.label}
+                  type="button"
+                  title={tooltip(action)}
+                  aria-label={action.label}
+                  disabled={action.disabled}
+                  onClick={action.run}
+                >
+                  {action.icon}
+                </button>
+              ))}
+            </div>
+            <span className="studio-title">
+              {title}
+              {unsaved && " *"} – {t("quizEditor")}
+            </span>
+            <button type="button" className="titlebar-exit" onClick={onExit}>
+              <BackIcon />
+              {t("backToDirector")}
+            </button>
+          </header>
+
+          {backstageShown ? (
+            <Backstage
+              open={open}
+              unsaved={unsaved}
+              page={backstage ?? "info"}
+              onPage={setBackstage}
+              onClose={open ? () => setBackstage(null) : null}
+              actions={actions}
+              recentFiles={editor.recentFiles}
+              onOpenFile={(path) => void editor.openQuiz(path).then(loaded)}
+              onTitle={(text) => editor.edit({ type: "setTitle", title: text }, "title")}
+              onShowSlide={(id) => {
+                setSelection({ id, index: 0, element: "slide" });
+                setView("graphical");
+                setBackstage(null);
+              }}
+            />
+          ) : (
+            quiz && (
+              <>
+                <Ribbon
+                  tab={tab}
+                  onTab={setTab}
+                  actions={actions}
+                  onGallery={(button) => setGallery({ x: button.left, y: button.bottom })}
+                  slide={slide}
+                  element={element}
+                  properties={properties}
+                  theme={theme.id}
+                  onTheme={(id) => editor.edit({ type: "setTheme", theme: id })}
+                  onPreviewTheme={setPreviewTheme}
+                />
+                <div className={panel && slide ? "studio-main with-panel" : "studio-main"}>
+                  {view === "graphical" ? (
+                    <>
+                      <Thumbnails
+                        quiz={quiz}
+                        contexts={contexts}
+                        selected={index}
+                        problems={new Set(open.problems.flatMap((p) => (p.slideId === null ? [] : [p.slideId])))}
+                        onSelect={(i) => select(i)}
+                        onOpen={(i) => {
+                          select(i);
+                          setDialog({ id: slides[i].id, focus: "slide" });
+                        }}
+                        onMenu={(e, i) => openMenu(e, i === null ? { kind: "list" } : { kind: "thumbnail" })}
+                        onMove={(from, to) => editor.edit({ type: "moveSlide", from, to })}
+                        onAdd={actions.addQuestion.run}
+                      />
+                      <div className="studio-center">
+                        {slide ? (
+                          <ThemeContext value={slideTheme}>
+                            <DesignArea
+                              quiz={quiz}
+                              index={index}
+                              slide={slide}
+                              context={contexts[index]}
+                              element={element}
+                              onSelect={selectPart}
+                              onEdit={openEdit}
+                              onMenu={(e, part) => openMenu(e, { kind: "canvas", element: part })}
+                            />
+                          </ThemeContext>
+                        ) : (
+                          <div className="design-empty">
+                            <p>{t("noSlides")}</p>
+                            <button type="button" onClick={(e) => setGallery({ x: e.clientX, y: e.clientY })}>
+                              {t("newSlide")}
+                            </button>
+                          </div>
+                        )}
+                        {notes && slide && <NotesBox notes={slide.notes} onChange={(text) => updateSlide(slide.id, (s) => ({ ...s, notes: text }), "notes")} />}
+                      </div>
+                    </>
+                  ) : (
+                    <div className="studio-center table-center">
+                      <TableView quiz={quiz} selected={index} onSelect={(i) => select(i)} onOpen={(i) => setDialog({ id: slides[i].id, focus: "slide" })} editingFor={editingFor} />
+                    </div>
+                  )}
+                  {panel && slide && <PropertiesPanel editing={editingFor(slide)} element={element} />}
+                </div>
+              </>
+            )
+          )}
+
+          <footer className="studio-status">
+            <span>{slide ? t("slide", { n: index + 1, total: slides.length }) : t("noSlideSelected")}</span>
+            {open && (
+              <button type="button" className={open.problems.length > 0 ? "status-problems bad" : "status-problems"} onClick={() => setBackstage("info")}>
+                {open.problems.length > 0 ? `⚠ ${t("problems", { n: open.problems.length })}` : `✓ ${t("readyToPlay")}`}
+              </button>
+            )}
+            {unsaved && <span>{t("unsaved")}</span>}
+            <span className="spacer" />
+            {open?.sourcePath && <span className="status-path">{open.sourcePath}</span>}
+            {[actions.graphical, actions.table].map((action) => (
+              <button key={action.label} type="button" className="status-view" title={action.label} aria-pressed={action.checked} onClick={action.run}>
                 {action.icon}
               </button>
             ))}
-          </div>
-          <span className="studio-title">
-            {title}
-            {unsaved && " *"} – {t("quizEditor")}
-          </span>
-          <button type="button" className="titlebar-exit" onClick={onExit}>
-            <BackIcon />
-            {t("backToDirector")}
-          </button>
-        </header>
+          </footer>
 
-        {backstageShown ? (
-          <Backstage
-            open={open}
-            unsaved={unsaved}
-            page={backstage ?? "info"}
-            onPage={setBackstage}
-            onClose={open ? () => setBackstage(null) : null}
-            actions={actions}
-            recentFiles={editor.recentFiles}
-            onOpenFile={(path) => void editor.openQuiz(path).then(loaded)}
-            onTitle={(text) => editor.edit({ type: "setTitle", title: text }, "title")}
-            onShowSlide={(id) => {
-              setSelection({ id, index: 0, element: "slide" });
-              setView("graphical");
-              setBackstage(null);
-            }}
-          />
-        ) : (
-          quiz && (
-            <>
-              <Ribbon
-                tab={tab}
-                onTab={setTab}
-                actions={actions}
-                onGallery={(button) => setGallery({ x: button.left, y: button.bottom })}
-                slide={slide}
-                element={element}
-                properties={properties}
-              />
-              <div className={panel && slide ? "studio-main with-panel" : "studio-main"}>
-                {view === "graphical" ? (
-                  <>
-                    <Thumbnails
-                      quiz={quiz}
-                      contexts={contexts}
-                      selected={index}
-                      problems={new Set(open.problems.flatMap((p) => (p.slideId === null ? [] : [p.slideId])))}
-                      onSelect={(i) => select(i)}
-                      onOpen={(i) => {
-                        select(i);
-                        setDialog({ id: slides[i].id, focus: "slide" });
-                      }}
-                      onMenu={(e, i) => openMenu(e, i === null ? { kind: "list" } : { kind: "thumbnail" })}
-                      onMove={(from, to) => editor.edit({ type: "moveSlide", from, to })}
-                      onAdd={actions.addQuestion.run}
-                    />
-                    <div className="studio-center">
-                      {slide ? (
-                        <DesignArea
-                          quiz={quiz}
-                          index={index}
-                          slide={slide}
-                          context={contexts[index]}
-                          element={element}
-                          onSelect={selectPart}
-                          onEdit={openEdit}
-                          onMenu={(e, part) => openMenu(e, { kind: "canvas", element: part })}
-                        />
-                      ) : (
-                        <div className="design-empty">
-                          <p>{t("noSlides")}</p>
-                          <button type="button" onClick={(e) => setGallery({ x: e.clientX, y: e.clientY })}>
-                            {t("newSlide")}
-                          </button>
-                        </div>
-                      )}
-                      {notes && slide && <NotesBox notes={slide.notes} onChange={(text) => updateSlide(slide.id, (s) => ({ ...s, notes: text }), "notes")} />}
-                    </div>
-                  </>
-                ) : (
-                  <div className="studio-center table-center">
-                    <TableView quiz={quiz} selected={index} onSelect={(i) => select(i)} onOpen={(i) => setDialog({ id: slides[i].id, focus: "slide" })} editingFor={editingFor} />
-                  </div>
-                )}
-                {panel && slide && <PropertiesPanel editing={editingFor(slide)} element={element} />}
-              </div>
-            </>
-          )
-        )}
-
-        <footer className="studio-status">
-          <span>{slide ? t("slide", { n: index + 1, total: slides.length }) : t("noSlideSelected")}</span>
-          {open && (
-            <button type="button" className={open.problems.length > 0 ? "status-problems bad" : "status-problems"} onClick={() => setBackstage("info")}>
-              {open.problems.length > 0 ? `⚠ ${t("problems", { n: open.problems.length })}` : `✓ ${t("readyToPlay")}`}
-            </button>
+          {menu && <ContextMenu x={menu.x} y={menu.y} items={menuItems(menu.target, menu.x, menu.y)} onClose={() => setMenu(null)} />}
+          {gallery && <LayoutGallery x={gallery.x} y={gallery.y} onPick={insertLayout} onClose={() => setGallery(null)} />}
+          {dialog && dialogSlide && (
+            <EditSlideDialog
+              slide={dialogSlide}
+              focus={dialog.focus}
+              onApply={(edited) => updateSlide(edited.id, () => edited)}
+              onClose={() => setDialog(null)}
+            />
           )}
-          {unsaved && <span>{t("unsaved")}</span>}
-          <span className="spacer" />
-          {open?.sourcePath && <span className="status-path">{open.sourcePath}</span>}
-          {[actions.graphical, actions.table].map((action) => (
-            <button key={action.label} type="button" className="status-view" title={action.label} aria-pressed={action.checked} onClick={action.run}>
-              {action.icon}
-            </button>
-          ))}
-        </footer>
-
-        {menu && <ContextMenu x={menu.x} y={menu.y} items={menuItems(menu.target, menu.x, menu.y)} onClose={() => setMenu(null)} />}
-        {gallery && <LayoutGallery x={gallery.x} y={gallery.y} onPick={insertLayout} onClose={() => setGallery(null)} />}
-        {dialog && dialogSlide && (
-          <EditSlideDialog
-            slide={dialogSlide}
-            focus={dialog.focus}
-            onApply={(edited) => updateSlide(edited.id, () => edited)}
-            onClose={() => setDialog(null)}
-          />
-        )}
-      </div>
+        </div>
+      </ThemeContext>
     </MediaRootContext>
   );
 }

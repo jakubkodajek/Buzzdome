@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { EditorDraft, Quiz, ValidationError } from "../types";
 import { editorReducer, isUnsaved, LOADING, type EditorState, type OpenQuiz } from "./editor-state";
 
-const quiz: Quiz = { schemaVersion: 1, title: "Quiz", slides: [] };
+const quiz: Quiz = { schemaVersion: 1, title: "Quiz", theme: null, slides: [] };
 const draft = (unsaved: boolean): EditorDraft => ({ quiz, sourcePath: "/q.quiz", unsaved, mediaRoot: "/d/", problems: [] });
 
 function opened(state: EditorState): OpenQuiz {

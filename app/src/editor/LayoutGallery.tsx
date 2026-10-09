@@ -67,7 +67,7 @@ function LayoutSketch({ layout }: { layout: SlideLayout }) {
         </span>
       )}
       {answers > 0 && (
-        <span className={answers > 4 ? "sketch-answers six" : "sketch-answers"}>
+        <span className="sketch-answers">
           {Array.from({ length: answers }, (_, i) => (
             <span key={i} className={`sketch-answer-${i}`} />
           ))}

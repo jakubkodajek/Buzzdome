@@ -5,12 +5,14 @@ import type { Slide } from "../types";
 import { tooltip, type Action, type Actions } from "./actions";
 import type { ElementId } from "./elements";
 import type { PropertyRow, SlideProperties } from "./properties";
+import { ThemeGallery } from "./ThemeGallery";
 
-export type RibbonTab = "home" | "insert" | "question" | "view" | "show" | "media";
+export type RibbonTab = "home" | "insert" | "design" | "question" | "view" | "show" | "media";
 
 const TABS: [Exclude<RibbonTab, "media">, StringKey][] = [
   ["home", "ribbonHome"],
   ["insert", "ribbonInsert"],
+  ["design", "ribbonDesign"],
   ["question", "ribbonQuestion"],
   ["view", "ribbonView"],
   ["show", "ribbonShow"],
@@ -33,10 +35,15 @@ interface RibbonProps {
   element: ElementId;
   /** The selected slide's properties; null without a slide. */
   properties: SlideProperties | null;
+  /** Id of the quiz's theme. */
+  theme: string;
+  onTheme: (id: string) => void;
+  /** Shows a theme on the slide while it is pointed at; null ends that. */
+  onPreviewTheme: (id: string | null) => void;
 }
 
 /** The tabbed command area at the top, as in an office suite. */
-export function Ribbon({ tab, onTab, actions, onGallery, slide, element, properties }: RibbonProps) {
+export function Ribbon({ tab, onTab, actions, onGallery, slide, element, properties, theme, onTheme, onPreviewTheme }: RibbonProps) {
   const { t } = useApp();
   const mediaTab = MEDIA_TAB[element];
   const shown = tab === "media" && !mediaTab ? "home" : tab;
@@ -94,6 +101,11 @@ export function Ribbon({ tab, onTab, actions, onGallery, slide, element, propert
               <BigButton action={actions.insertBackground} />
             </Group>
           </>
+        )}
+        {shown === "design" && (
+          <Group title="groupThemes">
+            <ThemeGallery current={theme} onPick={onTheme} onPreview={onPreviewTheme} />
+          </Group>
         )}
         {shown === "question" && <QuestionTab slide={slide} properties={properties} />}
         {shown === "view" && (

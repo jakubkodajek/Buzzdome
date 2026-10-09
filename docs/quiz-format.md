@@ -48,6 +48,7 @@ was moved or deleted.
 {
   "schemaVersion": 2,
   "title": "Pub quiz, March",
+  "theme": "builtin.night",
   "slides": [
     { "id": "round-1", "type": "billboard", "title": "Round 1: Geography",
       "picture": "media/map.jpg", "background": "media/stage.mp4" },
@@ -72,6 +73,7 @@ was moved or deleted.
 | --- | --- | --- |
 | `schemaVersion` | number | `2`. Version 1 files open unchanged; a file with a higher version is refused with a message. |
 | `title` | text | Shown on the welcome screen and in the Director. |
+| `theme` | text or `null` | Id of the look of the screens (`builtin.classic`, `builtin.studio`, `builtin.night`, `builtin.showtime`, `builtin.neon`, later installed themes, spec 5.2). Missing, `null` or not installed: the default look, so a quiz never fails to open or play over it. |
 | `slides` | list | The show in order. |
 
 ### Every slide
@@ -148,7 +150,7 @@ shown. Players do not answer; the next step goes to the next slide.
 | Version | Change |
 | --- | --- |
 | 1 | First version. |
-| 2 | Adds `explanation` slides. Version 1 files read as version 2 unchanged. |
+| 2 | Adds `explanation` slides and the quiz `theme`. Version 1 files read as version 2 unchanged. |
 
 Fields may be added within a version as long as older files keep their
 meaning; readers ignore fields they do not know. Anything else (a new slide

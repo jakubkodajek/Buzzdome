@@ -1,4 +1,6 @@
-import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useTheme } from "../theme/context";
+import { backgroundStyle, themeStyle, type ScreenKey } from "../theme/themes";
 import "./slide.css";
 
 const STAGE_W = 1920;
@@ -6,10 +8,13 @@ const STAGE_H = 1080;
 
 /**
  * A fixed 1920x1080 canvas scaled to fit the element it is placed in (styled
- * by `className`), letterboxed. Sizes inside are in stage pixels.
+ * by `className`), letterboxed. Sizes inside are in stage pixels. It is drawn
+ * in the theme of `ThemeContext`, with that theme's background for `screen`.
  */
-export function Stage({ className, children }: { className: string; children: ReactNode }) {
+export function Stage({ className, screen, children }: { className: string; screen: ScreenKey; children: ReactNode }) {
   const frame = useRef<HTMLDivElement>(null);
+  const theme = useTheme();
+  const look = useMemo(() => themeStyle(theme), [theme]);
   // Hidden until the frame is measured, so it never flashes at full size.
   const [scale, setScale] = useState(0);
   useLayoutEffect(() => {
@@ -24,9 +29,16 @@ export function Stage({ className, children }: { className: string; children: Re
   }, []);
   return (
     <div ref={frame} className={className}>
-      <div className="stage" style={{ width: STAGE_W, height: STAGE_H, transform: `translate(-50%, -50%) scale(${scale})` }}>
+      <div className="stage" style={{ ...look, width: STAGE_W, height: STAGE_H, transform: `translate(-50%, -50%) scale(${scale})` }}>
+        <Backdrop screen={screen} />
         {children}
       </div>
     </div>
   );
+}
+
+/** The theme's background for `screen`, filling its parent; a slide's own background covers it. */
+export function Backdrop({ screen }: { screen: ScreenKey }) {
+  const theme = useTheme();
+  return <div className="backdrop" style={backgroundStyle(theme, screen)} />;
 }

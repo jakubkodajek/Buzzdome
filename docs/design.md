@@ -124,7 +124,7 @@ table view toggle. It edits a quiz; it never touches a running show.
   (`quiz_file::problems`: the core's checks plus missing media), shown on
   the thumbnails, in the status bar and on the File page.
 - **State.** `history.ts` is a pure undo history of `Edit`s (set title,
-  insert, update, remove, move a slide). Typing into one field of one slide
+  set theme, insert, update, remove, move a slide). Typing into one field of one slide
   merges into one undo step through a merge key (`<slide id>:<field>`).
   `editor-state.ts` reduces that history together with what the backend
   reported (loaded, saved, checked). The selection is a slide id with its
@@ -157,6 +157,40 @@ table view toggle. It edits a quiz; it never touches a running show.
   start a show of the draft with keyboard and on-screen buzzers. The
   Director shows a test run badge and "Back to the editor" ends the show
   and returns. A quiz with problems opens the File page instead.
+
+### 1.4 Themes
+
+A theme is the look of the stage: colours, two fonts and a background per
+screen (spec 5.2). The quiz stores only its id (`Quiz.theme`); everything
+else lives in the UI, because only the UI draws.
+
+- **Data.** `app/src/theme/themes.ts` holds the built-in themes as
+  `ThemeDefinition`s that list only what differs from their `parent`, and
+  `resolveTheme` fills in the rest (TH-2). An id that is not installed, a
+  missing parent or a parent loop ends at the default theme, so a look can
+  never stop a quiz from opening or playing. Colour keys: `text`, `shadow`,
+  `glow`, `panel`, `bar`, `barEdge`, `tile`, `accent`, `answerA`..`answerD`,
+  `correct`, `wrong`. Theme packages (planned) will be read by Rust and
+  handed to the UI in the same form.
+- **Drawing.** `ThemeContext` (`theme/context.ts`) carries the resolved
+  theme: the projector, the Director and the editor provide the quiz's.
+  `Stage` turns it into `--theme-*` CSS variables (`themeStyle`) and draws
+  the background for its screen (`screenOf(view)`, TH-5) under the slide;
+  a slide's own background covers it (BG-6). `slide.css` takes colours and
+  fonts only from those variables. Text on a filled area (bars, answers,
+  rows) gets white or dark text from `readableText`, which keeps at least
+  the 3:1 contrast WCAG 2.2 asks for large text (SC 1.4.3); a test checks
+  every built-in colour.
+- **Choosing.** The editor's Design tab shows each theme on a sample
+  question (`ThemeGallery.tsx`). The theme under the pointer or focus is
+  shown on the slide canvas only, the thumbnails keep the quiz's; a click
+  is a `setTheme` edit, so it is undone like any other change.
+- **Fonts.** Inter, Nunito, Oswald and Exo 2 come from the
+  `@fontsource-variable` packages and are bundled, so the projector needs
+  no network. All four are under the SIL Open Font License 1.1, which
+  allows bundling as long as the licence goes with the font
+  (`node_modules/@fontsource-variable/*/LICENSE`); an installer that is
+  given to anyone else has to include those files.
 
 ## 2. Buzzer link
 
@@ -353,12 +387,12 @@ Developer ID; until then builds are unsigned (macOS ad-hoc), see PL-5.
 Not built yet; this is where they will attach, so current code does not block
 them.
 
-- **Themes and backgrounds.** The host screen reads colours and fonts from
-  CSS variables and backgrounds from one resolver function
-  (slide > round > quiz > theme > built-in). Theme packages unpack into
-  `<app data>/themes/<id>/` and are served to the web view through Tauri's
-  asset protocol, limited to that folder. Quiz files copy used backgrounds
-  into their `media/` folder on save.
+- **Theme packages and backgrounds.** Built-in themes are done (1.4).
+  Round and quiz backgrounds join the slide background in front of the
+  theme's (slide > round > quiz > theme > built-in). Theme packages unpack into
+  `<app data>/themes/<id>/`, are read into `ThemeDefinition`s by Rust and
+  served to the web view through Tauri's asset protocol, limited to that
+  folder. Quiz files copy used backgrounds into their `media/` folder on save.
 - **Plugins.** A plugin runs in an `<iframe sandbox="allow-scripts">` in the
   host window (screen plugins) or a hidden one in the Director (service
   plugins), loaded from `<app data>/plugins/<id>/` with a strict content

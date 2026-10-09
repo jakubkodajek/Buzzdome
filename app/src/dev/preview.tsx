@@ -1,5 +1,6 @@
 // Dev-only preview: renders a window with a mocked backend so screens can be
-// checked in a normal browser. Open /preview.html?window=host&scene=running.
+// checked in a normal browser. Open /preview.html?window=host&scene=running
+// (add &theme=builtin.neon for another look).
 
 import { clearMocks, mockIPC, mockWindows } from "@tauri-apps/api/mocks";
 import React from "react";
@@ -29,6 +30,8 @@ const quiz = {
 const params = new URLSearchParams(location.search);
 const windowLabel = params.get("window") === "host" ? "host" : "director";
 const scene = params.get("scene") ?? "running";
+/** A theme id to draw the screens in (`theme/themes.ts`); the default when missing. */
+const theme = params.get("theme");
 
 const NAMES = ["Kvízožrouti", "U Tří Lvů", "Mozkovna", "Hospodští géniové", "Tým Rychlík", "Bezejmenní", "Šprti", "Lvíčata"];
 
@@ -135,12 +138,14 @@ const SCENES: Record<string, GameView | null> = {
 const current = SCENES[scene] ?? null;
 const sceneQuiz: Quiz = {
   ...quiz,
+  theme,
   slides: quiz.slides.map((slide, i) => (current?.slide && i === current.slideIndex ? current.slide : slide)),
 };
 
 // The quiz the editor opens: the demo quiz, with media on its first question.
 const editorQuiz: Quiz = {
   ...quiz,
+  theme,
   slides: quiz.slides.map((slide, i) =>
     i === 1 ? { ...slide, picture: "media/landscape.svg", sound: { file: "media/song.mp3", start: "onDemand", repeat: false, volume: 80 } } : slide,
   ),

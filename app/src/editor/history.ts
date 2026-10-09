@@ -5,6 +5,8 @@ import type { Quiz, Slide } from "../types";
 
 export type Edit =
   | { type: "setTitle"; title: string }
+  /** The look of the quiz's screens (`theme/themes.ts`). */
+  | { type: "setTheme"; theme: string }
   | { type: "insertSlide"; index: number; slide: Slide }
   /** Applies `update` to the slide with this id as it is when the edit lands. */
   | { type: "updateSlide"; id: string; update: (slide: Slide) => Slide }
@@ -41,6 +43,8 @@ export function applyEdit(quiz: Quiz, edit: Edit): Quiz {
   switch (edit.type) {
     case "setTitle":
       return edit.title === quiz.title ? quiz : { ...quiz, title: edit.title };
+    case "setTheme":
+      return edit.theme === quiz.theme ? quiz : { ...quiz, theme: edit.theme };
     case "insertSlide": {
       if (!inRange(edit.index, count + 1)) return quiz;
       const slides = [...quiz.slides];

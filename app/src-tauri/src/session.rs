@@ -208,7 +208,7 @@ mod tests {
     #[test]
     fn resumes_the_latest_session_and_drops_a_torn_line() {
         let root = temp_root("resume");
-        let quiz = Quiz { schema_version: 1, title: "T".into(), slides: vec![] };
+        let quiz = Quiz::new("T", vec![]);
         for started_ms in [1, 2] {
             let meta = SessionMeta {
                 quiz_title: format!("show {started_ms}"),

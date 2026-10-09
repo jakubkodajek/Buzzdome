@@ -62,11 +62,12 @@ Status keys: `[x]` done, `[~]` in progress, `[ ]` not started.
 
 ### M4: Show polish (week 3-4)
 - [ ] Sounds, countdown, transitions, branding of the welcome screen
+- [x] Design templates: five built-in themes (colours, fonts, a background per screen) chosen on the editor's Design tab with live preview
 - [x] Czech and English UI (switchable in Settings)
 - [ ] Should-haves from `features.csv` that the first event needs
 
 ### M5: Extensions (after the first event)
-- [ ] Backgrounds and theme packages (`docs/specification.md` section 5)
+- [ ] Theme packages, background gallery, round and quiz backgrounds (`docs/specification.md` section 5)
 - [ ] Plugins: mini games and integrations (`docs/specification.md` section 6)
 
 ## Phase 4: Test

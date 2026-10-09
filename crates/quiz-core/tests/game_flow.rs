@@ -21,7 +21,7 @@ fn question(id: &str, mode: AnswerMode) -> Slide {
 }
 
 fn quiz(slides: Vec<Slide>) -> Quiz {
-    Quiz { schema_version: quiz_core::SCHEMA_VERSION, title: "Test".into(), slides }
+    Quiz::new("Test", slides)
 }
 
 /// Applies commands and keeps the journal, like the app does.
