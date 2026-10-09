@@ -713,3 +713,7 @@
 .receiver .log .decoded {
   color: var(--good);
 }
+
+.pre-line {
+  white-space: pre-line;
+}

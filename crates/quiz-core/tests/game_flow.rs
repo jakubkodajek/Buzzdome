@@ -20,7 +20,7 @@ fn question(id: &str, mode: AnswerMode) -> Slide {
 }
 
 fn quiz(slides: Vec<Slide>) -> Quiz {
-    Quiz { schema_version: 1, title: "Test".into(), slides }
+    Quiz { schema_version: quiz_core::SCHEMA_VERSION, title: "Test".into(), slides }
 }
 
 /// Applies commands and keeps the journal, like the app does.
@@ -243,6 +243,24 @@ fn final_scores_reveal_step_by_step() {
         assert_eq!(show.game.phase(), &Phase::Final { step: expected });
     }
     assert_eq!(show.run(0, Command::Next), Err(GameError::NotNow));
+}
+
+#[test]
+fn an_explanation_follows_the_revealed_question_and_scores_nothing() {
+    let explanation = Slide::new("e1", SlideContent::Explanation { text: "Because.".into() });
+    let mut show = Show::new(vec![question("q1", AnswerMode::Everyone), explanation]);
+    show.press(0, 1, Button::Big);
+    show.run(0, Command::Next).unwrap(); // q1 ready
+    show.run(10, Command::Next).unwrap(); // clock runs
+    show.press(20, 1, Button::B); // right; the only player, so the question closes
+    show.run(30, Command::Next).unwrap(); // reveal
+    show.run(40, Command::Next).unwrap(); // explanation
+    assert_eq!(show.game.phase(), &Phase::Explanation);
+    let score = show.score(1);
+    assert!(show.press(50, 1, Button::A).is_empty());
+    assert_eq!(show.score(1), score);
+    show.run(60, Command::Next).unwrap();
+    assert_eq!(show.game.phase(), &Phase::Final { step: 0 });
 }
 
 #[test]

@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "title": "Ukázkový kvíz",
   "slides": [
     {
@@ -41,6 +41,11 @@
       "timeLimitS": 15,
       "points": 100,
       "penalty": 20
+    },
+    {
+      "id": "x-peak",
+      "type": "explanation",
+      "text": "Sněžka (1603 m) leží v Krkonoších na hranici s Polskem. Praděd (1491 m) je nejvyšší horou Moravy."
     },
     {
       "id": "end-1",

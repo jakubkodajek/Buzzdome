@@ -65,6 +65,7 @@ pub fn slide_title(slide: &Slide) -> String {
     match &slide.content {
         SlideContent::Billboard { title, .. } | SlideContent::EndOfRound { title } => title.clone(),
         SlideContent::Question(q) => q.text.clone(),
+        SlideContent::Explanation { text } => text.clone(),
     }
 }
 

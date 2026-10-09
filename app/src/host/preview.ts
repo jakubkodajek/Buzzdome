@@ -28,6 +28,8 @@ function previewPhase(slide: Slide): Phase {
       return { phase: "question", step: "ready" };
     case "billboard":
       return { phase: "billboard" };
+    case "explanation":
+      return { phase: "explanation" };
     case "endOfRound":
       return { phase: "endOfRound" };
   }

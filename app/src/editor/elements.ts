@@ -21,9 +21,9 @@ export function hasElement(slide: Slide, element: ElementId): boolean {
     case "question":
       return slide.type === "question";
     case "title":
-      return slide.type !== "question";
+      return slide.type === "billboard" || slide.type === "endOfRound";
     case "text":
-      return slide.type === "billboard";
+      return slide.type === "billboard" || slide.type === "explanation";
     case "picture":
       return slide.picture !== null;
     case "video":

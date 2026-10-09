@@ -23,7 +23,7 @@ import {
 import { useShortcuts } from "../keyboard";
 import { MediaRootContext } from "../media";
 import { phaseLabel } from "../phase";
-import { questionPosition } from "../quiz";
+import { slideContext } from "../quiz";
 import { useSlideSound, type SlideSound } from "../slide-sound";
 import { playCue } from "../sound";
 import type { GameView, Quiz } from "../types";
@@ -236,7 +236,7 @@ function StatusBar({ view, quiz, testRun }: { view: GameView | null; quiz: Quiz 
   const { t } = useApp();
   const clock = useClock(view);
   if (!view) return <footer className="status-bar">{t("noShow")}</footer>;
-  const position = questionPosition(quiz, view.slideIndex);
+  const position = slideContext(quiz, view.slideIndex).position;
   return (
     <footer className="status-bar">
       <span>{view.quizTitle}</span>

@@ -11,7 +11,7 @@ const FORM_ID = "edit-slide";
 
 /**
  * The slide's texts in one form: the question and its answers with the
- * right one ticked, or the title and text, and the notes. OK applies them
+ * right one ticked, the title and text, or the explanation, and the notes. OK applies them
  * as one change; Cancel leaves the slide as it was.
  */
 export function EditSlideDialog(props: { slide: Slide; focus: ElementId; onApply: (slide: Slide) => void; onClose: () => void }) {
@@ -60,21 +60,30 @@ export function EditSlideDialog(props: { slide: Slide; focus: ElementId; onApply
           }
         }}
       >
-        {draft.type === "question" ? (
-          <QuestionFields question={draft} onChange={setDraft} />
-        ) : (
-          <>
-            <label className="field">
-              <span>{t("slideTitleField")}</span>
-              <input data-field="title" value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })} />
-            </label>
-            {draft.type === "billboard" && (
-              <label className="field">
-                <span>{t("slideTextField")}</span>
-                <textarea data-field="text" rows={4} value={draft.text} onChange={(e) => setDraft({ ...draft, text: e.target.value })} />
-              </label>
-            )}
-          </>
+        {draft.type === "question" && <QuestionFields question={draft} onChange={setDraft} />}
+        {(draft.type === "billboard" || draft.type === "endOfRound") && (
+          <label className="field">
+            <span>{t("slideTitleField")}</span>
+            <input data-field="title" value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })} />
+          </label>
+        )}
+        {draft.type === "billboard" && (
+          <label className="field">
+            <span>{t("slideTextField")}</span>
+            <textarea data-field="text" rows={4} value={draft.text} onChange={(e) => setDraft({ ...draft, text: e.target.value })} />
+          </label>
+        )}
+        {draft.type === "explanation" && (
+          <label className="field">
+            <span>{t("explanationField")}</span>
+            <textarea
+              data-field="text"
+              rows={6}
+              placeholder={t("explanationPlaceholder")}
+              value={draft.text}
+              onChange={(e) => setDraft({ ...draft, text: e.target.value })}
+            />
+          </label>
         )}
         <label className="field">
           <span>{t("notes")}</span>

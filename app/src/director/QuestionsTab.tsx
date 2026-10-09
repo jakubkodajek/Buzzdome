@@ -5,7 +5,7 @@ import { SlideThumbnail } from "../host/SlideThumbnail";
 import type { StringKey } from "../i18n";
 import { NextIcon, TrophyIcon } from "../icons";
 import { mediaFileName } from "../media";
-import { questionNumbers, SLIDE_TYPE_LABEL, slideTitle } from "../quiz";
+import { SLIDE_TYPE_LABEL, slideContexts, slideTitle, type SlideContext } from "../quiz";
 import { SlideMedia } from "../slide-media";
 import type { GameView, Quiz, Slide } from "../types";
 
@@ -47,8 +47,7 @@ export function QuestionsTab({ view, quiz }: { view: GameView; quiz: Quiz | null
   }, [current]);
 
   if (!quiz) return null;
-  const numbers = questionNumbers(quiz);
-  const questionCount = numbers.filter((n) => n !== null).length;
+  const contexts = slideContexts(quiz);
   const preview = quiz.slides[shown];
   const goTo = (slide: number) => dispatch({ type: "goTo", slide });
 
@@ -94,15 +93,14 @@ export function QuestionsTab({ view, quiz }: { view: GameView; quiz: Quiz | null
                   onDoubleClick={() => goTo(i)}
                 >
                   <td className="num">{i + 1}</td>
-                  <td className="num">{numbers[i] ?? ""}</td>
+                  <td className="num">{contexts[i].position?.n ?? ""}</td>
                   <td className="thumb-cell">
                     <SlideThumbnail
                       className="grid-thumbnail"
                       slide={slide}
                       index={i}
                       count={quiz.slides.length}
-                      questionNumber={numbers[i]}
-                      questionCount={questionCount}
+                      context={contexts[i]}
                     />
                   </td>
                   <td>{t(SLIDE_TYPE_LABEL[slide.type])}</td>
@@ -112,7 +110,7 @@ export function QuestionsTab({ view, quiz }: { view: GameView; quiz: Quiz | null
             </tbody>
           </table>
         </div>
-        <div className="preview">{preview && <SlidePreview slide={preview} counts={shown === current ? view.answerCounts : null} />}</div>
+        <div className="preview">{preview && <SlidePreview slide={preview} context={contexts[shown]} counts={shown === current ? view.answerCounts : null} />}</div>
       </div>
     </div>
   );
@@ -138,12 +136,13 @@ function LayoutIcon({ vertical }: { vertical: boolean }) {
   );
 }
 
-function SlidePreview({ slide, counts }: { slide: Slide; counts: number[] | null }) {
+function SlidePreview({ slide, context, counts }: { slide: Slide; context: SlideContext; counts: number[] | null }) {
   const { t } = useApp();
+  const explained = context.explains;
   return (
     <>
       <div className="preview-card">
-        <h2 className="preview-title">{slideTitle(slide)}</h2>
+        <h2 className="preview-title">{slide.type === "explanation" ? t("typeExplanation") : slideTitle(slide)}</h2>
         <SlideMedia slide={slide} className="preview-media" mode="preview" />
         {slide.type === "question" && (
           <>
@@ -163,7 +162,23 @@ function SlidePreview({ slide, counts }: { slide: Slide; counts: number[] | null
             </div>
           </>
         )}
-        {slide.type === "billboard" && slide.text && <p className="center">{slide.text}</p>}
+        {slide.type === "billboard" && slide.text && <p className="center pre-line">{slide.text}</p>}
+        {slide.type === "explanation" && (
+          <>
+            <p className="muted center">
+              {explained ? `${t("questionNumber", { n: explained.position.n })}: ${explained.question.text}` : t("noQuestionToExplain")}
+            </p>
+            {explained && explained.question.correct !== null && (
+              <div className="preview-answers">
+                <div className="preview-answer correct">
+                  <span className={`dot dot-${explained.question.correct}`}>{ANSWER_LETTERS[explained.question.correct]}</span>
+                  <span className="answer-label">{explained.question.answers[explained.question.correct]}</span>
+                </div>
+              </div>
+            )}
+            <p className="center pre-line">{slide.text}</p>
+          </>
+        )}
       </div>
       <MediaList slide={slide} />
       <div className="notes-box">

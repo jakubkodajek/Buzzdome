@@ -1,6 +1,7 @@
 import { ANSWER_LETTERS } from "../answers";
 import { useApp } from "../app-context";
 import type { Translate } from "../i18n";
+import { SLIDE_TYPE_LABEL } from "../quiz";
 import { Popup } from "./controls";
 import { LAYOUT_GROUPS, type SlideLayout } from "./layouts";
 
@@ -41,6 +42,19 @@ export function LayoutGallery({ x, y, onPick, onClose }: { x: number; y: number;
 /** What a layout looks like, drawn with boxes in the answer colours. */
 function LayoutSketch({ layout }: { layout: SlideLayout }) {
   const answers = layout.answers ?? 0;
+  if (layout.type === "explanation") {
+    return (
+      <span className="sketch explanation" aria-hidden="true">
+        <span className="sketch-title" />
+        <span className="sketch-correct" />
+        {layout.media && <span className={`sketch-media sketch-${layout.media}`} />}
+        <span className="sketch-lines">
+          <span />
+          <span />
+        </span>
+      </span>
+    );
+  }
   return (
     <span className={answers > 0 ? "sketch has-answers" : "sketch"} aria-hidden="true">
       <span className="sketch-title" />
@@ -69,7 +83,7 @@ function layoutLabel(t: Translate, layout: SlideLayout): string {
       ? layout.answers
         ? t("layoutAnswers", { range: `A–${ANSWER_LETTERS[layout.answers - 1]}` })
         : t("layoutSpoken")
-      : t(layout.type === "billboard" ? "typeBillboard" : "typeEndOfRound");
+      : t(SLIDE_TYPE_LABEL[layout.type]);
   if (layout.media === "picture") return t("layoutWithPicture", { layout: base });
   if (layout.media === "video") return t("layoutWithVideo", { layout: base });
   return base;

@@ -1,4 +1,4 @@
-# Quiz file format (version 1)
+# Quiz file format (version 2)
 
 A quiz travels as one file with the extension `.quiz`. It is a ZIP archive:
 
@@ -38,7 +38,7 @@ was moved or deleted.
 
 ```json
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "title": "Pub quiz, March",
   "slides": [
     { "id": "round-1", "type": "billboard", "title": "Round 1: Geography",
@@ -48,6 +48,8 @@ was moved or deleted.
       "answers": ["Opava", "Ostrava", "Frýdek-Místek", "Karviná"], "correct": 1,
       "timeLimitS": 20, "points": 100, "pointsEnd": 50, "penalty": 0,
       "notes": "Ostrava has been the regional capital since 2000." },
+    { "id": "q1-why", "type": "explanation",
+      "text": "The region was created in 2000 with Ostrava as its seat." },
     { "id": "q2", "type": "question", "mode": "fastestFinger",
       "text": "Name this song.",
       "sound": { "file": "media/song.mp3", "start": "withClock", "volume": 80 } },
@@ -60,7 +62,7 @@ was moved or deleted.
 
 | Field | Type | Meaning |
 | --- | --- | --- |
-| `schemaVersion` | number | `1`. A file with a higher version is refused with a message. |
+| `schemaVersion` | number | `2`. Version 1 files open unchanged; a file with a higher version is refused with a message. |
 | `title` | text | Shown on the welcome screen and in the Director. |
 | `slides` | list | The show in order. |
 
@@ -69,7 +71,7 @@ was moved or deleted.
 | Field | Type | Default | Meaning |
 | --- | --- | --- | --- |
 | `id` | text | required | Unique within the quiz. Keeps the show journal valid when slides are edited. |
-| `type` | `billboard`, `question`, `endOfRound` | required | See below. |
+| `type` | `billboard`, `question`, `explanation`, `endOfRound` | required | See below. |
 | `notes` | text | `""` | For the quizmaster only. |
 | `picture` | media path | none | PNG, JPEG, WebP, GIF or SVG. |
 | `video` | object | none | Shown in place of a picture; a slide has one or the other. |
@@ -104,6 +106,18 @@ was moved or deleted.
 | `pointsEnd` | number | none | Points when the clock runs out; points fall evenly from `points` to this. |
 | `penalty` | number | `0` | Points taken for a wrong answer (0 or more). |
 
+### `explanation`
+
+Explains the answer of a question. It explains the nearest question before
+it in the same round (an `endOfRound` slide ends the search), and the screen
+shows that question with its correct answer above `text`. With no question
+before it in its round, only `text` and the slide's picture or video are
+shown. Players do not answer; the next step goes to the next slide.
+
+| Field | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `text` | text | `""` | Why the answer is right. Line breaks are kept. |
+
 ### `endOfRound`
 
 | Field | Type | Default | Meaning |
@@ -123,6 +137,13 @@ was moved or deleted.
 
 ## Versioning
 
-Fields may be added within version 1 as long as older files keep their
-meaning; readers ignore fields they do not know. Anything else needs
-`schemaVersion` 2 and a migration that opens version 1 files unchanged.
+| Version | Change |
+| --- | --- |
+| 1 | First version. |
+| 2 | Adds `explanation` slides. Version 1 files read as version 2 unchanged. |
+
+Fields may be added within a version as long as older files keep their
+meaning; readers ignore fields they do not know. Anything else (a new slide
+type, a changed meaning) needs the next `schemaVersion` and a migration that
+opens older files unchanged. Readers keep a quiz in the current version, so
+saving an older file writes the current one.

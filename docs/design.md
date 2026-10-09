@@ -131,7 +131,9 @@ table view toggle. It edits a quiz; it never touches a running show.
 - **Rendering.** The canvas, the thumbnails (editor and Director) and the
   projector all draw a slide with `SlideScreen` inside a 16:9 `Stage`
   (`app/src/host/`). The editor and thumbnails feed it `previewView`, a
-  `GameView` built from the slide alone. `MediaRootContext` sits above
+  `GameView` built from the slide alone. What a slide shows from the rest of
+  the quiz comes in a `SlideContext` (`quiz.ts`): its question number and,
+  for an explanation slide, the question it explains. `MediaRootContext` sits above
   every screen that resolves media, so the editor, the Director and their
   sound hooks agree on the folder.
 - **Test run.** F5 (from the start) and Shift+F5 (from the selected slide)

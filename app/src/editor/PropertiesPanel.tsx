@@ -212,5 +212,12 @@ function propertyPages(slide: Slide, element: ElementId, rows: SlideProperties):
 }
 
 function textRows(slide: Exclude<Slide, { type: "question" }>, rows: SlideProperties): PropertyRow[] {
-  return slide.type === "billboard" ? [rows.title(slide), rows.bodyText(slide)] : [rows.title(slide)];
+  switch (slide.type) {
+    case "billboard":
+      return [rows.title(slide), rows.bodyText(slide)];
+    case "explanation":
+      return [rows.explains, rows.explanationText(slide)];
+    case "endOfRound":
+      return [rows.title(slide)];
+  }
 }

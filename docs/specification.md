@@ -47,7 +47,7 @@ Feature-level parity is tracked row by row in
 
 | ID | Requirement | Status |
 | --- | --- | --- |
-| PL-1 | Installers for Windows 10/11 (x64, NSIS `.exe`), macOS (one universal `.dmg` for Apple silicon and Intel) and Linux (x64 `.deb` and `.AppImage`). | done: CI builds them on every push |
+| PL-1 | Installers for Windows 10/11 (x64, NSIS `.exe`), macOS (one universal `.dmg` for Apple silicon and Intel) and Linux (x64 `.deb` and `.AppImage`). | done: CI builds them on `main`, on `v*` tags and on demand |
 | PL-2 | No driver installation for the buzzer receiver on any OS. | done by design, to verify on hardware |
 | PL-3 | Linux: the app shows the exact udev rule that lets a normal user open the receiver, with a copy button. | done |
 | PL-4 | macOS: if the OS blocks the receiver, the error names the setting to change (Privacy & Security > Input Monitoring). | done |
@@ -355,7 +355,7 @@ the Host screen.
 | ID | Requirement | Status |
 | --- | --- | --- |
 | QZ-1 | Quiz editor in the Director, after the reference editor's layout: ribbon (File, Home, Insert, Question, View, Quiz show, and a contextual tab for the selected picture, video or sound), slide thumbnails (add from a layout gallery, cut, copy, paste, duplicate, delete, reorder by drag), the slide as the audience sees it with its parts selectable, a properties panel (pages, foldable sections, search, descriptions), an Edit question form, a table view for typing many questions, quizmaster notes under the slide. Undo and redo; the draft survives a crash. | done |
-| QZ-2 | Slide types: billboard, question (2 to 6 answers, multiple choice or fastest finger), end of round. More types come with the reference's other formats. | done |
+| QZ-2 | Slide types: billboard, question (2 to 6 answers, multiple choice or fastest finger), answer explanation, end of round. An explanation is optional: the author inserts it after a question, and it shows that question with its correct answer above the author's text, picture or video. More types come with the reference's other formats. | done |
 | QZ-3 | Per question: text, answers, correct answer, time limit, points (fixed or falling from a start to an end value), penalty, notes for the quizmaster. | done |
 | QZ-4 | Media per slide: a picture, a sound clip and a video, each with its options (sound: when the slide opens, with the clock or on demand, loop, volume; video: autoplay, muted, loop). A background per slide overrides the theme's (BG rules in section 5). | done |
 | QZ-5 | Quiz file: one file (`.quiz`, a ZIP) with `quiz.json` and a `media/` folder, so a quiz with all its pictures and sounds can be copied to the event laptop as one file. Format version in `quiz.json`; older versions keep opening. | done: [`quiz-format.md`](quiz-format.md) |

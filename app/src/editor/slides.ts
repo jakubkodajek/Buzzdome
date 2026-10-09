@@ -3,6 +3,7 @@
 // crates/quiz-core/src/model.rs).
 
 import { ANSWER_LETTERS } from "../answers";
+import { slideTitle } from "../quiz";
 import type { AnswerMode, Quiz, QuestionSlide, Slide, SlideType, SoundClip, VideoClip } from "../types";
 
 /** Most answers a question can have (`MAX_ANSWERS` in Rust). */
@@ -32,33 +33,26 @@ export function newSlide(type: SlideType, id: string): Slide {
         pointsEnd: null,
         penalty: 0,
       };
+    case "explanation":
+      return { ...base, type, text: "" };
     case "endOfRound":
       return { ...base, type, title: "" };
   }
 }
 
-/** The text a slide is headed by: the question, or the title. */
-function headline(slide: Slide): string {
-  return slide.type === "question" ? slide.text : slide.title;
+/** Sets the text the slide is listed by (see `slideTitle`). */
+export function setHeadline(slide: Slide, text: string): Slide {
+  return slide.type === "question" || slide.type === "explanation" ? { ...slide, text } : { ...slide, title: text };
 }
 
 /**
- * The slide as another type. Its id, notes and media stay, the question or
- * title carries over, and the rest starts as on a new slide.
+ * The slide as another type. Its id, notes and media stay, the question,
+ * explanation or title carries over, and the rest starts as on a new slide.
  */
 export function convertSlide(slide: Slide, type: SlideType): Slide {
   if (slide.type === type) return slide;
   const { id, notes, picture, video, sound, background } = slide;
-  const kept = { notes, picture, video, sound, background };
-  const fresh = newSlide(type, id);
-  switch (fresh.type) {
-    case "question":
-      return { ...fresh, ...kept, text: headline(slide) };
-    case "billboard":
-      return { ...fresh, ...kept, title: headline(slide) };
-    case "endOfRound":
-      return { ...fresh, ...kept, title: headline(slide) };
-  }
+  return setHeadline({ ...newSlide(type, id), notes, picture, video, sound, background }, slideTitle(slide));
 }
 
 /** An id no slide of `quiz` has yet. */

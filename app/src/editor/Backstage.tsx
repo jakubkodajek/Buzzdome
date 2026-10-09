@@ -1,6 +1,6 @@
 import { useApp } from "../app-context";
 import { BackIcon } from "../icons";
-import { questionNumbers } from "../quiz";
+import { questionCount } from "../quiz";
 import type { Action } from "./actions";
 import type { OpenQuiz } from "./editor-state";
 
@@ -63,7 +63,6 @@ export function Backstage(props: BackstageProps) {
 function InfoPage({ open, unsaved, onTitle, onShowSlide }: BackstageProps & { open: OpenQuiz }) {
   const { t } = useApp();
   const quiz = open.history.present;
-  const numbers = questionNumbers(quiz);
   const slideNumber = new Map(quiz.slides.map((slide, i) => [slide.id, i + 1]));
   return (
     <>
@@ -81,7 +80,7 @@ function InfoPage({ open, unsaved, onTitle, onShowSlide }: BackstageProps & { op
         <dt>{t("slides")}</dt>
         <dd>{quiz.slides.length}</dd>
         <dt>{t("tabQuestions")}</dt>
-        <dd>{numbers.filter((n) => n !== null).length}</dd>
+        <dd>{questionCount(quiz)}</dd>
       </dl>
       <h2>{t("problems", { n: open.problems.length })}</h2>
       {open.problems.length === 0 ? (

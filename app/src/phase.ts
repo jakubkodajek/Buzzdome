@@ -9,6 +9,8 @@ export function phaseLabel(t: Translate, view: GameView): string {
       return t("lobby");
     case "billboard":
       return t("billboard");
+    case "explanation":
+      return t("explanation");
     case "endOfRound":
       return t("endOfRound");
     case "final":

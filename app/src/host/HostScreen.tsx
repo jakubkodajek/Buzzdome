@@ -4,7 +4,7 @@ import { useBackendEvent, useClock, useGameView, useMediaRoot, useQuiz } from ".
 import { CheckIcon, CrossIcon } from "../icons";
 import { useShortcuts } from "../keyboard";
 import { MediaRootContext } from "../media";
-import { questionPosition } from "../quiz";
+import { slideContext } from "../quiz";
 import { SlideBackground } from "../slide-media";
 import { Leaderboard, ranked, SlideScreen } from "./SlideScreen";
 import { Stage } from "./Stage";
@@ -36,7 +36,7 @@ function HostLayout() {
         {view && (
           <>
             {view.slide && <SlideBackground slide={view.slide} />}
-            <SlideScreen view={view} position={questionPosition(quiz, view.slideIndex)} clock={clock} />
+            <SlideScreen view={view} context={slideContext(quiz, view.slideIndex)} clock={clock} />
             {verdict && <div className={`verdict verdict-${verdict}`}>{verdict === "correct" ? <CheckIcon /> : <CrossIcon />}</div>}
             {view.leaderboardVisible && (
               <div className="overlay">

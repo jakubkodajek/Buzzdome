@@ -6,7 +6,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::{BTreeSet, HashSet};
 use ts_rs::TS;
 
-pub const SCHEMA_VERSION: u32 = 1;
+/// 1: first version. 2: adds explanation slides; version 1 files read unchanged.
+pub const SCHEMA_VERSION: u32 = 2;
 
 /// Buzzers have four answer buttons (A-D); keypads in the original have six.
 pub const MAX_ANSWERS: usize = 6;
@@ -84,6 +85,14 @@ pub enum SlideContent {
         text: String,
     },
     Question(Question),
+    /// Explains the answer of the question before it in the same round. The
+    /// screen shows that question and its correct answer above `text`; with
+    /// no question before it, only `text`.
+    #[serde(rename_all = "camelCase")]
+    Explanation {
+        #[serde(default)]
+        text: String,
+    },
     /// Closes a round and shows the leaderboard.
     #[serde(rename_all = "camelCase")]
     EndOfRound { title: String },
@@ -175,13 +184,15 @@ impl std::fmt::Display for ValidationError {
 
 impl Quiz {
     pub fn from_json(json: &str) -> Result<Quiz, String> {
-        let quiz: Quiz = serde_json::from_str(json).map_err(|e| e.to_string())?;
+        let mut quiz: Quiz = serde_json::from_str(json).map_err(|e| e.to_string())?;
         if quiz.schema_version > SCHEMA_VERSION {
             return Err(format!(
                 "quiz file uses schema version {}, this app supports up to {SCHEMA_VERSION}",
                 quiz.schema_version
             ));
         }
+        // Every older version reads as the current one, so it is saved as such.
+        quiz.schema_version = SCHEMA_VERSION;
         Ok(quiz)
     }
 
@@ -300,6 +311,12 @@ mod tests {
         q.correct = Some(5);
         quiz.slides.push(Slide::new("a", SlideContent::Question(q)));
         assert_eq!(quiz.validate().unwrap_err().len(), 1);
+    }
+
+    #[test]
+    fn reads_an_older_version_as_the_current_one() {
+        let quiz = Quiz::from_json(r#"{"schemaVersion": 1, "title": "Old"}"#).unwrap();
+        assert_eq!(quiz.schema_version, SCHEMA_VERSION);
     }
 
     #[test]

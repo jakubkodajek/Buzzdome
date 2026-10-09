@@ -37,6 +37,8 @@ export const LAYOUT_GROUPS: LayoutGroup[] = [
       { type: "billboard" },
       { type: "billboard", media: "picture" },
       { type: "billboard", media: "video" },
+      { type: "explanation" },
+      { type: "explanation", media: "picture" },
       { type: "endOfRound" },
     ],
   },

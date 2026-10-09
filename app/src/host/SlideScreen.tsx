@@ -4,7 +4,7 @@ import { useApp } from "../app-context";
 import { scoreDigits, signed } from "../format";
 import { playerName } from "../i18n";
 import { CheckIcon, CrossIcon, PeopleIcon, QuestionIcon, TrophyIcon } from "../icons";
-import type { QuestionPosition } from "../quiz";
+import type { QuestionPosition, SlideContext } from "../quiz";
 import { SlideMedia, type ScreenMode } from "../slide-media";
 import type { ClockView, GameView, PlayerView, QuestionSlide } from "../types";
 import "./slide.css";
@@ -19,8 +19,8 @@ export function ranked(view: GameView): PlayerView[] {
  * Outside the show, empty texts show what belongs there and the right
  * answer is ticked. Parts the editor can select carry `data-element`.
  */
-export function SlideScreen(props: { view: GameView; position: QuestionPosition | null; clock: ClockView | null; mode?: ScreenMode }) {
-  const { view, position, clock, mode = "show" } = props;
+export function SlideScreen(props: { view: GameView; context: SlideContext; clock: ClockView | null; mode?: ScreenMode }) {
+  const { view, context, clock, mode = "show" } = props;
   const { t } = useApp();
   const phase = view.phase;
   const placeholder = (text: string, empty: string) => (text || mode === "show" ? text : <span className="placeholder">{empty}</span>);
@@ -41,6 +41,20 @@ export function SlideScreen(props: { view: GameView; position: QuestionPosition 
           )}
         </div>
       ) : null;
+    case "explanation":
+      return view.slide?.type === "explanation" ? (
+        <div className="explanation-screen">
+          {context.explains ? (
+            <ExplainedHeader explained={context.explains.question} n={context.explains.position.n} />
+          ) : (
+            mode !== "show" && <p className="explained-missing">{t("noQuestionToExplain")}</p>
+          )}
+          <SlideMedia slide={view.slide} className="explanation-media" mode={mode} />
+          <p className="explanation-text" data-element="text">
+            {placeholder(view.slide.text, t("explanationPlaceholder"))}
+          </p>
+        </div>
+      ) : null;
     case "endOfRound":
       return (
         <div className="center-slide">
@@ -58,7 +72,7 @@ export function SlideScreen(props: { view: GameView; position: QuestionPosition 
           view={view}
           slide={view.slide}
           clock={clock}
-          position={position}
+          position={context.position}
           mode={mode}
           placeholder={placeholder}
         />
@@ -86,6 +100,25 @@ function Welcome({ view }: { view: GameView }) {
       </div>
       <footer className="welcome-footer">{t("registered", { n: view.players.length })}</footer>
     </div>
+  );
+}
+
+/** The question an explanation slide explains, with its correct answer. */
+function ExplainedHeader({ explained, n }: { explained: QuestionSlide; n: number }) {
+  const { t } = useApp();
+  const correct = explained.correct;
+  return (
+    <header className="explained">
+      <span className="explained-number">{t("questionNumber", { n })}</span>
+      <h2 className="explained-question">{explained.text}</h2>
+      {correct !== null && correct < explained.answers.length && (
+        <div className={`answer answer-${correct} is-correct explained-answer`}>
+          <span className="letter">{ANSWER_LETTERS[correct]}</span>
+          <span className="answer-text">{explained.answers[correct]}</span>
+          <CheckIcon className="answer-check" />
+        </div>
+      )}
+    </header>
   );
 }
 

@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState, type MouseEvent } from "react";
 import { useApp } from "../app-context";
 import { SlideThumbnail } from "../host/SlideThumbnail";
-import { questionNumbers } from "../quiz";
+import type { SlideContext } from "../quiz";
 import type { Quiz } from "../types";
 
 interface ThumbnailsProps {
   quiz: Quiz;
+  /** Per slide, from `slideContexts`. */
+  contexts: SlideContext[];
   selected: number;
   /** Slide ids with problems. */
   problems: ReadonlySet<string>;
@@ -18,13 +20,11 @@ interface ThumbnailsProps {
 }
 
 /** The slides down the left side: click to select, drag to reorder. */
-export function Thumbnails({ quiz, selected, problems, onSelect, onOpen, onMenu, onMove, onAdd }: ThumbnailsProps) {
+export function Thumbnails({ quiz, contexts, selected, problems, onSelect, onOpen, onMenu, onMove, onAdd }: ThumbnailsProps) {
   const { t } = useApp();
   // While dragging: the slide dragged and the gap (0..count) it would drop into.
   const [drag, setDrag] = useState<{ from: number; gap: number } | null>(null);
   const selectedItem = useRef<HTMLLIElement>(null);
-  const numbers = questionNumbers(quiz);
-  const questionCount = numbers.filter((n) => n !== null).length;
   // Gaps next to the dragged slide would leave it where it is: no marker.
   const gap = drag && drag.gap !== drag.from && drag.gap !== drag.from + 1 ? drag.gap : null;
 
@@ -93,8 +93,7 @@ export function Thumbnails({ quiz, selected, problems, onSelect, onOpen, onMenu,
                 slide={slide}
                 index={i}
                 count={quiz.slides.length}
-                questionNumber={numbers[i]}
-                questionCount={questionCount}
+                context={contexts[i]}
               />
               {problems.has(slide.id) && (
                 <span className="thumbnail-problem" title={t("slideHasProblems")}>

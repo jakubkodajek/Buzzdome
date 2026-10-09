@@ -6,7 +6,7 @@ import { ANSWER_LETTERS } from "../answers";
 import type { StringKey, Translate } from "../i18n";
 import { SoundIcon } from "../icons";
 import type { MediaKind } from "../media";
-import { SLIDE_TYPE_LABEL } from "../quiz";
+import { SLIDE_TYPE_LABEL, type SlideContext } from "../quiz";
 import type { QuestionSlide, Slide, SlideType, SoundStart } from "../types";
 import { MediaPicker, NumberBox, Select, Switch } from "./controls";
 import {
@@ -32,6 +32,8 @@ import {
 /** What the properties need to change the selected slide. */
 export interface SlideEditing {
   slide: Slide;
+  /** What the slide shows from the rest of the quiz. */
+  context: SlideContext;
   /** Changes the slide; `field` names what is typed into, so quick typing is one undo step. */
   update: (change: (slide: Slide) => Slide, field?: string) => void;
   /** Asks for a media file and applies it to the slide as it is by then. */
@@ -46,10 +48,10 @@ export interface PropertyRow {
   wide?: boolean;
 }
 
-const SLIDE_TYPES: SlideType[] = ["question", "billboard", "endOfRound"];
+const SLIDE_TYPES: SlideType[] = ["question", "billboard", "explanation", "endOfRound"];
 
 /** Every property row of the slide being edited. */
-export function slideProperties(t: Translate, { slide, update, chooseMedia }: SlideEditing) {
+export function slideProperties(t: Translate, { slide, context, update, chooseMedia }: SlideEditing) {
   const question = (change: (q: QuestionSlide) => QuestionSlide, field?: string) => update((s) => (s.type === "question" ? change(s) : s), field);
   const row = (label: StringKey, description: StringKey, control: ReactNode, wide = false): PropertyRow => ({
     label: t(label),
@@ -185,11 +187,11 @@ export function slideProperties(t: Translate, { slide, update, chooseMedia }: Sl
         textArea("questionField", q.text, (text) => question((s) => ({ ...s, text }), "text")),
         true,
       ),
-    title: (s: Exclude<Slide, QuestionSlide>) =>
+    title: (s: Extract<Slide, { type: "billboard" | "endOfRound" }>) =>
       row(
         "slideTitleField",
         "descTitle",
-        textArea("slideTitleField", s.title, (title) => update((x) => (x.type === "question" ? x : { ...x, title }), "title")),
+        textArea("slideTitleField", s.title, (title) => update((x) => (x.type === "billboard" || x.type === "endOfRound" ? { ...x, title } : x), "title")),
         true,
       ),
     bodyText: (s: Extract<Slide, { type: "billboard" }>) =>
@@ -199,6 +201,22 @@ export function slideProperties(t: Translate, { slide, update, chooseMedia }: Sl
         textArea("slideTextField", s.text, (text) => update((x) => (x.type === "billboard" ? { ...x, text } : x), "text")),
         true,
       ),
+    explanationText: (s: Extract<Slide, { type: "explanation" }>) =>
+      row(
+        "explanationField",
+        "descExplanation",
+        textArea("explanationField", s.text, (text) => update((x) => (x.type === "explanation" ? { ...x, text } : x), "text")),
+        true,
+      ),
+    /** Which question an explanation slide explains; set by where it stands. */
+    explains: row(
+      "explainsField",
+      "descExplains",
+      <span className="props-readonly">
+        {context.explains ? `${t("questionNumber", { n: context.explains.position.n })}: ${context.explains.question.text}` : t("noQuestionToExplain")}
+      </span>,
+      true,
+    ),
     notes: row(
       "notes",
       "descNotes",

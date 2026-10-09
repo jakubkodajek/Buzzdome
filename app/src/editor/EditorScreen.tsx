@@ -1,4 +1,4 @@
-import { useState, type MouseEvent } from "react";
+import { useMemo, useState, type MouseEvent } from "react";
 import { useApp } from "../app-context";
 import {
   ArrowDownIcon,
@@ -27,6 +27,7 @@ import {
   VideoIcon,
 } from "../icons";
 import { MediaRootContext, type MediaKind } from "../media";
+import { NO_CONTEXT, slideContexts } from "../quiz";
 import type { Slide } from "../types";
 import { tooltip, useActionKeys, type Action, type Actions } from "./actions";
 import { Backstage, type BackstagePage } from "./Backstage";
@@ -101,6 +102,7 @@ function Studio({ editor, open, onExit }: { editor: QuizEditor; open: OpenQuiz |
 
   const quiz = open?.history.present ?? null;
   const slides = quiz?.slides ?? [];
+  const contexts = useMemo(() => (quiz ? slideContexts(quiz) : []), [quiz]);
   const found = selection.id === null ? -1 : slides.findIndex((s) => s.id === selection.id);
   const index = slides.length === 0 ? -1 : found >= 0 ? found : Math.min(selection.index, slides.length - 1);
   const slide: Slide | null = slides[index] ?? null;
@@ -123,6 +125,7 @@ function Studio({ editor, open, onExit }: { editor: QuizEditor; open: OpenQuiz |
     });
   const editingFor = (s: Slide): SlideEditing => ({
     slide: s,
+    context: contexts[slides.indexOf(s)] ?? NO_CONTEXT,
     update: (change, field) => updateSlide(s.id, change, field),
     chooseMedia: (kinds, apply) => chooseMedia(s.id, kinds, apply),
   });
@@ -398,6 +401,7 @@ function Studio({ editor, open, onExit }: { editor: QuizEditor; open: OpenQuiz |
                   <>
                     <Thumbnails
                       quiz={quiz}
+                      contexts={contexts}
                       selected={index}
                       problems={new Set(open.problems.flatMap((p) => (p.slideId === null ? [] : [p.slideId])))}
                       onSelect={(i) => select(i)}
@@ -415,6 +419,7 @@ function Studio({ editor, open, onExit }: { editor: QuizEditor; open: OpenQuiz |
                           quiz={quiz}
                           index={index}
                           slide={slide}
+                          context={contexts[index]}
                           element={element}
                           onSelect={selectPart}
                           onEdit={openEdit}

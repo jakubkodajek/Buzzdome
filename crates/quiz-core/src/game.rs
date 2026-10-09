@@ -192,6 +192,7 @@ pub enum Phase {
     /// Before the first slide: buzzers register by pressing any button.
     Lobby,
     Billboard,
+    Explanation,
     EndOfRound,
     Question(QuestionStep),
     Final { step: u8 },
@@ -551,7 +552,7 @@ impl Game {
     fn next(&mut self, now: u64) -> Result<Vec<Effect>, GameError> {
         match self.phase.clone() {
             Phase::Lobby => Ok(self.enter_slide(0)),
-            Phase::Billboard | Phase::EndOfRound => Ok(self.enter_slide(self.slide + 1)),
+            Phase::Billboard | Phase::Explanation | Phase::EndOfRound => Ok(self.enter_slide(self.slide + 1)),
             Phase::Question(step) => match step {
                 QuestionStep::Ready => {
                     let limit = self.question().and_then(Question::time_limit_ms);
@@ -603,6 +604,7 @@ impl Game {
         self.phase = match self.quiz.slides.get(index).map(|s| &s.content) {
             None => Phase::Final { step: 0 },
             Some(SlideContent::Billboard { .. }) => Phase::Billboard,
+            Some(SlideContent::Explanation { .. }) => Phase::Explanation,
             Some(SlideContent::EndOfRound { .. }) => Phase::EndOfRound,
             Some(SlideContent::Question(_)) => Phase::Question(QuestionStep::Ready),
         };

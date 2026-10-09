@@ -5,7 +5,7 @@ import { SlideScreen } from "../host/SlideScreen";
 import { Stage } from "../host/Stage";
 import { SoundIcon } from "../icons";
 import { mediaFileName } from "../media";
-import { questionPosition } from "../quiz";
+import type { SlideContext } from "../quiz";
 import { SlideBackground } from "../slide-media";
 import type { Quiz, Slide } from "../types";
 import { elementAt, type ElementId } from "./elements";
@@ -14,6 +14,7 @@ interface DesignAreaProps {
   quiz: Quiz;
   index: number;
   slide: Slide;
+  context: SlideContext;
   /** The part of the slide that is selected; outlined. */
   element: ElementId;
   onSelect: (element: ElementId) => void;
@@ -25,7 +26,7 @@ interface DesignAreaProps {
  * The selected slide as the audience will see it. A click selects the part
  * under the pointer, a double click edits it.
  */
-export function DesignArea({ quiz, index, slide, element, onSelect, onEdit, onMenu }: DesignAreaProps) {
+export function DesignArea({ quiz, index, slide, context, element, onSelect, onEdit, onMenu }: DesignAreaProps) {
   const { t } = useApp();
   return (
     <div
@@ -42,7 +43,7 @@ export function DesignArea({ quiz, index, slide, element, onSelect, onEdit, onMe
     >
       <Stage className="design-stage">
         <SlideBackground slide={slide} mode="preview" />
-        <SlideScreen view={previewView(slide, index, quiz.slides.length, quiz.title)} position={questionPosition(quiz, index)} clock={null} mode="preview" />
+        <SlideScreen view={previewView(slide, index, quiz.slides.length, quiz.title)} context={context} clock={null} mode="preview" />
         {slide.sound && (
           <div className="sound-badge" data-element="sound" title={t("mediaSound")}>
             <SoundIcon />

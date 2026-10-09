@@ -1,22 +1,17 @@
 import type { StringKey } from "./i18n";
-import type { Quiz, Slide, SlideType } from "./types";
+import type { QuestionSlide, Quiz, Slide, SlideType } from "./types";
 
 /** How each kind of slide is named in the UI. */
 export const SLIDE_TYPE_LABEL: Record<SlideType, StringKey> = {
   billboard: "typeBillboard",
   question: "typeQuestion",
+  explanation: "typeExplanation",
   endOfRound: "typeEndOfRound",
 };
 
-/** The line a slide is listed by: the question text, or the title. */
+/** The line a slide is listed by: the question or explanation text, or the title. */
 export function slideTitle(slide: Slide): string {
-  return slide.type === "question" ? slide.text : slide.title;
-}
-
-/** For each slide its question number (1-based), or null if it is not a question. */
-export function questionNumbers(quiz: Quiz): (number | null)[] {
-  let n = 0;
-  return quiz.slides.map((slide) => (slide.type === "question" ? ++n : null));
+  return slide.type === "question" || slide.type === "explanation" ? slide.text : slide.title;
 }
 
 /** Position of a question among the questions, e.g. 3 of 12. */
@@ -25,10 +20,63 @@ export interface QuestionPosition {
   total: number;
 }
 
-/** Position of a slide among the questions; null for other slides. */
-export function questionPosition(quiz: Quiz | null, slideIndex: number): QuestionPosition | null {
-  if (!quiz) return null;
-  const numbers = questionNumbers(quiz);
-  const n = numbers[slideIndex];
-  return n == null ? null : { n, total: numbers.filter((x) => x !== null).length };
+/** A question as an explanation slide shows it. */
+export interface ExplainedQuestion {
+  question: QuestionSlide;
+  position: QuestionPosition;
+}
+
+/** What a slide shows from the rest of the quiz. */
+export interface SlideContext {
+  /** Its place among the questions; null for other slides. */
+  position: QuestionPosition | null;
+  /**
+   * For an explanation slide, the question it explains: the nearest one
+   * before it in the same round. Null when there is none.
+   */
+  explains: ExplainedQuestion | null;
+}
+
+export const NO_CONTEXT: SlideContext = { position: null, explains: null };
+
+export function questionCount(quiz: Quiz): number {
+  return quiz.slides.filter((slide) => slide.type === "question").length;
+}
+
+/** The context of each slide of `quiz`, in order. */
+export function slideContexts(quiz: Quiz): SlideContext[] {
+  const total = questionCount(quiz);
+  let n = 0;
+  let lastQuestion: ExplainedQuestion | null = null;
+  return quiz.slides.map((slide) => {
+    switch (slide.type) {
+      case "question": {
+        const position = { n: ++n, total };
+        lastQuestion = { question: slide, position };
+        return { position, explains: null };
+      }
+      case "explanation":
+        return { position: null, explains: lastQuestion };
+      case "endOfRound":
+        lastQuestion = null;
+        return NO_CONTEXT;
+      case "billboard":
+        return NO_CONTEXT;
+    }
+  });
+}
+
+/** The context of the slide at `index`; none without a quiz. */
+export function slideContext(quiz: Quiz | null, index: number): SlideContext {
+  return (quiz && slideContexts(quiz)[index]) ?? NO_CONTEXT;
+}
+
+/** Whether a slide shows the same in both contexts. */
+export function sameContext(a: SlideContext, b: SlideContext): boolean {
+  const samePosition = (x: QuestionPosition | null, y: QuestionPosition | null) => x?.n === y?.n && x?.total === y?.total;
+  return (
+    samePosition(a.position, b.position) &&
+    a.explains?.question === b.explains?.question &&
+    samePosition(a.explains?.position ?? null, b.explains?.position ?? null)
+  );
 }

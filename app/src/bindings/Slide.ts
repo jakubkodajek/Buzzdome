@@ -15,4 +15,4 @@ video: VideoClip | null, sound: SoundClip | null,
 /**
  * Picture or looping video behind the slide; the theme's otherwise.
  */
-background: string | null, } & ({ "type": "billboard", title: string, text: string, } | { "type": "question" } & Question | { "type": "endOfRound", title: string, });
+background: string | null, } & ({ "type": "billboard", title: string, text: string, } | { "type": "question" } & Question | { "type": "explanation", text: string, } | { "type": "endOfRound", title: string, });

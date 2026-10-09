@@ -2,11 +2,12 @@ import { useState, type MouseEvent, type ReactNode } from "react";
 import { ANSWER_LETTERS } from "../answers";
 import { useApp } from "../app-context";
 import type { StringKey } from "../i18n";
+import { slideTitle } from "../quiz";
 import type { Quiz, Slide } from "../types";
 import type { Action } from "./actions";
 import { ContextMenu } from "./controls";
 import { slideProperties, type SlideEditing } from "./properties";
-import { MAX_ANSWERS, setAnswerAt } from "./slides";
+import { MAX_ANSWERS, setAnswerAt, setHeadline } from "./slides";
 
 type ColumnId = "answers" | "correct" | "time" | "points" | "pointsEnd" | "penalty" | "notes";
 
@@ -104,10 +105,10 @@ function SlideRow(props: { index: number; selected: boolean; editing: SlideEditi
       <td className="wide">
         <input
           aria-label={t("colContent")}
-          value={slide.type === "question" ? slide.text : slide.title}
+          value={slideTitle(slide)}
           onChange={(e) => {
             const text = e.target.value;
-            update((s) => (s.type === "question" ? { ...s, text } : { ...s, title: text }), "text");
+            update((s) => setHeadline(s, text), "text");
           }}
         />
       </td>
