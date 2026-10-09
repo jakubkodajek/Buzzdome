@@ -255,8 +255,12 @@ struct MonitorInfo {
     height: u32,
 }
 
+// The window commands are async: Tauri runs them off the main thread, which
+// creating a window from a synchronous command would deadlock on Windows
+// (WebView2; see the `WebviewWindowBuilder::new` docs).
+
 #[tauri::command]
-fn list_monitors(app: AppHandle) -> CmdResult<Vec<MonitorInfo>> {
+async fn list_monitors(app: AppHandle) -> CmdResult<Vec<MonitorInfo>> {
     let window = app.get_webview_window(DIRECTOR_LABEL).ok_or("director window missing")?;
     let monitors = window.available_monitors().map_err(|e| e.to_string())?;
     Ok(monitors
@@ -273,7 +277,7 @@ fn list_monitors(app: AppHandle) -> CmdResult<Vec<MonitorInfo>> {
 
 /// Opens (or moves) the projector window, full screen on the chosen monitor.
 #[tauri::command]
-fn open_host_window(app: AppHandle, monitor: Option<usize>, fullscreen: bool) -> CmdResult<()> {
+async fn open_host_window(app: AppHandle, monitor: Option<usize>, fullscreen: bool) -> CmdResult<()> {
     let window = match app.get_webview_window(HOST_LABEL) {
         Some(window) => window,
         None => WebviewWindowBuilder::new(&app, HOST_LABEL, WebviewUrl::App("index.html".into()))
@@ -298,7 +302,7 @@ fn host_window_open(app: AppHandle) -> bool {
 }
 
 #[tauri::command]
-fn close_host_window(app: AppHandle) -> CmdResult<()> {
+async fn close_host_window(app: AppHandle) -> CmdResult<()> {
     match app.get_webview_window(HOST_LABEL) {
         Some(window) => window.close().map_err(|e| e.to_string()),
         None => Ok(()),
