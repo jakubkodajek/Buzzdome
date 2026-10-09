@@ -74,11 +74,16 @@ fn emit_show_changed(app: &AppHandle, inner: &Inner) {
     emit_state(app, inner.game.as_ref());
 }
 
-/// Applies a command on a copy, journals it, then commits. The show never
-/// shows a state that is not on disk.
+/// Applies `command` as of now; see `execute_at`.
 fn execute(app: &AppHandle, inner: &mut Inner, command: Command) -> CmdResult<()> {
+    execute_at(app, inner, command, now_ms())
+}
+
+/// Applies a command that happened at `at_ms` on a copy, journals it, then
+/// commits. The show never shows a state that is not on disk.
+fn execute_at(app: &AppHandle, inner: &mut Inner, command: Command, at_ms: u64) -> CmdResult<()> {
     let game = inner.game.as_ref().ok_or("no show is running")?;
-    let stamped = Stamped { at_ms: now_ms(), command };
+    let stamped = Stamped { at_ms, command };
     let mut next = game.clone();
     let effects = next.apply(&stamped).map_err(|e| e.to_string())?;
     if let Some(session) = inner.session.as_mut() {
@@ -228,15 +233,15 @@ fn dispatch(app: AppHandle, state: State<AppState>, command: Command) -> CmdResu
     execute(&app, &mut state.0.lock().unwrap(), command)
 }
 
-/// Feeds a press from the buzzer receiver into the running show, if any.
+/// Feeds a press the receiver got at `at_ms` into the running show, if any.
 /// Returns whether the show took it.
-pub(crate) fn press_from_hardware(app: &AppHandle, command: Command) -> bool {
+pub(crate) fn press_from_hardware(app: &AppHandle, command: Command, at_ms: u64) -> bool {
     let state = app.state::<AppState>();
     let mut inner = state.0.lock().unwrap();
     if inner.game.is_none() {
         return false;
     }
-    match execute(app, &mut inner, command) {
+    match execute_at(app, &mut inner, command, at_ms) {
         Ok(()) => true,
         Err(e) => {
             eprintln!("buzzer press: {e}");

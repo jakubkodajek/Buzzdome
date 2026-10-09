@@ -183,10 +183,11 @@ fn spawn_event_pump(app: AppHandle, rx: mpsc::Receiver<ReceiverEvent>) {
                             let _ = app.emit("receiver-learn", hw.learn_progress());
                         }
                     }
-                    ReceiverEvent::Press(press) => {
+                    ReceiverEvent::Press { press, at_ms } => {
                         // While learning, presses only teach; they must not play.
                         let learning = hw.learn.lock().unwrap().is_some();
-                        let used = !learning && crate::press_from_hardware(&app, Command::Press { buzzer: press.buzzer, button: press.button });
+                        let command = Command::Press { buzzer: press.buzzer, button: press.button };
+                        let used = !learning && crate::press_from_hardware(&app, command, at_ms);
                         let _ = app.emit("receiver-press", PressEvent { press, used });
                     }
                 }

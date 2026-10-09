@@ -49,8 +49,10 @@ pub enum ReceiverEvent {
     Status(ReceiverStatus),
     /// Sent for every report before the presses decoded from it.
     Raw(RawReport),
-    /// A press edge, in the order the receiver delivered it.
-    Press(Press),
+    /// A press edge, in the order the receiver delivered it, with the time
+    /// its report arrived (ms since the Unix epoch). The game scores the
+    /// press by that time, however long the app takes to apply it.
+    Press { press: Press, at_ms: u64 },
 }
 
 #[derive(Debug, Clone)]
@@ -273,7 +275,7 @@ impl Worker {
         let presses = self.edge.filter(decoded.clone(), at_ms);
         let _ = self.events.send(ReceiverEvent::Raw(RawReport { at_ms, bytes: bytes.to_vec(), decoded }));
         for press in presses {
-            let _ = self.events.send(ReceiverEvent::Press(press));
+            let _ = self.events.send(ReceiverEvent::Press { press, at_ms });
         }
     }
 

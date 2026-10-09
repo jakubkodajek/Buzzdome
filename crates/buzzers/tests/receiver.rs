@@ -165,19 +165,21 @@ fn connects_sends_init_and_decodes_presses_in_order() {
         w.inbox.push_back(vec![0x09, 9, 9]); // unknown report
     }
     let mut presses = Vec::new();
-    let mut raws = 0;
-    while raws < 4 {
+    let mut raws = Vec::new();
+    while raws.len() < 4 {
         match wait_for(&rx, |e| !matches!(e, ReceiverEvent::Status(_))) {
-            ReceiverEvent::Raw(_) => raws += 1,
-            ReceiverEvent::Press(p) => presses.push(p),
+            ReceiverEvent::Raw(report) => raws.push(report),
+            ReceiverEvent::Press { press, at_ms } => presses.push((press, at_ms)),
             ReceiverEvent::Status(_) => {}
         }
     }
     // Drain presses that follow the last raw report.
-    while let Ok(ReceiverEvent::Press(p)) = rx.recv_timeout(Duration::from_millis(50)) {
-        presses.push(p);
+    while let Ok(ReceiverEvent::Press { press, at_ms }) = rx.recv_timeout(Duration::from_millis(50)) {
+        presses.push((press, at_ms));
     }
-    assert_eq!(presses, vec![Press { buzzer: 7, button: Button::Big }, Press { buzzer: 3, button: Button::Big }]);
+    // Each press carries the arrival time of the report it came from.
+    let expected = [(Press { buzzer: 7, button: Button::Big }, raws[0].at_ms), (Press { buzzer: 3, button: Button::Big }, raws[1].at_ms)];
+    assert_eq!(presses, expected);
     handle.shutdown();
 }
 

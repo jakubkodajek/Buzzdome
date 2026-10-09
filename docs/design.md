@@ -253,12 +253,20 @@ pattern, learn mode will show conflicts and the vendor protocol is needed.
 ### 2.6 From press to screen
 
 The event pump thread in `hardware.rs` receives `Press` events in receiver
-order and calls `execute(Command::Press { buzzer, button })` for each, one at
-a time, under the app state lock. `execute` applies the command to a copy of
-the game, appends it to the journal (fsync'd file), swaps the new state in,
-sends light effects to the driver, and only then emits the new state to the
-windows. If the journal write fails, the press is rejected and the screen
-does not change.
+order and calls `execute_at(Command::Press { buzzer, button }, at_ms)` for
+each, one at a time, under the app state lock. `at_ms` is when the receiver
+thread read the report, not when the press is applied, so waiting for the
+lock or for earlier presses' fsync costs a team no points. `execute_at`
+applies the command to a copy of the game, appends it to the journal
+(fsync'd file), swaps the new state in, sends light effects to the driver,
+and only then emits the new state to the windows. If the journal write
+fails, the press is rejected and the screen does not change.
+
+Because a press can be applied a moment after it was received, the core
+judges it by its `at_ms`: it counts only if it was received while the
+question clock ran (or stood paused) and before time up. The ticker closes a
+question `PRESS_GRACE_MS` (250 ms) after time up, so presses received in
+time but still on their way are counted, and later ones are refused.
 
 Fastest-finger order is therefore the receiver's order. When the vendor
 protocol provides press times, `Command::Press` gets an optional

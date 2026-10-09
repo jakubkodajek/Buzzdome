@@ -14,6 +14,11 @@ pub type BuzzerId = u16;
 /// Steps of the final score reveal: drum roll, 3rd, 2nd, 1st, full ranking.
 pub const FINAL_LAST_STEP: u8 = 4;
 
+/// How long after time up a question stays open, so that presses made in
+/// time but still on their way from the receiver are counted. A press counts
+/// by when it was received (its `at_ms`), not by when it is applied.
+pub const PRESS_GRACE_MS: u64 = 250;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[ts(export)]
 #[serde(rename_all = "camelCase")]
@@ -166,6 +171,14 @@ impl Clock {
 
     fn expired(&self, now: u64) -> bool {
         self.remaining_ms(now) == Some(0)
+    }
+
+    /// A press received at `now` was made while this clock ran (or stood
+    /// paused) and before time up. Presses can be applied a moment after they
+    /// were received, so one received before the clock last started (for
+    /// example while another team's buzz held it) does not count.
+    fn takes_press_at(&self, now: u64) -> bool {
+        !self.expired(now) && self.running_since_ms.is_none_or(|since| now >= since)
     }
 }
 
@@ -327,10 +340,13 @@ impl Game {
         }
     }
 
-    /// A command the app must issue on its own at `now`, such as time up.
+    /// A command the app must issue on its own at `now`, such as time up
+    /// (`PRESS_GRACE_MS` after the clock runs out).
     pub fn due_command(&self, now: u64) -> Option<Command> {
         match &self.phase {
-            Phase::Question(QuestionStep::Running { clock }) if clock.expired(now) => Some(Command::CloseQuestion),
+            Phase::Question(QuestionStep::Running { clock }) if clock.expired(now.saturating_sub(PRESS_GRACE_MS)) => {
+                Some(Command::CloseQuestion)
+            }
             _ => None,
         }
     }
@@ -456,6 +472,9 @@ impl Game {
         let Phase::Question(QuestionStep::Running { clock }) = self.phase else {
             return vec![];
         };
+        if !clock.takes_press_at(now) {
+            return vec![];
+        }
         match mode {
             AnswerMode::Everyone => self.record_answer(buzzer, button, clock.elapsed_ms(now)),
             AnswerMode::FastestFinger => {

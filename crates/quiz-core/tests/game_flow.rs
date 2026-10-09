@@ -1,6 +1,6 @@
 use quiz_core::{
     AnswerMode, Button, Command, Cue, Effect, Game, GameError, Light, Phase, Question, QuestionStep, Quiz, Slide,
-    SlideContent, Stamped,
+    SlideContent, Stamped, PRESS_GRACE_MS,
 };
 
 fn question(id: &str, mode: AnswerMode) -> Slide {
@@ -105,12 +105,56 @@ fn everyone_answers_closes_on_time_up() {
     show.run(1_000, Command::Next).unwrap();
     show.press(2_000, 1, Button::B);
 
-    assert_eq!(show.game.due_command(10_999), None);
-    assert_eq!(show.game.due_command(11_000), Some(Command::CloseQuestion));
-    let effects = show.run(11_000, Command::CloseQuestion).unwrap();
+    // Time is up at 11 000; the question stays open for presses still on their way.
+    assert_eq!(show.game.due_command(11_000 + PRESS_GRACE_MS - 1), None);
+    assert_eq!(show.game.due_command(11_000 + PRESS_GRACE_MS), Some(Command::CloseQuestion));
+    let effects = show.run(11_000 + PRESS_GRACE_MS, Command::CloseQuestion).unwrap();
     assert!(effects.contains(&Effect::Sound { cue: Cue::TimeUp }));
     assert_eq!(step(&show.game), QuestionStep::Closed);
     assert_eq!((show.score(1), show.score(2)), (95, 0));
+}
+
+#[test]
+fn a_press_counts_by_when_it_was_received() {
+    let mut show = Show::new(vec![question("q1", AnswerMode::Everyone)]);
+    for buzzer in [1, 2, 3] {
+        show.press(0, buzzer, Button::Big);
+    }
+    show.run(0, Command::Next).unwrap();
+    show.run(1_000, Command::Next).unwrap();
+    // Applied after time up (11 000) but received before it: counts.
+    show.press(10_900, 1, Button::B);
+    // Received after time up: too late, though the question is still open.
+    show.press(11_100, 2, Button::B);
+    show.run(11_000 + PRESS_GRACE_MS, Command::CloseQuestion).unwrap();
+    assert_eq!(show.game.responses().keys().copied().collect::<Vec<_>>(), vec![1]);
+    assert_eq!((show.score(1), show.score(2)), (50, 0));
+}
+
+#[test]
+fn a_late_buzz_does_not_stop_a_fastest_finger_clock() {
+    let mut show = Show::new(vec![question("q1", AnswerMode::FastestFinger)]);
+    show.press(0, 1, Button::Big);
+    show.run(0, Command::Next).unwrap();
+    show.run(0, Command::Next).unwrap();
+    show.press(10_001, 1, Button::Big);
+    assert!(matches!(step(&show.game), QuestionStep::Running { .. }));
+}
+
+#[test]
+fn a_buzz_received_while_another_team_answers_does_not_count() {
+    let mut show = Show::new(vec![question("q1", AnswerMode::FastestFinger)]);
+    show.press(0, 1, Button::Big);
+    show.press(0, 2, Button::Big);
+    show.run(0, Command::Next).unwrap();
+    show.run(0, Command::Next).unwrap();
+    show.press(1_000, 1, Button::Big);
+    show.run(2_000, Command::JudgeWrong).unwrap();
+    // Received at 1 500, while buzzer 1 held the clock, applied only now.
+    show.press(1_500, 2, Button::Big);
+    assert!(matches!(step(&show.game), QuestionStep::Running { .. }));
+    show.press(2_100, 2, Button::Big);
+    assert!(matches!(step(&show.game), QuestionStep::Buzzed { buzzer: 2, .. }));
 }
 
 #[test]
@@ -188,7 +232,7 @@ fn ranking_breaks_ties_on_total_answer_time() {
     show.run(0, Command::AdjustScore { buzzer: 1, delta: 50 }).unwrap();
     show.run(0, Command::Next).unwrap();
     show.run(0, Command::Next).unwrap();
-    show.press(10_000, 1, Button::A); // wrong, slow
+    show.press(9_000, 1, Button::A); // wrong, slow
     show.press(1_000, 2, Button::B); // right after 1 s: 95 points
     show.run(1_000, Command::AdjustScore { buzzer: 2, delta: -25 }).unwrap();
     // Slow: 50 - 20 = 30; Fast: 95 - 25 = 70.
