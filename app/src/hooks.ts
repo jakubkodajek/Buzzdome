@@ -1,7 +1,7 @@
 import { listen } from "@tauri-apps/api/event";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { api, type BackendEvents } from "./api";
-import type { ClockView, GameView, Quiz, SessionSummary } from "./types";
+import type { ClockView, GameView, LearnProgress, Quiz, SessionSummary } from "./types";
 
 /** A ref that always holds the latest `value`, for callbacks that outlive a render. */
 export function useLatest<T>(value: T): { readonly current: T } {
@@ -55,24 +55,37 @@ function useBackendValue<T>(load: () => Promise<T>, initial: T, refreshOn: keyof
   return value;
 }
 
-/** The latest game state, pushed by the backend after every change. */
-export function useGameView(): GameView | null {
-  const [view, setView] = useState<GameView | null>(null);
+/**
+ * A value the backend sends with `event` whenever it changes. The first value
+ * comes from `load`, unless a push already arrived; null until then.
+ */
+function usePushedValue<E extends keyof BackendEvents>(event: E, load: () => Promise<BackendEvents[E]>): BackendEvents[E] | null {
+  const [value, setValue] = useState<BackendEvents[E] | null>(null);
   const pushed = useRef(false);
-  useBackendEvent("game-state", (next) => {
+  const initial = useRef(load);
+  useBackendEvent(event, (next) => {
     pushed.current = true;
-    setView(next);
+    setValue(next);
   });
   useEffect(() => {
-    // The first state comes from a fetch, unless a push already arrived.
-    api
-      .getView()
-      .then((initial) => {
-        if (!pushed.current) setView(initial);
+    initial
+      .current()
+      .then((first) => {
+        if (!pushed.current) setValue(first);
       })
       .catch((e) => console.error(e));
   }, []);
-  return view;
+  return value;
+}
+
+/** The latest game state, pushed by the backend after every change. */
+export function useGameView(): GameView | null {
+  return usePushedValue("game-state", api.getView);
+}
+
+/** Whether a buzzer button is being learned; presses do not play meanwhile. */
+export function useLearnProgress(): LearnProgress | null {
+  return usePushedValue("receiver-learn", () => api.receiverInfo().then((info) => info.learn));
 }
 
 /** The clock of the current question: from the game state, then from ticks. */

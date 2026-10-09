@@ -3,8 +3,8 @@ import { useCallback, useEffect, useState } from "react";
 import { BUTTONS, buttonLabel } from "../answers";
 import { api } from "../api";
 import { useApp, useRun } from "../app-context";
-import { useBackendEvent } from "../hooks";
-import type { Button, DeviceInfo, LearnProgress, Press, PressEvent, RawReport, ReceiverInfo, ReceiverStatus } from "../types";
+import { useBackendEvent, useLearnProgress } from "../hooks";
+import type { Button, DeviceInfo, Press, PressEvent, RawReport, ReceiverInfo, ReceiverStatus } from "../types";
 
 const LOG_LEN = 40;
 
@@ -23,7 +23,6 @@ export function ReceiverTab() {
   const [devices, setDevices] = useState<DeviceInfo[]>([]);
   const [raw, setRaw] = useState<RawReport[]>([]);
   const [presses, setPresses] = useState<(PressEvent & { at: number })[]>([]);
-  const [learn, setLearn] = useState<LearnProgress | null>(null);
   const [buzzer, setBuzzer] = useState(1);
   const [button, setButton] = useState<Button>("a");
   const [message, setMessage] = useState<string | null>(null);
@@ -34,7 +33,6 @@ export function ReceiverTab() {
       api.receiverInfo().then((i) => {
         setInfo(i);
         setStatus(i.status);
-        setLearn(i.learn);
         setRaw([...i.recent].reverse().slice(0, LOG_LEN));
       }),
     );
@@ -53,7 +51,9 @@ export function ReceiverTab() {
   });
   useBackendEvent("receiver-raw", (report) => setRaw((list) => [report, ...list].slice(0, LOG_LEN)));
   useBackendEvent("receiver-press", (event) => setPresses((list) => [{ ...event, at: Date.now() }, ...list].slice(0, LOG_LEN)));
-  useBackendEvent("receiver-learn", setLearn);
+  const learn = useLearnProgress();
+  // Learning stops with the tab, so presses never stay muted in a show.
+  useEffect(() => () => void api.receiverLearnCancel().catch((e) => console.error(e)), []);
 
   useEffect(() => {
     if (info?.platform === "linux") api.receiverUdevRule().then(setUdev).catch(() => setUdev(""));
@@ -100,6 +100,11 @@ export function ReceiverTab() {
           </p>
         )}
         {status?.kind === "connected" && !status.hasLights && <p className="muted">{t("receiverNoLights")}</p>}
+        {info?.settingsError && (
+          <p className="receiver-state error">
+            {t("receiverSettingsLost")} {info.settingsError}
+          </p>
+        )}
         {status && status.kind !== "off" && (
           <button onClick={() => run(api.receiverSelect(null))}>{t("forgetReceiver")}</button>
         )}

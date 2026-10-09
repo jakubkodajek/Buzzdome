@@ -4,7 +4,7 @@ import { api } from "../api";
 import { AppProvider, useApp, useDispatch, useRun } from "../app-context";
 import { clockSeconds } from "../format";
 import { EditorScreen } from "../editor/EditorScreen";
-import { useBackendEvent, useClock, useGameView, useLastSession, useMediaRoot, useQuiz } from "../hooks";
+import { useBackendEvent, useClock, useGameView, useLastSession, useLearnProgress, useMediaRoot, useQuiz } from "../hooks";
 import {
   BackIcon,
   CheckIcon,
@@ -110,11 +110,26 @@ function DirectorLayout({ testRun, onEditor }: { testRun: boolean; onEditor: () 
             </button>
           ))}
         </nav>
+        <LearnBanner />
         <div className="tab-body">
           <TabBody tab={tab} view={view} quiz={quiz} projector={projector} />
         </div>
         <StatusBar view={view} quiz={quiz} testRun={testRun} />
       </div>
+    </div>
+  );
+}
+
+/** Shown while a buzzer button is being learned, when presses do not play. */
+function LearnBanner() {
+  const { t } = useApp();
+  const run = useRun();
+  const learn = useLearnProgress();
+  if (!learn?.active) return null;
+  return (
+    <div className="learn-banner" role="status">
+      <span>{t("learnBanner")}</span>
+      <button onClick={() => run(api.receiverLearnCancel())}>{t("learnCancel")}</button>
     </div>
   );
 }

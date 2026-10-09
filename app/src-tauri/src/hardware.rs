@@ -15,7 +15,7 @@ use quiz_core::{BuzzerId, Button, Command};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 use std::collections::VecDeque;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Emitter, Manager};
@@ -51,6 +51,8 @@ pub struct ReceiverInfo {
     /// None when USB-HID could not be initialised on this system.
     status: Option<ReceiverStatus>,
     init_error: Option<String>,
+    /// The saved receiver settings could not be read; they were set aside.
+    settings_error: Option<String>,
     learned_buttons: usize,
     learn: LearnProgress,
     recent: Vec<RawReport>,
@@ -70,6 +72,7 @@ pub struct Hardware {
     backend: Option<Arc<HidapiBackend>>,
     handle: Option<ReceiverHandle>,
     init_error: Option<String>,
+    settings_error: Option<String>,
     settings: Arc<Mutex<ReceiverSettings>>,
     settings_path: PathBuf,
     learn: Mutex<Option<Recorder>>,
@@ -78,29 +81,33 @@ pub struct Hardware {
 
 type CmdResult<T> = Result<T, String>;
 
+/// Receiver events waiting for `spawn_event_pump`.
+pub type ReceiverEvents = mpsc::Receiver<ReceiverEvent>;
+
 impl Hardware {
     /// Starts the receiver thread and reconnects to the remembered receiver.
-    pub fn start(app: &AppHandle) -> Hardware {
+    /// Its events queue up until `spawn_event_pump` runs, which must be after
+    /// the returned `Hardware` is managed by the app (the pump reads it).
+    pub fn start(app: &AppHandle) -> (Hardware, Option<ReceiverEvents>) {
         let settings_path = app.path().app_data_dir().map(|d| d.join(SETTINGS_FILE)).unwrap_or_else(|_| SETTINGS_FILE.into());
-        let settings: ReceiverSettings = std::fs::read_to_string(&settings_path)
-            .ok()
-            .and_then(|s| serde_json::from_str(&s).ok())
-            .unwrap_or_default();
+        let (settings, settings_error) = load_settings(&settings_path);
         let remembered = settings.receiver.clone();
         let settings = Arc::new(Mutex::new(settings));
 
         let backend = match HidapiBackend::new() {
             Ok(b) => Arc::new(b),
             Err(e) => {
-                return Hardware {
+                let hardware = Hardware {
                     backend: None,
                     handle: None,
                     init_error: Some(format!("USB-HID is not available: {e}")),
+                    settings_error,
                     settings,
                     settings_path,
                     learn: Mutex::new(None),
                     raw_log: Mutex::new(VecDeque::new()),
-                }
+                };
+                return (hardware, None);
             }
         };
 
@@ -116,17 +123,18 @@ impl Hardware {
         let (tx, rx) = mpsc::channel();
         let (handle, _join) = receiver::spawn(backend.clone(), resolver, tx, ReceiverConfig::default());
         handle.select(remembered);
-        spawn_event_pump(app.clone(), rx);
 
-        Hardware {
+        let hardware = Hardware {
             backend: Some(backend),
             handle: Some(handle),
             init_error: None,
+            settings_error,
             settings,
             settings_path,
             learn: Mutex::new(None),
             raw_log: Mutex::new(VecDeque::new()),
-        }
+        };
+        (hardware, Some(rx))
     }
 
     pub fn handle(&self) -> Option<ReceiverHandle> {
@@ -138,9 +146,14 @@ impl Hardware {
         if let Some(dir) = self.settings_path.parent() {
             std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
         }
-        let tmp = self.settings_path.with_extension("json.tmp");
-        std::fs::write(&tmp, json).map_err(|e| e.to_string())?;
-        std::fs::rename(&tmp, &self.settings_path).map_err(|e| e.to_string())
+        quiz_file::write_atomic(&self.settings_path, json.as_bytes()).map_err(|e| e.to_string())
+    }
+
+    /// Ends learn mode, if on, so presses play again.
+    fn end_learning(&self, app: &AppHandle) {
+        if self.learn.lock().unwrap().take().is_some() {
+            let _ = app.emit("receiver-learn", self.learn_progress());
+        }
     }
 
     fn learn_progress(&self) -> LearnProgress {
@@ -158,8 +171,34 @@ impl Hardware {
     }
 }
 
+/// Reads the remembered receiver settings. A file that cannot be read is
+/// renamed aside (so learned buttons can still be recovered by hand) and
+/// reported, instead of being silently replaced by defaults.
+fn load_settings(path: &Path) -> (ReceiverSettings, Option<String>) {
+    let text = match std::fs::read_to_string(path) {
+        Ok(text) => text,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return (ReceiverSettings::default(), None),
+        Err(e) => return (ReceiverSettings::default(), Some(format!("{}: {e}", path.display()))),
+    };
+    match serde_json::from_str(&text) {
+        Ok(settings) => (settings, None),
+        Err(e) => {
+            let aside = path.with_extension("json.broken");
+            let _ = std::fs::rename(path, &aside);
+            (ReceiverSettings::default(), Some(format!("{}: {e}; kept as {}", path.display(), aside.display())))
+        }
+    }
+}
+
+/// Ends learn mode for a new show: during a show every press must play.
+pub fn end_learning(app: &AppHandle) {
+    if let Some(hw) = app.try_state::<Hardware>() {
+        hw.end_learning(app);
+    }
+}
+
 /// Moves receiver events into the game and out to the windows.
-fn spawn_event_pump(app: AppHandle, rx: mpsc::Receiver<ReceiverEvent>) {
+pub fn spawn_event_pump(app: AppHandle, rx: ReceiverEvents) {
     std::thread::Builder::new()
         .name("buzzer-events".into())
         .spawn(move || {
@@ -167,6 +206,10 @@ fn spawn_event_pump(app: AppHandle, rx: mpsc::Receiver<ReceiverEvent>) {
                 let hw = app.state::<Hardware>();
                 match event {
                     ReceiverEvent::Status(status) => {
+                        // Nothing more can be learned without the receiver.
+                        if !matches!(status, ReceiverStatus::Connected { .. }) {
+                            hw.end_learning(&app);
+                        }
                         let _ = app.emit("receiver-status", status);
                     }
                     ReceiverEvent::Raw(report) => {
@@ -203,6 +246,7 @@ pub fn receiver_info(hw: tauri::State<Hardware>) -> ReceiverInfo {
     ReceiverInfo {
         status: hw.handle.as_ref().map(ReceiverHandle::status),
         init_error: hw.init_error.clone(),
+        settings_error: hw.settings_error.clone(),
         learned_buttons: hw.settings.lock().unwrap().learned.iter().map(|m| m.signatures.len()).sum(),
         learn: hw.learn_progress(),
         recent: log.iter().skip(skip).cloned().collect(),
@@ -240,8 +284,7 @@ pub fn receiver_learn_start(app: AppHandle, hw: tauri::State<Hardware>, buzzer: 
 
 #[tauri::command]
 pub fn receiver_learn_cancel(app: AppHandle, hw: tauri::State<Hardware>) {
-    *hw.learn.lock().unwrap() = None;
-    let _ = app.emit("receiver-learn", hw.learn_progress());
+    hw.end_learning(&app);
 }
 
 /// Saves the recorded presses as the signature of the button being learned.

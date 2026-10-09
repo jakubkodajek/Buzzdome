@@ -274,7 +274,9 @@ protocol provides press times, `Command::Press` gets an optional
 together by that time; the PC clock is never used for ranking.
 
 While learn mode is active, presses are shown in the Receiver tab but not
-sent to the game.
+sent to the game. So that it can never mute the buzzers in a show, learn
+mode ends when a show starts, when the receiver disconnects and when the
+Receiver tab closes, and the Director shows a banner while it is on.
 
 ### 2.7 Lights
 

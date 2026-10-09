@@ -7,4 +7,8 @@ export type ReceiverInfo = {
 /**
  * None when USB-HID could not be initialised on this system.
  */
-status: ReceiverStatus | null, initError: string | null, learnedButtons: number, learn: LearnProgress, recent: Array<RawReport>, platform: string, };
+status: ReceiverStatus | null, initError: string | null, 
+/**
+ * The saved receiver settings could not be read; they were set aside.
+ */
+settingsError: string | null, learnedButtons: number, learn: LearnProgress, recent: Array<RawReport>, platform: string, };

@@ -13,7 +13,7 @@ use serde::Serialize;
 use ts_rs::TS;
 use session::{Resumed, Session, SessionMeta, SessionSummary};
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
+use std::sync::{Mutex, MutexGuard};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder};
 
@@ -106,6 +106,19 @@ fn execute_at(app: &AppHandle, inner: &mut Inner, command: Command, at_ms: u64) 
     Ok(())
 }
 
+/// Locks the show state to start a show, refusing while one runs. Learn
+/// mode ends first, because in a show every press must play; it is ended
+/// before the lock is taken, as no code may wait for the learn lock while
+/// holding this one.
+fn lock_for_new_show<'a>(app: &AppHandle, state: &'a AppState) -> CmdResult<MutexGuard<'a, Inner>> {
+    hardware::end_learning(app);
+    let inner = state.0.lock().unwrap();
+    if inner.game.is_some() {
+        return Err("a show is running; end it first".into());
+    }
+    Ok(inner)
+}
+
 /// Starts a show of `quiz`, whose media (if any) are in `media_root`.
 fn start_show(
     app: &AppHandle,
@@ -161,7 +174,7 @@ async fn start_show_from_file(app: AppHandle, state: State<'_, AppState>, path: 
     // Unpacking big media takes a moment: it runs off the UI thread and
     // before the show is locked.
     let package = quiz_file::open(Path::new(&path), &quizzes_cache(&app)?).map_err(|e| e.to_string())?;
-    start_show(&app, &mut state.0.lock().unwrap(), package.quiz, Some(path), Some(package.root))
+    start_show(&app, &mut *lock_for_new_show(&app, &state)?, package.quiz, Some(path), Some(package.root))
 }
 
 /// Plays the editor's quiz without a journal, so the last real show stays
@@ -170,10 +183,7 @@ async fn start_show_from_file(app: AppHandle, state: State<'_, AppState>, path: 
 fn editor_test_run(app: AppHandle, state: State<AppState>, quiz: Quiz) -> CmdResult<()> {
     let root = editor::draft_root(&app)?;
     quiz_file::check(&quiz, &root).map_err(|e| e.to_string())?;
-    let mut inner = state.0.lock().unwrap();
-    if inner.game.is_some() {
-        return Err("a show is running; end it before a test run".into());
-    }
+    let mut inner = lock_for_new_show(&app, &state)?;
     serve_media(&app, &mut inner, Some(root))?;
     inner.game = Some(Game::new(quiz));
     inner.session = None;
@@ -184,7 +194,7 @@ fn editor_test_run(app: AppHandle, state: State<AppState>, quiz: Quiz) -> CmdRes
 #[tauri::command]
 fn start_demo_show(app: AppHandle, state: State<AppState>) -> CmdResult<()> {
     let quiz = Quiz::from_json(DEMO_QUIZ)?;
-    start_show(&app, &mut state.0.lock().unwrap(), quiz, None, None)
+    start_show(&app, &mut *lock_for_new_show(&app, &state)?, quiz, None, None)
 }
 
 #[tauri::command]
@@ -196,6 +206,8 @@ fn last_session(app: AppHandle) -> CmdResult<Option<SessionSummary>> {
 /// runs but something is missing (its media were deleted).
 #[tauri::command]
 fn resume_last_session(app: AppHandle, state: State<AppState>) -> CmdResult<Option<String>> {
+    // Locked first: the running show's journal must not be reopened.
+    let mut inner = lock_for_new_show(&app, &state)?;
     let Resumed { session, quiz, journal, meta } = Session::resume_latest(&sessions_root(&app)?)
         .map_err(|e| e.to_string())?
         .ok_or("there is no show to resume")?;
@@ -205,7 +217,6 @@ fn resume_last_session(app: AppHandle, state: State<AppState>) -> CmdResult<Opti
         Some(root) => quiz_file::check(&quiz, root).err().map(|e| e.to_string()),
         None => None,
     };
-    let mut inner = state.0.lock().unwrap();
     serve_media(&app, &mut inner, media_root.filter(|root| root.is_dir()))?;
     let game = Game::replay(quiz, &journal);
     let recovery = game.recovery_command();
@@ -351,11 +362,15 @@ pub fn run() {
             driver: Box::new(VirtualDriver),
         })))
         .setup(|app| {
-            let hardware = Hardware::start(app.handle());
+            let (hardware, events) = Hardware::start(app.handle());
             if let Some(handle) = hardware.handle() {
                 app.state::<AppState>().0.lock().unwrap().driver = Box::new(HardwareDriver(handle));
             }
+            // The event pump reads `Hardware` from the app, so it starts after `manage`.
             app.manage(hardware);
+            if let Some(events) = events {
+                hardware::spawn_event_pump(app.handle().clone(), events);
+            }
             spawn_ticker(app.handle().clone());
             Ok(())
         })
