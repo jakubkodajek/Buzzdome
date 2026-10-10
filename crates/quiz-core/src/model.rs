@@ -528,6 +528,8 @@ pub enum Problem {
     UnknownCategory,
     #[error("two categories have the same id")]
     DuplicateCategoryId { name: String },
+    #[error("the id of category {name} is empty or longer than {max} characters")]
+    CategoryIdInvalid { name: String, max: usize },
     #[error("a category has no name")]
     CategoryUnnamed,
     #[error("a category name has more than {max} characters")]
@@ -572,6 +574,7 @@ impl Problem {
             Problem::CategoryStyleUnread { .. }
                 | Problem::UnknownCategory
                 | Problem::DuplicateCategoryId { .. }
+                | Problem::CategoryIdInvalid { .. }
                 | Problem::CategoryUnnamed
                 | Problem::CategoryNameTooLong { .. }
                 | Problem::CategoryNameTaken { .. }

@@ -4,14 +4,15 @@
 // background and look rows serve it too.
 
 import { useState } from "react";
-import { useApp } from "../app-context";
+import { api } from "../api";
+import { useApp, useReport } from "../app-context";
 import { MAX_CATEGORY_NAME_CHARS } from "../bindings/Constants";
 import { BackgroundIcon, CategoryIcon, PaletteIcon, PlayIcon, StopIcon, TrashIcon } from "../icons";
 import { isVideo, type MediaKind } from "../media";
 import { NO_CONTEXT } from "../quiz";
 import type { Category, Quiz, Slide } from "../types";
 import type { Action } from "./actions";
-import { freshCategoryId, freshCategoryName, newCategory, sampleSlide, slidesOf, withLook } from "./categories";
+import { freshCategoryId, newCategory, sampleSlide, slidesOf, withLook } from "./categories";
 import { hasElement, type ElementId } from "./elements";
 import type { SlideEditing } from "./properties";
 import { categoryPages, type Page } from "./property-pages";
@@ -53,6 +54,7 @@ export interface CategoryEditor {
 
 export function useCategories(editor: QuizEditor, quiz: Quiz | null): CategoryEditor {
   const { t, notify } = useApp();
+  const report = useReport();
   const [selection, setSelection] = useState<{ id: string | null; index: number; element: ElementId }>({ id: null, index: 0, element: "slide" });
   const [playingBackgroundOf, setPlayingBackgroundOf] = useState<string | null>(null);
   const categories = quiz?.categories ?? [];
@@ -76,9 +78,12 @@ export function useCategories(editor: QuizEditor, quiz: Quiz | null): CategoryEd
 
   const create = (look?: Slide) => {
     if (!quiz) return;
-    const added = newCategory(freshCategoryId(quiz), freshCategoryName(categories, t("categoryDefaultName")), look);
-    editor.edit({ type: "insertCategory", index: index + 1, category: added });
-    setSelection({ id: added.id, index: index + 1, element: "slide" });
+    // The backend tells category names apart (Z9).
+    api.editorCategoryName(categories, t("categoryDefaultName")).then((name) => {
+      const added = newCategory(freshCategoryId(quiz), name, look);
+      editor.edit({ type: "insertCategory", index: index + 1, category: added });
+      setSelection({ id: added.id, index: index + 1, element: "slide" });
+    }, report);
   };
 
   const editing: SlideEditing | null = category &&

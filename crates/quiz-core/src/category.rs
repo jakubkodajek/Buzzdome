@@ -12,6 +12,8 @@ use ts_rs::TS;
 
 /// Longest category name, in characters.
 pub const MAX_CATEGORY_NAME_CHARS: usize = 40;
+/// Longest category id, in characters; the editor makes ones like `c-k3x9q2ab`.
+pub const MAX_CATEGORY_ID_CHARS: usize = 64;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[ts(export)]
@@ -58,13 +60,27 @@ pub fn category_named<'a>(categories: &'a [Category], name: &str) -> Option<&'a 
     categories.iter().find(|category| name_key(&category.name) == key)
 }
 
+/// The first of "`base` 1", "`base` 2"… that no category of `categories` is
+/// named (see `name_key`), for a new category.
+pub fn fresh_category_name(categories: &[Category], base: &str) -> String {
+    let taken: HashSet<String> = categories.iter().map(|category| name_key(&category.name)).collect();
+    // Of one number more than there are categories, one is free.
+    (1..=categories.len() + 1)
+        .map(|n| format!("{} {n}", base.trim()))
+        .find(|name| !taken.contains(&name_key(name)))
+        .expect("one of the numbers is free")
+}
+
 /// What is wrong with the quiz's categories, each with the category's name.
 pub(crate) fn category_problems(categories: &[Category], found: &mut impl FnMut(Problem)) {
     let mut ids = HashSet::new();
     let mut names = HashSet::new();
     for category in categories {
         let name = category.name.trim();
-        if !ids.insert(category.id.as_str()) {
+        let id = category.id.as_str();
+        if id.is_empty() || id.chars().count() > MAX_CATEGORY_ID_CHARS {
+            found(Problem::CategoryIdInvalid { name: name.to_string(), max: MAX_CATEGORY_ID_CHARS });
+        } else if !ids.insert(id) {
             found(Problem::DuplicateCategoryId { name: name.to_string() });
         }
         if name.is_empty() {
@@ -102,7 +118,15 @@ mod tests {
     }
 
     #[test]
-    fn a_category_needs_its_own_id_a_name_of_a_length_and_a_safe_background() {
+    fn a_new_category_gets_the_first_numbered_name_none_has_regardless_of_case_and_spaces() {
+        let categories = [Category::new("c1", " category 1 "), Category::new("c2", "CATEGORY 3")];
+        assert_eq!(fresh_category_name(&categories, "Category"), "Category 2");
+        assert_eq!(fresh_category_name(&categories[..1], " Category "), "Category 2");
+        assert_eq!(fresh_category_name(&[], "Category"), "Category 1");
+    }
+
+    #[test]
+    fn a_category_needs_its_own_id_of_a_length_a_name_of_a_length_and_a_safe_background() {
         let mut long = Category::new("c3", "x".repeat(MAX_CATEGORY_NAME_CHARS + 1));
         long.background = Some(Background::new("../outside.mp4"));
         let found = problems(&[Category::new("c1", "A"), Category::new("c1", " "), long]);
@@ -111,5 +135,8 @@ mod tests {
         assert_eq!(found[2], Problem::CategoryNameTooLong { max: MAX_CATEGORY_NAME_CHARS });
         assert!(matches!(&found[3], Problem::CategoryMedia { file, issue: MediaIssue::NotInMediaFolder, .. } if file == "../outside.mp4"), "{found:?}");
         assert!(problems(&[Category::new("c1", "x".repeat(MAX_CATEGORY_NAME_CHARS))]).is_empty());
+        let invalid = |name: &str| Problem::CategoryIdInvalid { name: name.into(), max: MAX_CATEGORY_ID_CHARS };
+        let ids = [Category::new("", "B"), Category::new("x".repeat(MAX_CATEGORY_ID_CHARS + 1), "C"), Category::new("x".repeat(MAX_CATEGORY_ID_CHARS), "D")];
+        assert_eq!(problems(&ids), [invalid("B"), invalid("C")]);
     }
 }

@@ -189,11 +189,17 @@ pub async fn editor_add_media(app: AppHandle, lock: State<'_, EditorLock>, path:
     Ok(quiz_file::import_media(&root, quiz_file::MediaSource::File(Path::new(&path)))?)
 }
 
+/// A name for a new category that none of `categories` has (spec QZ-10).
+#[tauri::command]
+pub fn editor_category_name(categories: Vec<Category>, base: String) -> String {
+    quiz_core::fresh_category_name(&categories, &base)
+}
+
 /// Reads questions from a spreadsheet and copies the media they use into
 /// the draft; the editor inserts the slides as one change (spec QZ-8),
-/// giving a row that names one of the quiz's `categories` its look.
+/// giving a row that names one of the draft's categories its look (Z10).
 #[tauri::command]
-pub async fn editor_import_sheet(app: AppHandle, lock: State<'_, EditorLock>, path: String, categories: Vec<Category>) -> CmdResult<SheetImport> {
+pub async fn editor_import_sheet(app: AppHandle, lock: State<'_, EditorLock>, path: String) -> CmdResult<SheetImport> {
     // The sheet reader may take until its time limit: it runs off the async
     // workers, and the draft stays free for other commands meanwhile.
     let path = PathBuf::from(path);
@@ -201,6 +207,7 @@ pub async fn editor_import_sheet(app: AppHandle, lock: State<'_, EditorLock>, pa
     let tables = tauri::async_runtime::spawn_blocking(move || crate::sheet_reader::read_tables(&read)).await??;
     let _one_at_a_time = lock.0.lock().unwrap();
     let (root, _) = current(&app)?;
+    let categories = quiz_file::read_quiz_json(&root)?.categories;
     // Shuffles the answers of a question with none marked right.
     let seed = SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| d.as_nanos() as u64);
     Ok(quiz_file::import_sheet(&path, &tables, &categories, &root, seed)?)

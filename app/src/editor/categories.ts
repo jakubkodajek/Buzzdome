@@ -12,20 +12,6 @@ export function freshCategoryId(quiz: Quiz, random: () => string = randomId): st
   return freshId(new Set((quiz.categories ?? []).map((category) => category.id)), random, "c");
 }
 
-/** The name as categories are told apart (quiz_core::category::name_key): trimmed, regardless of case. */
-function nameKey(name: string): string {
-  return name.trim().toLowerCase();
-}
-
-/** The first of "`base` 1", "`base` 2"… that no category of `categories` is named. */
-export function freshCategoryName(categories: readonly Category[], base: string): string {
-  const taken = new Set(categories.map((category) => nameKey(category.name)));
-  for (let n = 1; ; n++) {
-    const name = `${base} ${n}`;
-    if (!taken.has(nameKey(name))) return name;
-  }
-}
-
 /** A category of the theme's look, or of the look `look` has: its background and style. */
 export function newCategory(id: string, name: string, look?: Slide): Category {
   return { id, name, background: look?.background ?? null, style: look?.style };
