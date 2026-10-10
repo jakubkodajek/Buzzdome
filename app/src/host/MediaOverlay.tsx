@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { PartPlayer, playerLevel, WHOLE_FILE } from "../audio/clip-player";
-import { positionAt, showClockAt, type HeardMedia } from "../media-player";
+import { positionAt, showClockNow, type HeardMedia } from "../media-player";
 import { useLatest, useMediaLibrary, useNowPlaying, usePlayerVolume } from "../hooks";
 import { mediaUrl } from "../media";
 import type { NowPlaying } from "../types";
@@ -35,7 +35,8 @@ function OverlayVideo({ url, now, heard }: { url: string; now: NowPlaying; heard
   useEffect(() => {
     const media = element.current;
     if (!media) return;
-    const clip = new PartPlayer(media);
+    // The Director ends it a moment after its length; until then it stays on its last frame.
+    const clip = new PartPlayer(media, { holdAtEnd: true });
     player.current = clip;
     return () => {
       clip.dispose();
@@ -48,7 +49,7 @@ function OverlayVideo({ url, now, heard }: { url: string; now: NowPlaying; heard
     if (!clip) return;
     const current = latest.current;
     if (sinceMs === null || !current.now) clip.pause();
-    else clip.play(WHOLE_FILE, { fromMs: positionAt(current.now, showClockAt(current, performance.now())) });
+    else clip.play(WHOLE_FILE, { fromMs: positionAt(current.now, showClockNow(current)) });
   }, [url, id, positionMs, sinceMs, latest]);
 
   return <video key={`${url}#${id}`} ref={element} src={url} preload="auto" playsInline />;

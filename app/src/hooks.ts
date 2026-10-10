@@ -2,7 +2,7 @@ import { listen } from "@tauri-apps/api/event";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { api, type BackendEvents } from "./api";
 import { MAX_PLAYER_VOLUME } from "./bindings/Constants";
-import { heard, type HeardMedia } from "./media-player";
+import { heardNow, type HeardMedia } from "./media-player";
 import type { AppError, ClockView, GameView, IconColor, LearnProgress, MediaLibrary, Quiz, SessionSummary, SettingsLost, SoundBoard } from "./types";
 
 /** A ref that always holds the latest `value`, for callbacks that outlive a render. */
@@ -123,7 +123,7 @@ export function useSoundBoard(): SoundBoard | null {
 
 /** What the media player plays, as this window heard it; null until loaded. */
 export function useNowPlaying(): HeardMedia | null {
-  return useReceivedValue("media-playing", api.mediaNow, (media) => heard(media, performance.now()));
+  return useReceivedValue("media-playing", api.mediaNow, heardNow);
 }
 
 /** The colour of the windows' icon; null until loaded. */

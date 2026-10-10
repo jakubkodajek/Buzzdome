@@ -44,12 +44,24 @@ export interface PlayOptions {
 export class PartPlayer {
   /** Called when the file starts or stops playing. */
   onChange: (() => void) | null = null;
+  /** Called when the part played to its end and does not loop. */
+  onEnd: (() => void) | null = null;
   private span = WHOLE_FILE;
   private loop = false;
   private ended = false;
   private timer: ReturnType<typeof setInterval> | null = null;
+  private readonly holdAtEnd: boolean;
 
-  constructor(protected readonly media: HTMLMediaElement) {
+  /**
+   * With `holdAtEnd`, a part that ends stays where it ended (a video on its
+   * last frame) instead of going back to its start; it then plays again
+   * only from a given `fromMs`.
+   */
+  constructor(
+    protected readonly media: HTMLMediaElement,
+    { holdAtEnd = false }: { holdAtEnd?: boolean } = {},
+  ) {
+    this.holdAtEnd = holdAtEnd;
     media.addEventListener("play", this.changed);
     media.addEventListener("pause", this.changed);
     media.addEventListener("ended", this.reachedEnd);
@@ -57,6 +69,11 @@ export class PartPlayer {
 
   get playing(): boolean {
     return !this.media.paused;
+  }
+
+  /** The file could not be played: it is missing or cannot be decoded. */
+  get failed(): boolean {
+    return this.media.error !== null;
   }
 
   /** The part played to its end (and does not loop) since it last started. */
@@ -129,10 +146,12 @@ export class PartPlayer {
     // A part that starts past the end of the file would loop forever.
     if (this.loop && !(this.span.fromMs >= this.durationMs)) {
       this.play(this.span, { loop: true, fromMs: this.span.fromMs });
-    } else {
-      this.stop();
-      this.ended = true;
+      return;
     }
+    if (this.holdAtEnd) this.pause();
+    else this.stop();
+    this.ended = true;
+    this.onEnd?.();
   };
 }
 

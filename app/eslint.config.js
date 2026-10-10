@@ -25,4 +25,15 @@ export default tseslint.config(
     files: ["src/confirm.ts"],
     rules: { "no-restricted-imports": "off" },
   },
+  {
+    // The windows count on the show clock from what they heard, by one clock (media-player.ts).
+    files: ["src/director/**", "src/host/**", "src/hooks.ts"],
+    rules: {
+      "no-restricted-properties": [
+        "error",
+        { object: "performance", property: "now", message: "Count on the show clock with showClockNow or heardNow (media-player.ts)." },
+        { object: "Date", property: "now", message: "The show clock is the backend's; count on it with showClockNow (media-player.ts)." },
+      ],
+    },
+  },
 );

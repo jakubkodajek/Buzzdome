@@ -10,7 +10,7 @@ export const PAD_COLORS: readonly PadColor[] = ["red", "orange", "yellow", "gree
 
 /**
  * What the media player plays, as a window heard it: the show clock read
- * `atMs` when `performance.now()` read `heardAt`. The window counts on from
+ * `atMs` when the window's monotonic clock (`localNow`) read `heardAt`. The window counts on from
  * there on that monotonic clock, never on its wall clock, which may stand
  * apart from the show clock by any amount (G2).
  */
@@ -18,14 +18,27 @@ export interface HeardMedia extends MediaNow {
   heardAt: number;
 }
 
-/** `media` as heard at `heardAt` (by `performance.now()`). */
+/** The clock a window counts on with; the only place it is read, so the windows cannot disagree. */
+const localNow = () => performance.now();
+
+/** `media` as heard at `heardAt` (by `localNow`). */
 export function heard(media: MediaNow, heardAt: number): HeardMedia {
   return { ...media, heardAt };
 }
 
-/** The show clock at `localMs` (by `performance.now()`), counted on from what was heard. */
+/** `media` as heard now. */
+export function heardNow(media: MediaNow): HeardMedia {
+  return heard(media, localNow());
+}
+
+/** The show clock at `localMs` (by `localNow`), counted on from what was heard. */
 export function showClockAt(media: HeardMedia, localMs: number): number {
   return media.atMs + Math.max(0, localMs - media.heardAt);
+}
+
+/** The show clock now, counted on from what was heard. */
+export function showClockNow(media: HeardMedia): number {
+  return showClockAt(media, localNow());
 }
 
 /**

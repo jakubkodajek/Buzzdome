@@ -6,6 +6,7 @@ class FakeMedia extends EventTarget {
   currentTime = 0;
   duration = 60;
   paused = true;
+  error: { code: number } | null = null;
   play() {
     this.paused = false;
     this.dispatchEvent(new Event("play"));
@@ -60,6 +61,29 @@ describe("part player", () => {
     // Playing again starts over.
     player.play(part);
     expect(player.finished).toBe(false);
+  });
+
+  it("tells when a part ends, and one made to hold stays at its end", () => {
+    const { media, player } = setUp();
+    const onEnd = vi.fn();
+    player.onEnd = onEnd;
+    player.play(part, { loop: true });
+    media.playTo(20);
+    expect(onEnd).not.toHaveBeenCalled();
+    player.play(part);
+    media.playTo(20);
+    expect(onEnd).toHaveBeenCalledTimes(1);
+    const video = new FakeMedia();
+    const held = new PartPlayer(video as unknown as HTMLMediaElement, { holdAtEnd: true });
+    held.play(WHOLE_FILE);
+    video.playTo(60);
+    expect([video.currentTime, held.playing, held.finished]).toEqual([60, false, true]);
+    held.play(WHOLE_FILE, { fromMs: 0 });
+    expect([video.currentTime, held.playing]).toEqual([0, true]);
+    // A file that cannot be played says so, though the element still counts as playing.
+    expect(held.failed).toBe(false);
+    video.error = { code: 4 };
+    expect([held.playing, held.failed]).toEqual([true, true]);
   });
 
   it("goes on where it was paused, and loops a part until stopped", () => {

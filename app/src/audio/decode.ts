@@ -16,6 +16,13 @@ export const MAX_DECODED_MINUTES = 10;
 export const MAX_UNTIMED_BYTES = (MAX_DECODED_MINUTES * 60 * 64_000) / 8;
 
 /**
+ * The largest file read whole when it tells its length: `MAX_DECODED_MINUTES`
+ * of CD-quality WAV (1,411.2 kbit/s, about 106 MB). A high-resolution WAV of
+ * the same length is three times that before it is even decoded.
+ */
+export const MAX_TIMED_BYTES = (MAX_DECODED_MINUTES * 60 * 1_411_200) / 8;
+
+/**
  * How long reading a sound's length may take before it is read whole. The
  * quizmaster waits for the dialog anyway, and a file that does not tell in
  * time fails to read rather than being judged by its size as one that tells
@@ -23,20 +30,22 @@ export const MAX_UNTIMED_BYTES = (MAX_DECODED_MINUTES * 60 * 64_000) / 8;
  */
 const LENGTH_TIMEOUT_MS = 60_000;
 
-/** A sound longer than `MAX_DECODED_MINUTES`, or one that may be, which is not read whole. */
+/** A sound longer than `MAX_DECODED_MINUTES`, or a file too large, which is not read whole. */
 export class SoundTooLong extends Error {
   constructor(url: string) {
-    super(`${url}: longer than ${MAX_DECODED_MINUTES} minutes, or too large to tell`);
+    super(`${url}: longer than ${MAX_DECODED_MINUTES} minutes, or too large`);
     this.name = "SoundTooLong";
   }
 }
 
-/**
- * Whether a sound of `lengthMs` is read whole. One that tells no length
- * (NaN) is judged by its size, `bytes` of it known so far.
- */
+/** The most of a sound of `lengthMs` that is read; one that tells no length (NaN) is read only while it is small. */
+export function maxBytes(lengthMs: number): number {
+  return Number.isNaN(lengthMs) ? MAX_UNTIMED_BYTES : MAX_TIMED_BYTES;
+}
+
+/** Whether a sound of `lengthMs` is read whole, `bytes` of it known so far. */
 export function readsWhole(lengthMs: number, bytes: number): boolean {
-  return Number.isNaN(lengthMs) ? bytes <= MAX_UNTIMED_BYTES : lengthMs <= MAX_DECODED_MINUTES * 60_000;
+  return !(lengthMs > MAX_DECODED_MINUTES * 60_000) && bytes <= maxBytes(lengthMs);
 }
 
 /** The body of `response`, or null once it passes `maxBytes`: then the rest is not read. */
@@ -67,9 +76,9 @@ export async function readAtMost(response: Response, maxBytes: number): Promise<
 /**
  * Reads a whole audio file into samples at `LOUDNESS_RATE`, the rate the
  * loudness meter needs; the browser resamples while it decodes (Web Audio
- * API, `decodeAudioData`). A file its metadata says is too long, or that
- * tells no length and is too large, is refused with `SoundTooLong`, before
- * it is read or as soon as it passes the size; one that does not tell in
+ * API, `decodeAudioData`). A file its metadata says is too long, or that is
+ * larger than `maxBytes`, is refused with `SoundTooLong`, before it is read
+ * or as soon as it passes the size; one that does not tell its length in
  * time fails with `MediaLengthTimeout`.
  */
 export async function decodeAudioFile(url: string): Promise<Samples> {
@@ -78,8 +87,8 @@ export async function decodeAudioFile(url: string): Promise<Samples> {
   const response = await fetch(url);
   if (!response.ok) throw new Error(`${url}: HTTP ${response.status}`);
   if (!readsWhole(lengthMs, Number(response.headers.get("Content-Length") ?? 0))) throw new SoundTooLong(url);
-  // A file that tells no length is read only while it is small, whether its size is told or not.
-  const data = Number.isNaN(lengthMs) ? await readAtMost(response, MAX_UNTIMED_BYTES) : await response.arrayBuffer();
+  // Read only up to the size, whether the size is told or not.
+  const data = await readAtMost(response, maxBytes(lengthMs));
   if (!data) throw new SoundTooLong(url);
   const buffer = await new OfflineAudioContext(1, 1, LOUDNESS_RATE).decodeAudioData(data);
   return { sampleRate: buffer.sampleRate, channels: Array.from({ length: buffer.numberOfChannels }, (_, c) => buffer.getChannelData(c)) };

@@ -113,7 +113,10 @@ two windows cannot disagree with each other or with the score.
   venue's network) neither freezes the countdown nor ends a question early.
   The show thread (`show_thread.rs`) applies due timer commands (time up)
   and otherwise sends `clock-tick` with the core's `ClockView`. The UI never
-  measures time itself; the gauge animates between ticks with CSS.
+  reads the wall clock: what plays counts on from the show clock it heard,
+  by one monotonic clock (`showClockNow` in `media-player.ts`; ESLint
+  refuses other clock reads in the windows), and the gauge animates
+  between ticks with CSS.
 - **Threads.** One show thread changes a running show: the receiver's
   events and the windows' commands that change or end the show
   (`dispatch`, team edits, `end_show`) reach it through one queue, so they
