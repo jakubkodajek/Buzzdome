@@ -22,16 +22,16 @@ export function FontBox(props: { label: string; value: FontValue; themeBold: boo
   const mixed = useContext(MixedContext);
   const [open, setOpen] = useState<{ x: number; y: number; width: number } | null>(null);
   const bold = value.bold ?? themeBold;
-  const toggle = (name: "bold" | "italic" | "underline", on: boolean, theme: boolean, text: string, title: string) => (
+  const toggle = (name: "bold" | "italic" | "underline", on: boolean, theme: boolean) => (
     <button
       type="button"
       className={!mixed && on ? "font-toggle on" : "font-toggle"}
       aria-pressed={!mixed && on}
-      aria-label={`${label}: ${title}`}
-      title={title}
+      aria-label={`${label}: ${t(name)}`}
+      title={t(name)}
       onClick={() => onChange({ [name]: mixed || !on ? (theme ? undefined : true) : theme ? false : undefined })}
     >
-      {text}
+      {t(`${name}Mark`)}
     </button>
   );
   return (
@@ -59,9 +59,9 @@ export function FontBox(props: { label: string; value: FontValue; themeBold: boo
           unit="%"
           onChange={(size) => onChange({ size: size === THEME_SIZE ? undefined : size })}
         />
-        {toggle("bold", bold, themeBold, "B", t("bold"))}
-        {toggle("italic", value.italic ?? false, false, "I", t("italic"))}
-        {toggle("underline", value.underline ?? false, false, "U", t("underline"))}
+        {toggle("bold", bold, themeBold)}
+        {toggle("italic", value.italic ?? false, false)}
+        {toggle("underline", value.underline ?? false, false)}
       </span>
       {open && (
         <Popup x={open.x} y={open.y} onClose={() => setOpen(null)} className="font-picker" role="dialog" label={label}>
