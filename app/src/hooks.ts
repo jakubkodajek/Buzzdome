@@ -1,7 +1,7 @@
 import { listen } from "@tauri-apps/api/event";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { api, type BackendEvents } from "./api";
-import type { ClockView, GameView, LearnProgress, MediaLibrary, NowPlaying, Quiz, SessionSummary, SoundBoard } from "./types";
+import type { ClockView, GameView, LearnProgress, MediaLibrary, NowPlaying, Quiz, SessionSummary, SettingsLost, SoundBoard } from "./types";
 
 /** A ref that always holds the latest `value`, for callbacks that outlive a render. */
 export function useLatest<T>(value: T): { readonly current: T } {
@@ -130,6 +130,11 @@ export function useQuiz(): Quiz | null {
 /** Folder of the running quiz's media (see `media.ts`). */
 export function useMediaRoot(): string | null {
   return useBackendValue(api.mediaRoot, null, "show-changed");
+}
+
+/** Why the saved team names could not be read when the app started, if so. */
+export function useTeamsLost(): SettingsLost | null {
+  return useBackendValue(api.teamsLost, null, "teams-changed");
 }
 
 /** The show that can be resumed after a crash, if any. */

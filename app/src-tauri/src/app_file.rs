@@ -22,22 +22,21 @@ pub struct SettingsLost {
 }
 
 /// The file at `path`, or the default when there is none. A file that cannot
-/// be read gives the default too, and is renamed aside (so what it held can
-/// still be recovered by hand) and reported.
+/// be read or understood gives the default too, and is renamed aside (so the
+/// next save does not overwrite it and what it held can still be recovered
+/// by hand) and reported.
 pub fn load<T: DeserializeOwned + Default>(path: &Path) -> (T, Option<SettingsLost>) {
-    let text = match std::fs::read_to_string(path) {
-        Ok(text) => text,
+    let detail = match std::fs::read_to_string(path) {
+        Ok(text) => match serde_json::from_str(&text) {
+            Ok(value) => return (value, None),
+            Err(e) => e.to_string(),
+        },
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return (T::default(), None),
-        Err(e) => return (T::default(), Some(SettingsLost { detail: e.to_string(), kept_as: None })),
+        Err(e) => e.to_string(),
     };
-    match serde_json::from_str(&text) {
-        Ok(value) => (value, None),
-        Err(e) => {
-            let aside = path.with_extension("json.broken");
-            let kept_as = std::fs::rename(path, &aside).ok().map(|()| aside.display().to_string());
-            (T::default(), Some(SettingsLost { detail: e.to_string(), kept_as }))
-        }
-    }
+    let aside = path.with_extension("json.broken");
+    let kept_as = std::fs::rename(path, &aside).ok().map(|()| aside.display().to_string());
+    (T::default(), Some(SettingsLost { detail, kept_as }))
 }
 
 /// Writes `value` to `path`, creating its folder, so that a crash leaves the
@@ -76,6 +75,12 @@ mod tests {
         assert_eq!(lost.and_then(|lost| lost.kept_as), Some(aside.display().to_string()));
         assert_eq!(std::fs::read_to_string(&aside).unwrap(), "{ not json");
         assert!(!path.exists());
+
+        // A file that is no text at all is kept aside too, so saving does not overwrite it.
+        std::fs::write(&path, b"\xff\xfe{").unwrap();
+        let (value, lost) = load::<Kept>(&path);
+        assert_eq!((value, lost.and_then(|lost| lost.kept_as)), (Kept::default(), Some(aside.display().to_string())));
+        assert_eq!(std::fs::read(&aside).unwrap(), b"\xff\xfe{");
         std::fs::remove_dir_all(&dir).unwrap();
     }
 }

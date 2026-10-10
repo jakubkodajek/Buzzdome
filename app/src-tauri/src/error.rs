@@ -59,6 +59,9 @@ pub enum AppError {
     NoDraft,
     #[error("the spreadsheet cannot be read: {detail}")]
     NotASpreadsheet { detail: String },
+    #[error("the spreadsheet is larger than {max_mb} MB or has more than {max_rows} rows")]
+    #[serde(rename_all = "camelCase")]
+    SpreadsheetTooLarge { max_mb: u64, max_rows: usize },
     #[error("no sheet has a Q column")]
     NoQuestionColumn,
 
@@ -67,6 +70,8 @@ pub enum AppError {
     NotAMediaFile { name: String },
     #[error("{reference} is not in the media library")]
     NotInLibrary { reference: String },
+    #[error("{name} is too large to drop (over {mb} MB)")]
+    DroppedFileTooLarge { name: String, mb: u64 },
     #[error("there is no pad {pad} on the sound board")]
     NoSuchPad { pad: usize },
 
@@ -149,6 +154,9 @@ impl From<QuizFileError> for AppError {
             QuizFileError::TooManyFiles => AppError::TooManyFiles { max: quiz_file::MAX_ENTRIES },
             QuizFileError::Invalid(problems) => AppError::QuizInvalid { problems },
             QuizFileError::Spreadsheet(detail) => AppError::NotASpreadsheet { detail },
+            QuizFileError::SpreadsheetTooLarge => {
+                AppError::SpreadsheetTooLarge { max_mb: quiz_file::MAX_SHEET_BYTES >> 20, max_rows: quiz_file::MAX_SHEET_ROWS }
+            }
             QuizFileError::Sheet(SheetError::NoQuestionColumn) => AppError::NoQuestionColumn,
         }
     }

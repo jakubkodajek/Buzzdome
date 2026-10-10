@@ -38,6 +38,8 @@ const ERROR_KEYS: Record<Exclude<AppError["code"], WordedApart>, StringKey> = {
   tooManyFiles: "errTooManyFiles",
   noDraft: "errNoDraft",
   notASpreadsheet: "errNotASpreadsheet",
+  droppedFileTooLarge: "mediaDropTooLarge",
+  spreadsheetTooLarge: "errSpreadsheetTooLarge",
   noQuestionColumn: "errNoQuestionColumn",
   notAMediaFile: "errNotAMediaFile",
   usbUnavailable: "errUsbUnavailable",

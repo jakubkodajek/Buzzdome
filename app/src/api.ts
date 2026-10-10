@@ -23,6 +23,7 @@ import type {
   ReceiverInfo,
   ReceiverStatus,
   SessionSummary,
+  SettingsLost,
   SheetExport,
   SheetImport,
   SoundBoard,
@@ -55,6 +56,7 @@ export const api = {
   listThemes: () => invoke<Theme[]>("list_themes"),
   /** The team names prepared for shows (the running show's while one runs). */
   preparedTeams: () => invoke<string[]>("prepared_teams"),
+  teamsLost: () => invoke<SettingsLost | null>("teams_lost"),
   addTeams: (names: string[]) => invoke<void>("add_teams", { names }),
   removeTeam: (name: string) => invoke<void>("remove_team", { name }),
   /** The media player's library of files, kept on this computer. */

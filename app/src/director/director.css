@@ -329,6 +329,13 @@
   flex-direction: column;
 }
 
+.teams-lost {
+  margin: 8px;
+  padding: 8px 10px;
+  border-left: 4px solid var(--bad);
+  background: #f6f6f6;
+}
+
 .split {
   flex: 1;
   min-height: 0;

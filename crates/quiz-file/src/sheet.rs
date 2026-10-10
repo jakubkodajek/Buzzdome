@@ -11,10 +11,18 @@ use serde::Serialize;
 use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::fs;
+use std::io::Read;
 use std::path::{Component, Path, PathBuf};
 use ts_rs::TS;
 
 const UTF8_BOM: &[u8] = b"\xef\xbb\xbf";
+
+/// The largest spreadsheet file read, and the most its parts may unpack to
+/// (a workbook is a ZIP archive): a sheet of questions is far smaller, and
+/// an import runs in the same process as a show.
+pub const MAX_SHEET_BYTES: u64 = 50 << 20;
+/// The most rows an import reads, over all sheets.
+pub const MAX_SHEET_ROWS: usize = 10_000;
 
 /// The slides of a spreadsheet, ready for the editor to insert, and what
 /// the import could not take over as the sheet has it.
@@ -117,8 +125,42 @@ fn find_media(folder: &Path, file: &str) -> Found {
     }
 }
 
-/// The tables of a workbook's visible worksheets, or of a CSV file.
+/// The tables of a workbook's visible worksheets, or of a CSV file, within
+/// `MAX_SHEET_BYTES` and `MAX_SHEET_ROWS`.
 pub fn read_tables(path: &Path) -> Result<Vec<Table>> {
+    read_tables_within(path, MAX_SHEET_BYTES, MAX_SHEET_ROWS)
+}
+
+fn read_tables_within(path: &Path, max_bytes: u64, max_rows: usize) -> Result<Vec<Table>> {
+    let size = fs::metadata(path).context(FileAction::Read, path)?.len();
+    if size > max_bytes || unpacked_size(path, max_bytes)? > max_bytes {
+        return Err(QuizFileError::SpreadsheetTooLarge);
+    }
+    let tables = read_tables_unchecked(path)?;
+    if tables.iter().map(|table| table.rows.len()).sum::<usize>() > max_rows {
+        return Err(QuizFileError::SpreadsheetTooLarge);
+    }
+    Ok(tables)
+}
+
+/// What a workbook that is a ZIP archive (xlsx, xlsm, ods) unpacks to,
+/// counted by unpacking it (an archive's own sizes may lie) up to just past
+/// `max`; 0 for any other file, which its parser reads as it is.
+fn unpacked_size(path: &Path, max: u64) -> Result<u64> {
+    let file = fs::File::open(path).context(FileAction::Read, path)?;
+    let Ok(mut archive) = zip::ZipArchive::new(file) else { return Ok(0) };
+    let mut total = 0;
+    for i in 0..archive.len() {
+        let entry = archive.by_index(i).map_err(|e| QuizFileError::Spreadsheet(e.to_string()))?;
+        total += std::io::copy(&mut entry.take(max + 1 - total), &mut std::io::sink()).context(FileAction::Read, path)?;
+        if total > max {
+            break;
+        }
+    }
+    Ok(total)
+}
+
+fn read_tables_unchecked(path: &Path) -> Result<Vec<Table>> {
     let extension = path.extension().map(|extension| extension.to_string_lossy().to_ascii_lowercase());
     if extension.as_deref() == Some("csv") {
         let bytes = fs::read(path).context(FileAction::Read, path)?;
@@ -243,6 +285,27 @@ mod tests {
         let utf16: Vec<u8> = [0xff, 0xfe].into_iter().chain("Q\tA1\nŽ\tx\n".encode_utf16().flat_map(u16::to_le_bytes)).collect();
         assert_eq!(csv_table(&utf16).unwrap().rows[1], ["Ž", "x"]);
         assert_eq!((separator("Q"), separator("\"a;b\",c")), (b',', b','));
+    }
+
+    #[test]
+    fn a_spreadsheet_too_large_or_with_too_many_rows_is_refused() {
+        let dir = temp_dir("limits");
+        fs::create_dir_all(&dir).unwrap();
+        let csv = dir.join("quiz.csv");
+        fs::write(&csv, "Q\nOne?\nTwo?\n").unwrap();
+        assert_eq!(read_tables_within(&csv, 100, 3).unwrap()[0].rows.len(), 3);
+        assert!(matches!(read_tables_within(&csv, 100, 2), Err(QuizFileError::SpreadsheetTooLarge)));
+        assert!(matches!(read_tables_within(&csv, 10, 3), Err(QuizFileError::SpreadsheetTooLarge)));
+
+        // A workbook is measured by what it unpacks to, not by the file.
+        let xlsx = dir.join("quiz.xlsx");
+        let cells = format!(r#"<row r="1"><c r="A1" t="inlineStr"><is><t>Q</t></is></c></row><row r="2"><c r="A2" t="inlineStr"><is><t>{}</t></is></c></row>"#, "x".repeat(20_000));
+        workbook(&xlsx, &[("Sheet1", false, &cells)]);
+        let size = fs::metadata(&xlsx).unwrap().len();
+        assert!(size < 10_000, "{size}");
+        assert!(read_tables_within(&xlsx, 10_000, 10).is_err_and(|e| matches!(e, QuizFileError::SpreadsheetTooLarge)));
+        assert_eq!(read_tables_within(&xlsx, 100_000, 10).unwrap()[0].rows.len(), 2);
+        fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]

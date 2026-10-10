@@ -38,6 +38,8 @@ struct Inner {
     driver: Box<dyn BuzzerDriver>,
     /// The team names prepared for the next show (`teams`).
     teams: Vec<String>,
+    /// Why the saved team names could not be read, for the Teams tab.
+    teams_lost: Option<app_file::SettingsLost>,
 }
 
 struct AppState(Mutex<Inner>);
@@ -94,6 +96,14 @@ fn timed_lock<T>(mutex: &Mutex<T>, clock: impl FnOnce() -> u64) -> (MutexGuard<'
 /// Applies a command that happened at `at_ms` on a copy, journals it, then
 /// commits. The show never shows a state that is not on disk.
 fn execute_at(app: &AppHandle, inner: &mut Inner, command: Command, at_ms: u64) -> CmdResult<()> {
+    let effects = apply_journaled(inner, command, at_ms)?;
+    deliver(app, inner, effects);
+    Ok(())
+}
+
+/// Applies `command` to a copy of the running show and journals it; only
+/// then does the copy replace the show (S1). The effects are for `deliver`.
+fn apply_journaled(inner: &mut Inner, command: Command, at_ms: u64) -> CmdResult<Vec<Effect>> {
     let game = inner.game.as_ref().ok_or(AppError::NoShow)?;
     let stamped = Stamped { at_ms, command };
     let mut next = game.clone();
@@ -102,6 +112,11 @@ fn execute_at(app: &AppHandle, inner: &mut Inner, command: Command, at_ms: u64) 
         session.append(&stamped).map_err(|e| AppError::ShowNotSaved { detail: e.to_string() })?;
     }
     inner.game = Some(next);
+    Ok(effects)
+}
+
+/// Sends a show change's effects to the buzzers and the windows, then the new state.
+fn deliver(app: &AppHandle, inner: &mut Inner, effects: Vec<Effect>) {
     for effect in effects {
         match effect {
             Effect::Lights { lights } => {
@@ -115,7 +130,6 @@ fn execute_at(app: &AppHandle, inner: &mut Inner, command: Command, at_ms: u64) 
         }
     }
     emit_state(app, inner.game.as_ref());
-    Ok(())
 }
 
 /// Locks the show state to start a show, refusing while one runs. Learn
@@ -148,25 +162,26 @@ fn start_show(
     };
     let session = Session::create(&sessions_root(app)?, &quiz, &meta).map_err(|e| AppError::ShowNotSaved { detail: e.to_string() })?;
     serve_media(app, inner, media_root)?;
-    begin_show(app, inner, Game::new(quiz), Some(session))?;
-    // Only the latest show can be resumed, so other unpacked quizzes can go.
+    let named = begin_show(app, inner, Game::new(quiz), Some(session));
+    // Only the latest show can be resumed, so other unpacked quizzes can go,
+    // also when the show runs without the names its journal refused.
     let keep: Vec<&Path> = inner.media_root.iter().map(PathBuf::as_path).collect();
     if let Err(e) = quiz_file::prune(&quizzes_cache(app)?, &keep) {
         eprintln!("cleaning unpacked quizzes: {e}");
     }
-    Ok(())
+    named
 }
 
 /// Makes `game` the running show, journaled in `session` (none in a test
 /// run), and gives it the prepared team names as its first command.
 fn begin_show(app: &AppHandle, inner: &mut Inner, game: Game, session: Option<Session>) -> CmdResult<()> {
-    inner.game = Some(game);
-    inner.session = session;
-    let teams = (!inner.teams.is_empty()).then(|| Command::SetTeams { names: inner.teams.clone() });
     // The show runs even if its journal refuses the names; the Director says why.
-    let named = teams.map_or(Ok(()), |command| execute_at(app, inner, command, now_ms()));
+    let named = teams::begin(inner, game, session, now_ms());
+    if let Ok(effects) = &named {
+        deliver(app, inner, effects.clone());
+    }
     emit_show_changed(app, inner);
-    named
+    named.map(drop)
 }
 
 #[tauri::command]
@@ -261,7 +276,11 @@ fn end_show(app: AppHandle, state: State<AppState>) {
 #[tauri::command]
 fn dispatch(app: AppHandle, state: State<AppState>, command: Command) -> CmdResult<()> {
     let (mut inner, at_ms) = timed_lock(&state.0, now_ms);
-    execute_at(&app, &mut inner, command, at_ms)
+    match command {
+        // The names a show is given are the prepared ones, also kept on disk.
+        Command::SetTeams { names } => teams::set(&app, &mut inner, names, at_ms),
+        command => execute_at(&app, &mut inner, command, at_ms),
+    }
 }
 
 /// Feeds a press the receiver got at `at_ms` into the running show, if any.
@@ -408,6 +427,7 @@ pub fn run() {
             media_root: None,
             driver: Box::new(VirtualDriver),
             teams: Vec::new(),
+            teams_lost: None,
         })))
         .setup(|app| {
             let (hardware, events) = Hardware::start(app.handle());
@@ -422,7 +442,11 @@ pub fn run() {
             app.asset_protocol_scope().allow_directory(&packages, true)?;
             let builtin = themes::builtin_themes(|id| packages.join(id).join("").to_string_lossy().into_owned())?;
             app.manage(themes::Themes(builtin));
-            app.state::<AppState>().0.lock().unwrap().teams = teams::teams_path(app.handle()).map(|path| teams::load(&path)).unwrap_or_default();
+            if let Ok(path) = teams::teams_path(app.handle()) {
+                let state = app.state::<AppState>();
+                let mut inner = state.0.lock().unwrap();
+                (inner.teams, inner.teams_lost) = teams::load(&path);
+            }
             let library = media_player::MediaState::open(app_data(app.handle(), media_player::LIBRARY_FOLDER)?);
             app.asset_protocol_scope().allow_directory(library.root(), true)?;
             app.manage(library);
@@ -444,6 +468,7 @@ pub fn run() {
             host_window_open,
             themes::list_themes,
             teams::prepared_teams,
+            teams::teams_lost,
             teams::add_teams,
             teams::remove_team,
             media_player::media_library,

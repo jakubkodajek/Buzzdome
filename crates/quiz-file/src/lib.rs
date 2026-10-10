@@ -9,7 +9,7 @@
 
 mod sheet;
 
-pub use sheet::{export_sheet, import_sheet, read_tables, SheetExport, SheetImport};
+pub use sheet::{export_sheet, import_sheet, read_tables, SheetExport, SheetImport, MAX_SHEET_BYTES, MAX_SHEET_ROWS};
 
 use quiz_core::{
     is_safe_reference, portable_name, portable_reference, MediaIssue, Problem, Quiz, QuizJsonError, SheetError, ValidationError,
@@ -68,6 +68,8 @@ pub enum QuizFileError {
     Invalid(Vec<ValidationError>),
     #[error("the spreadsheet cannot be read: {0}")]
     Spreadsheet(String),
+    #[error("the spreadsheet is larger than {} MB or has more than {} rows", sheet::MAX_SHEET_BYTES >> 20, sheet::MAX_SHEET_ROWS)]
+    SpreadsheetTooLarge,
     #[error("{0}")]
     Sheet(#[from] SheetError),
 }

@@ -8,6 +8,11 @@ use crate::sound_board::{BoardError, PadClick, PadSource, SoundBoard};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
+/// The largest file taken into the library by dropping it into the window:
+/// it travels to the app as its bytes, held in memory twice on the way.
+/// Larger files come in with Add, which copies them on disk.
+pub const MAX_DROPPED_MB: u64 = 256;
+
 /// The file that plays, or stands paused.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
 #[ts(export)]

@@ -3,8 +3,8 @@ import { buttonLabel } from "../answers";
 import { useApp, useDispatch } from "../app-context";
 import { MAX_NAME_CHARS } from "../bindings/Constants";
 import { seconds, signed } from "../format";
-import { usePreparedTeams } from "../hooks";
-import type { BuzzerId, Command, GameView } from "../types";
+import { usePreparedTeams, useTeamsLost } from "../hooks";
+import type { BuzzerId, Command, GameView, SettingsLost } from "../types";
 import { BuzzerChip, TeamList } from "./TeamList";
 
 /**
@@ -13,9 +13,11 @@ import { BuzzerChip, TeamList } from "./TeamList";
  */
 export function TeamsTab({ view }: { view: GameView | null }) {
   const prepared = usePreparedTeams();
-  if (view) return <ShowTeams view={view} />;
+  const lost = useTeamsLost();
+  if (view) return <ShowTeams view={view} lost={lost} />;
   return (
     <div className="teams-tab">
+      <TeamsLost lost={lost} />
       <div className="teams-body">
         <TeamList teams={prepared.map((name) => ({ name, buzzer: null }))} players={null} picked={null} onPick={() => {}} />
       </div>
@@ -23,11 +25,23 @@ export function TeamsTab({ view }: { view: GameView | null }) {
   );
 }
 
+/** Why the saved team names were not read when the app started, if so. */
+function TeamsLost({ lost }: { lost: SettingsLost | null }) {
+  const { t } = useApp();
+  if (!lost) return null;
+  return (
+    <p className="teams-lost">
+      {t("teamsLost")} {lost.detail}
+      {lost.keptAs && ` ${t("settingsKeptAs", { path: lost.keptAs })}`}
+    </p>
+  );
+}
+
 /**
  * Players with scores; select rows (Ctrl/Shift click) to change several at
  * once. Beside them, the team names the buzzers are paired with.
  */
-function ShowTeams({ view }: { view: GameView }) {
+function ShowTeams({ view, lost }: { view: GameView; lost: SettingsLost | null }) {
   const { t } = useApp();
   const dispatch = useDispatch();
   const [selected, setSelected] = useState<Set<BuzzerId>>(new Set());
@@ -64,6 +78,7 @@ function ShowTeams({ view }: { view: GameView }) {
 
   return (
     <div className="teams-tab">
+      <TeamsLost lost={lost} />
       <div className="toolbar">
         <span className="muted">{t("selectedPlayers", { n: selected.size })}</span>
         {[-10, -1, 1, 10].map((delta) => (

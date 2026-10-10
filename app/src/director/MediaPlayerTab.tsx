@@ -3,6 +3,7 @@ import { useRef, useState, type PointerEvent as ReactPointerEvent } from "react"
 import { api } from "../api";
 import { useApp, useReport, useRun } from "../app-context";
 import type { SlideSound } from "../audio/slide-sound";
+import { MAX_DROPPED_MB } from "../bindings/Constants";
 import { ContextMenu } from "../editor/controls";
 import { trackTime } from "../format";
 import { AddIcon, GridIcon, ListIcon, PauseIcon, PlayIcon, RewindIcon, StopIcon, TrashIcon } from "../icons";
@@ -15,7 +16,6 @@ import { SoundBoardGrid } from "./SoundBoardGrid";
 import type { MediaPlayer } from "./useMediaPlayer";
 
 /** Dropped files are sent whole through memory; bigger ones are added with Add, from their path. */
-const MAX_DROPPED_MB = 256;
 const LAYOUT_KEY = "quiz-show.media-player.layout";
 const SPLIT_KEY = "quiz-show.media-player.split";
 /** The list's share of the width when both are shown, and its limits. */

@@ -95,6 +95,12 @@ impl Session {
         Ok(Some(SessionSummary { meta, command_count }))
     }
 
+    /// Makes every later append fail, as after a write that could not be taken back.
+    #[cfg(test)]
+    pub fn break_for_test(&mut self) {
+        self.broken = true;
+    }
+
     /// Appends one accepted command and waits until it is on disk. On an
     /// error the command is not in the journal and must be rejected.
     pub fn append(&mut self, stamped: &Stamped) -> io::Result<()> {

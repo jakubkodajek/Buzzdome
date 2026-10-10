@@ -351,7 +351,8 @@ fn column_letters(column: usize) -> String {
     letters.iter().rev().map(|&b| b as char).collect()
 }
 
-/// A row's cells by field, trimmed; empty where the sheet has none.
+/// A row's cells by field, trimmed and without the `'` an export put before
+/// what looks like a formula; empty where the sheet has none.
 struct Row<'a>([&'a str; FIELDS.len()]);
 
 impl<'a> Row<'a> {
@@ -359,7 +360,7 @@ impl<'a> Row<'a> {
         let mut row = [""; FIELDS.len()];
         for (field, cell) in columns.iter().zip(cells) {
             if let Some(field) = field {
-                row[field.index()] = cell.trim();
+                row[field.index()] = undefused(cell.trim()).trim();
             }
         }
         Row(row)
@@ -864,7 +865,43 @@ fn seconds(ms: u32) -> String {
 /// none leaves the file out.
 pub fn export_table(quiz: &Quiz, file_name: impl Fn(&str) -> Option<String>) -> Vec<Vec<String>> {
     let headings = FIELDS.iter().map(|(heading, _)| heading.to_string()).collect();
-    std::iter::once(headings).chain(quiz.slides.iter().map(|slide| export_row(slide, &file_name))).collect()
+    let rows = quiz.slides.iter().map(|slide| export_row(slide, &file_name).into_iter().map(defused).collect());
+    std::iter::once(headings).chain(rows).collect()
+}
+
+/// Whether a spreadsheet program would take `cell` for a formula, which can
+/// run commands when the sheet is opened: it starts with `=`, `@`, a tab, a
+/// carriage return, or `+` or `-` not followed by just a number.
+fn looks_like_formula(cell: &str) -> bool {
+    let mut chars = cell.chars();
+    match chars.next() {
+        Some('=' | '@' | '\t' | '\r') => true,
+        Some('+' | '-') => {
+            let rest = chars.as_str();
+            !rest.starts_with(|c: char| c.is_ascii_digit()) || !rest.chars().all(|c| c.is_ascii_digit() || c == '.' || c == ',')
+        }
+        _ => false,
+    }
+}
+
+/// Whether an export puts a `'` before `cell`: it looks like a formula, or
+/// would after the `'`s it starts with, so the import knows which to take off.
+fn needs_quote(cell: &str) -> bool {
+    looks_like_formula(cell.trim_start_matches('\''))
+}
+
+/// A cell for export: one that looks like a formula gets a leading `'`, so
+/// a spreadsheet program shows it as text; the import takes it off again.
+fn defused(cell: String) -> String {
+    if needs_quote(&cell) { format!("'{cell}") } else { cell }
+}
+
+/// A cell as `defused` wrote it, without the `'`.
+fn undefused(cell: &str) -> &str {
+    match cell.strip_prefix('\'') {
+        Some(rest) if needs_quote(rest) => rest,
+        _ => cell,
+    }
 }
 
 fn export_row(slide: &Slide, file_name: &impl Fn(&str) -> Option<String>) -> Vec<String> {
@@ -1420,6 +1457,31 @@ mod tests {
             slide.id.clone_from(&original.id);
         }
         assert_eq!(back, expected.slides);
+    }
+
+    #[test]
+    fn cells_a_spreadsheet_would_run_as_formulas_export_as_text_and_import_as_they_were() {
+        let mut slide = Slide::new("q", SlideContent::Question(Question {
+            text: "=1+1".into(),
+            mode: AnswerMode::FastestFinger,
+            answers: vec!["=HYPERLINK(\"x\")".into(), "+420 777".into(), "-5".into(), "@home".into(), "'kept".into(), "'=x".into()],
+            correct: Some(2),
+            time_limit_s: 20,
+            points: 10,
+            points_end: None,
+            penalty: 0,
+        }));
+        slide.notes = "-2+3+cmd|' /C calc'!A0".into();
+        let quiz = Quiz::new("Quiz", vec![slide]);
+        let rows = export_table(&quiz, |reference| Some(reference.to_string()));
+        let cells: Vec<&str> = (0..6).map(|i| rows[1][Field::Answer(i).index()].as_str()).collect();
+        assert_eq!(cells, ["'=HYPERLINK(\"x\")", "'+420 777", "[-5]", "'@home", "'kept", "''=x"]);
+        assert_eq!(rows[1][Field::Notes.index()], "'-2+3+cmd|' /C calc'!A0");
+        assert_eq!(rows[1][Field::Text.index()], "{Q, FF}=1+1", "the prefix comes first");
+
+        let imported = import_tables(&[Table { name: String::new(), first_row: 1, rows }], 3).unwrap();
+        let back = &imported.slides[0].1;
+        assert_eq!((question(back), &back.notes), (question(&quiz.slides[0]), &quiz.slides[0].notes));
     }
 
     #[test]

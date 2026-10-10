@@ -12,7 +12,7 @@
 use crate::app_file;
 use crate::error::{AppError, CmdResult};
 use crate::now_ms;
-use quiz_core::{is_safe_reference, BoardChange, MediaKind, MediaPlayer, NowPlaying, PlayerCommand, SoundBoard, MEDIA_PREFIX};
+use quiz_core::{is_safe_reference, BoardChange, MediaKind, MediaPlayer, NowPlaying, PlayerCommand, SoundBoard, MAX_DROPPED_MB, MEDIA_PREFIX};
 use quiz_file::{FileAction, MediaSource};
 use serde::Serialize;
 use std::path::{Path, PathBuf};
@@ -150,6 +150,9 @@ pub async fn media_add_dropped(app: AppHandle, state: State<'_, MediaState>, req
     let InvokeBody::Raw(bytes) = request.body() else { return Err(AppError::system("a dropped file comes as its bytes")) };
     let encoded = request.headers().get(DROPPED_NAME_HEADER).and_then(|value| value.to_str().ok()).unwrap_or_default();
     let name = percent_encoding::percent_decode_str(encoded).decode_utf8_lossy();
+    if bytes.len() as u64 > MAX_DROPPED_MB << 20 {
+        return Err(AppError::DroppedFileTooLarge { name: name.into_owned(), mb: MAX_DROPPED_MB });
+    }
     let _one_at_a_time = state.imports.lock().unwrap();
     let reference = import(&state.root, &name, MediaSource::Bytes { name: &name, bytes })?;
     state.files_changed(&app, &mut state.library.lock().unwrap())?;

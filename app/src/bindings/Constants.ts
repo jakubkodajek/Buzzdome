@@ -23,3 +23,4 @@ export const MAX_BOARD_ROWS = 8;
 export const MIN_BOARD_COLUMNS = 4;
 export const MAX_BOARD_COLUMNS = 8;
 export const MAX_PAD_LABEL_CHARS = 40;
+export const MAX_DROPPED_MB = 256;

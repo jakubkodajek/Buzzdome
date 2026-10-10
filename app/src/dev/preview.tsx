@@ -425,6 +425,9 @@ mockIPC(
         return null;
       case "prepared_teams":
         return current ? current.teams.map((team) => team.name) : PREPARED_TEAMS;
+      case "teams_lost":
+        // `?teamsLost` shows the notice for saved names that could not be read.
+        return params.has("teamsLost") ? { detail: "expected value at line 1 column 1", keptAs: "C:\\Data\\teams.json.broken" } : null;
       case "get_view":
         return current;
       case "get_quiz":

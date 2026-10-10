@@ -105,7 +105,7 @@ export function ReceiverTab() {
         {info?.settingsError && (
           <p className="receiver-state error">
             {t("receiverSettingsLost")} {info.settingsError.detail}
-            {info.settingsError.keptAs && ` ${t("receiverSettingsKeptAs", { path: info.settingsError.keptAs })}`}
+            {info.settingsError.keptAs && ` ${t("settingsKeptAs", { path: info.settingsError.keptAs })}`}
           </p>
         )}
         {status && status.kind !== "off" && (

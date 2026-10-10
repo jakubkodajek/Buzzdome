@@ -253,7 +253,9 @@ separated by `;`: `intro.mp4{start-at=00:00:05;loop=false}`. Times are
 Export writes only the settings that differ from these defaults, every
 media file next to the CSV file under its own name (numbered when another
 file has it), and the correct answer in brackets, so an exported quiz
-imports as it was.
+imports as it was. A cell a spreadsheet program would run as a formula
+(starting with `=`, `@`, a tab, or `+` or `-` not followed by just a
+number) gets a leading `'`, so it opens as text; the import takes it off.
 
 **What is left out.** The reference's other columns (`CAT`, `P2`-`P6`,
 `A7`, `A8`, the bonus and evaluation columns, `STYLE`, `TRANSITION`...),

@@ -161,9 +161,10 @@ be resumed. If the folder is gone on resume, the show still resumes and the
 Director shows a warning.
 
 The windows load media through Tauri's asset protocol. Its scope starts
-empty and the shell allows exactly the current quiz folder
-(`asset_protocol_scope().allow_directory`), so a page cannot read anything
-else on the disk. `media_root` returns the folder with a trailing separator;
+empty and the shell allows exactly the current quiz folder, the editor's
+draft folder, the built-in theme packages and the media player's library
+(`<app data>/library`, spec SN-7) (`asset_protocol_scope().allow_directory`),
+so a page cannot read anything else on the disk. `media_root` returns the folder with a trailing separator;
 `media.ts` appends a reference to it and calls `convertFileSrc`. Media
 references are checked in the core (`media.rs`) to stay inside `media/`.
 
@@ -342,8 +343,13 @@ packages users will install are read the same way.
   A show starts with them as its first journaled `SetTeams`. The Director
   changes them with `add_teams` and `remove_team`, which work on the list
   the shell holds, so two quick edits cannot undo each other; in a show
-  the change is journaled first and then saved. `teams-changed` tells the
-  windows.
+  the change is journaled first and then saved. A `SetTeams` sent through
+  `dispatch` (a window or a plugin) takes the same way, so the saved names
+  never differ from the show's. The rules work on `Inner` and a path
+  (`teams::begin`, `teams::change`) and are tested there. `teams-changed`
+  tells the windows. A `teams.json` that cannot be read is renamed aside
+  (`teams.json.broken`) so the next save does not overwrite it, and the
+  Teams tab says so.
 - **Pairing.** A team is paired with the buzzer whose player has its name,
   so the player's name is the only record; `GameView.teams` (`TeamView`)
   derives the pairs. `PairTeam` gives a buzzer a name and takes it from any
@@ -494,7 +500,8 @@ button, presses it at least twice, and saves.
 - Stored per vendor and product ID in `receiver.json` in the app data folder,
   next to the chosen receiver. Written atomically (temp file, then rename),
   and used only once written: if the write fails, the receiver keeps its
-  previous settings and learn mode stays on.
+  previous settings, the Receiver tab says why, and learn mode ends all the
+  same, so presses play again.
 
 Limits: learned mode cannot drive lights (the light commands are unknown) and
 it assumes one press per report. If the receiver packs several presses into
