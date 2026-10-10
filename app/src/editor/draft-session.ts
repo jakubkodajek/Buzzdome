@@ -3,6 +3,7 @@
 // written, tried again while writing fails, until it is.
 
 import type { api } from "../api";
+import { isAppError } from "../messages";
 import type { EditorDraft, Quiz, ValidationError } from "../types";
 import { DraftQueue } from "./draft-queue";
 
@@ -24,11 +25,6 @@ export type DraftApi = Pick<
 /** What the editor does with its file, one at a time (A16). */
 export type DraftOperation = "new" | "open" | "close" | "save" | "media" | "import" | "export" | "testRun";
 
-/** Whether `operation` puts another draft in place of the open one: edits given meanwhile would be lost. */
-export function replacesDraft(operation: DraftOperation | null): boolean {
-  return operation === "new" || operation === "open" || operation === "close";
-}
-
 export interface DraftStatus {
   /** The file operation under way; no other starts meanwhile. */
   busy: DraftOperation | null;
@@ -49,9 +45,23 @@ interface Write {
   checked: (problems: ValidationError[]) => void;
 }
 
-/** The backend refused a command for a draft that another has replaced (`AppError::DraftChanged`). */
-function isDraftChanged(error: unknown): boolean {
-  return (error as { code?: unknown } | null)?.code === "draftChanged";
+/**
+ * The backend refused a write for a draft that is not its current one:
+ * another replaced it, or none is open (`AppError::DraftChanged`, `NoDraft`).
+ */
+function isRefused(error: unknown): boolean {
+  return isAppError(error) && (error.code === "draftChanged" || error.code === "noDraft");
+}
+
+/** A value kept for the draft it was set in (`useDraftState`, A18). */
+export interface DraftHeld<T> {
+  draftId: string | null;
+  value: T | null;
+}
+
+/** What `held` gives in the draft `draftId`: nothing once another draft is open. */
+export function heldIn<T>(held: DraftHeld<T>, draftId: string | null): T | null {
+  return held.draftId === draftId ? held.value : null;
 }
 
 export class DraftSession {
@@ -62,6 +72,8 @@ export class DraftSession {
   private readonly listeners = new Set<() => void>();
   /** The last change given; the draft has it once a write of it (or of a later one) works. */
   private latest: Write | null = null;
+  /** The draft the editor has open: the one it loaded, or the one that replaced it. */
+  private open: string | null = null;
   private retry: ReturnType<typeof setTimeout> | null = null;
 
   constructor(draftApi: DraftApi, retryAfterMs = RETRY_AFTER_MS) {
@@ -85,6 +97,7 @@ export class DraftSession {
    */
   async load(): Promise<EditorDraft | null> {
     const draft = await this.queue.run(() => this.api.editorLoad());
+    this.open = draft?.id ?? null;
     const pending = this.latest;
     if (draft && pending?.draft === draft.id && this.status.notWritten !== null) {
       return { ...draft, quiz: pending.quiz, unsaved: pending.unsaved };
@@ -106,13 +119,20 @@ export class DraftSession {
     }
   }
 
+  /** Whether an edit given now is kept: not while another draft takes the open one's place. */
+  editable(): boolean {
+    const busy = this.status.busy;
+    return busy !== "new" && busy !== "open" && busy !== "close";
+  }
+
   /**
-   * Another draft (or none) took the open one's place: the old one's
+   * The draft `draftId` (or none) took the open one's place: the old one's
    * changes that could not be written are let go, as the quizmaster chose.
    */
-  replaced(): void {
+  replaced(draftId: string | null): void {
     this.cancelRetry();
     this.latest = null;
+    this.open = draftId;
     this.update({ notWritten: null });
   }
 
@@ -120,7 +140,8 @@ export class DraftSession {
    * Writes `quiz` into the draft `draft` after everything given before;
    * writes still waiting collapse into the latest. `checked` gets what keeps
    * the quiz from being played. A write that fails is tried again until it
-   * or a later one works; one for a draft that another has replaced is let go.
+   * or a later one works; one for a draft that another has replaced is let
+   * go, but not one for the open draft: its change is not in the draft (G27).
    */
   write(draft: string, quiz: Quiz, unsaved: boolean, checked: (problems: ValidationError[]) => void): void {
     this.cancelRetry();
@@ -135,7 +156,7 @@ export class DraftSession {
       if (write === this.latest) this.update({ notWritten: null });
     } catch (error) {
       // A later write follows anyway, and a replaced draft's quiz is gone.
-      if (write !== this.latest || isDraftChanged(error)) return;
+      if (write !== this.latest || (isRefused(error) && write.draft !== this.open)) return;
       this.update({ notWritten: error });
       this.retry = setTimeout(() => {
         this.retry = null;

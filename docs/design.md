@@ -342,7 +342,8 @@ table view toggle. It edits a quiz; it never touches a running show.
   not taken for "no draft": the editor says why and offers to try again,
   to discard the draft (after asking) or to go back, and nothing deletes
   it meanwhile. The backend refuses a new or opened quiz while `draft.json`
-  does not read, so its folder is not pruned unseen.
+  or the draft's `quiz.json` does not read, so its folder is not pruned
+  unseen.
 - **State.** `history.ts` is a pure undo history of `Edit`s (set title,
   set theme, insert, update, remove, move a slide; insert, update, remove
   and apply a category). Typing into one field of one slide

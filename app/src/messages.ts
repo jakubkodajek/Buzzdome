@@ -72,7 +72,8 @@ const FILE_ACTION_KEYS: Record<FileAction, StringKey> = {
   delete: "errFileDelete",
 };
 
-function isAppError(value: unknown): value is AppError {
+/** Whether `value` is a backend error (an `AppError`), not one of Tauri's own or a script's. */
+export function isAppError(value: unknown): value is AppError {
   return typeof value === "object" && value !== null && "code" in value && typeof value.code === "string";
 }
 
