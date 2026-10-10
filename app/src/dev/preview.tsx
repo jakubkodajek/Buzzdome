@@ -31,7 +31,7 @@ import type {
   VideoClip,
 } from "../types";
 import "../styles.css";
-import { BUILTIN_THEMES } from "./builtin-themes";
+import { BUILTIN_THEMES } from "../bindings/BuiltinThemes";
 
 // The backend fills serde defaults; the raw JSON file leaves them out.
 const quiz = {
@@ -63,7 +63,7 @@ const timer = params.get("timer") as TimerDesign | null;
 const resume = params.get("resume");
 /** `full`: the running show's journal refuses writes, as on a full disk; `broken`: it cannot be repaired; `hangs`: a write does not finish. */
 const saving = params.get("saving");
-/** `unreadable`: the editor's draft does not read; `failing`: writing it fails, as on a full disk. */
+/** `unreadable`: the editor's draft does not read; `failing`: writing it fails, as on a full disk; `busy`: a sheet import does not finish. */
 const draft = params.get("draft");
 /** `slide`: the fourth slide has no answers list, so it fails to render; `view`: the show's view has no players, so the Director's screen does. */
 const broken = params.get("broken");
@@ -597,7 +597,7 @@ mockIPC(
       }
       case "editor_import_sheet":
         called.push({ cmd, ...(payload as object) });
-        return SHEET_IMPORT;
+        return draft === "busy" ? new Promise(() => undefined) : SHEET_IMPORT;
       case "editor_export_sheet":
         called.push({ cmd, ...(payload as object) });
         return { media: 2, missing: ["media/gone.mp3"], refused: [] };

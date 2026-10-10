@@ -10,16 +10,17 @@
 //! (Windows refuses that) goes the next time.
 //!
 //! The folder's name is the draft's id: a command for a draft that another
-//! has replaced since is refused (A16). A `draft.json` that cannot be read
-//! is never taken for "no draft": nothing is deleted until the quizmaster
-//! discards the draft (A17).
+//! has replaced since is refused (A16). A draft that cannot be read (its
+//! `draft.json` or `quiz.json`) is never taken for "no draft": nothing is
+//! deleted until the quizmaster discards the draft (A17, G26).
 
 use crate::dialogs::{self, Picker};
 use crate::error::{AppError, CmdResult};
 use crate::{app_local_data, app_log, lock_show, media_player, off_ui, roaming_leftover, show_running};
 use quiz_core::{Category, MediaKind, Quiz, ValidationError};
 use quiz_file::{FileAction, SheetExport, SheetImport};
-use serde::{Deserialize, Serialize};
+use serde::de::{Error as _, Unexpected};
+use serde::{Deserialize, Deserializer, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, MutexGuard};
@@ -38,6 +39,7 @@ pub struct EditorLock(Mutex<()>);
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct Pointer {
+    #[serde(deserialize_with = "draft_folder")]
     folder: String,
     source_path: Option<String>,
     unsaved: bool,
@@ -86,6 +88,17 @@ pub fn move_roaming_drafts(app: &AppHandle) {
     }
 }
 
+/// A draft folder's name in `draft.json`. The file is ours, but a name must
+/// never lead out of the editor's folder.
+fn draft_folder<'de, D: Deserializer<'de>>(deserializer: D) -> Result<String, D::Error> {
+    let folder = String::deserialize(deserializer)?;
+    let plain = folder.strip_prefix(FOLDER_PREFIX).is_some_and(|rest| rest.chars().all(|c| c.is_ascii_digit()));
+    if !plain {
+        return Err(D::Error::invalid_value(Unexpected::Str(&folder), &"a draft folder name"));
+    }
+    Ok(folder)
+}
+
 /// The current draft's pointer, or none when there is no draft. One that
 /// cannot be read is an error, not "no draft", so that nothing deletes the
 /// draft it names (A17). Not `AppFile`: a pointer has no default to go on with.
@@ -96,12 +109,7 @@ fn read_pointer(dir: &Path) -> CmdResult<Option<Pointer>> {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
         Err(e) => return Err(AppError::file(FileAction::Read, &path, e)),
     };
-    let pointer: Pointer = serde_json::from_slice(&bytes).map_err(|e| AppError::DraftNotRead { detail: e.to_string() })?;
-    // The file is ours, but a folder name must never lead out of `dir`.
-    let plain = pointer.folder.strip_prefix(FOLDER_PREFIX).is_some_and(|rest| rest.chars().all(|c| c.is_ascii_digit()));
-    if !plain {
-        return Err(AppError::DraftNotRead { detail: format!("folder {:?}", pointer.folder) });
-    }
+    let pointer = serde_json::from_slice(&bytes).map_err(|e| AppError::DraftNotRead { detail: e.to_string() })?;
     Ok(Some(pointer))
 }
 
@@ -177,9 +185,12 @@ fn switch_to(app: &AppHandle, dir: &Path, pointer: &Pointer) -> CmdResult<()> {
 }
 
 /// A folder for a new draft in place of the current one, refused while
-/// the current one cannot be read: it would be deleted unseen (A17).
+/// the current one cannot be read, its pointer or its quiz: it would be
+/// deleted unseen (A17, G26).
 fn new_draft_folder(dir: &Path) -> CmdResult<(String, PathBuf)> {
-    read_pointer(dir)?;
+    if let Some(pointer) = read_pointer(dir)? {
+        quiz_file::read_quiz_json(&dir.join(&pointer.folder))?;
+    }
     let folder = new_folder(dir);
     let root = dir.join(&folder);
     Ok((folder, root))
@@ -396,6 +407,23 @@ mod tests {
         write_pointer(&dir, &pointer).unwrap();
         assert_eq!(current(&dir, "draft-1").unwrap_err(), AppError::DraftChanged);
         assert_eq!(current(&dir, "draft-2").unwrap().0, dir.join("draft-2"));
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn a_draft_whose_quiz_does_not_read_is_not_replaced() {
+        let dir = editor_dir("quiz-unread");
+        let pointer = Pointer { folder: "draft-1".into(), source_path: None, unsaved: true, dropped: Vec::new() };
+        write_pointer(&dir, &pointer).unwrap();
+        // Its folder is gone, then its quiz.json does not parse.
+        assert_eq!(new_draft_folder(&dir).unwrap_err(), AppError::MissingQuizJson);
+        fs::create_dir_all(dir.join("draft-1")).unwrap();
+        fs::write(dir.join("draft-1/quiz.json"), "{ broken").unwrap();
+        assert!(matches!(new_draft_folder(&dir), Err(AppError::BadQuizJson { .. })));
+        quiz_file::write_quiz_json(&dir.join("draft-1"), &Quiz::new("Kept", Vec::new())).unwrap();
+        let (folder, root) = new_draft_folder(&dir).unwrap();
+        assert_eq!(root, dir.join(&folder));
+        assert_ne!(folder, "draft-1");
         fs::remove_dir_all(&dir).unwrap();
     }
 

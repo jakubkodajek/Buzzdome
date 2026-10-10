@@ -51,7 +51,7 @@ two windows cannot disagree with each other or with the score.
   them. Constants the UI needs (`MAX_ANSWERS`, question defaults and limits,
   `FINAL_LAST_STEP`, `DEFAULT_THEME_ID`) go to `bindings/Constants.ts` the
   same way, media extensions to `bindings/MediaExtensions.ts` and the
-  built-in themes to `bindings/BuiltinThemes.json` (1.4). CI fails when the committed
+  built-in themes to `bindings/BuiltinThemes.ts` (1.4). CI fails when the committed
   bindings differ from the Rust types.
 - **Errors and messages.** No Rust code sends the UI an English sentence.
   A failed command returns an `AppError` (`app/src-tauri/src/error.rs`): a
@@ -342,7 +342,8 @@ table view toggle. It edits a quiz; it never touches a running show.
   not taken for "no draft": the editor says why and offers to try again,
   to discard the draft (after asking) or to go back, and nothing deletes
   it meanwhile. The backend refuses a new or opened quiz while `draft.json`
-  does not read, so its folder is not pruned unseen.
+  or the draft's `quiz.json` does not read, so its folder is not pruned
+  unseen.
 - **State.** `history.ts` is a pure undo history of `Edit`s (set title,
   set theme, insert, update, remove, move a slide; insert, update, remove
   and apply a category). Typing into one field of one slide
@@ -497,10 +498,12 @@ packages users will install are read the same way.
   they name is in the package.
 - **Resolving.** `quiz_core::theme` reads `theme.json`
   (`ThemeManifest::from_json`): it refuses a file over 64 KB, an unknown
-  `format` (TH-1), colours that are not `#rrggbb` or `#rrggbbaa`, corners
-  and headings that are none of their values (TH-4) and file paths that leave the package or have the wrong type (TH-3), drops
-  keys set to `"default"` (TH-2) and returns unknown keys, at the top level
-  or in a section, for a warning instead of failing on them (TH-5). `resolve_themes` fills in every value from the parents, ending at
+  `format` (TH-1), colours that are not `#rrggbb` or `#rrggbbaa` (TH-4)
+  and file paths that leave the package or have the wrong type (TH-3),
+  drops keys set to `"default"` (TH-2) and returns unknown keys, at the
+  top level or in a section, and corners or headings that are none of
+  their values (a newer version's, say; the parent's value is used), for a
+  warning instead of failing on them (TH-5). `resolve_themes` fills in every value from the parents, ending at
   `builtin.classic`, which must set them all; a missing parent or a loop
   ends there too, so a look never stops a quiz from opening or playing. A
   screen without a background takes the theme's own background of the
@@ -594,8 +597,10 @@ packages users will install are read the same way.
   show. A `theme` value that is not a theme id
   reads as none.
 - **Preview.** A test of the shell writes the built-in themes as
-  `list_themes` returns them to `app/src/bindings/BuiltinThemes.json`, with
+  `list_themes` returns them to `app/src/bindings/BuiltinThemes.ts`, with
   folders that Vite serves; the browser preview and the UI tests use it.
+  It is TypeScript typed as `Theme`, so the compiler checks the named
+  values that JSON would type as any string.
 
 ### 1.5 Teams and registration
 

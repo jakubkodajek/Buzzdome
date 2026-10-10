@@ -245,13 +245,17 @@ pub struct ThemeManifest {
     pub buzzer_colors: BTreeMap<BuzzerColorKey, String>,
 }
 
-/// A key the app does not know, ignored so that newer themes still load (TH-5).
+/// What `theme.json` has that the app does not know, ignored so that newer
+/// themes still load (TH-5): a key, or a named value of a known key.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct UnknownKey {
+pub struct Ignored {
     /// The section of `theme.json` it is in, such as `backgrounds`; none
     /// for a key at the top level.
     pub section: Option<&'static str>,
     pub key: String,
+    /// The value, when the key is known but not its value, such as a
+    /// `corners` style of a newer version; the parent's value is used.
+    pub value: Option<String>,
 }
 
 /// Why a theme cannot be used. The wording is for logs: today only a broken
@@ -311,11 +315,11 @@ struct RawManifest {
 
 impl ThemeManifest {
     /// Reads and checks `theme.json`: a known format (TH-1), an id in reverse
-    /// domain style, colours as `#rrggbb` or `#rrggbbaa` and corners and
-    /// headings as one of their values (TH-4), and file paths that stay
-    /// inside the package and have a usable type (TH-3).
-    /// Keys the app does not know are returned, not refused (TH-5).
-    pub fn from_json(json: &str) -> Result<(ThemeManifest, Vec<UnknownKey>), ThemeError> {
+    /// domain style, colours as `#rrggbb` or `#rrggbbaa` (TH-4), and file
+    /// paths that stay inside the package and have a usable type (TH-3).
+    /// Keys the app does not know, and corners or headings that are none of
+    /// their values, are returned, not refused (TH-5).
+    pub fn from_json(json: &str) -> Result<(ThemeManifest, Vec<Ignored>), ThemeError> {
         #[derive(Deserialize)]
         struct Format {
             format: u32,
@@ -330,27 +334,27 @@ impl ThemeManifest {
             return Err(ThemeError::UnknownFormat(format));
         }
         let raw: RawManifest = serde_json::from_str(json).map_err(json_error)?;
-        let mut unknown: Vec<UnknownKey> = raw.other.into_keys().map(|key| UnknownKey { section: None, key }).collect();
+        let mut ignored: Vec<Ignored> = raw.other.into_keys().map(|key| Ignored { section: None, key, value: None }).collect();
         let manifest = ThemeManifest {
             version: parse_version(&raw.version).ok_or_else(|| bad("version", &raw.version))?,
             name: LocalizedText { cs: label("name.cs", raw.name.cs)?, en: label("name.en", raw.name.en)? },
             author: raw.author.map(|author| label("author", author)).transpose()?,
             parent: raw.parent.map(|parent| theme_id("parent", parent)).transpose()?,
-            colors: section("colors", raw.colors, ColorKey::parse, is_hex_color, &mut unknown)?,
-            fonts: section("fonts", raw.fonts, FontKey::parse, |path| check_file(path, &[FONT_EXTENSIONS]), &mut unknown)?,
-            corners: choice("corners", raw.corners)?,
-            headings: choice("headings", raw.headings)?,
+            colors: section("colors", raw.colors, ColorKey::parse, is_hex_color, &mut ignored)?,
+            fonts: section("fonts", raw.fonts, FontKey::parse, |path| check_file(path, &[FONT_EXTENSIONS]), &mut ignored)?,
+            corners: choice("corners", raw.corners, &mut ignored),
+            headings: choice("headings", raw.headings, &mut ignored),
             backgrounds: section(
                 "backgrounds",
                 raw.backgrounds,
                 ScreenKey::parse,
                 |path| check_file(path, &[MediaKind::Image.extensions(), MediaKind::Video.extensions()]),
-                &mut unknown,
+                &mut ignored,
             )?,
-            buzzer_colors: section("buzzerColors", raw.buzzer_colors, BuzzerColorKey::parse, is_hex_color, &mut unknown)?,
+            buzzer_colors: section("buzzerColors", raw.buzzer_colors, BuzzerColorKey::parse, is_hex_color, &mut ignored)?,
             id: theme_id("id", raw.id)?,
         };
-        Ok((manifest, unknown))
+        Ok((manifest, ignored))
     }
 }
 
@@ -390,12 +394,16 @@ fn label(field: &str, text: String) -> Result<String, ThemeError> {
 }
 
 /// One of a key's named values, such as `"square"` for `corners`; none for
-/// a key left out or set to `"default"` (TH-2).
-fn choice<T: DeserializeOwned>(field: &str, value: Option<String>) -> Result<Option<T>, ThemeError> {
-    match value {
-        Some(value) if value != INHERIT => serde_json::from_value(serde_json::Value::String(value.clone())).map(Some).map_err(|_| bad(field, &value)),
-        _ => Ok(None),
+/// a key left out or set to `"default"` (TH-2). A value this version does
+/// not know (a newer one's, say) goes to `ignored` and the parent's value
+/// is used (TH-5).
+fn choice<T: DeserializeOwned>(key: &str, value: Option<String>, ignored: &mut Vec<Ignored>) -> Option<T> {
+    let value = value.filter(|value| value != INHERIT)?;
+    let known = serde_json::from_value(serde_json::Value::String(value.clone())).ok();
+    if known.is_none() {
+        ignored.push(Ignored { section: None, key: key.into(), value: Some(value) });
     }
+    known
 }
 
 /// A file path inside the package (TH-3) with one of the extensions in `types`.
@@ -405,18 +413,18 @@ fn check_file(path: &str, types: &[&[&str]]) -> bool {
 }
 
 /// The keys of one section that the app knows, with their values checked.
-/// `"default"` leaves a key out (TH-2); unknown keys go to `unknown`.
+/// `"default"` leaves a key out (TH-2); unknown keys go to `ignored`.
 fn section<K: Ord>(
     name: &'static str,
     raw: BTreeMap<String, String>,
     parse: fn(&str) -> Option<K>,
     valid: impl Fn(&str) -> bool,
-    unknown: &mut Vec<UnknownKey>,
+    ignored: &mut Vec<Ignored>,
 ) -> Result<BTreeMap<K, String>, ThemeError> {
     let mut known = BTreeMap::new();
     for (key, value) in raw {
         let Some(parsed) = parse(&key) else {
-            unknown.push(UnknownKey { section: Some(name), key });
+            ignored.push(Ignored { section: Some(name), key, value: None });
             continue;
         };
         if value == INHERIT {
@@ -592,8 +600,8 @@ mod tests {
             "fonts": { "heading": "fonts/Heading.woff2" }, "corners": "square", "headings": "uppercase",
             "buzzerColors": { "ready": "#00ff00" }
         }"##;
-        let (theme, unknown) = ThemeManifest::from_json(json).unwrap();
-        assert!(unknown.is_empty());
+        let (theme, ignored) = ThemeManifest::from_json(json).unwrap();
+        assert!(ignored.is_empty());
         assert_eq!(theme.version, [1, 0, 0]);
         assert_eq!(theme.parent.as_deref(), Some(DEFAULT_THEME_ID));
         assert_eq!(theme.colors.get(&ColorKey::Panel).map(String::as_str), Some("#101830cc"));
@@ -615,10 +623,21 @@ mod tests {
         json["backgrounds"]["lobby"] = "backgrounds/lobby.png".into();
         json["colors"]["sparkle"] = "#ffffff".into();
         json["sounds"] = serde_json::json!({ "correct": "sounds/yes.ogg" });
-        let (theme, unknown) = ThemeManifest::from_json(&json.to_string()).unwrap();
-        let found: Vec<(Option<&str>, &str)> = unknown.iter().map(|u| (u.section, u.key.as_str())).collect();
+        let (theme, ignored) = ThemeManifest::from_json(&json.to_string()).unwrap();
+        let found: Vec<(Option<&str>, &str)> = ignored.iter().map(|u| (u.section, u.key.as_str())).collect();
         assert_eq!(found, [(None, "sounds"), (Some("colors"), "sparkle"), (Some("backgrounds"), "lobby")]);
         assert_eq!(theme.backgrounds.len(), 2);
+    }
+
+    #[test]
+    fn ignores_corners_and_headings_it_does_not_know_and_takes_the_parents() {
+        let mut json = root_json();
+        json["corners"] = "oval".into();
+        json["headings"] = "Uppercase".into();
+        let (theme, ignored) = ThemeManifest::from_json(&json.to_string()).unwrap();
+        assert_eq!((theme.corners, theme.headings), (None, None));
+        let found: Vec<(&str, Option<&str>)> = ignored.iter().map(|u| (u.key.as_str(), u.value.as_deref())).collect();
+        assert_eq!(found, [("corners", Some("oval")), ("headings", Some("Uppercase"))]);
     }
 
     #[test]
@@ -630,7 +649,7 @@ mod tests {
 
     #[test]
     fn refuses_values_that_break_the_rules() {
-        let cases: [(&str, serde_json::Value); 14] = [
+        let cases: [(&str, serde_json::Value); 12] = [
             ("/id", "Autumn".into()),
             ("/id", "single".into()),
             ("/id", "cz..double".into()),
@@ -640,8 +659,6 @@ mod tests {
             ("/colors/text", "#fff".into()),
             ("/fonts/body", "../fonts/Body.woff2".into()),
             ("/fonts/body", "fonts/Body.png".into()),
-            ("/corners", "oval".into()),
-            ("/headings", "Uppercase".into()),
             ("/backgrounds/default", "/etc/main.png".into()),
             ("/backgrounds/default", "backgrounds\\main.png".into()),
             ("/backgrounds/default", "C:/main.png".into()),

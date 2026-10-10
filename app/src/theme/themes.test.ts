@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BUILTIN_THEMES } from "../dev/builtin-themes";
+import { BUILTIN_THEMES } from "../bindings/BuiltinThemes";
 import { DEFAULT_THEME_ID } from "../bindings/Constants";
 import { newSlide } from "../editor/slides";
 import { previewView } from "../host/preview";

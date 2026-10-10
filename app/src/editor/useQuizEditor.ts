@@ -5,7 +5,7 @@ import { useLatest } from "../hooks";
 import { mediaPicker, type MediaKind } from "../media";
 import { quizPicker } from "../quiz";
 import type { EditorDraft, Quiz, SheetExport, SheetImport } from "../types";
-import { BUSY, DraftSession, replacesDraft, type DraftApi, type DraftOperation, type DraftStatus } from "./draft-session";
+import { BUSY, DraftSession, heldIn, type DraftApi, type DraftHeld, type DraftOperation, type DraftStatus } from "./draft-session";
 import { editorReducer, isUnsaved, LOADING, type EditorState } from "./editor-state";
 import type { Edit } from "./history";
 import { readRecentFiles, rememberRecentFile } from "./recent";
@@ -58,7 +58,7 @@ export interface QuizEditor {
  * a test show has started.
  */
 export function useQuizEditor(onTestRun: () => void): QuizEditor {
-  const { t, lang } = useApp();
+  const { t, lang, notify } = useApp();
   const [state, dispatch] = useReducer(editorReducer, LOADING);
   const status = useSyncExternalStore(drafts.subscribe, drafts.getStatus);
   const report = useLatest(useReport());
@@ -98,11 +98,16 @@ export function useQuizEditor(onTestRun: () => void): QuizEditor {
 
   /**
    * Runs a file operation as the only one (A16); a failure is shown, not
-   * thrown, and gives false, as does one refused while another runs.
+   * thrown, and gives false, as does one refused while another runs: the
+   * quizmaster is told why nothing happened (G28).
    */
   const attempt = <T>(operation: DraftOperation, task: (draftApi: DraftApi) => Promise<T | false>): Promise<T | false> =>
     drafts.exclusive(operation, task).then(
-      (result) => (result === BUSY ? false : result),
+      (result) => {
+        if (result !== BUSY) return result;
+        notify(t("editorBusy"));
+        return false as const;
+      },
       (error: unknown) => {
         report.current(error);
         return false as const;
@@ -111,7 +116,7 @@ export function useQuizEditor(onTestRun: () => void): QuizEditor {
 
   /** Puts `draft` (or none) in place of the open one. */
   const load = (draft: EditorDraft | null) => {
-    drafts.replaced();
+    drafts.replaced(draft?.id ?? null);
     written.current = draft?.quiz ?? null;
     dispatch({ type: "loaded", draft });
   };
@@ -133,8 +138,17 @@ export function useQuizEditor(onTestRun: () => void): QuizEditor {
       return true;
     });
 
+  /** Discards the draft, also one that cannot be read, once `confirmed`. */
+  const discard = (confirmed: () => Promise<boolean>) =>
+    attempt("close", async (draftApi) => {
+      if (!(await confirmed())) return false;
+      await draftApi.editorClose();
+      load(null);
+      return true;
+    });
+
   // Edits given while another draft takes the open one's place would be lost with it.
-  const editable = () => !replacesDraft(drafts.getStatus().busy);
+  const editable = () => drafts.editable();
 
   return {
     state,
@@ -166,24 +180,12 @@ export function useQuizEditor(onTestRun: () => void): QuizEditor {
     recentFiles,
     save: () => save(false),
     saveAs: () => save(true),
-    closeQuiz: () =>
-      attempt("close", async (draftApi) => {
-        if (!(await mayDiscard())) return false;
-        await draftApi.editorClose();
-        load(null);
-        return true;
-      }),
+    closeQuiz: () => discard(mayDiscard),
     reload: () => {
       dispatch({ type: "loading" });
       setLoads((n) => n + 1);
     },
-    discardUnreadable: () =>
-      attempt("close", async (draftApi) => {
-        if (!(await confirmAction(t, t("discardUnreadableDraft")))) return false;
-        await draftApi.editorClose();
-        load(null);
-        return true;
-      }),
+    discardUnreadable: () => discard(() => confirmAction(t, t("discardUnreadableDraft"))),
     pickMedia: async (kinds) => {
       const picked = await attempt("media", async (draftApi) => {
         if (!open) return false;
@@ -220,9 +222,9 @@ export function useQuizEditor(onTestRun: () => void): QuizEditor {
  * of its media files) lands in another (A18).
  */
 export function useDraftState<T>(draftId: string | null): [T | null, (value: T | null) => void] {
-  const [held, setHeld] = useState<{ draftId: string | null; value: T | null }>({ draftId, value: null });
+  const [held, setHeld] = useState<DraftHeld<T>>({ draftId, value: null });
   const set = useCallback((value: T | null) => setHeld({ draftId, value }), [draftId]);
-  return [held.draftId === draftId ? held.value : null, set];
+  return [heldIn(held, draftId), set];
 }
 
 /** The id of the draft open in `editor`, if one is. */
