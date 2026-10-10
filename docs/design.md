@@ -319,9 +319,10 @@ Director shows a warning. `meta.json` also records `RULES_VERSION`, which
 quiz-core bumps whenever the same journal would replay into another show;
 a show begun under another version still resumes, rebuilt with today's
 rules, and the Director says its scores may differ. What would put the
-replay a step off is kept: a journal begun before version 2 replays its
-jumps out of a question in play, as the app then restarted a question
-after a crash with a `GoTo` to it (`Game::replay`).
+replay a step off is kept (`Game::replay`): a journal begun before version
+2 replays its jumps out of a question in play, as the app then restarted a
+question after a crash with a `GoTo` to it, and one begun before version 3
+replays switching a player off without closing the question.
 
 The windows load media through Tauri's asset protocol. Its scope is empty
 in `tauri.conf.json`; at startup the shell allows the folder of unpacked
@@ -668,6 +669,27 @@ packages users will install are read the same way.
   also works on a touch screen.
 - **Projector.** The registration grid shows a paired team's name under its
   number.
+- **Scores.** A right everyone-answers answer scores the points the clock
+  shows when it was given (`Question::points_at`, falling or rising from
+  `points` to `points_end` over the time limit), times its share; a wrong
+  one costs the penalty, and no answer costs nothing. A fastest-finger buzz judged right scores the points at
+  the moment of the buzz, one judged wrong costs the penalty. An untimed
+  question always scores `points`.
+- **Who counts.** When an everyone-answers question closes, the players
+  switched on then are the ones it counts (`Game::counted`): its scores,
+  the result bars, the answer counts and the result lights go by them,
+  whoever is switched on or off afterwards. A question closes on time up,
+  on Next, or when nobody switched on is left to answer: everyone answered,
+  or in fastest finger everyone answered wrong. Switching a player on or
+  off is checked the same way, so switching off the last player who had
+  not answered closes the question. A player switched off cannot answer;
+  one switched on mid-question can, unless they already answered or were
+  locked out.
+- **Ranking.** `Game::ranking` orders the players switched on by score,
+  then by the time their right answers took together (`total_answer_ms`,
+  less first); wrong answers add no time, so not answering never helps.
+  Players equal in both share a place and the places after them are
+  skipped (1, 1, 3); the podium shows the shared number.
 
 ### 1.6 Media player and sound board
 
@@ -925,7 +947,12 @@ neither can slip in between the other's check and its start.
 ### 2.7 Lights
 
 `Game::apply` returns `Effect::Lights` with the light state of every affected
-buzzer. The shell passes it to `BuzzerDriver::set_lights`; for the hardware
+buzzer, from one function (`Game::light_of`): ready while a player can press,
+locked once they answered or another player buzzed, first for the buzz being
+judged, dark while a question is closed, and the result from the reveal. A
+wrong buzz shows wrong as it is judged, then the lights of the step that
+follows. A player switched on gets the light of the step at once, one
+switched off shows locked. The shell passes it to `BuzzerDriver::set_lights`; for the hardware
 driver that is a message to the receiver thread, which encodes it with the
 active protocol and writes the reports. Light failures are logged and never
 block the show. With the learned or raw protocol, `has_lights()` is false and

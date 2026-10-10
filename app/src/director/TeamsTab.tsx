@@ -113,7 +113,7 @@ function ShowTeams({ view, lost }: { view: GameView; lost: SettingsLost | null }
                 <th>{t("colBuzzer")}</th>
                 <th>{t("score")}</th>
                 <th>{t("colLastResponse")}</th>
-                <th>{t("colTotalTime")}</th>
+                <th title={t("colTotalTimeHint")}>{t("colTotalTime")}</th>
                 <th>{t("active")}</th>
               </tr>
             </thead>

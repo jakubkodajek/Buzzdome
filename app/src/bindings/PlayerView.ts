@@ -3,7 +3,8 @@ import type { Button } from "./Button";
 
 export type PlayerView = { buzzer: number, name: string, score: number, enabled: boolean, totalAnswerMs: number, 
 /**
- * 1-based position in the ranking; `None` for disabled players.
+ * The player's place in the ranking, from 1, shared with the players
+ * equal to them (`Game::ranking`); `None` for disabled players.
  */
 rank: number | null, answered: boolean, 
 /**

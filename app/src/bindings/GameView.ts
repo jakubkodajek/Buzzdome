@@ -21,7 +21,8 @@ teams: Array<TeamView>, enabledCount: number,
  */
 answeredCount: number, 
 /**
- * Answers per button (A, B, ...), only once the question is closed.
+ * Everyone-answers: how many of the players it counted gave each
+ * answer, in order, once the question is closed.
  */
 answerCounts: Array<number> | null, 
 /**
@@ -31,7 +32,7 @@ answerCounts: Array<number> | null,
  */
 answerShares: Array<number | null>, 
 /**
- * Everyone-answers: how the enabled players did, once the question is closed.
+ * Everyone-answers: how the players it counted did, once the question is closed.
  */
 results: AnswerResults | null, buzzed: number | null, leaderboardVisible: boolean, 
 /**
