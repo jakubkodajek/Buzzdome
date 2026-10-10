@@ -1,10 +1,11 @@
 // A slide's own look over its theme (quiz_core::style) as CSS: the one place
 // that turns a gradient or a text style into what the stage shows, so the
-// projector, the editor and the thumbnails draw the same. Sizes scale the
-// theme's through `--text-scale` (slide.css).
+// projector, the editor and the thumbnails draw the same. It sets only
+// variables (`--style-*`, `--text-scale`, `--answer-fill`); slide.css owns
+// every theme value they fall back to.
 
 import type { CSSProperties } from "react";
-import type { Gradient, GradientKind, SlideStyle, TextAlign, TextStyle } from "../types";
+import type { Gradient, GradientKind, SlideStyle, TextStyle } from "../types";
 import { cssColor } from "./color";
 import { readableText } from "./themes";
 
@@ -37,23 +38,22 @@ export function gradientCss({ from, to, kind }: Gradient, transparency = 0): str
   return kind === "radial" ? `radial-gradient(circle, ${stops})` : `linear-gradient(${GRADIENT_DIRECTIONS[kind]}, ${stops})`;
 }
 
-/** How the theme draws each text: its font, and whether it is bold and has a shadow. */
-export const THEME_TEXT: Record<StyledText, { font: "heading" | "body"; bold: boolean; shadow: boolean }> = {
-  title: { font: "heading", bold: true, shadow: true },
-  question: { font: "body", bold: true, shadow: true },
-  text: { font: "body", bold: false, shadow: false },
-  answer: { font: "body", bold: true, shadow: false },
+/**
+ * Whether the theme draws each text bold and with a shadow, as slide.css
+ * does (a test reads it there), for the editor to show its look as set.
+ */
+export const THEME_TEXT: Record<StyledText, { bold: boolean; shadow: boolean }> = {
+  title: { bold: true, shadow: true },
+  question: { bold: true, shadow: true },
+  text: { bold: false, shadow: false },
+  answer: { bold: true, shadow: false },
 };
 
-const JUSTIFY: Record<TextAlign, string> = { left: "flex-start", center: "center", right: "flex-end" };
-
-/** A drop shadow as the theme's question has one, in another colour. */
-const SHADOW = "0 4px 18px";
-
 /**
- * The inline style that gives `text` its style; empty for none. Only what
- * the style changes is set, so the theme (and the screen's own rules, such
- * as a revealed answer) keeps the rest. An answer's fill goes to
+ * The variables that give `text` its style; empty for none. Only what the
+ * style changes is set, and slide.css reads each over the text's theme
+ * look ("Styled texts"), so the theme (and the screen's own rules, such as
+ * a revealed answer) keeps the rest. An answer's fill goes to
  * `--answer-fill`, under the theme's sheen; another text's fill becomes a
  * box around it. Text on a fill of its own and in no colour of its own is
  * made readable on the fill (the theme's colour suits the theme's fill),
@@ -61,32 +61,28 @@ const SHADOW = "0 4px 18px";
  */
 export function textStyleCss(style: TextStyle | undefined, text: StyledText): CSSProperties {
   if (!style) return {};
-  const theme = THEME_TEXT[text];
   const css: Record<string, string | number> = {};
-  if (style.color) css.color = cssColor(style.color);
-  if (style.font) css.fontFamily = `"${style.font}", var(--theme-font-${theme.font})`;
+  if (style.color) css["--style-color"] = cssColor(style.color);
+  if (style.font) css["--style-font"] = `"${style.font}"`;
   if (style.size !== undefined) css["--text-scale"] = style.size / 100;
-  if (style.bold !== undefined && style.bold !== theme.bold) css.fontWeight = style.bold ? "bold" : "normal";
-  if (style.italic !== undefined) css.fontStyle = style.italic ? "italic" : "normal";
-  if (style.underline !== undefined) css.textDecoration = style.underline ? "underline" : "none";
+  if (style.bold !== undefined) css["--style-weight"] = style.bold ? "var(--text-bold)" : "normal";
+  if (style.italic !== undefined) css["--style-italic"] = style.italic ? "italic" : "normal";
+  if (style.underline !== undefined) css["--style-underline"] = style.underline ? "underline" : "none";
   if (style.align) {
-    css.textAlign = style.align;
+    css["--style-align"] = style.align;
     // A text as wide as the screen, so its alignment shows; an answer's text sits in its panel.
-    if (text === "answer") css.justifyContent = JUSTIFY[style.align];
-    else css.alignSelf = "stretch";
+    if (text !== "answer") css["--style-stretch"] = "stretch";
   }
-  const shadow = style.shadow ?? theme.shadow;
-  if (!shadow && theme.shadow) css.textShadow = "none";
-  else if (shadow && (style.shadowColor || !theme.shadow)) css.textShadow = `${SHADOW} ${style.shadowColor ? cssColor(style.shadowColor) : "var(--theme-shadow)"}`;
+  if (style.shadow !== undefined) css["--style-shadow"] = style.shadow ? "var(--text-shadow)" : "none";
+  if (style.shadowColor) css["--style-shadow-color"] = cssColor(style.shadowColor);
   const transparency = style.transparency ?? 0;
-  if (style.fill && !style.color && transparency < 50) css.color = readableText(style.fill.from, style.fill.to);
+  if (style.fill && !style.color && transparency < 50) css["--style-color"] = readableText(style.fill.from, style.fill.to);
   if (text === "answer") {
     if (style.fill) css["--answer-fill"] = gradientCss(style.fill, transparency);
     else if (transparency > 0) css["--answer-fill"] = `color-mix(in srgb, var(--answer) ${100 - transparency}%, transparent)`;
   } else if (style.fill) {
-    css.background = gradientCss(style.fill, transparency);
-    css.padding = "0.15em 0.5em";
-    css.borderRadius = 22;
+    css["--style-fill"] = gradientCss(style.fill, transparency);
+    css["--style-boxed"] = 1;
   }
   return css as CSSProperties;
 }

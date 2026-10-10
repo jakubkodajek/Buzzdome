@@ -3,8 +3,10 @@
    so sizes below are in stage pixels. Colours and fonts come from the theme
    as --theme-* variables (themeStyle in theme/themes.ts); only colours that
    mean the same in every look (medals, the clock face) are written here.
-   A slide's own style (theme/slide-style.ts) sets the texts' inline styles,
-   --text-scale for their size and --answer-fill for the answers' panels. */
+   A slide's own style (theme/slide-style.ts) sets only variables on the
+   texts it changes: --style-* (read under "Styled texts" below, each
+   falling back to the theme's look), --text-scale for their size and
+   --answer-fill for the answers' panels. */
 
 .stage {
   position: absolute;
@@ -70,9 +72,7 @@
 .slide-title {
   margin: 0;
   font-size: calc(110px * var(--text-scale, 1));
-  font-weight: 800;
   line-height: 1.1;
-  text-shadow: 0 6px 30px var(--theme-glow);
 }
 
 .slide-title.small {
@@ -425,10 +425,7 @@
 .question-text {
   margin: 0 0 40px;
   font-size: calc(66px * var(--text-scale, 1));
-  font-weight: 800;
   line-height: 1.18;
-  text-align: center;
-  text-shadow: 0 4px 18px var(--theme-shadow);
 }
 
 .answers {
@@ -445,13 +442,9 @@
   position: relative;
   display: flex;
   align-items: center;
-  justify-content: center;
   padding: 0 70px 0 110px;
   border-radius: 22px;
   font-size: calc(52px * var(--text-scale, 1));
-  font-weight: 700;
-  text-align: center;
-  color: var(--answer-text);
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.22), rgba(0, 0, 0, 0.12)), var(--answer-fill, var(--answer));
   border: 4px solid rgba(255, 255, 255, 0.55);
   box-shadow: inset 0 -10px 0 rgba(0, 0, 0, 0.18), 0 10px 26px rgba(0, 0, 0, 0.45);
@@ -784,4 +777,70 @@
 .question-screen.has-media .question-text {
   margin-bottom: 30px;
   font-size: calc(56px * var(--text-scale, 1));
+}
+
+/* Styled texts: the ones a slide's own style changes (slide-style.ts).
+   Each has its theme look here: --text-font, its weight, --text-bold (its
+   weight when made bold) and --text-shadow (drawn when its shadow is on),
+   and reads the --style-* variables over them. */
+
+.slide-title {
+  --text-font: var(--theme-font-heading);
+  --text-bold: 800;
+  --text-shadow: 0 6px 30px var(--style-shadow-color, var(--theme-glow));
+  font-weight: var(--style-weight, var(--text-bold));
+  text-shadow: var(--style-shadow, var(--text-shadow));
+}
+
+.question-text {
+  --text-font: var(--theme-font-body);
+  --text-bold: 800;
+  --text-shadow: 0 4px 18px var(--style-shadow-color, var(--theme-shadow));
+  font-weight: var(--style-weight, var(--text-bold));
+  text-shadow: var(--style-shadow, var(--text-shadow));
+}
+
+.slide-text,
+.explanation-text {
+  --text-font: var(--theme-font-body);
+  --text-bold: bold;
+  --text-shadow: 0 4px 18px var(--style-shadow-color, var(--theme-shadow));
+  font-weight: var(--style-weight, normal);
+  text-shadow: var(--style-shadow, none);
+}
+
+.answer {
+  --text-font: var(--theme-font-body);
+  --text-bold: 700;
+  --text-shadow: 0 4px 18px var(--style-shadow-color, var(--theme-shadow));
+  font-weight: var(--style-weight, var(--text-bold));
+  text-shadow: var(--style-shadow, none);
+  /* The fill goes to --answer-fill, under the panel's sheen; the text sits in the panel. */
+  color: var(--style-color, var(--answer-text));
+  justify-content: var(--style-align, center);
+}
+
+.slide-title,
+.question-text,
+.slide-text,
+.explanation-text,
+.answer {
+  /* A font that is not installed falls back to the theme's. */
+  font-family: var(--style-font, var(--text-font)), var(--text-font);
+  font-style: var(--style-italic, normal);
+  text-decoration: var(--style-underline, none);
+  text-align: var(--style-align, center);
+}
+
+/* Another text keeps the colour it inherits, has its fill as a box around
+   it, and spans the screen once it is aligned, so the alignment shows. */
+.slide-title,
+.question-text,
+.slide-text,
+.explanation-text {
+  color: var(--style-color, currentColor);
+  background: var(--style-fill, none);
+  padding: calc(var(--style-boxed, 0) * 0.15em) calc(var(--style-boxed, 0) * 0.5em);
+  border-radius: calc(var(--style-boxed, 0) * 22px);
+  align-self: var(--style-stretch, auto);
 }

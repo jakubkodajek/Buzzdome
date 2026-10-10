@@ -379,11 +379,15 @@ packages users will install are read the same way.
   (the leaderboard) through `StageOverlay`, so none places a background
   itself. `slide.css` takes colours and fonts only from those
   variables, apart from a slide's own style: `textStyleCss`
-  (`theme/slide-style.ts`, tested) turns a text's style into an inline
-  style that sets only what the style changes, a size as `--text-scale`
-  (which the text's `font-size` multiplies) and an answer's fill as
-  `--answer-fill` under the theme's sheen, so a revealed or dimmed answer
-  keeps its look. A title and a question share the headline's style.
+  (`theme/slide-style.ts`, tested) turns a text's style into inline
+  `--style-*` variables for only what the style changes, a size as
+  `--text-scale` (which the text's `font-size` multiplies) and an answer's
+  fill as `--answer-fill` under the theme's sheen, so a revealed or dimmed
+  answer keeps its look. `slide.css` reads each variable with the theme's
+  value as the fallback, so a font, a shadow or a corner is written once,
+  in CSS; a test checks that the texts the editor offers bold and with a
+  shadow are the ones `slide.css` draws so. A title and a question share
+  the headline's style.
   Text on a filled area (bars, answers, rows) gets white or dark
   text from `readableText`, which keeps at least the 3:1 contrast WCAG 2.2
   asks for large text (SC 1.4.3); a test checks every built-in colour. A
