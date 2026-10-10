@@ -718,7 +718,7 @@ conflict detection. None of this proves the real receiver's format: see
    runs, because macOS minutes are expensive): Windows NSIS, macOS universal DMG
    (`aarch64` and `x86_64` targets), Linux deb and AppImage on Ubuntu 22.04
    so the AppImage runs on older distributions. Each uploads its files as a
-   run artifact (`quiz-show-windows`, `quiz-show-macos`, `quiz-show-linux`).
+   run artifact (`buzzdome-windows`, `buzzdome-macos`, `buzzdome-linux`).
 
 Signing and notarization need a Windows code-signing certificate and an Apple
 Developer ID; until then builds are unsigned (macOS ad-hoc), see PL-5.

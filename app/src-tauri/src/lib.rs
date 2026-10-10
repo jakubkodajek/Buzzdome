@@ -346,7 +346,7 @@ async fn open_host_window(app: AppHandle, monitor: Option<usize>, fullscreen: bo
     let window = match app.get_webview_window(HOST_LABEL) {
         Some(window) => window,
         None => WebviewWindowBuilder::new(&app, HOST_LABEL, WebviewUrl::App("index.html".into()))
-            .title("Quiz Show")
+            .title("Buzzdome")
             .inner_size(1280.0, 720.0)
             .build()?,
     };

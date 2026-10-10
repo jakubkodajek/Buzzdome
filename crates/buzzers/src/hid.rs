@@ -83,7 +83,7 @@ pub fn udev_rule(vendor_id: Option<u16>, product_id: Option<u16>) -> String {
     let vid = vendor_id.map_or("VVVV".to_string(), |v| format!("{v:04x}"));
     let pid = product_id.map_or("PPPP".to_string(), |p| format!("{p:04x}"));
     format!(
-        "# Save as /etc/udev/rules.d/70-quiz-show.rules, then run\n\
+        "# Save as /etc/udev/rules.d/70-buzzdome.rules, then run\n\
          #   sudo udevadm control --reload-rules && sudo udevadm trigger\n\
          # and plug the receiver in again.\n\
          KERNEL==\"hidraw*\", ATTRS{{idVendor}}==\"{vid}\", ATTRS{{idProduct}}==\"{pid}\", MODE=\"0660\", TAG+=\"uaccess\"\n"

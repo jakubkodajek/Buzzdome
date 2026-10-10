@@ -246,7 +246,7 @@ mod tests {
     use quiz_core::{Button, Command};
 
     fn temp_root(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("quiz-show-test-{name}-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("buzzdome-test-{name}-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         dir
     }

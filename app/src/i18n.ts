@@ -7,7 +7,7 @@ const STORAGE_KEY = "quiz-show.lang";
 
 const strings = {
   cs: {
-    appTitle: "Kvízová show",
+    appTitle: "Buzzdome",
     noShow: "Není spuštěná žádná show.",
     openQuiz: "Otevřít kvíz…",
     demoQuiz: "Ukázkový kvíz",
@@ -750,7 +750,7 @@ const strings = {
     monitor: "Monitor",
   },
   en: {
-    appTitle: "Quiz Show",
+    appTitle: "Buzzdome",
     noShow: "No show is running.",
     openQuiz: "Open quiz…",
     demoQuiz: "Demo quiz",

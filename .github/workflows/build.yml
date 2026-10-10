@@ -111,7 +111,7 @@ jobs:
             args: --bundles nsis
             artifacts: |
               target/release/bundle/nsis/*.exe
-              target/release/quiz-show.exe
+              target/release/buzzdome.exe
           - name: macos
             os: macos-latest
             # One build for Apple silicon and Intel Macs.
@@ -158,6 +158,6 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: quiz-show-${{ matrix.name }}
+          name: buzzdome-${{ matrix.name }}
           path: ${{ matrix.artifacts }}
           if-no-files-found: error

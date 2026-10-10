@@ -11,7 +11,7 @@ about 30 minutes with four buzzers.
   charged, each with its own ID (the vendor's ID programming: hold B or C and
   the big button, see `replica/hardware.md`).
 - The app installed from the latest CI run (GitHub > Actions > Build > the run
-  > Artifacts: `quiz-show-windows`, `quiz-show-macos` or `quiz-show-linux`).
+  > Artifacts: `buzzdome-windows`, `buzzdome-macos` or `buzzdome-linux`).
 - The vendor's quiz software closed: only one program can open the receiver.
 
 ## 1. Identify

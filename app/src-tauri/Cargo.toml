@@ -1,13 +1,13 @@
 [package]
-name = "quiz-show"
-description = "Desktop quiz show with hardware buzzers"
+name = "buzzdome"
+description = "Buzzdome, a desktop quiz show with hardware buzzers"
 version.workspace = true
 edition.workspace = true
 
 [lib]
 # The `_lib` suffix keeps the lib name distinct from the bin name, which matters
 # on Windows: https://github.com/rust-lang/cargo/issues/8519
-name = "quiz_show_lib"
+name = "buzzdome_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]

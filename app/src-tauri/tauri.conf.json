@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Quiz Show",
+  "productName": "Buzzdome",
   "version": "0.1.0",
   "identifier": "cz.kodajek.quizshow",
   "build": {
@@ -13,7 +13,7 @@
     "windows": [
       {
         "label": "director",
-        "title": "Quiz Show – Director",
+        "title": "Buzzdome – Director",
         "width": 1280,
         "height": 800,
         "minWidth": 960,

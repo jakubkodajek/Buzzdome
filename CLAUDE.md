@@ -1,4 +1,4 @@
-# Quiz show app (working title)
+# Buzzdome
 
 A desktop quiz and game-show app for Jakub's own non-profit events, played with
 wireless hardware buzzers. It replaces Windows-only desktop game-show software;
@@ -21,6 +21,11 @@ development. Two windows on one machine:
   and show settings.
 - **Host screen**: full-screen window on the projector. A view of the game
   state, never the source of truth.
+
+The app is called Buzzdome (decided 2026-10-10). Its logo is a top view of a
+dome buzzer in six colours, orange by default (`app/src-tauri/icons`). The
+bundle identifier `cz.kodajek.quizshow` and the `quiz-show.*` preference keys
+keep the working title, so saved settings and data stay where they are.
 
 Players answer only with wireless buzzers (no phones, no network, no server).
 Up to ~50 buzzers. Quizzes are written by a colleague, so the quiz file format
@@ -50,7 +55,7 @@ on `PATH` first (macOS dev machine).
 | type-check and build UI | `cd app && npm run build` |
 | UI logic tests (editor history, draft queue, slide changes) | `cd app && npm test` |
 | UI preview in a browser (mocked backend) | `cd app && npm run dev`, then `/preview.html?window=host&scene=running` (scenes in `app/src/dev/preview.tsx`) |
-| installers | CI: `.github/workflows/build.yml` on `main`, tags `v*` and "Run workflow"; artifacts `quiz-show-windows`, `quiz-show-macos`, `quiz-show-linux` |
+| installers | CI: `.github/workflows/build.yml` on `main`, tags `v*` and "Run workflow"; artifacts `buzzdome-windows`, `buzzdome-macos`, `buzzdome-linux` |
 | receiver probe (no app) | `cargo run -p buzzers --example hid-monitor [-- VID:PID]` |
 | build installer | `cd app && npm run tauri build` (each OS builds its own installer) |
 
