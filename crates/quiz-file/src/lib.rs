@@ -32,6 +32,8 @@ use zip::{CompressionMethod, ZipArchive, ZipWriter};
 
 /// File extension of quiz files.
 pub const EXTENSION: &str = "quiz";
+/// What a quiz opens from: a quiz file, or a plain quiz JSON.
+pub const OPEN_EXTENSIONS: [&str; 2] = [EXTENSION, "json"];
 /// The quiz itself, at the root of a quiz file and of a package folder.
 pub const QUIZ_JSON: &str = "quiz.json";
 /// Limits against damaged or hostile files.

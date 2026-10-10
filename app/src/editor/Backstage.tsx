@@ -19,7 +19,8 @@ interface BackstageProps {
   /** The file's actions, and questions from a spreadsheet, the template for one, and the quiz as one (spec QZ-8). */
   actions: Pick<Actions, "newQuiz" | "save" | "saveAs" | "closeQuiz" | "exit" | "importSheet" | "sheetTemplate" | "exportSheet">;
   recentFiles: string[];
-  onOpenFile: (path?: string) => void;
+  /** Opens the file at `recent` in `recentFiles`, or one the quizmaster picks. */
+  onOpenFile: (recent?: number) => void;
   onTitle: (title: string) => void;
   /** Shows a slide (by id) in the editor. */
   onShowSlide: (id: string) => void;
@@ -191,9 +192,9 @@ function OpenPage({ recentFiles, onOpenFile }: BackstageProps) {
         <p className="muted">{t("noRecentFiles")}</p>
       ) : (
         <ul className="recent-list">
-          {recentFiles.map((path) => (
+          {recentFiles.map((path, recent) => (
             <li key={path}>
-              <button type="button" onClick={() => onOpenFile(path)}>
+              <button type="button" onClick={() => onOpenFile(recent)}>
                 <b>{fileName(path)}</b>
                 <small>{path}</small>
               </button>

@@ -177,12 +177,19 @@ two windows cannot disagree with each other or with the score.
   (`capabilities/director.json`, `capabilities/projector.json`; `build.rs`
   lists the app's commands so Tauri checks them, and a test in
   `app_windows.rs` keeps the three lists in step). The projector can read
-  the show and its media and dispatch, but not open, save or pick files.
+  the show and its media, but not open, save or pick files, and `dispatch`
+  takes from it only what its keys stand for (`PROJECTOR_COMMANDS` in
+  `lib.rs`, written to `bindings/ProjectorCommands.ts`; a test in
+  `keyboard.test.ts` checks that every command a key gives is in it).
   A content security policy (`tauri.conf.json`) lets the pages load only
   the app's own scripts and styles and media through the asset protocol.
-  Files the quizmaster opens, saves, imports or exports are picked by the
-  backend (`dialogs.rs`, worded by the UI's `Picker`), never named by a
-  page, and the pages confirm through the dialog plugin's `ask`
+  Tauri sets it only on the pages a release build serves, not on the dev
+  server's, so the release smoke check in `docs/hardware-test.md` runs
+  under it. Files the quizmaster opens, saves, imports or exports are
+  picked by the backend (`dialogs.rs`, worded by the UI's `Picker`), never
+  named by a page: the editor's recent files are kept by the backend
+  (`recent_files.rs`) and the page opens one by its place in the list. The
+  pages confirm through the dialog plugin's `ask`
   (`confirm.ts`, with Yes and No in the UI's language); ESLint refuses `alert`, `confirm`, `prompt` and the
   plugin's file pickers.
 - **Log.** `app_log.rs` writes `buzzdome.log` in the app's log folder

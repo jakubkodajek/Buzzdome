@@ -111,8 +111,10 @@ export const api = {
   /** The quiz editor's draft left from last time, if any. */
   editorLoad: () => invoke<EditorDraft | null>("editor_load"),
   editorNew: (title: string) => invoke<EditorDraft>("editor_new", { title }),
-  /** Opens `path` (a recent file) or a quiz file the quizmaster picks; null when they cancel. */
-  editorOpen: (path: string | null, picker: Picker) => invoke<EditorDraft | null>("editor_open", { path, picker }),
+  /** Opens the file at `recent` in `editorRecentFiles`, or a quiz file the quizmaster picks; null when they cancel. */
+  editorOpen: (recent: number | null, picker: Picker) => invoke<EditorDraft | null>("editor_open", { recent, picker }),
+  /** Quiz files the editor opened or saved lately, latest first. */
+  editorRecentFiles: () => invoke<string[]>("editor_recent_files"),
   /** Stores the edited quiz; returns what keeps it from being played. */
   editorUpdate: (draft: string, quiz: Quiz, unsaved: boolean) => invoke<ValidationError[]>("editor_update", { draft, quiz, unsaved }),
   /** Saves over the quiz file the draft came from, unless `saveAs`, else where the quizmaster picks; returns the path, null when they cancel. */

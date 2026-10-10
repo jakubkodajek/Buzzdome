@@ -8,7 +8,6 @@ import type { EditorDraft, Quiz, SheetExport, SheetImport } from "../types";
 import { BUSY, DraftSession, heldIn, type DraftApi, type DraftHeld, type DraftOperation, type DraftStatus } from "./draft-session";
 import { editorReducer, isUnsaved, LOADING, type EditorState } from "./editor-state";
 import type { Edit } from "./history";
-import { readRecentFiles, rememberRecentFile } from "./recent";
 import { listSeparator } from "./sheet";
 import { confirmAction } from "../confirm";
 
@@ -28,11 +27,12 @@ export interface QuizEditor {
   // failed, not refused while another one was under way).
   newQuiz: () => Promise<boolean>;
   /**
-   * Opens `path`, or a file the user picks. Resolves to the draft opened (a
-   * file from an older version may break newer rules, or have what this
-   * version leaves out), or false when nothing was opened.
+   * Opens the file at `recent` in `recentFiles`, or a file the user picks.
+   * Resolves to the draft opened (a file from an older version may break
+   * newer rules, or have what this version leaves out), or false when
+   * nothing was opened.
    */
-  openQuiz: (path?: string) => Promise<EditorDraft | false>;
+  openQuiz: (recent?: number) => Promise<EditorDraft | false>;
   /** Quiz files opened or saved lately, newest first. */
   recentFiles: string[];
   save: () => Promise<boolean>;
@@ -63,7 +63,15 @@ export function useQuizEditor(onTestRun: () => void): QuizEditor {
   const status = useSyncExternalStore(drafts.subscribe, drafts.getStatus);
   const report = useLatest(useReport());
   const dispatchCommand = useDispatch();
-  const [recentFiles, setRecentFiles] = useState(readRecentFiles);
+  // Kept by the backend, which opens a recent file by its place in the list.
+  const [recentFiles, setRecentFiles] = useState<string[]>([]);
+  const readRecentFiles = useCallback(
+    () => api.editorRecentFiles().then(setRecentFiles, (error: unknown) => report.current(error)),
+    [report],
+  );
+  useEffect(() => {
+    void readRecentFiles();
+  }, [readRecentFiles]);
   // The quiz the backend has; nothing is written back that came from it.
   const written = useRef<Quiz | null>(null);
   const [loads, setLoads] = useState(0);
@@ -134,7 +142,7 @@ export function useQuizEditor(onTestRun: () => void): QuizEditor {
       const path = await draftApi.editorSave(open.draftId, quiz, saveAs, picker);
       if (path === null) return false;
       dispatch({ type: "saved", quiz, path });
-      setRecentFiles(rememberRecentFile(path));
+      void readRecentFiles();
       return true;
     });
 
@@ -168,13 +176,13 @@ export function useQuizEditor(onTestRun: () => void): QuizEditor {
         load(await draftApi.editorNew(t("untitledQuiz")));
         return true;
       }),
-    openQuiz: (given) =>
+    openQuiz: (recent) =>
       attempt("open", async (draftApi) => {
         if (!(await mayDiscard())) return false;
-        const draft = await draftApi.editorOpen(given ?? null, quizPicker(t));
+        const draft = await draftApi.editorOpen(recent ?? null, quizPicker(t));
         if (!draft) return false;
         load(draft);
-        if (draft.sourcePath) setRecentFiles(rememberRecentFile(draft.sourcePath));
+        void readRecentFiles();
         return draft;
       }),
     recentFiles,
