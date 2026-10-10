@@ -12,6 +12,8 @@ pub const THEME_FORMAT: u32 = 1;
 /// The theme a quiz without one uses. Every theme ends at it, so it sets
 /// every value (TH-2).
 pub const DEFAULT_THEME_ID: &str = "builtin.classic";
+/// The ids of the app's own themes start with this; no other theme may take one.
+pub const BUILTIN_PREFIX: &str = "builtin.";
 /// Longest theme id, in bytes.
 pub const MAX_THEME_ID_LEN: usize = 100;
 /// Longest theme name or author, in characters.
@@ -232,6 +234,8 @@ pub enum ThemeError {
     BadValue { field: String, value: String },
     #[error("theme {0} is listed twice")]
     DuplicateId(String),
+    #[error("theme id {0} is kept for the app's own themes")]
+    ReservedId(String),
     #[error("the default theme {DEFAULT_THEME_ID} is missing")]
     NoDefault,
     #[error("the default theme sets no {0}")]
@@ -377,23 +381,63 @@ pub struct ThemeSource {
     pub root: String,
 }
 
-/// Every theme of `sources`, in their order, with all values filled in
-/// (TH-2): a key a theme leaves out comes from its parent, recursively,
-/// ending at the default theme (`DEFAULT_THEME_ID`), which must be among
-/// `sources` and set every value. A parent that is missing or already on the
-/// way (a loop) also ends at the default theme, so a theme always draws. A
-/// screen without a background takes the theme's own background of the
-/// screen it falls back to before any parent's (TH-5), so a theme that sets
-/// only `default` is not mixed with its parent's pictures.
-pub fn resolve_themes(sources: &[ThemeSource]) -> Result<Vec<Theme>, ThemeError> {
+/// The themes the app can draw with, and those it left out.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ResolvedThemes {
+    pub themes: Vec<Theme>,
+    pub skipped: Vec<SkippedTheme>,
+}
+
+/// A theme package left out, and why.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SkippedTheme {
+    /// The package's folder.
+    pub root: String,
+    pub problem: ThemeError,
+}
+
+/// Every theme, the app's own (`builtin`) and then the others, in their
+/// order, with all values filled in (TH-2): a key a theme leaves out comes
+/// from its parent, recursively, ending at the default theme
+/// (`DEFAULT_THEME_ID`), which must be among `builtin` and set every value.
+/// A parent that is missing or already on the way (a loop) also ends at the
+/// default theme, so a theme always draws. A screen without a background
+/// takes the theme's own background of the screen it falls back to before
+/// any parent's (TH-5), so a theme that sets only `default` is not mixed
+/// with its parent's pictures.
+///
+/// The app's own themes ship with it, so any fault in them is an error.
+/// Each other theme stands on its own: one with an id under
+/// `BUILTIN_PREFIX`, or the id of a theme before it, is left out, and the
+/// rest are still there.
+pub fn resolve_themes(builtin: &[ThemeSource], others: &[ThemeSource]) -> Result<ResolvedThemes, ThemeError> {
     let mut by_id = BTreeMap::new();
-    for source in sources {
+    for source in builtin {
         if by_id.insert(source.manifest.id.as_str(), source).is_some() {
             return Err(ThemeError::DuplicateId(source.manifest.id.clone()));
         }
     }
     let root = *by_id.get(DEFAULT_THEME_ID).ok_or(ThemeError::NoDefault)?;
-    sources.iter().map(|source| resolve(source, &inheritance(source, root, &by_id))).collect()
+    let mut themes = builtin.iter().map(|source| resolve(source, &inheritance(source, root, &by_id))).collect::<Result<Vec<_>, _>>()?;
+    let mut skipped = Vec::new();
+    let mut usable = Vec::new();
+    for source in others {
+        let id = source.manifest.id.as_str();
+        if id.starts_with(BUILTIN_PREFIX) {
+            skipped.push(SkippedTheme { root: source.root.clone(), problem: ThemeError::ReservedId(id.to_string()) });
+        } else if by_id.insert(id, source).is_some() {
+            skipped.push(SkippedTheme { root: source.root.clone(), problem: ThemeError::DuplicateId(id.to_string()) });
+        } else {
+            usable.push(source);
+        }
+    }
+    for source in usable {
+        match resolve(source, &inheritance(source, root, &by_id)) {
+            Ok(theme) => themes.push(theme),
+            Err(problem) => skipped.push(SkippedTheme { root: source.root.clone(), problem }),
+        }
+    }
+    Ok(ResolvedThemes { themes, skipped })
 }
 
 /// `source`, its parents, and the default theme last.
@@ -474,7 +518,7 @@ mod tests {
     }
 
     fn resolved(sources: &[ThemeSource], id: &str) -> Theme {
-        resolve_themes(sources).unwrap().into_iter().find(|theme| theme.id == id).unwrap()
+        resolve_themes(sources, &[]).unwrap().themes.into_iter().find(|theme| theme.id == id).unwrap()
     }
 
     #[test]
@@ -610,12 +654,41 @@ mod tests {
 
     #[test]
     fn the_default_theme_must_be_there_and_complete() {
-        assert_eq!(resolve_themes(&[child("test.a", None, serde_json::json!({}))]), Err(ThemeError::NoDefault));
+        assert_eq!(resolve_themes(&[child("test.a", None, serde_json::json!({}))], &[]), Err(ThemeError::NoDefault));
+        assert_eq!(resolve_themes(&[], &[source(root_json())]), Err(ThemeError::NoDefault));
         let mut json = root_json();
         json["colors"].as_object_mut().unwrap().remove("answerF");
-        assert_eq!(resolve_themes(&[source(json)]), Err(ThemeError::Incomplete("colors.answerF".into())));
+        assert_eq!(resolve_themes(&[source(json)], &[]), Err(ThemeError::Incomplete("colors.answerF".into())));
         let twice = [source(root_json()), source(root_json())];
-        assert_eq!(resolve_themes(&twice), Err(ThemeError::DuplicateId(DEFAULT_THEME_ID.into())));
+        assert_eq!(resolve_themes(&twice, &[]), Err(ThemeError::DuplicateId(DEFAULT_THEME_ID.into())));
+    }
+
+    #[test]
+    fn a_theme_that_takes_the_id_of_the_app_or_of_an_earlier_theme_is_left_out_alone() {
+        let builtin = [source(root_json()), child("builtin.night", Some(DEFAULT_THEME_ID), serde_json::json!({}))];
+        let mut copy = child("test.autumn", None, serde_json::json!({}));
+        copy.root = "/elsewhere/test.autumn/".into();
+        let others = [
+            child(DEFAULT_THEME_ID, None, serde_json::json!({})),
+            child("test.autumn", None, serde_json::json!({})),
+            copy,
+            child("builtin.new", None, serde_json::json!({})),
+            child("test.winter", Some("test.autumn"), serde_json::json!({})),
+        ];
+        let resolved = resolve_themes(&builtin, &others).unwrap();
+        let ids: Vec<&str> = resolved.themes.iter().map(|theme| theme.id.as_str()).collect();
+        assert_eq!(ids, [DEFAULT_THEME_ID, "builtin.night", "test.autumn", "test.winter"]);
+        let skipped = |root: &str, problem: ThemeError| SkippedTheme { root: root.into(), problem };
+        assert_eq!(
+            resolved.skipped,
+            [
+                skipped("/themes/builtin.classic/", ThemeError::ReservedId(DEFAULT_THEME_ID.into())),
+                skipped("/elsewhere/test.autumn/", ThemeError::DuplicateId("test.autumn".into())),
+                skipped("/themes/builtin.new/", ThemeError::ReservedId("builtin.new".into())),
+            ]
+        );
+        // The default theme is still the app's own.
+        assert_eq!(resolved.themes[0].name, builtin[0].manifest.name);
     }
 
     #[test]

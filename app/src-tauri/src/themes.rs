@@ -35,7 +35,8 @@ pub fn builtin_themes(folder_of: impl Fn(&str) -> String) -> Result<Vec<Theme>, 
         .iter()
         .map(|(id, json)| Ok(ThemeSource { manifest: ThemeManifest::from_json(json)?.0, root: folder_of(id) }))
         .collect::<Result<Vec<_>, ThemeError>>()?;
-    resolve_themes(&sources)
+    // No other themes yet: importing them (TH-1) shows the Director the ones `resolve_themes` leaves out.
+    resolve_themes(&sources, &[]).map(|resolved| resolved.themes)
 }
 
 /// Every installed theme, the default first (`DEFAULT_THEME_ID`).
@@ -47,7 +48,7 @@ pub fn list_themes(themes: State<Themes>) -> Vec<Theme> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use quiz_core::{ThemeFile, DEFAULT_THEME_ID};
+    use quiz_core::{ThemeFile, BUILTIN_PREFIX, DEFAULT_THEME_ID};
     use std::path::Path;
 
     const PACKAGES: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/themes");
@@ -61,6 +62,7 @@ mod tests {
         for (id, json) in BUILTIN {
             let (manifest, unknown) = ThemeManifest::from_json(json).unwrap();
             assert_eq!(manifest.id, id);
+            assert!(id.starts_with(BUILTIN_PREFIX), "{id}");
             assert!(unknown.is_empty(), "{id}: {unknown:?}");
         }
         let themes = builtin_themes(on_disk).unwrap();

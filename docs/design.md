@@ -240,7 +240,11 @@ packages users will install are read the same way.
   `builtin.classic`, which must set them all; a missing parent or a loop
   ends there too, so a look never stops a quiz from opening or playing. A
   screen without a background takes the theme's own background of the
-  screen it falls back to before any parent's. Each file comes out as a
+  screen it falls back to before any parent's. The app's own themes must
+  all resolve, as they ship with it; every other theme stands alone, and
+  one whose id is under `builtin.` or already taken is left out and
+  reported (`ResolvedThemes::skipped`), so it cannot take the others down.
+  Each file comes out as a
   `ThemeFile` (package folder and path), because one resolved theme can use
   files of several packages. The keys of each section (`ThemeColors`,
   `ThemeFonts`, `ThemeBackgrounds`, `BuzzerColors`) are written once, in a

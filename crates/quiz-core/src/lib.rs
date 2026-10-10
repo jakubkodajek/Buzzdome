@@ -21,7 +21,8 @@ pub use model::{
     SCHEMA_VERSION,
 };
 pub use theme::{
-    is_theme_id, resolve_themes, ScreenKey, Theme, ThemeError, ThemeFile, ThemeManifest, ThemeSource, UnknownKey, DEFAULT_THEME_ID,
+    is_theme_id, resolve_themes, ResolvedThemes, ScreenKey, SkippedTheme, Theme, ThemeError, ThemeFile, ThemeManifest, ThemeSource, UnknownKey,
+    BUILTIN_PREFIX, DEFAULT_THEME_ID,
 };
 pub use view::GameView;
 
