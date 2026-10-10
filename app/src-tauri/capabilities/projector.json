@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "projector",
-  "description": "The projector: reads the show and plays it, and its keys step the show (A13); it cannot send events, open files or change settings",
+  "description": "The projector: reads the show and plays it, tells when the player's video ended, and its keys step the show (A13); it cannot send events, open files or change settings",
   "windows": [
     "host"
   ],
@@ -14,6 +14,7 @@
     "allow-list-themes",
     "allow-media-library",
     "allow-media-now",
+    "allow-media-ended",
     "allow-media-volume",
     "allow-dispatch",
     "allow-close-host-window",

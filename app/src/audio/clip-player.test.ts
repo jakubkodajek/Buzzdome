@@ -84,6 +84,11 @@ describe("part player", () => {
     expect(held.failed).toBe(false);
     video.error = { code: 4 };
     expect([held.playing, held.failed]).toEqual([true, true]);
+    // Then nothing more plays, so it ends.
+    const failed = vi.fn();
+    held.onEnd = failed;
+    video.dispatchEvent(new Event("error"));
+    expect(failed).toHaveBeenCalledTimes(1);
   });
 
   it("goes on where it was paused, and loops a part until stopped", () => {

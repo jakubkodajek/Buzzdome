@@ -44,7 +44,11 @@ export interface PlayOptions {
 export class PartPlayer {
   /** Called when the file starts or stops playing. */
   onChange: (() => void) | null = null;
-  /** Called when the part played to its end and does not loop. */
+  /**
+   * Called when the part played to its end and does not loop, or when the
+   * file failed (missing, cannot be decoded, its drive gone): either way
+   * nothing more plays.
+   */
   onEnd: (() => void) | null = null;
   private span = WHOLE_FILE;
   private loop = false;
@@ -65,6 +69,7 @@ export class PartPlayer {
     media.addEventListener("play", this.changed);
     media.addEventListener("pause", this.changed);
     media.addEventListener("ended", this.reachedEnd);
+    media.addEventListener("error", this.broke);
   }
 
   get playing(): boolean {
@@ -122,6 +127,7 @@ export class PartPlayer {
     media.removeEventListener("play", this.changed);
     media.removeEventListener("pause", this.changed);
     media.removeEventListener("ended", this.reachedEnd);
+    media.removeEventListener("error", this.broke);
   }
 
   private seek(ms: number) {
@@ -141,6 +147,11 @@ export class PartPlayer {
   }
 
   private readonly changed = () => this.onChange?.();
+
+  private readonly broke = () => {
+    this.unwatchEnd();
+    this.onEnd?.();
+  };
 
   private readonly reachedEnd = () => {
     // A part that starts past the end of the file would loop forever.

@@ -7,7 +7,7 @@ import { useApp } from "../app-context";
 import { WHOLE_FILE } from "../audio/clip-player";
 import { MAX_REPLAY_DELAY_MS } from "../bindings/Constants";
 import { trackTime } from "../format";
-import { isTypingTarget } from "../keyboard";
+import { isPlainKey } from "../keyboard";
 import type { Replay, Span } from "../types";
 import { NumberBox, TimeBox } from "./controls";
 import { newReplay } from "./slides";
@@ -147,7 +147,7 @@ export function PartTimes({ parts, durationMs }: { parts: PartEditing; durationM
 
 /** The trim windows' keys: Space plays or stops, I and O set the start and the end; also on a slider, which takes no typing. */
 export function onPartKeys(event: KeyboardEvent, keys: { togglePlay: () => void; setStart: () => void; setEnd: () => void }) {
-  if (isTypingTarget(event.target) || event.ctrlKey || event.metaKey || event.altKey) return;
+  if (!isPlainKey(event)) return;
   const run = { " ": keys.togglePlay, i: keys.setStart, o: keys.setEnd }[event.key.toLowerCase()];
   if (!run) return;
   event.preventDefault();

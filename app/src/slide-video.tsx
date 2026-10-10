@@ -9,6 +9,7 @@ import { timeLeft } from "./answer-time";
 import { PartPlayer, playerLevel } from "./audio/clip-player";
 import { useReplay } from "./audio/replay";
 import { useLatest, usePlayerVolume } from "./hooks";
+import { heardAtNow, msSinceHeard } from "./media-player";
 import type { ClockView, GameView, VideoClip, VideoEffect } from "./types";
 import { blurRadius, mosaicColumns } from "./video-effect";
 
@@ -111,7 +112,7 @@ function useVideoEffect(
 ) {
   const reading = useRef({ phase: view.phase, clock, at: 0 });
   useLayoutEffect(() => {
-    reading.current = { phase: view.phase, clock, at: performance.now() };
+    reading.current = { phase: view.phase, clock, at: heardAtNow() };
   }, [view.phase, clock]);
 
   useEffect(() => {
@@ -119,7 +120,7 @@ function useVideoEffect(
     if (!video || !effect) return;
     let frame = requestAnimationFrame(function draw() {
       const { phase, clock: read, at } = reading.current;
-      const strength = timeLeft(phase, read, performance.now() - at);
+      const strength = timeLeft(phase, read, msSinceHeard(at));
       if (effect === "blur") video.style.filter = strength > 0 ? `blur(${blurRadius(strength, video.clientWidth)}px)` : "";
       else if (mosaic.current) drawMosaic(video, mosaic.current, strength);
       frame = requestAnimationFrame(draw);

@@ -36,6 +36,7 @@ export interface StepGuard {
   send(command: Command, send: () => Promise<void>): Promise<void> | null;
 }
 
+// eslint-disable-next-line no-restricted-properties -- the spacing of this window's own presses, not the show clock
 export function createStepGuard(now: () => number = () => performance.now()): StepGuard {
   let unanswered = false;
   /** When the last step command was answered. */

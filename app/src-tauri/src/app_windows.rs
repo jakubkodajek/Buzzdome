@@ -8,7 +8,7 @@
 use crate::error::CmdResult;
 use crate::{app_icon, app_log, AppState};
 use serde::{Deserialize, Serialize};
-use std::sync::{Mutex, TryLockError};
+use std::sync::{Arc, Mutex, TryLockError};
 use std::time::{Duration, Instant};
 use tauri::menu::{Menu, MenuEvent};
 use tauri::plugin::TauriPlugin;
@@ -24,7 +24,7 @@ const CLOSE_REQUESTED_EVENT: &str = "close-requested";
 /// How long a close request waits for the Director's answer: a Director
 /// whose page failed or hangs never gives one, so a request made after that
 /// closes the app without asking (G3).
-const CLOSE_ANSWER_WAIT: Duration = Duration::from_secs(10);
+pub(crate) const CLOSE_ANSWER_WAIT: Duration = Duration::from_secs(10);
 /// How long an unanswered close request lasts. A later close asks again, so
 /// a request whose answer was lost (its dialog failed to open) does not let
 /// an accidental close go through without asking an hour later.
@@ -145,11 +145,23 @@ pub fn report_host_problem(app: AppHandle, message: String) {
     let _ = app.emit("host-problem", message);
 }
 
+/// The most of a window's problem that goes in the log: a window can send
+/// text of any size, and a long one would push the rest out of the log.
+const LOGGED_PROBLEM_CHARS: usize = 2_000;
+
 /// Notes in the log a problem a window has nowhere to show, such as the
 /// Director's close dialog not opening once its screen failed.
 #[tauri::command]
 pub fn log_problem(window: Window, message: String) {
-    app_log::note(&format!("the {} window: {message}", window.label()));
+    app_log::note(&format!("the {} window: {}", window.label(), logged_problem(&message)));
+}
+
+/// `message` as it goes in the log: cut after `LOGGED_PROBLEM_CHARS`.
+fn logged_problem(message: &str) -> String {
+    match message.char_indices().nth(LOGGED_PROBLEM_CHARS) {
+        Some((cut, _)) => format!("{}… ({} bytes)", &message[..cut], message.len()),
+        None => message.to_owned(),
+    }
 }
 
 /// Ends the app, once the quizmaster confirmed it during a show. Every
@@ -160,25 +172,34 @@ pub fn quit_app(app: AppHandle) {
 }
 
 /// When the Director was asked to confirm closing the app, until it answers.
-#[derive(Default)]
-pub struct CloseRequest(Mutex<Option<Instant>>);
+/// The windows and the show state share it: a request left unanswered is
+/// about the show running when it was made, so the show state forgets it
+/// when a show begins or ends (`replace_show`).
+#[derive(Clone, Default)]
+pub struct CloseRequest(Arc<Mutex<Option<Instant>>>);
+
+impl CloseRequest {
+    /// What a request to close the app during a show does `now`.
+    pub(crate) fn answer(&self, now: Instant) -> CloseAnswer {
+        close_answer(&mut self.0.lock().unwrap(), now)
+    }
+
+    /// The next close asks again.
+    pub fn forget(&self) {
+        *self.0.lock().unwrap() = None;
+    }
+}
 
 /// The quizmaster chose not to close the app: the next close asks again.
 #[tauri::command]
 pub fn close_declined(request: State<CloseRequest>) {
-    *request.0.lock().unwrap() = None;
-}
-
-/// A show began or ended: a close request left unanswered was about the
-/// one before, so the next close asks again.
-pub fn forget_close_request(app: &AppHandle) {
-    *app.state::<CloseRequest>().0.lock().unwrap() = None;
+    request.forget();
 }
 
 /// What a request to close the app during a show does, given when the
 /// Director was `asked` and has not answered yet.
 #[derive(Debug, PartialEq)]
-enum CloseAnswer {
+pub(crate) enum CloseAnswer {
     /// Ask the Director to confirm it.
     Ask,
     /// The Director is asking already: no second dialog.
@@ -205,9 +226,7 @@ fn may_close(app: &AppHandle) -> bool {
     if !show_may_run(app) || app.get_webview_window(DIRECTOR_LABEL).is_none() {
         return true;
     }
-    let request = app.state::<CloseRequest>();
-    let answer = close_answer(&mut request.0.lock().unwrap(), Instant::now());
-    match answer {
+    match app.state::<CloseRequest>().answer(Instant::now()) {
         CloseAnswer::Ask => {
             let _ = app.emit_to(DIRECTOR_LABEL, CLOSE_REQUESTED_EVENT, ());
             false
@@ -250,43 +269,83 @@ pub fn on_window_event(window: &Window, event: &WindowEvent) {
     }
 }
 
-/// The words of the macOS app menu that the system does not word itself,
-/// in the UI's language (`set_menu_words`).
+/// The words of the macOS app menu in the UI's language
+/// (`set_menu_words`): the menu's own items, and those Tauri gives fixed
+/// English titles.
 #[derive(Debug, Clone, Deserialize, TS)]
 #[ts(export)]
 #[serde(rename_all = "camelCase")]
 pub struct MenuWords {
     /// The app's Quit, with the app's name.
     pub quit: String,
+    /// With the app's name, as `hide`.
+    pub about: String,
+    pub services: String,
+    pub hide: String,
+    pub hide_others: String,
     pub file: String,
+    pub close_window: String,
     pub edit: String,
+    pub undo: String,
+    pub redo: String,
+    pub cut: String,
+    pub copy: String,
+    pub paste: String,
+    pub select_all: String,
     pub view: String,
+    pub fullscreen: String,
     pub window: String,
+    pub minimize: String,
+    pub maximize: String,
 }
 
 /// The macOS app menu, as Tauri's default one but with a Quit of the app's
 /// own: the system's Quit ends the app at once, with no event to wait on,
 /// so Cmd+Q would end a show without asking (G21). Quit from the Dock still
-/// does; the show stays saved and can be resumed. Worded in English until
-/// the Director words it.
+/// does; the show stays saved and can be resumed. In English until the
+/// Director words it.
 #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 pub fn app_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
-    let name = &app.package_info().name;
-    let words = MenuWords { quit: format!("Quit {name}"), file: "File".into(), edit: "Edit".into(), view: "View".into(), window: "Window".into() };
-    worded_menu(app, &words)
+    worded_menu(app, None)
 }
 
+/// The app menu in `words`, or in English: the menu's own items as here,
+/// the others with Tauri's titles.
 #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
-fn worded_menu<R: Runtime>(app: &AppHandle<R>, words: &MenuWords) -> tauri::Result<Menu<R>> {
-    use tauri::menu::{AboutMetadata, MenuBuilder, MenuItemBuilder, SubmenuBuilder};
+fn worded_menu<R: Runtime>(app: &AppHandle<R>, words: Option<&MenuWords>) -> tauri::Result<Menu<R>> {
+    use tauri::menu::{AboutMetadata, MenuBuilder, MenuItemBuilder, PredefinedMenuItem as Item, SubmenuBuilder};
     let name = &app.package_info().name;
+    let word = |pick: fn(&MenuWords) -> &String| words.map(|words| pick(words).as_str());
+    let title = |pick: fn(&MenuWords) -> &String, english: &str| word(pick).unwrap_or(english).to_owned();
     let about = AboutMetadata { name: Some(name.clone()), version: Some(app.package_info().version.to_string()), ..Default::default() };
-    let quit = MenuItemBuilder::with_id(QUIT_MENU_ID, &words.quit).accelerator("CmdOrCtrl+Q").build(app)?;
-    let app_menu = SubmenuBuilder::new(app, name).about(Some(about)).separator().services().separator().hide().hide_others().separator().item(&quit).build()?;
-    let file = SubmenuBuilder::new(app, &words.file).close_window().build()?;
-    let edit = SubmenuBuilder::new(app, &words.edit).undo().redo().separator().cut().copy().paste().select_all().build()?;
-    let view = SubmenuBuilder::new(app, &words.view).fullscreen().build()?;
-    let window = SubmenuBuilder::new(app, &words.window).minimize().maximize().separator().close_window().build()?;
+    let quit = MenuItemBuilder::with_id(QUIT_MENU_ID, title(|w| &w.quit, &format!("Quit {name}"))).accelerator("CmdOrCtrl+Q").build(app)?;
+    let app_menu = SubmenuBuilder::new(app, name)
+        .item(&Item::about(app, word(|w| &w.about), Some(about))?)
+        .separator()
+        .item(&Item::services(app, word(|w| &w.services))?)
+        .separator()
+        .item(&Item::hide(app, word(|w| &w.hide))?)
+        .item(&Item::hide_others(app, word(|w| &w.hide_others))?)
+        .separator()
+        .item(&quit)
+        .build()?;
+    let file = SubmenuBuilder::new(app, title(|w| &w.file, "File")).item(&Item::close_window(app, word(|w| &w.close_window))?).build()?;
+    let edit = SubmenuBuilder::new(app, title(|w| &w.edit, "Edit"))
+        .item(&Item::undo(app, word(|w| &w.undo))?)
+        .item(&Item::redo(app, word(|w| &w.redo))?)
+        .separator()
+        .item(&Item::cut(app, word(|w| &w.cut))?)
+        .item(&Item::copy(app, word(|w| &w.copy))?)
+        .item(&Item::paste(app, word(|w| &w.paste))?)
+        .item(&Item::select_all(app, word(|w| &w.select_all))?)
+        .build()?;
+    let view = SubmenuBuilder::new(app, title(|w| &w.view, "View")).item(&Item::fullscreen(app, word(|w| &w.fullscreen))?).build()?;
+    let window = SubmenuBuilder::new(app, title(|w| &w.window, "Window"))
+        .item(&Item::minimize(app, word(|w| &w.minimize))?)
+        .item(&Item::maximize(app, word(|w| &w.maximize))?)
+        .separator()
+        .item(&Item::close_window(app, word(|w| &w.close_window))?)
+        .build()?;
     MenuBuilder::new(app).items(&[&app_menu, &file, &edit, &view, &window]).build()
 }
 
@@ -294,7 +353,7 @@ fn worded_menu<R: Runtime>(app: &AppHandle<R>, words: &MenuWords) -> tauri::Resu
 #[tauri::command]
 pub fn set_menu_words(app: AppHandle, words: MenuWords) -> CmdResult<()> {
     #[cfg(target_os = "macos")]
-    app.set_menu(worded_menu(&app, &words)?)?;
+    app.set_menu(worded_menu(&app, Some(&words))?)?;
     #[cfg(not(target_os = "macos"))]
     let _ = (app, words);
     Ok(())
@@ -407,6 +466,14 @@ mod tests {
     }
 
     #[test]
+    fn a_long_problem_is_cut_in_the_log() {
+        let most = "é".repeat(LOGGED_PROBLEM_CHARS);
+        assert_eq!(logged_problem(&most), most);
+        let long = format!("{most}é");
+        assert_eq!(logged_problem(&long), format!("{most}… ({} bytes)", long.len()));
+    }
+
+    #[test]
     fn a_close_request_asks_once_and_closes_when_it_goes_unanswered() {
         let start = Instant::now();
         let mut asked = None;
@@ -421,7 +488,7 @@ mod tests {
         assert_eq!(close_answer(&mut asked, later), CloseAnswer::Ask);
         assert_eq!(asked, Some(later));
         assert_eq!(close_answer(&mut asked, later + Duration::from_secs(3)), CloseAnswer::Wait);
-        // Once the quizmaster declined (`close_declined`), or a show began or ended, the next close asks again.
+        // Once the quizmaster declined (`close_declined`), or a show began or ended (`replace_show`), the next close asks again.
         asked = None;
         assert_eq!(close_answer(&mut asked, later + Duration::from_secs(5)), CloseAnswer::Ask);
     }

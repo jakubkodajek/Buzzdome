@@ -54,6 +54,8 @@ struct Inner {
     save_problem: Option<AppError>,
     /// When the running show began on the show clock (`before_show`).
     began_ms: u64,
+    /// The windows' close request, forgotten when a show begins or ends.
+    close_request: app_windows::CloseRequest,
 }
 
 impl Inner {
@@ -68,6 +70,7 @@ impl Inner {
             teams_file: None,
             save_problem: None,
             began_ms: 0,
+            close_request: app_windows::CloseRequest::default(),
         }
     }
 
@@ -166,11 +169,8 @@ fn emit_state(app: &AppHandle, game: Option<&Game>) {
     let _ = app.emit("game-state", view);
 }
 
-/// A different show (or none) is loaded: the windows hear of it and reload
-/// the quiz, and a close request left unanswered, which was about the show
-/// before, is forgotten.
+/// A different show (or none) is loaded: the windows hear of it and reload the quiz.
 fn show_changed(app: &AppHandle, inner: &Inner) {
-    app_windows::forget_close_request(app);
     let _ = app.emit("show-changed", ());
     // A show has its own team names, and the prepared ones are back after it.
     let _ = app.emit("teams-changed", teams::current(inner));
@@ -214,12 +214,15 @@ fn apply_journaled(inner: &mut Inner, command: Command, at_ms: u64) -> CmdResult
 }
 
 /// Makes `game` the running show, or none, journaled in `session` (none in
-/// a test run), beginning now. A new journal has no failed write yet.
+/// a test run), beginning now. A new journal has no failed write yet, and
+/// the next close during a show asks again. Every show begins and ends here.
 fn replace_show(inner: &mut Inner, game: Option<Game>, session: Option<Session>) {
     inner.game = game;
     inner.session = session;
     inner.save_problem = None;
     inner.began_ms = now_ms();
+    // A close request left unanswered was about the show before.
+    inner.close_request.forget();
 }
 
 /// Applies `stamped` to a copy of `game` and journals it in `session` (none
@@ -518,12 +521,13 @@ pub fn run() {
     // Only macOS has an app menu, whose Quit asks during a show (G21).
     #[cfg(target_os = "macos")]
     let builder = builder.menu(app_windows::app_menu);
+    let inner = Inner::new();
     builder
         .on_window_event(app_windows::on_window_event)
         .on_menu_event(app_windows::on_menu_event)
-        .manage(app_windows::CloseRequest::default())
+        .manage(inner.close_request.clone())
         .manage(editor::EditorLock::default())
-        .manage(AppState(Mutex::new(Inner::new())))
+        .manage(AppState(Mutex::new(inner)))
         .setup(|app| {
             app_log::start(app.path().app_log_dir()?);
             editor::move_roaming_drafts(app.handle());
@@ -593,6 +597,7 @@ pub fn run() {
             media_player::sound_board_change,
             media_player::media_now,
             media_player::media_control,
+            media_player::media_ended,
             media_player::media_volume,
             media_player::media_set_volume,
             app_icon::app_icon,
@@ -626,6 +631,8 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use app_windows::{CloseAnswer, CLOSE_ANSWER_WAIT};
+    use std::time::Instant;
 
     #[test]
     fn the_demo_quiz_is_current_and_plays() {
@@ -881,6 +888,24 @@ mod tests {
             serde_json::to_string(&PROJECTOR_COMMANDS).unwrap(),
         );
         fs::write(Path::new(&dir).join("ProjectorCommands.ts"), ts).unwrap();
+    }
+
+    #[test]
+    fn a_close_request_left_unanswered_is_forgotten_when_a_show_begins_or_ends() {
+        let mut inner = Inner::new();
+        let request = inner.close_request.clone();
+        let now = Instant::now();
+        let demo = || Game::new(Quiz::from_json(DEMO_QUIZ).unwrap());
+        assert_eq!(request.answer(now), CloseAnswer::Ask);
+        assert_eq!(request.answer(now), CloseAnswer::Wait);
+        replace_show(&mut inner, Some(demo()), None);
+        assert_eq!(request.answer(now), CloseAnswer::Ask, "a show began");
+        assert_eq!(request.answer(now + CLOSE_ANSWER_WAIT), CloseAnswer::Close);
+        replace_show(&mut inner, None, None);
+        assert_eq!(request.answer(now + CLOSE_ANSWER_WAIT), CloseAnswer::Ask, "the show ended");
+        // The show resumed after a crash begins here too (`resume_last_session`).
+        replace_show(&mut inner, Some(demo()), None);
+        assert_eq!(request.answer(now + CLOSE_ANSWER_WAIT), CloseAnswer::Ask, "a show resumed");
     }
 
     #[test]

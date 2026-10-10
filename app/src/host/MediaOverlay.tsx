@@ -1,4 +1,6 @@
 import { useEffect, useRef } from "react";
+import { api } from "../api";
+import { useRun } from "../app-context";
 import { PartPlayer, playerLevel, WHOLE_FILE } from "../audio/clip-player";
 import { positionAt, showClockNow, type HeardMedia } from "../media-player";
 import { useLatest, useMediaLibrary, useNowPlaying, usePlayerVolume } from "../hooks";
@@ -10,7 +12,8 @@ import type { NowPlaying } from "../types";
  * whole stage until it is stopped; sounds play in the Director. A video
  * follows the player: it pauses, goes on and starts over with it, and
  * opening the projector mid-file joins it where it is, and it sounds at the
- * player's volume.
+ * player's volume. Its end, or its file failing, is told from here: only
+ * this window can tell.
  */
 export function MediaOverlay() {
   const library = useMediaLibrary();
@@ -25,6 +28,7 @@ function OverlayVideo({ url, now, heard }: { url: string; now: NowPlaying; heard
   const element = useRef<HTMLVideoElement>(null);
   const player = useRef<PartPlayer | null>(null);
   const latest = useLatest(heard);
+  const latestRun = useLatest(useRun());
   const { id, positionMs, sinceMs } = now;
   const level = playerLevel(usePlayerVolume());
 
@@ -35,14 +39,15 @@ function OverlayVideo({ url, now, heard }: { url: string; now: NowPlaying; heard
   useEffect(() => {
     const media = element.current;
     if (!media) return;
-    // The Director ends it a moment after its length; until then it stays on its last frame.
+    // It stays on its last frame until the player stops it.
     const clip = new PartPlayer(media, { holdAtEnd: true });
+    clip.onEnd = () => latestRun.current(api.mediaEnded(id));
     player.current = clip;
     return () => {
       clip.dispose();
       player.current = null;
     };
-  }, [url, id]);
+  }, [url, id, latestRun]);
 
   useEffect(() => {
     const clip = player.current;

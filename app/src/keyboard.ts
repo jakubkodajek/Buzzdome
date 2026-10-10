@@ -68,6 +68,14 @@ export function keyCombo(event: Pick<KeyboardEvent, "key" | "ctrlKey" | "metaKey
   return parts.join("+");
 }
 
+/**
+ * True for a key press the app's own keys may take: no Ctrl, Cmd or Alt, not
+ * typed text, and no control took it already (Space on a focused team chip).
+ */
+export function isPlainKey(event: Pick<KeyboardEvent, "metaKey" | "ctrlKey" | "altKey" | "defaultPrevented" | "target">): boolean {
+  return !event.defaultPrevented && !event.metaKey && !event.ctrlKey && !event.altKey && !isTypingTarget(event.target);
+}
+
 /** True for the keys a running show takes, whether or not the current step has a use for them. */
 function isShowKey(key: string): boolean {
   const lower = key.toLowerCase();
@@ -92,8 +100,7 @@ export function useShortcuts(view: GameView | null, onToggleProjector?: () => vo
       if (isHeldButtonPress(event)) event.preventDefault();
     };
     const onKey = (event: KeyboardEvent) => {
-      // A key a control already took (Space on a focused team chip) is not the show's.
-      if (event.defaultPrevented || isTypingTarget(event.target) || event.metaKey || event.ctrlKey || event.altKey) return;
+      if (!isPlainKey(event)) return;
       if (event.key.toLowerCase() === KEYS.projector && onToggleProjector) {
         event.preventDefault();
         if (!event.repeat) onToggleProjector();
@@ -122,10 +129,9 @@ export function useShortcuts(view: GameView | null, onToggleProjector?: () => vo
   }, [view, dispatch, onToggleProjector]);
 }
 
-/** True for a key press that closes the projector from itself: M or Esc, held or not, with no modifier. */
+/** True for a key press that closes the projector from itself: M or Esc, plain (`isPlainKey`) and not held down. */
 export function isProjectorCloseKey(event: Pick<KeyboardEvent, "key" | "repeat" | "metaKey" | "ctrlKey" | "altKey" | "defaultPrevented" | "target">): boolean {
-  if (event.defaultPrevented || event.repeat || event.metaKey || event.ctrlKey || event.altKey || isTypingTarget(event.target)) return false;
-  return event.key === "Escape" || event.key.toLowerCase() === KEYS.projector;
+  return isPlainKey(event) && !event.repeat && (event.key === "Escape" || event.key.toLowerCase() === KEYS.projector);
 }
 
 /**

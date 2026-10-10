@@ -190,8 +190,12 @@ fn keep_aside(path: &Path, dir: &Path) -> io::Result<PathBuf> {
         match OpenOptions::new().write(true).create_new(true).open(&copy) {
             Ok(mut file) => {
                 io::copy(&mut File::open(path)?, &mut file)?;
-                // On disk before the journal is cut, so a crash in between loses neither.
+                // On disk before the journal is cut, so a crash in between
+                // loses neither: the copy, its name in `TORN_DIR` and that
+                // folder's name in the session's.
                 file.sync_all()?;
+                sync_dir(&torn)?;
+                sync_dir(dir)?;
                 return Ok(copy);
             }
             Err(e) if e.kind() == io::ErrorKind::AlreadyExists => number += 1,

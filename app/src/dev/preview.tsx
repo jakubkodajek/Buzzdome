@@ -508,6 +508,10 @@ mockIPC(
         called.push({ cmd, ...(payload as object) });
         control((payload as { command: PlayerCommand }).command);
         return null;
+      case "media_ended":
+        called.push({ cmd, ...(payload as object) });
+        control({ type: "ended", id: (payload as { id: number }).id });
+        return null;
       case "app_icon":
         return appIcon;
       case "set_app_icon":

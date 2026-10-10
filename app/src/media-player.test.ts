@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MAX_BOARD_COLUMNS } from "./bindings/Constants";
 import type { LibraryFile, NowPlaying, SoundBoard } from "./types";
-import { heard, heardNow, msToEnd, padColor, positionAt, progressOf, searchFiles, showClockAt, showClockNow, shownRows } from "./media-player";
+import { heard, heardNow, msToEnd, overAtCheck, padColor, positionAt, progressOf, searchFiles, showClockAt, showClockNow, shownRows } from "./media-player";
 // The cases quiz-core tests `NowPlaying::position_at` with.
 import POSITION_CASES from "../../crates/quiz-core/tests/data/position-at.json";
 
@@ -86,5 +86,16 @@ describe("media player", () => {
     expect(msToEnd(SONG, undefined, 11_000)).toBeNull();
     expect(msToEnd(SONG, Number.NaN, 11_000)).toBeNull();
     expect(msToEnd(null, 8_000, 11_000)).toBeNull();
+  });
+
+  it("at its end ends a video, a stopped or failed sound, and one that stands still", () => {
+    const sound = { playing: true, failed: false, positionMs: 8_000 };
+    expect(overAtCheck(null, null)).toBe(true);
+    expect(overAtCheck({ ...sound, playing: false }, null)).toBe(true);
+    expect(overAtCheck({ ...sound, failed: true }, null)).toBe(true);
+    // Still playing at its length (it started late): it ends by itself, so it is checked again.
+    expect(overAtCheck(sound, null)).toBe(false);
+    expect(overAtCheck({ ...sound, positionMs: 9_500 }, 8_000)).toBe(false);
+    expect(overAtCheck(sound, 8_000)).toBe(true);
   });
 });

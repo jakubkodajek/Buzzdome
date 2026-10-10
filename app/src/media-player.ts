@@ -31,6 +31,16 @@ export function heardNow(media: MediaNow): HeardMedia {
   return heard(media, localNow());
 }
 
+/** The time by `localNow`, for something heard now (`msSinceHeard`). */
+export function heardAtNow(): number {
+  return localNow();
+}
+
+/** How long ago, by `localNow`, something heard at `heardAt` was heard. */
+export function msSinceHeard(heardAt: number): number {
+  return Math.max(0, localNow() - heardAt);
+}
+
 /** The show clock at `localMs` (by `localNow`), counted on from what was heard. */
 export function showClockAt(media: HeardMedia, localMs: number): number {
   return media.atMs + Math.max(0, localMs - media.heardAt);
@@ -93,10 +103,37 @@ export function progressOf(reference: string | null, now: NowPlaying | null, dur
 
 /**
  * In how many ms what plays reaches its end, if it plays and its length is
- * known; a picture has no end. The Director then tells the backend, which
- * stops it whichever window plays it (the projector may be closed).
+ * known; a picture has no end. The Director then checks it (`overAtCheck`)
+ * and tells the backend, which stops it whichever window plays it (the
+ * projector may be closed).
  */
 export function msToEnd(now: NowPlaying | null, durationMs: number | undefined, atMs: number): number | null {
   if (!now || now.sinceMs === null || now.kind === "image" || durationMs === undefined || !(durationMs > 0)) return null;
   return Math.max(0, durationMs - positionAt(now, atMs));
+}
+
+/**
+ * How long a sound found still playing at its end may stand still before
+ * the Director ends it: its file stalled (its drive pulled out, say).
+ */
+export const STALLED_SOUND_MS = 2_000;
+
+/** What the Director's end check reads of the sound it plays (a `ClipPlayer`). */
+export interface PlayingSound {
+  readonly playing: boolean;
+  readonly failed: boolean;
+  readonly positionMs: number;
+}
+
+/**
+ * Whether what plays is over when the Director checks it at its end
+ * (`msToEnd`): a video is (the projector plays it, so there is no `sound`),
+ * and so is a sound that stopped or whose file failed. A sound still
+ * playing ends by itself, unless it stood still since the check before,
+ * which read it at `beforeMs`; the Director checks it again
+ * `STALLED_SOUND_MS` later.
+ */
+export function overAtCheck(sound: PlayingSound | null, beforeMs: number | null): boolean {
+  if (!sound?.playing || sound.failed) return true;
+  return beforeMs !== null && sound.positionMs <= beforeMs;
 }

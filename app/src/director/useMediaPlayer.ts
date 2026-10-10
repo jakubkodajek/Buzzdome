@@ -4,17 +4,18 @@ import { useRun } from "../app-context";
 import { ClipPlayer, playerLevel, WHOLE_FILE } from "../audio/clip-player";
 import { useLatest, useMediaLibrary, useNowPlaying, usePlayerVolume, useSoundBoard } from "../hooks";
 import { mediaUrl } from "../media";
-import { msToEnd, positionAt, showClockNow } from "../media-player";
+import { msToEnd, overAtCheck, positionAt, showClockNow, STALLED_SOUND_MS } from "../media-player";
 import type { HeardMedia } from "../media-player";
 import type { MediaLibrary, NowPlaying, SoundBoard } from "../types";
 import { useMediaDurations } from "./media-durations";
 
 /**
- * How much longer than its length a video may play before it is ended: it
- * plays on the projector, which may start it late (from a slow drive), and
- * cannot tell its own end.
+ * How much longer than its length a video may play before the Director
+ * ends it. The projector, which plays it, tells its end itself
+ * (`mediaEnded`), however late it started; this ends it when the projector
+ * is closed or its file failed unseen.
  */
-const VIDEO_END_GRACE_MS = 1_000;
+const VIDEO_END_FALLBACK_MS = 10_000;
 
 export interface MediaPlayer {
   library: MediaLibrary | null;
@@ -52,18 +53,20 @@ export function useMediaPlayer(): MediaPlayer {
   const soundUrl = now?.kind === "audio" ? urlOf(now.reference) : null;
   const player = useRef<ClipPlayer | null>(null);
   const latestLevel = useLatest(level);
+  // `run` changes with the language; a sound must not start over then.
+  const latestRun = useLatest(run);
 
   // One player per start of a sound. Its own end ends it, however late it started.
   useEffect(() => {
     if (!soundUrl || id === null) return;
     const clip = new ClipPlayer(soundUrl, latestLevel.current);
-    clip.onEnd = () => run(api.mediaControl({ type: "ended", id }));
+    clip.onEnd = () => latestRun.current(api.mediaControl({ type: "ended", id }));
     player.current = clip;
     return () => {
       clip.dispose();
       player.current = null;
     };
-  }, [soundUrl, id, latestLevel, run]);
+  }, [soundUrl, id, latestLevel, latestRun]);
 
   useEffect(() => player.current?.setGain(level), [level]);
 
@@ -75,20 +78,27 @@ export function useMediaPlayer(): MediaPlayer {
     else clip.play(WHOLE_FILE, { fromMs: positionAt(current.now, showClockNow(current)) });
   }, [soundUrl, id, positionMs, sinceMs, latest]);
 
-  // When its length says it ends: a sound that is still playing tells its
-  // own end (above); one that does not play, or whose file failed, ends now.
+  // Checked when its length says it ends, and again while a sound found
+  // playing then moves on (`overAtCheck`).
   const durationMs = now ? durationOf(now.reference) : undefined;
-  const grace = now?.kind === "video" ? VIDEO_END_GRACE_MS : 0;
+  const grace = now?.kind === "video" ? VIDEO_END_FALLBACK_MS : 0;
   useEffect(() => {
     const current = latest.current;
     const ms = current && msToEnd(current.now, durationMs, showClockNow(current));
     if (ms === null || id === null) return;
-    const timer = setTimeout(() => {
-      const clip = player.current;
-      if (!clip?.playing || clip.failed) run(api.mediaControl({ type: "ended", id }));
-    }, ms + grace);
+    let timer: ReturnType<typeof setTimeout>;
+    const check = (beforeMs: number | null) => {
+      const sound = player.current;
+      if (overAtCheck(sound, beforeMs)) {
+        latestRun.current(api.mediaControl({ type: "ended", id }));
+        return;
+      }
+      const positionMs = sound?.positionMs ?? null;
+      timer = setTimeout(() => check(positionMs), STALLED_SOUND_MS);
+    };
+    timer = setTimeout(() => check(null), ms + grace);
     return () => clearTimeout(timer);
-  }, [id, positionMs, sinceMs, durationMs, grace, latest, run]);
+  }, [id, positionMs, sinceMs, durationMs, grace, latest, latestRun]);
 
   return { library, board, now, heard, durationOf, urlOf };
 }

@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from "react";
+import { useSyncExternalStore } from "react";
+import type { MenuWords } from "./bindings/MenuWords";
 import { readPreference, writePreference } from "./preferences";
 
 export type Lang = "cs" | "en";
@@ -631,7 +632,7 @@ const strings = {
     trimPlayback: "Přehrávání",
     trimReplayPart: "Opakování",
     trimFailed: "Zvuk se nepodařilo načíst.",
-    trimTooLong: "Zvuk je delší než {minutes} minut nebo je soubor příliš velký (třeba WAV ve vysoké kvalitě), a tak se kvůli paměti nenačítá celý. Stříhat ani vyrovnat ho nejde.",
+    trimTooLong: "Zvuk je delší než {minutes} minut nebo je soubor příliš velký (třeba WAV v lepší kvalitě než 48 kHz/16 bitů), a tak se kvůli paměti nenačítá celý. Stříhat ani vyrovnat ho nejde.",
     trimScroll: "Posunout zobrazený úsek",
     trimStart: "Začátek",
     trimEnd: "Konec",
@@ -807,10 +808,24 @@ const strings = {
     closeAppKeepShow: "Zavřít aplikaci (rozehraná show zůstane uložená)",
     // The macOS app menu (app_windows.rs, set_menu_words).
     menuQuit: "Ukončit {name}",
+    menuAbout: "O aplikaci {name}",
+    menuServices: "Služby",
+    menuHide: "Skrýt {name}",
+    menuHideOthers: "Skrýt ostatní",
     menuFile: "Soubor",
+    menuCloseWindow: "Zavřít okno",
     menuEdit: "Úpravy",
+    menuUndo: "Zpět",
+    menuRedo: "Znovu",
+    menuCut: "Vyjmout",
+    menuCopy: "Kopírovat",
+    menuPaste: "Vložit",
+    menuSelectAll: "Vybrat vše",
     menuView: "Zobrazení",
+    menuFullscreen: "Celá obrazovka",
     menuWindow: "Okno",
+    menuMinimize: "Minimalizovat",
+    menuMaximize: "Zvětšit",
     projectorFailed: "Jeho obrazovku se nepodařilo zobrazit: {message}. Zavřete ho a znovu otevřete klávesou M.",
     slideNotShown: "Snímek se nepodařilo zobrazit: {message}",
     tryAgain: "Zkusit znovu",
@@ -1439,7 +1454,7 @@ const strings = {
     trimPlayback: "Playback",
     trimReplayPart: "Replay",
     trimFailed: "The sound could not be read.",
-    trimTooLong: "The sound is longer than {minutes} minutes or the file is too large (a high-resolution WAV, say), so it is not read whole to save memory. It cannot be trimmed or normalized.",
+    trimTooLong: "The sound is longer than {minutes} minutes or the file is too large (a WAV above 48 kHz/16-bit, say), so it is not read whole to save memory. It cannot be trimmed or normalized.",
     trimScroll: "Scroll the part in view",
     trimStart: "Start",
     trimEnd: "End",
@@ -1614,10 +1629,24 @@ const strings = {
     windowFailed: "The window could not be shown: {message}",
     closeAppKeepShow: "Close the app (a show in progress stays saved)",
     menuQuit: "Quit {name}",
+    menuAbout: "About {name}",
+    menuServices: "Services",
+    menuHide: "Hide {name}",
+    menuHideOthers: "Hide Others",
     menuFile: "File",
+    menuCloseWindow: "Close Window",
     menuEdit: "Edit",
+    menuUndo: "Undo",
+    menuRedo: "Redo",
+    menuCut: "Cut",
+    menuCopy: "Copy",
+    menuPaste: "Paste",
+    menuSelectAll: "Select All",
     menuView: "View",
+    menuFullscreen: "Full Screen",
     menuWindow: "Window",
+    menuMinimize: "Minimize",
+    menuMaximize: "Zoom",
     projectorFailed: "Its screen could not be shown: {message}. Close it and open it again with M.",
     slideNotShown: "The slide could not be shown: {message}",
     tryAgain: "Try again",
@@ -1630,19 +1659,39 @@ function readLang(): Lang {
   return readPreference(STORAGE_KEY) === "en" ? "en" : "cs";
 }
 
+let currentLang: Lang | null = null;
+const langListeners = new Set<() => void>();
+
+function langChanged(lang: Lang) {
+  currentLang = lang;
+  for (const listener of langListeners) listener();
+}
+
+// Storage events come only from the other window.
+const otherWindowSwitched = () => langChanged(readLang());
+
+/**
+ * The window's language: one for all its parts, so a switch reaches them
+ * all at once, and kept in step with the other window.
+ */
+export const windowLang = {
+  get: (): Lang => (currentLang ??= readLang()),
+  set: (lang: Lang) => {
+    writePreference(STORAGE_KEY, lang);
+    langChanged(lang);
+  },
+  subscribe: (listener: () => void): (() => void) => {
+    langListeners.add(listener);
+    window.addEventListener("storage", otherWindowSwitched);
+    return () => {
+      langListeners.delete(listener);
+      if (langListeners.size === 0) window.removeEventListener("storage", otherWindowSwitched);
+    };
+  },
+};
+
 export function useLang(): [Lang, (lang: Lang) => void] {
-  const [lang, setLangState] = useState<Lang>(readLang);
-  useEffect(() => {
-    // Keeps the projector window in step with the Director.
-    const onStorage = () => setLangState(readLang());
-    window.addEventListener("storage", onStorage);
-    return () => window.removeEventListener("storage", onStorage);
-  }, []);
-  const setLang = useCallback((next: Lang) => {
-    writePreference(STORAGE_KEY, next);
-    setLangState(next);
-  }, []);
-  return [lang, setLang];
+  return [useSyncExternalStore(windowLang.subscribe, windowLang.get), windowLang.set];
 }
 
 export type Translate = (key: StringKey, params?: Record<string, string | number>) => string;
@@ -1654,6 +1703,32 @@ export function translator(lang: Lang): Translate {
       text = text.split(`{${name}}`).join(String(value));
     }
     return text;
+  };
+}
+
+/** The macOS app menu's words (`set_menu_words`). */
+export function menuWords(t: Translate): MenuWords {
+  const name = t("appTitle");
+  return {
+    quit: t("menuQuit", { name }),
+    about: t("menuAbout", { name }),
+    services: t("menuServices"),
+    hide: t("menuHide", { name }),
+    hideOthers: t("menuHideOthers"),
+    file: t("menuFile"),
+    closeWindow: t("menuCloseWindow"),
+    edit: t("menuEdit"),
+    undo: t("menuUndo"),
+    redo: t("menuRedo"),
+    cut: t("menuCut"),
+    copy: t("menuCopy"),
+    paste: t("menuPaste"),
+    selectAll: t("menuSelectAll"),
+    view: t("menuView"),
+    fullscreen: t("menuFullscreen"),
+    window: t("menuWindow"),
+    minimize: t("menuMinimize"),
+    maximize: t("menuMaximize"),
   };
 }
 
