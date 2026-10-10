@@ -15,6 +15,14 @@ export const MAX_DECODED_MINUTES = 10;
  */
 export const MAX_UNTIMED_BYTES = (MAX_DECODED_MINUTES * 60 * 64_000) / 8;
 
+/**
+ * How long reading a sound's length may take before it is read whole. The
+ * quizmaster waits for the dialog anyway, and a file that does not tell in
+ * time fails to read rather than being judged by its size as one that tells
+ * none: a long file on a slow USB drive would be refused as too long (Z8).
+ */
+const LENGTH_TIMEOUT_MS = 60_000;
+
 /** A sound longer than `MAX_DECODED_MINUTES`, or one that may be, which is not read whole. */
 export class SoundTooLong extends Error {
   constructor(url: string) {
@@ -61,10 +69,11 @@ export async function readAtMost(response: Response, maxBytes: number): Promise<
  * loudness meter needs; the browser resamples while it decodes (Web Audio
  * API, `decodeAudioData`). A file its metadata says is too long, or that
  * tells no length and is too large, is refused with `SoundTooLong`, before
- * it is read or as soon as it passes the size.
+ * it is read or as soon as it passes the size; one that does not tell in
+ * time fails with `MediaLengthTimeout`.
  */
 export async function decodeAudioFile(url: string): Promise<Samples> {
-  const lengthMs = await readMediaLength(url, "audio");
+  const lengthMs = await readMediaLength(url, "audio", LENGTH_TIMEOUT_MS);
   if (!readsWhole(lengthMs, 0)) throw new SoundTooLong(url);
   const response = await fetch(url);
   if (!response.ok) throw new Error(`${url}: HTTP ${response.status}`);

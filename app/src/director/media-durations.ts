@@ -50,7 +50,10 @@ export function mediaDurations(read: (url: string, kind: TimedKind) => Promise<n
   };
 }
 
-const durations = mediaDurations(readMediaLength);
+/** How long reading a file's length may take; a file that takes longer counts as telling none, so it holds up no other. */
+const LENGTH_TIMEOUT_MS = 10_000;
+
+const durations = mediaDurations((url, kind) => readMediaLength(url, kind, LENGTH_TIMEOUT_MS).catch(() => Number.NaN));
 
 /** The lengths of the library's sounds and videos by URL, as they become known. Used once, by the Director. */
 export function useMediaDurations(library: MediaLibrary | null): ReadonlyMap<string, number> {
