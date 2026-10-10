@@ -6,6 +6,13 @@ import type { Slide } from "../types";
 
 export type ElementId = "slide" | "question" | "title" | "text" | "picture" | "video" | "sound" | `answer-${number}`;
 
+/** The parts of a slide that are a media file. */
+export type MediaElement = "picture" | "video" | "sound";
+
+export function isMediaElement(element: ElementId): element is MediaElement {
+  return element === "picture" || element === "video" || element === "sound";
+}
+
 /** The answer an element is, or null. */
 export function answerIndex(element: ElementId): number | null {
   const match = /^answer-(\d+)$/.exec(element);

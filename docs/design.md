@@ -246,11 +246,16 @@ table view toggle. It edits a quiz; it never touches a running show.
   disabled, checked, run). `EditorScreen.tsx` builds the one record of all
   actions, and the ribbon, context menus, the quick access bar, the status
   bar and the keyboard (`useActionKeys`) all read it, so a command, its
-  shortcut and its enabled state are defined once. Commands with a window
-  of their own live in a hook that holds the window and hands back its
-  actions: `useSoundTools` (trimming a sound or video, evening out
-  loudness) and `useSheetActions` (spreadsheet import, sample sheet and
-  export, read by File › Import and Export).
+  shortcut and its enabled state are defined once. The record is put
+  together from hooks that hold what their commands need: `useSlideList`
+  (the selection, the clipboard, moving and going through the slides),
+  `useSlideMedia` (a slide's picture, video, sound and background, and
+  playing a background video on the canvas), and, with a window of their
+  own, `useSoundTools` (trimming a sound or video, evening out loudness)
+  and `useSheetActions` (spreadsheet import, sample sheet and export, read
+  by File › Import and Export); `actions.ts` lists the ids by hook.
+  `menus.ts` says what a right click offers on a thumbnail, the list, a part
+  of the slide or a category.
 - **Properties.** `properties.tsx` turns the selected slide into labelled
   rows (id, label, description, control, and for most rows a typed value:
   number with its range, flag, choice or media). The properties panel, the

@@ -20,31 +20,11 @@ export interface Action {
   run: () => void;
 }
 
-export type ActionId =
-  | "file"
-  | "newQuiz"
-  | "openQuiz"
-  | "save"
-  | "saveAs"
-  | "closeQuiz"
-  | "exit"
-  | "undo"
-  | "redo"
-  | "cut"
-  | "copy"
-  | "paste"
-  | "delete"
-  | "duplicate"
-  | "moveUp"
-  | "moveDown"
-  | "selectAll"
-  | "edit"
-  | "newSlide"
-  | "addQuestion"
-  | "previous"
-  | "next"
-  | "first"
-  | "last"
+/** What is done with the slides as a list (`useSlideList`). */
+export type SlideListActionId = "cut" | "copy" | "paste" | "delete" | "duplicate" | "moveUp" | "moveDown" | "selectAll" | "previous" | "next" | "first" | "last";
+
+/** What is done with the slides' media (`useSlideMedia`). */
+export type SlideMediaActionId =
   | "insertPicture"
   | "insertVideo"
   | "insertSound"
@@ -56,7 +36,23 @@ export type ActionId =
   | "normalizeSound"
   | "normalizeAll"
   | "toggleBackground"
-  | "removeBackground"
+  | "removeBackground";
+
+export type ActionId =
+  | "file"
+  | "newQuiz"
+  | "openQuiz"
+  | "save"
+  | "saveAs"
+  | "closeQuiz"
+  | "exit"
+  | "undo"
+  | "redo"
+  | SlideListActionId
+  | "edit"
+  | "newSlide"
+  | "addQuestion"
+  | SlideMediaActionId
   | "graphical"
   | "table"
   | "categories"
