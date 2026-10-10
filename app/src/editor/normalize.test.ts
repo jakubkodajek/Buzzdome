@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { MAX_UNTIMED_BYTES, readsWhole, SoundTooLong } from "../audio/decode";
+import { MAX_UNTIMED_BYTES, readAtMost, readsWhole, SoundTooLong } from "../audio/decode";
 import { gainAfterTrim, gainChange, readLoudnessTarget, unreadSound, writeLoudnessTarget } from "./normalize";
 
 describe("normalize", () => {
@@ -42,5 +42,28 @@ describe("normalize", () => {
     expect(readsWhole(Number.NaN, MAX_UNTIMED_BYTES + 1)).toBe(false);
     expect(unreadSound(new SoundTooLong("media/long.mp3"))).toBe("tooLong");
     expect(unreadSound(new Error("media/song.mp3: HTTP 404"))).toBe("failed");
+  });
+
+  it("reads a file that tells no size only up to the limit, and no further", async () => {
+    let pulls = 0;
+    let cancelled = false;
+    const body = (chunks: number) =>
+      new Response(
+        new ReadableStream<Uint8Array>({
+          pull(controller) {
+            pulls += 1;
+            if (pulls > chunks) controller.close();
+            else controller.enqueue(new Uint8Array(4).fill(pulls));
+          },
+          cancel: () => {
+            cancelled = true;
+          },
+        }),
+      );
+    expect([...new Uint8Array((await readAtMost(body(3), 12))!)]).toEqual([1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3]);
+    pulls = 0;
+    expect(await readAtMost(body(1000), 10)).toBeNull();
+    expect(cancelled).toBe(true);
+    expect(pulls).toBeLessThan(10);
   });
 });

@@ -31,12 +31,37 @@ export function readsWhole(lengthMs: number, bytes: number): boolean {
   return Number.isNaN(lengthMs) ? bytes <= MAX_UNTIMED_BYTES : lengthMs <= MAX_DECODED_MINUTES * 60_000;
 }
 
+/** The body of `response`, or null once it passes `maxBytes`: then the rest is not read. */
+export async function readAtMost(response: Response, maxBytes: number): Promise<ArrayBuffer | null> {
+  const reader = response.body?.getReader();
+  if (!reader) return new ArrayBuffer(0);
+  const chunks: Uint8Array[] = [];
+  let bytes = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    bytes += value.byteLength;
+    if (bytes > maxBytes) {
+      await reader.cancel();
+      return null;
+    }
+    chunks.push(value);
+  }
+  const data = new Uint8Array(bytes);
+  let at = 0;
+  for (const chunk of chunks) {
+    data.set(chunk, at);
+    at += chunk.byteLength;
+  }
+  return data.buffer;
+}
+
 /**
  * Reads a whole audio file into samples at `LOUDNESS_RATE`, the rate the
  * loudness meter needs; the browser resamples while it decodes (Web Audio
  * API, `decodeAudioData`). A file its metadata says is too long, or that
- * tells no length and is too large, is refused with `SoundTooLong`, as far
- * as can be before it is read.
+ * tells no length and is too large, is refused with `SoundTooLong`, before
+ * it is read or as soon as it passes the size.
  */
 export async function decodeAudioFile(url: string): Promise<Samples> {
   const lengthMs = await readMediaLength(url, "audio");
@@ -44,8 +69,9 @@ export async function decodeAudioFile(url: string): Promise<Samples> {
   const response = await fetch(url);
   if (!response.ok) throw new Error(`${url}: HTTP ${response.status}`);
   if (!readsWhole(lengthMs, Number(response.headers.get("Content-Length") ?? 0))) throw new SoundTooLong(url);
-  const data = await response.arrayBuffer();
-  if (!readsWhole(lengthMs, data.byteLength)) throw new SoundTooLong(url);
+  // A file that tells no length is read only while it is small, whether its size is told or not.
+  const data = Number.isNaN(lengthMs) ? await readAtMost(response, MAX_UNTIMED_BYTES) : await response.arrayBuffer();
+  if (!data) throw new SoundTooLong(url);
   const buffer = await new OfflineAudioContext(1, 1, LOUDNESS_RATE).decodeAudioData(data);
   return { sampleRate: buffer.sampleRate, channels: Array.from({ length: buffer.numberOfChannels }, (_, c) => buffer.getChannelData(c)) };
 }
