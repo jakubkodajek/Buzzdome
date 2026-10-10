@@ -645,7 +645,8 @@ mod tests {
         let quiz = Quiz::from_json(DEMO_QUIZ).unwrap();
         let meta = SessionMeta { quiz_title: quiz.title.clone(), source_path: None, started_ms: 1, media_root: None, rules_version };
         let session = Session::create(root, &quiz, &meta).unwrap();
-        let mut inner = Inner { game: Some(Game::new(quiz)), session: Some(session), ..Inner::new() };
+        let game = Game::replay(quiz, &[], rules_version);
+        let mut inner = Inner { game: Some(game), session: Some(session), ..Inner::new() };
         for (n, command) in commands.into_iter().enumerate() {
             apply_journaled(&mut inner, command, 1_000 * (n as u64 + 1)).unwrap();
         }
@@ -749,6 +750,31 @@ mod tests {
         assert_eq!(Game::replay(on_disk.quiz, &on_disk.journal, on_disk.meta.rules_version), resumed.game);
         assert_eq!(resumed.game.slide_index(), slide);
         assert_eq!(resumed.game.phase(), &quiz_core::Phase::Question(quiz_core::QuestionStep::Ready));
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn a_show_begun_under_rules_version_2_keeps_its_rules_across_resumes() {
+        let root = sessions_dir("rules-2");
+        drop(journaled_show_under(2, &root, up_to_the_first_question()));
+        let resumed = resume_show(&root, 60_000, &[]).unwrap();
+        assert_eq!(resumed.warnings, [AppError::RulesChanged]);
+        let mut inner = Inner { game: Some(resumed.game), session: Some(resumed.session), ..Inner::new() };
+        apply_journaled(&mut inner, Command::Next, 61_000).unwrap(); // the restarted question's clock
+        apply_journaled(&mut inner, Command::Press { buzzer: 1, button: quiz_core::Button::A }, 62_000).unwrap();
+        // The last player still to answer is switched off: today that closes
+        // the question, under version 2 the quizmaster closes it with Next.
+        apply_journaled(&mut inner, Command::SetPlayerEnabled { buzzer: 2, enabled: false }, 63_000).unwrap();
+        let game = inner.game.as_ref().unwrap();
+        assert!(matches!(game.phase(), quiz_core::Phase::Question(quiz_core::QuestionStep::Running { .. })), "{:?}", game.phase());
+        apply_journaled(&mut inner, Command::Next, 64_000).unwrap();
+        apply_journaled(&mut inner, Command::Next, 65_000).unwrap();
+        let live = inner.game.take().unwrap();
+        drop(inner);
+
+        let again = resume_show(&root, 120_000, &[]).unwrap();
+        assert_eq!(again.game, live, "the second resume brings back the show the windows saw");
+        assert!(again.effects.is_empty());
         std::fs::remove_dir_all(&root).unwrap();
     }
 

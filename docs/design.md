@@ -327,12 +327,14 @@ starts, every other unpacked quiz is deleted, because only the latest show can
 be resumed. If the folder is gone on resume, the show still resumes and the
 Director shows a warning. `meta.json` also records `RULES_VERSION`, which
 quiz-core bumps whenever the same journal would replay into another show;
-a show begun under another version still resumes, rebuilt with today's
-rules, and the Director says its scores may differ. What would put the
-replay a step off is kept (`Game::replay`): a journal begun before version
-2 replays its jumps out of a question in play, as the app then restarted a
-question after a crash with a `GoTo` to it, and one begun before version 3
-replays switching a player off without closing the question.
+a show begun under another version still resumes with today's rules, and
+the Director says its scores may differ. What would put the replay a step
+off is kept from the show's own version, and the game keeps that version
+to the show's end (`Game::replay`), so what is journaled after a resume
+replays the same way at the next one: a show begun before version 2 jumps
+out of a question in play, as the app then restarted a question after a
+crash with a `GoTo` to it, and one begun before version 3 switches a
+player off without closing the question.
 
 The windows load media through Tauri's asset protocol. Its scope is empty
 in `tauri.conf.json`; at startup the shell allows the folder of unpacked
