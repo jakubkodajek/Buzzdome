@@ -678,6 +678,37 @@ fn a_wrong_answer_before_a_crash_is_charged_once_after_it() {
 }
 
 #[test]
+fn a_restart_given_after_time_ran_out_takes_the_closed_questions_scores_back() {
+    let mut show = Show::new(vec![question("q1", AnswerMode::Everyone)]);
+    for buzzer in 1..=3 {
+        show.press(0, buzzer, Button::Big);
+    }
+    show.run(0, Command::AdjustScore { buzzer: 1, delta: 5 }).unwrap();
+    show.run(0, Command::Next).unwrap();
+    show.run(0, Command::Next).unwrap();
+    show.press(2_000, 1, Button::B);
+    show.press(4_000, 2, Button::A);
+    // Time is up while the quizmaster confirms the restart.
+    let due = show.game.due_command(10_000 + PRESS_GRACE_MS).unwrap();
+    show.run(10_000 + PRESS_GRACE_MS, due).unwrap();
+    assert_eq!(step(&show.game), QuestionStep::Closed);
+    assert_eq!((show.score(1), show.score(2)), (5 + 90, -20));
+
+    show.run(11_000, Command::RestartQuestion).unwrap();
+    assert_eq!(step(&show.game), QuestionStep::Ready);
+    assert_eq!((show.score(1), show.score(2)), (5, 0), "a manual change stays");
+    let answering: Vec<u64> = show.game.players().map(|p| p.total_answer_ms).collect();
+    assert_eq!(answering, [0, 0, 0], "the answering times go with the answers");
+    assert!(show.game.view(11_000).players.iter().all(|p| p.delta.is_none()));
+    // Once the answer is on screen, the question is over.
+    show.run(12_000, Command::Next).unwrap();
+    show.run(13_000, Command::CloseQuestion).unwrap();
+    show.run(14_000, Command::Next).unwrap();
+    assert_eq!(show.run(15_000, Command::RestartQuestion), Err(GameError::NotNow));
+    assert_eq!(Game::replay(show.game.quiz().clone(), &show.journal, RULES_VERSION), show.game);
+}
+
+#[test]
 fn a_question_in_play_cannot_be_jumped_away_from() {
     let mut show = Show::new(vec![question("q1", AnswerMode::FastestFinger), question("q2", AnswerMode::Everyone)]);
     show.press(0, 1, Button::Big);

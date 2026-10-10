@@ -15,6 +15,7 @@ judge: boolean, pauseClock: boolean, resumeClock: boolean, closeQuestion: boolea
 goTo: boolean, 
 /**
  * `RestartQuestion`: while a question is in play, the way to leave it
- * without scoring it (G14).
+ * without scoring it (G14), and once it closed, until its answer is
+ * shown, the way to take its scores back and ask it again (J20).
  */
 restartQuestion: boolean, };

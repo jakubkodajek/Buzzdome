@@ -846,8 +846,10 @@ charged twice), and that command is journaled before `show-changed`
 reaches the windows, so no window shows the stopped question. The
 quizmaster can restart a question in play too (Restart question, after a
 confirmation): it is the way to leave a question without scoring it, since
-a jump is refused then. Score changes made by hand (`AdjustScore`) are not
-the question's and stay.
+a jump is refused then. It also works once the question closed, until its
+answer is shown, taking its scores and answering times back, so a restart
+confirmed just after time ran out still works. Score changes made by hand
+(`AdjustScore`) are not the question's and stay.
 The Director keeps a resume problem on screen, under the Resume button,
 until another show loads. When a failed journal write cannot be taken back,
 the session refuses every later command (`journalBroken`) until the show is
