@@ -2,6 +2,7 @@
 // the gradient behind it, and the font, colours, shadow and fill of each of
 // its texts. Only what differs from the theme is stored.
 
+import { MAX_TRANSPARENCY } from "../bindings/Constants";
 import type { StringKey, Translate } from "../i18n";
 import { THEME_TEXT, type StyledText } from "../theme/slide-style";
 import type { Slide, TextAlign, TextStyle } from "../types";
@@ -107,7 +108,7 @@ export function styleProperties(t: Translate, { slide, update }: Pick<SlideEditi
           value: own?.transparency ?? 0,
           initial: 0,
           min: 0,
-          max: 100,
+          max: MAX_TRANSPARENCY,
           unit: "%",
           slider: true,
           set: (transparency) => set({ transparency: transparency === 0 ? undefined : transparency }, id("transparency")),

@@ -13,6 +13,8 @@ pub const MIN_TEXT_SIZE: u16 = 50;
 pub const MAX_TEXT_SIZE: u16 = 200;
 /// Longest font name, in characters.
 pub const MAX_FONT_NAME_CHARS: usize = 64;
+/// Most transparency, in percent: the fill no longer shows.
+pub const MAX_TRANSPARENCY: u8 = 100;
 
 /// Reads `$name` as a `$inner` it takes through its `TryFrom`, so a value
 /// that does not fit does not read.
@@ -87,7 +89,7 @@ impl TryFrom<u16> for TextSize {
     }
 }
 
-/// How much of a fill shows through, in percent: 0 is solid, 100 invisible.
+/// How much of a fill shows through, in percent: 0 is solid, `MAX_TRANSPARENCY` invisible.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
 #[ts(export)]
 pub struct Transparency(u8);
@@ -96,7 +98,7 @@ impl TryFrom<u8> for Transparency {
     type Error = &'static str;
 
     fn try_from(percent: u8) -> Result<Transparency, Self::Error> {
-        (percent <= 100).then_some(Transparency(percent)).ok_or("transparency is 0 to 100 %")
+        (percent <= MAX_TRANSPARENCY).then_some(Transparency(percent)).ok_or("transparency out of range")
     }
 }
 
@@ -388,6 +390,6 @@ mod tests {
     fn sizes_and_transparency_stay_in_range() {
         assert!(TextSize::try_from(MIN_TEXT_SIZE).is_ok() && TextSize::try_from(MAX_TEXT_SIZE).is_ok());
         assert!(TextSize::try_from(MIN_TEXT_SIZE - 1).is_err() && TextSize::try_from(MAX_TEXT_SIZE + 1).is_err());
-        assert!(Transparency::try_from(100).is_ok() && Transparency::try_from(101).is_err());
+        assert!(Transparency::try_from(MAX_TRANSPARENCY).is_ok() && Transparency::try_from(MAX_TRANSPARENCY + 1).is_err());
     }
 }

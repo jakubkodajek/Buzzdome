@@ -29,4 +29,5 @@ export const MAX_DROPPED_MB = 256;
 export const MIN_TEXT_SIZE = 50;
 export const MAX_TEXT_SIZE = 200;
 export const MAX_FONT_NAME_CHARS = 64;
+export const MAX_TRANSPARENCY = 100;
 export const FULL_SHARE = 100;
