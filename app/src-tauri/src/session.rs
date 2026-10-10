@@ -1,12 +1,18 @@
 //! Crash-safe show sessions. Each show gets a folder with a copy of the quiz and
 //! an append-only journal of accepted commands, synced to disk on every write.
 //! Replaying the journal on the quiz copy rebuilds the show exactly.
+//!
+//! The journal is opened for plain writing, not in append mode: on Windows an
+//! append-mode handle lacks the write-data access that truncating needs
+//! (Rust std, `library/std/src/sys/fs/windows.rs`, `get_access_mode`), and
+//! truncating is how a torn line is cut off on resume and a failed write is
+//! taken back. Every line is written at the end of the whole lines instead.
 
 use quiz_core::{Quiz, Stamped};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 use std::fs::{self, File, OpenOptions};
-use std::io::{self, Write};
+use std::io::{self, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 
 const QUIZ_FILE: &str = "quiz.json";
@@ -56,7 +62,7 @@ impl Session {
         fs::create_dir_all(&dir)?;
         write_atomic(&dir.join(QUIZ_FILE), quiz)?;
         write_atomic(&dir.join(META_FILE), meta)?;
-        let journal = OpenOptions::new().create(true).append(true).open(dir.join(JOURNAL_FILE))?;
+        let journal = open_journal(&dir.join(JOURNAL_FILE))?;
         let len = journal.metadata()?.len();
         Ok(Session { journal, len, broken: false })
     }
@@ -68,9 +74,10 @@ impl Session {
             .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
         let meta: SessionMeta = serde_json::from_str(&fs::read_to_string(dir.join(META_FILE))?)?;
         let (journal, valid_len) = read_journal(&dir.join(JOURNAL_FILE))?;
-        let file = OpenOptions::new().create(true).append(true).open(dir.join(JOURNAL_FILE))?;
+        let file = open_journal(&dir.join(JOURNAL_FILE))?;
         // Cut off a torn last line so new commands start on a clean line.
         file.set_len(valid_len)?;
+        file.sync_data()?;
         let session = Session { journal: file, len: valid_len, broken: false };
         Ok(Some(Resumed { session, quiz, journal, meta }))
     }
@@ -98,13 +105,26 @@ impl Session {
     }
 }
 
+/// Opens a journal for writing (and creates it), without append mode: see the module comment.
+fn open_journal(path: &Path) -> io::Result<File> {
+    OpenOptions::new().read(true).write(true).create(true).truncate(false).open(path)
+}
+
 /// What the journal is written to; tests use a file that fails on purpose.
-trait JournalFile: Write {
+trait JournalFile {
+    /// Writes `line` starting at byte `at`.
+    fn write_at(&mut self, at: u64, line: &[u8]) -> io::Result<()>;
     fn sync(&mut self) -> io::Result<()>;
     fn truncate(&mut self, len: u64) -> io::Result<()>;
 }
 
 impl JournalFile for File {
+    fn write_at(&mut self, at: u64, line: &[u8]) -> io::Result<()> {
+        // After a failed write the position is past the whole lines, so it is set every time.
+        self.seek(SeekFrom::Start(at))?;
+        self.write_all(line)
+    }
+
     fn sync(&mut self) -> io::Result<()> {
         self.sync_data()
     }
@@ -135,7 +155,7 @@ impl AppendError {
 /// partial line (which would hide every later command on resume) nor a
 /// command that was rejected (which would be replayed).
 fn append_line(file: &mut impl JournalFile, len: &mut u64, line: &[u8]) -> Result<(), AppendError> {
-    match file.write_all(line).and_then(|()| file.sync()) {
+    match file.write_at(*len, line).and_then(|()| file.sync()) {
         Ok(()) => {
             *len += line.len() as u64;
             Ok(())
@@ -244,26 +264,21 @@ mod tests {
         fail_truncate: bool,
     }
 
-    impl Write for FlakyJournal {
-        fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-            match self.fail_after.take() {
-                Some(n) => {
-                    self.bytes.extend_from_slice(&buf[..n.min(buf.len())]);
-                    Err(io::Error::other("disk full"))
-                }
-                None => {
-                    self.bytes.extend_from_slice(buf);
-                    Ok(buf.len())
-                }
-            }
-        }
-
-        fn flush(&mut self) -> io::Result<()> {
-            Ok(())
-        }
-    }
-
     impl JournalFile for FlakyJournal {
+        fn write_at(&mut self, at: u64, line: &[u8]) -> io::Result<()> {
+            let at = at as usize;
+            let (written, result) = match self.fail_after.take() {
+                Some(n) => (&line[..n.min(line.len())], Err(io::Error::other("disk full"))),
+                None => (line, Ok(())),
+            };
+            let end = at + written.len();
+            if self.bytes.len() < end {
+                self.bytes.resize(end, 0);
+            }
+            self.bytes[at..end].copy_from_slice(written);
+            result
+        }
+
         fn sync(&mut self) -> io::Result<()> {
             Ok(())
         }
@@ -287,6 +302,34 @@ mod tests {
         append_line(&mut journal, &mut len, b"three\n").unwrap();
         assert_eq!(journal.bytes, b"one\nthree\n");
         assert_eq!(len, 10);
+    }
+
+    #[test]
+    fn a_line_after_a_failed_write_lands_right_after_the_whole_lines() {
+        let mut journal = FlakyJournal::default();
+        let mut len = 0;
+        append_line(&mut journal, &mut len, b"one\n").unwrap();
+        // The failed write left bytes past the whole lines that were not taken back yet.
+        journal.bytes.extend_from_slice(b"tw");
+        append_line(&mut journal, &mut len, b"three\n").unwrap();
+        assert_eq!(journal.bytes, b"one\nthree\n");
+    }
+
+    #[test]
+    fn the_journal_file_can_be_cut_back_and_written_after() {
+        let root = temp_root("truncate");
+        fs::create_dir_all(&root).unwrap();
+        let path = root.join(JOURNAL_FILE);
+        let mut file = open_journal(&path).unwrap();
+        let mut len = 0;
+        append_line(&mut file, &mut len, b"one\n").unwrap();
+        file.write_all(b"torn").unwrap();
+        // What a failed write is taken back with, and what resume does to a torn line.
+        file.truncate(len).unwrap();
+        append_line(&mut file, &mut len, b"two\n").unwrap();
+        drop(file);
+        assert_eq!(fs::read(&path).unwrap(), b"one\ntwo\n");
+        fs::remove_dir_all(&root).unwrap();
     }
 
     #[test]

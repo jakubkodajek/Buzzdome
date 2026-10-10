@@ -68,8 +68,39 @@ jobs:
             exit 1
           fi
 
+  # The show journal and quiz files depend on how the OS opens, truncates and
+  # renames files, so the Rust tests also run on Windows, the event laptop's OS.
+  windows-tests:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: windows-tests
+
+      - name: Install UI dependencies
+        working-directory: app
+        run: npm ci
+
+      # Tauri embeds the built UI, so it must exist before the shell compiles.
+      - name: Build the UI
+        working-directory: app
+        run: npm run build
+
+      - name: Test the Rust workspace
+        run: cargo test --workspace
+
   installers:
-    needs: check
+    needs: [check, windows-tests]
     if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
     strategy:
       fail-fast: false
