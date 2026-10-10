@@ -373,8 +373,7 @@ export class App {
 
   /** Kills the app at once, as a crash or a power cut would; its data stays. */
   async crash(): Promise<void> {
-    if (process.platform === "win32") spawnSync("taskkill", ["/F", "/IM", "buzzdome.exe"]);
-    else spawnSync("pkill", ["-KILL", "-x", "buzzdome"]);
+    killApp();
     this.session = null;
     await this.stopDriver();
   }
@@ -385,6 +384,11 @@ export class App {
       this.driver.kill();
       await exited;
     }
+    // The app takes a moment to close after its session ends, and writes its
+    // caches meanwhile; the next launch or `forget` must not race it.
+    const until = Date.now() + 15_000;
+    while (appRunning() && Date.now() < until) await sleep(200);
+    if (appRunning()) killApp();
   }
 
   /** Removes the app's data folder; for after the last restart. */
@@ -392,4 +396,14 @@ export class App {
     // The web view may still be writing its cache for a moment after the app ended.
     rmSync(this.data, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
   }
+}
+
+function appRunning(): boolean {
+  if (process.platform === "win32") return spawnSync("tasklist", ["/FI", "IMAGENAME eq buzzdome.exe", "/NH"], { encoding: "utf8" }).stdout.includes("buzzdome.exe");
+  return spawnSync("pgrep", ["-x", "buzzdome"]).status === 0;
+}
+
+function killApp(): void {
+  if (process.platform === "win32") spawnSync("taskkill", ["/F", "/IM", "buzzdome.exe"]);
+  else spawnSync("pkill", ["-KILL", "-x", "buzzdome"]);
 }
