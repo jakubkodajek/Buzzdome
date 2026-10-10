@@ -2,7 +2,7 @@ import { listen } from "@tauri-apps/api/event";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { api, type BackendEvents } from "./api";
 import { MAX_PLAYER_VOLUME } from "./bindings/Constants";
-import type { ClockView, GameView, LearnProgress, MediaLibrary, NowPlaying, Quiz, SessionSummary, SettingsLost, SoundBoard } from "./types";
+import type { ClockView, GameView, IconColor, LearnProgress, MediaLibrary, NowPlaying, Quiz, SessionSummary, SettingsLost, SoundBoard } from "./types";
 
 /** A ref that always holds the latest `value`, for callbacks that outlive a render. */
 export function useLatest<T>(value: T): { readonly current: T } {
@@ -112,6 +112,11 @@ export function useSoundBoard(): SoundBoard | null {
 /** What the media player plays, if anything. */
 export function useNowPlaying(): NowPlaying | null {
   return usePushedValue("media-playing", api.mediaNow);
+}
+
+/** The colour of the windows' icon; null until loaded. */
+export function useAppIcon(): IconColor | null {
+  return usePushedValue("app-icon", api.appIcon);
 }
 
 /** The player's volume in percent, everything the show plays sounds at; full until loaded. */

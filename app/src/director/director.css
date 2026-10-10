@@ -580,6 +580,35 @@
   min-width: 110px;
 }
 
+.icon-picker {
+  display: flex;
+  gap: 8px;
+}
+
+.director .icon-choice {
+  padding: 4px;
+  border: 2px solid transparent;
+  border-radius: 8px;
+  background: none;
+}
+
+.director .icon-choice:hover:not(:disabled) {
+  border-color: var(--line);
+  background: none;
+}
+
+.director .icon-choice.chosen,
+.director .icon-choice.chosen:hover:not(:disabled) {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.icon-choice img {
+  display: block;
+  width: 40px;
+  height: 40px;
+}
+
 .virtual-buzzers {
   padding: 10px;
   overflow: auto;

@@ -11,6 +11,7 @@ import type {
   DeviceInfo,
   EditorDraft,
   GameView,
+  IconColor,
   LearnProgress,
   ListSeparator,
   MediaLibrary,
@@ -79,6 +80,9 @@ export const api = {
   /** The player's volume in percent, the level everything the show plays sounds at. */
   mediaVolume: () => invoke<number>("media_volume"),
   mediaSetVolume: (volume: number) => invoke<void>("media_set_volume", { volume }),
+  /** The colour of the windows' icon. */
+  appIcon: () => invoke<IconColor>("app_icon"),
+  setAppIcon: (color: IconColor) => invoke<void>("set_app_icon", { color }),
   receiverInfo: () => invoke<ReceiverInfo>("receiver_info"),
   receiverDevices: () => invoke<DeviceInfo[]>("receiver_devices"),
   receiverSelect: (device: DeviceInfo | null) => invoke<void>("receiver_select", { device }),
@@ -135,4 +139,6 @@ export interface BackendEvents {
   "media-playing": NowPlaying | null;
   /** The player's volume changed, in percent. */
   "media-volume": number;
+  /** The windows' icon took another colour. */
+  "app-icon": IconColor;
 }

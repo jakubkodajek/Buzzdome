@@ -2,6 +2,7 @@
 //! the windows see it, drives the buzzer lights and the projector window.
 
 mod app_file;
+mod app_icon;
 mod editor;
 mod error;
 mod fonts;
@@ -345,10 +346,14 @@ async fn list_monitors(app: AppHandle) -> CmdResult<Vec<MonitorInfo>> {
 async fn open_host_window(app: AppHandle, monitor: Option<usize>, fullscreen: bool) -> CmdResult<()> {
     let window = match app.get_webview_window(HOST_LABEL) {
         Some(window) => window,
-        None => WebviewWindowBuilder::new(&app, HOST_LABEL, WebviewUrl::App("index.html".into()))
-            .title("Buzzdome")
-            .inner_size(1280.0, 720.0)
-            .build()?,
+        None => {
+            let window = WebviewWindowBuilder::new(&app, HOST_LABEL, WebviewUrl::App("index.html".into()))
+                .title("Buzzdome")
+                .inner_size(1280.0, 720.0)
+                .build()?;
+            app_icon::apply(&app, &window);
+            window
+        }
     };
     window.set_fullscreen(false)?;
     if let Some(index) = monitor {
@@ -461,6 +466,10 @@ pub fn run() {
             let library = media_player::MediaState::open(app_data(app.handle(), media_player::LIBRARY_FOLDER)?);
             app.asset_protocol_scope().allow_directory(library.root(), true)?;
             app.manage(library);
+            app.manage(app_icon::AppIcon::load(app_data(app.handle(), app_icon::ICON_FILE)?));
+            for window in app.webview_windows().values() {
+                app_icon::apply(app.handle(), window);
+            }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -493,6 +502,8 @@ pub fn run() {
             media_player::media_control,
             media_player::media_volume,
             media_player::media_set_volume,
+            app_icon::app_icon,
+            app_icon::set_app_icon,
             editor::editor_load,
             editor::editor_new,
             editor::editor_open,

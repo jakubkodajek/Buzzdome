@@ -24,6 +24,7 @@ export type { FontName } from "./bindings/FontName";
 export type { GameView } from "./bindings/GameView";
 export type { Gradient } from "./bindings/Gradient";
 export type { GradientKind } from "./bindings/GradientKind";
+export type { IconColor } from "./bindings/IconColor";
 export type { ImportIssue } from "./bindings/ImportIssue";
 export type { ImportNote } from "./bindings/ImportNote";
 export type { LearnProgress } from "./bindings/LearnProgress";

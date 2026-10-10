@@ -1,9 +1,25 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import blueIcon from "../../src-tauri/icons/colors/buzzdome-blue.png";
+import greenIcon from "../../src-tauri/icons/colors/buzzdome-green.png";
+import orangeIcon from "../../src-tauri/icons/colors/buzzdome-orange.png";
+import purpleIcon from "../../src-tauri/icons/colors/buzzdome-purple.png";
+import redIcon from "../../src-tauri/icons/colors/buzzdome-red.png";
+import yellowIcon from "../../src-tauri/icons/colors/buzzdome-yellow.png";
 import { api } from "../api";
 import { useApp, useRun } from "../app-context";
-import { useHostWindowOpen } from "../hooks";
-import type { Lang } from "../i18n";
-import type { MonitorInfo } from "../types";
+import { useAppIcon, useHostWindowOpen } from "../hooks";
+import type { Lang, StringKey } from "../i18n";
+import type { IconColor, MonitorInfo } from "../types";
+
+/** The app's icons, as the windows take them (`app_icon.rs`), in the order the picker shows them. */
+const ICONS: Record<IconColor, { label: StringKey; image: string }> = {
+  orange: { label: "iconOrange", image: orangeIcon },
+  blue: { label: "iconBlue", image: blueIcon },
+  green: { label: "iconGreen", image: greenIcon },
+  purple: { label: "iconPurple", image: purpleIcon },
+  red: { label: "iconRed", image: redIcon },
+  yellow: { label: "iconYellow", image: yellowIcon },
+};
 
 export interface ProjectorSettings {
   monitors: MonitorInfo[];
@@ -64,6 +80,7 @@ export function SettingsTab({ projector }: { projector: ProjectorSettings }) {
         </label>
         <button onClick={projector.toggle}>{projector.isOpen ? t("closeProjector") : t("openProjector")}</button>
       </fieldset>
+      <AppIconPicker />
       <fieldset>
         <legend>{t("language")}</legend>
         <select value={lang} onChange={(e) => setLang(e.target.value as Lang)}>
@@ -73,5 +90,32 @@ export function SettingsTab({ projector }: { projector: ProjectorSettings }) {
       </fieldset>
       <p className="muted">{t("keyboardHint")}</p>
     </div>
+  );
+}
+
+/** The colour of the windows' icon, orange unless another is chosen. */
+function AppIconPicker() {
+  const { t } = useApp();
+  const run = useRun();
+  const current = useAppIcon();
+  return (
+    <fieldset>
+      <legend>{t("appIcon")}</legend>
+      <div className="icon-picker" role="radiogroup" aria-label={t("appIcon")}>
+        {(Object.keys(ICONS) as IconColor[]).map((color) => (
+          <button
+            key={color}
+            role="radio"
+            aria-checked={color === current}
+            className={color === current ? "icon-choice chosen" : "icon-choice"}
+            title={t(ICONS[color].label)}
+            onClick={() => run(api.setAppIcon(color))}
+          >
+            <img src={ICONS[color].image} alt={t(ICONS[color].label)} />
+          </button>
+        ))}
+      </div>
+      <p className="muted">{t("appIconHint")}</p>
+    </fieldset>
   );
 }

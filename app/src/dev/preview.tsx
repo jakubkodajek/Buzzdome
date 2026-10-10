@@ -15,6 +15,7 @@ import type {
   Background,
   BoardChange,
   GameView,
+  IconColor,
   MediaLibrary,
   NowPlaying,
   Pad,
@@ -400,6 +401,7 @@ function control(command: PlayerCommand) {
 }
 
 let playerVolume = MAX_PLAYER_VOLUME;
+let appIcon: IconColor = "orange";
 
 /** The same for the board's changes the preview checks. */
 function changeBoard(change: BoardChange) {
@@ -466,6 +468,13 @@ mockIPC(
       case "media_control":
         called.push({ cmd, ...(payload as object) });
         control((payload as { command: PlayerCommand }).command);
+        return null;
+      case "app_icon":
+        return appIcon;
+      case "set_app_icon":
+        called.push({ cmd, ...(payload as object) });
+        appIcon = (payload as { color: IconColor }).color;
+        void emit("app-icon", appIcon);
         return null;
       case "media_volume":
         return playerVolume;
