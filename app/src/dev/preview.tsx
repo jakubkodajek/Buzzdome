@@ -62,6 +62,10 @@ const timer = params.get("timer") as TimerDesign | null;
 const resume = params.get("resume");
 /** `full`: the running show's journal refuses writes, as on a full disk; `broken`: it cannot be repaired. */
 const saving = params.get("saving");
+/** `unreadable`: the editor's draft does not read; `failing`: writing it fails, as on a full disk. */
+const draft = params.get("draft");
+/** The editor's drafts are numbered as the backend names their folders. */
+let drafts = 1;
 
 const NAMES = ["Kvízožrouti", "U Tří Lvů", "Mozkovna", "Hospodští géniové", "Tým Rychlík", "Bezejmenní", "Šprti", "Lvíčata"];
 
@@ -535,7 +539,13 @@ mockIPC(
         if (resume === "damaged") return Promise.reject({ code: "journalDamaged", line: 58 });
         return { meta: { quizTitle: quiz.title, sourcePath: null, startedMs: Date.now() - 3_600_000 }, commandCount: 57 };
       case "editor_load":
-        return { quiz: editorQuiz, sourcePath: "C:\\Kvizy\\hospodsky-kviz.quiz", unsaved: false, mediaRoot: "/src/dev/", problems: [], dropped: [] };
+        if (draft === "unreadable") return Promise.reject({ code: "draftNotRead", detail: "expected value at line 1 column 1" });
+        return { id: "draft-1", quiz: editorQuiz, sourcePath: "C:\\Kvizy\\hospodsky-kviz.quiz", unsaved: false, mediaRoot: "/src/dev/", problems: [], dropped: [] };
+      case "editor_new":
+        return { id: `draft-${++drafts}`, quiz: { ...editorQuiz, title: (payload as { title: string }).title, slides: [] }, sourcePath: null, unsaved: false, mediaRoot: "/src/dev/", problems: [], dropped: [] };
+      case "editor_close":
+        called.push({ cmd });
+        return null;
       case "editor_open": {
         // As a file from an older version opens: what this one leaves out is listed.
         const [first, , third] = editorQuiz.slides;
@@ -544,10 +554,11 @@ mockIPC(
           { slideId: third.id, problem: { code: "mediaOnRanking" } },
         ];
         const path = (payload as { path: string }).path;
-        return { quiz: editorQuiz, sourcePath: path, unsaved: true, mediaRoot: "/src/dev/", problems: [], dropped };
+        return { id: `draft-${++drafts}`, quiz: editorQuiz, sourcePath: path, unsaved: true, mediaRoot: "/src/dev/", problems: [], dropped };
       }
       case "editor_update":
         called.push({ cmd, ...(payload as object) });
+        if (draft === "failing") return Promise.reject({ code: "file", action: "write", path: "C:\\Users\\q\\AppData\\Local\\cz.kodajek.quizshow\\editor\\draft-1\\quiz.json", detail: "No space left on device (os error 28)" });
         return [];
       // Dialogs answer what a check sets in `window.dialogAnswer`; cancelled otherwise.
       case "plugin:dialog|open":

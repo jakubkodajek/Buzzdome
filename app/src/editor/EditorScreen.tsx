@@ -1,5 +1,6 @@
 import { useMemo, useState, type MouseEvent } from "react";
 import { useApp } from "../app-context";
+import { errorText } from "../messages";
 import {
   BackIcon,
   CategoryIcon,
@@ -43,7 +44,7 @@ import { styleProperties } from "./style-properties";
 import { TableView } from "./TableView";
 import { Thumbnails } from "./Thumbnails";
 import { useCategories } from "./useCategories";
-import { useQuizEditor, type QuizEditor } from "./useQuizEditor";
+import { useDraftState, useQuizEditor, type QuizEditor } from "./useQuizEditor";
 import { useSheetActions } from "./useSheetActions";
 import { useSlideList } from "./useSlideList";
 import { useSlideMedia } from "./useSlideMedia";
@@ -69,8 +70,35 @@ const CATEGORY_VIEW_KEYS: ActionId[] = ["file", "newQuiz", "openQuiz", "save", "
 export function EditorScreen({ onTestRun, onExit }: { onTestRun: () => void; onExit: () => void }) {
   const { t } = useApp();
   const editor = useQuizEditor(onTestRun);
-  if (editor.state.status === "loading") return <div className="studio studio-loading">{t("loading")}</div>;
-  return <Studio editor={editor} open={editor.state.status === "open" ? editor.state : null} onExit={onExit} />;
+  const { state } = editor;
+  if (state.status === "loading") return <div className="studio studio-loading">{t("loading")}</div>;
+  if (state.status === "unreadable") return <UnreadableDraft editor={editor} error={state.error} onExit={onExit} />;
+  return <Studio editor={editor} open={state.status === "open" ? state : null} onExit={onExit} />;
+}
+
+/** The draft left from last time does not read: it stays until the quizmaster discards it (A17). */
+function UnreadableDraft({ editor, error, onExit }: { editor: QuizEditor; error: unknown; onExit: () => void }) {
+  const { t } = useApp();
+  return (
+    <div className="studio studio-loading">
+      <div className="draft-unreadable" role="alert">
+        <h2>{t("draftUnreadable")}</h2>
+        <p>{errorText(t, error)}</p>
+        <p>{t("draftUnreadableInfo")}</p>
+        <div className="draft-unreadable-actions">
+          <button type="button" onClick={editor.reload}>
+            {t("tryAgain")}
+          </button>
+          <button type="button" onClick={() => void editor.discardUnreadable()}>
+            {t("discardDraft")}
+          </button>
+          <button type="button" onClick={onExit}>
+            {t("backToDirector")}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function Studio({ editor, open, onExit }: { editor: QuizEditor; open: OpenQuiz | null; onExit: () => void }) {
@@ -80,8 +108,8 @@ function Studio({ editor, open, onExit }: { editor: QuizEditor; open: OpenQuiz |
   const [view, setView] = useState<"graphical" | "table" | "categories">("graphical");
   const [panel, setPanel] = useState(true);
   const [notesShown, setNotesShown] = useState(true);
-  /** The value last copied from a property, to paste into another. */
-  const [copiedValue, setCopiedValue] = useState<CopiedValue | null>(null);
+  /** The value last copied from a property, to paste into another; a media file only in its own quiz. */
+  const [copiedValue, setCopiedValue] = useDraftState<CopiedValue>(open?.draftId ?? null);
   /** Ctrl+F asked for the property search, which the panel focuses once it is shown. */
   const [findProperty, setFindProperty] = useState(false);
   const [menu, setMenu] = useState<{ x: number; y: number; target: MenuTarget } | null>(null);
@@ -263,7 +291,8 @@ function Studio({ editor, open, onExit }: { editor: QuizEditor; open: OpenQuiz |
   return (
     <MediaRootContext value={open?.mediaRoot ?? null}>
       <ThemeContext value={theme}>
-        <div className="studio">
+        {/* A file operation under way takes no other; while another quiz opens, no edits either (A16). */}
+        <div className={editor.status.busy ? "studio studio-busy" : "studio"} aria-busy={editor.status.busy !== null}>
           <header className="studio-titlebar">
             <div className="quick-access">
               {[actions.save, actions.undo, actions.redo].map((action) => (
@@ -288,6 +317,11 @@ function Studio({ editor, open, onExit }: { editor: QuizEditor; open: OpenQuiz |
               {t("backToDirector")}
             </button>
           </header>
+          {editor.status.notWritten !== null && (
+            <div className="not-saved-banner" role="alert">
+              {t("draftNotWritten", { problem: errorText(t, editor.status.notWritten) })}
+            </div>
+          )}
 
           {backstageShown ? (
             <Backstage

@@ -77,6 +77,12 @@ pub enum AppError {
     QuizInvalid { problems: Vec<ValidationError> },
     #[error("no quiz is open in the editor")]
     NoDraft,
+    /// The editor opened another quiz since the command was given (A16).
+    #[error("another quiz was opened in the editor meanwhile")]
+    DraftChanged,
+    /// The editor's `draft.json` does not hold what it should (A17).
+    #[error("the editor's draft cannot be read: {detail}")]
+    DraftNotRead { detail: String },
     #[error("the spreadsheet cannot be read: {detail}")]
     NotASpreadsheet { detail: String },
     #[error("the spreadsheet is larger than {max_mb} MB, holds more than {max_text_mb} MB of text or has more than {max_rows} rows or {max_columns} columns")]

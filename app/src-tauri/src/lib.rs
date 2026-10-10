@@ -338,9 +338,11 @@ async fn start_show_from_file(app: AppHandle, path: String) -> CmdResult<()> {
 /// Plays the editor's quiz without a journal, so the last real show stays
 /// the one that can be resumed.
 #[tauri::command]
-async fn editor_test_run(app: AppHandle, quiz: Quiz) -> CmdResult<()> {
+async fn editor_test_run(app: AppHandle, draft: String, quiz: Quiz) -> CmdResult<()> {
     off_ui(move || {
-        let root = editor::draft_root(&app)?;
+        // Held until the show serves the draft's media, which the editor then keeps.
+        let _editor = editor::lock(&app);
+        let root = editor::draft_root(&app, &draft)?;
         quiz_file::check_playable(&quiz, &root)?;
         let mut inner = lock_for_new_show(&app)?;
         serve_media(&app, &mut inner, Some(root))?;

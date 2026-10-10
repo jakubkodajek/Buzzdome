@@ -4,6 +4,8 @@ import type { EditorDraft, Quiz, ValidationError } from "../types";
 import { historyReducer, startHistory, type History, type HistoryAction } from "./history";
 
 export interface OpenQuiz {
+  /** The backend's name for the draft (`EditorDraft.id`), which every command on it gives (A16). */
+  draftId: string;
   history: History;
   /** The quiz as it is in the file at `sourcePath` (or as created); null when not known. */
   saved: Quiz | null;
@@ -17,11 +19,20 @@ export interface OpenQuiz {
   dropped: ValidationError[];
 }
 
-export type EditorState = { status: "loading" } | { status: "empty" } | ({ status: "open" } & OpenQuiz);
+export type EditorState =
+  | { status: "loading" }
+  | { status: "empty" }
+  /** The draft left from last time cannot be read (`error`); it stays until the quizmaster discards it (A17). */
+  | { status: "unreadable"; error: unknown }
+  | ({ status: "open" } & OpenQuiz);
 
 export type EditorAction =
   /** A draft came from the backend (null: there is none). */
   | { type: "loaded"; draft: EditorDraft | null }
+  /** The draft is being read again. */
+  | { type: "loading" }
+  /** The draft could not be read. */
+  | { type: "unreadable"; error: unknown }
   | { type: "saved"; quiz: Quiz; path: string }
   /** The backend stored `quiz` and checked it. */
   | { type: "checked"; quiz: Quiz; problems: ValidationError[] }
@@ -30,11 +41,14 @@ export type EditorAction =
 export const LOADING: EditorState = { status: "loading" };
 
 export function editorReducer(state: EditorState, action: EditorAction): EditorState {
+  if (action.type === "loading") return LOADING;
+  if (action.type === "unreadable") return { status: "unreadable", error: action.error };
   if (action.type === "loaded") {
     const { draft } = action;
     if (!draft) return { status: "empty" };
     return {
       status: "open",
+      draftId: draft.id,
       history: startHistory(draft.quiz),
       saved: draft.unsaved ? null : draft.quiz,
       sourcePath: draft.sourcePath,

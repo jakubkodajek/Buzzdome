@@ -3,7 +3,7 @@
 // is edited as its sample slide (categories.ts), so the slide's own
 // background and look rows serve it too.
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { api } from "../api";
 import { useApp, useReport } from "../app-context";
 import { MAX_CATEGORY_NAME_CHARS } from "../bindings/Constants";
@@ -56,6 +56,8 @@ export function useCategories(editor: QuizEditor, quiz: Quiz | null): CategoryEd
   const { t, notify } = useApp();
   const report = useReport();
   const [selection, setSelection] = useState<{ id: string | null; index: number; element: ElementId }>({ id: null, index: 0, element: "slide" });
+  /** A category is being named, so the next waits for it. */
+  const creating = useRef(false);
   const [playingBackgroundOf, setPlayingBackgroundOf] = useState<string | null>(null);
   const categories = quiz?.categories ?? [];
   const found = selection.id === null ? -1 : categories.findIndex((c) => c.id === selection.id);
@@ -77,13 +79,19 @@ export function useCategories(editor: QuizEditor, quiz: Quiz | null): CategoryEd
     void editor.pickMedia(kinds).then((file) => file && restyle(id, (slide) => apply(slide, file)));
 
   const create = (look?: Slide) => {
-    if (!quiz) return;
+    // A second click before the first category is in would name and number
+    // it from the same quiz, as a twin with the same id.
+    if (!quiz || creating.current) return;
+    creating.current = true;
     // The backend tells category names apart (Z9).
-    api.editorCategoryName(categories, t("categoryDefaultName")).then((name) => {
-      const added = newCategory(freshCategoryId(quiz), name, look);
-      editor.edit({ type: "insertCategory", index: index + 1, category: added });
-      setSelection({ id: added.id, index: index + 1, element: "slide" });
-    }, report);
+    api
+      .editorCategoryName(categories, t("categoryDefaultName"))
+      .then((name) => {
+        const added = newCategory(freshCategoryId(quiz), name, look);
+        editor.edit({ type: "insertCategory", index: index + 1, category: added });
+        setSelection({ id: added.id, index: index + 1, element: "slide" });
+      }, report)
+      .finally(() => (creating.current = false));
   };
 
   const editing: SlideEditing | null = category &&

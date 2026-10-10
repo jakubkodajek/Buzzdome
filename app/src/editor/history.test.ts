@@ -100,6 +100,8 @@ describe("category edits", () => {
   it("inserts, updates and removes categories", () => {
     expect(withCategories.categories).toEqual([films, music]);
     expect(applyEdit(quiz, { type: "insertCategory", index: 1, category: films })).toBe(quiz);
+    // A twin of a category there (a double click) is not inserted.
+    expect(applyEdit(withCategories, { type: "insertCategory", index: 2, category: { ...films, name: "Films 2" } })).toBe(withCategories);
     const renamed = applyEdit(withCategories, { type: "updateCategory", id: "c-2", update: (c) => ({ ...c, name: "Songs" }) });
     expect(renamed.categories?.map((c) => c.name)).toEqual(["Films", "Songs"]);
     expect(applyEdit(withCategories, { type: "updateCategory", id: "c-2", update: (c) => c })).toBe(withCategories);

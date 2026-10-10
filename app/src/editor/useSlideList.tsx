@@ -10,7 +10,7 @@ import type { Action, SlideListActionId } from "./actions";
 import { hasElement, isMediaElement, type ElementId } from "./elements";
 import { FIRST, insertSlides, moveByOne, positions, removeSlides, selectAll, selectedIds, selectIds, selectOne, type Selection } from "./selection";
 import { withFreshIds } from "./slides";
-import type { QuizEditor } from "./useQuizEditor";
+import { openDraftId, useDraftState, type QuizEditor } from "./useQuizEditor";
 
 export interface SlideList {
   slides: Slide[];
@@ -40,7 +40,8 @@ export interface SlideList {
 export function useSlideList(editor: QuizEditor, quiz: Quiz | null): SlideList {
   const { t } = useApp();
   const [selection, setSelection] = useState<Selection>(FIRST);
-  const [clipboard, setClipboard] = useState<Slide[] | null>(null);
+  // Slides keep their media by name, which another quiz does not have.
+  const [clipboard, setClipboard] = useDraftState<Slide[]>(openDraftId(editor));
   const slides = quiz?.slides ?? [];
   const found = selection.id === null ? -1 : slides.findIndex((s) => s.id === selection.id);
   const index = slides.length === 0 ? -1 : found >= 0 ? found : Math.min(selection.index, slides.length - 1);

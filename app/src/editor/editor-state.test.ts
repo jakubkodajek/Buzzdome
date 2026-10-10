@@ -4,6 +4,7 @@ import { editorReducer, isUnsaved, LOADING, needsInfo, type EditorState, type Op
 
 const quiz: Quiz = { schemaVersion: 1, title: "Quiz", theme: null, slides: [] };
 const draft = (unsaved: boolean, dropped: ValidationError[] = []): EditorDraft => ({
+  id: "draft-1",
   quiz,
   sourcePath: "/q.quiz",
   unsaved,
@@ -58,5 +59,14 @@ describe("editor state", () => {
   it("has nothing open without a draft", () => {
     expect(editorReducer(LOADING, { type: "loaded", draft: null })).toEqual({ status: "empty" });
     expect(editorReducer({ status: "empty" }, { type: "undo" })).toEqual({ status: "empty" });
+  });
+
+  it("keeps a draft that cannot be read apart from having none, until it reads", () => {
+    const error = { code: "draftNotRead", detail: "line 1" };
+    const state = editorReducer(LOADING, { type: "unreadable", error });
+    expect(state).toEqual({ status: "unreadable", error });
+    expect(editorReducer(state, { type: "undo" })).toBe(state);
+    expect(editorReducer(state, { type: "loading" })).toBe(LOADING);
+    expect(opened(editorReducer(LOADING, { type: "loaded", draft: draft(false) })).draftId).toBe("draft-1");
   });
 });

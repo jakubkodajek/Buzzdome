@@ -28,6 +28,14 @@ body,
   color: var(--good);
 }
 
+/* Saving does not work: the show's journal (Director) or the editor's draft. */
+.not-saved-banner {
+  padding: 6px 12px;
+  font-weight: 600;
+  color: #fff;
+  background: var(--bad);
+}
+
 .bad-text {
   color: var(--bad);
 }

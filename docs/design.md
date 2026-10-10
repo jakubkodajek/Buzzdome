@@ -278,6 +278,24 @@ table view toggle. It edits a quiz; it never touches a running show.
   (`quiz_file::problems`: the core's checks plus missing media), shown on
   the thumbnails, in the status bar and on the File page. A file that opens
   with problems opens on that list.
+- **One draft at a time.** The draft folder's name is its id
+  (`EditorDraft.id`): every command on a draft names it, and the backend
+  refuses one for a draft that another has replaced since
+  (`draftChanged`). `draft-session.ts` runs one file operation at a time
+  (new, open, close, save, media, import, export, test run): another one
+  given meanwhile, such as Ctrl+S while a big quiz opens, does not run, and
+  while another quiz takes the open one's place the editor takes no edits.
+  A write that fails is tried again every 2 s until it or a later one
+  works, with a banner meanwhile; one for a replaced draft is let go. The
+  slide clipboard and a copied property value belong to their draft, so
+  a slide never brings a media name into another quiz. A test run holds
+  the draft folder it plays from: switching drafts keeps it.
+- **A draft that does not read.** A `draft.json` or `quiz.json` that cannot
+  be read (a newer schema after going back to an older version, say) is
+  not taken for "no draft": the editor says why and offers to try again,
+  to discard the draft (after asking) or to go back, and nothing deletes
+  it meanwhile. The backend refuses a new or opened quiz while `draft.json`
+  does not read, so its folder is not pruned unseen.
 - **State.** `history.ts` is a pure undo history of `Edit`s (set title,
   set theme, insert, update, remove, move a slide; insert, update, remove
   and apply a category). Typing into one field of one slide
