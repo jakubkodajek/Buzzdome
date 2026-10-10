@@ -80,7 +80,8 @@ export function applyEdit(quiz: Quiz, edit: Edit): Quiz {
     }
     case "insertCategory": {
       const categories = [...(quiz.categories ?? [])];
-      if (!inRange(edit.index, categories.length + 1)) return quiz;
+      // Slides name their category by id: two with one id would be one.
+      if (!inRange(edit.index, categories.length + 1) || categories.some((c) => c.id === edit.category.id)) return quiz;
       categories.splice(edit.index, 0, edit.category);
       return { ...quiz, categories };
     }

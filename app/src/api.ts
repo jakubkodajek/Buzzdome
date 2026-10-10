@@ -99,28 +99,31 @@ export const api = {
   receiverForgetLearned: () => invoke<void>("receiver_forget_learned"),
   receiverExportLog: (path: string) => invoke<void>("receiver_export_log", { path }),
   receiverUdevRule: () => invoke<string>("receiver_udev_rule"),
+  // The editor's commands on a draft name it (`EditorDraft.id`): one that
+  // another draft has replaced since is refused with `draftChanged` (A16).
   /** The quiz editor's draft left from last time, if any. */
   editorLoad: () => invoke<EditorDraft | null>("editor_load"),
   editorNew: (title: string) => invoke<EditorDraft>("editor_new", { title }),
   editorOpen: (path: string) => invoke<EditorDraft>("editor_open", { path }),
   /** Stores the edited quiz; returns what keeps it from being played. */
-  editorUpdate: (quiz: Quiz, unsaved: boolean) => invoke<ValidationError[]>("editor_update", { quiz, unsaved }),
-  editorSave: (quiz: Quiz, path: string) => invoke<void>("editor_save", { quiz, path }),
+  editorUpdate: (draft: string, quiz: Quiz, unsaved: boolean) => invoke<ValidationError[]>("editor_update", { draft, quiz, unsaved }),
+  editorSave: (draft: string, quiz: Quiz, path: string) => invoke<void>("editor_save", { draft, quiz, path }),
   /** Copies a media file into the draft; returns its reference (`media/...`). */
-  editorAddMedia: (path: string) => invoke<string>("editor_add_media", { path }),
+  editorAddMedia: (draft: string, path: string) => invoke<string>("editor_add_media", { draft, path }),
   /** A name for a new category, "`base` 2" or so, that none of `categories` has. */
   editorCategoryName: (categories: readonly Category[], base: string) => invoke<string>("editor_category_name", { categories, base }),
   /**
    * Reads questions from a spreadsheet, copying their media into the draft,
    * for the editor to insert; a row's `CAT` names one of the draft's categories.
    */
-  editorImportSheet: (path: string) => invoke<SheetImport>("editor_import_sheet", { path }),
+  editorImportSheet: (draft: string, path: string) => invoke<SheetImport>("editor_import_sheet", { draft, path }),
   /** Writes the quiz as a CSV file with its media next to it. */
-  editorExportSheet: (quiz: Quiz, path: string, separator: ListSeparator) =>
-    invoke<SheetExport>("editor_export_sheet", { quiz, path, separator }),
+  editorExportSheet: (draft: string, quiz: Quiz, path: string, separator: ListSeparator) =>
+    invoke<SheetExport>("editor_export_sheet", { draft, quiz, path, separator }),
+  /** Discards the draft, also one that cannot be read. */
   editorClose: () => invoke<void>("editor_close"),
   /** Plays the editor's quiz as a show that is not kept for resuming. */
-  editorTestRun: (quiz: Quiz) => invoke<void>("editor_test_run", { quiz }),
+  editorTestRun: (draft: string, quiz: Quiz) => invoke<void>("editor_test_run", { draft, quiz }),
 };
 
 /** Events the backend emits (`app.emit` in app/src-tauri), with their payloads. */

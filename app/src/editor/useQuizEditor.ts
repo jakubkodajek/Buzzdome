@@ -1,41 +1,31 @@
 import { ask, open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
-import { useEffect, useReducer, useRef, useState } from "react";
+import { useCallback, useEffect, useReducer, useRef, useState, useSyncExternalStore } from "react";
 import { api } from "../api";
 import { useApp, useDispatch, useReport } from "../app-context";
 import { useLatest } from "../hooks";
 import { mediaFileFilter, type MediaKind } from "../media";
 import { QUIZ_EXTENSION, quizOpenFilter } from "../quiz";
-import type { EditorDraft, Quiz, SheetExport, SheetImport, ValidationError } from "../types";
-import { DraftQueue } from "./draft-queue";
+import type { EditorDraft, Quiz, SheetExport, SheetImport } from "../types";
+import { BUSY, DraftSession, replacesDraft, type DraftApi, type DraftOperation, type DraftStatus } from "./draft-session";
 import { editorReducer, isUnsaved, LOADING, type EditorState } from "./editor-state";
 import type { Edit } from "./history";
 import { readRecentFiles, rememberRecentFile } from "./recent";
 import { CSV_EXTENSION, listSeparator, SHEET_EXTENSIONS } from "./sheet";
 
-interface DraftWrite {
-  quiz: Quiz;
-  unsaved: boolean;
-  checked: (problems: ValidationError[]) => void;
-  failed: (error: unknown) => void;
-}
-
-// One draft for the whole app, so one queue, outliving the editor screen:
+// One draft for the whole app, so one session, outliving the editor screen:
 // whatever it wrote is on disk before the screen opens again and loads it.
-const draftQueue = new DraftQueue<DraftWrite>(async (write) => {
-  try {
-    write.checked(await api.editorUpdate(write.quiz, write.unsaved));
-  } catch (error) {
-    write.failed(error);
-  }
-});
+const drafts = new DraftSession(api);
 
 export interface QuizEditor {
   state: EditorState;
+  /** The file operation under way, and why the latest change is not in the draft, if it is not. */
+  status: DraftStatus;
   /** Changes the quiz; `merge` joins quick changes of one field into one undo step. */
   edit: (edit: Edit, merge?: string) => void;
   undo: () => void;
   redo: () => void;
-  // File operations resolve to whether they happened (not cancelled, not failed).
+  // File operations resolve to whether they happened (not cancelled, not
+  // failed, not refused while another one was under way).
   newQuiz: () => Promise<boolean>;
   /**
    * Opens `path`, or a file the user picks. Resolves to the draft opened (a
@@ -48,6 +38,10 @@ export interface QuizEditor {
   save: () => Promise<boolean>;
   saveAs: () => Promise<boolean>;
   closeQuiz: () => Promise<boolean>;
+  /** Loads the draft again, after it could not be read. */
+  reload: () => void;
+  /** Throws away a draft that cannot be read, once the quizmaster confirms it. */
+  discardUnreadable: () => Promise<boolean>;
   /** Asks for a media file and copies it into the quiz; its reference, or null if none was picked. */
   pickMedia: (kinds: MediaKind[]) => Promise<string | null>;
   /** Plays the quiz as a show (see `onTestRun`), from its start or from slide `from`. */
@@ -66,46 +60,58 @@ export interface QuizEditor {
 export function useQuizEditor(onTestRun: () => void): QuizEditor {
   const { t, lang } = useApp();
   const [state, dispatch] = useReducer(editorReducer, LOADING);
+  const status = useSyncExternalStore(drafts.subscribe, drafts.getStatus);
   const report = useLatest(useReport());
   const dispatchCommand = useDispatch();
   const [recentFiles, setRecentFiles] = useState(readRecentFiles);
   // The quiz the backend has; nothing is written back that came from it.
   const written = useRef<Quiz | null>(null);
+  const [loads, setLoads] = useState(0);
 
   useEffect(() => {
     let alive = true;
-    draftQueue.run(api.editorLoad).then((draft) => {
-      if (!alive) return;
-      written.current = draft?.quiz ?? null;
-      dispatch({ type: "loaded", draft });
-    }, report.current);
+    drafts.load().then(
+      (draft) => {
+        if (!alive) return;
+        written.current = draft?.quiz ?? null;
+        dispatch({ type: "loaded", draft });
+      },
+      // Not "no draft": the quizmaster chooses what becomes of it (A17).
+      (error: unknown) => {
+        if (alive) dispatch({ type: "unreadable", error });
+      },
+    );
     return () => {
       alive = false;
     };
-  }, [report]);
+  }, [loads]);
 
   const open = state.status === "open" ? state : null;
+  const draftId = open?.draftId ?? null;
   const present = open?.history.present ?? null;
   const unsaved = open !== null && isUnsaved(open);
   useEffect(() => {
-    if (!present || present === written.current) return;
+    if (!draftId || !present || present === written.current) return;
     written.current = present;
-    draftQueue.push({
-      quiz: present,
-      unsaved,
-      checked: (problems) => dispatch({ type: "checked", quiz: present, problems }),
-      failed: (error) => report.current(error),
-    });
-  }, [present, unsaved, report]);
+    drafts.write(draftId, present, unsaved, (problems) => dispatch({ type: "checked", quiz: present, problems }));
+  }, [draftId, present, unsaved]);
 
-  /** Runs a file operation; a failure is shown, not thrown, and gives false. */
-  const attempt = <T>(operation: () => Promise<T | false>): Promise<T | false> =>
-    operation().catch((error: unknown) => {
-      report.current(error);
-      return false as const;
-    });
+  /**
+   * Runs a file operation as the only one (A16); a failure is shown, not
+   * thrown, and gives false, as does one refused while another runs.
+   */
+  const attempt = <T>(operation: DraftOperation, task: (draftApi: DraftApi) => Promise<T | false>): Promise<T | false> =>
+    drafts.exclusive(operation, task).then(
+      (result) => (result === BUSY ? false : result),
+      (error: unknown) => {
+        report.current(error);
+        return false as const;
+      },
+    );
 
-  const load = (draft: Awaited<ReturnType<typeof api.editorLoad>>) => {
+  /** Puts `draft` (or none) in place of the open one. */
+  const load = (draft: EditorDraft | null) => {
+    drafts.replaced();
     written.current = draft?.quiz ?? null;
     dispatch({ type: "loaded", draft });
   };
@@ -114,41 +120,51 @@ export function useQuizEditor(onTestRun: () => void): QuizEditor {
   const mayDiscard = async () =>
     !open || !unsaved || (await ask(t("discardChanges", { title: open.history.present.title || t("untitledQuiz") }), { kind: "warning" }));
 
-  const saveTo = async (quiz: Quiz, path: string) => {
-    await draftQueue.run(() => api.editorSave(quiz, path));
+  const saveTo = async (draftApi: DraftApi, draft: string, quiz: Quiz, path: string) => {
+    await draftApi.editorSave(draft, quiz, path);
     dispatch({ type: "saved", quiz, path });
     setRecentFiles(rememberRecentFile(path));
     return true;
   };
 
   const saveAs = () =>
-    attempt(async () => {
+    attempt("save", async (draftApi) => {
       if (!open) return false;
       const quiz = open.history.present;
       const path = await saveDialog({
         defaultPath: open.sourcePath ? withExtension(open.sourcePath) : `${fileStem(quiz.title || t("untitledQuiz"))}.${QUIZ_EXTENSION}`,
         filters: [{ name: t("quizFiles"), extensions: [QUIZ_EXTENSION] }],
       });
-      return path ? saveTo(quiz, withExtension(path)) : false;
+      return path ? saveTo(draftApi, open.draftId, quiz, withExtension(path)) : false;
     });
+
+  // Edits given while another draft takes the open one's place would be lost with it.
+  const editable = () => !replacesDraft(drafts.getStatus().busy);
 
   return {
     state,
-    edit: (edit, merge) => dispatch({ type: "edit", edit, merge, at: Date.now() }),
-    undo: () => dispatch({ type: "undo" }),
-    redo: () => dispatch({ type: "redo" }),
+    status,
+    edit: (edit, merge) => {
+      if (editable()) dispatch({ type: "edit", edit, merge, at: Date.now() });
+    },
+    undo: () => {
+      if (editable()) dispatch({ type: "undo" });
+    },
+    redo: () => {
+      if (editable()) dispatch({ type: "redo" });
+    },
     newQuiz: () =>
-      attempt(async () => {
+      attempt("new", async (draftApi) => {
         if (!(await mayDiscard())) return false;
-        load(await draftQueue.run(() => api.editorNew(t("untitledQuiz"))));
+        load(await draftApi.editorNew(t("untitledQuiz")));
         return true;
       }),
     openQuiz: (given) =>
-      attempt(async () => {
+      attempt("open", async (draftApi) => {
         if (!(await mayDiscard())) return false;
         const path = given ?? (await openDialog({ multiple: false, filters: [quizOpenFilter(t)] }));
         if (typeof path !== "string") return false;
-        const draft = await draftQueue.run(() => api.editorOpen(path));
+        const draft = await draftApi.editorOpen(path);
         load(draft);
         setRecentFiles(rememberRecentFile(path));
         return draft;
@@ -157,48 +173,75 @@ export function useQuizEditor(onTestRun: () => void): QuizEditor {
     save: () => {
       // A plain JSON quiz is saved as a new quiz file, never over the JSON.
       const path = open?.sourcePath;
-      return open && path && hasExtension(path) ? attempt(() => saveTo(open.history.present, path)) : saveAs();
+      return open && path && hasExtension(path) ? attempt("save", (draftApi) => saveTo(draftApi, open.draftId, open.history.present, path)) : saveAs();
     },
     saveAs,
     closeQuiz: () =>
-      attempt(async () => {
+      attempt("close", async (draftApi) => {
         if (!(await mayDiscard())) return false;
-        await draftQueue.run(api.editorClose);
+        await draftApi.editorClose();
+        load(null);
+        return true;
+      }),
+    reload: () => {
+      dispatch({ type: "loading" });
+      setLoads((n) => n + 1);
+    },
+    discardUnreadable: () =>
+      attempt("close", async (draftApi) => {
+        if (!(await ask(t("discardUnreadableDraft"), { kind: "warning" }))) return false;
+        await draftApi.editorClose();
         load(null);
         return true;
       }),
     pickMedia: async (kinds) => {
-      try {
+      const picked = await attempt("media", async (draftApi) => {
+        if (!open) return false;
         const path = await openDialog({ multiple: false, filters: [mediaFileFilter(t, kinds)] });
-        return typeof path === "string" ? await draftQueue.run(() => api.editorAddMedia(path)) : null;
-      } catch (error) {
-        report.current(error);
-        return null;
-      }
+        return typeof path === "string" ? await draftApi.editorAddMedia(open.draftId, path) : false;
+      });
+      return picked === false ? null : picked;
     },
     importSheet: () =>
-      attempt(async () => {
+      attempt("import", async (draftApi) => {
+        if (!open) return false;
         const path = await openDialog({ multiple: false, filters: [{ name: t("sheetFiles"), extensions: SHEET_EXTENSIONS }] });
-        return typeof path === "string" ? await draftQueue.run(() => api.editorImportSheet(path)) : false;
+        return typeof path === "string" ? await draftApi.editorImportSheet(open.draftId, path) : false;
       }),
     exportSheet: (quiz, name) =>
-      attempt(async () => {
+      attempt("export", async (draftApi) => {
+        if (!open) return false;
         const path = await saveDialog({ defaultPath: `${fileStem(name)}.${CSV_EXTENSION}`, filters: [{ name: t("csvFile"), extensions: [CSV_EXTENSION] }] });
         if (!path) return false;
         const csv = path.toLowerCase().endsWith(`.${CSV_EXTENSION}`) ? path : `${path}.${CSV_EXTENSION}`;
-        return await draftQueue.run(() => api.editorExportSheet(quiz, csv, listSeparator(lang)));
+        return await draftApi.editorExportSheet(open.draftId, quiz, csv, listSeparator(lang));
       }),
     testRun: (from) =>
-      attempt(async () => {
+      attempt("testRun", async (draftApi) => {
         if (!open) return false;
-        const quiz = open.history.present;
-        await draftQueue.run(() => api.editorTestRun(quiz));
+        await draftApi.editorTestRun(open.draftId, open.history.present);
         // The show runs now, whatever happens next: the Director shows it.
         onTestRun();
         if (from !== undefined) dispatchCommand({ type: "goTo", slide: from });
         return true;
       }),
   };
+}
+
+/**
+ * State that belongs to the open draft, such as a clipboard: once another
+ * draft is open it reads as null, so nothing of one quiz (the name of one
+ * of its media files) lands in another (A18).
+ */
+export function useDraftState<T>(draftId: string | null): [T | null, (value: T | null) => void] {
+  const [held, setHeld] = useState<{ draftId: string | null; value: T | null }>({ draftId, value: null });
+  const set = useCallback((value: T | null) => setHeld({ draftId, value }), [draftId]);
+  return [held.draftId === draftId ? held.value : null, set];
+}
+
+/** The id of the draft open in `editor`, if one is. */
+export function openDraftId(editor: QuizEditor): string | null {
+  return editor.state.status === "open" ? editor.state.draftId : null;
 }
 
 function hasExtension(path: string): boolean {

@@ -81,7 +81,8 @@
 .studio .dialog-footer button,
 .studio .browse,
 .studio .props-button,
-.studio .design-empty button {
+.studio .design-empty button,
+.studio .draft-unreadable-actions button {
   min-width: 80px;
   padding: 4px 14px;
   border: 1px solid #b9b9b9;
@@ -92,7 +93,8 @@
 .studio .dialog-footer button:hover:not(:disabled),
 .studio .browse:hover,
 .studio .props-button:hover:not(:disabled),
-.studio .design-empty button:hover {
+.studio .design-empty button:hover,
+.studio .draft-unreadable-actions button:hover {
   border-color: var(--hover-line);
   background: var(--hover);
 }
@@ -112,6 +114,30 @@
   display: grid;
   place-items: center;
   color: var(--muted);
+}
+
+.studio-busy,
+.studio-busy * {
+  cursor: progress !important;
+}
+
+.draft-unreadable {
+  max-width: 560px;
+  padding: 24px;
+  color: var(--text);
+  background: #fff;
+  border: 1px solid var(--line);
+}
+
+.draft-unreadable h2 {
+  margin: 0 0 12px;
+  font-size: 18px;
+}
+
+.draft-unreadable-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 16px;
 }
 
 /* Title bar */

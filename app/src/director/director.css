@@ -209,13 +209,6 @@
   font-weight: 600;
 }
 
-.not-saved-banner {
-  padding: 6px 12px;
-  font-weight: 600;
-  color: #fff;
-  background: var(--bad);
-}
-
 .tab-body {
   flex: 1;
   min-height: 0;

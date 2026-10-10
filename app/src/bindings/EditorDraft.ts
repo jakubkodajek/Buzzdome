@@ -5,7 +5,12 @@ import type { ValidationError } from "./ValidationError";
 /**
  * The draft as the editor loads it.
  */
-export type EditorDraft = { quiz: Quiz, 
+export type EditorDraft = { 
+/**
+ * Names the draft (its folder); commands for it are refused once
+ * another draft has replaced it.
+ */
+id: string, quiz: Quiz, 
 /**
  * The file it was opened from or last saved to.
  */

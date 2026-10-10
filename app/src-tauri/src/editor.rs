@@ -2,23 +2,28 @@
 //! Every change is written at once, so closing or crashing the app loses
 //! nothing; saving packs the draft into a `.quiz` file.
 //!
-//! Under `<app data>/editor/`, `draft.json` names the current draft folder
+//! Under `<local data>/editor/`, `draft.json` names the current draft folder
 //! (`quiz.json` and `media/`) and remembers where it is saved. A new or
 //! opened quiz gets a folder of its own and `draft.json` switches to it only
 //! once it is complete, so a failure leaves the old draft as it was. Old
 //! folders are deleted afterwards; one the web view still reads a file from
 //! (Windows refuses that) goes the next time.
+//!
+//! The folder's name is the draft's id: a command for a draft that another
+//! has replaced since is refused (A16). A `draft.json` that cannot be read
+//! is never taken for "no draft": nothing is deleted until the quizmaster
+//! discards the draft (A17).
 
 use crate::error::{AppError, CmdResult};
-use crate::{app_local_data, app_log, roaming_leftover};
+use crate::{app_local_data, app_log, lock_show, off_ui, roaming_leftover};
 use quiz_core::{Category, Quiz, ValidationError};
 use quiz_file::{FileAction, SheetExport, SheetImport};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
+use std::sync::{Mutex, MutexGuard};
 use std::time::{SystemTime, UNIX_EPOCH};
-use tauri::{AppHandle, Manager, State};
+use tauri::{AppHandle, Manager};
 use ts_rs::TS;
 
 const POINTER_FILE: &str = "draft.json";
@@ -45,6 +50,9 @@ struct Pointer {
 #[ts(export)]
 #[serde(rename_all = "camelCase")]
 pub struct EditorDraft {
+    /// Names the draft (its folder); commands for it are refused once
+    /// another draft has replaced it.
+    pub id: String,
     pub quiz: Quiz,
     /// The file it was opened from or last saved to.
     pub source_path: Option<String>,
@@ -77,12 +85,23 @@ pub fn move_roaming_drafts(app: &AppHandle) {
     }
 }
 
-fn read_pointer(dir: &Path) -> Option<Pointer> {
-    let json = fs::read_to_string(dir.join(POINTER_FILE)).ok()?;
-    let pointer: Pointer = serde_json::from_str(&json).ok()?;
+/// The current draft's pointer, or none when there is no draft. One that
+/// cannot be read is an error, not "no draft", so that nothing deletes the
+/// draft it names (A17). Not `AppFile`: a pointer has no default to go on with.
+fn read_pointer(dir: &Path) -> CmdResult<Option<Pointer>> {
+    let path = dir.join(POINTER_FILE);
+    let bytes = match fs::read(&path) {
+        Ok(bytes) => bytes,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(e) => return Err(AppError::file(FileAction::Read, &path, e)),
+    };
+    let pointer: Pointer = serde_json::from_slice(&bytes).map_err(|e| AppError::DraftNotRead { detail: e.to_string() })?;
     // The file is ours, but a folder name must never lead out of `dir`.
     let plain = pointer.folder.strip_prefix(FOLDER_PREFIX).is_some_and(|rest| rest.chars().all(|c| c.is_ascii_digit()));
-    plain.then_some(pointer)
+    if !plain {
+        return Err(AppError::DraftNotRead { detail: format!("folder {:?}", pointer.folder) });
+    }
+    Ok(Some(pointer))
 }
 
 fn write_pointer(dir: &Path, pointer: &Pointer) -> CmdResult<()> {
@@ -90,16 +109,56 @@ fn write_pointer(dir: &Path, pointer: &Pointer) -> CmdResult<()> {
     Ok(quiz_file::write_atomic(&dir.join(POINTER_FILE), json.as_bytes())?)
 }
 
-/// The current draft's folder and its pointer.
-fn current(app: &AppHandle) -> CmdResult<(PathBuf, Pointer)> {
-    let dir = editor_dir(app)?;
-    let pointer = read_pointer(&dir).ok_or(AppError::NoDraft)?;
+/// The folder and pointer of the draft `id`, while it is the current one.
+fn current(dir: &Path, id: &str) -> CmdResult<(PathBuf, Pointer)> {
+    let pointer = read_pointer(dir)?.ok_or(AppError::NoDraft)?;
+    if pointer.folder != id {
+        return Err(AppError::DraftChanged);
+    }
     Ok((dir.join(&pointer.folder), pointer))
 }
 
-/// Folder of the quiz in the editor, for a test run.
-pub(crate) fn draft_root(app: &AppHandle) -> CmdResult<PathBuf> {
-    current(app).map(|(root, _)| root)
+/// Runs `work` on the editor's folder, one editor command at a time and off
+/// the async workers: it reads and writes files (`off_ui`).
+async fn with_drafts<T: Send + 'static>(app: AppHandle, work: impl FnOnce(&AppHandle, &Path) -> CmdResult<T> + Send + 'static) -> CmdResult<T> {
+    off_ui(move || {
+        let _one_at_a_time = lock(&app);
+        work(&app, &editor_dir(&app)?)
+    })
+    .await
+}
+
+/// Runs `work` on the draft `id` (its folder and pointer), refused once
+/// another draft has replaced it (A16).
+async fn on_draft<T: Send + 'static>(
+    app: AppHandle,
+    id: String,
+    work: impl FnOnce(&AppHandle, &Path, PathBuf, Pointer) -> CmdResult<T> + Send + 'static,
+) -> CmdResult<T> {
+    with_drafts(app, move |app, dir| {
+        let (root, pointer) = current(dir, &id)?;
+        work(app, dir, root, pointer)
+    })
+    .await
+}
+
+/// Holds the editor's folder, as every editor command does.
+pub(crate) fn lock(app: &AppHandle) -> MutexGuard<'_, ()> {
+    app.state::<EditorLock>().inner().0.lock().unwrap()
+}
+
+/// Folder of the draft `id`, for a test run; the caller holds `lock`.
+pub(crate) fn draft_root(app: &AppHandle, id: &str) -> CmdResult<PathBuf> {
+    current(&editor_dir(app)?, id).map(|(root, _)| root)
+}
+
+/// Deletes the draft folders but `keep` and the one a test run plays from.
+fn prune(app: &AppHandle, dir: &Path, keep: Option<&Path>) {
+    let playing = lock_show(app).media_root.clone();
+    let keep: Vec<&Path> = keep.into_iter().chain(playing.as_deref()).collect();
+    if let Err(e) = quiz_file::prune(dir, &keep) {
+        app_log::note(&format!("cleaning old editor drafts: {e}"));
+    }
 }
 
 /// A name for a new draft folder that is not taken.
@@ -109,12 +168,19 @@ fn new_folder(dir: &Path) -> String {
 }
 
 /// Makes `pointer` the current draft, then deletes the other folders.
-fn switch_to(dir: &Path, pointer: &Pointer) -> CmdResult<()> {
+fn switch_to(app: &AppHandle, dir: &Path, pointer: &Pointer) -> CmdResult<()> {
     write_pointer(dir, pointer)?;
-    if let Err(e) = quiz_file::prune(dir, &[&dir.join(&pointer.folder)]) {
-        app_log::note(&format!("cleaning old editor drafts: {e}"));
-    }
+    prune(app, dir, Some(&dir.join(&pointer.folder)));
     Ok(())
+}
+
+/// A folder for a new draft in place of the current one, refused while
+/// the current one cannot be read: it would be deleted unseen (A17).
+fn new_draft_folder(dir: &Path) -> CmdResult<(String, PathBuf)> {
+    read_pointer(dir)?;
+    let folder = new_folder(dir);
+    let root = dir.join(&folder);
+    Ok((folder, root))
 }
 
 /// Lets the windows show the draft's media, and describes the draft.
@@ -122,6 +188,7 @@ fn describe(app: &AppHandle, root: &Path, pointer: Pointer, quiz: Quiz) -> CmdRe
     app.asset_protocol_scope().allow_directory(root, true)?;
     Ok(EditorDraft {
         problems: quiz_file::problems(&quiz, root),
+        id: pointer.folder,
         quiz,
         source_path: pointer.source_path,
         unsaved: pointer.unsaved,
@@ -132,76 +199,74 @@ fn describe(app: &AppHandle, root: &Path, pointer: Pointer, quiz: Quiz) -> CmdRe
 
 /// The draft left from last time, if any.
 #[tauri::command]
-pub async fn editor_load(app: AppHandle, lock: State<'_, EditorLock>) -> CmdResult<Option<EditorDraft>> {
-    let _one_at_a_time = lock.0.lock().unwrap();
-    let Ok((root, pointer)) = current(&app) else { return Ok(None) };
-    let quiz = quiz_file::read_quiz_json(&root)?;
-    describe(&app, &root, pointer, quiz).map(Some)
+pub async fn editor_load(app: AppHandle) -> CmdResult<Option<EditorDraft>> {
+    with_drafts(app, |app, dir| {
+        let Some(pointer) = read_pointer(dir)? else { return Ok(None) };
+        let root = dir.join(&pointer.folder);
+        let quiz = quiz_file::read_quiz_json(&root)?;
+        describe(app, &root, pointer, quiz).map(Some)
+    })
+    .await
 }
 
 /// Starts a new, empty quiz in place of the draft.
 #[tauri::command]
-pub async fn editor_new(app: AppHandle, lock: State<'_, EditorLock>, title: String) -> CmdResult<EditorDraft> {
-    let _one_at_a_time = lock.0.lock().unwrap();
-    let dir = editor_dir(&app)?;
-    let folder = new_folder(&dir);
-    let root = dir.join(&folder);
-    let quiz = Quiz::new(title, Vec::new());
-    fs::create_dir_all(&root).map_err(|e| AppError::file(FileAction::CreateFolder, &root, e))?;
-    quiz_file::write_quiz_json(&root, &quiz)?;
-    let pointer = Pointer { folder, source_path: None, unsaved: false, dropped: Vec::new() };
-    switch_to(&dir, &pointer)?;
-    describe(&app, &root, pointer, quiz)
+pub async fn editor_new(app: AppHandle, title: String) -> CmdResult<EditorDraft> {
+    with_drafts(app, move |app, dir| {
+        let (folder, root) = new_draft_folder(dir)?;
+        let quiz = Quiz::new(title, Vec::new());
+        fs::create_dir_all(&root).map_err(|e| AppError::file(FileAction::CreateFolder, &root, e))?;
+        quiz_file::write_quiz_json(&root, &quiz)?;
+        let pointer = Pointer { folder, source_path: None, unsaved: false, dropped: Vec::new() };
+        switch_to(app, dir, &pointer)?;
+        describe(app, &root, pointer, quiz)
+    })
+    .await
 }
 
 /// Opens a quiz file in place of the draft.
 #[tauri::command]
-pub async fn editor_open(app: AppHandle, lock: State<'_, EditorLock>, path: String) -> CmdResult<EditorDraft> {
-    let _one_at_a_time = lock.0.lock().unwrap();
-    let dir = editor_dir(&app)?;
-    let folder = new_folder(&dir);
-    let root = dir.join(&folder);
-    let opened = quiz_file::open_into(Path::new(&path), &root)?;
-    // A quiz that opening changed has to be saved to keep the change.
-    let pointer = Pointer { folder, source_path: Some(path), unsaved: opened.changed, dropped: opened.dropped };
-    switch_to(&dir, &pointer)?;
-    describe(&app, &root, pointer, opened.quiz)
+pub async fn editor_open(app: AppHandle, path: String) -> CmdResult<EditorDraft> {
+    with_drafts(app, move |app, dir| {
+        let (folder, root) = new_draft_folder(dir)?;
+        let opened = quiz_file::open_into(Path::new(&path), &root)?;
+        // A quiz that opening changed has to be saved to keep the change.
+        let pointer = Pointer { folder, source_path: Some(path), unsaved: opened.changed, dropped: opened.dropped };
+        switch_to(app, dir, &pointer)?;
+        describe(app, &root, pointer, opened.quiz)
+    })
+    .await
 }
 
-/// Stores the edited quiz in the draft and returns what keeps it from being
-/// played. `unsaved` tells whether it differs from the saved file.
+/// Stores the edited quiz in the draft `draft` and returns what keeps it
+/// from being played. `unsaved` tells whether it differs from the saved file.
 #[tauri::command]
-pub async fn editor_update(
-    app: AppHandle,
-    lock: State<'_, EditorLock>,
-    quiz: Quiz,
-    unsaved: bool,
-) -> CmdResult<Vec<ValidationError>> {
-    let _one_at_a_time = lock.0.lock().unwrap();
-    let (root, pointer) = current(&app)?;
-    quiz_file::write_quiz_json(&root, &quiz)?;
-    if pointer.unsaved != unsaved {
-        write_pointer(&editor_dir(&app)?, &Pointer { unsaved, ..pointer })?;
-    }
-    Ok(quiz_file::problems(&quiz, &root))
+pub async fn editor_update(app: AppHandle, draft: String, quiz: Quiz, unsaved: bool) -> CmdResult<Vec<ValidationError>> {
+    on_draft(app, draft, move |_, dir, root, pointer| {
+        quiz_file::write_quiz_json(&root, &quiz)?;
+        if pointer.unsaved != unsaved {
+            write_pointer(dir, &Pointer { unsaved, ..pointer })?;
+        }
+        Ok(quiz_file::problems(&quiz, &root))
+    })
+    .await
 }
 
-/// Saves the quiz with its media to `path` as a quiz file.
+/// Saves the quiz of the draft `draft` with its media to `path` as a quiz file.
 #[tauri::command]
-pub async fn editor_save(app: AppHandle, lock: State<'_, EditorLock>, quiz: Quiz, path: String) -> CmdResult<()> {
-    let _one_at_a_time = lock.0.lock().unwrap();
-    let (root, pointer) = current(&app)?;
-    quiz_file::write_quiz_json(&root, &quiz)?;
-    quiz_file::save(&quiz, &root, Path::new(&path))?;
-    write_pointer(&editor_dir(&app)?, &Pointer { source_path: Some(path), unsaved: false, dropped: Vec::new(), ..pointer })
+pub async fn editor_save(app: AppHandle, draft: String, quiz: Quiz, path: String) -> CmdResult<()> {
+    on_draft(app, draft, move |_, dir, root, pointer| {
+        quiz_file::write_quiz_json(&root, &quiz)?;
+        quiz_file::save(&quiz, &root, Path::new(&path))?;
+        write_pointer(dir, &Pointer { source_path: Some(path), unsaved: false, dropped: Vec::new(), ..pointer })
+    })
+    .await
 }
 
-/// Copies a picture, sound or video into the draft and returns its reference.
+/// Copies a picture, sound or video into the draft `draft` and returns its reference.
 #[tauri::command]
-pub async fn editor_add_media(app: AppHandle, lock: State<'_, EditorLock>, path: String) -> CmdResult<String> {
-    let _one_at_a_time = lock.0.lock().unwrap();
-    let (root, _) = current(&app)?;
-    Ok(quiz_file::import_media(&root, quiz_file::MediaSource::File(Path::new(&path)))?)
+pub async fn editor_add_media(app: AppHandle, draft: String, path: String) -> CmdResult<String> {
+    on_draft(app, draft, move |_, _, root, _| Ok(quiz_file::import_media(&root, quiz_file::MediaSource::File(Path::new(&path)))?)).await
 }
 
 /// A name for a new category that none of `categories` has (spec QZ-10).
@@ -214,18 +279,19 @@ pub fn editor_category_name(categories: Vec<Category>, base: String) -> String {
 /// the draft; the editor inserts the slides as one change (spec QZ-8),
 /// giving a row that names one of the draft's categories its look (Z10).
 #[tauri::command]
-pub async fn editor_import_sheet(app: AppHandle, lock: State<'_, EditorLock>, path: String) -> CmdResult<SheetImport> {
-    // The sheet reader may take until its time limit: it runs off the async
-    // workers, and the draft stays free for other commands meanwhile.
+pub async fn editor_import_sheet(app: AppHandle, draft: String, path: String) -> CmdResult<SheetImport> {
+    // The sheet reader may take until its time limit: the draft stays free
+    // for other commands meanwhile.
     let path = PathBuf::from(path);
     let read = path.clone();
-    let tables = tauri::async_runtime::spawn_blocking(move || crate::sheet_reader::read_tables(&read)).await??;
-    let _one_at_a_time = lock.0.lock().unwrap();
-    let (root, _) = current(&app)?;
-    let categories = quiz_file::read_quiz_json(&root)?.categories;
-    // Shuffles the answers of a question with none marked right.
-    let seed = SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| d.as_nanos() as u64);
-    Ok(quiz_file::import_sheet(&path, &tables, &categories, &root, seed)?)
+    let tables = off_ui(move || crate::sheet_reader::read_tables(&read)).await?;
+    on_draft(app, draft, move |_, _, root, _| {
+        let categories = quiz_file::read_quiz_json(&root)?.categories;
+        // Shuffles the answers of a question with none marked right.
+        let seed = SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| d.as_nanos() as u64);
+        Ok(quiz_file::import_sheet(&path, &tables, &categories, &root, seed)?)
+    })
+    .await
 }
 
 /// The character between the cells of a CSV file. Excel splits a CSV file
@@ -239,36 +305,63 @@ pub enum ListSeparator {
     Comma,
 }
 
-/// Writes the quiz as a CSV file with its media next to it (spec QZ-8).
+/// Writes the quiz of the draft `draft` as a CSV file with its media next to it (spec QZ-8).
 #[tauri::command]
-pub async fn editor_export_sheet(
-    app: AppHandle,
-    lock: State<'_, EditorLock>,
-    quiz: Quiz,
-    path: String,
-    separator: ListSeparator,
-) -> CmdResult<SheetExport> {
-    let _one_at_a_time = lock.0.lock().unwrap();
-    let (root, _) = current(&app)?;
+pub async fn editor_export_sheet(app: AppHandle, draft: String, quiz: Quiz, path: String, separator: ListSeparator) -> CmdResult<SheetExport> {
     let separator = match separator {
         ListSeparator::Semicolon => b';',
         ListSeparator::Comma => b',',
     };
-    Ok(quiz_file::export_sheet(&quiz, &root, Path::new(&path), separator)?)
+    on_draft(app, draft, move |_, _, root, _| Ok(quiz_file::export_sheet(&quiz, &root, Path::new(&path), separator)?)).await
 }
 
-/// Discards the draft.
+/// Discards the draft, also one that cannot be read: the quizmaster chose to.
 #[tauri::command]
-pub async fn editor_close(app: AppHandle, lock: State<'_, EditorLock>) -> CmdResult<()> {
-    let _one_at_a_time = lock.0.lock().unwrap();
-    let dir = editor_dir(&app)?;
-    let pointer = dir.join(POINTER_FILE);
-    match fs::remove_file(&pointer) {
-        Err(e) if e.kind() != std::io::ErrorKind::NotFound => return Err(AppError::file(FileAction::Write, &pointer, e)),
-        _ => {}
+pub async fn editor_close(app: AppHandle) -> CmdResult<()> {
+    with_drafts(app, |app, dir| {
+        let pointer = dir.join(POINTER_FILE);
+        match fs::remove_file(&pointer) {
+            Err(e) if e.kind() != std::io::ErrorKind::NotFound => return Err(AppError::file(FileAction::Write, &pointer, e)),
+            _ => {}
+        }
+        prune(app, dir, None);
+        Ok(())
+    })
+    .await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn editor_dir(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("buzzdome-editor-{name}-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        dir
     }
-    if let Err(e) = quiz_file::prune(&dir, &[]) {
-        app_log::note(&format!("cleaning old editor drafts: {e}"));
+
+    #[test]
+    fn a_command_for_a_draft_that_another_replaced_is_refused() {
+        let dir = editor_dir("replaced");
+        assert_eq!(current(&dir, "draft-1").unwrap_err(), AppError::NoDraft);
+        let pointer = Pointer { folder: "draft-2".into(), source_path: None, unsaved: false, dropped: Vec::new() };
+        write_pointer(&dir, &pointer).unwrap();
+        assert_eq!(current(&dir, "draft-1").unwrap_err(), AppError::DraftChanged);
+        assert_eq!(current(&dir, "draft-2").unwrap().0, dir.join("draft-2"));
+        fs::remove_dir_all(&dir).unwrap();
     }
-    Ok(())
+
+    #[test]
+    fn a_pointer_that_does_not_read_is_no_reason_to_start_afresh() {
+        let dir = editor_dir("unread");
+        assert!(read_pointer(&dir).unwrap().is_none(), "no pointer, no draft");
+        for broken in ["{ not json", r#"{"folder":"../elsewhere","sourcePath":null,"unsaved":true}"#] {
+            fs::write(dir.join(POINTER_FILE), broken).unwrap();
+            assert!(matches!(read_pointer(&dir), Err(AppError::DraftNotRead { .. })), "{broken}");
+            assert!(matches!(new_draft_folder(&dir), Err(AppError::DraftNotRead { .. })), "{broken}");
+            assert!(matches!(current(&dir, "draft-1"), Err(AppError::DraftNotRead { .. })), "{broken}");
+        }
+        fs::remove_dir_all(&dir).unwrap();
+    }
 }
