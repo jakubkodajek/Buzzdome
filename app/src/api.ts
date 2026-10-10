@@ -42,6 +42,8 @@ export const api = {
   getQuiz: () => invoke<Quiz | null>("get_quiz"),
   /** Folder of the running quiz's media, ending with a path separator. */
   mediaRoot: () => invoke<string | null>("media_root"),
+  /** Why the running show's journal cannot be written, if so. */
+  showNotSaved: () => invoke<AppError | null>("show_not_saved"),
   startShowFromFile: (path: string) => invoke<void>("start_show_from_file", { path }),
   startDemoShow: () => invoke<void>("start_demo_show"),
   lastSession: () => invoke<SessionSummary | null>("last_session"),
@@ -126,6 +128,8 @@ export interface BackendEvents {
   "show-changed": null;
   /** The running question clock, a few times per second. */
   "clock-tick": ClockView;
+  /** The running show's journal refused a write (why), or works again (null). */
+  "show-not-saved": AppError | null;
   "sound-cue": Cue;
   "receiver-status": ReceiverStatus;
   "receiver-raw": RawReport;

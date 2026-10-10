@@ -95,11 +95,32 @@ two windows cannot disagree with each other or with the score.
 | `sound-cue` | `Cue` | a game effect that has a sound |
 | `receiver-status`, `receiver-raw`, `receiver-press`, `receiver-learn` | see `hardware.rs` | receiver setup and diagnostics |
 | `host-window` | bool | the projector window opened or closed (also from its title bar) |
+| `host-problem` | string | the projector met a problem, worded for the Director to show |
+| `show-not-saved` | `AppError` or null | the running show's journal refused a write, or works again |
+| `teams-changed` | string list | the prepared team names changed, or a show started or ended |
+| `media-library`, `sound-board` | `MediaLibrary`, `SoundBoard` | the media player's library or pads changed |
+| `media-playing`, `media-volume` | `NowPlaying` or null, number | the media player started, paused or stopped; its volume changed |
+| `app-icon` | `IconColor` | the windows' icon took another colour |
 
-- **Clock.** The show pump thread in the shell (`spawn_show_pump`) applies
-  due timer commands (time up) and otherwise sends `clock-tick` with the
-  core's `ClockView`. The UI never measures time itself; the gauge animates
-  between ticks with CSS.
+- **Clock.** Every command and press is stamped by one show clock
+  (`buzzers::clock::ShowClock`, shared with the receiver thread): it reads
+  the wall clock once when the app starts and counts on from a monotonic
+  clock, so the system setting its clock mid-show (say, on joining the
+  venue's network) neither freezes the countdown nor ends a question early.
+  The show thread (`show_thread.rs`) applies due timer commands (time up)
+  and otherwise sends `clock-tick` with the core's `ClockView`. The UI never
+  measures time itself; the gauge animates between ticks with CSS.
+- **Threads.** One show thread changes a running show: the receiver's
+  events and the windows' commands that change the show (`dispatch`, team
+  edits) reach it through one queue, so they are handled in the order they
+  came, and the windows never wait on a journal write. The commands that
+  read the show or start or end one are async and take the show state on a
+  worker thread (`off_ui`); Tauri runs synchronous commands on the windows'
+  thread, so they must not wait for it.
+- **Saving problems.** When the journal refuses a write (the disk is full,
+  say), the change is not made, and the Director shows why in a banner until
+  a write works again (`show-not-saved`, `show_not_saved`). A due command
+  that failed is tried again a second later.
 - **React side.** `app-context.tsx` gives each window its language, `t` and
   error reporting (`useReport`, `useRun`, `useDispatch`). `hooks.ts` wraps events and
   loads (`useBackendEvent`, `useGameView`, `useClock`, `useQuiz`,
@@ -582,8 +603,8 @@ USB HID device ──► HidBackend / HidDevice      crates/buzzers/src/hid.rs
                     lights → report bytes
                 ──► EdgeFilter                  edge.rs
                     held button = one press
-                ──► ReceiverEvent channel
-                ──► show pump (app)             app/src-tauri/src/lib.rs, pump.rs, hardware.rs
+                ──► show queue (with commands)  app/src-tauri/src/show_thread.rs
+                ──► show thread (app)           show_thread.rs, pump.rs, hardware.rs
                     learn mode, raw log, UI events, time up
                 ──► execute(Command::Press)     app/src-tauri/src/lib.rs
                     journal, then game state, then lights
@@ -681,11 +702,14 @@ pattern, learn mode will show conflicts and the vendor protocol is needed.
 
 ### 2.6 From press to screen
 
-The show pump thread receives `Press` events in receiver order and
+The show thread receives `Press` events in receiver order and
 (`hardware::handle_event`) calls `execute_at(Command::Press { buzzer, button }, at_ms)` for
 each, one at a time, under the app state lock. `at_ms` is when the receiver
 thread read the report, not when the press is applied, so waiting for the
-lock or for earlier presses' fsync costs a team no points. `execute_at`
+lock or for earlier presses' fsync costs a team no points. A press that
+changes nothing (a second answer, a press after time up; `Game::ignores`)
+stops there: it is neither journaled nor shown, so a burst of them costs no
+disk writes. `execute_at`
 applies the command to a copy of the game, appends it to the journal
 (fsync'd file), swaps the new state in, sends light effects to the driver,
 and only then emits the new state to the windows. If the journal write
@@ -693,9 +717,9 @@ fails, the press is rejected and the screen does not change. A new show's
 session folder, and the journal's entry in it, are synced to disk when the
 show starts, so a power cut cannot lose the journal itself. Commands from
 the windows (`dispatch`: keyboard and on-screen buzzers, the quizmaster's
-buttons) are timed the same way: `timed_lock` reads the time before waiting
-for the lock, so a keyboard press made during a burst of buzzer presses
-counts as on time.
+buttons) are timed the same way: `show_thread::run` reads the time before
+the command joins the show queue, so a keyboard press made during a burst
+of buzzer presses counts as on time.
 
 Resuming (`resume_show`) reads the latest session folder: the one with the
 highest number, as a folder is named by its show's start in milliseconds,
@@ -724,10 +748,13 @@ started, or when it went on after a wrong answer. So a press made while
 another player answered never counts, and one made during the quizmaster's
 pause counts even when it is applied after the resume. The same thread
 closes a question `PRESS_GRACE_MS` (250 ms) after time up, and only after it
-has handled every event already received (`pump::pump_once`), so a press
-that came in on time counts however far behind the thread is; the grace
-covers presses the receiver thread has read but not yet passed on. Later
-presses are refused.
+has handled every event received by that moment (`pump::Pump::once`), so a
+press that came in on time counts however far behind the thread is; the
+grace covers presses the receiver thread has read but not yet passed on.
+Later presses are refused. Each round, the thread reads the clock once,
+handles the events received up to then and ticks at that moment; events
+that come in meanwhile wait for the next round, so a burst of presses never
+holds the clock or time up back.
 
 Fastest-finger order is therefore the receiver's order. When the vendor
 protocol provides press times, `Command::Press` gets an optional

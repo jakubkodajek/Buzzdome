@@ -59,6 +59,8 @@ const theme = params.get("theme");
 const timer = params.get("timer") as TimerDesign | null;
 /** `damaged`: the last show's journal does not read; `failing`: resuming the last show fails. */
 const resume = params.get("resume");
+/** `full`: the running show's journal refuses writes, as on a full disk; `broken`: it cannot be repaired. */
+const saving = params.get("saving");
 
 const NAMES = ["Kvízožrouti", "U Tří Lvů", "Mozkovna", "Hospodští géniové", "Tým Rychlík", "Bezejmenní", "Šprti", "Lvíčata"];
 
@@ -519,6 +521,9 @@ mockIPC(
       case "media_root":
         // Served by Vite from this folder (see the convertFileSrc mock below).
         return "/src/dev/";
+      case "show_not_saved":
+        if (saving === "full") return { code: "showNotSaved", detail: "No space left on device (os error 28)" };
+        return saving === "broken" ? { code: "journalBroken" } : null;
       case "resume_last_session":
         if (resume === "failing") return Promise.reject({ code: "showNotSaved", detail: "No space left on device (os error 28)" });
         return [];

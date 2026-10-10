@@ -3,6 +3,7 @@ import type { Press } from "./Press";
 
 export type PressEvent = { press: Press, 
 /**
- * False when the press was only recorded (learn mode) or no show is running.
+ * False when the press did not play: it was only recorded (learn
+ * mode), no show is running, or it changed nothing (`Game::ignores`).
  */
 used: boolean, };

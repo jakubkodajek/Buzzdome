@@ -145,6 +145,11 @@ impl Session {
 
     /// Makes every later append fail, as after a write that could not be taken back.
     #[cfg(test)]
+    pub fn repair_for_test(&mut self) {
+        self.broken = false;
+    }
+
+    #[cfg(test)]
     pub fn break_for_test(&mut self) {
         self.broken = true;
     }

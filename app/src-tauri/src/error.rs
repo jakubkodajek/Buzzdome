@@ -39,6 +39,10 @@ pub enum AppError {
     /// back, so nothing more is saved until the show is resumed.
     #[error("the show's journal could not be repaired after a failed write")]
     JournalBroken,
+    /// The show thread stopped (a bug), so the show takes no more commands;
+    /// it can be resumed after a restart.
+    #[error("the show stopped; restart the app and resume it")]
+    ShowStopped,
     #[error("the last show cannot be read: {detail}")]
     ShowNotRead { detail: String },
     /// Line `line` of the last show's journal does not read, so the show is
@@ -137,6 +141,11 @@ impl AppError {
 
     pub fn system(error: impl ToString) -> AppError {
         AppError::System { detail: error.to_string() }
+    }
+
+    /// Whether the running show's journal refused a write (A9).
+    pub fn is_not_saved(&self) -> bool {
+        matches!(self, AppError::ShowNotSaved { .. } | AppError::JournalBroken)
     }
 }
 

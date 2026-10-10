@@ -13,6 +13,7 @@
 //!
 //! See `docs/design.md` and `replica/hardware.md`.
 
+pub mod clock;
 pub mod edge;
 pub mod hid;
 #[cfg(feature = "hidapi")]

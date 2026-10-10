@@ -143,6 +143,12 @@ pub enum Command {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Stamped {
+    /// When the command was given or the press received, in milliseconds
+    /// since the Unix epoch on the app's show clock (`buzzers::clock`): it
+    /// reads the wall clock once and counts on from a monotonic clock, so
+    /// within a run it never goes back, whatever the system clock does.
+    /// Across a restart it may: a resumed show restarts a question that was
+    /// in play (`Game::recovery_command`), so no clock spans two runs.
     pub at_ms: u64,
     pub command: Command,
 }
@@ -244,6 +250,14 @@ impl Clock {
     fn takes_press_at(&self, now: u64) -> bool {
         !self.expired(now) && now >= self.presses_from_ms
     }
+}
+
+/// What a press does in the running question (`Game::press_play`).
+enum PressPlay {
+    /// An answer in an everyone-answers question, given `elapsed_ms` into it.
+    Answer { elapsed_ms: u64 },
+    /// The buzz in a fastest-finger question; `clock` is the question's.
+    Buzz { clock: Clock },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -679,27 +693,12 @@ impl Game {
                 return vec![Effect::Lights { lights: vec![(buzzer, Light::Ready)] }];
             }
         }
-        if !self.players[&buzzer].enabled {
-            return vec![];
-        }
-        let Some(mode) = self.question().map(|q| q.mode) else {
-            return vec![];
-        };
-        let Phase::Question(QuestionStep::Running { clock }) = self.phase else {
-            return vec![];
-        };
-        if !clock.takes_press_at(now) {
-            return vec![];
-        }
-        match mode {
-            AnswerMode::Everyone => self.record_answer(buzzer, button, clock.elapsed_ms(now)),
+        match self.press_play(buzzer, button, now) {
+            None => vec![],
+            Some(PressPlay::Answer { elapsed_ms }) => self.record_answer(buzzer, button, elapsed_ms),
             // The first press applied wins. Presses come in the receiver's order and the
             // PC clock never re-ranks them (BZ-5), not even against a keyboard press.
-            AnswerMode::FastestFinger => {
-                if self.locked_out.contains(&buzzer) {
-                    return vec![];
-                }
-                let mut clock = clock;
+            Some(PressPlay::Buzz { mut clock }) => {
                 clock.pause(now);
                 self.phase = Phase::Question(QuestionStep::Buzzed { buzzer, clock });
                 let lights = self
@@ -711,13 +710,45 @@ impl Game {
         }
     }
 
-    fn record_answer(&mut self, buzzer: BuzzerId, button: Button, elapsed_ms: u64) -> Vec<Effect> {
-        let answer_count = self.question().map_or(0, |q| q.answers.len());
-        let valid = button.answer_index().is_some_and(|i| i < answer_count);
-        // The first answer counts; changing it is not allowed.
-        if !valid || self.responses.contains_key(&buzzer) {
-            return vec![];
+    /// What a press of a registered buzzer does in the running question, if
+    /// anything. Decided without changing the show, so `ignores` and `press`
+    /// cannot disagree.
+    fn press_play(&self, buzzer: BuzzerId, button: Button, now: u64) -> Option<PressPlay> {
+        if !self.players.get(&buzzer)?.enabled {
+            return None;
         }
+        let question = self.question()?;
+        let Phase::Question(QuestionStep::Running { clock }) = self.phase else {
+            return None;
+        };
+        if !clock.takes_press_at(now) {
+            return None;
+        }
+        match question.mode {
+            AnswerMode::Everyone => {
+                let valid = button.answer_index().is_some_and(|i| i < question.answers.len());
+                // The first answer counts; changing it is not allowed.
+                (valid && !self.responses.contains_key(&buzzer)).then(|| PressPlay::Answer { elapsed_ms: clock.elapsed_ms(now) })
+            }
+            AnswerMode::FastestFinger => (!self.locked_out.contains(&buzzer)).then_some(PressPlay::Buzz { clock }),
+        }
+    }
+
+    /// Whether applying `stamped` would leave the show as it is: a press that
+    /// does not play, such as a second answer or one after time up. The app
+    /// neither journals nor shows such a press (A8), so a burst of them
+    /// cannot hold up the show. A press of a new buzzer always counts, as it
+    /// registers the buzzer.
+    pub fn ignores(&self, stamped: &Stamped) -> bool {
+        match stamped.command {
+            Command::Press { buzzer, button } => {
+                self.players.contains_key(&buzzer) && self.press_play(buzzer, button, stamped.at_ms).is_none()
+            }
+            _ => false,
+        }
+    }
+
+    fn record_answer(&mut self, buzzer: BuzzerId, button: Button, elapsed_ms: u64) -> Vec<Effect> {
         self.responses.insert(buzzer, Response { button, elapsed_ms });
         let mut effects = vec![Effect::Lights { lights: vec![(buzzer, Light::Locked)] }];
         if self.enabled_buzzers().all(|b| self.responses.contains_key(&b)) {

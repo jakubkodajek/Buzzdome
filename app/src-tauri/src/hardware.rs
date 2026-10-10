@@ -5,10 +5,12 @@
 //! (`Command::Press` through `execute_at`), so they are journaled and replayed
 //! like everything else.
 
+use buzzers::clock::ShowClock;
 use buzzers::hid::{udev_rule, DeviceInfo, DeviceSelector, HidBackend};
 use buzzers::hidapi_backend::HidapiBackend;
 use crate::app_file::{AppFile, SettingsLost};
 use crate::error::{AppError, CmdResult};
+use crate::show_thread::ShowEvent;
 use buzzers::learned::{self, LearnedMapping, Recorder};
 use buzzers::protocol::{format_hex, Protocol};
 use buzzers::receiver::{self, RawReport, ReceiverConfig, ReceiverEvent, ReceiverHandle, ReceiverStatus};
@@ -19,7 +21,7 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 use std::collections::VecDeque;
 use std::path::Path;
-use std::sync::mpsc;
+use std::sync::mpsc::Sender;
 use std::sync::{Arc, Mutex, MutexGuard};
 use tauri::{AppHandle, Emitter, Manager};
 
@@ -69,7 +71,8 @@ pub struct ReceiverInfo {
 #[serde(rename_all = "camelCase")]
 struct PressEvent {
     press: Press,
-    /// False when the press was only recorded (learn mode) or no show is running.
+    /// False when the press did not play: it was only recorded (learn
+    /// mode), no show is running, or it changed nothing (`Game::ignores`).
     used: bool,
 }
 
@@ -84,14 +87,11 @@ pub struct Hardware {
     raw_log: Mutex<VecDeque<RawReport>>,
 }
 
-/// Receiver events waiting for `spawn_event_pump`.
-pub type ReceiverEvents = mpsc::Receiver<ReceiverEvent>;
-
 impl Hardware {
     /// Starts the receiver thread and reconnects to the remembered receiver.
-    /// Its events queue up until `spawn_event_pump` runs, which must be after
-    /// the returned `Hardware` is managed by the app (the pump reads it).
-    pub fn start(app: &AppHandle) -> (Hardware, Option<ReceiverEvents>) {
+    /// Its events, stamped by `clock`, go to the show thread's queue `events`
+    /// (`show_thread`), and wait there until that thread starts.
+    pub fn start(app: &AppHandle, events: Sender<ShowEvent>, clock: ShowClock) -> Hardware {
         let settings_path = app.path().app_data_dir().map(|d| d.join(SETTINGS_FILE)).unwrap_or_else(|_| SETTINGS_FILE.into());
         // Unreadable settings are reported in the Receiver tab: learned buttons are gone until learned again.
         let (settings_file, settings) = AppFile::load::<ReceiverSettings>(settings_path);
@@ -101,7 +101,7 @@ impl Hardware {
         let backend = match HidapiBackend::new() {
             Ok(b) => Arc::new(b),
             Err(e) => {
-                let hardware = Hardware {
+                return Hardware {
                     backend: None,
                     handle: None,
                     init_error: Some(e.to_string()),
@@ -110,7 +110,6 @@ impl Hardware {
                     learn: Mutex::new(None),
                     raw_log: Mutex::new(VecDeque::new()),
                 };
-                return (hardware, None);
             }
         };
 
@@ -118,11 +117,10 @@ impl Hardware {
         let resolver = Arc::new(move |device: &DeviceInfo| -> Box<dyn Protocol> {
             learned::protocol_for(&resolver_settings.lock().unwrap().learned, device)
         });
-        let (tx, rx) = mpsc::channel();
-        let (handle, _join) = receiver::spawn(backend.clone(), resolver, tx, ReceiverConfig::default());
+        let (handle, _join) = receiver::spawn(backend.clone(), resolver, events, ReceiverConfig { clock, ..ReceiverConfig::default() });
         handle.select(remembered);
 
-        let hardware = Hardware {
+        Hardware {
             backend: Some(backend),
             handle: Some(handle),
             init_error: None,
@@ -130,8 +128,7 @@ impl Hardware {
             settings_file,
             learn: Mutex::new(None),
             raw_log: Mutex::new(VecDeque::new()),
-        };
-        (hardware, Some(rx))
+        }
     }
 
     pub fn handle(&self) -> Option<ReceiverHandle> {
@@ -277,15 +274,20 @@ pub fn receiver_select(hw: tauri::State<Hardware>, device: Option<DeviceInfo>) -
     Ok(())
 }
 
+/// Async, as it takes the show state, which a journal write can hold (`off_ui`).
 #[tauri::command]
-pub fn receiver_learn_start(app: AppHandle, hw: tauri::State<Hardware>, buzzer: BuzzerId, button: Button) -> CmdResult<()> {
-    if hw.connected_device().is_none() {
-        return Err(AppError::ReceiverNotConnected);
-    }
-    // The learn lock first, then the show's, as for a new show (`end_learning`).
-    start_learning(&mut hw.learn.lock().unwrap(), crate::show_running(&app), buzzer, button)?;
-    let _ = app.emit("receiver-learn", hw.learn_progress());
-    Ok(())
+pub async fn receiver_learn_start(app: AppHandle, buzzer: BuzzerId, button: Button) -> CmdResult<()> {
+    crate::off_ui(move || {
+        let hw = app.state::<Hardware>();
+        if hw.connected_device().is_none() {
+            return Err(AppError::ReceiverNotConnected);
+        }
+        // The learn lock first, then the show's, as for a new show (`end_learning`).
+        start_learning(&mut hw.learn.lock().unwrap(), crate::show_running(&app), buzzer, button)?;
+        let _ = app.emit("receiver-learn", hw.learn_progress());
+        Ok(())
+    })
+    .await
 }
 
 #[tauri::command]

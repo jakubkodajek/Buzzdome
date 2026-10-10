@@ -8,11 +8,11 @@
 use crate::app_file::{AppFile, SettingsLost};
 use crate::error::{AppError, CmdResult};
 use crate::session::Session;
-use crate::{app_data, apply_journaled, deliver, now_ms, timed_lock, AppState, Inner};
+use crate::{app_data, apply_journaled, deliver, read_show, replace_show, show_thread, Inner};
 use quiz_core::{game::same_name, team_names, Command, Effect, Game, MAX_TEAMS};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter};
 
 const TEAMS_FILE: &str = "teams.json";
 
@@ -45,12 +45,11 @@ pub fn current(inner: &Inner) -> &[String] {
 /// prepared names as its first command. On an error the show runs without
 /// them, as its journal refused them.
 pub fn begin(inner: &mut Inner, game: Game, session: Option<Session>, at_ms: u64) -> CmdResult<Vec<Effect>> {
-    inner.game = Some(game);
-    inner.session = session;
+    replace_show(inner, Some(game), session);
     if inner.teams.is_empty() {
         return Ok(Vec::new());
     }
-    apply_journaled(inner, Command::SetTeams { names: inner.teams.clone() }, at_ms)
+    Ok(apply_journaled(inner, Command::SetTeams { names: inner.teams.clone() }, at_ms)?.unwrap_or_default())
 }
 
 /// Makes `teams` the prepared names: in the running show first (journaled;
@@ -58,7 +57,7 @@ pub fn begin(inner: &mut Inner, game: Game, session: Option<Session>, at_ms: u64
 /// Gives the show's effects and whether the file was written.
 fn change(inner: &mut Inner, teams: Vec<String>, at_ms: u64) -> CmdResult<(Vec<Effect>, CmdResult<()>)> {
     let effects = match inner.game {
-        Some(_) => apply_journaled(inner, Command::SetTeams { names: teams.clone() }, at_ms)?,
+        Some(_) => apply_journaled(inner, Command::SetTeams { names: teams.clone() }, at_ms)?.unwrap_or_default(),
         None => Vec::new(),
     };
     inner.teams = teams;
@@ -93,39 +92,45 @@ pub fn set(app: &AppHandle, inner: &mut Inner, names: Vec<String>, at_ms: u64) -
     change_and_tell(app, inner, teams, at_ms)
 }
 
+// Like the show's commands, these run off the windows' thread, and the
+// edits on the show thread, in order with the show's commands (A7).
+
 /// The team names prepared for shows.
 #[tauri::command]
-pub fn prepared_teams(state: State<AppState>) -> Vec<String> {
-    current(&state.0.lock().unwrap()).to_vec()
+pub async fn prepared_teams(app: AppHandle) -> CmdResult<Vec<String>> {
+    read_show(app, |inner| current(inner).to_vec()).await
 }
 
 /// Why the saved team names could not be read when the app started, if so.
 #[tauri::command]
-pub fn teams_lost(state: State<AppState>) -> Option<SettingsLost> {
-    state.0.lock().unwrap().teams_file.as_ref().and_then(AppFile::lost).cloned()
+pub async fn teams_lost(app: AppHandle) -> CmdResult<Option<SettingsLost>> {
+    read_show(app, |inner| inner.teams_file.as_ref().and_then(AppFile::lost).cloned()).await
 }
 
 /// Adds team names after the prepared ones; names already there are kept once.
 #[tauri::command]
-pub fn add_teams(app: AppHandle, state: State<AppState>, names: Vec<String>) -> CmdResult<()> {
-    let (mut inner, at_ms) = timed_lock(&state.0, now_ms);
-    let teams = added(&inner, &names)?;
-    change_and_tell(&app, &mut inner, teams, at_ms)
+pub async fn add_teams(app: AppHandle, names: Vec<String>) -> CmdResult<()> {
+    show_thread::run(&app, move |app, inner, at_ms| {
+        let teams = added(inner, &names)?;
+        change_and_tell(app, inner, teams, at_ms)
+    })
+    .await
 }
 
 /// Removes a prepared team name. A buzzer paired with it keeps its player's name.
 #[tauri::command]
-pub fn remove_team(app: AppHandle, state: State<AppState>, name: String) -> CmdResult<()> {
-    let (mut inner, at_ms) = timed_lock(&state.0, now_ms);
-    let teams = removed(&inner, &name);
-    change_and_tell(&app, &mut inner, teams, at_ms)
+pub async fn remove_team(app: AppHandle, name: String) -> CmdResult<()> {
+    show_thread::run(&app, move |app, inner, at_ms| {
+        let teams = removed(inner, &name);
+        change_and_tell(app, inner, teams, at_ms)
+    })
+    .await
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::session::SessionMeta;
-    use buzzers::VirtualDriver;
     use quiz_core::Quiz;
     use std::path::Path;
 
@@ -138,7 +143,7 @@ mod tests {
     /// The app's state with no names, keeping them in `path`.
     fn inner(path: &Path) -> Inner {
         let teams_file = Some(load(path.to_path_buf()).1);
-        Inner { game: None, session: None, media_root: None, driver: Box::new(VirtualDriver), teams: Vec::new(), teams_file }
+        Inner { teams_file, ..Inner::new() }
     }
 
     fn session(root: &Path) -> Session {
