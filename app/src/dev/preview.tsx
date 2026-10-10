@@ -9,7 +9,7 @@ import ReactDOM from "react-dom/client";
 import demoQuiz from "../../../samples/demo-quiz.json";
 import builtinThemes from "../bindings/BuiltinThemes.json";
 import { setBodyText } from "../editor/slides";
-import { NO_CONTROLS } from "../host/preview";
+import { answerShares, NO_CONTROLS } from "../host/preview";
 import { MAX_BOARD_COLUMNS, MAX_BOARD_ROWS } from "../bindings/Constants";
 import type {
   Background,
@@ -116,7 +116,7 @@ const STYLE: SlideStyle = {
 const BACKGROUND: Background = { file: "media/landscape.svg", repeat: true, muted: true, sync: false };
 
 function view(partial: Partial<GameView>): GameView {
-  return {
+  const shown: Omit<GameView, "answerShares"> = {
     quizTitle: quiz.title,
     slideIndex: 1,
     slideCount: quiz.slides.length,
@@ -137,6 +137,7 @@ function view(partial: Partial<GameView>): GameView {
     videoPlays: 0,
     ...partial,
   };
+  return { ...shown, answerShares: answerShares(shown.slide) };
 }
 
 const answered: Partial<PlayerView>[] = [

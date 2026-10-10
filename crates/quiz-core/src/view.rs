@@ -25,6 +25,10 @@ pub struct GameView {
     pub answered_count: usize,
     /// Answers per button (A, B, ...), only once the question is closed.
     pub answer_counts: Option<Vec<usize>>,
+    /// The current question's answers in order, each with the share of the
+    /// points it scores (`FULL_SHARE` when fully right), none for a wrong
+    /// one; empty on another slide. Windows mark the right answers from it.
+    pub answer_shares: Vec<Option<u8>>,
     /// Everyone-answers: how the enabled players did, once the question is closed.
     pub results: Option<AnswerResults>,
     pub buzzed: Option<BuzzerId>,
@@ -181,6 +185,7 @@ impl Game {
             enabled_count: enabled.len(),
             answered_count: enabled.iter().filter(|p| p.answered).count(),
             answer_counts,
+            answer_shares: question.map(|q| (0..q.answers.len()).map(|i| q.share_of(i)).collect()).unwrap_or_default(),
             results,
             buzzed: match self.phase() {
                 Phase::Question(QuestionStep::Buzzed { buzzer, .. }) => Some(*buzzer),

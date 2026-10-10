@@ -1,6 +1,6 @@
 use quiz_core::{
     AnswerMode, Button, Command, CorrectAnswer, Cue, Effect, Game, GameError, Light, Phase, Question, QuestionStep, Quiz, Slide,
-    SlideContent, Stamped, VideoClip, team_names, MAX_NAME_CHARS, MAX_TEAMS, PRESS_GRACE_MS,
+    SlideContent, Stamped, VideoClip, team_names, FULL_SHARE, MAX_NAME_CHARS, MAX_TEAMS, PRESS_GRACE_MS,
 };
 use quiz_core::game::FINAL_LAST_STEP;
 use quiz_core::view::AnswerResults;
@@ -201,6 +201,7 @@ fn several_correct_answers_each_score_their_share() {
     show.press(3_000, 3, Button::A); // wrong: -20
     assert_eq!((show.score(1), show.score(2), show.score(3)), (100, 50, -20));
     let view = show.game.view(3_000);
+    assert_eq!(view.answer_shares, [None, Some(FULL_SHARE), None, Some(50)]);
     assert_eq!(view.results, Some(AnswerResults { right: 2, wrong: 1, none: 0 }));
     let effects = show.run(4_000, Command::Next).unwrap();
     assert!(effects.contains(&Effect::Lights {

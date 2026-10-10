@@ -6,7 +6,7 @@ import { FINAL_LAST_STEP, FULL_SHARE, MAX_EVERYONE_ANSWERS } from "../bindings/C
 import { scoreDigits, signed } from "../format";
 import { playerName } from "../i18n";
 import { CheckIcon, CrossIcon, PeopleIcon, QuestionIcon, TrophyIcon } from "../icons";
-import { shareOf, type QuestionPosition, type SlideContext } from "../quiz";
+import type { QuestionPosition, SlideContext } from "../quiz";
 import { SlideMedia, type ScreenMode } from "../slide-media";
 import { styleOf, textStyleCss, type StyledText } from "../theme/slide-style";
 import type { AnswerResults, ClockView, GameView, PlayerView, QuestionSlide, Slide } from "../types";
@@ -223,7 +223,7 @@ function QuestionScreen(props: {
         <div className={question.answers.length > MAX_EVERYONE_ANSWERS ? "answers answers-6" : "answers"}>
           {question.answers.map((answer, i) => {
             const revealed = step === "revealed";
-            const share = shareOf(question, i);
+            const share = view.answerShares[i] ?? null;
             const isCorrect = share !== null;
             return (
               <div

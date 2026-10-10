@@ -1,4 +1,5 @@
 import { FINAL_LAST_STEP } from "../bindings/Constants";
+import { shareOf } from "../quiz";
 import type { Controls, GameView, Phase, Slide } from "../types";
 
 /** A preview is not a show: no command applies. */
@@ -22,6 +23,7 @@ export function previewView(slide: Slide, slideIndex: number, slideCount: number
     enabledCount: 0,
     answeredCount: 0,
     answerCounts: null,
+    answerShares: answerShares(slide),
     results: null,
     buzzed: null,
     leaderboardVisible: false,
@@ -29,6 +31,11 @@ export function previewView(slide: Slide, slideIndex: number, slideCount: number
     onHold: false,
     videoPlays: 0,
   };
+}
+
+/** A slide's answers' shares as written, for a view the core did not make (a show's view has the core's). */
+export function answerShares(slide: Slide | null): (number | null)[] {
+  return slide?.type === "question" ? slide.answers.map((_, i) => shareOf(slide, i)) : [];
 }
 
 function previewPhase(slide: Slide): Phase {

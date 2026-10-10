@@ -25,6 +25,12 @@ answeredCount: number,
  */
 answerCounts: Array<number> | null, 
 /**
+ * The current question's answers in order, each with the share of the
+ * points it scores (`FULL_SHARE` when fully right), none for a wrong
+ * one; empty on another slide. Windows mark the right answers from it.
+ */
+answerShares: Array<number | null>, 
+/**
  * Everyone-answers: how the enabled players did, once the question is closed.
  */
 results: AnswerResults | null, buzzed: number | null, leaderboardVisible: boolean, 
