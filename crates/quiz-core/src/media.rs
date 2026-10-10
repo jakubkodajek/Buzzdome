@@ -346,6 +346,9 @@ impl Playback for VideoClip {
     }
 }
 
+/// The kinds of file a background may be.
+pub(crate) const BACKGROUND_KINDS: &[MediaKind] = &[MediaKind::Image, MediaKind::Video];
+
 /// A picture or video behind a slide's content, in place of the theme's
 /// (spec section 5). The options apply to videos only.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]

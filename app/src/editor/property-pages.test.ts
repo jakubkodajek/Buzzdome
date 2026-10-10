@@ -1,22 +1,26 @@
 import { describe, expect, it } from "vitest";
 import { translator } from "../i18n";
 import { NO_CONTEXT } from "../quiz";
-import type { QuestionSlide, Slide, SlideType } from "../types";
+import type { Category, QuestionSlide, Slide, SlideType } from "../types";
+import { sampleSlide } from "./categories";
 import type { ElementId } from "./elements";
 import type { SlideEditing } from "./properties";
-import { selectionPages } from "./property-pages";
+import { categoryPages, selectionPages, type Page } from "./property-pages";
 import { newSlide } from "./slides";
 
 const t = translator("en");
 
-function editing(slide: Slide): SlideEditing {
-  return { slide, context: NO_CONTEXT, update: () => {}, chooseMedia: () => {}, trimSound: () => {}, trimVideo: () => {}, normalizeSound: () => {} };
+function editing(slide: Slide, categories: Category[] = []): SlideEditing {
+  return { slide, context: NO_CONTEXT, categories, update: () => {}, chooseMedia: () => {}, trimSound: () => {}, trimVideo: () => {}, normalizeSound: () => {} };
 }
 
-/** The pages for the selected slides as page ids, section titles and row ids; the mixed row ids. */
-function outline(slides: Slide[], element: ElementId = "slide") {
-  const { pages, mixed } = selectionPages(t, slides.map(editing), element);
-  return { pages: pages.map((p) => ({ [p.id]: p.sections.map((s) => ({ [s.title]: s.rows.map((r) => r.id) })) })), mixed: [...mixed].sort() };
+/** Pages as page ids, section titles and row ids. */
+const outlined = (pages: Page[]) => pages.map((p) => ({ [p.id]: p.sections.map((s) => ({ [s.title]: s.rows.map((r) => r.id) })) }));
+
+/** The pages for the selected slides of a quiz with `categories`, outlined; the mixed row ids. */
+function outline(slides: Slide[], element: ElementId = "slide", categories: Category[] = []) {
+  const { pages, mixed } = selectionPages(t, slides.map((s) => editing(s, categories)), element);
+  return { pages: outlined(pages), mixed: [...mixed].sort() };
 }
 
 /** The ids of the shown pages. */
@@ -125,5 +129,33 @@ describe("the pages for several slides", () => {
     ]);
     // A final slide plays no picture, so neither does the selection.
     expect(rowIds([slide("billboard"), slide("final")])).not.toContain("picture");
+  });
+});
+
+describe("categories in the pages", () => {
+  const films: Category = { id: "c-1", name: "Films", background: null };
+
+  it("offer a slide of a quiz with categories the one it takes on, first on the design page", () => {
+    const design = (slides: Slide[], categories: Category[]) => outline(slides, "slide", categories).pages.find((p) => "design" in p)?.design;
+    expect(design([question()], [films])?.[0]).toEqual({ sectionCategory: ["category"] });
+    expect(design([question()], [])?.[0]).toEqual({ sectionBackground: ["fill", "background"] });
+    expect(outline([question({ category: "c-1" }), question()], "slide", [films]).mixed).toEqual(["category"]);
+  });
+
+  it("are a category's name, its background and the look of every text, or of the text selected on its sample", () => {
+    const name = { id: "category.name", label: "Name", description: "", control: null };
+    const pages = (element: ElementId) => outlined(categoryPages(t, editing(sampleSlide(films)), name, element));
+    expect(pages("slide")).toEqual([
+      {
+        design: [
+          { sectionCategory: ["category.name"] },
+          { sectionBackground: ["fill", "background"] },
+          { sectionHeadlineLook: look("headline") },
+          { sectionTextLook: look("text") },
+          { sectionAnswersLook: look("answers") },
+        ],
+      },
+    ]);
+    expect(pages("answer-2")).toEqual([{ design: [{ sectionAnswersLook: look("answers") }] }]);
   });
 });

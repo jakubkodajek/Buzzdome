@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { MAX_ANSWERS, MAX_EVERYONE_ANSWERS } from "../bindings/Constants";
-import type { QuestionSlide, Quiz } from "../types";
+import type { Category, QuestionSlide, Quiz } from "../types";
 import {
   addAnswer,
   convertSlide,
+  forgetCategory,
+  formatImported,
+  formatLike,
   freshSlideId,
   fullyCorrect,
   headlinePart,
@@ -320,5 +323,50 @@ describe("slides", () => {
     const fresh = withFreshIds(quiz, imported, () => ids.shift() as string);
     expect(fresh.map((slide) => slide.id)).toEqual(["s-b", "s-c"]);
     expect(fresh[1]).toEqual({ ...imported[1], id: "s-c" });
+  });
+
+  it("keeps a category on copies to insert only while the quiz has it", () => {
+    const quiz: Quiz = { schemaVersion: 1, title: "", theme: null, slides: [], categories: [{ id: "c-1", name: "Films", background: null }] };
+    const copied = [{ ...newSlide("question", "a"), category: "c-1" }, { ...newSlide("question", "b"), category: "c-gone" }];
+    expect(withFreshIds(quiz, copied).map((slide) => slide.category)).toEqual(["c-1", undefined]);
+  });
+});
+
+describe("categories on slides", () => {
+  const red = "#c80000";
+  const films: Category = {
+    id: "c-1",
+    name: "Films",
+    background: { file: "media/loop.mp4", repeat: true, muted: true, sync: false },
+    style: { fill: { from: red, to: red, kind: "vertical" }, headline: { bold: true }, text: { italic: true }, answers: { color: red } },
+  };
+
+  it("formats a slide like a category: its fill, the looks of the texts the slide shows and its background", () => {
+    const own = setPicture(setTextStyle(question(), "headline", { size: 80 }), "media/actor.jpg");
+    const formatted = formatLike(own, films);
+    expect(formatted.style).toEqual({ fill: films.style?.fill, headline: { bold: true }, answers: { color: red } });
+    expect(formatted).toMatchObject({ background: films.background, category: "c-1", picture: "media/actor.jpg" });
+    // A billboard shows a text and no answers.
+    expect(formatLike(newSlide("billboard", "b"), films).style).toEqual({ fill: films.style?.fill, headline: { bold: true }, text: { italic: true } });
+  });
+
+  it("keeps the slide's own background for a category without one, and an imported row's own", () => {
+    const plain: Category = { id: "c-2", name: "Music", background: null };
+    const withBackground = setBackground(question(), "media/stage.jpg");
+    expect(formatLike(withBackground, plain)).toMatchObject({ background: withBackground.background, category: "c-2" });
+    expect(formatLike(withBackground, plain).style).toBeUndefined();
+    const imported = { ...withBackground, category: "c-1" };
+    expect(formatImported(imported, [films])).toMatchObject({ background: withBackground.background, style: { headline: { bold: true } } });
+    expect(formatImported({ ...question(), category: "c-1" }, [films]).background).toBe(films.background);
+    // A row without a category, or naming one gone, stays as imported.
+    expect(formatImported(withBackground, [films])).toBe(withBackground);
+    expect(formatImported({ ...withBackground, category: "c-9" }, [films])).toEqual({ ...withBackground, category: "c-9" });
+  });
+
+  it("forgets a category and keeps its look, and keeps it through a change of type", () => {
+    const formatted = formatLike(question(), films);
+    expect(forgetCategory(formatted)).toEqual({ ...formatted, category: undefined });
+    expect(forgetCategory(question())).toEqual(question());
+    expect(convertSlide(formatted, "billboard").category).toBe("c-1");
   });
 });

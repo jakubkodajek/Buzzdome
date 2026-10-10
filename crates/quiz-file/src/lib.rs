@@ -254,15 +254,20 @@ pub fn problems(quiz: &Quiz, root: &Path) -> Vec<ValidationError> {
         return errors;
     }
     // References are safe paths now, so joining them stays inside `root`.
-    quiz.slides
-        .iter()
-        .flat_map(|slide| slide.media().into_iter().map(move |(file, _)| (slide, file)))
-        .filter(|(_, file)| !root.join(file).is_file())
-        .map(|(slide, file)| ValidationError {
+    let missing = |file: &str| !root.join(file).is_file();
+    let slides = quiz.slides.iter().flat_map(|slide| slide.media().into_iter().map(move |(file, _)| (slide, file))).filter(|(_, file)| missing(file)).map(
+        |(slide, file)| ValidationError {
             slide_id: Some(slide.id.clone()),
             problem: Problem::Media { file: file.to_string(), issue: MediaIssue::Missing },
-        })
-        .collect()
+        },
+    );
+    let categories = quiz.categories.iter().filter_map(|category| Some((category, category.media()?))).filter(|(_, file)| missing(file)).map(
+        |(category, file)| ValidationError {
+            slide_id: None,
+            problem: Problem::CategoryMedia { name: category.name.clone(), file: file.to_string(), issue: MediaIssue::Missing },
+        },
+    );
+    slides.chain(categories).collect()
 }
 
 /// Writes `quiz.json` into the package folder `root` (see `write_atomic`).
@@ -667,7 +672,7 @@ fn remove_dir(path: &Path) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use quiz_core::{AnswerMode, CorrectAnswer, Question, Slide, SlideContent, MAX_EVERYONE_ANSWERS, MAX_POINTS};
+    use quiz_core::{AnswerMode, Background, Category, CorrectAnswer, Question, Slide, SlideContent, MAX_EVERYONE_ANSWERS, MAX_POINTS};
 
     /// The problem `check` reports when the quiz's flag picture is missing.
     fn flag_missing() -> Vec<ValidationError> {
@@ -1048,6 +1053,22 @@ mod tests {
         let found = problems(&quiz_with_picture("media/flag.png"), &temp("problems"));
         assert_eq!(found.len(), 1);
         assert_eq!(found[0].slide_id.as_deref(), Some("intro"));
+    }
+
+    #[test]
+    fn a_categorys_background_is_saved_with_the_quiz_and_reported_when_missing() {
+        let mut quiz = quiz_with_picture("media/flag.png");
+        quiz.categories = vec![Category::new("c1", "Sport")];
+        quiz.categories[0].background = Some(Background::new("media/stadium.mp4"));
+        let media = media_folder("category-media", &[("media/flag.png", b"png"), ("media/stadium.mp4", b"mp4")]);
+        let file = temp("category-out").join("test.quiz");
+        save(&quiz, &media, &file).unwrap();
+        let package = open(&file, &temp("category-cache")).unwrap();
+        assert_eq!(fs::read(package.root.join("media/stadium.mp4")).unwrap(), b"mp4");
+
+        fs::remove_file(package.root.join("media/stadium.mp4")).unwrap();
+        let problem = Problem::CategoryMedia { name: "Sport".into(), file: "media/stadium.mp4".into(), issue: MediaIssue::Missing };
+        assert_eq!(problems(&package.quiz, &package.root), [ValidationError { slide_id: None, problem }]);
     }
 
     #[test]

@@ -6,7 +6,7 @@
 
 use crate::{place_file, write_atomic, Context, FileAction, MediaSource, QuizFileError, Result};
 use calamine::{open_workbook_auto, Data, DataRef, Reader, SheetType, SheetVisible, Sheets, XlsxError};
-use quiz_core::{export_table, import_tables, ImportIssue, ImportNote, Quiz, Slide, Table};
+use quiz_core::{export_table, import_tables, Category, ImportIssue, ImportNote, Quiz, Slide, Table};
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::collections::BTreeMap;
@@ -48,13 +48,14 @@ pub struct SheetExport {
 
 /// Makes slides of the `tables` read from the spreadsheet at `path` (see
 /// `read_tables`) and copies the media they use into the package folder
-/// `root`. Answers with none marked right are shuffled with `seed`. A media
+/// `root`. Answers with none marked right are shuffled with `seed`, and a
+/// row naming one of `categories` gets its id (see `import_tables`). A media
 /// file is looked for where its cell says, relative to the spreadsheet, and
 /// else next to it by its name, so a sheet made on another computer works
 /// with its media beside it. A file taken from outside the sheet's folder
 /// gets a note; a network or device path is never read.
-pub fn import_sheet(path: &Path, tables: &[Table], root: &Path, seed: u64) -> Result<SheetImport> {
-    let imported = import_tables(tables, seed)?;
+pub fn import_sheet(path: &Path, tables: &[Table], categories: &[Category], root: &Path, seed: u64) -> Result<SheetImport> {
+    let imported = import_tables(tables, categories, seed)?;
     let folder = path.parent().unwrap_or(Path::new(""));
     let mut notes = imported.notes;
     // The reference each file got and whether it came from outside the sheet's folder, or why it got none.
@@ -444,7 +445,7 @@ mod tests {
                    Again?;pictures/flag.png;C:\\Users\\Ann\\anthem.mp3;stage.jpg\n";
         fs::write(sheets.join("quiz.csv"), csv).unwrap();
 
-        let imported = import_sheet(&sheets.join("quiz.csv"), &read_tables(&sheets.join("quiz.csv")).unwrap(), &root, 1).unwrap();
+        let imported = import_sheet(&sheets.join("quiz.csv"), &read_tables(&sheets.join("quiz.csv")).unwrap(), &[], &root, 1).unwrap();
         assert_eq!(imported.slides.len(), 2);
         for slide in &imported.slides {
             assert_eq!(slide.picture.as_deref(), Some("media/flag.png"));
@@ -474,7 +475,7 @@ mod tests {
         let csv = format!("Q;P1\nUp?;../private.png\nFull?;{full}\nShare?;{share}\nNear?;\\\\server\\share\\near.png\nNt?;\\??\\UNC\\server\\near.png\n");
         fs::write(sheets.join("quiz.csv"), csv).unwrap();
 
-        let imported = import_sheet(&sheets.join("quiz.csv"), &read_tables(&sheets.join("quiz.csv")).unwrap(), &root, 1).unwrap();
+        let imported = import_sheet(&sheets.join("quiz.csv"), &read_tables(&sheets.join("quiz.csv")).unwrap(), &[], &root, 1).unwrap();
         let pictures: Vec<Option<&str>> = imported.slides.iter().map(|slide| slide.picture.as_deref()).collect();
         assert_eq!(pictures, [Some("media/private.png"), Some("media/private.png"), None, Some("media/near.png"), Some("media/near.png")]);
         let note = |issue, row| ImportNote { issue, places: vec![Place { sheet: String::new(), row }] };
@@ -521,7 +522,7 @@ mod tests {
         assert_eq!(fs::read(out.join("waves.mp4")).unwrap(), b"mine");
 
         let draft = dir.join("draft-2");
-        let back = import_sheet(&out.join("quiz.csv"), &read_tables(&out.join("quiz.csv")).unwrap(), &draft, 1).unwrap();
+        let back = import_sheet(&out.join("quiz.csv"), &read_tables(&out.join("quiz.csv")).unwrap(), &[], &draft, 1).unwrap();
         assert!(back.notes.is_empty(), "{:?}", back.notes);
         assert_eq!(back.slides[1].picture.as_deref(), Some("media/flag-2.png"));
         assert_eq!(back.slides[0].background, Some(Background::new("media/waves-2.mp4")));
@@ -592,7 +593,7 @@ mod tests {
         assert!(matches!(read_tables(&dir.join("notes.xlsx")), Err(QuizFileError::Spreadsheet(_))));
         fs::write(dir.join("songs.csv"), "Title,Artist\nSong,Band\n").unwrap();
         let songs = dir.join("songs.csv");
-        assert!(matches!(import_sheet(&songs, &read_tables(&songs).unwrap(), &dir, 1), Err(QuizFileError::Sheet(_))));
+        assert!(matches!(import_sheet(&songs, &read_tables(&songs).unwrap(), &[], &dir, 1), Err(QuizFileError::Sheet(_))));
         fs::remove_dir_all(&dir).unwrap();
     }
 }

@@ -508,6 +508,29 @@
   pointer-events: none;
 }
 
+/* A category's name under its sample slide (Categories view). */
+.category-name {
+  display: block;
+  overflow: hidden;
+  padding: 2px 2px 0;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 12px;
+}
+
+.thumbnail.selected .category-name {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.category-list ol {
+  padding-left: 8px;
+}
+
+.category-list .add-slide {
+  margin-left: 0;
+}
+
 .thumbnail-problem {
   position: absolute;
   top: -6px;
@@ -875,7 +898,8 @@
 }
 
 .props-control select,
-.props-control textarea {
+.props-control textarea,
+.props-control input[type="text"] {
   width: 100%;
 }
 

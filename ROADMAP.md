@@ -63,7 +63,7 @@ Status keys: `[x]` done, `[~]` in progress, `[ ]` not started.
 - [x] Properties panel features and several selected slides at once (QZ-1): docs gap item 7
 - [x] Colour, gradient and font pickers with per-slide styles (QZ-9): docs gap item 7
 - [x] Several right answers per question, each with a share of the points: quiz format v5
-- [ ] Rest of the manual's new features, P2 (`quizxpress-docs` gap list): categories with a background video (docs gap item 6)
+- [x] Categories with a background video, applied from the Design tab and named by a spreadsheet's `CAT` (QZ-10): docs gap item 6
 - [ ] Show settings: team names, sounds, welcome screen, end-of-question actions
 
 ### M4: Show polish (week 3-4)

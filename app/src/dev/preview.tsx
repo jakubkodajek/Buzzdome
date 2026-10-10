@@ -272,6 +272,15 @@ const editorQuiz: Quiz = {
   slides: quiz.slides.map((slide, i) =>
     i === 1 ? { ...slide, picture: "media/landscape.svg", sound: SONG } : i === 2 ? { ...slide, video: VIDEO } : slide,
   ),
+  // A category with a looping background video, for the Categories view.
+  categories: [
+    {
+      id: "c-films",
+      name: "Filmy",
+      background: { file: "media/clip.webm", repeat: true, muted: true, sync: false },
+      style: { headline: { color: "#ffd54a", bold: true }, answers: { fill: { from: "#3a1c71", to: "#d76d77", kind: "horizontal" } } },
+    },
+  ],
 };
 
 clearMocks();
@@ -291,6 +300,7 @@ const SHEET_IMPORT: SheetImport = {
       sound: null,
       background: null,
       type: "question",
+      category: "c-films",
       text: "Kdo natočil Vetřelce?",
       mode: "everyone",
       answers: ["James Cameron", "Ridley Scott", "David Fincher"],
@@ -302,7 +312,7 @@ const SHEET_IMPORT: SheetImport = {
     },
   ],
   notes: [
-    { issue: { code: "unsupportedColumn", column: "CAT" }, places: [{ sheet: "Kolo 2", row: 1 }] },
+    { issue: { code: "unknownCategory", name: "Hudba" }, places: [{ sheet: "Kolo 2", row: 1 }] },
     { issue: { code: "fileNotFound", file: "ridley.jpg" }, places: [{ sheet: "Kolo 2", row: 3 }] },
   ],
 };

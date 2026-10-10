@@ -11,7 +11,7 @@
 
 use crate::app_data;
 use crate::error::{AppError, CmdResult};
-use quiz_core::{Quiz, ValidationError};
+use quiz_core::{Category, Quiz, ValidationError};
 use quiz_file::{FileAction, SheetExport, SheetImport};
 use serde::{Deserialize, Serialize};
 use std::fs;
@@ -190,16 +190,17 @@ pub async fn editor_add_media(app: AppHandle, lock: State<'_, EditorLock>, path:
 }
 
 /// Reads questions from a spreadsheet and copies the media they use into
-/// the draft; the editor inserts the slides as one change (spec QZ-8).
+/// the draft; the editor inserts the slides as one change (spec QZ-8),
+/// giving a row that names one of the quiz's `categories` its look.
 #[tauri::command]
-pub async fn editor_import_sheet(app: AppHandle, lock: State<'_, EditorLock>, path: String) -> CmdResult<SheetImport> {
+pub async fn editor_import_sheet(app: AppHandle, lock: State<'_, EditorLock>, path: String, categories: Vec<Category>) -> CmdResult<SheetImport> {
     let _one_at_a_time = lock.0.lock().unwrap();
     let (root, _) = current(&app)?;
     let path = Path::new(&path);
     let tables = crate::sheet_reader::read_tables(path)?;
     // Shuffles the answers of a question with none marked right.
     let seed = SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| d.as_nanos() as u64);
-    Ok(quiz_file::import_sheet(path, &tables, &root, seed)?)
+    Ok(quiz_file::import_sheet(path, &tables, &categories, &root, seed)?)
 }
 
 /// The character between the cells of a CSV file. Excel splits a CSV file

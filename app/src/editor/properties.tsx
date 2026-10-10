@@ -19,13 +19,15 @@ import { trackTime } from "../format";
 import type { StringKey, Translate } from "../i18n";
 import { isVideo, mediaKindOf, type MediaKind } from "../media";
 import { isCorrect, plays, shareOf, SLIDE_TYPE_LABEL, type SlideContext } from "../quiz";
-import type { QuestionSlide, Replay, Slide, SlideType, SoundClip, SoundStart, Span, TitledSlide, VideoClip, VideoEffect } from "../types";
+import type { Category, QuestionSlide, Replay, Slide, SlideType, SoundClip, SoundStart, Span, TitledSlide, VideoClip, VideoEffect } from "../types";
 import { AnswerToggles, MediaPicker } from "./controls";
 import type { PropertyRow } from "./property-rows";
 import { rowBuilders } from "./row-builders";
 import {
   answerLimits,
   convertSlide,
+  forgetCategory,
+  formatLike,
   NEW_BACKGROUND,
   NEW_SOUND,
   NEW_VIDEO,
@@ -58,6 +60,8 @@ export interface SlideEditing {
   slide: Slide;
   /** What the slide shows from the rest of the quiz. */
   context: SlideContext;
+  /** The quiz's categories, whose look the slide can take on. */
+  categories: readonly Category[];
   /** Changes the slide; `field` names what is typed into, so quick typing is one undo step. */
   update: (change: (slide: Slide) => Slide, field?: string) => void;
   /** Asks for a media file and applies it to the slide as it is by then. */
@@ -73,7 +77,7 @@ export interface SlideEditing {
 const SLIDE_TYPES: SlideType[] = ["question", "billboard", "explanation", "endOfRound", "final"];
 
 /** Every property row of the slide being edited. */
-export function slideProperties(t: Translate, { slide, context, update, chooseMedia, trimSound, trimVideo, normalizeSound }: SlideEditing) {
+export function slideProperties(t: Translate, { slide, context, categories, update, chooseMedia, trimSound, trimVideo, normalizeSound }: SlideEditing) {
   const question = (change: (q: QuestionSlide) => QuestionSlide, field?: string) => update((s) => (s.type === "question" ? change(s) : s), field);
   const { row, numberRow, flagRow, choiceRow } = rowBuilders(t);
   /** A media file of the slide: choose, remove, and Copy and Paste between slides. */
@@ -184,6 +188,18 @@ export function slideProperties(t: Translate, { slide, context, update, chooseMe
       set: (type) => update((s) => convertSlide(s, type)),
     }),
     id: row("id", "propId", "descId", <code className="props-readonly">{slide.id}</code>),
+    /** The category whose look the slide took on (spec QZ-10); null for a quiz without categories. */
+    category:
+      categories.length === 0
+        ? null
+        : choiceRow("category", "propCategory", "descCategory", {
+            value: slide.category ?? "",
+            options: [["", t("noCategory")], ...categories.map((c): [string, string] => [c.id, c.name])],
+            set: (id) => {
+              const category = categories.find((c) => c.id === id);
+              update((s) => (category ? formatLike(s, category) : forgetCategory(s)));
+            },
+          }),
 
     answerTime: (q: QuestionSlide) =>
       numberRow("answerTime", "propAnswerTime", "descAnswerTime", {

@@ -100,7 +100,9 @@ UI conventions (keep one way of doing each thing):
   rows from `editor/properties.tsx` and, for a slide's look,
   `editor/style-properties.tsx` (panel, ribbon and table view share them),
   each built with the builder for its kind in `editor/row-builders.tsx`;
-  `editor/property-pages.ts` decides which rows a selection shows.
+  `editor/property-pages.ts` decides which rows a selection shows. A
+  category is edited as its sample slide (`editor/categories.ts`), so it
+  uses the slide's rows too.
 
 ## Where things live
 

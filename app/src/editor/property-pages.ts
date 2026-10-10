@@ -8,7 +8,7 @@ import type { Slide } from "../types";
 import { answerIndex, type ElementId } from "./elements";
 import { slideProperties, type SlideEditing, type SlideProperties } from "./properties";
 import { commonRows, type PropertyRow } from "./property-rows";
-import { styledParts, type StyledPart } from "./slides";
+import { STYLED_PARTS, styledParts, type StyledPart } from "./slides";
 import { lookTitle, styledPartOf, styleProperties, type StyleProperties } from "./style-properties";
 
 export type PageId = "gameplay" | "scoring" | "text" | "media" | "design" | "advanced";
@@ -101,10 +101,44 @@ function propertyPages(slide: Slide, element: ElementId, { slide: rows, style }:
   const pictureVideo: Section[] = plays(slide.type).pictureAndVideo ? [{ title: "sectionPictureVideo", rows: [rows.picture, ...videoRows(rows)] }] : [];
   pages.push(
     page("media", [...pictureVideo, { title: "sectionSound", rows: soundRows(rows) }]),
-    page("design", [{ title: "sectionBackground", rows: [style.fill, rows.background, ...rows.backgroundOptions] }, ...styledParts(slide).map(look)]),
+    page("design", [
+      ...(rows.category ? [{ title: "sectionCategory" as const, rows: [rows.category] }] : []),
+      { title: "sectionBackground", rows: [style.fill, rows.background, ...rows.backgroundOptions] },
+      ...styledParts(slide).map(look),
+    ]),
     page("advanced", [{ title: "sectionMetadata", rows: [rows.id] }]),
   );
   return pages;
+}
+
+/** The title of the look a category gives each text: its headline is a question's and another slide's title. */
+const CATEGORY_LOOK_TITLE: Record<StyledPart, StringKey> = {
+  headline: "sectionHeadlineLook",
+  text: "sectionTextLook",
+  answers: "sectionAnswersLook",
+};
+
+/**
+ * The pages for a category in the Categories view, edited as its sample
+ * slide (`editing`): its `name`, the background and the looks it gives
+ * slides; for a text selected on the sample, that text's look.
+ */
+export function categoryPages(t: Translate, editing: SlideEditing, name: PropertyRow, element: ElementId): Page[] {
+  const rows = slideProperties(t, editing);
+  const style = styleProperties(t, editing);
+  const look = (part: StyledPart): Section => ({ title: CATEGORY_LOOK_TITLE[part], rows: style.look(part) });
+  const part = styledPartOf(element);
+  if (part) return [{ id: "design", sections: [look(part)] }];
+  return [
+    {
+      id: "design",
+      sections: [
+        { title: "sectionCategory", rows: [name] },
+        { title: "sectionBackground", rows: [style.fill, rows.background, ...rows.backgroundOptions] },
+        ...STYLED_PARTS.map(look),
+      ],
+    },
+  ];
 }
 
 /** The video's rows: the file, how it plays, which part plays, its effect. */

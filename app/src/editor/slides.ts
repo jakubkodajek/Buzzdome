@@ -23,6 +23,7 @@ import { hasTitle, isCorrect, plays, slideTitle } from "../quiz";
 import type {
   AnswerMode,
   Background,
+  Category,
   CorrectAnswer,
   Gradient,
   Quiz,
@@ -102,13 +103,13 @@ export function setNotes(slide: Slide, notes: string): Slide {
  */
 export function convertSlide(slide: Slide, type: SlideType): Slide {
   if (slide.type === type) return slide;
-  const { id, notes, background } = slide;
+  const { id, notes, background, category } = slide;
   const { pictureAndVideo, clockAndReveal } = plays(type);
   const sound =
     slide.sound && !clockAndReveal ? { ...slide.sound, start: slide.sound.start === "withClock" ? "onSlide" : slide.sound.start, replay: null } : slide.sound;
   const video = slide.video && !clockAndReveal ? { ...slide.video, replay: null, effect: null } : slide.video;
   const media = pictureAndVideo ? { picture: slide.picture, video } : { picture: null, video: null };
-  const converted = setHeadline({ ...newSlide(type, id), notes, ...media, sound, background }, slideTitle(slide));
+  const converted = setHeadline({ ...newSlide(type, id), notes, ...media, sound, background, category }, slideTitle(slide));
   return withStyle(converted, { fill: slide.style?.fill, [headlinePart(type)]: slide.style?.[headlinePart(slide.type)] });
 }
 
@@ -132,26 +133,33 @@ export function styledParts(slide: Slide): StyledPart[] {
   }
 }
 
-const randomId = () => Math.random().toString(36).slice(2, 10);
+export const randomId = () => Math.random().toString(36).slice(2, 10);
 
 /** An id no slide of `quiz` has yet. */
 export function freshSlideId(quiz: Quiz, random: () => string = randomId): string {
   return freshId(new Set(quiz.slides.map((slide) => slide.id)), random);
 }
 
-/** Copies of `slides` with ids no slide of `quiz` has, nor each other, to insert them all (pasting, duplicating, importing). */
+/**
+ * Copies of `slides` to insert them all into `quiz` (pasting, duplicating,
+ * importing): with ids no slide of `quiz` has, nor each other, and without
+ * a category `quiz` does not have (one deleted since they were copied).
+ */
 export function withFreshIds(quiz: Quiz, slides: Slide[], random: () => string = randomId): Slide[] {
   const taken = new Set(quiz.slides.map((slide) => slide.id));
+  const categories = new Set((quiz.categories ?? []).map((category) => category.id));
   return slides.map((slide) => {
     const id = freshId(taken, random);
     taken.add(id);
-    return { ...slide, id };
+    const category = slide.category !== undefined && categories.has(slide.category) ? slide.category : undefined;
+    return { ...slide, id, category };
   });
 }
 
-function freshId(taken: Set<string>, random: () => string): string {
+/** An id of `random` characters after `prefix` that is not `taken`. */
+export function freshId(taken: ReadonlySet<string>, random: () => string, prefix = "s"): string {
   for (;;) {
-    const id = `s-${random()}`;
+    const id = `${prefix}-${random()}`;
     if (!taken.has(id)) return id;
   }
 }
@@ -367,6 +375,9 @@ export function setBackgroundOptions(slide: Slide, options: Partial<Omit<Backgro
 /** The texts of a slide that have a style of their own (`SlideStyle`). */
 export type StyledPart = "headline" | "text" | "answers";
 
+/** Every text a slide style can give a look, as `SlideStyle` lists them. */
+export const STYLED_PARTS: readonly StyledPart[] = ["headline", "text", "answers"];
+
 /** Sets the gradient behind the slide; null shows the theme's background. */
 export function setSlideFill(slide: Slide, fill: Gradient | null): Slide {
   return withStyle(slide, { ...slide.style, fill: fill ?? undefined });
@@ -375,6 +386,32 @@ export function setSlideFill(slide: Slide, fill: Gradient | null): Slide {
 /** Changes the style of one of the slide's texts; a value set to undefined is the theme's again. */
 export function setTextStyle(slide: Slide, part: StyledPart, change: Partial<TextStyle>): Slide {
   return withStyle(slide, { ...slide.style, [part]: { ...slide.style?.[part], ...change } });
+}
+
+/**
+ * Gives the slide the look of `category` and remembers it (spec QZ-10): the
+ * category's fill and the looks of the texts the slide shows in place of
+ * the slide's, and its background when it has one. The slide's picture,
+ * video and sound stay.
+ */
+export function formatLike(slide: Slide, category: Category): Slide {
+  const style = category.style ?? {};
+  const shown = Object.fromEntries(styledParts(slide).map((part) => [part, style[part]]));
+  return { ...withStyle(slide, { fill: style.fill, ...shown }), background: category.background ?? slide.background, category: category.id };
+}
+
+/**
+ * An imported slide with the look of the category its row named (see
+ * `formatLike`); a background of its row's own (`BACKGROUND-VIDEO`) stays.
+ */
+export function formatImported(slide: Slide, categories: readonly Category[]): Slide {
+  const category = categories.find((c) => c.id === slide.category);
+  return category ? { ...formatLike(slide, category), background: slide.background ?? category.background } : slide;
+}
+
+/** Forgets the slide's category; its look stays. */
+export function forgetCategory(slide: Slide): Slide {
+  return slide.category === undefined ? slide : { ...slide, category: undefined };
 }
 
 /** The slide with `style`, keeping only what is set: a slide that looks as its theme has no style. */

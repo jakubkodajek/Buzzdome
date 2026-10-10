@@ -86,6 +86,7 @@ was moved or deleted.
 | `title` | text | Shown on the welcome screen and in the Director. |
 | `theme` | text or `null` | Id of the look of the screens (`builtin.classic`, `builtin.studio`, `builtin.night`, `builtin.showtime`, `builtin.neon`, later installed themes, spec 5.2). Missing, `null` or not installed: the default look, so a quiz never fails to open or play over it. A value that is not a theme id (dot-separated parts of lower-case letters, digits, `-` and `_`, at least two parts, at most 100 bytes) reads as missing. |
 | `slides` | list | The show in order. |
+| `categories` | list | Named looks the slides can take on; see [Categories](#categories). Left out when there are none. |
 
 ### Every slide
 
@@ -124,6 +125,7 @@ was moved or deleted.
 | `background.muted` | yes/no | `true` | Video only: plays without its sound. |
 | `background.sync` | yes/no | `false` | Video only: pauses while a player answers, while the clock is paused and once the question is over. |
 | `style` | object | none | Colours, gradients and fonts over the theme's; see [Slide style](#slide-style). |
+| `category` | text | none | Id of the category whose look the slide took on (see [Categories](#categories)). An id no category of the quiz has is dropped when the file opens, and listed under File › Info. |
 
 A **span** is `{ "fromMs": number, "toMs": number or null }`, milliseconds
 from the start of the file; `toMs: null` runs to the end of the file, so the
@@ -153,12 +155,12 @@ slide with nothing set has no `style`.
 | `fill` | gradient | Behind the slide when it has no `background`; over the theme's background. |
 | `headline` | text style | The question of a question slide, the title of another. |
 | `text` | text style | The text of a `billboard` or an `explanation`. |
+| `answers` | text style | Every answer of a question alike. |
 
 When the editor changes a slide's type, the headline (the question, the
 title, or an explanation's text) keeps its look in the part the new type
 styles it with (`text` on an explanation, `headline` elsewhere), and the
 `fill` stays; the texts that start anew start with the theme's look.
-| `answers` | text style | Every answer of a question alike. |
 
 A **text style** has:
 
@@ -235,6 +237,35 @@ quizmaster's "go to the final ranking" goes to the last `final` slide.
 | --- | --- | --- | --- |
 | `title` | text | `""` | Shown above the podium and the ranking; empty shows the default title. |
 
+### Categories
+
+```json
+"categories": [
+  { "id": "c-films", "name": "Films",
+    "background": { "file": "media/film-loop.mp4", "repeat": true, "muted": true, "sync": false },
+    "style": { "headline": { "color": "#FFCC00", "bold": true } } }
+]
+```
+
+A category (spec QZ-10) is a look the slides copy: applying it gives a
+slide the category's `style` fill and the looks of the texts that slide
+shows, and the category's `background` when it has one; the slide's
+picture, video and sound stay, and its `category` remembers the id.
+Changing the category later changes no slide until it is applied again,
+and deleting it leaves its slides' look as it is. A background video is
+stored once in `media/`, however many slides use it.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `id` | text | Unique among the quiz's categories. |
+| `name` | text | 1 to 40 characters, unique regardless of case and of spaces around it, as a spreadsheet's `CAT` names it. |
+| `background` | object or `null` | As a slide's `background`. |
+| `style` | object | As a slide's `style`, read the same way (a value that does not read is left out and listed). Left out when nothing is set. |
+
+A duplicate id, a missing, too long or taken name, and a background that
+is not a picture or video in `media/` are problems that keep the quiz from
+being played.
+
 ## Spreadsheets
 
 Questions can also be written in a spreadsheet and imported into a quiz
@@ -266,6 +297,7 @@ billboard with the sheet's name opens. Each row with a value is a slide.
 | `ANSWER-TIME` | Seconds, 0 to 3600. |
 | `POINTS-START`, `POINTS-END` | Points, falling from the start to the end value when both are given. |
 | `PENALTY-POINTS-START` | Points taken for a wrong answer (either sign). |
+| `CAT` | The name of one of the quiz's categories, in any case: the slide takes on its look, but keeps a `BACKGROUND` or `BACKGROUND-VIDEO` of its own. A name the quiz has no category of is listed in the notes, so categories are made in the quiz before importing. Export writes the name of the slide's category. |
 
 **Prefixes.** `{Q}` question, `{T}` test question (imported with no
 points), `{B}` billboard (the first line is its title, the rest its text),
@@ -311,7 +343,7 @@ the points (the sheet has no column for a share). A cell a spreadsheet program w
 (starting with `=`, `@`, a tab, or `+` or `-` not followed by just a
 number) gets a leading `'`, so it opens as text; the import takes it off.
 
-**What is left out.** The reference's other columns (`CAT`, `P2`-`P6`,
+**What is left out.** The reference's other columns (`P2`-`P6`,
 `A7`, `A8`, the bonus and evaluation columns, `STYLE`, `TRANSITION`...),
 its other slide types (imported as billboards with their text), a second
 language after `||`, a picture next to a video, media a slide cannot have
@@ -337,7 +369,7 @@ the rows it came up in.
 | 2 | Adds `explanation` slides and, later within version 2, the quiz `theme` (builds from before that drop it when they save). Version 1 files read as version 2 unchanged. |
 | 3 | `background` becomes an object with video options; sounds get `part`, `gainDb` and `replay`. Version 1 and 2 files read as version 3 unchanged. Later within version 3, a `fastestFinger` question may have up to 6 answers instead of 4; earlier builds list such a question as a problem. |
 | 4 | Adds `final` slides. Version 1 to 3 files read as version 4 unchanged. Later within version 4, videos get `introPauseMs`, `volume`, `speed`, `part`, `effect` and `replay`; a video without them plays as before. Later still, slides get `style`; builds before it show the theme's look and drop the style when they save. |
-| 5 | A question's `correct` becomes a list of right answers, each with a `share` of the points. A version 1 to 4 question with `correct: n` reads as `[{ "answer": n, "share": 100 }]`, and one without as `[]`. |
+| 5 | A question's `correct` becomes a list of right answers, each with a `share` of the points. A version 1 to 4 question with `correct: n` reads as `[{ "answer": n, "share": 100 }]`, and one without as `[]`. Later within version 5, the quiz gets `categories` and slides `category`; builds before it drop them when they save, and the slides keep the look they took on. |
 
 Fields may be added within a version as long as older files keep their
 meaning; readers ignore fields they do not know. Anything else (a new slide

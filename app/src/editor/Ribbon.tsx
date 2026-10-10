@@ -3,10 +3,12 @@ import { useApp } from "../app-context";
 import type { StringKey } from "../i18n";
 import type { Slide } from "../types";
 import { tooltip, type Action, type Actions } from "./actions";
+import { CategoryGallery, type CategoryGalleryProps } from "./CategoryGallery";
 import { MixedContext } from "./controls";
 import type { ElementId } from "./elements";
 import type { PropertyRow, SlideProperties } from "./properties";
 import { ThemeGallery } from "./ThemeGallery";
+import type { CategoryActions } from "./useCategories";
 import type { ThemeChoice } from "./useThemeChoice";
 
 /** The ids of the properties the selected slides differ in. */
@@ -43,10 +45,14 @@ interface RibbonProps {
   /** The ids of the properties the selected slides differ in. */
   mixed: ReadonlySet<string>;
   themeChoice: ThemeChoice;
+  /** The Categories view's actions, which take the place of the slides' on HOME and INSERT; null in the other views. */
+  categoryView: CategoryActions | null;
+  /** The categories DESIGN offers to apply to the selected slides. */
+  categoryGallery: CategoryGalleryProps;
 }
 
 /** The tabbed command area at the top, as in an office suite. */
-export function Ribbon({ tab, onTab, actions, onGallery, slide, element, properties, mixed, themeChoice }: RibbonProps) {
+export function Ribbon({ tab, onTab, actions, onGallery, slide, element, properties, mixed, themeChoice, categoryView, categoryGallery }: RibbonProps) {
   const { t } = useApp();
   const mediaTab = MEDIA_TAB[element];
   const shown = tab === "media" && !mediaTab ? "home" : tab;
@@ -77,7 +83,18 @@ export function Ribbon({ tab, onTab, actions, onGallery, slide, element, propert
           )}
         </nav>
         <div className="ribbon-body" role="tabpanel">
-          {shown === "home" && (
+          {shown === "home" && categoryView && (
+            <>
+              <Group title="groupCategories">
+                <BigButton action={categoryView.newCategory} />
+                <Stack actions={[categoryView.deleteCategory, categoryView.reapplyCategory]} />
+              </Group>
+              <Group title="groupMedia">
+                <BigButton action={categoryView.categoryBackground} />
+              </Group>
+            </>
+          )}
+          {shown === "home" && !categoryView && (
             <>
               <Group title="groupClipboard">
                 <BigButton action={actions.paste} />
@@ -98,7 +115,17 @@ export function Ribbon({ tab, onTab, actions, onGallery, slide, element, propert
               </Group>
             </>
           )}
-          {shown === "insert" && (
+          {shown === "insert" && categoryView && (
+            <>
+              <Group title="groupCategories">
+                <BigButton action={categoryView.newCategory} />
+              </Group>
+              <Group title="groupMedia">
+                <BigButton action={categoryView.categoryBackground} />
+              </Group>
+            </>
+          )}
+          {shown === "insert" && !categoryView && (
             <>
               <Group title="groupSlides">{newSlide}</Group>
               <Group title="groupMedia">
@@ -110,16 +137,25 @@ export function Ribbon({ tab, onTab, actions, onGallery, slide, element, propert
             </>
           )}
           {shown === "design" && (
-            <Group title="groupThemes">
-              <ThemeGallery choice={themeChoice} />
-            </Group>
+            <>
+              <Group title="groupThemes">
+                <ThemeGallery choice={themeChoice} />
+              </Group>
+              {!categoryView && (
+                <Group title="groupCategories">
+                  <CategoryGallery {...categoryGallery} />
+                  <Stack actions={[actions.saveAsCategory, { ...actions.categories, label: t("editCategories"), checked: undefined }]} />
+                </Group>
+              )}
+            </>
           )}
-          {shown === "question" && <QuestionTab slide={slide} properties={properties} />}
+          {shown === "question" && (categoryView ? <p className="ribbon-note">{t("categoryViewNote")}</p> : <QuestionTab slide={slide} properties={properties} />)}
           {shown === "view" && (
             <>
               <Group title="groupViews">
                 <BigButton action={actions.graphical} />
                 <BigButton action={actions.table} />
+                <BigButton action={actions.categories} />
               </Group>
               <Group title="groupPanels">
                 <BigButton action={actions.properties} />

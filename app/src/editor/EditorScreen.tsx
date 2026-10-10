@@ -5,6 +5,7 @@ import {
   ArrowUpIcon,
   BackgroundIcon,
   BackIcon,
+  CategoryIcon,
   CopyIcon,
   CutIcon,
   EditIcon,
@@ -33,8 +34,9 @@ import { isCorrect, NO_CONTEXT, plays, slideContexts } from "../quiz";
 import { ThemeContext } from "../theme/context";
 import { useLatest } from "../hooks";
 import type { EditorDraft, Slide } from "../types";
-import { tooltip, useActionKeys, type Action, type Actions } from "./actions";
+import { tooltip, useActionKeys, type Action, type ActionId, type Actions } from "./actions";
 import { Backstage, type BackstagePage } from "./Backstage";
+import { CategoryView } from "./CategoryView";
 import { ContextMenu } from "./controls";
 import { DesignArea, NotesBox } from "./DesignArea";
 import { EditSlideDialog } from "./EditSlideDialog";
@@ -42,7 +44,7 @@ import { isUnsaved, needsInfo, type OpenQuiz } from "./editor-state";
 import { answerIndex, hasElement, type ElementId } from "./elements";
 import { LayoutGallery } from "./LayoutGallery";
 import { DEFAULT_LAYOUT, slideFromLayout, type SlideLayout } from "./layouts";
-import { PropertiesPanel } from "./PropertiesPanel";
+import { categoryHeader, PropertiesPanel, selectionHeader } from "./PropertiesPanel";
 import { slideProperties, type SlideEditing } from "./properties";
 import { selectionPages } from "./property-pages";
 import type { CopiedValue } from "./property-rows";
@@ -62,6 +64,7 @@ import {
 } from "./selection";
 import { Ribbon, type RibbonTab } from "./Ribbon";
 import {
+  formatImported,
   freshSlideId,
   setBackground,
   setNotes,
@@ -73,6 +76,7 @@ import {
 } from "./slides";
 import { TableView } from "./TableView";
 import { Thumbnails } from "./Thumbnails";
+import { useCategories } from "./useCategories";
 import { useQuizEditor, type QuizEditor } from "./useQuizEditor";
 import { useSheetActions } from "./useSheetActions";
 import { useSoundTools } from "./useSoundTools";
@@ -95,7 +99,13 @@ function isMedia(element: ElementId): element is MediaElement {
 /** Where the layout gallery opens when no button opened it. */
 const GALLERY_AT = { x: 180, y: 120 };
 
-type MenuTarget = { kind: "thumbnail" } | { kind: "list" } | { kind: "canvas"; element: ElementId };
+type MenuTarget = { kind: "thumbnail" } | { kind: "list" } | { kind: "canvas"; element: ElementId } | { kind: "category" };
+
+/** A category's properties are its own: nothing is mixed. */
+const NOTHING_MIXED: ReadonlySet<string> = new Set();
+
+/** What the keys do in the Categories view besides the categories' own actions: nothing that changes a slide unseen. */
+const CATEGORY_VIEW_KEYS: ActionId[] = ["file", "newQuiz", "openQuiz", "save", "saveAs", "closeQuiz", "undo", "redo", "findProperty", "testRun"];
 
 /**
  * The quiz editor in the Director's window, laid out like an office
@@ -115,7 +125,7 @@ function Studio({ editor, open, onExit }: { editor: QuizEditor; open: OpenQuiz |
   const [selection, setSelection] = useState<Selection>(FIRST);
   const [tab, setTab] = useState<RibbonTab>("home");
   const [backstage, setBackstage] = useState<BackstagePage | null>(null);
-  const [view, setView] = useState<"graphical" | "table">("graphical");
+  const [view, setView] = useState<"graphical" | "table" | "categories">("graphical");
   const [panel, setPanel] = useState(true);
   const [notesShown, setNotesShown] = useState(true);
   const [clipboard, setClipboard] = useState<Slide[] | null>(null);
@@ -135,6 +145,7 @@ function Studio({ editor, open, onExit }: { editor: QuizEditor; open: OpenQuiz |
     editor.edit({ type: "setTheme", theme: id }),
   );
   const slides = quiz?.slides ?? [];
+  const categories = useCategories(editor, quiz);
   const contexts = useMemo(() => (quiz ? slideContexts(quiz) : []), [quiz]);
   const found = selection.id === null ? -1 : slides.findIndex((s) => s.id === selection.id);
   const index = slides.length === 0 ? -1 : found >= 0 ? found : Math.min(selection.index, slides.length - 1);
@@ -173,6 +184,7 @@ function Studio({ editor, open, onExit }: { editor: QuizEditor; open: OpenQuiz |
   const editingFor = (s: Slide, ids: string[] = [s.id]): SlideEditing => ({
     slide: s,
     context: contexts[slides.indexOf(s)] ?? NO_CONTEXT,
+    categories: categories.categories,
     update: (change, field) => updateSlides(ids, change, field),
     chooseMedia: (kinds, apply) => chooseMedia(ids, kinds, apply),
     trimSound: () => sound.trim(s.id, "sound"),
@@ -219,7 +231,8 @@ function Studio({ editor, open, onExit }: { editor: QuizEditor; open: OpenQuiz |
   const sheet = useSheetActions(editor, quiz, (imported) => {
     const { quiz: now, index: at } = latest.current;
     if (!now) return 0;
-    insert(withFreshIds(now, imported), at + 1);
+    // A row that names a category is formatted like it.
+    insert(withFreshIds(now, imported).map((s) => formatImported(s, now.categories ?? [])), at + 1);
     setBackstage(null);
     return imported.length;
   });
@@ -380,12 +393,23 @@ function Studio({ editor, open, onExit }: { editor: QuizEditor; open: OpenQuiz |
     },
     graphical: { label: t("viewGraphical"), icon: <SlideIcon />, checked: view === "graphical", run: () => setView("graphical") },
     table: { label: t("viewTable"), icon: <TableIcon />, checked: view === "table", run: () => setView("table") },
+    categories: { label: t("viewCategories"), icon: <CategoryIcon />, checked: view === "categories", run: () => setView("categories") },
+    saveAsCategory: {
+      label: t("saveAsCategory"),
+      icon: <CategoryIcon />,
+      disabled: noSlide,
+      run: () => {
+        if (!slide) return;
+        categories.create(slide);
+        setView("categories");
+      },
+    },
     properties: { label: t("viewProperties"), icon: <PanelIcon />, checked: panel, run: () => setPanel(!panel) },
     findProperty: {
       label: t("findProperty"),
       keys: ["Ctrl+F"],
       inFields: true,
-      disabled: noSlide || view !== "graphical",
+      disabled: view === "table" || (view === "graphical" ? noSlide : !categories.category),
       run: () => {
         setPanel(true);
         setFindProperty(true);
@@ -404,13 +428,21 @@ function Studio({ editor, open, onExit }: { editor: QuizEditor; open: OpenQuiz |
     label: "",
     keys: ["Escape"],
     inFields: true,
-    run: () => (open && backstage ? setBackstage(null) : selectPart("slide")),
+    run: () => (open && backstage ? setBackstage(null) : view === "categories" ? categories.selectPart("slide") : selectPart("slide")),
   };
-  const all = [...Object.values(actions), escape];
+  const all =
+    view === "categories"
+      ? [...CATEGORY_VIEW_KEYS.map((id) => actions[id]), ...Object.values(categories.actions), escape]
+      : [...Object.values(actions), escape];
   // Dialogs and menus take the keys; the FILE page only the ones that work anywhere.
   useActionKeys(dialog || menu || gallery || sound.windowOpen || sheet.windowOpen ? [] : backstageShown ? all.filter((a) => a.inFields) : all);
 
   const menuItems = (target: MenuTarget, x: number, y: number): (Action | "separator")[] => {
+    if (target.kind === "category") {
+      const c = categories.actions;
+      const background = [c.toggleCategoryBackground, c.removeCategoryBackground].filter((action) => !action.disabled);
+      return [c.newCategory, c.deleteCategory, c.reapplyCategory, "separator", c.categoryBackground, ...background];
+    }
     const galleryHere = { ...actions.newSlide, run: () => setGallery({ x, y }) };
     if (target.kind === "list") return [actions.paste, galleryHere];
     if (target.kind === "thumbnail") {
@@ -457,6 +489,18 @@ function Studio({ editor, open, onExit }: { editor: QuizEditor; open: OpenQuiz |
   const editings = selectedSlides.map((s) => editingFor(s, selected));
   const shared = selectionPages(t, editings, element);
   const properties = editings.length > 0 ? slideProperties(t, editings[0]) : null;
+  // The panel shows the category in the Categories view, else the selected slides.
+  const panelContent =
+    view === "categories"
+      ? categories.category && { header: categoryHeader(t, categories.category, categories.slideCount), pages: categories.pages, mixed: NOTHING_MIXED }
+      : slide && { header: selectionHeader(t, slide, selectedSlides.length, element), pages: shared.pages, mixed: shared.mixed };
+  const status =
+    view === "categories"
+      ? categories.category
+        ? t("categoryNumber", { n: categories.index + 1, total: categories.categories.length })
+        : t("noCategories")
+      : `${slide ? t("slide", { n: index + 1, total: slides.length }) : t("noSlideSelected")}${several ? ` · ${t("slidesSelected", { n: selected.length })}` : ""}`;
+  const sameCategory = slide?.category !== undefined && selectedSlides.every((s) => s.category === slide.category);
 
   return (
     <MediaRootContext value={open?.mediaRoot ?? null}>
@@ -513,12 +557,18 @@ function Studio({ editor, open, onExit }: { editor: QuizEditor; open: OpenQuiz |
                   actions={actions}
                   onGallery={(button) => setGallery({ x: button.left, y: button.bottom })}
                   slide={slide}
-                  element={element}
+                  element={view === "categories" ? categories.element : element}
                   properties={properties}
                   mixed={shared.mixed}
                   themeChoice={themeChoice}
+                  categoryView={view === "categories" ? categories.actions : null}
+                  categoryGallery={{
+                    categories: categories.categories,
+                    current: sameCategory ? (slide?.category ?? null) : null,
+                    apply: (id) => editor.edit({ type: "applyCategory", id, slides: selected }),
+                  }}
                 />
-                <div className={panel && slide ? "studio-main with-panel" : "studio-main"}>
+                <div className={panel && panelContent ? "studio-main with-panel" : "studio-main"}>
                   {view === "graphical" ? (
                     <>
                       <Thumbnails
@@ -566,18 +616,16 @@ function Studio({ editor, open, onExit }: { editor: QuizEditor; open: OpenQuiz |
                         {notesShown && slide && <NotesBox notes={slide.notes} onChange={(text) => updateSlide(slide.id, (s) => setNotes(s, text), "notes")} />}
                       </div>
                     </>
-                  ) : (
+                  ) : view === "table" ? (
                     <div className="studio-center table-center">
                       <TableView quiz={quiz} selected={index} onSelect={(i) => select(i)} onOpen={(i) => setDialog({ id: slides[i].id, focus: "slide" })} editingFor={editingFor} />
                     </div>
+                  ) : (
+                    <CategoryView quiz={quiz} categories={categories} canvasTheme={canvasTheme} onMenu={(e) => openMenu(e, { kind: "category" })} />
                   )}
-                  {panel && slide && (
+                  {panel && panelContent && (
                     <PropertiesPanel
-                      slide={slide}
-                      count={selectedSlides.length}
-                      element={element}
-                      pages={shared.pages}
-                      mixed={shared.mixed}
+                      {...panelContent}
                       copied={copiedValue}
                       onCopy={setCopiedValue}
                       focusSearch={findProperty}
@@ -590,10 +638,7 @@ function Studio({ editor, open, onExit }: { editor: QuizEditor; open: OpenQuiz |
           )}
 
           <footer className="studio-status">
-            <span>
-              {slide ? t("slide", { n: index + 1, total: slides.length }) : t("noSlideSelected")}
-              {several && ` · ${t("slidesSelected", { n: selected.length })}`}
-            </span>
+            <span>{status}</span>
             {open && (
               <button type="button" className={open.problems.length > 0 ? "status-problems bad" : "status-problems"} onClick={() => setBackstage("info")}>
                 {open.problems.length > 0 ? `⚠ ${t("problems", { n: open.problems.length })}` : `✓ ${t("readyToPlay")}`}
@@ -602,7 +647,7 @@ function Studio({ editor, open, onExit }: { editor: QuizEditor; open: OpenQuiz |
             {unsaved && <span>{t("unsaved")}</span>}
             <span className="spacer" />
             {open?.sourcePath && <span className="status-path">{open.sourcePath}</span>}
-            {[actions.graphical, actions.table].map((action) => (
+            {[actions.graphical, actions.table, actions.categories].map((action) => (
               <button key={action.label} type="button" className="status-view" title={action.label} aria-pressed={action.checked} onClick={action.run}>
                 {action.icon}
               </button>

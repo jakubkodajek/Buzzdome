@@ -19,10 +19,15 @@ export function listSeparator(lang: Lang): ListSeparator {
   return lang === "cs" ? "semicolon" : "comma";
 }
 
-/** `quiz` with sample slides in the quizmaster's language, whose export is the import template. */
+/**
+ * `quiz` with sample slides in the quizmaster's language, whose export is
+ * the import template. The sample questions take on the quiz's first
+ * category, if it has one, so its CAT column shows how one is named.
+ */
 export function templateQuiz(t: Translate, quiz: Quiz): Quiz {
   const question: QuestionSlide = {
     ...(newSlide("question", "t-question") as QuestionSlide),
+    category: quiz.categories?.[0]?.id,
     text: t("templateQuestion"),
     answers: [t("templateAnswer1"), t("templateAnswer2"), t("templateAnswer3"), t("templateAnswer4")],
     correct: [fullyCorrect(0)],

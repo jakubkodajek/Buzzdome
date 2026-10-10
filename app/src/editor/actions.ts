@@ -59,6 +59,8 @@ export type ActionId =
   | "removeBackground"
   | "graphical"
   | "table"
+  | "categories"
+  | "saveAsCategory"
   | "properties"
   | "findProperty"
   | "importSheet"

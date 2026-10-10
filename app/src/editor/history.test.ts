@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import type { Quiz } from "../types";
-import { historyReducer, MERGE_MS, startHistory, UNDO_LIMIT, type History } from "./history";
-import { newSlide } from "./slides";
+import type { Category, Quiz } from "../types";
+import { applyEdit, historyReducer, MERGE_MS, startHistory, UNDO_LIMIT, type History } from "./history";
+import { newSlide, setTextStyle } from "./slides";
 
 const quiz: Quiz = {
   schemaVersion: 1,
@@ -89,5 +89,37 @@ describe("history", () => {
     }
     expect(h.present.slides).toHaveLength(3 + UNDO_LIMIT + 10);
     expect(h.past).toHaveLength(UNDO_LIMIT);
+  });
+});
+
+describe("category edits", () => {
+  const films: Category = { id: "c-1", name: "Films", background: null, style: { headline: { bold: true } } };
+  const music: Category = { id: "c-2", name: "Music", background: null };
+  const withCategories = applyEdit(applyEdit(quiz, { type: "insertCategory", index: 0, category: films }), { type: "insertCategory", index: 1, category: music });
+
+  it("inserts, updates and removes categories", () => {
+    expect(withCategories.categories).toEqual([films, music]);
+    expect(applyEdit(quiz, { type: "insertCategory", index: 1, category: films })).toBe(quiz);
+    const renamed = applyEdit(withCategories, { type: "updateCategory", id: "c-2", update: (c) => ({ ...c, name: "Songs" }) });
+    expect(renamed.categories?.map((c) => c.name)).toEqual(["Films", "Songs"]);
+    expect(applyEdit(withCategories, { type: "updateCategory", id: "c-2", update: (c) => c })).toBe(withCategories);
+    expect(applyEdit(withCategories, { type: "updateCategory", id: "gone", update: (c) => ({ ...c, name: "x" }) })).toBe(withCategories);
+    expect(applyEdit(withCategories, { type: "removeCategory", id: "gone" })).toBe(withCategories);
+  });
+
+  it("gives slides a category's look as it is when the edit lands, and unlinks them from one removed", () => {
+    const bolder = applyEdit(withCategories, { type: "updateCategory", id: "c-1", update: (c) => ({ ...c, style: { headline: { bold: true, size: 90 } } }) });
+    const applied = applyEdit(bolder, { type: "applyCategory", id: "c-1", slides: ["b", "c"] });
+    expect(applied.slides.map((s) => s.category)).toEqual([undefined, "c-1", "c-1"]);
+    expect(applied.slides[1].style).toEqual({ headline: { bold: true, size: 90 } });
+    expect(applyEdit(bolder, { type: "applyCategory", id: "gone", slides: ["b"] })).toBe(bolder);
+    expect(applyEdit(bolder, { type: "applyCategory", id: "c-1", slides: ["gone"] })).toBe(bolder);
+
+    const restyled = applyEdit(applied, { type: "updateSlide", id: "c", update: (s) => setTextStyle(s, "headline", { italic: true }) });
+    const removed = applyEdit(restyled, { type: "removeCategory", id: "c-1" });
+    expect(removed.categories).toEqual([music]);
+    expect(removed.slides.map((s) => s.category)).toEqual([undefined, undefined, undefined]);
+    // Their look stays.
+    expect(removed.slides[2].style).toEqual(restyled.slides[2].style);
   });
 });

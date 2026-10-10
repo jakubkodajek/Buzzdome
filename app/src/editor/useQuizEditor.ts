@@ -180,7 +180,8 @@ export function useQuizEditor(onTestRun: () => void): QuizEditor {
     importSheet: () =>
       attempt(async () => {
         const path = await openDialog({ multiple: false, filters: [{ name: t("sheetFiles"), extensions: SHEET_EXTENSIONS }] });
-        return typeof path === "string" ? await draftQueue.run(() => api.editorImportSheet(path)) : false;
+        const categories = open?.history.present.categories ?? [];
+        return typeof path === "string" ? await draftQueue.run(() => api.editorImportSheet(path, categories)) : false;
       }),
     exportSheet: (quiz, name) =>
       attempt(async () => {

@@ -379,6 +379,16 @@ export function PaletteIcon(props: IconProps) {
   );
 }
 
+/** A tag: a category of slides. */
+export function CategoryIcon(props: IconProps) {
+  return (
+    <LineIcon {...props}>
+      <path d="M3.5 12.2V4.5a1 1 0 0 1 1-1h7.7l8.3 8.3a1 1 0 0 1 0 1.4l-7 7a1 1 0 0 1-1.4 0z" />
+      <path d="M8 8h.01" />
+    </LineIcon>
+  );
+}
+
 export function AddIcon(props: IconProps) {
   return (
     <LineIcon {...props}>

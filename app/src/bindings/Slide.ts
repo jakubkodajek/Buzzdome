@@ -21,4 +21,8 @@ background: Background | null,
 /**
  * Colours, gradients and fonts over the theme's.
  */
-style?: SlideStyle, } & ({ "type": "billboard", title: string, text: string, } | { "type": "question" } & Question | { "type": "explanation", text: string, } | { "type": "endOfRound", title: string, } | { "type": "final", title: string, });
+style?: SlideStyle, 
+/**
+ * Id of the category whose look the slide last took on (`Quiz::categories`).
+ */
+category?: string, } & ({ "type": "billboard", title: string, text: string, } | { "type": "question" } & Question | { "type": "explanation", text: string, } | { "type": "endOfRound", title: string, } | { "type": "final", title: string, });

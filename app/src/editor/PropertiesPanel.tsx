@@ -14,7 +14,7 @@ import type { StringKey, Translate } from "../i18n";
 import { CrossIcon, GamepadIcon, PaletteIcon, PictureIcon, QuestionIcon, SlideIcon, SoundIcon, StarIcon, VideoIcon } from "../icons";
 import { readPreference, writePreference } from "../preferences";
 import { SLIDE_TYPE_LABEL, slideTitle } from "../quiz";
-import type { Slide } from "../types";
+import type { Category, Slide } from "../types";
 import { keyCombo, type Action } from "./actions";
 import { ContextMenu, MixedContext } from "./controls";
 import { answerIndex, type ElementId } from "./elements";
@@ -74,12 +74,8 @@ function useStoredFlag(key: string, initial: boolean): [boolean, (on: boolean) =
 }
 
 interface PropertiesPanelProps {
-  /** The slide on the canvas. */
-  slide: Slide;
-  /** How many slides are selected; a change goes to all of them. */
-  count: number;
-  /** The part of the slide selected on the canvas (one slide only). */
-  element: ElementId;
+  /** What the properties are of (`selectionHeader`, `categoryHeader`). */
+  header: PanelHeader;
   /** The selection's pages and the properties the slides differ in (`selectionPages`). */
   pages: Page[];
   mixed: ReadonlySet<string>;
@@ -92,15 +88,15 @@ interface PropertiesPanelProps {
 }
 
 /**
- * The properties of the selected slides, or of the part of a slide selected
- * on the canvas, in pages of foldable sections (spec QZ-1). For several
+ * The properties of the selected slides, of the part of a slide selected
+ * on the canvas, or of a category, in pages of foldable sections (spec QZ-1). For several
  * slides it shows what they all have, values they differ in as Mixed, and a
  * change sets every one. The search looks through all pages; a number
  * changes by dragging its name; a right click resets, copies or pastes a
  * value; the … menu folds, shows descriptions, darkens the panel or lists
  * every property by name.
  */
-export function PropertiesPanel({ slide, count, element, pages, mixed, copied, onCopy, focusSearch, onSearchFocused }: PropertiesPanelProps) {
+export function PropertiesPanel({ header, pages, mixed, copied, onCopy, focusSearch, onSearchFocused }: PropertiesPanelProps) {
   const { t, lang } = useApp();
   const search = useRef<HTMLInputElement>(null);
   useEffect(() => {
@@ -122,7 +118,6 @@ export function PropertiesPanel({ slide, count, element, pages, mixed, copied, o
   const [dark, setDark] = useStoredFlag(DARK_KEY, false);
   const [classic, setClassic] = useStoredFlag(CLASSIC_KEY, false);
   const page = pages.find((p) => p.id === pageId) ?? pages[0];
-  const header = count > 1 ? severalHeader(t, count) : panelHeader(t, slide, element);
   const needle = query.trim();
 
   const matches = (row: PropertyRow) => rowMatches(row, needle) || (row.parts ?? []).some((part) => rowMatches(part, needle));
@@ -411,18 +406,16 @@ const ELEMENT_TITLE: Record<"question" | "title" | "text", StringKey> = {
   text: "slideTextField",
 };
 
-interface Header {
+export interface PanelHeader {
   icon: ReactNode;
   title: string;
   chip?: string;
   subtitle: string;
 }
 
-function severalHeader(t: Translate, count: number): Header {
-  return { icon: <SlideIcon />, title: t("slidesSelected", { n: count }), subtitle: t("commonPropertiesHint") };
-}
-
-function panelHeader(t: Translate, slide: Slide, element: ElementId): Header {
+/** The header for the selected slides: the slide on the canvas, or the part of it selected (`element`), or how many are selected. */
+export function selectionHeader(t: Translate, slide: Slide, count: number, element: ElementId): PanelHeader {
+  if (count > 1) return { icon: <SlideIcon />, title: t("slidesSelected", { n: count }), subtitle: t("commonPropertiesHint") };
   const answer = answerIndex(element);
   if (answer !== null && slide.type === "question") {
     return { icon: <QuestionIcon />, title: t("elementAnswer", { letter: ANSWER_LETTERS[answer] }), subtitle: slide.answers[answer] ?? "" };
@@ -446,4 +439,9 @@ function panelHeader(t: Translate, slide: Slide, element: ElementId): Header {
         subtitle: slideTitle(slide),
       };
   }
+}
+
+/** The header for a category in the Categories view, with how many slides took it on. */
+export function categoryHeader(t: Translate, category: Category, slides: number): PanelHeader {
+  return { icon: <PaletteIcon />, title: category.name || t("unnamedCategory"), chip: t("categorySlides", { n: slides }), subtitle: t("categoryHint") };
 }

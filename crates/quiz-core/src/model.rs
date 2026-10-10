@@ -1,9 +1,10 @@
 //! Quiz file model (schema version 5). This is the contract with quiz authors:
 //! change it only with a schema version bump and a migration.
 
+use crate::category::{category_problems, Category};
 use crate::media::{
-    check_reference, Background, MediaIssue, MediaKind, Playback, SoundClip, SoundStart, VideoClip, MAX_GAIN_DB, MAX_INTRO_PAUSE_MS,
-    MAX_REPLAY_DELAY_MS, MAX_VIDEO_SPEED, MIN_GAIN_DB, MIN_VIDEO_SPEED,
+    check_reference, Background, MediaIssue, MediaKind, Playback, SoundClip, SoundStart, VideoClip, BACKGROUND_KINDS, MAX_GAIN_DB,
+    MAX_INTRO_PAUSE_MS, MAX_REPLAY_DELAY_MS, MAX_VIDEO_SPEED, MIN_GAIN_DB, MIN_VIDEO_SPEED,
 };
 use crate::style::SlideStyle;
 use crate::theme::is_theme_id;
@@ -17,8 +18,9 @@ use ts_rs::TS;
 /// answers instead of 4 (builds before refuse more). 4: adds final slides;
 /// later within 4, video options and slide styles (builds before drop them
 /// when they save). 5: a question may have several correct answers, each
-/// with its share of the points (`correct` becomes a list). Older files
-/// read unchanged (`migrate`).
+/// with its share of the points (`correct` becomes a list); later within 5,
+/// categories (builds before drop them when they save). Older files read
+/// unchanged (`migrate`).
 pub const SCHEMA_VERSION: u32 = 5;
 
 /// Most answers a question can show (A-F, as many as the reference app's
@@ -54,6 +56,9 @@ pub struct Quiz {
     pub theme: Option<String>,
     #[serde(default)]
     pub slides: Vec<Slide>,
+    /// Named looks the slides can take on (spec QZ-10).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub categories: Vec<Category>,
 }
 
 /// A `theme` that is not a theme id (see `is_theme_id`) can name no
@@ -86,6 +91,10 @@ pub struct Slide {
     #[serde(default, skip_serializing_if = "SlideStyle::is_empty", with = "crate::style::lenient_or_default")]
     #[ts(as = "SlideStyle")]
     pub style: SlideStyle,
+    /// Id of the category whose look the slide last took on (`Quiz::categories`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub category: Option<String>,
     #[serde(flatten)]
     pub content: SlideContent,
 }
@@ -93,7 +102,17 @@ pub struct Slide {
 impl Slide {
     /// A slide without notes or media.
     pub fn new(id: impl Into<String>, content: SlideContent) -> Slide {
-        Slide { id: id.into(), notes: String::new(), picture: None, video: None, sound: None, background: None, style: SlideStyle::default(), content }
+        Slide {
+            id: id.into(),
+            notes: String::new(),
+            picture: None,
+            video: None,
+            sound: None,
+            background: None,
+            style: SlideStyle::default(),
+            category: None,
+            content,
+        }
     }
 
     /// Drops what the slide's type cannot play (`SlideType::plays`) and
@@ -135,7 +154,6 @@ impl Slide {
         const IMAGE: &[MediaKind] = &[MediaKind::Image];
         const AUDIO: &[MediaKind] = &[MediaKind::Audio];
         const VIDEO: &[MediaKind] = &[MediaKind::Video];
-        const BACKGROUND: &[MediaKind] = &[MediaKind::Image, MediaKind::Video];
         let mut media = Vec::new();
         if let Some(file) = &self.picture {
             media.push((file.as_str(), IMAGE));
@@ -147,7 +165,7 @@ impl Slide {
             media.push((sound.file.as_str(), AUDIO));
         }
         if let Some(background) = &self.background {
-            media.push((background.file.as_str(), BACKGROUND));
+            media.push((background.file.as_str(), BACKGROUND_KINDS));
         }
         media
     }
@@ -478,6 +496,23 @@ pub enum Problem {
     /// `path` names the value as the file has it, such as `style.headline.color`.
     #[error("the style value {path} cannot be read")]
     StyleUnread { path: String },
+    /// Only in `ReadQuiz::dropped`, as `StyleUnread` for a category's style.
+    #[error("the style value {path} of category {name} cannot be read")]
+    CategoryStyleUnread { name: String, path: String },
+    /// On a slide whose category the quiz does not have; in
+    /// `ReadQuiz::dropped`, the slide read without it.
+    #[error("the slide's category is not in the quiz")]
+    UnknownCategory,
+    #[error("two categories have the same id")]
+    DuplicateCategoryId { name: String },
+    #[error("a category has no name")]
+    CategoryUnnamed,
+    #[error("a category name has more than {max} characters")]
+    CategoryNameTooLong { max: usize },
+    #[error("two categories are called {name}")]
+    CategoryNameTaken { name: String },
+    #[error("media file {file} of category {name}: {issue}")]
+    CategoryMedia { name: String, file: String, issue: MediaIssue },
     #[error("more than {max} answers")]
     TooManyAnswers { max: usize },
     #[error("an everyone-answers question needs at least {min} answers")]
@@ -561,7 +596,7 @@ fn migrate(quiz: &mut serde_json::Value, version: u64) {
 impl Quiz {
     /// A quiz of the current schema version in the default look.
     pub fn new(title: impl Into<String>, slides: Vec<Slide>) -> Quiz {
-        Quiz { schema_version: SCHEMA_VERSION, title: title.into(), theme: None, slides }
+        Quiz { schema_version: SCHEMA_VERSION, title: title.into(), theme: None, slides, categories: Vec::new() }
     }
 
     /// Reads a quiz, leaving out what it cannot keep (see `ReadQuiz::dropped`).
@@ -586,6 +621,13 @@ impl Quiz {
         // The slides read in the file's order, one for each.
         let written = value.get("slides").and_then(Value::as_array).map_or(&[][..], Vec::as_slice);
         let mut dropped = Vec::new();
+        let written_categories = value.get("categories").and_then(Value::as_array).map_or(&[][..], Vec::as_slice);
+        for (category, written) in quiz.categories.iter().zip(written_categories) {
+            for path in category.style.left_out(written.get("style").unwrap_or(&Value::Null)) {
+                dropped.push(ValidationError { slide_id: None, problem: Problem::CategoryStyleUnread { name: category.name.clone(), path } });
+            }
+        }
+        let categories: HashSet<&str> = quiz.categories.iter().map(|category| category.id.as_str()).collect();
         for (slide, written) in quiz.slides.iter_mut().zip(written) {
             let id = slide.id.clone();
             let mut found = |problem: Problem| dropped.push(ValidationError { slide_id: Some(id.clone()), problem });
@@ -593,6 +635,11 @@ impl Quiz {
                 found(Problem::StyleUnread { path });
             }
             slide.drop_unplayable(&mut found);
+            // A category that is gone gives the slide nothing to apply again; the look stays.
+            if slide.category.as_deref().is_some_and(|category| !categories.contains(category)) {
+                slide.category = None;
+                found(Problem::UnknownCategory);
+            }
         }
         Ok(ReadQuiz { quiz, dropped })
     }
@@ -603,26 +650,37 @@ impl Quiz {
         self.slides.iter().rposition(|slide| matches!(slide.content, SlideContent::Final { .. }))
     }
 
-    /// Every media file the quiz uses, each once.
+    /// Every media file the quiz uses, its categories' too, each once.
     pub fn media_files(&self) -> BTreeSet<&str> {
-        self.slides.iter().flat_map(|s| s.media()).map(|(file, _)| file).collect()
+        let slides = self.slides.iter().flat_map(|s| s.media()).map(|(file, _)| file);
+        slides.chain(self.categories.iter().filter_map(Category::media)).collect()
     }
 
     /// Points the media references in `renamed` (old reference to new one)
-    /// to their new names.
+    /// to their new names, in the slides and the categories.
     pub fn rename_media(&mut self, renamed: &BTreeMap<String, String>) {
         for slide in &mut self.slides {
             slide.rename_media(renamed);
+        }
+        for file in self.categories.iter_mut().filter_map(Category::media_mut) {
+            if let Some(new) = renamed.get(file.as_str()) {
+                file.clone_from(new);
+            }
         }
     }
 
     pub fn validate(&self) -> Result<(), Vec<ValidationError>> {
         let mut errors = Vec::new();
+        category_problems(&self.categories, &mut |problem| errors.push(ValidationError { slide_id: None, problem }));
+        let categories: HashSet<&str> = self.categories.iter().map(|category| category.id.as_str()).collect();
         let mut ids = HashSet::new();
         for slide in &self.slides {
             let mut found = |problem: Problem| errors.push(ValidationError { slide_id: Some(slide.id.clone()), problem });
             if !ids.insert(slide.id.as_str()) {
                 found(Problem::DuplicateSlideId);
+            }
+            if slide.category.as_deref().is_some_and(|category| !categories.contains(category)) {
+                found(Problem::UnknownCategory);
             }
             for (file, kinds) in slide.media() {
                 if let Err(issue) = check_reference(file, kinds) {
@@ -1193,5 +1251,66 @@ mod tests {
         let issue = MediaIssue::WrongType { expected: vec![MediaKind::Image, MediaKind::Video] };
         let problem = Problem::Media { file: "media/stage.txt".into(), issue };
         assert_eq!(broken.validate().unwrap_err(), [ValidationError { slide_id: Some("q1".into()), problem }]);
+    }
+
+    #[test]
+    fn keeps_categories_and_the_slides_that_took_one_on() {
+        let json = r##"{"schemaVersion": 5, "title": "x",
+            "categories": [{"id": "c1", "name": "Science", "background": {"file": "media/lab.mp4", "sync": true},
+                            "style": {"fill": {"from": "#000000", "to": "#102030", "kind": "radial"}, "answers": {"bold": false}}}],
+            "slides": [{"id": "a", "type": "billboard", "title": "", "category": "c1"}, {"id": "b", "type": "billboard", "title": ""}]}"##;
+        let ReadQuiz { quiz, dropped } = Quiz::read_json(json).unwrap();
+        assert_eq!(dropped, []);
+        assert_eq!(quiz.validate(), Ok(()));
+        let science = &quiz.categories[0];
+        assert_eq!((science.name.as_str(), science.background.as_ref().map(|b| (b.file.as_str(), b.repeat, b.sync))), ("Science", Some(("media/lab.mp4", true, true))));
+        assert_eq!(science.style.answers.bold, Some(false));
+        assert_eq!((quiz.slides[0].category.as_deref(), quiz.slides[1].category.as_deref()), (Some("c1"), None));
+        // A slide without a category and a quiz without categories write none.
+        let written = serde_json::to_value(&quiz).unwrap();
+        assert!(written["slides"][1].get("category").is_none());
+        assert!(serde_json::to_value(Quiz::new("y", vec![])).unwrap().get("categories").is_none());
+        assert_eq!(Quiz::from_json(&written.to_string()).unwrap(), quiz);
+    }
+
+    #[test]
+    fn says_what_reading_left_out_of_categories_and_slides_that_name_one_gone() {
+        let json = r##"{"schemaVersion": 5, "title": "x",
+            "categories": [{"id": "c1", "name": "Music", "style": {"headline": {"color": "blue", "bold": true}}}],
+            "slides": [{"id": "a", "type": "billboard", "title": "", "category": "gone"}]}"##;
+        let ReadQuiz { quiz, dropped } = Quiz::read_json(json).unwrap();
+        let unread = Problem::CategoryStyleUnread { name: "Music".into(), path: "style.headline.color".into() };
+        assert_eq!(
+            dropped,
+            [ValidationError { slide_id: None, problem: unread }, ValidationError { slide_id: Some("a".into()), problem: Problem::UnknownCategory }]
+        );
+        assert_eq!(quiz.slides[0].category, None);
+        assert_eq!(Quiz::read_json(&serde_json::to_string(&quiz).unwrap()).unwrap().dropped, []);
+    }
+
+    #[test]
+    fn checks_categories_and_the_categories_slides_name() {
+        let mut quiz = Quiz::new("x", vec![Slide::new("a", SlideContent::Billboard { title: String::new(), text: String::new() })]);
+        quiz.categories = vec![Category::new("c1", "Sport"), Category::new("c2", "sport")];
+        quiz.categories[0].background = Some(Background::new("media/stage.txt"));
+        quiz.slides[0].category = Some("c3".into());
+        let issue = MediaIssue::WrongType { expected: vec![MediaKind::Image, MediaKind::Video] };
+        assert_eq!(
+            quiz.validate().unwrap_err(),
+            [
+                ValidationError { slide_id: None, problem: Problem::CategoryMedia { name: "Sport".into(), file: "media/stage.txt".into(), issue } },
+                ValidationError { slide_id: None, problem: Problem::CategoryNameTaken { name: "sport".into() } },
+                ValidationError { slide_id: Some("a".into()), problem: Problem::UnknownCategory },
+            ]
+        );
+    }
+
+    #[test]
+    fn a_categorys_background_is_among_the_quizs_media_and_renamed_with_them() {
+        let mut quiz = Quiz::new("x", vec![]);
+        quiz.categories = vec![Category::new("c1", "Sport"), Category::new("c2", "Film")];
+        quiz.categories[0].background = Some(Background::new("media/a?.mp4"));
+        quiz.rename_media(&[("media/a?.mp4".to_string(), "media/a_.mp4".to_string())].into_iter().collect());
+        assert_eq!(quiz.media_files().into_iter().collect::<Vec<_>>(), ["media/a_.mp4"]);
     }
 }

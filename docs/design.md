@@ -221,7 +221,8 @@ table view toggle. It edits a quiz; it never touches a running show.
   the thumbnails, in the status bar and on the File page. A file that opens
   with problems opens on that list.
 - **State.** `history.ts` is a pure undo history of `Edit`s (set title,
-  set theme, insert, update, remove, move a slide). Typing into one field of one slide
+  set theme, insert, update, remove, move a slide; insert, update, remove
+  and apply a category). Typing into one field of one slide
   merges into one undo step through a merge key (`<slide id>:<field>`).
   `editor-state.ts` reduces that history together with what the backend
   reported (loaded, saved, checked). The selection (`selection.ts`) is the
@@ -287,6 +288,19 @@ table view toggle. It edits a quiz; it never touches a running show.
   `#1E4A6B`), and pasting takes text from another program where the row
   can read it (`pasteText`), else the value copied in the panel. A hex box
   is a text field, so pasting into it works on every platform.
+- **Categories.** A category (spec QZ-10, `quiz_core::category`) is a
+  background and a style that applying copies onto slides (`formatLike` in
+  `slides.ts`), so drawing a slide never looks one up and the rule of what
+  a category gives lives in one place; the core only checks categories and
+  resolves a spreadsheet's `CAT` name to an id. The Categories view
+  (`useCategories.tsx`, `CategoryView.tsx`) edits a category as its sample
+  slide (`sampleSlide` in `categories.ts`): the panel's background and look
+  rows run on that slide and `withLook` takes its background and style
+  back into the category, so they are the slide's own rows. In that view
+  the keys act only on categories and quiz-wide commands, never on slides
+  out of sight. Applying from the Design tab or the Category row, and
+  Apply again, are `applyCategory` edits, which take the category as it is
+  when the edit lands.
 - **Rendering.** The canvas, the thumbnails (editor and Director) and the
   projector all draw a slide with `SlideScreen` inside a 16:9 `Stage`
   (`app/src/host/`). The editor and thumbnails feed it `previewView`, a
@@ -308,7 +322,8 @@ table view toggle. It edits a quiz; it never touches a running show.
   (pure; a seed from the shell shuffles unmarked answers); `import_sheet`
   then finds each media file, copies it in with `import_media` and drops a
   missing one with a note. The editor gives the slides fresh ids
-  (`withFreshIds`), inserts them after the current slide as one batch,
+  (`withFreshIds`), formats a row that named a category like it
+  (`formatImported`), inserts them after the current slide as one batch,
   selects them as a paste does and shows the notes
   (`ImportNotesDialog`, worded by `messages.ts`). Export is the reverse:
   `export_table` builds the rows and `export_sheet` places each media file

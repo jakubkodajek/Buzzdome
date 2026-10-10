@@ -95,7 +95,7 @@ export function errorText(t: Translate, error: unknown): string {
 }
 
 /** Problems worded with their own parameters, see `problemText`. */
-type ProblemApart = "media" | "volume" | "partEmpty" | "replayNotOnQuestion";
+type ProblemApart = "media" | "categoryMedia" | "volume" | "partEmpty" | "replayNotOnQuestion";
 
 const PROBLEM_KEYS: Record<Exclude<Problem["code"], ProblemApart>, StringKey> = {
   duplicateSlideId: "problemDuplicateSlideId",
@@ -108,6 +108,12 @@ const PROBLEM_KEYS: Record<Exclude<Problem["code"], ProblemApart>, StringKey> = 
   effectNotOnQuestion: "problemEffectNotOnQuestion",
   mediaOnRanking: "problemMediaOnRanking",
   styleUnread: "problemStyleUnread",
+  categoryStyleUnread: "problemCategoryStyleUnread",
+  unknownCategory: "problemUnknownCategory",
+  duplicateCategoryId: "problemDuplicateCategoryId",
+  categoryUnnamed: "problemCategoryUnnamed",
+  categoryNameTooLong: "problemCategoryNameTooLong",
+  categoryNameTaken: "problemCategoryNameTaken",
   tooManyAnswers: "problemTooManyAnswers",
   tooFewAnswers: "problemTooFewAnswers",
   noCorrectAnswer: "problemNoCorrectAnswer",
@@ -137,6 +143,8 @@ export function problemText(t: Translate, problem: Problem): string {
   switch (problem.code) {
     case "media":
       return t("problemMedia", { file: problem.file, issue: mediaIssueText(t, problem.issue) });
+    case "categoryMedia":
+      return t("problemCategoryMedia", { name: problem.name, file: problem.file, issue: mediaIssueText(t, problem.issue) });
     // Rules a sound and a video share, said of the one that breaks them.
     case "volume":
       return t(problem.media === "audio" ? "problemSoundVolume" : "problemVideoVolume");
@@ -196,6 +204,7 @@ const IMPORT_ISSUE_KEYS: Record<ImportIssue["code"], StringKey> = {
   qualifierNotSupported: "importQualifierNotSupported",
   notEveryone: "importNotEveryone",
   answersLeftOut: "importAnswersLeftOut",
+  unknownCategory: "importUnknownCategory",
   pictureAndVideo: "importPictureAndVideo",
   twoBackgrounds: "importTwoBackgrounds",
   mediaOnRanking: "importMediaOnRanking",

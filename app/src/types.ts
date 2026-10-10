@@ -9,6 +9,7 @@ export type { BoardChange } from "./bindings/BoardChange";
 export type { Background } from "./bindings/Background";
 export type { AnswerResults } from "./bindings/AnswerResults";
 export type { Button } from "./bindings/Button";
+export type { Category } from "./bindings/Category";
 export type { ClockView } from "./bindings/ClockView";
 export type { Color } from "./bindings/Color";
 export type { ColorKey } from "./bindings/ColorKey";

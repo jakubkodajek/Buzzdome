@@ -8,6 +8,7 @@ use crate::media::{
     Background, MediaKind, Replay, SoundClip, SoundStart, Span, VideoClip, VideoEffect, MAX_GAIN_DB, MAX_INTRO_PAUSE_MS, MAX_REPLAY_DELAY_MS,
     MAX_VIDEO_SPEED, MIN_GAIN_DB, MIN_VIDEO_SPEED, NEW_VIDEO_INTRO_PAUSE_MS,
 };
+use crate::category::{category_named, Category};
 use crate::model::{AnswerMode, CorrectAnswer, Question, Quiz, Slide, SlideContent, DEFAULT_POINTS, DEFAULT_TIME_LIMIT_S, MAX_ANSWERS, MAX_POINTS, MAX_TIME_LIMIT_S};
 use serde::{Deserialize, Serialize};
 use std::ops::RangeInclusive;
@@ -65,6 +66,8 @@ pub enum ImportIssue {
     NotEveryone { answers: usize },
     /// Answers on a slide that is no question: left out.
     AnswersLeftOut,
+    /// A category (`CAT`) the quiz does not have: the slide keeps the theme's look.
+    UnknownCategory { name: String },
     /// A picture and a video: the picture is left out, as a slide shows one.
     PictureAndVideo,
     /// A background picture and a background video: the picture is left out.
@@ -147,11 +150,12 @@ enum Field {
     PointsStart,
     PointsEnd,
     Penalty,
+    Category,
 }
 
 /// The columns this app reads and writes, in the order an export writes
 /// them, under the reference template's headings.
-const FIELDS: [(&str, Field); 17] = [
+const FIELDS: [(&str, Field); 18] = [
     ("Q", Field::Text),
     ("A1", Field::Answer(0)),
     ("A2", Field::Answer(1)),
@@ -169,11 +173,11 @@ const FIELDS: [(&str, Field); 17] = [
     ("POINTS-START", Field::PointsStart),
     ("POINTS-END", Field::PointsEnd),
     ("PENALTY-POINTS-START", Field::Penalty),
+    ("CAT", Field::Category),
 ];
 
 /// Columns of the reference template this app has no place for.
-const UNSUPPORTED: [&str; 21] = [
-    "CAT",
+const UNSUPPORTED: [&str; 20] = [
     "P2",
     "P3",
     "P4",
@@ -267,13 +271,15 @@ fn sheet_video(file: impl Into<String>) -> VideoClip {
 
 /// Reads the slides of `tables`, in order. With more than one sheet of
 /// questions, each sheet is a round that a billboard with its name opens.
-/// Answers whose correct one is not marked are shuffled with `seed`.
-/// Slides get the ids `import-1`, `import-2`... for the editor to replace.
-pub fn import_tables(tables: &[Table], seed: u64) -> Result<ImportedRows, SheetError> {
+/// Answers whose correct one is not marked are shuffled with `seed`. A row
+/// that names one of `categories` (`CAT`) gets its id; the editor gives the
+/// slide its look. Slides get the ids `import-1`, `import-2`... for the
+/// editor to replace.
+pub fn import_tables(tables: &[Table], categories: &[Category], seed: u64) -> Result<ImportedRows, SheetError> {
     let mut shuffler = Shuffler(seed);
     let mut notes = Notes::default();
     let sheets: Vec<(&Table, Vec<(Place, Slide)>)> =
-        tables.iter().filter_map(|table| Some((table, import_table(table, &mut shuffler, &mut notes)?))).collect();
+        tables.iter().filter_map(|table| Some((table, import_table(table, categories, &mut shuffler, &mut notes)?))).collect();
     if sheets.is_empty() {
         return Err(SheetError::NoQuestionColumn);
     }
@@ -294,7 +300,7 @@ pub fn import_tables(tables: &[Table], seed: u64) -> Result<ImportedRows, SheetE
 
 /// The slides of one sheet; none when it has no `Q` column. An empty sheet
 /// is skipped without a note: workbooks often have some.
-fn import_table(table: &Table, shuffler: &mut Shuffler, notes: &mut Notes) -> Option<Vec<(Place, Slide)>> {
+fn import_table(table: &Table, categories: &[Category], shuffler: &mut Shuffler, notes: &mut Notes) -> Option<Vec<(Place, Slide)>> {
     let has_value = |row: &Vec<String>, column: usize| row.get(column).is_some_and(|cell| !cell.trim().is_empty());
     let (headings, data) = table.rows.split_first()?;
     let at_headings = Place { sheet: table.name.clone(), row: table.first_row };
@@ -329,7 +335,7 @@ fn import_table(table: &Table, shuffler: &mut Shuffler, notes: &mut Notes) -> Op
     }
     let slides = data.iter().zip(table.first_row + 1..).filter_map(|(cells, row)| {
         let place = Place { sheet: table.name.clone(), row };
-        let slide = import_row(&Row::new(&columns, cells), &place, shuffler, notes)?;
+        let slide = import_row(&Row::new(&columns, cells), categories, &place, shuffler, notes)?;
         Some((place, slide))
     });
     Some(slides.collect())
@@ -430,7 +436,7 @@ fn answer(cell: &str, place: &Place, notes: &mut Notes) -> Option<(String, bool)
     Some((text.trim().to_string(), correct))
 }
 
-fn import_row(row: &Row, place: &Place, shuffler: &mut Shuffler, notes: &mut Notes) -> Option<Slide> {
+fn import_row(row: &Row, categories: &[Category], place: &Place, shuffler: &mut Shuffler, notes: &mut Notes) -> Option<Slide> {
     if row.0.iter().all(|cell| cell.is_empty()) {
         return None;
     }
@@ -461,6 +467,13 @@ fn import_row(row: &Row, place: &Place, shuffler: &mut Shuffler, notes: &mut Not
     };
     let mut slide = Slide::new("", content);
     slide.notes = row.get(Field::Notes).to_string();
+    let category = row.get(Field::Category);
+    if !category.is_empty() {
+        match category_named(categories, category) {
+            Some(found) => slide.category = Some(found.id.clone()),
+            None => notes.add(ImportIssue::UnknownCategory { name: category.to_string() }, place),
+        }
+    }
     import_media(row, &mut slide, place, notes);
     fit(&mut slide, place, notes);
     Some(slide)
@@ -859,7 +872,7 @@ fn seconds(ms: u32) -> String {
 /// none leaves the file out.
 pub fn export_table(quiz: &Quiz, file_name: impl Fn(&str) -> Option<String>) -> Vec<Vec<String>> {
     let headings = FIELDS.iter().map(|(heading, _)| heading.to_string()).collect();
-    let rows = quiz.slides.iter().map(|slide| export_row(slide, &file_name).into_iter().map(defused).collect());
+    let rows = quiz.slides.iter().map(|slide| export_row(slide, &quiz.categories, &file_name).into_iter().map(defused).collect());
     std::iter::once(headings).chain(rows).collect()
 }
 
@@ -898,7 +911,7 @@ fn undefused(cell: &str) -> &str {
     }
 }
 
-fn export_row(slide: &Slide, file_name: &impl Fn(&str) -> Option<String>) -> Vec<String> {
+fn export_row(slide: &Slide, categories: &[Category], file_name: &impl Fn(&str) -> Option<String>) -> Vec<String> {
     let mut row = vec![String::new(); FIELDS.len()];
     let mut set = |field: Field, value: String| row[field.index()] = value;
     let prefixed = |kind: &str, text: &str| format!("{{{kind}}}{text}");
@@ -925,6 +938,9 @@ fn export_row(slide: &Slide, file_name: &impl Fn(&str) -> Option<String>) -> Vec
         SlideContent::Final { title } => set(Field::Text, prefixed(FINAL, title)),
     }
     set(Field::Notes, slide.notes.clone());
+    if let Some(category) = categories.iter().find(|category| slide.category.as_ref() == Some(&category.id)) {
+        set(Field::Category, category.name.clone());
+    }
     let mut media = |field: Field, file: &str, settings: Vec<(&str, String)>| {
         let Some(name) = file_name(file) else { return };
         let settings: Vec<String> = settings.into_iter().map(|(key, value)| format!("{key}={value}")).collect();
@@ -1072,7 +1088,7 @@ mod tests {
     }
 
     fn import(rows: &[&[&str]]) -> ImportedRows {
-        import_tables(&[table("", rows)], 7).unwrap()
+        import_tables(&[table("", rows)], &[], 7).unwrap()
     }
 
     fn slides(imported: &ImportedRows) -> Vec<&Slide> {
@@ -1138,7 +1154,7 @@ mod tests {
         let rows: &[&[&str]] = &[&["Q", "A1", "A2", "A3", "A4"], &["?", "right", "w1", "w2", "w3"]];
         let mut orders = std::collections::HashSet::new();
         for seed in 0..200 {
-            let imported = import_tables(&[table("", rows)], seed).unwrap();
+            let imported = import_tables(&[table("", rows)], &[], seed).unwrap();
             let question = question(&imported.slides[0].1);
             assert_eq!(correct(question).iter().map(|&i| question.answers[i].as_str()).collect::<Vec<_>>(), ["right"]);
             orders.insert(question.answers.clone());
@@ -1304,22 +1320,32 @@ mod tests {
     #[test]
     fn columns_without_a_place_here_are_noted_once_if_they_hold_values() {
         let imported = import(&[
-            &["Q", "CAT", "STYLE", "COLOUR", "", "Q", "BONUS-POINTS-1"],
-            &["One", "Music", "", "red", "x", "dup"],
-            &["Two", "Music", "", "", "", "", "", "beyond"],
+            &["Q", "P2", "STYLE", "COLOUR", "", "Q", "BONUS-POINTS-1"],
+            &["One", "b.png", "", "red", "x", "dup"],
+            &["Two", "c.png", "", "", "", "", "", "beyond"],
         ]);
         assert_eq!(question(slides(&imported)[0]).text, "One");
         let headings = at(1);
         assert_eq!(
             imported.notes.0,
             [
-                ImportNote { issue: ImportIssue::UnsupportedColumn { column: "CAT".into() }, places: vec![headings.clone()] },
+                ImportNote { issue: ImportIssue::UnsupportedColumn { column: "P2".into() }, places: vec![headings.clone()] },
                 ImportNote { issue: ImportIssue::UnknownColumn { column: "COLOUR".into() }, places: vec![headings.clone()] },
                 ImportNote { issue: ImportIssue::UnknownColumn { column: "E".into() }, places: vec![headings.clone()] },
                 ImportNote { issue: ImportIssue::DuplicateColumn { column: "Q".into() }, places: vec![headings.clone()] },
                 ImportNote { issue: ImportIssue::UnknownColumn { column: "H".into() }, places: vec![headings] },
             ]
         );
+    }
+
+    #[test]
+    fn a_row_takes_the_category_it_names_regardless_of_case_and_a_note_for_one_the_quiz_lacks() {
+        let categories = [Category::new("c1", "Music"), Category::new("c2", "Film")];
+        let rows: &[&[&str]] = &[&["Q", "CAT"], &["One", " music "], &["Two", "Sport"], &["Three", ""]];
+        let imported = import_tables(&[table("", rows)], &categories, 7).unwrap();
+        let found: Vec<Option<&str>> = slides(&imported).iter().map(|slide| slide.category.as_deref()).collect();
+        assert_eq!(found, [Some("c1"), None, None]);
+        assert_eq!(imported.notes.0, [ImportNote { issue: ImportIssue::UnknownCategory { name: "Sport".into() }, places: vec![at(3)] }]);
     }
 
     #[test]
@@ -1343,7 +1369,7 @@ mod tests {
             table("Sheet3", &[]),
             table("Round 2", &[&["Q"], &["Two"], &["Three"]]),
         ];
-        let imported = import_tables(&tables, 1).unwrap();
+        let imported = import_tables(&tables, &[], 1).unwrap();
         let titles: Vec<String> = imported
             .slides
             .iter()
@@ -1357,14 +1383,14 @@ mod tests {
         assert_eq!(imported.slides[4].0, Place { sheet: "Round 2".into(), row: 3 });
         assert_eq!(imported.notes.0, [ImportNote { issue: ImportIssue::NoQuestionColumn, places: vec![Place { sheet: "Instructions".into(), row: 1 }] }]);
         // One sheet of questions is no round.
-        let one = import_tables(&tables[..2], 1).unwrap();
+        let one = import_tables(&tables[..2], &[], 1).unwrap();
         assert_eq!(one.slides.len(), 1);
     }
 
     #[test]
     fn a_sheet_without_a_q_column_is_refused() {
-        assert_eq!(import_tables(&[table("", &[&["Title", "Artist"], &["Song", "Band"]])], 1), Err(SheetError::NoQuestionColumn));
-        assert_eq!(import_tables(&[], 1), Err(SheetError::NoQuestionColumn));
+        assert_eq!(import_tables(&[table("", &[&["Title", "Artist"], &["Song", "Band"]])], &[], 1), Err(SheetError::NoQuestionColumn));
+        assert_eq!(import_tables(&[], &[], 1), Err(SheetError::NoQuestionColumn));
     }
 
     #[test]
@@ -1417,9 +1443,10 @@ mod tests {
         });
         let mut round = Slide::new("b1", SlideContent::Billboard { title: "Round 1".into(), text: "Films\nand music".into() });
         round.background = Some(Background::new("media/stage.jpg"));
+        round.category = Some("c1".into());
         let mut winners = Slide::new("f1", SlideContent::Final { title: "Winners".into() });
         winners.sound = Some(SoundClip { start: SoundStart::OnDemand, ..SoundClip::new("media/anthem.mp3") });
-        Quiz::new(
+        let mut quiz = Quiz::new(
             "Pub quiz",
             vec![
                 round,
@@ -1430,7 +1457,9 @@ mod tests {
                 Slide::new("t1", SlideContent::Billboard { title: "Just a title".into(), text: String::new() }),
                 winners,
             ],
-        )
+        );
+        quiz.categories = vec![Category::new("c1", "Films")];
+        quiz
     }
 
     #[test]
@@ -1444,13 +1473,14 @@ mod tests {
         assert_eq!(rows[2][Field::Answer(1).index()], "[Paris]");
         assert_eq!(rows[2][Field::BackgroundVideo.index()], "waves.mp4{loop=false;sync-with-quiz=true}");
         assert_eq!(rows[1][Field::Background.index()], "stage.jpg");
+        assert_eq!((rows[1][Field::Category.index()].as_str(), rows[2][Field::Category.index()].as_str()), ("Films", ""));
         assert_eq!(
             rows[4][Field::Video.index()],
             "clip.webm{replay=true;silent=true;speed=125;effect=Blur;intro-pause=0;autoplay=false}",
             "only settings that differ from the defaults"
         );
 
-        let imported = import_tables(&[Table { name: String::new(), first_row: 1, rows }], 3).unwrap();
+        let imported = import_tables(&[Table { name: String::new(), first_row: 1, rows }], &quiz.categories, 3).unwrap();
         assert!(imported.notes.0.is_empty(), "{:?}", imported.notes);
         let mut expected = quiz.clone();
         let renamed = quiz.media_files().into_iter().map(|file| (file.to_string(), name(file).unwrap())).collect();
@@ -1482,7 +1512,7 @@ mod tests {
         assert_eq!(rows[1][Field::Notes.index()], "'-2+3+cmd|' /C calc'!A0");
         assert_eq!(rows[1][Field::Text.index()], "{Q, FF}=1+1", "the prefix comes first");
 
-        let imported = import_tables(&[Table { name: String::new(), first_row: 1, rows }], 3).unwrap();
+        let imported = import_tables(&[Table { name: String::new(), first_row: 1, rows }], &[], 3).unwrap();
         let back = &imported.slides[0].1;
         assert_eq!((question(back), &back.notes), (question(&quiz.slides[0]), &quiz.slides[0].notes));
     }
