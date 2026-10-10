@@ -2,7 +2,7 @@ import { useApp } from "../app-context";
 import { BackIcon } from "../icons";
 import { problemText } from "../messages";
 import { questionCount } from "../quiz";
-import type { Action } from "./actions";
+import type { Action, Actions } from "./actions";
 import type { OpenQuiz } from "./editor-state";
 
 export type BackstagePage = "info" | "open" | "import" | "export";
@@ -15,14 +15,13 @@ interface BackstageProps {
   onPage: (page: BackstagePage) => void;
   /** Back to the quiz; null when there is no quiz to go back to. */
   onClose: (() => void) | null;
-  actions: { newQuiz: Action; save: Action; saveAs: Action; closeQuiz: Action; exit: Action };
+  /** The file's actions, and questions from a spreadsheet, the template for one, and the quiz as one (spec QZ-8). */
+  actions: Pick<Actions, "newQuiz" | "save" | "saveAs" | "closeQuiz" | "exit" | "importSheet" | "sheetTemplate" | "exportSheet">;
   recentFiles: string[];
   onOpenFile: (path?: string) => void;
   onTitle: (title: string) => void;
   /** Shows a slide (by id) in the editor. */
   onShowSlide: (id: string) => void;
-  /** Questions from a spreadsheet, the template for one, and the quiz as one (spec QZ-8). */
-  sheet: { importSheet: () => void; saveTemplate: () => void; exportSheet: () => void };
 }
 
 /** The FILE tab: the quiz as a whole and its file, over the whole window. */
@@ -127,20 +126,20 @@ function InfoPage({ open, unsaved, onTitle, onShowSlide }: BackstageProps & { op
   );
 }
 
-function ImportPage({ sheet }: BackstageProps) {
+function ImportPage({ actions }: BackstageProps) {
   const { t } = useApp();
   return (
     <>
       <h1>{t("backstageImport")}</h1>
       <div className="backstage-task">
-        <button type="button" className="browse" onClick={sheet.importSheet}>
-          {t("importFromSheet")}
+        <button type="button" className="browse" disabled={actions.importSheet.disabled} onClick={actions.importSheet.run}>
+          {actions.importSheet.label}
         </button>
         <p>{t("importFromSheetHint")}</p>
       </div>
       <div className="backstage-task">
-        <button type="button" className="browse" onClick={sheet.saveTemplate}>
-          {t("saveSheetTemplate")}
+        <button type="button" className="browse" disabled={actions.sheetTemplate.disabled} onClick={actions.sheetTemplate.run}>
+          {actions.sheetTemplate.label}
         </button>
         <p>{t("saveSheetTemplateHint")}</p>
       </div>
@@ -148,14 +147,14 @@ function ImportPage({ sheet }: BackstageProps) {
   );
 }
 
-function ExportPage({ sheet }: BackstageProps) {
+function ExportPage({ actions }: BackstageProps) {
   const { t } = useApp();
   return (
     <>
       <h1>{t("backstageExport")}</h1>
       <div className="backstage-task">
-        <button type="button" className="browse" onClick={sheet.exportSheet}>
-          {t("exportToSheet")}
+        <button type="button" className="browse" disabled={actions.exportSheet.disabled} onClick={actions.exportSheet.run}>
+          {actions.exportSheet.label}
         </button>
         <p>{t("exportToSheetHint")}</p>
       </div>

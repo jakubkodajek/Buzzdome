@@ -1,8 +1,5 @@
 import { useMemo, useState, type MouseEvent } from "react";
 import { useApp } from "../app-context";
-import { sameSpan } from "../audio/clip-player";
-import { normalization } from "../audio/loudness";
-import { decibels } from "../format";
 import {
   ArrowDownIcon,
   ArrowUpIcon,
@@ -32,23 +29,20 @@ import {
   UndoIcon,
   VideoIcon,
 } from "../icons";
-import { isVideo, mediaFileName, MediaRootContext, mediaUrl, type MediaKind } from "../media";
+import { isVideo, MediaRootContext, type MediaKind } from "../media";
 import { NO_CONTEXT, showsRanking, slideContexts } from "../quiz";
 import { ThemeContext } from "../theme/context";
 import { useLatest } from "../hooks";
-import type { ImportNote, Slide, ValidationError } from "../types";
+import type { Slide, ValidationError } from "../types";
 import { tooltip, useActionKeys, type Action, type Actions } from "./actions";
 import { Backstage, type BackstagePage } from "./Backstage";
 import { ContextMenu } from "./controls";
 import { DesignArea, NotesBox } from "./DesignArea";
 import { EditSlideDialog } from "./EditSlideDialog";
-import { ImportNotesDialog } from "./ImportNotesDialog";
 import { isUnsaved, type OpenQuiz } from "./editor-state";
 import { answerIndex, hasElement, type ElementId } from "./elements";
 import { LayoutGallery } from "./LayoutGallery";
 import { DEFAULT_LAYOUT, slideFromLayout, type SlideLayout } from "./layouts";
-import { LoudnessDialog } from "./LoudnessDialog";
-import { gainChange, LOUDNESS_STATUS_KEYS, measureSound, readLoudnessTarget } from "./normalize";
 import { PropertiesPanel } from "./PropertiesPanel";
 import { slideProperties, type SlideEditing } from "./properties";
 import { selectionPages } from "./property-pages";
@@ -68,7 +62,6 @@ import {
   type Selection,
 } from "./selection";
 import { Ribbon, type RibbonTab } from "./Ribbon";
-import { templateQuiz } from "./sheet";
 import {
   freshSlideId,
   setBackground,
@@ -76,16 +69,14 @@ import {
   setNotes,
   setPicture,
   setSound,
-  setSoundOptions,
   setVideo,
-  setVideoOptions,
   withFreshIds,
 } from "./slides";
 import { TableView } from "./TableView";
 import { Thumbnails } from "./Thumbnails";
-import { TrimDialog } from "./TrimDialog";
-import { VideoTrimDialog } from "./VideoTrimDialog";
 import { useQuizEditor, type QuizEditor } from "./useQuizEditor";
+import { useSheetActions } from "./useSheetActions";
+import { useSoundTools } from "./useSoundTools";
 import { useThemeChoice } from "./useThemeChoice";
 import "./editor.css";
 
@@ -137,10 +128,6 @@ function Studio({ editor, open, onExit }: { editor: QuizEditor; open: OpenQuiz |
   const [gallery, setGallery] = useState<{ x: number; y: number } | null>(null);
   const [dialog, setDialog] = useState<{ id: string; focus: ElementId } | null>(null);
   /** The slide whose sound or video is being trimmed. */
-  const [trimOf, setTrimOf] = useState<{ id: string; media: "sound" | "video" } | null>(null);
-  const [loudness, setLoudness] = useState(false);
-  /** What the last spreadsheet import could not take over, until read. */
-  const [importNotes, setImportNotes] = useState<{ imported: number; notes: ImportNote[] } | null>(null);
   /** The slide whose background video plays in the design area. */
   const [playingBackgroundOf, setPlayingBackgroundOf] = useState<string | null>(null);
 
@@ -160,7 +147,6 @@ function Studio({ editor, open, onExit }: { editor: QuizEditor; open: OpenQuiz |
   const element: ElementId = slide && !several && hasElement(slide, selection.element) ? selection.element : "slide";
   const media = isMedia(element) ? element : null;
   const dialogSlide = dialog ? slides.find((s) => s.id === dialog.id) : undefined;
-  const trimSlide = trimOf === null ? undefined : slides.find((s) => s.id === trimOf.id);
   const backgroundVideo = slide?.background ? isVideo(slide.background.file) : false;
   const backgroundPlaying = backgroundVideo && playingBackgroundOf === slide?.id;
   const unsaved = open !== null && isUnsaved(open);
@@ -183,34 +169,16 @@ function Studio({ editor, open, onExit }: { editor: QuizEditor; open: OpenQuiz |
       updateSlides(ids, (s) => apply(s, file));
       if (part && ids.length === 1) setSelection((current) => (current.id === ids[0] ? { ...current, element: part } : current));
     });
-  /** Measures a slide's sound and sets its loudness gain to the remembered target (SN-9). */
-  const normalizeSound = (id: string) => {
-    const sound = slides.find((s) => s.id === id)?.sound;
-    if (!open || !sound) return;
-    const target = readLoudnessTarget();
-    measureSound(mediaUrl(open.mediaRoot, sound.file), sound).then(
-      (measured) => {
-        const change = gainChange(sound.gainDb, normalization(measured, target));
-        const { gainDb } = change;
-        // Only while the sound still plays the part that was measured.
-        if (gainDb !== null) updateSlide(id, (s) => (s.sound?.file === sound.file && sameSpan(s.sound.part, sound.part) ? setSoundOptions(s, { gainDb }) : s));
-        notify(t(change.message, { gain: decibels(gainDb ?? sound.gainDb) }));
-      },
-      (error: unknown) => {
-        console.error("normalize:", error);
-        notify(t(LOUDNESS_STATUS_KEYS.failed));
-      },
-    );
-  };
+  const sound = useSoundTools(open, editor.edit);
   /** How the properties change slide `s`, and with it every slide of `ids`. */
   const editingFor = (s: Slide, ids: string[] = [s.id]): SlideEditing => ({
     slide: s,
     context: contexts[slides.indexOf(s)] ?? NO_CONTEXT,
     update: (change, field) => updateSlides(ids, change, field),
     chooseMedia: (kinds, apply) => chooseMedia(ids, kinds, apply),
-    trimSound: () => setTrimOf({ id: s.id, media: "sound" }),
-    trimVideo: () => setTrimOf({ id: s.id, media: "video" }),
-    normalizeSound: () => normalizeSound(s.id),
+    trimSound: () => sound.trim(s.id, "sound"),
+    trimVideo: () => sound.trim(s.id, "video"),
+    normalizeSound: () => sound.normalize(s.id),
   });
 
   /** Inserts slides at `at` as one change and selects them. */
@@ -249,27 +217,13 @@ function Studio({ editor, open, onExit }: { editor: QuizEditor; open: OpenQuiz |
   };
   // The quiz and place as they are once a spreadsheet is read, after its dialogs.
   const latest = useLatest({ quiz, index });
-  const sheet = {
-    importSheet: () =>
-      void editor.importSheet().then((result) => {
-        const { quiz: now, index: at } = latest.current;
-        if (!result || !now) return;
-        const inserted = withFreshIds(now, result.slides);
-        editor.edit(insertSlides(inserted, at + 1));
-        if (inserted.length > 0) setSelection(selectIds([inserted[0].id], at + 1));
-        setBackstage(null);
-        if (result.notes.length > 0) setImportNotes({ imported: inserted.length, notes: result.notes });
-        else notify(inserted.length > 0 ? t("sheetImported", { n: inserted.length }) : t("sheetImportedNone"));
-      }),
-    saveTemplate: () => quiz && void editor.exportSheet(templateQuiz(t, quiz), t("templateFileName")).then((done) => done && notify(t("sheetTemplateSaved"))),
-    exportSheet: () =>
-      quiz &&
-      void editor.exportSheet(quiz, quiz.title || t("untitledQuiz")).then((report) => {
-        if (!report) return;
-        const missing = report.missing.map(mediaFileName).join(", ");
-        notify([t("sheetExported", { n: quiz.slides.length, media: report.media }), missing && t("sheetExportMissing", { files: missing })].filter(Boolean).join(" "));
-      }),
-  };
+  const sheet = useSheetActions(editor, quiz, (imported) => {
+    const { quiz: now, index: at } = latest.current;
+    if (!now) return 0;
+    insert(withFreshIds(now, imported), at + 1);
+    setBackstage(null);
+    return imported.length;
+  });
   const testRun = (from?: number) => {
     if (open && open.problems.length > 0) {
       notify(t("testRunNeedsFixes"));
@@ -410,10 +364,10 @@ function Studio({ editor, open, onExit }: { editor: QuizEditor; open: OpenQuiz |
       disabled: !media,
       run: () => slide && media && updateSlide(slide.id, (s) => MEDIA[media].set(s, null)),
     },
-    trimSound: { label: t("trimAction"), icon: <TrimIcon />, disabled: !slide?.sound, run: () => slide && setTrimOf({ id: slide.id, media: "sound" }) },
-    trimVideo: { label: t("trimAction"), icon: <TrimIcon />, disabled: !slide?.video, run: () => slide && setTrimOf({ id: slide.id, media: "video" }) },
-    normalizeSound: { label: t("normalizeAction"), icon: <LoudnessIcon />, disabled: !slide?.sound, run: () => slide && normalizeSound(slide.id) },
-    normalizeAll: { label: t("normalizeAll"), icon: <LoudnessIcon />, disabled: !slides.some((s) => s.sound), run: () => setLoudness(true) },
+    trimSound: { label: t("trimAction"), icon: <TrimIcon />, disabled: !slide?.sound, run: () => slide && sound.trim(slide.id, "sound") },
+    trimVideo: { label: t("trimAction"), icon: <TrimIcon />, disabled: !slide?.video, run: () => slide && sound.trim(slide.id, "video") },
+    normalizeSound: { label: t("normalizeAction"), icon: <LoudnessIcon />, disabled: !slide?.sound, run: () => slide && sound.normalize(slide.id) },
+    normalizeAll: { label: t("normalizeAll"), icon: <LoudnessIcon />, disabled: !slides.some((s) => s.sound), run: sound.normalizeAll },
     toggleBackground: {
       label: t(backgroundPlaying ? "stopBackground" : "playBackground"),
       icon: backgroundPlaying ? <StopIcon /> : <PlayIcon />,
@@ -442,6 +396,9 @@ function Studio({ editor, open, onExit }: { editor: QuizEditor; open: OpenQuiz |
     notes: { label: t("viewNotes"), icon: <NotesIcon />, checked: notesShown, run: () => setNotesShown(!notesShown) },
     testRun: { label: t("testFromStart"), icon: <PlayIcon />, keys: ["F5"], inFields: true, disabled: slides.length === 0, run: () => testRun() },
     testRunHere: { label: t("testFromHere"), icon: <PreviewIcon />, keys: ["Shift+F5"], inFields: true, disabled: noSlide, run: () => testRun(index) },
+    importSheet: sheet.importSheet,
+    sheetTemplate: sheet.sheetTemplate,
+    exportSheet: sheet.exportSheet,
   };
 
   const backstageShown = open === null || backstage !== null;
@@ -453,7 +410,7 @@ function Studio({ editor, open, onExit }: { editor: QuizEditor; open: OpenQuiz |
   };
   const all = [...Object.values(actions), escape];
   // Dialogs and menus take the keys; the FILE page only the ones that work anywhere.
-  useActionKeys(dialog || menu || gallery || trimSlide || loudness || importNotes ? [] : backstageShown ? all.filter((a) => a.inFields) : all);
+  useActionKeys(dialog || menu || gallery || sound.windowOpen || sheet.windowOpen ? [] : backstageShown ? all.filter((a) => a.inFields) : all);
 
   const menuItems = (target: MenuTarget, x: number, y: number): (Action | "separator")[] => {
     const galleryHere = { ...actions.newSlide, run: () => setGallery({ x, y }) };
@@ -548,7 +505,6 @@ function Studio({ editor, open, onExit }: { editor: QuizEditor; open: OpenQuiz |
                 setView("graphical");
                 setBackstage(null);
               }}
-              sheet={sheet}
             />
           ) : (
             quiz && (
@@ -657,39 +613,8 @@ function Studio({ editor, open, onExit }: { editor: QuizEditor; open: OpenQuiz |
 
           {menu && <ContextMenu x={menu.x} y={menu.y} items={menuItems(menu.target, menu.x, menu.y)} onClose={() => setMenu(null)} />}
           {gallery && <LayoutGallery x={gallery.x} y={gallery.y} onPick={insertLayout} onClose={() => setGallery(null)} />}
-          {open && trimOf?.media === "sound" && trimSlide?.sound && (
-            <TrimDialog
-              key={trimSlide.id}
-              url={mediaUrl(open.mediaRoot, trimSlide.sound.file)}
-              name={mediaFileName(trimSlide.sound.file)}
-              sound={trimSlide.sound}
-              canReplay={trimSlide.type === "question"}
-              onApply={(trim) => updateSlide(trimSlide.id, (s) => setSoundOptions(s, trim))}
-              onClose={() => setTrimOf(null)}
-            />
-          )}
-          {open && trimOf?.media === "video" && trimSlide?.video && (
-            <VideoTrimDialog
-              key={trimSlide.id}
-              url={mediaUrl(open.mediaRoot, trimSlide.video.file)}
-              name={mediaFileName(trimSlide.video.file)}
-              video={trimSlide.video}
-              canReplay={trimSlide.type === "question"}
-              onApply={(trim) => updateSlide(trimSlide.id, (s) => setVideoOptions(s, trim))}
-              onClose={() => setTrimOf(null)}
-            />
-          )}
-          {open && loudness && quiz && (
-            <LoudnessDialog
-              quiz={quiz}
-              mediaRoot={open.mediaRoot}
-              onApply={(gains) =>
-                editor.edit({ type: "batch", edits: [...gains].map(([id, gainDb]) => ({ type: "updateSlide", id, update: (s: Slide) => setSoundOptions(s, { gainDb }) })) })
-              }
-              onClose={() => setLoudness(false)}
-            />
-          )}
-          {importNotes && <ImportNotesDialog {...importNotes} onClose={() => setImportNotes(null)} />}
+          {sound.windows}
+          {sheet.windows}
           {dialog && dialogSlide && (
             <EditSlideDialog
               slide={dialogSlide}

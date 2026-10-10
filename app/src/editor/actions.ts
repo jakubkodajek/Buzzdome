@@ -61,6 +61,9 @@ export type ActionId =
   | "table"
   | "properties"
   | "findProperty"
+  | "importSheet"
+  | "sheetTemplate"
+  | "exportSheet"
   | "notes"
   | "testRun"
   | "testRunHere";

@@ -207,7 +207,11 @@ table view toggle. It edits a quiz; it never touches a running show.
   disabled, checked, run). `EditorScreen.tsx` builds the one record of all
   actions, and the ribbon, context menus, the quick access bar, the status
   bar and the keyboard (`useActionKeys`) all read it, so a command, its
-  shortcut and its enabled state are defined once.
+  shortcut and its enabled state are defined once. Commands with a window
+  of their own live in a hook that holds the window and hands back its
+  actions: `useSoundTools` (trimming a sound or video, evening out
+  loudness) and `useSheetActions` (spreadsheet import, sample sheet and
+  export, read by File › Import and Export).
 - **Properties.** `properties.tsx` turns the selected slide into labelled
   rows (id, label, description, control, and for most rows a typed value:
   number with its range, flag, choice or media). The properties panel, the
@@ -238,7 +242,8 @@ table view toggle. It edits a quiz; it never touches a running show.
   (pure; a seed from the shell shuffles unmarked answers); `import_sheet`
   then finds each media file, copies it in with `import_media` and drops a
   missing one with a note. The editor gives the slides fresh ids
-  (`withFreshIds`), inserts them as one batch and shows the notes
+  (`withFreshIds`), inserts them after the current slide as one batch,
+  selects them as a paste does and shows the notes
   (`ImportNotesDialog`, worded by `messages.ts`). Export is the reverse:
   `export_table` builds the rows and `export_sheet` places each media file
   next to the CSV (`place_file`, shared with media imports: the same name

@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { useApp } from "../app-context";
 import { decodeAudioFile } from "../audio/decode";
-import { LOUDNESS_TARGETS, measureLoudness, normalization, type Loudness, type LoudnessTarget } from "../audio/loudness";
+import { LOUDNESS_TARGETS, measureLoudness, type Loudness, type LoudnessTarget } from "../audio/loudness";
 import { decibels } from "../format";
 import { mediaFileName, mediaUrl } from "../media";
 import type { Quiz } from "../types";
 import { Dialog, Select } from "./controls";
-import { gainChange, LOUDNESS_STATUS_KEYS, LOUDNESS_TARGET_KEYS, readLoudnessTarget, writeLoudnessTarget } from "./normalize";
+import { LOUDNESS_STATUS_KEYS, LOUDNESS_TARGET_KEYS, normalizedGain, readLoudnessTarget, writeLoudnessTarget } from "./normalize";
 
 interface LoudnessDialogProps {
   quiz: Quiz;
@@ -58,7 +58,7 @@ export function LoudnessDialog({ quiz, mediaRoot, onApply, onClose }: LoudnessDi
 
   const results = rows.map((row) => {
     const loudness = measured.get(row.id);
-    const change = loudness && loudness !== "failed" ? gainChange(row.sound.gainDb, normalization(loudness, target)) : null;
+    const change = loudness && loudness !== "failed" ? normalizedGain(row.sound.gainDb, loudness, target) : null;
     /** The new gain; null when it stays. */
     const gainDb = change?.gainDb ?? null;
     return { ...row, loudness, change, gainDb, ticked: gainDb !== null && !unticked.has(row.id) };

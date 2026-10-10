@@ -2,7 +2,7 @@
 // quizmaster chose, and measuring the part of a sound that plays.
 
 import { decodeAudioFile } from "../audio/decode";
-import { LOUDNESS_TARGETS, measureLoudness, type Loudness, type LoudnessStatus, type LoudnessTarget, type Normalization } from "../audio/loudness";
+import { LOUDNESS_TARGETS, measureLoudness, normalization, type Loudness, type LoudnessStatus, type LoudnessTarget, type Normalization } from "../audio/loudness";
 import type { StringKey } from "../i18n";
 import { readPreference, writePreference } from "../preferences";
 import type { SoundClip } from "../types";
@@ -41,13 +41,33 @@ export const LOUDNESS_STATUS_KEYS: Record<LoudnessStatus | "failed", StringKey> 
   failed: "loudnessFailed",
 };
 
+export interface GainChange {
+  gainDb: number | null;
+  status: LoudnessStatus;
+  message: StringKey;
+}
+
+/** What normalizing a sound whose gain is `currentDb` and that measures as `loudness` to `target` does (`gainChange`). */
+export function normalizedGain(currentDb: number, loudness: Loudness, target: number): GainChange {
+  return gainChange(currentDb, normalization(loudness, target));
+}
+
+/**
+ * The gain of a normalized sound once it plays another part, measured as
+ * `loudness`: what normalizing it gives, or the gain it had when the part
+ * cannot be measured (silent or too short).
+ */
+export function gainAfterTrim(currentDb: number, loudness: Loudness, target: number): number {
+  return normalizedGain(currentDb, loudness, target).gainDb ?? currentDb;
+}
+
 /**
  * What normalizing a sound whose gain is `currentDb` does: the gain to set,
  * or null when it stays (nothing to measure, or the gain is right already),
  * the status that says so ("changed" only when the gain does change), and
  * the message for the quizmaster.
  */
-export function gainChange(currentDb: number, { gainDb, status }: Normalization): { gainDb: number | null; status: LoudnessStatus; message: StringKey } {
+export function gainChange(currentDb: number, { gainDb, status }: Normalization): GainChange {
   if (status === "silent" || status === "tooShort") return { gainDb: null, status, message: LOUDNESS_STATUS_KEYS[status] };
   if (gainDb === currentDb) {
     const same = status === "limited" ? "limited" : "atTarget";

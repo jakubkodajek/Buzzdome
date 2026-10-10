@@ -2,10 +2,10 @@ import { useEffect, useMemo, useRef, useState, type PointerEvent } from "react";
 import { useApp } from "../app-context";
 import { ClipPlayer, inSpan, linearGain, sameSpan, WHOLE_FILE } from "../audio/clip-player";
 import { decodeAudioFile } from "../audio/decode";
-import { measureLoudness, normalization, type Samples } from "../audio/loudness";
+import { measureLoudness, type Samples } from "../audio/loudness";
 import type { SoundClip, Span } from "../types";
 import { Dialog } from "./controls";
-import { readLoudnessTarget } from "./normalize";
+import { gainAfterTrim, readLoudnessTarget } from "./normalize";
 import { onPartKeys, PART_COLOR, PART_COLORS, PartTimes, REPLAY_COLOR, ReplayChoice, usePartEditing } from "./part-editing";
 import { panned, waveformPeaks, zoomed, type TimeWindow } from "./waveform";
 
@@ -229,7 +229,8 @@ export function TrimDialog({ url, name, sound, canReplay, onApply, onClose }: Tr
   const apply = () => {
     const trimmed = parts.result();
     let gainDb = sound.gainDb;
-    if (gainDb !== 0 && samples && !sameSpan(trimmed.part, sound.part)) gainDb = normalization(measureLoudness(samples, trimmed.part), readLoudnessTarget()).gainDb;
+    // A normalized sound is normalized again for the part it plays now.
+    if (gainDb !== 0 && samples && !sameSpan(trimmed.part, sound.part)) gainDb = gainAfterTrim(gainDb, measureLoudness(samples, trimmed.part), readLoudnessTarget());
     onApply({ ...trimmed, gainDb });
     onClose();
   };

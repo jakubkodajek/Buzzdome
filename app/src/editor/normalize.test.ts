@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { gainChange, readLoudnessTarget, writeLoudnessTarget } from "./normalize";
+import { gainAfterTrim, gainChange, readLoudnessTarget, writeLoudnessTarget } from "./normalize";
 
 describe("normalize", () => {
   afterEach(() => vi.unstubAllGlobals());
@@ -25,5 +25,11 @@ describe("normalize", () => {
     expect(gainChange(2, { gainDb: 2, status: "limited" })).toEqual({ gainDb: null, status: "limited", message: "loudnessLimited" });
     expect(gainChange(3, { gainDb: 0, status: "silent" })).toEqual({ gainDb: null, status: "silent", message: "loudnessSilent" });
     expect(gainChange(3, { gainDb: 0, status: "tooShort" })).toEqual({ gainDb: null, status: "tooShort", message: "loudnessTooShort" });
+  });
+
+  it("measures a normalized sound's new part again, keeping its gain where the part cannot be measured", () => {
+    expect(gainAfterTrim(3, { lufs: -20, peakDb: -10, durationMs: 5_000 }, -16)).toBe(4);
+    expect(gainAfterTrim(3, { lufs: null, peakDb: -Infinity, durationMs: 5_000 }, -16)).toBe(3);
+    expect(gainAfterTrim(3, { lufs: null, peakDb: -20, durationMs: 100 }, -16)).toBe(3);
   });
 });
