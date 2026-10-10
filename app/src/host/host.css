@@ -9,6 +9,14 @@
   cursor: none;
 }
 
+/* The projector after its screen failed to render: black, not a white page. */
+.host-failed {
+  position: fixed;
+  inset: 0;
+  background: #000;
+  cursor: none;
+}
+
 .verdict {
   position: absolute;
   inset: 0;

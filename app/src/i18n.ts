@@ -714,7 +714,6 @@ const strings = {
     errLearnTooFewPresses: "Stiskněte tlačítko aspoň {min}× (nejlépe 3×).",
     errLearnInconsistent: "Zaznamenané stisky se liší délkou. Zkuste to znovu.",
     errLearnConflict: "Tyto stisky vypadají stejně jako bzučák {buzzer}, tlačítko {button}. Zkuste to znovu, nebo naučte znovu to tlačítko.",
-    errNoSuchMonitor: "Monitor {n} není připojený.",
     errNoDataFolder: "Systém aplikaci nedal složku pro data, takže ji nelze uložit. Zkontrolujte, že má váš uživatelský účet domovskou složku.",
     errSystem: "Chyba systému: {detail}",
     // Quiz problems (Problem, MediaIssue).
@@ -778,6 +777,13 @@ const strings = {
     displayN: "Monitor {n}",
     keySpace: "Mezerník",
     monitor: "Monitor",
+    monitorAuto: "Jiný než ten s Directorem",
+    monitorDirector: "zde je Director",
+    quitDuringShow: "Show běží. Přesto aplikaci zavřít? Show zůstane uložená a půjde v ní pokračovat.",
+    partFailed: "Tuto část se nepodařilo zobrazit: {message}",
+    windowFailed: "Okno se nepodařilo zobrazit: {message}",
+    slideFailed: "Snímek se na projektoru nepodařilo zobrazit: {message}",
+    tryAgain: "Zkusit znovu",
   },
   en: {
     appTitle: "Buzzdome",
@@ -1486,7 +1492,6 @@ const strings = {
     errLearnTooFewPresses: "Press the button at least {min} times (3 is best).",
     errLearnInconsistent: "The recorded presses differ in length. Try again.",
     errLearnConflict: "These presses look the same as buzzer {buzzer}, button {button}. Try again or re-learn that button.",
-    errNoSuchMonitor: "Display {n} is not connected.",
     errNoDataFolder: "The system gave the app no folder for its data, so it cannot be saved. Check that your user account has a home folder.",
     errSystem: "System error: {detail}",
     // Quiz problems (Problem, MediaIssue).
@@ -1550,6 +1555,13 @@ const strings = {
     displayN: "Display {n}",
     keySpace: "Space",
     monitor: "Display",
+    monitorAuto: "Not the Director's",
+    monitorDirector: "the Director is here",
+    quitDuringShow: "A show is running. Close the app anyway? The show stays saved and can be resumed.",
+    partFailed: "This part could not be shown: {message}",
+    windowFailed: "The window could not be shown: {message}",
+    slideFailed: "The projector could not show the slide: {message}",
+    tryAgain: "Try again",
   },
 } as const;
 

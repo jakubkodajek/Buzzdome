@@ -7,6 +7,7 @@ import { playCue } from "../audio/cues";
 import { useSlideSound, type SlideSound } from "../audio/slide-sound";
 import { clockSeconds } from "../format";
 import { EditorScreen } from "../editor/EditorScreen";
+import { ErrorBoundary } from "../error-boundary";
 import { errorText } from "../messages";
 import { useBackendEvent, useClock, useGameView, useLastSession, useLearnProgress, useMediaRoot, usePlayerVolume, useQuiz, useShowNotSaved } from "../hooks";
 import {
@@ -81,8 +82,15 @@ export function Director() {
 
 function DirectorScreens() {
   const { t, notify } = useApp();
+  const run = useRun();
   const [screen, setScreen] = useState<Screen>("show");
   useBackendEvent("host-problem", (message) => notify(t("hostProblem", { message })));
+  // Closing this window during a show asks first; the app ends with it (A10).
+  useBackendEvent("close-requested", () => {
+    void ask(t("quitDuringShow"), { kind: "warning" }).then((quit) => {
+      if (quit) run(api.quitApp());
+    });
+  });
   // Provided above the show controls: their hooks (the slide sound) resolve media too.
   const mediaRoot = useMediaRoot();
   if (screen === "editor") return <EditorScreen onTestRun={() => setScreen("testRun")} onExit={() => setScreen("show")} />;
@@ -137,7 +145,18 @@ function DirectorLayout({ testRun, onEditor }: { testRun: boolean; onEditor: () 
         <LearnBanner />
         <div className="tab-body" role="tabpanel">
           <ThemeContext value={theme}>
-            <TabBody tab={tab} view={view} quiz={quiz} projector={projector} player={player} sound={sound} />
+            {/* A tab that fails to render keeps the rest of the window, and its keys, working (A12). */}
+            <ErrorBoundary
+              key={tab}
+              fallback={(message, retry) => (
+                <div className="part-failed" role="alert">
+                  <p>{t("partFailed", { message })}</p>
+                  <button onClick={retry}>{t("tryAgain")}</button>
+                </div>
+              )}
+            >
+              <TabBody tab={tab} view={view} quiz={quiz} projector={projector} player={player} sound={sound} />
+            </ErrorBoundary>
           </ThemeContext>
         </div>
         <StatusBar view={view} quiz={quiz} testRun={testRun} />

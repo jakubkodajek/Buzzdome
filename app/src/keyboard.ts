@@ -50,6 +50,19 @@ export function isFieldTarget(target: EventTarget | null): boolean {
   return tag === "INPUT" || tag === "SELECT" || isTypingTarget(target);
 }
 
+/**
+ * A key press written as the editor's `Action.keys` are, e.g. "Ctrl+S": modifiers in the order Ctrl, Alt,
+ * Shift, then the key. Ctrl stands for Cmd on macOS too.
+ */
+export function keyCombo(event: Pick<KeyboardEvent, "key" | "ctrlKey" | "metaKey" | "altKey" | "shiftKey">): string {
+  const parts: string[] = [];
+  if (event.ctrlKey || event.metaKey) parts.push("Ctrl");
+  if (event.altKey) parts.push("Alt");
+  if (event.shiftKey) parts.push("Shift");
+  parts.push(event.key.length === 1 ? event.key.toUpperCase() : event.key);
+  return parts.join("+");
+}
+
 /** True for the keys a running show takes, whether or not the current step has a use for them. */
 function isShowKey(key: string): boolean {
   const lower = key.toLowerCase();
@@ -58,7 +71,8 @@ function isShowKey(key: string): boolean {
 
 /**
  * Quizmaster keys, the same in the Director and on the projector window.
- * `onToggleProjector` adds M, which only the Director handles.
+ * `onToggleProjector` adds M: in the Director it opens or closes the
+ * projector, on the projector it closes it.
  */
 export function useShortcuts(view: GameView | null, onToggleProjector?: () => void) {
   const dispatch = useDispatch();

@@ -9,8 +9,8 @@
 //! folders are deleted afterwards; one the web view still reads a file from
 //! (Windows refuses that) goes the next time.
 
-use crate::app_data;
 use crate::error::{AppError, CmdResult};
+use crate::{app_local_data, app_log, roaming_leftover};
 use quiz_core::{Category, Quiz, ValidationError};
 use quiz_file::{FileAction, SheetExport, SheetImport};
 use serde::{Deserialize, Serialize};
@@ -58,8 +58,23 @@ pub struct EditorDraft {
     pub dropped: Vec<ValidationError>,
 }
 
+const EDITOR_FOLDER: &str = "editor";
+
 fn editor_dir(app: &AppHandle) -> CmdResult<PathBuf> {
-    app_data(app, "editor")
+    app_local_data(app, EDITOR_FOLDER)
+}
+
+/// Moves the drafts that earlier versions kept in the roaming folder
+/// (Windows) to where they are kept now, so an unsaved quiz is not lost.
+pub fn move_roaming_drafts(app: &AppHandle) {
+    let (Some(old), Ok(dir)) = (roaming_leftover(app, EDITOR_FOLDER), editor_dir(app)) else { return };
+    if dir.exists() {
+        return;
+    }
+    let moved = dir.parent().map_or(Ok(()), fs::create_dir_all).and_then(|()| fs::rename(&old, &dir));
+    if let Err(e) = moved {
+        app_log::note(&format!("moving editor drafts from {}: {e}", old.display()));
+    }
 }
 
 fn read_pointer(dir: &Path) -> Option<Pointer> {
@@ -97,7 +112,7 @@ fn new_folder(dir: &Path) -> String {
 fn switch_to(dir: &Path, pointer: &Pointer) -> CmdResult<()> {
     write_pointer(dir, pointer)?;
     if let Err(e) = quiz_file::prune(dir, &[&dir.join(&pointer.folder)]) {
-        eprintln!("cleaning old editor drafts: {e}");
+        app_log::note(&format!("cleaning old editor drafts: {e}"));
     }
     Ok(())
 }
@@ -253,7 +268,7 @@ pub async fn editor_close(app: AppHandle, lock: State<'_, EditorLock>) -> CmdRes
         _ => {}
     }
     if let Err(e) = quiz_file::prune(&dir, &[]) {
-        eprintln!("cleaning old editor drafts: {e}");
+        app_log::note(&format!("cleaning old editor drafts: {e}"));
     }
     Ok(())
 }

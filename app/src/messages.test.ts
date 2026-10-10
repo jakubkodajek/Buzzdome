@@ -18,9 +18,8 @@ describe("errorText", () => {
     expect(errorText(en, { ...error, action: "createFolder" })).toBe("Cannot create the folder /q/a.quiz: denied");
   });
 
-  it("numbers slides and monitors from one, as the quizmaster sees them", () => {
+  it("numbers slides from one, as the quizmaster sees them", () => {
     expect(errorText(en, { code: "noSuchSlide", slide: 0 })).toBe("There is no slide 1.");
-    expect(errorText(en, { code: "noSuchMonitor", index: 1 })).toBe("Display 2 is not connected.");
   });
 
   it("names the button of a learn conflict and the first problem of an invalid quiz", () => {

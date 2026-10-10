@@ -18,7 +18,7 @@ function params(fields: object): Params {
 }
 
 /** Codes worded with their own parameters, see `errorText`. */
-type WordedApart = "file" | "noSuchSlide" | "noSuchMonitor" | "noSuchPad" | "notInLibrary" | "learnConflict" | "quizInvalid";
+type WordedApart = "file" | "noSuchSlide" | "noSuchPad" | "notInLibrary" | "learnConflict" | "quizInvalid";
 
 const ERROR_KEYS: Record<Exclude<AppError["code"], WordedApart>, StringKey> = {
   noShow: "noShow",
@@ -82,8 +82,6 @@ export function errorText(t: Translate, error: unknown): string {
       return t(FILE_ACTION_KEYS[error.action], params(error));
     case "noSuchSlide":
       return t("errNoSuchSlide", { slide: error.slide + 1 });
-    case "noSuchMonitor":
-      return t("errNoSuchMonitor", { n: error.index + 1 });
     case "noSuchPad":
       return t("errNoSuchPad", { pad: error.pad + 1 });
     case "notInLibrary":

@@ -79,6 +79,17 @@
   color: var(--muted);
 }
 
+.part-failed,
+.window-failed {
+  padding: 30px;
+}
+
+.part-failed p,
+.window-failed p {
+  color: var(--bad);
+  font-weight: 600;
+}
+
 /* Command panel */
 
 .command-panel {
