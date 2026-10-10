@@ -123,7 +123,9 @@ pub fn open(path: &Path, cache: &Path) -> Result<Package> {
     let result = unpack(path, &incoming).and_then(|unpacked| {
         // The show plays the file as it is: a media name it would have to
         // rename is a problem to fix in the editor.
-        let quiz = read_playable(&incoming)?;
+        let quiz = read_quiz_json(&incoming)?;
+        refuse(clashing_media(&quiz, &unpacked.renames.clashes))?;
+        check_playable(&quiz, &incoming)?;
         let root = place_package(cache, &unpacked.hash, &incoming)?;
         Ok(Package { quiz, root })
     });
@@ -181,9 +183,9 @@ pub fn open_into(path: &Path, dest: &Path) -> Result<Opened> {
     let incoming = incoming_dir(parent)?;
     let result = unpack(path, &incoming).and_then(|unpacked| {
         let ReadQuiz { mut quiz, dropped } = read_quiz(&incoming)?;
-        quiz.rename_media(&unpacked.renamed);
+        quiz.rename_media(&unpacked.renames.new);
         // The draft holds the quiz as the editor has it.
-        let changed = !unpacked.renamed.is_empty() || !dropped.is_empty();
+        let changed = !unpacked.renames.new.is_empty() || !dropped.is_empty();
         if changed {
             write_quiz_json(&incoming, &quiz)?;
         }
@@ -200,8 +202,16 @@ pub fn open_into(path: &Path, dest: &Path) -> Result<Opened> {
 struct Unpacked {
     /// Hash of the names and contents of the files written.
     hash: String,
-    /// Media stored under another name than the quiz uses (see `renames`).
-    renamed: BTreeMap<String, String>,
+    /// Media stored under another name than the quiz uses.
+    renames: Renames,
+}
+
+/// Media that a show would find under another file than the one stored
+/// for it (`Renames::clashes`): on Windows or macOS the name the quiz uses
+/// finds the earlier file, which is another picture or sound, or none.
+fn clashing_media(quiz: &Quiz, clashes: &BTreeMap<String, String>) -> Vec<ValidationError> {
+    let clash = |file: &str| clashes.get(file).map(|other| Problem::MediaNameClash { file: file.to_string(), other: other.clone() });
+    quiz.media_files().into_iter().filter_map(clash).map(|problem| ValidationError { slide_id: None, problem }).collect()
 }
 
 /// Unpacks a quiz file into `dest` without checking the quiz.
@@ -415,7 +425,7 @@ pub fn import_media(root: &Path, source: MediaSource) -> Result<String> {
 /// Copies `source` to `folder/name` and returns the name. A file with that
 /// name and the same contents is reused; a different one keeps its place
 /// and the copy gets a number added (see `numbered`). A name is taken by
-/// a file whose name is one file with it on Windows and macOS
+/// a file whose name is one file with it on Windows or macOS
 /// (`quiz_core::file_key`), so a folder made on Linux opens on them. A copy
 /// that fails leaves nothing behind: it is written under a name no media
 /// file has (`.part`) and renamed when complete.
@@ -478,19 +488,28 @@ fn numbered(name: &str, n: u32) -> String {
     }
 }
 
-/// New names for the media references among `names`, old name to new: for
-/// those that are not safe but can be made so (see
-/// `quiz_core::portable_reference`), and for safe ones that are one file
-/// with a name before them on Windows and macOS (`quiz_core::file_key`),
-/// which would take its place there. A new name is one file with none of
-/// `names` nor another new one.
-fn renames<'a>(names: impl Iterator<Item = &'a str> + Clone) -> BTreeMap<String, String> {
+/// New names for media, from `renames`.
+#[derive(Debug, Default)]
+struct Renames {
+    /// Old name to new.
+    new: BTreeMap<String, String>,
+    /// The safe names among them, each to the name before it that is one
+    /// file with it on Windows or macOS.
+    clashes: BTreeMap<String, String>,
+}
+
+/// New names for the media references among `names`: for those that are
+/// not safe but can be made so (see `quiz_core::portable_reference`), and
+/// for safe ones that are one file with a name before them on Windows or
+/// macOS (`quiz_core::file_key`), which would take its place there. A new
+/// name is one file with none of `names` nor another new one.
+fn renames<'a>(names: impl Iterator<Item = &'a str> + Clone) -> Renames {
     let mut taken: HashSet<String> = names.clone().map(file_key).collect();
     // The safe names kept as they are, by `file_key`.
     let mut kept: HashMap<String, &str> = HashMap::new();
-    let mut renamed = BTreeMap::new();
+    let mut renames = Renames::default();
     for name in names {
-        if renamed.contains_key(name) {
+        if renames.new.contains_key(name) {
             continue;
         }
         let wanted = if is_safe_reference(name) {
@@ -501,16 +520,19 @@ fn renames<'a>(names: impl Iterator<Item = &'a str> + Clone) -> BTreeMap<String,
                 }
                 // The same name again is the same file.
                 Entry::Occupied(first) if *first.get() == name => continue,
-                Entry::Occupied(_) => name.to_string(),
+                Entry::Occupied(first) => {
+                    renames.clashes.insert(name.to_string(), first.get().to_string());
+                    name.to_string()
+                }
             }
         } else {
             let Some(portable) = portable_reference(name) else { continue };
             portable
         };
         let new = (1..).map(|n| numbered(&wanted, n)).find(|new| taken.insert(file_key(new))).expect("a free name");
-        renamed.insert(name.to_string(), new);
+        renames.new.insert(name.to_string(), new);
     }
-    renamed
+    renames
 }
 
 /// Compares a file with `bytes` without reading the file whole into memory.
@@ -669,7 +691,7 @@ fn unpack_zip(path: &Path, dest: &Path) -> Result<Unpacked> {
         return Err(QuizFileError::TooManyFiles);
     }
     let names = archive.file_names().map(|name| name.map(|name| entry_name(&name))).collect::<std::result::Result<Vec<_>, _>>()?;
-    let renamed = renames(names.iter().map(String::as_str));
+    let renames = renames(names.iter().map(String::as_str));
     let mut hasher = Sha256::new();
     let mut budget = MAX_UNPACKED_BYTES;
     for i in 0..archive.len() {
@@ -678,14 +700,14 @@ fn unpack_zip(path: &Path, dest: &Path) -> Result<Unpacked> {
             continue;
         }
         let name = entry_name(&entry.name()?);
-        let stored = match renamed.get(&name) {
+        let stored = match renames.new.get(&name) {
             Some(new) => Some(new.as_str()),
             None => (name == QUIZ_JSON || is_safe_reference(&name)).then_some(name.as_str()),
         };
         let Some(stored) = stored else { continue };
         budget -= write_file(dest, stored, &mut entry, path, budget, &mut hasher)?;
     }
-    Ok(Unpacked { hash: finish(hasher), renamed })
+    Ok(Unpacked { hash: finish(hasher), renames })
 }
 
 /// A ZIP entry's name with `/` between folders, as some ZIP tools on Windows
@@ -719,7 +741,7 @@ fn copy_json(path: &Path, dest: &Path) -> Result<Unpacked> {
         let Some(mut media) = inside.then(|| File::open(&source).ok()).flatten() else { continue };
         budget -= write_file(dest, reference, &mut media, &source, budget, &mut hasher)?;
     }
-    Ok(Unpacked { hash: finish(hasher), renamed: BTreeMap::new() })
+    Ok(Unpacked { hash: finish(hasher), renames: Renames::default() })
 }
 
 /// Writes one file of a package from `contents` (read from the file
@@ -1148,13 +1170,33 @@ mod tests {
     }
 
     #[test]
+    fn a_show_refuses_media_stored_apart_from_an_unused_file_before_it() {
+        // Only the second file is used; on Windows or macOS its name would find the first.
+        let quiz = quiz_with_picture("media/flag.png");
+        let json = serde_json::to_vec(&quiz).unwrap();
+        let file = zip_of("unused-clash", &[(QUIZ_JSON, &json), ("media/Flag.png", b"unused"), ("media/flag.png", b"used")]);
+
+        let err = open(&file, &temp("unused-clash-cache")).unwrap_err();
+        let clash = Problem::MediaNameClash { file: "media/flag.png".into(), other: "media/Flag.png".into() };
+        assert!(matches!(err, QuizFileError::Invalid(ref p) if p.iter().map(|e| &e.problem).eq([&clash])), "{err}");
+
+        let draft = temp("unused-clash-draft").join("draft");
+        let Opened { quiz: opened, .. } = open_into(&file, &draft).unwrap();
+        assert_eq!(opened.slides[0].picture.as_deref(), Some("media/flag-2.png"));
+        assert_eq!(fs::read(draft.join("media/flag-2.png")).unwrap(), b"used");
+        assert_eq!(problems(&opened, &draft), []);
+    }
+
+    #[test]
     fn renaming_ignores_letter_case_and_numbers_before_the_extension() {
         let renamed = renames(["media/A_.png", "media/a?.png", "media/a*.png", "media/x/../y.png"].into_iter());
         let expected = [("media/a*.png", "media/a_-3.png"), ("media/a?.png", "media/a_-2.png")];
-        assert_eq!(renamed, expected.map(|(old, new)| (old.to_string(), new.to_string())).into());
+        assert_eq!(renamed.new, expected.map(|(old, new)| (old.to_string(), new.to_string())).into());
+        assert_eq!(renamed.clashes, [].into());
         // A safe name that is one file with one before it is renamed; the same name twice is one file.
         let renamed = renames(["media/Flag.png", "media/flag.png", "media/flag.png", "media/flag-2.png", "quiz.json"].into_iter());
-        assert_eq!(renamed, [("media/flag.png".to_string(), "media/flag-3.png".to_string())].into());
+        assert_eq!(renamed.new, [("media/flag.png".to_string(), "media/flag-3.png".to_string())].into());
+        assert_eq!(renamed.clashes, [("media/flag.png".to_string(), "media/Flag.png".to_string())].into());
         assert_eq!(numbered("media/round.1/a.b.png", 2), "media/round.1/a.b-2.png");
         assert_eq!(numbered("media/round.1/noext", 3), "media/round.1/noext-3");
         assert_eq!(numbered("media/.hidden", 2), "media/.hidden-2");
@@ -1242,7 +1284,7 @@ mod tests {
         let root = temp("import-case");
         let dropped = |name: &str, bytes: &[u8]| import_media(&root, MediaSource::Bytes { name, bytes }).unwrap();
         assert_eq!(dropped("Flag.png", b"one"), "media/Flag.png");
-        // On Linux these are other files; on Windows and macOS the same one.
+        // On Linux these are other files; on Windows or macOS the same one.
         assert_eq!(dropped("flag.png", b"two"), "media/flag-2.png");
         assert_eq!(dropped("FLAG.png", b"one"), "media/Flag.png");
         assert_eq!(dropped("Ku\u{30a}n\u{30c}.png", b"horse"), "media/Ku\u{30a}n\u{30c}.png");

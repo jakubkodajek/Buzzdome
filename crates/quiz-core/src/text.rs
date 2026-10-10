@@ -18,11 +18,13 @@ pub(crate) fn name_key(name: &str) -> String {
 }
 
 /// The key file names are told apart by on some disk the quiz may be
-/// opened on: lower case, as Windows and macOS disks ignore case, and
-/// composed, as macOS disks also ignore how accents are encoded. Two
-/// media files whose names have one key are one file there.
+/// opened on. Windows disks compare names in upper case and macOS disks
+/// in lower case, so the key is the name in upper case, then in lower case
+/// (`σ` and `ς` are one letter in upper case), and composed, as macOS disks
+/// also ignore how accents are encoded. Two media files whose names have
+/// one key are one file on Windows or on macOS.
 pub fn file_key(name: &str) -> String {
-    name.to_lowercase().nfc().collect()
+    name.to_uppercase().to_lowercase().nfc().collect()
 }
 
 #[cfg(test)]
@@ -36,6 +38,8 @@ mod tests {
         assert_eq!(composed(decomposed), "Žluťoučký kůň");
         assert_ne!(name_key("kun"), name_key("kůň"), "accents still count");
         assert_eq!(file_key("media/Ku\u{30a}n\u{30c}.PNG"), file_key("media/kůň.png"));
+        // Windows folds names to upper case, where the two sigmas are one letter.
+        assert_eq!(file_key("media/ς.png"), file_key("media/σ.png"));
         assert_ne!(file_key("media/ kůň.png"), file_key("media/kůň.png"), "spaces are part of a file name");
     }
 }

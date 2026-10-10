@@ -8,7 +8,18 @@ import { clockSeconds } from "../format";
 import { EditorScreen } from "../editor/EditorScreen";
 import { ErrorBoundary, RenderFailed } from "../error-boundary";
 import { errorText } from "../messages";
-import { useBackendEvent, useClock, useGameView, useLastSession, useLearnProgress, useMediaRoot, usePlayerVolume, useQuiz, useShowNotSaved } from "../hooks";
+import {
+  useBackendEvent,
+  useClock,
+  useGameView,
+  useLastSession,
+  useLatest,
+  useLearnProgress,
+  useMediaRoot,
+  usePlayerVolume,
+  useQuiz,
+  useShowNotSaved,
+} from "../hooks";
 import {
   BackIcon,
   CheckIcon,
@@ -251,7 +262,25 @@ function CommandPanel(props: { view: GameView | null; projector: ProjectorSettin
   const openQuiz = () => run(api.startShowFromFile(quizPicker(t)));
 
   const controls = view?.controls;
+  const latestControls = useLatest(controls);
   const hint = (key: string) => keyHint(t, key);
+  // Asked first, with the clock paused meanwhile so time cannot run out
+  // while the quizmaster decides. A question closed by then shows its
+  // results and does not start again.
+  const restartQuestion = () => {
+    const paused = controls?.pauseClock === true;
+    if (paused) dispatch({ type: "pauseClock" });
+    const answered = (yes: boolean) => {
+      if (!yes) {
+        if (paused && latestControls.current?.resumeClock) dispatch({ type: "resumeClock" });
+      } else if (latestControls.current?.restartQuestion) {
+        dispatch({ type: "restartQuestion" });
+      } else {
+        notify(t("restartTooLate"));
+      }
+    };
+    run(confirmAction(t, t("restartQuestionConfirm")).then(answered));
+  };
 
   return (
     <aside className="command-panel">
@@ -296,7 +325,7 @@ function CommandPanel(props: { view: GameView | null; projector: ProjectorSettin
             <CommandButton
               icon={<RewindIcon />}
               label={t("restartQuestion")}
-              onClick={() => run(confirmAction(t, t("restartQuestionConfirm")).then((yes) => yes && dispatch({ type: "restartQuestion" })))}
+              onClick={restartQuestion}
             />
           )}
           {sound.available &&

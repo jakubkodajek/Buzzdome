@@ -27,6 +27,13 @@ Rules for readers and writers (implemented in `crates/quiz-file`):
   `LPT0`-`LPT9`, with any extension). The editor renames imported files to
   fit, and so it does when it opens a `.quiz` file an older version wrote
   with such names (see Versioning).
+- Two media files must not have names that differ only in letter case or
+  in how their accents are encoded (`Flag.png` and `flag.png`, or `kůň`
+  with `ů` as one character or as `u` and a ring): macOS takes them for
+  one file, and Windows does when the case differs. A quiz that uses both
+  is refused; when it uses only one, a show refuses it too if the other
+  comes first in the archive, as its name would find that file, and the
+  editor opens the used one under a numbered name (`flag-2.png`).
 - ZIP entry names written with backslashes (some Windows tools do that) are
   read with `/` in their place.
 - Entries outside `quiz.json` and `media/` (for example the `__MACOSX/`
@@ -260,7 +267,7 @@ stored once in `media/`, however many slides use it.
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `id` | text | 1 to 64 characters, unique among the quiz's categories. |
-| `name` | text | 1 to 40 characters, unique regardless of case and of spaces around it, as a spreadsheet's `CAT` names it. |
+| `name` | text | 1 to 40 characters, unique regardless of case, of spaces around it and of how its accents are encoded, as a spreadsheet's `CAT` names it. |
 | `background` | object or `null` | As a slide's `background`. |
 | `style` | object | As a slide's `style`, read the same way (a value that does not read is left out and listed). Left out when nothing is set. |
 

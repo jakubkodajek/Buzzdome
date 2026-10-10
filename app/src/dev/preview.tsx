@@ -230,6 +230,13 @@ const SCENES: Record<string, GameView | null> = {
   leaderboard: view({ phase: { phase: "endOfRound" }, slideIndex: 5, slide: quiz.slides[5] }),
   overlay: view({ leaderboardVisible: true }),
   final3: view({ phase: { phase: "final", step: 3 }, slideIndex: quiz.slides.length, slide: null }),
+  // Two winners share first place and two teams third (1, 1, 3, 3): no second place.
+  finalShared: view({
+    phase: { phase: "final", step: 3 },
+    slideIndex: quiz.slides.length,
+    slide: null,
+    players: players([{ score: 420, rank: 1 }, { score: 420, rank: 1 }, { score: 395, rank: 3 }, { score: 395, rank: 3 }]),
+  }),
   // The demo quiz's final slide, with the winners' music to play on demand.
   finalSlide: view({ phase: { phase: "final", step: 3 }, slideIndex: quiz.slides.length - 1, slide: { ...quiz.slides[quiz.slides.length - 1], sound: SONG } }),
   picture: view({

@@ -79,15 +79,16 @@ draws slides without a show.
   command (`step-guard.ts`) while the last one is unanswered and for
   `STEP_PAUSE_MS` (300 ms) after its answer, less than a person takes to
   see the new step, so a double press never runs the step after the one on
-  screen, however long the journal write took. Presses and score changes are never dropped.
+  screen, however long the journal write took. Presses and score changes are never dropped,
+  nor is Restart question, which the quizmaster confirms first.
   Show keys count as typing only in text fields: after the quizmaster
   touched a slider, checkbox or list, the keys still work, and a slider
   lets go of the focus when released.
 - **Where Next goes.** `Game::following` decides it: the next slide, or
   after the last slide the final ranking, unless the quiz has a final slide
   of its own (`Quiz::final_slide`), which then is the ranking and the show
-  ends with the last slide. `controls` and `GameView.next_slide_title` use
-  the same function.
+  ends with the last slide. `controls` and `GameView.next_slide` use the
+  same function.
 - **Commands** (UI to Rust) are the `api` object in `app/src/api.ts`, one
   entry per `#[tauri::command]`. Game actions all go through one command,
   `dispatch(Command)`, the same for buttons, keys, virtual and real buzzers.
@@ -290,10 +291,12 @@ A `.quiz` entry with a name that is not portable is stored under the
 closest portable one (`quiz_core::portable_reference`, numbered if taken)
 and the quiz's references are renamed with it (the draft then counts as
 unsaved). So is an entry whose name is one file with an entry before it on
-Windows and macOS (`quiz_core::file_key`: the names differ only in letter
-case, or in how accents are encoded, which macOS ignores too), which would
-take its place there; a show refuses such a quiz (`MediaNameClash`), as it
-does a name it would have to rename. Media added in the editor, and media
+Windows or macOS (`quiz_core::file_key`: the names differ only in letter
+case, which Windows compares in upper case and macOS in lower case, or in
+how accents are encoded, which macOS ignores too), which would take its
+place there; a show refuses a quiz that uses such a name
+(`MediaNameClash`), whether or not it uses the entry before it, as it does
+a name it would have to rename. Media added in the editor, and media
 an export copies beside a sheet, take no name that is one file with a name
 in the folder, also on Linux. A plain `quiz.json` reads
 only safe names from the disk (no device names on Windows), nor any
@@ -335,8 +338,9 @@ off is kept from the show's own version, and the game keeps that version
 to the show's end (`Game::replay`), so what is journaled after a resume
 replays the same way at the next one: a show begun before version 2 jumps
 out of a question in play, as the app then restarted a question after a
-crash with a `GoTo` to it, and one begun before version 3 switches a
-player off without closing the question.
+crash with a `GoTo` to it, one begun before version 3 switches a player
+off without closing the question, and one begun before version 4 restarts
+a closed question.
 
 The windows load media through Tauri's asset protocol. Its scope is empty
 in `tauri.conf.json`; at startup the shell allows the folder of unpacked
@@ -712,7 +716,16 @@ packages users will install are read the same way.
   then by the time their right answers took together (`total_answer_ms`,
   less first); wrong answers add no time, so not answering never helps.
   Players equal in both share a place and the places after them are
-  skipped (1, 1, 3); the podium shows the shared number.
+  skipped (1, 1, 3). On the final podium (`host/podium.ts`) players who
+  share a place stand on its block (more than three: two named, the rest
+  counted), and a place the game skips leaves its block empty.
+  The original breaks ties on total answering time (`replica/recon.md`);
+  counting only right answers is a choice made on purpose, with its price:
+  at equal score, a player whose extra right answers were cancelled by
+  penalties has spent more time and ranks below one with fewer right
+  answers. The rule came with rules version 3 and has no older variant, so
+  in a show begun before it, which resumes with the Director's warning
+  that scores may differ (`RulesChanged`), tied players may swap places.
 
 ### 1.6 Media player and sound board
 
@@ -896,8 +909,11 @@ the windows (`dispatch`: keyboard and on-screen buzzers, the quizmaster's
 buttons) are timed the same way: the time is read before the press or
 command joins the show queue (`show_thread::press`, `show_thread::run`),
 so a keyboard press made during a burst of buzzer presses counts as on
-time. A press or command stamped before the running show began, while it
-started, was meant for no show or the one before, and does not reach it.
+time. A press or show command (`execute_at`) stamped before the running
+show began, while it started, was meant for no show or the one before, and
+does not reach it; neither does an end of the show (`end_show`). Team name
+edits skip that check: they are about the names prepared for any show, and
+one made while a show starts reaches it.
 
 Resuming (`resume_show`) reads the latest session folder: the one with the
 highest number, as a folder is named by its show's start in milliseconds,
@@ -921,10 +937,13 @@ charged twice), and that command is journaled before `show-changed`
 reaches the windows, so no window shows the stopped question. The
 quizmaster can restart a question in play too (Restart question, after a
 confirmation): it is the way to leave a question without scoring it, since
-a jump is refused then. It also works once the question closed, until its
-answer is shown, taking its scores and answering times back, so a restart
-confirmed just after time ran out still works. Score changes made by hand
-(`AdjustScore`) are not the question's and stay.
+a jump is refused then. Its score changes and answering times are taken
+back; score changes made by hand (`AdjustScore`) are not the question's and
+stay. A closed question does not restart: the projector shows its results
+then, which would give the answer away. So the Director pauses the clock
+while the quizmaster confirms, and resumes it if they decline; a question
+that closed meanwhile anyway (everyone answered) is not restarted, and the
+Director says why.
 The Director keeps a resume problem on screen, under the Resume button,
 until another show loads. When a failed journal write cannot be taken back,
 the session refuses every later command (`journalBroken`) until the show is
@@ -973,8 +992,10 @@ neither can slip in between the other's check and its start.
 buzzer, from one function (`Game::light_of`): ready while a player can press,
 locked once they answered or another player buzzed, first for the buzz being
 judged, dark while a question is closed, and the result from the reveal. A
-wrong buzz shows wrong as it is judged, then the lights of the step that
-follows. A player switched on gets the light of the step at once, one
+buzz judged wrong shows wrong while the others get the lights of the step
+that follows (ready again, or dark when it closed the question), until the
+next step's lights: another buzz, the question's close or its reveal. A
+player switched on gets the light of the step at once, one
 switched off shows locked. The shell passes it to `BuzzerDriver::set_lights`; for the hardware
 driver that is a message to the receiver thread, which encodes it with the
 active protocol and writes the reports. Light failures are logged and never

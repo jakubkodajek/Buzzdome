@@ -63,6 +63,15 @@ describe("step guard", () => {
     expect(show.sent).toEqual(["next", "press", "press", "press", "adjustScore", "adjustScore"]);
   });
 
+  it("lets a confirmed restart through right after the clock was paused for its question", async () => {
+    const show = guarded();
+    const paused = show.send({ type: "pauseClock" });
+    show.answer();
+    await paused;
+    expect(show.send({ type: "restartQuestion" })).not.toBeNull();
+    expect(show.sent).toEqual(["pauseClock", "restartQuestion"]);
+  });
+
   it("lets the next step through once the last one was refused", async () => {
     let ms = 0;
     const guard = createStepGuard(() => ms);

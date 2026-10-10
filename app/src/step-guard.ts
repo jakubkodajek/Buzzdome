@@ -5,13 +5,16 @@
 
 import type { Command } from "./types";
 
-/** Commands that move the show on, each meant for the step the quizmaster saw. */
+/**
+ * Commands that move the show on, each meant for the step the quizmaster
+ * saw. Not `restartQuestion`: the quizmaster confirms it first, so no press
+ * runs it unseen, and the clock paused just before it does not hold it up.
+ */
 const STEP_COMMANDS: ReadonlySet<Command["type"]> = new Set([
   "next",
   "goTo",
   "goToFinal",
   "closeQuestion",
-  "restartQuestion",
   "judgeRight",
   "judgeWrong",
   "pauseClock",
