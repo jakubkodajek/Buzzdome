@@ -476,6 +476,12 @@
   font-weight: 600;
 }
 
+/* Selected with the slide on the canvas (Ctrl or Shift click). */
+.thumbnail.selected.also .thumbnail-frame {
+  border-color: var(--hover-line);
+  box-shadow: 0 0 0 2px var(--accent-soft);
+}
+
 .thumbnail.drop-before::before,
 .thumbnail.drop-after::after {
   content: "";
@@ -702,10 +708,47 @@
   background: #fdf0d8;
 }
 
-.studio .props-search {
+.props-search {
+  display: flex;
+  align-items: center;
+  gap: 4px;
   margin: 0 12px 8px;
+}
+
+.studio .props-search input {
+  flex: 1;
+  min-width: 0;
   padding: 5px 10px;
   border-radius: 4px;
+}
+
+.props-search .mini svg {
+  width: 10px;
+  height: 10px;
+}
+
+.studio .props-options {
+  align-self: flex-start;
+  margin-left: auto;
+  padding: 0 7px;
+  border-radius: 4px;
+  font-size: 16px;
+  line-height: 22px;
+  color: var(--muted);
+}
+
+.studio .props-options:hover {
+  background: var(--hover);
+}
+
+.props-classic-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 12px 6px;
+  border-bottom: 1px solid #e6e6e6;
+  color: var(--muted);
 }
 
 .props-pages {
@@ -793,6 +836,34 @@
   color: #444;
 }
 
+/* A number's name: drag it sideways to change the number. */
+.props-label.draggable {
+  cursor: ew-resize;
+  touch-action: none;
+}
+
+.properties-panel mark {
+  border-radius: 2px;
+  color: inherit;
+  background: #ffe08a;
+}
+
+/* A search match in the description, under the row. */
+.props-match {
+  grid-column: 1 / -1;
+  color: var(--muted);
+}
+
+.studio .props-more {
+  margin: 2px 0 0;
+  padding: 2px 0;
+  color: var(--accent);
+}
+
+.studio .props-more:hover {
+  text-decoration: underline;
+}
+
 .props-control {
   display: flex;
   justify-content: flex-end;
@@ -825,6 +896,74 @@
 .props-description p {
   margin: 3px 0 0;
   line-height: 1.35;
+}
+
+/* The panel's dark theme (… menu), for the panel only. */
+.properties-panel.dark {
+  --text: #e6e6e6;
+  --muted: #a3a3a3;
+  --line: #3a3a3a;
+  --accent-soft: #23395a;
+  --hover: #2d3b4d;
+  --hover-line: #4f7bb5;
+
+  color: var(--text);
+  background: #1f1f1f;
+  border-left-color: var(--line);
+}
+
+.properties-panel.dark .props-label,
+.properties-panel.dark .props-pages button,
+.properties-panel.dark .media-name {
+  color: #d0d0d0;
+}
+
+.properties-panel.dark .props-icon,
+.properties-panel.dark .props-pages button.active,
+.properties-panel.dark .chip {
+  color: #9cc3ec;
+}
+
+.properties-panel.dark .props-pages,
+.properties-panel.dark .props-section,
+.properties-panel.dark .props-classic-bar {
+  border-color: var(--line);
+}
+
+.properties-panel.dark .props-pages button:hover {
+  background: #2a2a2a;
+}
+
+.properties-panel.dark .props-description {
+  background: #191919;
+}
+
+.studio .properties-panel.dark input:not([type="checkbox"]):not([type="range"]),
+.studio .properties-panel.dark select,
+.studio .properties-panel.dark textarea,
+.studio .properties-panel.dark .mini,
+.studio .properties-panel.dark .props-button {
+  border-color: #4a4a4a;
+  color: var(--text);
+  background: #2a2a2a;
+}
+
+.studio .properties-panel.dark .switch {
+  border-color: #8a8a8a;
+  background: #2a2a2a;
+}
+
+.properties-panel.dark .switch-knob {
+  background: #cfcfcf;
+}
+
+.studio .properties-panel.dark .switch.on {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+.properties-panel.dark mark {
+  background: #7a5d00;
 }
 
 /* Small controls (controls.tsx) */
@@ -865,6 +1004,16 @@
   opacity: 0.45;
 }
 
+/* The selected slides differ: neither on nor off. */
+.studio .switch.mixed {
+  border-style: dashed;
+}
+
+.switch.mixed .switch-knob {
+  left: 11px;
+  background: #999;
+}
+
 .number-box {
   display: inline-flex;
   align-items: center;
@@ -877,6 +1026,28 @@
 }
 
 .number-box .unit {
+  color: var(--muted);
+}
+
+.number-box.with-slider {
+  width: 100%;
+}
+
+.number-box.with-slider input[type="range"] {
+  flex: 1;
+  min-width: 50px;
+}
+
+.studio .number-box.with-slider input:not([type="range"]) {
+  width: 58px;
+}
+
+.number-box input[type="range"].mixed {
+  opacity: 0.4;
+}
+
+.media-name.mixed {
+  font-style: italic;
   color: var(--muted);
 }
 
@@ -910,24 +1081,6 @@
 .studio .mini:hover:not(:disabled) {
   border-color: var(--hover-line);
   background: var(--hover);
-}
-
-.volume {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  width: 100%;
-}
-
-.volume svg {
-  width: 16px;
-  height: 16px;
-  color: var(--muted);
-}
-
-.volume input {
-  flex: 1;
-  min-width: 60px;
 }
 
 /* Dialogs and menus */

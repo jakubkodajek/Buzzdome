@@ -4,6 +4,8 @@
 import type { ReactNode } from "react";
 import { ANSWER_LETTERS } from "../answers";
 import {
+  DEFAULT_POINTS,
+  DEFAULT_TIME_LIMIT_S,
   MAX_GAIN_DB,
   MAX_INTRO_PAUSE_MS,
   MAX_POINTS,
@@ -16,14 +18,17 @@ import {
 import { sameSpan, WHOLE_FILE } from "../audio/clip-player";
 import { trackTime } from "../format";
 import type { StringKey, Translate } from "../i18n";
-import { SoundIcon } from "../icons";
-import { isVideo, type MediaKind } from "../media";
+import { isVideo, mediaKindOf, type MediaKind } from "../media";
 import { SLIDE_TYPE_LABEL, type SlideContext } from "../quiz";
 import type { QuestionSlide, Replay, Slide, SlideType, SoundClip, SoundStart, Span, TitledSlide, VideoClip, VideoEffect } from "../types";
 import { MediaPicker, NumberBox, Select, Switch } from "./controls";
+import type { PropertyRow } from "./property-rows";
 import {
   answerLimits,
   convertSlide,
+  NEW_BACKGROUND,
+  NEW_SOUND,
+  NEW_VIDEO,
   newReplay,
   removeAnswer,
   setAnswer,
@@ -43,6 +48,8 @@ import {
   withAnswerCount,
 } from "./slides";
 
+export type { PropertyRow } from "./property-rows";
+
 /** What the properties need to change the selected slide. */
 export interface SlideEditing {
   slide: Slide;
@@ -60,25 +67,77 @@ export interface SlideEditing {
   normalizeSound: () => void;
 }
 
-export interface PropertyRow {
-  label: string;
-  description: string;
-  control: ReactNode;
-  /** The control spans the panel's width, under its label. */
-  wide?: boolean;
-}
-
 const SLIDE_TYPES: SlideType[] = ["question", "billboard", "explanation", "endOfRound", "final"];
+
+type RowOptions = Pick<PropertyRow, "wide" | "rare" | "value">;
 
 /** Every property row of the slide being edited. */
 export function slideProperties(t: Translate, { slide, context, update, chooseMedia, trimSound, trimVideo, normalizeSound }: SlideEditing) {
   const question = (change: (q: QuestionSlide) => QuestionSlide, field?: string) => update((s) => (s.type === "question" ? change(s) : s), field);
-  const row = (label: StringKey, description: StringKey, control: ReactNode, wide = false): PropertyRow => ({
+  const row = (id: string, label: StringKey, description: StringKey, control: ReactNode, options: RowOptions = {}): PropertyRow => ({
+    id,
     label: t(label),
     description: t(description),
     control,
-    wide,
+    ...options,
   });
+  /** A number: its box, with a slider when `slider`, and its value for Reset, Copy and Paste. */
+  const numberRow = (
+    id: string,
+    label: StringKey,
+    description: StringKey,
+    number: { value: number; initial?: number; min: number; max: number; step?: number; unit?: string; slider?: boolean; set: (value: number) => void },
+    options: RowOptions = {},
+  ) => {
+    const { value, initial, min, max, step = 1, unit, slider, set } = number;
+    const control = <NumberBox label={t(label)} value={value} min={min} max={max} step={step} unit={unit} slider={slider} onChange={set} />;
+    return row(id, label, description, control, { ...options, value: { kind: "number", value, initial, min, max, step, set } });
+  };
+  const flagRow = (
+    id: string,
+    label: StringKey,
+    description: StringKey,
+    flag: { value: boolean; initial?: boolean; disabled?: boolean; set: (on: boolean) => void },
+    options: RowOptions = {},
+  ) =>
+    row(id, label, description, <Switch label={t(label)} checked={flag.value} disabled={flag.disabled} onChange={flag.set} />, {
+      ...options,
+      value: { kind: "flag", value: flag.value, initial: flag.initial, set: flag.set },
+    });
+  const choiceRow = <T extends string | number>(
+    id: string,
+    label: StringKey,
+    description: StringKey,
+    choice: { value: T; initial?: T; options: [T, string][]; disabled?: boolean; set: (value: T) => void },
+  ) => {
+    const { value, initial, options, disabled, set } = choice;
+    const control = <Select label={t(label)} value={value} options={options} disabled={disabled} onChange={set} />;
+    const setOffered = (picked: string | number) => {
+      const option = options.find(([offered]) => offered === picked);
+      if (option) set(option[0]);
+    };
+    return row(id, label, description, control, { value: { kind: "choice", value, initial, options: options.map(([offered]) => offered), set: setOffered } });
+  };
+  /** A media file of the slide: choose, remove, and Copy and Paste between slides. */
+  const mediaRow = (id: string, label: StringKey, description: StringKey, file: string | null, kinds: MediaKind[], apply: (s: Slide, file: string | null) => Slide) =>
+    row(
+      id,
+      label,
+      description,
+      <MediaPicker label={t(label)} file={file} onChoose={() => chooseMedia(kinds, apply)} onRemove={() => update((s) => apply(s, null))} />,
+      {
+        value: {
+          kind: "media",
+          value: file,
+          initial: null,
+          accepts: (pasted) => {
+            const kind = mediaKindOf(pasted);
+            return kind !== null && kinds.includes(kind);
+          },
+          set: (pasted) => update((s) => apply(s, pasted)),
+        },
+      },
+    );
   const textArea = (label: StringKey, value: string, onChange: (text: string) => void) => (
     <textarea rows={3} aria-label={t(label)} value={value} onChange={(e) => onChange(e.target.value)} />
   );
@@ -107,27 +166,18 @@ export function slideProperties(t: Translate, { slide, context, update, chooseMe
       return key === "sound" ? setSoundOptions(s, change(clip)) : setVideoOptions(s, change(clip));
     }, field && `${key}-${field}`);
   const volume = (key: "sound" | "video", clip: SoundClip | VideoClip, description: StringKey) =>
+    numberRow(`${key}.volume`, "volume", description, {
+      value: clip.volume,
+      initial: 100,
+      min: 0,
+      max: 100,
+      unit: "%",
+      slider: true,
+      set: (value) => playback(key, () => ({ volume: value }), "volume"),
+    });
+  const part = (key: "sound" | "video", clip: SoundClip | VideoClip, description: StringKey, trim: () => void) =>
     row(
-      "volume",
-      description,
-      <span className="volume">
-        <SoundIcon />
-        <input
-          type="range"
-          min={0}
-          max={100}
-          aria-label={t("volume")}
-          value={clip.volume}
-          onChange={(e) => {
-            const value = Number(e.target.value);
-            playback(key, () => ({ volume: value }), "volume");
-          }}
-        />
-        <span className="tabular">{clip.volume} %</span>
-      </span>,
-    );
-  const part = (clip: SoundClip | VideoClip, description: StringKey, trim: () => void) =>
-    row(
+      `${key}.part`,
       "propSoundPart",
       description,
       <span className="props-inline">
@@ -142,208 +192,172 @@ export function slideProperties(t: Translate, { slide, context, update, chooseMe
     slide.type !== "question"
       ? []
       : [
-          row(
-            "propReplay",
-            description,
-            <Switch label={t("propReplay")} checked={clip.replay !== null} onChange={(on) => playback(key, (c) => ({ replay: on ? newReplay(c.part) : null }))} />,
-          ),
+          flagRow(`${key}.replay`, "propReplay", description, {
+            value: clip.replay !== null,
+            initial: false,
+            set: (on) => playback(key, (c) => ({ replay: on ? newReplay(c.part) : null })),
+          }),
           ...(clip.replay
             ? [
-                row("trimReplayPart", description, <span className="tabular props-readonly">{spanText(clip.replay.part)}</span>),
-                row(
+                row(`${key}.replayPart`, "trimReplayPart", description, <span className="tabular props-readonly">{spanText(clip.replay.part)}</span>),
+                numberRow(
+                  `${key}.replayDelay`,
                   "propReplayDelay",
                   "descReplayDelay",
-                  <NumberBox
-                    label={t("propReplayDelay")}
-                    value={clip.replay.delayMs / 1000}
-                    min={0}
-                    max={MAX_REPLAY_DELAY_MS / 1000}
-                    step={0.1}
-                    unit="s"
-                    onChange={(seconds) => playback(key, (c) => ({ replay: c.replay && { ...c.replay, delayMs: seconds * 1000 } }), "replayDelay")}
-                  />,
+                  {
+                    value: clip.replay.delayMs / 1000,
+                    initial: 0,
+                    min: 0,
+                    max: MAX_REPLAY_DELAY_MS / 1000,
+                    step: 0.1,
+                    unit: "s",
+                    set: (seconds) => playback(key, (c) => ({ replay: c.replay && { ...c.replay, delayMs: seconds * 1000 } }), "replayDelay"),
+                  },
+                  { rare: true },
                 ),
               ]
             : []),
         ];
 
   return {
-    type: row(
-      "propType",
-      "descType",
-      <Select
-        label={t("propType")}
-        value={slide.type}
-        options={SLIDE_TYPES.map((type) => [type, t(SLIDE_TYPE_LABEL[type])])}
-        onChange={(type) => update((s) => convertSlide(s, type))}
-      />,
-    ),
-    id: row("propId", "descId", <code className="props-readonly">{slide.id}</code>),
+    type: choiceRow("type", "propType", "descType", {
+      value: slide.type,
+      options: SLIDE_TYPES.map((type) => [type, t(SLIDE_TYPE_LABEL[type])]),
+      set: (type) => update((s) => convertSlide(s, type)),
+    }),
+    id: row("id", "propId", "descId", <code className="props-readonly">{slide.id}</code>),
 
     answerTime: (q: QuestionSlide) =>
-      row(
-        "propAnswerTime",
-        "descAnswerTime",
-        <NumberBox
-          label={t("propAnswerTime")}
-          value={q.timeLimitS}
-          min={0}
-          max={MAX_TIME_LIMIT_S}
-          unit="s"
-          onChange={(v) => question((s) => setScoring(s, { timeLimitS: v }), "timeLimitS")}
-        />,
-      ),
+      numberRow("answerTime", "propAnswerTime", "descAnswerTime", {
+        value: q.timeLimitS,
+        initial: DEFAULT_TIME_LIMIT_S,
+        min: 0,
+        max: MAX_TIME_LIMIT_S,
+        unit: "s",
+        set: (v) => question((s) => setScoring(s, { timeLimitS: v }), "timeLimitS"),
+      }),
     everyoneAnswers: (q: QuestionSlide) =>
-      row(
-        "propEveryoneAnswers",
-        "descEveryoneAnswers",
-        <Switch
-          label={t("propEveryoneAnswers")}
-          checked={q.mode === "everyone"}
-          onChange={(on) => question((s) => setMode(s, on ? "everyone" : "fastestFinger"))}
-        />,
-      ),
+      flagRow("everyoneAnswers", "propEveryoneAnswers", "descEveryoneAnswers", {
+        value: q.mode === "everyone",
+        set: (on) => question((s) => setMode(s, on ? "everyone" : "fastestFinger")),
+      }),
     answerCount: (q: QuestionSlide) => {
       const { fewest, most } = answerLimits(q.mode);
       // A file from an older version may have more; it is offered until changed.
       const counts = Array.from({ length: Math.max(most, q.answers.length) - fewest + 1 }, (_, i) => fewest + i);
-      return row(
-        "propAnswerCount",
-        "descAnswerCount",
-        <Select
-          label={t("propAnswerCount")}
-          value={q.answers.length}
-          options={counts.map((n) => [n, String(n)])}
-          onChange={(n) => question((s) => withAnswerCount(s, n))}
-        />,
-      );
+      return choiceRow("answerCount", "propAnswerCount", "descAnswerCount", {
+        value: q.answers.length,
+        options: counts.map((n) => [n, String(n)]),
+        set: (n) => question((s) => withAnswerCount(s, n)),
+      });
     },
     correctAnswer: (q: QuestionSlide) => {
       const none: [number, string][] = q.mode === "fastestFinger" ? [[-1, t("noCorrectAnswer")]] : [];
-      return row(
-        "propCorrectAnswer",
-        "descCorrectAnswer",
-        <Select
-          label={t("propCorrectAnswer")}
-          value={q.correct ?? -1}
-          options={[...none, ...q.answers.map((_, i): [number, string] => [i, ANSWER_LETTERS[i]])]}
-          disabled={q.answers.length === 0}
-          onChange={(i) => question((s) => setCorrect(s, i < 0 ? null : i))}
-        />,
-      );
+      return choiceRow("correctAnswer", "propCorrectAnswer", "descCorrectAnswer", {
+        value: q.correct ?? -1,
+        options: [...none, ...q.answers.map((_, i): [number, string] => [i, ANSWER_LETTERS[i]])],
+        disabled: q.answers.length === 0,
+        set: (i) => question((s) => setCorrect(s, i < 0 ? null : i)),
+      });
     },
 
     pointsStart: (q: QuestionSlide) =>
-      row(
-        "propPointsStart",
-        "descPointsStart",
-        <NumberBox
-          label={t("propPointsStart")}
-          value={q.points}
-          min={-MAX_POINTS}
-          max={MAX_POINTS}
-          onChange={(v) => question((s) => setScoring(s, { points: v }), "points")}
-        />,
-      ),
+      numberRow("pointsStart", "propPointsStart", "descPointsStart", {
+        value: q.points,
+        initial: DEFAULT_POINTS,
+        min: -MAX_POINTS,
+        max: MAX_POINTS,
+        set: (v) => question((s) => setScoring(s, { points: v }), "points"),
+      }),
     falling: (q: QuestionSlide) =>
-      row(
-        "propFalling",
-        "descFalling",
-        <Switch
-          label={t("propFalling")}
-          checked={q.pointsEnd !== null}
-          onChange={(on) => question((s) => setScoring(s, { pointsEnd: on ? Math.round(s.points / 2) : null }))}
-        />,
-      ),
+      flagRow("falling", "propFalling", "descFalling", {
+        value: q.pointsEnd !== null,
+        initial: false,
+        set: (on) => question((s) => setScoring(s, { pointsEnd: on ? Math.round(s.points / 2) : null })),
+      }),
     pointsEnd: (q: QuestionSlide) =>
-      row(
-        "propPointsEnd",
-        "descPointsEnd",
-        <NumberBox
-          label={t("propPointsEnd")}
-          value={q.pointsEnd ?? q.points}
-          min={-MAX_POINTS}
-          max={MAX_POINTS}
-          onChange={(v) => question((s) => (s.pointsEnd === null ? s : setScoring(s, { pointsEnd: v })), "pointsEnd")}
-        />,
-      ),
+      numberRow("pointsEnd", "propPointsEnd", "descPointsEnd", {
+        value: q.pointsEnd ?? q.points,
+        min: -MAX_POINTS,
+        max: MAX_POINTS,
+        set: (v) => question((s) => (s.pointsEnd === null ? s : setScoring(s, { pointsEnd: v })), "pointsEnd"),
+      }),
     penalty: (q: QuestionSlide) =>
-      row(
-        "propPenalty",
-        "descPenalty",
-        <NumberBox
-          label={t("propPenalty")}
-          value={q.penalty}
-          min={0}
-          max={MAX_POINTS}
-          onChange={(v) => question((s) => setScoring(s, { penalty: v }), "penalty")}
-        />,
-      ),
+      numberRow("penalty", "propPenalty", "descPenalty", {
+        value: q.penalty,
+        initial: 0,
+        min: 0,
+        max: MAX_POINTS,
+        set: (v) => question((s) => setScoring(s, { penalty: v }), "penalty"),
+      }),
 
     questionText: (q: QuestionSlide) =>
       row(
+        "questionText",
         "questionField",
         "descQuestionText",
         textArea("questionField", q.text, (text) => update((s) => setHeadline(s, text), "text")),
-        true,
+        { wide: true },
       ),
     title: (s: TitledSlide) =>
       row(
+        "title",
         "slideTitleField",
         "descTitle",
         textArea("slideTitleField", s.title, (title) => update((x) => setHeadline(x, title), "title")),
-        true,
+        { wide: true },
       ),
     bodyText: (s: Extract<Slide, { type: "billboard" }>) =>
       row(
+        "bodyText",
         "slideTextField",
         "descBodyText",
         textArea("slideTextField", s.text, (text) => update((x) => setBodyText(x, text), "text")),
-        true,
+        { wide: true },
       ),
     explanationText: (s: Extract<Slide, { type: "explanation" }>) =>
       row(
+        "explanationText",
         "explanationField",
         "descExplanation",
         textArea("explanationField", s.text, (text) => update((x) => setHeadline(x, text), "text")),
-        true,
+        { wide: true },
       ),
     /** Which question an explanation slide explains; set by where it stands. */
     explains: row(
+      "explains",
       "explainsField",
       "descExplains",
       <span className="props-readonly">
         {context.explains ? `${t("questionNumber", { n: context.explains.position.n })}: ${context.explains.question.text}` : t("noQuestionToExplain")}
       </span>,
-      true,
+      { wide: true },
     ),
     notes: row(
       "notes",
+      "notes",
       "descNotes",
       textArea("notes", slide.notes, (notes) => update((s) => setNotes(s, notes), "notes")),
-      true,
+      { wide: true },
     ),
 
     answerText: (q: QuestionSlide, i: number) =>
       row(
+        `answer${i}.text`,
         "propAnswerText",
         "descAnswerText",
         textArea("propAnswerText", q.answers[i] ?? "", (text) => question((s) => setAnswer(s, i, text), `answer${i}`)),
-        true,
+        { wide: true },
       ),
     isCorrect: (q: QuestionSlide, i: number) =>
-      row(
-        "propIsCorrect",
-        "descIsCorrect",
-        <Switch
-          label={t("propIsCorrect")}
-          checked={q.correct === i}
-          disabled={q.correct === i && q.mode === "everyone"}
-          onChange={(on) => question((s) => setCorrect(s, on ? i : null))}
-        />,
-      ),
+      flagRow(`answer${i}.correct`, "propIsCorrect", "descIsCorrect", {
+        value: q.correct === i,
+        disabled: q.correct === i && q.mode === "everyone",
+        set: (on) => question((s) => setCorrect(s, on ? i : null)),
+      }),
     removeAnswer: (q: QuestionSlide, i: number) =>
       row(
+        `answer${i}.remove`,
         "removeAnswer",
         "descRemoveAnswer",
         <button type="button" className="props-button" disabled={removeAnswer(q, i) === q} onClick={() => question((s) => removeAnswer(s, i))}>
@@ -351,166 +365,154 @@ export function slideProperties(t: Translate, { slide, context, update, chooseMe
         </button>,
       ),
 
-    picture: row(
-      "propPicture",
-      "descPicture",
-      <MediaPicker
-        label={t("propPicture")}
-        file={slide.picture}
-        onChoose={() => chooseMedia(["image"], setPicture)}
-        onRemove={() => update((s) => setPicture(s, null))}
-      />,
-    ),
-    video: row(
-      "propVideo",
-      "descVideo",
-      <MediaPicker
-        label={t("propVideo")}
-        file={slide.video?.file ?? null}
-        onChoose={() => chooseMedia(["video"], setVideo)}
-        onRemove={() => update((s) => setVideo(s, null))}
-      />,
-    ),
+    picture: mediaRow("picture", "propPicture", "descPicture", slide.picture, ["image"], setPicture),
+    video: mediaRow("video", "propVideo", "descVideo", slide.video?.file ?? null, ["video"], setVideo),
     /** Options of the slide's video; none without one. */
     videoOptions: video
       ? [
-          row("videoAutoplay", "descVideoAutoplay", <Switch label={t("videoAutoplay")} checked={video.autoplay} onChange={(on) => update((s) => setVideoOptions(s, { autoplay: on }))} />),
+          flagRow("video.autoplay", "videoAutoplay", "descVideoAutoplay", {
+            value: video.autoplay,
+            initial: NEW_VIDEO.autoplay,
+            set: (on) => update((s) => setVideoOptions(s, { autoplay: on })),
+          }),
           ...(video.autoplay
             ? [
-                row(
+                numberRow(
+                  "video.introPause",
                   "propIntroPause",
                   "descIntroPause",
-                  <NumberBox
-                    label={t("propIntroPause")}
-                    value={video.introPauseMs / 1000}
-                    min={0}
-                    max={MAX_INTRO_PAUSE_MS / 1000}
-                    step={0.1}
-                    unit="s"
-                    onChange={(seconds) => update((s) => setVideoOptions(s, { introPauseMs: seconds * 1000 }), "introPause")}
-                  />,
+                  {
+                    value: video.introPauseMs / 1000,
+                    initial: NEW_VIDEO.introPauseMs / 1000,
+                    min: 0,
+                    max: MAX_INTRO_PAUSE_MS / 1000,
+                    step: 0.1,
+                    unit: "s",
+                    set: (seconds) => update((s) => setVideoOptions(s, { introPauseMs: seconds * 1000 }), "introPause"),
+                  },
+                  { rare: true },
                 ),
               ]
             : []),
-          row("videoMuted", "descVideoMuted", <Switch label={t("videoMuted")} checked={video.muted} onChange={(on) => update((s) => setVideoOptions(s, { muted: on }))} />),
-          row("repeat", "descVideoRepeat", <Switch label={t("repeat")} checked={video.repeat} onChange={(on) => update((s) => setVideoOptions(s, { repeat: on }))} />),
+          flagRow("video.muted", "videoMuted", "descVideoMuted", {
+            value: video.muted,
+            initial: NEW_VIDEO.muted,
+            set: (on) => update((s) => setVideoOptions(s, { muted: on })),
+          }),
+          flagRow("video.repeat", "repeat", "descVideoRepeat", {
+            value: video.repeat,
+            initial: NEW_VIDEO.repeat,
+            set: (on) => update((s) => setVideoOptions(s, { repeat: on })),
+          }),
           volume("video", video, "descVideoVolume"),
-          row(
+          numberRow(
+            "video.speed",
             "propSpeed",
             "descSpeed",
-            <NumberBox
-              label={t("propSpeed")}
-              value={video.speed}
-              min={MIN_VIDEO_SPEED}
-              max={MAX_VIDEO_SPEED}
-              step={5}
-              unit="%"
-              onChange={(speed) => update((s) => setVideoOptions(s, { speed }), "speed")}
-            />,
+            {
+              value: video.speed,
+              initial: NEW_VIDEO.speed,
+              min: MIN_VIDEO_SPEED,
+              max: MAX_VIDEO_SPEED,
+              step: 5,
+              unit: "%",
+              slider: true,
+              set: (speed) => update((s) => setVideoOptions(s, { speed }), "speed"),
+            },
+            { rare: true },
           ),
         ]
       : [],
     /** Which part of the video plays; null without one. */
-    videoPart: video && part(video, "descVideoPart", trimVideo),
+    videoPart: video && part("video", video, "descVideoPart", trimVideo),
     /** The part a question's video replays after the reveal. */
     videoReplay: video ? replay("video", video, "descVideoReplay") : [],
     /** The effect over a question's video; null on other slides or without a video. */
     videoEffect:
       video && slide.type === "question"
-        ? row(
-            "propEffect",
-            "descEffect",
-            <Select
-              label={t("propEffect")}
-              value={video.effect ?? "none"}
-              options={effects}
-              onChange={(effect) => update((s) => setVideoOptions(s, { effect: effect === "none" ? null : effect }))}
-            />,
-          )
+        ? choiceRow("video.effect", "propEffect", "descEffect", {
+            value: video.effect ?? "none",
+            initial: "none",
+            options: effects,
+            set: (effect) => update((s) => setVideoOptions(s, { effect: effect === "none" ? null : effect })),
+          })
         : null,
-    sound: row(
-      "propSound",
-      "descSound",
-      <MediaPicker
-        label={t("propSound")}
-        file={slide.sound?.file ?? null}
-        onChoose={() => chooseMedia(["audio"], setSound)}
-        onRemove={() => update((s) => setSound(s, null))}
-      />,
-    ),
+    sound: mediaRow("sound", "propSound", "descSound", slide.sound?.file ?? null, ["audio"], setSound),
     /** Options of the slide's sound; none without one. */
-    soundOptions: slide.sound
+    soundOptions: sound
       ? [
-          row(
-            "soundStart",
-            "descSoundStart",
-            <Select label={t("soundStart")} value={slide.sound.start} options={soundStarts} onChange={(start) => update((s) => setSoundOptions(s, { start }))} />,
-          ),
-          row(
-            "repeat",
-            "descSoundRepeat",
-            <Switch label={t("repeat")} checked={slide.sound.repeat} onChange={(on) => update((s) => setSoundOptions(s, { repeat: on }))} />,
-          ),
-          volume("sound", slide.sound, "descVolume"),
+          choiceRow("sound.start", "soundStart", "descSoundStart", {
+            value: sound.start,
+            initial: NEW_SOUND.start,
+            options: soundStarts,
+            set: (start) => update((s) => setSoundOptions(s, { start })),
+          }),
+          flagRow("sound.repeat", "repeat", "descSoundRepeat", {
+            value: sound.repeat,
+            initial: NEW_SOUND.repeat,
+            set: (on) => update((s) => setSoundOptions(s, { repeat: on })),
+          }),
+          volume("sound", sound, "descVolume"),
         ]
       : [],
     /** Which part of the sound plays; null without one. */
-    soundPart: sound && part(sound, "descSoundPart", trimSound),
+    soundPart: sound && part("sound", sound, "descSoundPart", trimSound),
     /** The part a question's sound replays after the reveal. */
     replay: sound ? replay("sound", sound, "descReplay") : [],
     /** The sound's loudness gain; null without a sound. */
     gain:
       sound &&
-      row(
+      numberRow(
+        "sound.gain",
         "propGain",
         "descGain",
-        <NumberBox
-          label={t("propGain")}
-          value={sound.gainDb}
-          min={MIN_GAIN_DB}
-          max={MAX_GAIN_DB}
-          step={0.1}
-          unit="dB"
-          onChange={(gainDb) => update((s) => setSoundOptions(s, { gainDb }), "gainDb")}
-        />,
+        {
+          value: sound.gainDb,
+          initial: NEW_SOUND.gainDb,
+          min: MIN_GAIN_DB,
+          max: MAX_GAIN_DB,
+          step: 0.1,
+          unit: "dB",
+          slider: true,
+          set: (gainDb) => update((s) => setSoundOptions(s, { gainDb }), "gainDb"),
+        },
+        { rare: true },
       ),
     /** Normalizing the sound; null without one. The ribbon has its own button. */
     normalize:
       sound &&
       row(
+        "sound.normalize",
         "normalizeAction",
         "descNormalize",
         <button type="button" className="props-button" onClick={normalizeSound}>
           {t("normalizeAction")}
         </button>,
       ),
-    background: row(
-      "propBackground",
-      "descBackground",
-      <MediaPicker
-        label={t("propBackground")}
-        file={slide.background?.file ?? null}
-        onChoose={() => chooseMedia(["image", "video"], setBackground)}
-        onRemove={() => update((s) => setBackground(s, null))}
-      />,
-    ),
+    background: mediaRow("background", "propBackground", "descBackground", slide.background?.file ?? null, ["image", "video"], setBackground),
     /** Options of a background video; none for a picture or without a background. */
     backgroundOptions: backgroundVideo
       ? [
-          row(
-            "repeat",
-            "descBackgroundRepeat",
-            <Switch label={t("repeat")} checked={backgroundVideo.repeat} onChange={(on) => update((s) => setBackgroundOptions(s, { repeat: on }))} />,
-          ),
-          row(
-            "videoMuted",
-            "descBackgroundMuted",
-            <Switch label={t("videoMuted")} checked={backgroundVideo.muted} onChange={(on) => update((s) => setBackgroundOptions(s, { muted: on }))} />,
-          ),
-          row(
+          flagRow("background.repeat", "repeat", "descBackgroundRepeat", {
+            value: backgroundVideo.repeat,
+            initial: NEW_BACKGROUND.repeat,
+            set: (on) => update((s) => setBackgroundOptions(s, { repeat: on })),
+          }),
+          flagRow("background.muted", "videoMuted", "descBackgroundMuted", {
+            value: backgroundVideo.muted,
+            initial: NEW_BACKGROUND.muted,
+            set: (on) => update((s) => setBackgroundOptions(s, { muted: on })),
+          }),
+          flagRow(
+            "background.sync",
             "propBackgroundSync",
             "descBackgroundSync",
-            <Switch label={t("propBackgroundSync")} checked={backgroundVideo.sync} onChange={(on) => update((s) => setBackgroundOptions(s, { sync: on }))} />,
+            {
+              value: backgroundVideo.sync,
+              initial: NEW_BACKGROUND.sync,
+              set: (on) => update((s) => setBackgroundOptions(s, { sync: on })),
+            },
+            { rare: true },
           ),
         ]
       : [],

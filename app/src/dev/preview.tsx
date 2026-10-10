@@ -248,7 +248,6 @@ mockWindows(windowLabel, windowLabel === "host" ? "director" : "host");
 /** The commands the windows sent, for browser checks of the controls (nothing applies them here). */
 const dispatched: unknown[] = [];
 (window as unknown as { dispatched: unknown[] }).dispatched = dispatched;
-/** Other backend calls that change something, as `{ cmd, ...payload }`, for the same checks. */
 /** What the stand-in spreadsheet import gives. */
 const SHEET_IMPORT: SheetImport = {
   slides: [
@@ -277,6 +276,7 @@ const SHEET_IMPORT: SheetImport = {
   ],
 };
 
+/** Other backend calls that change something, as `{ cmd, ...payload }`, for the same checks. */
 const called: unknown[] = [];
 (window as unknown as { called: unknown[] }).called = called;
 /** The team names prepared before a show (the running show's in a show scene). */

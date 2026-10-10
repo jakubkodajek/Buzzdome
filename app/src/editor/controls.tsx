@@ -1,21 +1,30 @@
 // Small form controls of the editor, in the look of a desktop app.
 
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { useApp } from "../app-context";
 import { parseTrackTime, trackTime } from "../format";
 import { mediaFileName } from "../media";
 import { shortcutLabel, type Action } from "./actions";
 
+/**
+ * True around the control of a property the selected slides have different
+ * values for: it shows no value (Mixed), and setting one sets it on all.
+ */
+export const MixedContext = createContext(false);
+
 export function Switch({ checked, onChange, disabled = false, label }: { checked: boolean; onChange: (on: boolean) => void; disabled?: boolean; label: string }) {
+  const { t } = useApp();
+  const mixed = useContext(MixedContext);
   return (
     <button
       type="button"
       role="switch"
-      aria-checked={checked}
-      aria-label={label}
-      className={checked ? "switch on" : "switch"}
+      aria-checked={checked && !mixed}
+      aria-label={mixed ? `${label}: ${t("mixedValues")}` : label}
+      title={mixed ? t("mixedValues") : undefined}
+      className={mixed ? "switch mixed" : checked ? "switch on" : "switch"}
       disabled={disabled}
-      onClick={() => onChange(!checked)}
+      onClick={() => onChange(mixed || !checked)}
     >
       <span className="switch-knob" />
     </button>
@@ -27,19 +36,44 @@ export function Switch({ checked, onChange, disabled = false, label }: { checked
  * typed while focused; the value changes whenever the text is a number in
  * [min, max], and leaving the field brings a number outside to its nearest
  * limit (so typing 150 into a box from 25 does not stop at 25 after the 1).
+ * With `slider`, a slider over [min, max] comes before the box.
  */
-export function NumberBox(props: { value: number; onChange: (value: number) => void; min?: number; max?: number; step?: number; unit?: string; label: string }) {
-  const { value, onChange, min = -Infinity, max = Infinity, step = 1, unit, label } = props;
+export function NumberBox(props: {
+  value: number;
+  onChange: (value: number) => void;
+  min?: number;
+  max?: number;
+  step?: number;
+  unit?: string;
+  label: string;
+  slider?: boolean;
+}) {
+  const { value, onChange, min = -Infinity, max = Infinity, step = 1, unit, label, slider = false } = props;
+  const { t } = useApp();
+  const mixed = useContext(MixedContext);
   const clamp = (n: number) => Math.min(max, Math.max(min, n));
-  const [text, setText] = useState(String(value));
-  const [shown, setShown] = useState(value);
-  if (value !== shown) {
-    // The value changed from outside (undo, clamping): show it.
-    setShown(value);
-    setText(String(value));
+  const shownText = mixed ? "" : String(value);
+  const [text, setText] = useState(shownText);
+  const [shown, setShown] = useState(shownText);
+  if (shownText !== shown) {
+    // The value changed from outside (undo, clamping, other slides): show it.
+    setShown(shownText);
+    setText(shownText);
   }
   return (
-    <span className="number-box">
+    <span className={slider ? "number-box with-slider" : "number-box"}>
+      {slider && (
+        <input
+          type="range"
+          min={min}
+          max={max}
+          step={step}
+          aria-label={label}
+          value={value}
+          className={mixed ? "mixed" : undefined}
+          onChange={(e) => onChange(Number(e.target.value))}
+        />
+      )}
       <input
         type="number"
         inputMode={Number.isInteger(step) ? "numeric" : "decimal"}
@@ -47,6 +81,7 @@ export function NumberBox(props: { value: number; onChange: (value: number) => v
         min={Number.isFinite(min) ? min : undefined}
         max={Number.isFinite(max) ? max : undefined}
         aria-label={label}
+        placeholder={mixed ? t("mixedValues") : undefined}
         value={text}
         onChange={(e) => {
           const next = e.target.value;
@@ -56,8 +91,8 @@ export function NumberBox(props: { value: number; onChange: (value: number) => v
         }}
         onBlur={() => {
           const typed = typedNumber(text);
-          if (typed !== null && clamp(typed) !== value) onChange(clamp(typed));
-          setText(String(value));
+          if (typed !== null && (mixed || clamp(typed) !== value)) onChange(clamp(typed));
+          setText(shownText);
         }}
       />
       {unit && <span className="unit">{unit}</span>}
@@ -102,18 +137,28 @@ export function TimeBox(props: { value: number; onChange: (ms: number) => void; 
   );
 }
 
+/** The value of the Mixed entry of a select; no option has it. */
+const MIXED_OPTION = "\u0000mixed";
+
 export function Select<T extends string | number>(props: { value: T; options: [T, string][]; onChange: (value: T) => void; label: string; disabled?: boolean }) {
   const { value, options, onChange, label, disabled } = props;
+  const { t } = useApp();
+  const mixed = useContext(MixedContext);
   return (
     <select
       aria-label={label}
-      value={String(value)}
+      value={mixed ? MIXED_OPTION : String(value)}
       disabled={disabled}
       onChange={(e) => {
         const picked = options.find(([option]) => String(option) === e.target.value);
         if (picked) onChange(picked[0]);
       }}
     >
+      {mixed && (
+        <option value={MIXED_OPTION} disabled>
+          {t("mixedValues")}
+        </option>
+      )}
       {options.map(([option, text]) => (
         <option key={String(option)} value={String(option)}>
           {text}
@@ -126,15 +171,16 @@ export function Select<T extends string | number>(props: { value: T; options: [T
 /** A media file of the slide: its name, a button to choose another, one to remove it. */
 export function MediaPicker({ file, onChoose, onRemove, label }: { file: string | null; onChoose: () => void; onRemove: () => void; label: string }) {
   const { t } = useApp();
+  const mixed = useContext(MixedContext);
   return (
     <span className="media-picker">
-      <span className="media-name" title={file ?? undefined}>
-        {file ? mediaFileName(file) : t("noFile")}
+      <span className={mixed ? "media-name mixed" : "media-name"} title={mixed ? undefined : (file ?? undefined)}>
+        {mixed ? t("mixedValues") : file ? mediaFileName(file) : t("noFile")}
       </span>
       <button type="button" className="mini" aria-label={`${label}: ${t("chooseFile")}`} title={t("chooseFile")} onClick={onChoose}>
         …
       </button>
-      {file && (
+      {(file || mixed) && (
         <button type="button" className="mini" aria-label={`${label}: ${t("remove")}`} title={t("remove")} onClick={onRemove}>
           ×
         </button>

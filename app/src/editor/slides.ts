@@ -101,7 +101,7 @@ export function freshSlideId(quiz: Quiz, random: () => string = randomId): strin
   return freshId(new Set(quiz.slides.map((slide) => slide.id)), random);
 }
 
-/** `slides` with ids no slide of `quiz` has, nor each other, to insert them all. */
+/** Copies of `slides` with ids no slide of `quiz` has, nor each other, to insert them all (pasting, duplicating, importing). */
 export function withFreshIds(quiz: Quiz, slides: Slide[], random: () => string = randomId): Slide[] {
   const taken = new Set(quiz.slides.map((slide) => slide.id));
   return slides.map((slide) => {
@@ -116,11 +116,6 @@ function freshId(taken: Set<string>, random: () => string): string {
     const id = `s-${random()}`;
     if (!taken.has(id)) return id;
   }
-}
-
-/** A copy of `slide` under a new id. */
-export function duplicateSlide(slide: Slide, id: string): Slide {
-  return { ...slide, id };
 }
 
 export function setMode(question: QuestionSlide, mode: AnswerMode): QuestionSlide {
@@ -201,8 +196,13 @@ function clampInt(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, Number.isFinite(value) ? Math.round(value) : 0));
 }
 
-/** The options a quiz file gets when it names only the file (crates/quiz-core/src/media.rs). */
-const NEW_VIDEO: Omit<VideoClip, "file"> = {
+/**
+ * The options a new video, sound and background get in the editor, and the
+ * defaults the properties' Reset goes back to. A quiz file that names only
+ * the file gets the same, but a video there starts without an intro pause
+ * (crates/quiz-core/src/media.rs).
+ */
+export const NEW_VIDEO: Omit<VideoClip, "file"> = {
   autoplay: true,
   introPauseMs: 1_000,
   muted: false,
@@ -213,8 +213,8 @@ const NEW_VIDEO: Omit<VideoClip, "file"> = {
   effect: null,
   replay: null,
 };
-const NEW_SOUND: Omit<SoundClip, "file"> = { start: "onSlide", repeat: false, volume: 100, part: WHOLE_FILE, gainDb: 0, replay: null };
-const NEW_BACKGROUND: Omit<Background, "file"> = { repeat: true, muted: true, sync: false };
+export const NEW_SOUND: Omit<SoundClip, "file"> = { start: "onSlide", repeat: false, volume: 100, part: WHOLE_FILE, gainDb: 0, replay: null };
+export const NEW_BACKGROUND: Omit<Background, "file"> = { repeat: true, muted: true, sync: false };
 
 /** Shows a picture; a slide shows a picture or a video, so the video goes. */
 export function setPicture(slide: Slide, file: string | null): Slide {

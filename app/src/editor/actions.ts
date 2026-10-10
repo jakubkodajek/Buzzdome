@@ -37,6 +37,7 @@ export type ActionId =
   | "duplicate"
   | "moveUp"
   | "moveDown"
+  | "selectAll"
   | "edit"
   | "newSlide"
   | "addQuestion"
@@ -59,6 +60,7 @@ export type ActionId =
   | "graphical"
   | "table"
   | "properties"
+  | "findProperty"
   | "notes"
   | "testRun"
   | "testRunHere";

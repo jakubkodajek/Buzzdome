@@ -189,10 +189,14 @@ table view toggle. It edits a quiz; it never touches a running show.
   set theme, insert, update, remove, move a slide). Typing into one field of one slide
   merges into one undo step through a merge key (`<slide id>:<field>`).
   `editor-state.ts` reduces that history together with what the backend
-  reported (loaded, saved, checked). The selection is a slide id with its
-  index as a fallback once the slide is gone, plus the part of the slide
-  (`elements.ts`: question, answer *n*, title, picture, video, sound, ...),
-  which the canvas, the panel and the context menu share.
+  reported (loaded, saved, checked). The selection (`selection.ts`) is the
+  slide on the canvas, by id with its index as a fallback once the slide is
+  gone, the part of it (`elements.ts`: question, answer *n*, title,
+  picture, video, sound, ...), which the canvas, the panel and the context
+  menu share, and the other slides selected with it (Ctrl and Shift click,
+  Ctrl+A). Cut, copy, paste, duplicate, delete, moving and dragging act on
+  every selected slide as one `batch` edit; `selection.ts` builds those
+  edits and the click rules, tested in `selection.test.ts`.
 - **Slide changes.** `slides.ts` holds every change to a slide as a pure
   function that keeps the slide playable (an everyone-answers question
   always has 2 to 4 answers and a correct one, a fastest finger question at
@@ -204,10 +208,20 @@ table view toggle. It edits a quiz; it never touches a running show.
   bar and the keyboard (`useActionKeys`) all read it, so a command, its
   shortcut and its enabled state are defined once.
 - **Properties.** `properties.tsx` turns the selected slide into labelled
-  rows (label, description, control). The properties panel, the ribbon's
-  Question tab and the table view lay out the same rows, so a field is
+  rows (id, label, description, control, and for most rows a typed value:
+  number with its range, flag, choice or media). The properties panel, the
+  ribbon's Question tab and the table view lay out the same rows, so a field is
   built and validated in one place. The Edit dialog (double click, Enter)
   edits a local copy and applies it as one undo step.
+  `property-pages.ts` sorts the rows into the panel's pages and sections.
+  With several slides selected each slide gets its own rows, and the panel
+  shows only the rows with a value that every slide has (`commonRows`);
+  a change runs the same slide change on each of them as one undo step,
+  and values that differ show as Mixed (`MixedContext` in `controls.tsx`).
+  What the panel does with a row's value (search with accents ignored,
+  dragging a number's name, Reset, Copy and Paste between rows, the
+  alphabetical list) is pure in `property-rows.ts`, tested in
+  `property-rows.test.ts`.
 - **Rendering.** The canvas, the thumbnails (editor and Director) and the
   projector all draw a slide with `SlideScreen` inside a 16:9 `Stage`
   (`app/src/host/`). The editor and thumbnails feed it `previewView`, a
@@ -618,6 +632,7 @@ them.
 | Linux `.deb` | built locally | pass |
 | UI screens (Director, projector) render without errors, incl. a slide picture | preview with a mocked backend, headless Chromium | pass |
 | Editor: typing, undo and redo, copy and paste, delete, keys, Edit dialog, ribbon fields, layout gallery, drag reorder, table view, File page | `npm test` (history, draft queue, slide changes, layouts) and 22 flows in headless Chromium against the preview | pass |
+| Properties panel and several selected slides: search, More options, drag a name, Reset, Copy and Paste, Mixed values, dark panel, alphabetical list; Ctrl and Shift click, Ctrl+A, delete, move | `npm test` (`property-rows`, `selection`) and 38 checks in headless Chromium against the preview | pass |
 | Quiz files: save, open, reuse, unsafe entries, size limit, missing media | `cargo test -p quiz-file` | pass |
 | Themes: `theme.json` rules, inheritance, built-in packages complete with their files and font licences; gallery, fonts, a broken theme background warns once | `cargo test` (`quiz_core::theme`, shell `themes`), `npm test`, headless Chromium against the preview | pass |
 | Teams: names, pairing, replay, names kept between shows; drag, click, paste and CSV import (Windows-1250), preparing names before a show | `cargo test` (`game_flow`, shell `teams`, `app_file`), `npm test` (`team-names`), headless Chromium against the preview | pass |

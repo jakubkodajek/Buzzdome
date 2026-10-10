@@ -51,10 +51,25 @@ import { LoudnessDialog } from "./LoudnessDialog";
 import { gainChange, LOUDNESS_STATUS_KEYS, measureSound, readLoudnessTarget } from "./normalize";
 import { PropertiesPanel } from "./PropertiesPanel";
 import { slideProperties, type SlideEditing } from "./properties";
+import { selectionPages } from "./property-pages";
+import type { CopiedValue } from "./property-rows";
+import {
+  clickSlide,
+  FIRST,
+  insertSlides,
+  moveByOne,
+  moveToGap,
+  positions,
+  removeSlides,
+  selectAll,
+  selectedIds,
+  selectIds,
+  selectOne,
+  type Selection,
+} from "./selection";
 import { Ribbon, type RibbonTab } from "./Ribbon";
 import { templateQuiz } from "./sheet";
 import {
-  duplicateSlide,
   freshSlideId,
   setBackground,
   setCorrect,
@@ -87,15 +102,6 @@ function isMedia(element: ElementId): element is MediaElement {
   return element in MEDIA;
 }
 
-/** The selected slide, by id so it stays selected as slides move; the index is the fallback once it is gone. */
-interface Selection {
-  id: string | null;
-  index: number;
-  element: ElementId;
-}
-
-const FIRST: Selection = { id: null, index: 0, element: "slide" };
-
 /** Where the layout gallery opens when no button opened it. */
 const GALLERY_AT = { x: 180, y: 120 };
 
@@ -122,7 +128,11 @@ function Studio({ editor, open, onExit }: { editor: QuizEditor; open: OpenQuiz |
   const [view, setView] = useState<"graphical" | "table">("graphical");
   const [panel, setPanel] = useState(true);
   const [notesShown, setNotesShown] = useState(true);
-  const [clipboard, setClipboard] = useState<Slide | null>(null);
+  const [clipboard, setClipboard] = useState<Slide[] | null>(null);
+  /** The value last copied from a property, to paste into another. */
+  const [copiedValue, setCopiedValue] = useState<CopiedValue | null>(null);
+  /** Ctrl+F asked for the property search, which the panel focuses once it is shown. */
+  const [findProperty, setFindProperty] = useState(false);
   const [menu, setMenu] = useState<{ x: number; y: number; target: MenuTarget } | null>(null);
   const [gallery, setGallery] = useState<{ x: number; y: number } | null>(null);
   const [dialog, setDialog] = useState<{ id: string; focus: ElementId } | null>(null);
@@ -143,7 +153,11 @@ function Studio({ editor, open, onExit }: { editor: QuizEditor; open: OpenQuiz |
   const found = selection.id === null ? -1 : slides.findIndex((s) => s.id === selection.id);
   const index = slides.length === 0 ? -1 : found >= 0 ? found : Math.min(selection.index, slides.length - 1);
   const slide: Slide | null = slides[index] ?? null;
-  const element: ElementId = slide && hasElement(slide, selection.element) ? selection.element : "slide";
+  const selected = selectedIds(selection, slides);
+  const several = selected.length > 1;
+  /** The selected slides, the one on the canvas first. */
+  const selectedSlides = slide ? [slide, ...slides.filter((s) => s !== slide && selected.includes(s.id))] : [];
+  const element: ElementId = slide && !several && hasElement(slide, selection.element) ? selection.element : "slide";
   const media = isMedia(element) ? element : null;
   const dialogSlide = dialog ? slides.find((s) => s.id === dialog.id) : undefined;
   const trimSlide = trimOf === null ? undefined : slides.find((s) => s.id === trimOf.id);
@@ -151,17 +165,23 @@ function Studio({ editor, open, onExit }: { editor: QuizEditor; open: OpenQuiz |
   const backgroundPlaying = backgroundVideo && playingBackgroundOf === slide?.id;
   const unsaved = open !== null && isUnsaved(open);
 
-  const select = (i: number, part: ElementId = "slide") => setSelection({ id: slides[i]?.id ?? null, index: i, element: part });
-  const selectPart = (part: ElementId) => setSelection((current) => ({ ...current, id: slide?.id ?? null, index, element: part }));
+  const select = (i: number, part: ElementId = "slide") => setSelection(selectOne(slides, i, part));
+  /** Selects a part of the slide on the canvas, which leaves only that slide selected. */
+  const selectPart = (part: ElementId) => setSelection(selectOne(slides, index, part));
 
-  const updateSlide = (id: string, change: (s: Slide) => Slide, field?: string) =>
-    editor.edit({ type: "updateSlide", id, update: change }, field === undefined ? undefined : `${id}:${field}`);
-  /** Asks for a media file and puts it on the slide; `part` is selected once it is there. */
-  const chooseMedia = (id: string, kinds: MediaKind[], apply: (s: Slide, file: string) => Slide, part?: ElementId) =>
+  /** Changes the slides `ids` as one undo step; quick changes to one `field` of them merge. */
+  const updateSlides = (ids: string[], change: (s: Slide) => Slide, field?: string) =>
+    editor.edit(
+      ids.length === 1 ? { type: "updateSlide", id: ids[0], update: change } : { type: "batch", edits: ids.map((id) => ({ type: "updateSlide", id, update: change })) },
+      field === undefined ? undefined : `${ids.join(",")}:${field}`,
+    );
+  const updateSlide = (id: string, change: (s: Slide) => Slide, field?: string) => updateSlides([id], change, field);
+  /** Asks for a media file and puts it on the slides; `part` is selected once it is there (one slide). */
+  const chooseMedia = (ids: string[], kinds: MediaKind[], apply: (s: Slide, file: string) => Slide, part?: ElementId) =>
     void editor.pickMedia(kinds).then((file) => {
       if (!file) return;
-      updateSlide(id, (s) => apply(s, file));
-      if (part) setSelection((current) => (current.id === id ? { ...current, element: part } : current));
+      updateSlides(ids, (s) => apply(s, file));
+      if (part && ids.length === 1) setSelection((current) => (current.id === ids[0] ? { ...current, element: part } : current));
     });
   /** Measures a slide's sound and sets its loudness gain to the remembered target (SN-9). */
   const normalizeSound = (id: string) => {
@@ -182,26 +202,33 @@ function Studio({ editor, open, onExit }: { editor: QuizEditor; open: OpenQuiz |
       },
     );
   };
-  const editingFor = (s: Slide): SlideEditing => ({
+  /** How the properties change slide `s`, and with it every slide of `ids`. */
+  const editingFor = (s: Slide, ids: string[] = [s.id]): SlideEditing => ({
     slide: s,
     context: contexts[slides.indexOf(s)] ?? NO_CONTEXT,
-    update: (change, field) => updateSlide(s.id, change, field),
-    chooseMedia: (kinds, apply) => chooseMedia(s.id, kinds, apply),
+    update: (change, field) => updateSlides(ids, change, field),
+    chooseMedia: (kinds, apply) => chooseMedia(ids, kinds, apply),
     trimSound: () => setTrimOf({ id: s.id, media: "sound" }),
     trimVideo: () => setTrimOf({ id: s.id, media: "video" }),
     normalizeSound: () => normalizeSound(s.id),
   });
 
-  const insert = (inserted: Slide, at: number) => {
-    editor.edit({ type: "insertSlide", index: at, slide: inserted });
-    setSelection({ id: inserted.id, index: at, element: "slide" });
+  /** Inserts slides at `at` as one change and selects them. */
+  const insert = (inserted: Slide[], at: number) => {
+    editor.edit(insertSlides(inserted, at));
+    setSelection(selectIds(inserted.map((s) => s.id), at));
+  };
+  /** Removes the selected slides as one change; the slide after them is selected. */
+  const removeSelected = () => {
+    editor.edit(removeSlides(positions(slides, selected)));
+    setSelection(selectOne(slides, positions(slides, selected)[0] ?? index));
   };
   const insertLayout = (layout: SlideLayout) => {
     if (!quiz) return;
     const inserted = slideFromLayout(layout, freshSlideId(quiz));
-    insert(inserted, index + 1);
-    if (layout.media === "picture") chooseMedia(inserted.id, MEDIA.picture.kinds, setPicture, "picture");
-    if (layout.media === "video") chooseMedia(inserted.id, MEDIA.video.kinds, setVideo, "video");
+    insert([inserted], index + 1);
+    if (layout.media === "picture") chooseMedia([inserted.id], MEDIA.picture.kinds, setPicture, "picture");
+    if (layout.media === "video") chooseMedia([inserted.id], MEDIA.video.kinds, setVideo, "video");
   };
   /** Shows a quiz that was just loaded (or the empty editor) from its start. */
   const loaded = (done: boolean) => {
@@ -217,7 +244,7 @@ function Studio({ editor, open, onExit }: { editor: QuizEditor; open: OpenQuiz |
   };
   const openEdit = (part: ElementId) => {
     if (!slide) return;
-    if (isMedia(part)) chooseMedia(slide.id, MEDIA[part].kinds, MEDIA[part].set, part);
+    if (isMedia(part)) chooseMedia([slide.id], MEDIA[part].kinds, MEDIA[part].set, part);
     else setDialog({ id: slide.id, focus: part });
   };
   // The quiz and place as they are once a spreadsheet is read, after its dialogs.
@@ -228,8 +255,8 @@ function Studio({ editor, open, onExit }: { editor: QuizEditor; open: OpenQuiz |
         const { quiz: now, index: at } = latest.current;
         if (!result || !now) return;
         const inserted = withFreshIds(now, result.slides);
-        editor.edit({ type: "batch", edits: inserted.map((s, i) => ({ type: "insertSlide", index: at + 1 + i, slide: s })) });
-        if (inserted.length > 0) setSelection({ id: inserted[0].id, index: at + 1, element: "slide" });
+        editor.edit(insertSlides(inserted, at + 1));
+        if (inserted.length > 0) setSelection(selectIds([inserted[0].id], at + 1));
         setBackstage(null);
         if (result.notes.length > 0) setImportNotes({ imported: inserted.length, notes: result.notes });
         else notify(inserted.length > 0 ? t("sheetImported", { n: inserted.length }) : t("sheetImportedNone"));
@@ -253,6 +280,9 @@ function Studio({ editor, open, onExit }: { editor: QuizEditor; open: OpenQuiz |
   };
 
   const noSlide = slide === null;
+  const selectedSlidesInOrder = slides.filter((s) => selected.includes(s.id));
+  const moveUp = moveByOne(slides, selected, -1);
+  const moveDown = moveByOne(slides, selected, 1);
   const actions: Actions = {
     file: { label: t("ribbonFile"), keys: ["F1"], inFields: true, run: () => setBackstage("info") },
     newQuiz: { label: t("newQuiz"), keys: ["Ctrl+N"], inFields: true, run: () => void editor.newQuiz().then(loaded) },
@@ -285,46 +315,53 @@ function Studio({ editor, open, onExit }: { editor: QuizEditor; open: OpenQuiz |
       keys: ["Ctrl+X"],
       disabled: noSlide,
       run: () => {
-        setClipboard(slide);
-        editor.edit({ type: "removeSlide", index });
+        setClipboard(selectedSlidesInOrder);
+        removeSelected();
       },
     },
-    copy: { label: t("copy"), icon: <CopyIcon />, keys: ["Ctrl+C"], disabled: noSlide, run: () => setClipboard(slide) },
+    copy: { label: t("copy"), icon: <CopyIcon />, keys: ["Ctrl+C"], disabled: noSlide, run: () => setClipboard(selectedSlidesInOrder) },
     paste: {
       label: t("paste"),
       icon: <PasteIcon />,
       keys: ["Ctrl+V"],
       disabled: !quiz || !clipboard,
-      run: () => quiz && clipboard && insert(duplicateSlide(clipboard, freshSlideId(quiz)), index + 1),
+      run: () => quiz && clipboard && insert(withFreshIds(quiz, clipboard), index + 1),
     },
     delete: {
       label: t("deleteSlide"),
       icon: <TrashIcon />,
-      // Delete removes what is selected: a picture, video or sound, or else the slide.
+      // Delete removes what is selected: a picture, video or sound, or else the slides.
       keys: media ? undefined : ["Delete", "Backspace"],
       disabled: noSlide,
-      run: () => editor.edit({ type: "removeSlide", index }),
+      run: removeSelected,
     },
     duplicate: {
       label: t("duplicate"),
       icon: <SlideIcon />,
       keys: ["Ctrl+D"],
       disabled: noSlide,
-      run: () => quiz && slide && insert(duplicateSlide(slide, freshSlideId(quiz)), index + 1),
+      // The copies go after the last selected slide.
+      run: () => quiz && insert(withFreshIds(quiz, selectedSlidesInOrder), Math.max(...positions(slides, selected)) + 1),
     },
     moveUp: {
       label: t("moveUp"),
       icon: <ArrowUpIcon />,
       keys: ["Ctrl+ArrowUp"],
-      disabled: index <= 0,
-      run: () => editor.edit({ type: "moveSlide", from: index, to: index - 1 }),
+      disabled: moveUp === null,
+      run: () => moveUp && editor.edit(moveUp),
     },
     moveDown: {
       label: t("moveDown"),
       icon: <ArrowDownIcon />,
       keys: ["Ctrl+ArrowDown"],
-      disabled: noSlide || index >= slides.length - 1,
-      run: () => editor.edit({ type: "moveSlide", from: index, to: index + 1 }),
+      disabled: moveDown === null,
+      run: () => moveDown && editor.edit(moveDown),
+    },
+    selectAll: {
+      label: t("selectAllSlides"),
+      keys: ["Ctrl+A"],
+      disabled: slides.length < 2,
+      run: () => setSelection(selectAll(selection, slides, index)),
     },
     edit: { label: t("editSlide"), icon: <EditIcon />, keys: ["Enter", "F2"], disabled: noSlide, run: () => openEdit(media ? "slide" : element) },
     newSlide: { label: t("newSlide"), icon: <SlideAddIcon />, disabled: !quiz, run: () => setGallery(GALLERY_AT) },
@@ -344,26 +381,27 @@ function Studio({ editor, open, onExit }: { editor: QuizEditor; open: OpenQuiz |
       icon: <PictureIcon />,
       // Ranking screens have the ranking where a picture would go.
       disabled: noSlide || showsRanking(slide.type),
-      run: () => slide && chooseMedia(slide.id, MEDIA.picture.kinds, setPicture, "picture"),
+      run: () => slide && chooseMedia([slide.id], MEDIA.picture.kinds, setPicture, "picture"),
     },
     insertVideo: {
       label: t("mediaVideo"),
       icon: <VideoIcon />,
       disabled: noSlide || showsRanking(slide.type),
-      run: () => slide && chooseMedia(slide.id, MEDIA.video.kinds, setVideo, "video"),
+      run: () => slide && chooseMedia([slide.id], MEDIA.video.kinds, setVideo, "video"),
     },
-    insertSound: { label: t("mediaSound"), icon: <SoundIcon />, disabled: noSlide, run: () => slide && chooseMedia(slide.id, MEDIA.sound.kinds, setSound, "sound") },
+    insertSound: { label: t("mediaSound"), icon: <SoundIcon />, disabled: noSlide, run: () => slide && chooseMedia([slide.id], MEDIA.sound.kinds, setSound, "sound") },
     insertBackground: {
       label: t("mediaBackground"),
       icon: <BackgroundIcon />,
       disabled: noSlide,
-      run: () => slide && chooseMedia(slide.id, ["image", "video"], setBackground),
+      // A background goes on every selected slide.
+      run: () => chooseMedia(selected, ["image", "video"], setBackground),
     },
     changeMedia: {
       label: t("changeFile"),
       icon: <FolderIcon />,
       disabled: !media,
-      run: () => slide && media && chooseMedia(slide.id, MEDIA[media].kinds, MEDIA[media].set, media),
+      run: () => slide && media && chooseMedia([slide.id], MEDIA[media].kinds, MEDIA[media].set, media),
     },
     removeMedia: {
       label: t("remove"),
@@ -385,12 +423,22 @@ function Studio({ editor, open, onExit }: { editor: QuizEditor; open: OpenQuiz |
     removeBackground: {
       label: t("removeBackground"),
       icon: <TrashIcon />,
-      disabled: !slide?.background,
-      run: () => slide && updateSlide(slide.id, (s) => setBackground(s, null)),
+      disabled: !selectedSlides.some((s) => s.background),
+      run: () => updateSlides(selected, (s) => setBackground(s, null)),
     },
     graphical: { label: t("viewGraphical"), icon: <SlideIcon />, checked: view === "graphical", run: () => setView("graphical") },
     table: { label: t("viewTable"), icon: <TableIcon />, checked: view === "table", run: () => setView("table") },
     properties: { label: t("viewProperties"), icon: <PanelIcon />, checked: panel, run: () => setPanel(!panel) },
+    findProperty: {
+      label: t("findProperty"),
+      keys: ["Ctrl+F"],
+      inFields: true,
+      disabled: noSlide || view !== "graphical",
+      run: () => {
+        setPanel(true);
+        setFindProperty(true);
+      },
+    },
     notes: { label: t("viewNotes"), icon: <NotesIcon />, checked: notesShown, run: () => setNotesShown(!notesShown) },
     testRun: { label: t("testFromStart"), icon: <PlayIcon />, keys: ["F5"], inFields: true, disabled: slides.length === 0, run: () => testRun() },
     testRunHere: { label: t("testFromHere"), icon: <PreviewIcon />, keys: ["Shift+F5"], inFields: true, disabled: noSlide, run: () => testRun(index) },
@@ -415,6 +463,7 @@ function Studio({ editor, open, onExit }: { editor: QuizEditor; open: OpenQuiz |
         actions.cut,
         actions.copy,
         actions.paste,
+        actions.selectAll,
         "separator",
         galleryHere,
         actions.duplicate,
@@ -450,7 +499,9 @@ function Studio({ editor, open, onExit }: { editor: QuizEditor; open: OpenQuiz |
   const openMenu = (event: MouseEvent, target: MenuTarget) => setMenu({ x: event.clientX, y: event.clientY, target });
 
   const title = quiz ? quiz.title || t("untitledQuiz") : t("quizEditor");
-  const properties = slide ? slideProperties(t, editingFor(slide)) : null;
+  const editings = selectedSlides.map((s) => editingFor(s, selected));
+  const shared = selectionPages(t, editings, element);
+  const properties = editings.length > 0 ? slideProperties(t, editings[0]) : null;
 
   return (
     <MediaRootContext value={open?.mediaRoot ?? null}>
@@ -493,7 +544,7 @@ function Studio({ editor, open, onExit }: { editor: QuizEditor; open: OpenQuiz |
               onOpenFile={(path) => void editor.openQuiz(path).then(opened)}
               onTitle={(text) => editor.edit({ type: "setTitle", title: text }, "title")}
               onShowSlide={(id) => {
-                setSelection({ id, index: 0, element: "slide" });
+                setSelection(selectIds([id], 0));
                 setView("graphical");
                 setBackstage(null);
               }}
@@ -510,6 +561,7 @@ function Studio({ editor, open, onExit }: { editor: QuizEditor; open: OpenQuiz |
                   slide={slide}
                   element={element}
                   properties={properties}
+                  mixed={shared.mixed}
                   themeChoice={themeChoice}
                 />
                 <div className={panel && slide ? "studio-main with-panel" : "studio-main"}>
@@ -518,15 +570,20 @@ function Studio({ editor, open, onExit }: { editor: QuizEditor; open: OpenQuiz |
                       <Thumbnails
                         quiz={quiz}
                         contexts={contexts}
-                        selected={index}
+                        current={index}
+                        selected={new Set(selected)}
                         problems={new Set(open.problems.flatMap((p) => (p.slideId === null ? [] : [p.slideId])))}
-                        onSelect={(i) => select(i)}
+                        onSelect={(i, keys) => setSelection(clickSlide(selection, slides, i, keys))}
                         onOpen={(i) => {
                           select(i);
                           setDialog({ id: slides[i].id, focus: "slide" });
                         }}
                         onMenu={(e, i) => openMenu(e, i === null ? { kind: "list" } : { kind: "thumbnail" })}
-                        onMove={(from, to) => editor.edit({ type: "moveSlide", from, to })}
+                        onMove={(dragged, gap) => {
+                          // A selected slide takes the others selected with it.
+                          const moved = moveToGap(slides, selected.includes(dragged) ? selected : [dragged], gap);
+                          if (moved) editor.edit(moved);
+                        }}
                         onAdd={actions.addQuestion.run}
                       />
                       <div className="studio-center">
@@ -560,14 +617,29 @@ function Studio({ editor, open, onExit }: { editor: QuizEditor; open: OpenQuiz |
                       <TableView quiz={quiz} selected={index} onSelect={(i) => select(i)} onOpen={(i) => setDialog({ id: slides[i].id, focus: "slide" })} editingFor={editingFor} />
                     </div>
                   )}
-                  {panel && slide && <PropertiesPanel editing={editingFor(slide)} element={element} />}
+                  {panel && slide && (
+                    <PropertiesPanel
+                      slide={slide}
+                      count={selectedSlides.length}
+                      element={element}
+                      pages={shared.pages}
+                      mixed={shared.mixed}
+                      copied={copiedValue}
+                      onCopy={setCopiedValue}
+                      focusSearch={findProperty}
+                      onSearchFocused={() => setFindProperty(false)}
+                    />
+                  )}
                 </div>
               </>
             )
           )}
 
           <footer className="studio-status">
-            <span>{slide ? t("slide", { n: index + 1, total: slides.length }) : t("noSlideSelected")}</span>
+            <span>
+              {slide ? t("slide", { n: index + 1, total: slides.length }) : t("noSlideSelected")}
+              {several && ` · ${t("slidesSelected", { n: selected.length })}`}
+            </span>
             {open && (
               <button type="button" className={open.problems.length > 0 ? "status-problems bad" : "status-problems"} onClick={() => setBackstage("info")}>
                 {open.problems.length > 0 ? `⚠ ${t("problems", { n: open.problems.length })}` : `✓ ${t("readyToPlay")}`}

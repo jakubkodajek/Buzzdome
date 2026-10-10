@@ -53,8 +53,14 @@ export function mediaFileName(reference: string): string {
   return reference.replace(/^media\//, "");
 }
 
+/** What a media file is, by its extension; null for a type the app does not play. */
+export function mediaKindOf(reference: string): MediaKind | null {
+  const extension = reference.slice(reference.lastIndexOf(".") + 1).toLowerCase();
+  const kinds = Object.keys(MEDIA_EXTENSIONS) as MediaKind[];
+  return kinds.find((kind) => (MEDIA_EXTENSIONS[kind] as readonly string[]).includes(extension)) ?? null;
+}
+
 /** Whether a media file is a video, by its extension. */
 export function isVideo(reference: string): boolean {
-  const extension = reference.slice(reference.lastIndexOf(".") + 1).toLowerCase();
-  return (MEDIA_EXTENSIONS.video as readonly string[]).includes(extension);
+  return mediaKindOf(reference) === "video";
 }
