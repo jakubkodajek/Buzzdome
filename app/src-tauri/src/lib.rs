@@ -6,6 +6,8 @@ mod app_file;
 mod app_icon;
 mod app_log;
 mod app_windows;
+#[cfg(test)]
+mod crash_drill;
 mod dialogs;
 mod editor;
 mod error;

@@ -80,8 +80,9 @@ Status keys: `[x]` done, `[~]` in progress, `[ ]` not started.
 ## Phase 4: Test
 
 - [ ] Unit tests for scoring and the state machine
-- [ ] Simulated show with 50 virtual buzzers
-- [~] Crash drill: kill the app mid-question, restart, continue (automated as run, crash and resume tests in `app/src-tauri/src/lib.rs`; the drill on the event laptop to do)
+- [x] Simulated show with 50 virtual buzzers (`crates/show-sim`: random quizzes and shows checked against the game rules; 30 000 more every night in `.github/workflows/nightly.yml`)
+- [~] Crash drill: kill the app mid-question, restart, continue (automated as run, crash and resume tests in `app/src-tauri/src/lib.rs`, random crash drills with torn journal lines in `crash_drill.rs`, and the real app killed and resumed in `app/e2e/resume.e2e.ts`; the drill on the event laptop to do)
+- [x] End-to-end tests of the real app (`app/e2e`): a whole show, every Director and editor button, on every push (Linux)
 - [ ] Rehearsal on the event laptop with the projector and real buzzers
 - [ ] Parity check against `features.csv`
 
