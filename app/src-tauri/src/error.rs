@@ -43,6 +43,16 @@ pub enum AppError {
     /// it can be resumed after a restart.
     #[error("the show stopped; restart the app and resume it")]
     ShowStopped,
+    /// The show thread was still busy with something earlier (a journal
+    /// write that does not finish) when the command had waited
+    /// `show_thread::STUCK_AFTER`, so it was given up: it is never made (G17).
+    #[error("the show is still busy with an earlier step; this one was not made")]
+    ShowBusy,
+    /// The show thread has been busy with one thing for
+    /// `show_thread::STUCK_AFTER`: a journal write that does not finish,
+    /// as when the disk does not answer. Presses wait for it (G17).
+    #[error("saving the show does not finish")]
+    SaveHangs,
     #[error("the last show cannot be read: {detail}")]
     ShowNotRead { detail: String },
     /// Line `line` of the last show's journal does not read, so the show is

@@ -52,7 +52,8 @@ pub enum ReceiverProblem {
 #[ts(export)]
 #[serde(rename_all = "camelCase")]
 pub struct RawReport {
-    /// Wall-clock time, ms since the Unix epoch.
+    /// When it arrived, on the show clock (`ReceiverConfig::clock`), as
+    /// the presses decoded from it.
     pub at_ms: u64,
     pub bytes: Vec<u8>,
     pub decoded: Vec<Press>,
@@ -82,9 +83,11 @@ pub struct ReceiverConfig {
     pub clock: ShowClock,
 }
 
-impl Default for ReceiverConfig {
-    fn default() -> Self {
-        ReceiverConfig { retry: Duration::from_secs(2), read_timeout_ms: 20, repeat_gap_ms: 150, clock: ShowClock::start() }
+impl ReceiverConfig {
+    /// The usual settings, stamping reports with the app's show `clock`:
+    /// there is no default clock, so presses and commands share one (A6).
+    pub fn new(clock: ShowClock) -> ReceiverConfig {
+        ReceiverConfig { retry: Duration::from_secs(2), read_timeout_ms: 20, repeat_gap_ms: 150, clock }
     }
 }
 

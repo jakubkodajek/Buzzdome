@@ -61,7 +61,7 @@ const theme = params.get("theme");
 const timer = params.get("timer") as TimerDesign | null;
 /** `damaged`: the last show's journal does not read; `failing`: resuming the last show fails. */
 const resume = params.get("resume");
-/** `full`: the running show's journal refuses writes, as on a full disk; `broken`: it cannot be repaired. */
+/** `full`: the running show's journal refuses writes, as on a full disk; `broken`: it cannot be repaired; `hangs`: a write does not finish. */
 const saving = params.get("saving");
 /** `unreadable`: the editor's draft does not read; `failing`: writing it fails, as on a full disk. */
 const draft = params.get("draft");
@@ -549,6 +549,7 @@ mockIPC(
         return "/src/dev/";
       case "show_not_saved":
         if (saving === "full") return { code: "showNotSaved", detail: "No space left on device (os error 28)" };
+        if (saving === "hangs") return { code: "saveHangs" };
         return saving === "broken" ? { code: "journalBroken" } : null;
       case "resume_last_session":
         if (resume === "failing") return Promise.reject({ code: "showNotSaved", detail: "No space left on device (os error 28)" });

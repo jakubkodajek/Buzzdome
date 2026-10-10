@@ -68,8 +68,10 @@ impl Inner {
 
 struct AppState(Mutex<Inner>);
 
-/// The show state. Code that holds it must not wait for the learn lock
-/// (`lock_for_new_show`).
+/// The show state. The app's locks are taken in one order: the editor's
+/// (`editor::lock`), then this one, then the learn lock (`hardware`). So
+/// code holding the learn lock never waits for this one, which a journal
+/// write can hold for a while (G16).
 fn lock_show(app: &AppHandle) -> MutexGuard<'_, Inner> {
     app.state::<AppState>().inner().0.lock().unwrap()
 }
@@ -233,16 +235,15 @@ fn send_effects(app: &AppHandle, inner: &mut Inner, effects: Vec<Effect>) {
 }
 
 /// Locks the show state to start a show, refusing while one runs. Learn
-/// mode ends first, because in a show every press must play. Its lock is
-/// taken before this one and kept until this one is held, so learn mode
-/// cannot start in between; no code may wait for the learn lock while
-/// holding this one.
+/// mode ends, because in a show every press must play; learn mode starts
+/// only while holding the show state (`hardware::receiver_learn_start`),
+/// so it cannot start again until the show has.
 fn lock_for_new_show(app: &AppHandle) -> CmdResult<MutexGuard<'_, Inner>> {
-    let _learning = hardware::end_learning(app);
     let inner = lock_show(app);
     if inner.game.is_some() {
         return Err(AppError::ShowRunning);
     }
+    hardware::end_learning(app);
     Ok(inner)
 }
 
@@ -301,8 +302,8 @@ fn show_running(app: &AppHandle) -> bool {
 
 // The commands that read or start the show are async, so Tauri runs them
 // off the windows' thread, and they take the show state on a thread that
-// may wait (`off_ui`, A7). Those that change a running show run on the show
-// thread (`show_thread::run`).
+// may wait (`off_ui`, A7). Those that change or end a running show run on
+// the show thread (`show_thread::run`).
 
 #[tauri::command]
 async fn get_view(app: AppHandle) -> CmdResult<Option<GameView>> {
@@ -322,11 +323,12 @@ async fn media_root(app: AppHandle) -> CmdResult<Option<String>> {
     read_show(app, |inner| inner.media_root.as_ref().map(|root| root.join("").to_string_lossy().into_owned())).await
 }
 
-/// Why the running show's journal cannot be written, if so; also sent with
-/// `show-not-saved` whenever it changes (A9).
+/// Why the running show's journal cannot be written, or that a write does
+/// not finish, if so; also sent with `show-not-saved` whenever it changes
+/// (A9, G17).
 #[tauri::command]
 async fn show_not_saved(app: AppHandle) -> CmdResult<Option<AppError>> {
-    read_show(app, |inner| inner.save_problem.clone()).await
+    Ok(show_thread::not_saved(&app))
 }
 
 /// Opens a quiz file the quizmaster picks (`.quiz` or a plain quiz JSON)
@@ -432,14 +434,15 @@ async fn resume_last_session(app: AppHandle) -> CmdResult<Vec<AppError>> {
     .await
 }
 
-/// Closes the running show. Its journal stays on disk, so it can be resumed.
+/// Closes the running show. Its journal stays on disk, so it can be
+/// resumed. In order with the show's commands, so a step given before it
+/// still counts and none given after it reaches the show (G18).
 #[tauri::command]
 async fn end_show(app: AppHandle) -> CmdResult<()> {
-    off_ui(move || {
-        let mut inner = lock_show(&app);
-        replace_show(&mut inner, None, None);
+    show_thread::run(&app, |app, inner, _| {
+        replace_show(inner, None, None);
         inner.media_root = None;
-        emit_show_changed(&app, &inner);
+        emit_show_changed(app, inner);
         Ok(())
     })
     .await

@@ -6,6 +6,7 @@ import type { Press } from "./Press";
  */
 export type RawReport = { 
 /**
- * Wall-clock time, ms since the Unix epoch.
+ * When it arrived, on the show clock (`ReceiverConfig::clock`), as
+ * the presses decoded from it.
  */
 atMs: number, bytes: Array<number>, decoded: Array<Press>, };

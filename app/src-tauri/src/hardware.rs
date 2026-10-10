@@ -24,7 +24,7 @@ use ts_rs::TS;
 use std::collections::VecDeque;
 use std::path::Path;
 use std::sync::mpsc::Sender;
-use std::sync::{Arc, Mutex, MutexGuard};
+use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Emitter, Manager, Window};
 
 const SETTINGS_FILE: &str = "receiver.json";
@@ -119,7 +119,7 @@ impl Hardware {
         let resolver = Arc::new(move |device: &DeviceInfo| -> Box<dyn Protocol> {
             learned::protocol_for(&resolver_settings.lock().unwrap().learned, device)
         });
-        let (handle, _join) = receiver::spawn(backend.clone(), resolver, events, ReceiverConfig { clock, ..ReceiverConfig::default() });
+        let (handle, _join) = receiver::spawn(backend.clone(), resolver, events, ReceiverConfig::new(clock));
         handle.select(remembered);
 
         Hardware {
@@ -199,14 +199,10 @@ fn start_learning(learn: &mut Option<Recorder>, show_running: bool, buzzer: Buzz
 }
 
 /// Ends learn mode for a new show, as during a show every press must play.
-/// Gives the learn lock, to keep until the show state is locked, so learn
-/// mode cannot start in between: `receiver_learn_start` too takes the learn
-/// lock first, then the show's.
-pub fn end_learning(app: &AppHandle) -> Option<MutexGuard<'_, Option<Recorder>>> {
-    let hw = app.try_state::<Hardware>()?.inner();
-    let mut learn = hw.learn.lock().unwrap();
-    stop_learning(&mut learn, app);
-    Some(learn)
+pub fn end_learning(app: &AppHandle) {
+    if let Some(hw) = app.try_state::<Hardware>() {
+        hw.end_learning(app);
+    }
 }
 
 /// Moves receiver events into the game and out to the windows.
@@ -284,8 +280,11 @@ pub async fn receiver_learn_start(app: AppHandle, buzzer: BuzzerId, button: Butt
         if hw.connected_device().is_none() {
             return Err(AppError::ReceiverNotConnected);
         }
-        // The learn lock first, then the show's, as for a new show (`end_learning`).
-        start_learning(&mut hw.learn.lock().unwrap(), crate::show_running(&app), buzzer, button)?;
+        // Held until learn mode is on, so no show starts in between; the
+        // show's lock comes before the learn lock (`lock_show`).
+        let show = crate::lock_show(&app);
+        start_learning(&mut hw.learn.lock().unwrap(), show.game.is_some(), buzzer, button)?;
+        drop(show);
         let _ = app.emit("receiver-learn", hw.learn_progress());
         Ok(())
     })

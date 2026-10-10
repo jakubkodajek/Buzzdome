@@ -114,16 +114,26 @@ two windows cannot disagree with each other or with the score.
   and otherwise sends `clock-tick` with the core's `ClockView`. The UI never
   measures time itself; the gauge animates between ticks with CSS.
 - **Threads.** One show thread changes a running show: the receiver's
-  events and the windows' commands that change the show (`dispatch`, team
-  edits) reach it through one queue, so they are handled in the order they
-  came, and the windows never wait on a journal write. The commands that
-  read the show or start or end one are async and take the show state on a
-  worker thread (`off_ui`); Tauri runs synchronous commands on the windows'
-  thread, so they must not wait for it.
+  events and the windows' commands that change or end the show
+  (`dispatch`, team edits, `end_show`) reach it through one queue, so they
+  are handled in the order they came, and the windows never wait on a
+  journal write. A step given just before the show ends still counts in
+  it, and none given after reaches the show. The commands that read the
+  show or start one are async and take the show state on a worker thread
+  (`off_ui`); Tauri runs synchronous commands on the windows' thread, so
+  they must not wait for it. The app's locks are taken in one order: the
+  editor's, the show state, then learn mode's; so nothing holding learn
+  mode's lock, as the Receiver tab's commands do, waits for a journal write.
 - **Saving problems.** When the journal refuses a write (the disk is full,
   say), the change is not made, and the Director shows why in a banner until
   a write works again (`show-not-saved`, `show_not_saved`). A due command
-  that failed is tried again a second later.
+  that failed is tried again a second later. A write that does not finish
+  (the disk does not answer) holds the show thread up: after 3 s
+  (`STUCK_AFTER`) a watchdog shows that in the banner (`saveHangs`), and a
+  command the thread has not begun by then is given up (`showBusy`) and
+  never made, so the quizmaster can give it again without it happening
+  twice. Presses wait in the queue and count by their time once the write
+  finishes.
 - **Windows.** `app_windows.rs` keeps both windows through a show. Closing
   the Director during a show asks first (`close-requested`), and the app
   ends with the Director, so a full-screen projector is never left alone.

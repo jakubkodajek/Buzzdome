@@ -163,14 +163,15 @@ function DirectorLayout({ testRun, onEditor }: { testRun: boolean; onEditor: () 
   );
 }
 
-/** Shown while the show's journal refuses writes, when nothing in the show changes. */
+/** Shown while the show's journal refuses writes, when nothing in the show changes, or a write does not finish. */
 function NotSavedBanner() {
   const { t } = useApp();
   const problem = useShowNotSaved();
   if (!problem) return null;
   return (
     <div className="not-saved-banner" role="alert">
-      {t("notSavedBanner", { problem: errorText(t, problem) })}
+      {/* A write that hangs keeps the presses for when it finishes, as its own text says. */}
+      {problem.code === "saveHangs" ? errorText(t, problem) : t("notSavedBanner", { problem: errorText(t, problem) })}
     </div>
   );
 }
