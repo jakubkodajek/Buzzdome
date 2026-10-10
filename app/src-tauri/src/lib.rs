@@ -479,14 +479,18 @@ mod tests {
             std::thread::spawn(move || {
                 // The "time" read is whether someone else still held the state then.
                 let (_inner, held_then) = timed_lock(&shared, || {
+                    let held_then = u64::from(shared.try_lock().is_err());
                     timed.send(()).unwrap();
-                    u64::from(shared.try_lock().is_err())
+                    held_then
                 });
                 held_then
             })
         };
-        was_timed.recv().unwrap();
+        // The state is let go only once the time is read, so the answer does not depend on timing;
+        // a clock read after locking would never come while it is held.
+        let read_while_held = was_timed.recv_timeout(Duration::from_secs(5));
         drop(held);
+        assert!(read_while_held.is_ok(), "the time was read only after waiting for the state");
         assert_eq!(waiter.join().unwrap(), 1);
     }
 }
