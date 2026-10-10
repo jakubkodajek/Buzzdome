@@ -33,6 +33,10 @@ ts-rs.workspace = true
 
 # Read how much memory the sheet reader process holds, and on Windows cap it
 # (sheet_reader.rs).
+[dev-dependencies]
+# Random shows for the crash drills (crash_drill.rs).
+show-sim = { path = "../../crates/show-sim" }
+
 [target.'cfg(target_os = "macos")'.dependencies]
 libc = "0.2"
 

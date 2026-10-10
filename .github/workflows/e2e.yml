@@ -1,0 +1,83 @@
+name: E2E
+
+# The real app driven through WebDriver (tauri-driver with WebKitWebDriver)
+# on a virtual display: a whole show, crashes and resumes, every Director
+# and editor button (app/e2e). Called by build.yml on every push and by
+# nightly.yml, which plays the suite several times over.
+on:
+  workflow_call:
+    inputs:
+      runs:
+        description: How many times the whole suite runs.
+        type: number
+        default: 1
+
+permissions:
+  contents: read
+
+env:
+  RUST_TOOLCHAIN: "1.97.0"
+  LINUX_DEPS: libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libudev-dev
+  # WebKitWebDriver, a virtual display, and xdotool for the system's file picker.
+  E2E_DEPS: webkit2gtk-driver xvfb xdotool
+  TAURI_DRIVER_VERSION: "2.1.0"
+
+jobs:
+  e2e:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Install system libraries
+        run: sudo apt-get update && sudo apt-get install -y $LINUX_DEPS $E2E_DEPS
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: e2e
+
+      - name: Install tauri-driver
+        run: cargo install tauri-driver --locked --version "$TAURI_DRIVER_VERSION"
+
+      - name: Install UI dependencies
+        working-directory: app
+        run: npm ci
+
+      - name: Type-check the tests
+        working-directory: app
+        run: npx tsc -p e2e/tsconfig.json
+
+      - name: Build the app
+        working-directory: app
+        run: npm run tauri build -- --debug --no-bundle
+
+      - name: Run the E2E tests
+        working-directory: app
+        env:
+          RUNS: ${{ inputs.runs }}
+        run: |
+          for run in $(seq 1 "$RUNS"); do
+            echo "::group::run $run of $RUNS"
+            xvfb-run -a npm run e2e
+            echo "::endgroup::"
+          done
+
+      # What each window showed when a test failed (app/e2e/setup.ts).
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: e2e-output
+          path: app/e2e-output
+          if-no-files-found: ignore

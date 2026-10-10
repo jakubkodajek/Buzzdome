@@ -113,8 +113,12 @@ jobs:
       - name: Test the Rust workspace
         run: cargo test --workspace
 
+  # The real app, clicked through as the quizmaster would (app/e2e).
+  e2e:
+    uses: ./.github/workflows/e2e.yml
+
   installers:
-    needs: [check, windows-tests]
+    needs: [check, windows-tests, e2e]
     if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
     strategy:
       fail-fast: false

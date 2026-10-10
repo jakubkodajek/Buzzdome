@@ -935,11 +935,26 @@ conflict detection. None of this proves the real receiver's format: see
 1. `check` (Ubuntu 22.04, every push): ESLint, type-check and build the UI,
    `cargo clippy -D warnings`, `cargo test --workspace` from an empty
    bindings folder, then fail if `app/src/bindings` changed.
-2. `installers` (matrix, after `check`, on `main`, tags `v*` and manual
+2. `installers` (matrix, after `check`, `windows-tests` and `e2e`, on `main`, tags `v*` and manual
    runs, because macOS minutes are expensive): Windows NSIS, macOS universal DMG
    (`aarch64` and `x86_64` targets), Linux deb and AppImage on Ubuntu 22.04
    so the AppImage runs on older distributions. Each uploads its files as a
    run artifact (`buzzdome-windows`, `buzzdome-macos`, `buzzdome-linux`).
+3. `e2e` (`.github/workflows/e2e.yml`, Ubuntu 22.04, every push): the real
+   app built with `--debug --no-bundle` and driven through `tauri-driver`
+   and `WebKitWebDriver` under `xvfb-run` (`app/e2e`): a whole demo show
+   with the on-screen and keyboard buzzers and the projector checked at
+   each step, crashes (the app killed) and resumes, every button on every
+   Director tab and editor ribbon tab, the command panel step by step to
+   the end, a quiz saved and opened through the system's file picker
+   (`xdotool`). When a test fails, each window's screenshot and text go up
+   as the `e2e-output` artifact.
+
+`.github/workflows/nightly.yml` runs every night (and on "Run workflow"):
+30 000 random shows with up to 50 buzzers (`crates/show-sim`), 10 000 crash
+drills through the real journal (`app/src-tauri/src/crash_drill.rs`), both in
+release and from seeds no earlier night used, and the E2E suite five times.
+A failing random show prints `SOAK_SEED=<n>`; that variable replays it alone.
 
 Signing and notarization need a Windows code-signing certificate and an Apple
 Developer ID; until then builds are unsigned (macOS ad-hoc), see PL-5.
@@ -990,6 +1005,9 @@ them.
 | Spreadsheets: columns, prefixes, settings, notes, shuffling, rounds per sheet, CSV encodings and separators, workbooks, media found and copied, export and re-import; File › Import and Export, notes dialog, one undo step, sample sheet | `cargo test` (`quiz_core::sheet`, `quiz-file` sheet), `npm test` (`sheet`, `slides`, `messages`), headless Chromium against the preview | pass |
 | Loudness measurement | `npm test`: a full-scale 997 Hz sine in one channel measures -3.01 LUFS as BS.1770-4 states; gating, channel sum, part, peak limit | pass |
 | Trim and Normalize volume windows, video trim window, background video menu and options, slide video (intro pause, Play video, speed, volume, part, holding with the show, blur and mosaic, replay) | headless Chromium against the preview with generated test media (a song and a test-pattern video, not in the repo) | pass |
+| Game rules under random shows: refused commands change nothing, controls match what the game accepts, scores add up, results only after close, replay from the journal gives the same game; 1 to 50 buzzers, random quizzes of every slide kind | `crates/show-sim` (`cargo test -p show-sim`: 40 shows and one 3000-step evening on every push, 30 000 nightly); 30 000 shows locally | pass |
+| Crash and resume through the real journal, incl. a torn, zeroed or garbage last line | `crash_drill.rs` (40 per push, 10 000 nightly) | pass |
+| The real app end to end: show, crash and resume, every Director and editor button, file picker | `app/e2e` on Linux (WebKitGTK), every push and five times nightly | pass |
 | Media through the asset protocol, autoplay of video and sound | needs the installed app on each OS | **not tested** |
 | Windows and macOS installers | CI | see the PR's checks |
 | Real receiver: detection, raw reports, learn mode, presses in a show | needs the hardware | **not tested** |

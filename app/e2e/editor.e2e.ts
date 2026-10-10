@@ -1,0 +1,143 @@
+// The quiz editor in the real app: a quiz written with the keys and the
+// ribbon, every ribbon button clicked, a test run, saving through the
+// system's file picker, and the draft surviving a crash.
+
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+import { afterAll, beforeAll, describe, expect, test } from "vitest";
+import type { StringKey } from "../src/i18n";
+import { App, dataFolder, sleep, t, waitFor } from "./harness";
+import { Key } from "./webdriver";
+
+const data = dataFolder();
+let app: App;
+
+beforeAll(async () => {
+  app = await App.launch(data);
+});
+
+afterAll(async () => {
+  await app?.quit();
+  app?.forget();
+});
+
+const RIBBON_TABS: StringKey[] = ["ribbonHome", "ribbonInsert", "ribbonDesign", "ribbonQuestion", "ribbonView"];
+
+/**
+ * Ribbon buttons the crawl leaves alone: they open the system's file
+ * picker (the save test drives one), leave the editor, or start a test run
+ * (tested on its own).
+ */
+const NOT_CLICKED: (StringKey | { text: string })[] = [
+  "mediaPicture",
+  "mediaVideo",
+  "mediaSound",
+  "mediaBackground",
+  "changeFile",
+  "importFromSheet",
+  "saveSheetTemplate",
+  "exportToSheet",
+  "openFile",
+  "saveQuiz",
+  "saveQuizAs",
+  "closeQuiz",
+  "backToDirector",
+  "testFromStart",
+  "testFromHere",
+  "ribbonFile",
+];
+
+const slideCount = () => app.count(".thumbnails .thumbnail-number");
+
+async function ctrl(key: string, shift = false): Promise<void> {
+  await app.page.keys([key], shift ? [Key.Control, Key.Shift] : [Key.Control]);
+}
+
+async function ribbonTab(label: StringKey): Promise<void> {
+  const literal = `"${t(label)}"`;
+  const [tab] = await app.page.findAllXPath(`//nav[contains(@class, 'ribbon-tabs')]/button[normalize-space(.) = ${literal}]`);
+  if (!tab) throw new Error(`no ribbon tab ${t(label)}`);
+  await app.page.click(tab);
+}
+
+describe("the quiz editor", () => {
+  test("opens from the Director and starts a new quiz", async () => {
+    await app.press("quizEditor");
+    await app.$(".studio");
+    // Without a quiz the editor opens on its File page.
+    await app.$(".backstage");
+    await ctrl("n");
+    await app.$(".ribbon");
+    await app.seeText(t("noSlides").slice(0, 20));
+  });
+
+  test("adds questions with the keys, and undo and redo take them back and forth", async () => {
+    const start = await slideCount();
+    for (let i = 0; i < 3; i++) {
+      await ctrl("m");
+      await waitFor(`${start + i + 1} slides`, async () => (await slideCount()) === start + i + 1);
+    }
+    await ctrl("z");
+    await waitFor("one undone", async () => (await slideCount()) === start + 2);
+    await ctrl("y");
+    await waitFor("one redone", async () => (await slideCount()) === start + 3);
+  });
+
+  test("every ribbon button on every ribbon tab works", async () => {
+    for (const tab of RIBBON_TABS) {
+      await ribbonTab(tab);
+      await app.clickEverything(".ribbon-body", NOT_CLICKED);
+      // A gallery or menu a button opened closes again.
+      await app.page.keys([Key.Escape]);
+    }
+    await app.assertHealthy();
+    // Back to the slides (the crawl also chose the table and category views), with a question to play.
+    await ribbonTab("ribbonView");
+    await app.press("viewGraphical");
+    await ctrl("m");
+    await waitFor("a slide", async () => (await slideCount()) > 0);
+  });
+
+  test("a test run plays the edited quiz and goes back to the editor", async () => {
+    await ribbonTab("ribbonHome");
+    const slides = await slideCount();
+    await app.page.keys([Key.F5]);
+    await app.seeText(t("testRunActive"));
+    const view = await app.waitView("the test show", (v) => v.slideCount === slides);
+    expect(view.phase.phase).toBe("lobby");
+    await app.step("next");
+    await app.waitView("the first slide", (v) => v.phase.phase !== "lobby");
+    await app.press("backToEditor");
+    await app.$(".studio");
+    expect(await slideCount()).toBe(slides);
+    expect(await app.view()).toBeNull();
+  });
+
+  test("the draft survives a crash", async () => {
+    const slides = await slideCount();
+    // The draft is written a moment after each change.
+    await sleep(1500);
+    await app.crash();
+    app = await App.launch(data);
+    await app.press("quizEditor");
+    await app.$(".studio");
+    await waitFor(`${slides} slides back`, async () => (await slideCount()) === slides);
+  });
+
+  // The system's file picker is driven through the X server (`App.pickFile`).
+  test.skipIf(process.platform !== "linux")("Save as writes a quiz file through the system's picker, and the Director plays it", async () => {
+    const file = join(data, "saved-quiz.quiz");
+    await ctrl("s", true);
+    await app.pickFile(file);
+    await waitFor("the quiz file", async () => existsSync(file));
+    // A quiz file is a ZIP (docs/quiz-format.md).
+    expect(readFileSync(file).subarray(0, 2).toString("latin1")).toBe("PK");
+    const slides = await slideCount();
+    await app.press("backToDirector");
+    await app.press("openQuiz");
+    await app.pickFile(file);
+    const view = await app.waitView("the saved quiz's show", () => true);
+    expect(view.slideCount).toBe(slides);
+    await app.assertHealthy();
+  });
+});

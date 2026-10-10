@@ -54,12 +54,16 @@ on `PATH` first (macOS dev machine).
 | lint UI (incl. React hooks rules) | `cd app && npm run lint` |
 | type-check and build UI | `cd app && npm run build` |
 | UI logic tests (editor history, draft queue, slide changes) | `cd app && npm test` |
+| E2E tests of the real app (Linux; needs `tauri-driver`, `webkit2gtk-driver`, `xvfb`, `xdotool`) | `cd app && npm run tauri build -- --debug --no-bundle && xvfb-run -a npm run e2e` |
+| random shows / crash drills (more, or replay one) | `SOAK_SHOWS=5000 cargo test --release -p show-sim`; `SOAK_SEED=<n> cargo test -p buzzdome crash_drill` |
 | UI preview in a browser (mocked backend) | `cd app && npm run dev`, then `/preview.html?window=host&scene=running` (scenes in `app/src/dev/preview.tsx`) |
+| nightly soak and E2E | CI: `.github/workflows/nightly.yml` every night and on "Run workflow" |
 | installers | CI: `.github/workflows/build.yml` on `main`, tags `v*` and "Run workflow"; artifacts `buzzdome-windows`, `buzzdome-macos`, `buzzdome-linux` |
 | receiver probe (no app) | `cargo run -p buzzers --example hid-monitor [-- VID:PID]` |
 | build installer | `cd app && npm run tauri build` (each OS builds its own installer) |
 
 Layout: `crates/quiz-core` (model, game state machine, scoring, view),
+`crates/show-sim` (random quizzes and shows for the soak tests),
 `crates/quiz-file` (`.quiz` files: ZIP with media, unpack cache, save;
 `sheet.rs` spreadsheet import and CSV export),
 `crates/buzzers` (driver trait, USB-HID receiver thread, protocols, learn mode, `clock.rs` show clock),
@@ -69,7 +73,8 @@ event order, `app_windows.rs` the Director and projector windows, `app_log.rs` t
 `themes.rs` built-in themes, `fonts.rs` installed fonts, `app_file.rs` settings files,
 `app_icon.rs` the windows' icon colour),
 `app/src` (React UI: `director/`, `host/`, `editor/`; `browser-guard.ts` and `error-boundary.tsx`
-keep the windows from acting as a browser or going blank), `samples/demo-quiz.json`.
+keep the windows from acting as a browser or going blank), `app/e2e` (E2E tests through WebDriver),
+`samples/demo-quiz.json`.
 Show sessions are journaled under the OS app-data dir in `sessions/<start ms>/`.
 
 UI conventions (keep one way of doing each thing):

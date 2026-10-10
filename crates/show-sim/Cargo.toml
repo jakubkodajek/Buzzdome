@@ -1,0 +1,10 @@
+[package]
+name = "show-sim"
+description = "Simulated shows for tests: random quizzes, a quizmaster and up to 50 buzzers, and the rules every step must keep."
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[dependencies]
+quiz-core = { path = "../quiz-core" }
+serde_json.workspace = true

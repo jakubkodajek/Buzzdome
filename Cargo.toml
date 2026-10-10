@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/quiz-core", "crates/quiz-file", "crates/buzzers", "app/src-tauri"]
+members = ["crates/quiz-core", "crates/quiz-file", "crates/buzzers", "crates/show-sim", "app/src-tauri"]
 resolver = "2"
 
 [workspace.package]
