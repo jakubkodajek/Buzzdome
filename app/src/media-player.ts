@@ -12,7 +12,7 @@ export const PAD_COLORS: readonly PadColor[] = ["red", "orange", "yellow", "gree
  * What the media player plays, as a window heard it: the show clock read
  * `atMs` when the window's monotonic clock (`localNow`) read `heardAt`. The window counts on from
  * there on that monotonic clock, never on its wall clock, which may stand
- * apart from the show clock by any amount (G2).
+ * apart from the show clock by any amount.
  */
 export interface HeardMedia extends MediaNow {
   heardAt: number;

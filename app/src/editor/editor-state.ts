@@ -4,7 +4,7 @@ import type { EditorDraft, Quiz, ValidationError } from "../types";
 import { historyReducer, startHistory, type History, type HistoryAction } from "./history";
 
 export interface OpenQuiz {
-  /** The backend's name for the draft (`EditorDraft.id`), which every command on it gives (A16). */
+  /** The backend's name for the draft (`EditorDraft.id`), which every command on it gives. */
   draftId: string;
   history: History;
   /** The quiz as it is in the file at `sourcePath` (or as created); null when not known. */
@@ -22,7 +22,7 @@ export interface OpenQuiz {
 export type EditorState =
   | { status: "loading" }
   | { status: "empty" }
-  /** The draft left from last time cannot be read (`error`); it stays until the quizmaster discards it (A17). */
+  /** The draft left from last time cannot be read (`error`); it stays until the quizmaster discards it. */
   | { status: "unreadable"; error: unknown }
   | ({ status: "open" } & OpenQuiz);
 

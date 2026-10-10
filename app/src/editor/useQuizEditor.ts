@@ -84,7 +84,7 @@ export function useQuizEditor(onTestRun: () => void): QuizEditor {
         written.current = draft?.quiz ?? null;
         dispatch({ type: "loaded", draft });
       },
-      // Not "no draft": the quizmaster chooses what becomes of it (A17).
+      // Not "no draft": the quizmaster chooses what becomes of it.
       (error: unknown) => {
         if (alive) dispatch({ type: "unreadable", error });
       },
@@ -105,9 +105,9 @@ export function useQuizEditor(onTestRun: () => void): QuizEditor {
   }, [draftId, present, unsaved]);
 
   /**
-   * Runs a file operation as the only one (A16); a failure is shown, not
+   * Runs a file operation as the only one; a failure is shown, not
    * thrown, and gives false, as does one refused while another runs: the
-   * quizmaster is told why nothing happened (G28).
+   * quizmaster is told why nothing happened.
    */
   const attempt = <T>(operation: DraftOperation, task: (draftApi: DraftApi) => Promise<T | false>): Promise<T | false> =>
     drafts.exclusive(operation, task).then(
@@ -228,7 +228,7 @@ export function useQuizEditor(onTestRun: () => void): QuizEditor {
 /**
  * State that belongs to the open draft, such as a clipboard: once another
  * draft is open it reads as null, so nothing of one quiz (the name of one
- * of its media files) lands in another (A18).
+ * of its media files) lands in another.
  */
 export function useDraftState<T>(draftId: string | null): [T | null, (value: T | null) => void] {
   const [held, setHeld] = useState<DraftHeld<T>>({ draftId, value: null });

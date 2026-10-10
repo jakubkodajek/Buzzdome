@@ -1,7 +1,7 @@
 //! Whether a ZIP file counts more entries than a quiz may have, read before
 //! the archive is opened: opening reads every entry header the end record
 //! it takes counts, so a file of millions of empty entries would take all
-//! memory before `MAX_ENTRIES` could be checked (A20).
+//! memory before `MAX_ENTRIES` could be checked.
 //!
 //! A plain end record counts at most 65,535 entries, which opening reads at
 //! a bounded cost and the count after it refuses. A ZIP64 end record can

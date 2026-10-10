@@ -1,5 +1,5 @@
 //! The journal contract: every command a show journals reads back as it was
-//! written, and lines written by earlier versions still read (A2, G6, G7).
+//! written, and lines written by earlier versions still read.
 
 use quiz_core::{Button, Command, Stamped};
 use std::collections::BTreeSet;

@@ -49,12 +49,12 @@ pub enum AppError {
     ShowStopped,
     /// The show thread got stuck on something earlier (a journal write that
     /// does not finish, `SaveHangs`) before it began the command, so the
-    /// command was given up: it is never made (G17, J18).
+    /// command was given up: it is never made.
     #[error("the show is still busy with an earlier step; this one was not made")]
     ShowBusy,
     /// The show thread has been busy with one thing for
     /// `show_thread::STUCK_AFTER`: a journal write that does not finish,
-    /// as when the disk does not answer. Presses wait for it (G17, J17).
+    /// as when the disk does not answer. Presses wait for it.
     #[error("saving the show does not finish")]
     SaveHangs,
     #[error("the last show cannot be read: {detail}")]
@@ -71,7 +71,7 @@ pub enum AppError {
     #[error("the show began in another version of the app; its scores may differ")]
     RulesChanged,
     /// A resumed show's media are in a folder the windows may not load
-    /// from (A21); it runs without them.
+    /// from; it runs without them.
     #[error("the show's media are in {folder}, which the windows may not load from")]
     MediaFolderRefused { folder: String },
 
@@ -101,10 +101,10 @@ pub enum AppError {
     /// The recent file the editor was asked to open is no longer in the list.
     #[error("the file is no longer in the recent files")]
     NotRecent,
-    /// The editor opened another quiz since the command was given (A16).
+    /// The editor opened another quiz since the command was given.
     #[error("another quiz was opened in the editor meanwhile")]
     DraftChanged,
-    /// The editor's `draft.json` does not hold what it should (A17).
+    /// The editor's `draft.json` does not hold what it should.
     #[error("the editor's draft cannot be read: {detail}")]
     DraftNotRead { detail: String },
     #[error("the spreadsheet cannot be read: {detail}")]
@@ -171,7 +171,7 @@ impl AppError {
         AppError::System { detail: error.to_string() }
     }
 
-    /// Whether the running show's journal refused a write (A9).
+    /// Whether the running show's journal refused a write.
     pub fn is_not_saved(&self) -> bool {
         matches!(self, AppError::ShowNotSaved { .. } | AppError::JournalBroken)
     }

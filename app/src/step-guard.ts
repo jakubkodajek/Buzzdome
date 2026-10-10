@@ -1,6 +1,6 @@
 // One step of the show per key press or click. A double press, a double
 // click or a press made before the new step is on screen must not run the
-// step after it unseen (A4): a Space too many on a question starts its clock
+// step after it unseen: a Space too many on a question starts its clock
 // and closes it with no answers.
 
 import type { Command } from "./types";
@@ -23,7 +23,7 @@ const STEP_COMMANDS: ReadonlySet<Command["type"]> = new Set([
 /**
  * How long after a step command is answered another one is dropped: less
  * than a person takes to see the new step and react to it. Counted from the
- * answer, so a slow journal write does not use it up (G12).
+ * answer, so a slow journal write does not use it up.
  */
 export const STEP_PAUSE_MS = 300;
 

@@ -145,7 +145,7 @@ impl Hardware {
     /// Writes `settings` to disk and only then uses them, so the app never
     /// works with settings that a restart would lose. Only off the windows'
     /// thread (`off_ui`): the file is in the app's data folder with the
-    /// show's journal, so a disk that does not answer holds both (J23).
+    /// show's journal, so a disk that does not answer holds both.
     fn store_settings(&self, settings: ReceiverSettings) -> CmdResult<()> {
         self.settings_file.store(&settings)?;
         *self.settings.lock().unwrap() = settings;
@@ -191,7 +191,7 @@ fn stop_learning(learn: &mut Option<Recorder>, app: &AppHandle) {
 }
 
 /// Starts learning `button` of `buzzer` in `learn`, unless a show runs: in
-/// a show every press must play, and learn mode drops them (A14).
+/// a show every press must play, and learn mode drops them.
 fn start_learning(learn: &mut Option<Recorder>, show_running: bool, buzzer: BuzzerId, button: Button) -> CmdResult<()> {
     if show_running {
         return Err(AppError::ShowRunning);

@@ -22,7 +22,7 @@ export type DraftApi = Pick<
   | "editorTestRun"
 >;
 
-/** What the editor does with its file, one at a time (A16). */
+/** What the editor does with its file, one at a time. */
 export type DraftOperation = "new" | "open" | "close" | "save" | "media" | "import" | "export" | "testRun";
 
 export interface DraftStatus {
@@ -53,7 +53,7 @@ function isRefused(error: unknown): boolean {
   return isAppError(error) && (error.code === "draftChanged" || error.code === "noDraft");
 }
 
-/** A value kept for the draft it was set in (`useDraftState`, A18). */
+/** A value kept for the draft it was set in (`useDraftState`). */
 export interface DraftHeld<T> {
   draftId: string | null;
   value: T | null;
@@ -141,7 +141,7 @@ export class DraftSession {
    * writes still waiting collapse into the latest. `checked` gets what keeps
    * the quiz from being played. A write that fails is tried again until it
    * or a later one works; one for a draft that another has replaced is let
-   * go, but not one for the open draft: its change is not in the draft (G27).
+   * go, but not one for the open draft: its change is not in the draft.
    */
   write(draft: string, quiz: Quiz, unsaved: boolean, checked: (problems: ValidationError[]) => void): void {
     this.cancelRetry();

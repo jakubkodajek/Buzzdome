@@ -1,4 +1,4 @@
-//! File pickers the backend opens itself (A21). A file the app reads or
+//! File pickers the backend opens itself. A file the app reads or
 //! writes for the quizmaster is one picked here, never a path a window
 //! names, so a window cannot have a file written anywhere; and picking adds
 //! nothing to what the windows may load, as the dialog plugin's own

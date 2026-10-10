@@ -381,7 +381,7 @@ let board: SoundBoard = {
     return pads[place] ?? { source: null, label: "", color: null };
   }),
 };
-/** The backend's show clock, which reads nothing like the wall clock, as in the app (G2). */
+/** The backend's show clock, which reads nothing like the wall clock, as in the app. */
 const showClockMs = () => Math.round(performance.now());
 let nowPlaying: NowPlaying | null =
   playing === "picture" ? { id: 1, reference: "media/landscape.svg", kind: "image", positionMs: 0, sinceMs: showClockMs() }

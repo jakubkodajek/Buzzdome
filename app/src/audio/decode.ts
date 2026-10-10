@@ -27,7 +27,7 @@ export const MAX_TIMED_BYTES = (MAX_DECODED_MINUTES * 60 * 1_536_000) / 8;
  * How long reading a sound's length may take before it is read whole. The
  * quizmaster waits for the dialog anyway, and a file that does not tell in
  * time fails to read rather than being judged by its size as one that tells
- * none: a long file on a slow USB drive would be refused as too long (Z8).
+ * none: a long file on a slow USB drive would be refused as too long.
  */
 const LENGTH_TIMEOUT_MS = 60_000;
 

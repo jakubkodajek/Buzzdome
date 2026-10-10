@@ -10,9 +10,9 @@
 //! (Windows refuses that) goes the next time.
 //!
 //! The folder's name is the draft's id: a command for a draft that another
-//! has replaced since is refused (A16). A draft that cannot be read (its
+//! has replaced since is refused. A draft that cannot be read (its
 //! `draft.json` or `quiz.json`) is never taken for "no draft": nothing is
-//! deleted until the quizmaster discards the draft (A17, G26).
+//! deleted until the quizmaster discards the draft.
 
 use crate::dialogs::{self, Picker};
 use crate::error::{AppError, CmdResult};
@@ -102,7 +102,7 @@ fn draft_folder<'de, D: Deserializer<'de>>(deserializer: D) -> Result<String, D:
 
 /// The current draft's pointer, or none when there is no draft. One that
 /// cannot be read is an error, not "no draft", so that nothing deletes the
-/// draft it names (A17). Not `AppFile`: a pointer has no default to go on with.
+/// draft it names. Not `AppFile`: a pointer has no default to go on with.
 fn read_pointer(dir: &Path) -> CmdResult<Option<Pointer>> {
     let path = dir.join(POINTER_FILE);
     let bytes = match fs::read(&path) {
@@ -139,7 +139,7 @@ async fn with_drafts<T: Send + 'static>(app: AppHandle, work: impl FnOnce(&AppHa
 }
 
 /// Runs `work` on the draft `id` (its folder and pointer), refused once
-/// another draft has replaced it (A16).
+/// another draft has replaced it.
 async fn on_draft<T: Send + 'static>(
     app: AppHandle,
     id: String,
@@ -187,7 +187,7 @@ fn switch_to(app: &AppHandle, dir: &Path, pointer: &Pointer) -> CmdResult<()> {
 
 /// A folder for a new draft in place of the current one, refused while
 /// the current one cannot be read, its pointer or its quiz: it would be
-/// deleted unseen (A17, G26).
+/// deleted unseen.
 fn new_draft_folder(dir: &Path) -> CmdResult<(String, PathBuf)> {
     if let Some(pointer) = read_pointer(dir)? {
         quiz_file::read_quiz_json(&dir.join(&pointer.folder))?;
@@ -240,7 +240,7 @@ pub async fn editor_new(app: AppHandle, title: String) -> CmdResult<EditorDraft>
 /// Opens a quiz file in place of the draft: the `recent` file at that place
 /// in the list (`RecentFiles`), or one the quizmaster picks (none when they
 /// cancel). Refused during a show, whose journal must not wait for the disk
-/// while a large file unpacks (A20).
+/// while a large file unpacks.
 #[tauri::command]
 pub async fn editor_open(app: AppHandle, window: Window, recent: Option<usize>, picker: Picker) -> CmdResult<Option<EditorDraft>> {
     let path = match recent {
@@ -328,7 +328,7 @@ pub fn editor_category_name(categories: Vec<Category>, base: String) -> String {
 /// Reads questions from a spreadsheet the quizmaster picks (none when they
 /// cancel) and copies the media they use into the draft; the editor
 /// inserts the slides as one change (spec QZ-8), giving a row that names
-/// one of the draft's categories its look (Z10).
+/// one of the draft's categories its look.
 #[tauri::command]
 pub async fn editor_import_sheet(app: AppHandle, window: Window, draft: String, picker: Picker) -> CmdResult<Option<SheetImport>> {
     let Some(path) = dialogs::pick_file(window, picker, quiz_file::SHEET_EXTENSIONS.to_vec()).await? else { return Ok(None) };

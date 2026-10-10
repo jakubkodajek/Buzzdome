@@ -99,7 +99,7 @@ mod tests {
     /// The browser preview and the UI tests use the built-in themes as
     /// `list_themes` returns them, with the files served by Vite. Written as
     /// TypeScript typed as `Theme`, so the compiler checks the named values
-    /// (`corners`, `headings`) that JSON would type as any string (G32).
+    /// (`corners`, `headings`) that JSON would type as any string.
     #[test]
     fn export_built_in_themes_for_the_preview() {
         let Ok(dir) = std::env::var("TS_RS_EXPORT_DIR") else { return };

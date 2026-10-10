@@ -7,7 +7,7 @@ import type { Slide } from "../types";
 /**
  * Draws `slide` with `children`, a box styled by `className`. A slide that
  * fails to render shows so in that box, and the list or editor around it
- * keeps working (G23); the slide is drawn again once it changes, as when
+ * keeps working; the slide is drawn again once it changes, as when
  * the quizmaster edits it.
  */
 export function SlideBoundary({ className, slide, children }: { className: string; slide: Slide; children: ReactNode }) {

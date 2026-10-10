@@ -30,7 +30,7 @@ type KeyTarget = Partial<Pick<HTMLInputElement, "tagName" | "type" | "isContentE
 /**
  * True when a key press is typed text: in a text field, a text area or
  * editable text. A slider, checkbox or list takes no typing, so the show's
- * keys still work after the quizmaster touched one (A5).
+ * keys still work after the quizmaster touched one.
  */
 export function isTypingTarget(target: EventTarget | null): boolean {
   const element = target as KeyTarget | null;
@@ -82,7 +82,7 @@ function isShowKey(key: string): boolean {
   return /^[0-9]$/.test(key) || NEXT_KEYS.includes(lower) || [KEYS.right, KEYS.wrong, KEYS.clock, KEYS.leaderboard].some((k) => k === lower);
 }
 
-/** True for Enter held down on a button, which would press it again with every repeat (G13). */
+/** True for Enter held down on a button, which would press it again with every repeat. */
 export function isHeldButtonPress(event: Pick<KeyboardEvent, "key" | "repeat" | "target">): boolean {
   return event.repeat && event.key === "Enter" && (event.target as KeyTarget | null)?.tagName === "BUTTON";
 }
@@ -95,7 +95,7 @@ export function isHeldButtonPress(event: Pick<KeyboardEvent, "key" | "repeat" | 
 export function useShortcuts(view: GameView | null, onToggleProjector?: () => void) {
   const dispatch = useDispatch();
   useEffect(() => {
-    // Before anything else sees it, so no control on the way can let it through (G13).
+    // Before anything else sees it, so no control on the way can let it through.
     const onKeyFirst = (event: KeyboardEvent) => {
       if (isHeldButtonPress(event)) event.preventDefault();
     };
@@ -109,12 +109,12 @@ export function useShortcuts(view: GameView | null, onToggleProjector?: () => vo
       if (!view || !isShowKey(event.key)) return;
       // Taken even when the step has no use for it, so Space never presses a focused button mid-show.
       event.preventDefault();
-      // A key held down sends one command, not one per repeat (A4).
+      // A key held down sends one command, not one per repeat.
       if (event.repeat) return;
       const command = commandForKey(event.key, view);
       if (command) dispatch(command);
     };
-    // A slider keeps no focus once let go, so the arrow keys never move it unseen (A5).
+    // A slider keeps no focus once let go, so the arrow keys never move it unseen.
     const onPointerUp = (event: PointerEvent) => {
       if (view && event.target instanceof HTMLInputElement && event.target.type === "range") event.target.blur();
     };
@@ -136,7 +136,7 @@ export function isProjectorCloseKey(event: Pick<KeyboardEvent, "key" | "repeat" 
 
 /**
  * M or Esc closes the projector from itself: full screen over the Director,
- * it is the window that has the keys (A13), also once its screen failed.
+ * it is the window that has the keys, also once its screen failed.
  */
 export function useProjectorCloseKeys(close: () => void) {
   useEffect(() => {

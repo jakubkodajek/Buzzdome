@@ -1,9 +1,9 @@
 //! The app's two windows: the Director, the quizmaster's (from
 //! `tauri.conf.json`), and the projector, which the Director opens. A live
 //! show must lose neither by accident: the Director asks before it closes
-//! during a show and the app ends with it (A10), the windows stay on the
-//! app's own pages (A11), and the projector opens on another screen than
-//! the Director's (A13).
+//! during a show and the app ends with it, the windows stay on the
+//! app's own pages, and the projector opens on another screen than
+//! the Director's.
 
 use crate::error::CmdResult;
 use crate::{app_icon, app_log, AppState};
@@ -23,13 +23,13 @@ pub const DIRECTOR_LABEL: &str = "director";
 const CLOSE_REQUESTED_EVENT: &str = "close-requested";
 /// How long a close request waits for the Director's answer: a Director
 /// whose page failed or hangs never gives one, so a request made after that
-/// closes the app without asking (G3).
+/// closes the app without asking.
 pub(crate) const CLOSE_ANSWER_WAIT: Duration = Duration::from_secs(10);
 /// How long an unanswered close request lasts. A later close asks again, so
 /// a request whose answer was lost (its dialog failed to open) does not let
 /// an accidental close go through without asking an hour later.
 const CLOSE_REQUEST_LASTS: Duration = Duration::from_secs(60);
-/// The app menu's Quit on macOS, which asks during a show (G21).
+/// The app menu's Quit on macOS, which asks during a show.
 const QUIT_MENU_ID: &str = "quit";
 
 #[derive(Serialize, TS)]
@@ -301,7 +301,7 @@ pub struct MenuWords {
 
 /// The macOS app menu, as Tauri's default one but with a Quit of the app's
 /// own: the system's Quit ends the app at once, with no event to wait on,
-/// so Cmd+Q would end a show without asking (G21). Quit from the Dock still
+/// so Cmd+Q would end a show without asking. Quit from the Dock still
 /// does; the show stays saved and can be resumed. In English until the
 /// Director words it.
 #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
@@ -366,7 +366,7 @@ pub fn on_menu_event(app: &AppHandle, event: MenuEvent) {
     }
 }
 
-/// Brings the Director forward when the app is started again (Z2), and
+/// Brings the Director forward when the app is started again, and
 /// builds it again if it is gone.
 pub fn show_director(app: &AppHandle) {
     if let Some(director) = app.get_webview_window(DIRECTOR_LABEL) {
@@ -386,7 +386,7 @@ pub fn show_director(app: &AppHandle) {
     });
 }
 
-/// Keeps every window on the app's own pages (A11): a link, a file dropped
+/// Keeps every window on the app's own pages: a link, a file dropped
 /// where nothing takes it or a stray script cannot replace the Director or
 /// the projector. The first page of a window loads before this applies.
 pub fn navigation_guard<R: Runtime>() -> TauriPlugin<R> {
@@ -458,7 +458,7 @@ mod tests {
         let projector = granted(include_str!("../capabilities/projector.json"));
         assert!(projector.iter().all(|c| registered.contains(&c.as_str())), "{projector:?}");
         for command in ["dispatch", "get_view", "close_host_window"] {
-            assert!(projector.iter().any(|c| c == command), "the projector shows the show and its keys step it (A13): {command}");
+            assert!(projector.iter().any(|c| c == command), "the projector shows the show and its keys step it: {command}");
         }
         for command in ["editor_save", "editor_open", "start_show_from_file", "receiver_select", "quit_app"] {
             assert!(!projector.iter().any(|c| c == command), "the projector opens no file and changes no setting: {command}");

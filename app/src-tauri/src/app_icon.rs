@@ -96,7 +96,7 @@ pub fn app_icon(state: State<AppIcon>) -> IconColor {
 
 /// Keeps the icon in `color` for the next start, then gives it to every
 /// window. Kept first, so nothing shows a colour the next start would not
-/// have; a window that cannot take it keeps its icon and the rest change (Z11).
+/// have; a window that cannot take it keeps its icon and the rest change.
 #[tauri::command]
 pub fn set_app_icon(app: AppHandle, state: State<AppIcon>, color: IconColor) -> CmdResult<()> {
     let image = color.image()?;

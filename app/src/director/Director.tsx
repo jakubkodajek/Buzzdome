@@ -89,7 +89,7 @@ function DirectorScreens() {
   const mediaRoot = useMediaRoot();
   if (screen === "editor") {
     return (
-      // An editor that fails to render keeps the way back to the show (G23).
+      // An editor that fails to render keeps the way back to the show.
       <ErrorBoundary
         fallback={(message, retry) => (
           <RenderFailed t={t} text={t("partFailed", { message })} retry={retry}>
@@ -152,7 +152,7 @@ function DirectorLayout({ testRun, onEditor }: { testRun: boolean; onEditor: () 
         <LearnBanner />
         <div className="tab-body" role="tabpanel">
           <ThemeContext value={theme}>
-            {/* A tab that fails to render keeps the rest of the window, and its keys, working (A12). */}
+            {/* A tab that fails to render keeps the rest of the window, and its keys, working. */}
             <ErrorBoundary key={tab} fallback={(message, retry) => <RenderFailed t={t} text={t("partFailed", { message })} retry={retry} />}>
               <TabBody tab={tab} view={view} quiz={quiz} projector={projector} player={player} sound={sound} />
             </ErrorBoundary>
@@ -239,7 +239,7 @@ function CommandPanel(props: { view: GameView | null; projector: ProjectorSettin
   const run = useRun();
   const last = useLastSession();
   // Why Resume failed, kept on screen until another show loads: the show
-  // waits on it (A1).
+  // waits on it.
   const [resumeProblem, setResumeProblem] = useState<unknown>(null);
   useBackendEvent("show-changed", () => setResumeProblem(null));
   const resume = () => {

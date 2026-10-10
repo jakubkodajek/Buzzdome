@@ -248,7 +248,7 @@ describe("DraftSession", () => {
 });
 
 describe("heldIn", () => {
-  it("gives what was kept in the open draft, and nothing once another is open (A18)", () => {
+  it("gives what was kept in the open draft, and nothing once another is open", () => {
     const copied = { draftId: "draft-1", value: "media/a.png" };
     expect(heldIn(copied, "draft-1")).toBe("media/a.png");
     expect(heldIn(copied, "draft-2")).toBe(null);

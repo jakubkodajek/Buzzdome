@@ -14,7 +14,7 @@ interface Props {
 
 /**
  * Keeps a render error in one part of a window from blanking the whole
- * window (A12): the part shows `fallback` until it is tried again, `resetOn`
+ * window: the part shows `fallback` until it is tried again, `resetOn`
  * changes or the boundary is given another `key`.
  */
 export class ErrorBoundary extends Component<Props, { message: string | null }> {
@@ -42,7 +42,7 @@ export class ErrorBoundary extends Component<Props, { message: string | null }> 
 }
 
 /**
- * What a window or a part of it shows after it failed to render (A12, G25):
+ * What a window or a part of it shows after it failed to render:
  * `text` says so, with a button to try again; `children` adds other ways out.
  */
 export function RenderFailed({ t, text, retry, children }: { t: Translate; text: string; retry: () => void; children?: ReactNode }) {

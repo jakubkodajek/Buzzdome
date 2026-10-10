@@ -50,7 +50,7 @@ struct Inner {
     /// so (for the Teams tab). Known once the app has started.
     teams_file: Option<app_file::AppFile>,
     /// Why the running show's last journal write failed, if it did; none
-    /// once one works again. The Director shows it (A9).
+    /// once one works again. The Director shows it.
     save_problem: Option<AppError>,
     /// When the running show began on the show clock (`before_show`).
     began_ms: u64,
@@ -76,7 +76,7 @@ impl Inner {
 
     /// Whether a command or press given at `at_ms` came before the running
     /// show began, while it started: it was meant for no show or the one
-    /// before, and does not reach this one (J24).
+    /// before, and does not reach this one.
     fn before_show(&self, at_ms: u64) -> bool {
         at_ms < self.began_ms
     }
@@ -87,7 +87,7 @@ struct AppState(Mutex<Inner>);
 /// The show state. The app's locks are taken in one order: the editor's
 /// (`editor::lock`), then this one, then the learn lock (`hardware`). So
 /// code holding the learn lock never waits for this one, which a journal
-/// write can hold for a while (G16). The close request
+/// write can hold for a while. The close request
 /// (`app_windows::CloseRequest`) is taken under this one when a show begins
 /// or ends, and holds no other lock.
 fn lock_show(app: &AppHandle) -> MutexGuard<'_, Inner> {
@@ -95,7 +95,7 @@ fn lock_show(app: &AppHandle) -> MutexGuard<'_, Inner> {
 }
 
 /// The clock every command and press is stamped with, shared with the
-/// receiver thread (A6, `Stamped::at_ms`).
+/// receiver thread (`Stamped::at_ms`).
 static SHOW_CLOCK: LazyLock<ShowClock> = LazyLock::new(ShowClock::start);
 
 fn now_ms() -> u64 {
@@ -104,7 +104,7 @@ fn now_ms() -> u64 {
 
 /// Runs `work` on a thread that may wait, never the windows' thread: Tauri
 /// runs synchronous commands there, so one that waits for the show state,
-/// which a journal write holds, would freeze both windows (A7).
+/// which a journal write holds, would freeze both windows.
 async fn off_ui<T: Send + 'static>(work: impl FnOnce() -> CmdResult<T> + Send + 'static) -> CmdResult<T> {
     tauri::async_runtime::spawn_blocking(work).await?
 }
@@ -150,8 +150,8 @@ fn quizzes_cache(app: &AppHandle) -> CmdResult<PathBuf> {
 static QUIZZES_CACHE: Mutex<()> = Mutex::new(());
 
 /// The folders a show's media can be in, unpacked quizzes and editor
-/// drafts: the windows may load files from these, allowed once at start
-/// (A21), and from no other folder of the disk.
+/// drafts: the windows may load files from these, allowed once at start,
+/// and from no other folder of the disk.
 fn media_folders(app: &AppHandle) -> CmdResult<[PathBuf; 2]> {
     Ok([quizzes_cache(app)?, editor::editor_dir(app)?])
 }
@@ -194,8 +194,8 @@ fn execute_at(app: &AppHandle, inner: &mut Inner, command: Command, at_ms: u64) 
 /// Applies `command` to a copy of the running show and journals it; only
 /// then does the copy replace the show (S1). Gives the effects, for
 /// `deliver`, or none for a press that changes nothing (`Game::ignores`):
-/// a burst of those costs no journal write (A8). Keeps whether the journal
-/// write failed, for the Director (A9).
+/// a burst of those costs no journal write. Keeps whether the journal
+/// write failed, for the Director.
 fn apply_journaled(inner: &mut Inner, command: Command, at_ms: u64) -> CmdResult<Option<Vec<Effect>>> {
     let game = inner.game.as_ref().ok_or(AppError::NoShow)?;
     let stamped = Stamped { at_ms, command };
@@ -326,7 +326,7 @@ fn show_running(app: &AppHandle) -> bool {
 
 // The commands that read or start the show are async, so Tauri runs them
 // off the windows' thread, and they take the show state on a thread that
-// may wait (`off_ui`, A7). Those that change or end a running show run on
+// may wait (`off_ui`). Those that change or end a running show run on
 // the show thread (`show_thread::run`).
 
 #[tauri::command]
@@ -348,8 +348,7 @@ async fn media_root(app: AppHandle) -> CmdResult<Option<String>> {
 }
 
 /// Why the running show's journal cannot be written, or that a write does
-/// not finish, if so; also sent with `show-not-saved` whenever it changes
-/// (A9, G17).
+/// not finish, if so; also sent with `show-not-saved` whenever it changes.
 #[tauri::command]
 async fn show_not_saved(app: AppHandle) -> CmdResult<Option<AppError>> {
     Ok(show_thread::not_saved(&app))
@@ -421,7 +420,7 @@ struct ResumedShow {
 
 /// Rebuilds the latest show under `root` from its journal. A show that
 /// stopped mid-question has the question restarted, journaled at `at_ms`,
-/// before anything is shown: no window sees the stopped question (A2). Its
+/// before anything is shown: no window sees the stopped question. Its
 /// media are served only from the `media_folders`.
 fn resume_show(root: &Path, at_ms: u64, media_folders: &[PathBuf]) -> CmdResult<ResumedShow> {
     let Resumed { mut session, quiz, journal, meta } = Session::resume_latest(root)?.ok_or(AppError::NoShowToResume)?;
@@ -460,7 +459,7 @@ async fn resume_last_session(app: AppHandle) -> CmdResult<Vec<AppError>> {
 
 /// Closes the running show. Its journal stays on disk, so it can be
 /// resumed. In order with the show's commands, so a step given before it
-/// still counts and none given after it reaches the show (G18).
+/// still counts and none given after it reaches the show.
 #[tauri::command]
 async fn end_show(app: AppHandle) -> CmdResult<()> {
     show_thread::run(&app, |app, inner, at_ms| {
@@ -514,11 +513,11 @@ pub(crate) fn play_press(app: &AppHandle, press: Press, at_ms: u64) -> bool {
 pub fn run() {
     let builder = tauri::Builder::default()
         // First, so a second start ends before it touches the show: it brings
-        // the running app's Director forward instead (Z2).
+        // the running app's Director forward instead.
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| app_windows::show_director(app)))
         .plugin(tauri_plugin_dialog::init())
         .plugin(app_windows::navigation_guard());
-    // Only macOS has an app menu, whose Quit asks during a show (G21).
+    // Only macOS has an app menu, whose Quit asks during a show.
     #[cfg(target_os = "macos")]
     let builder = builder.menu(app_windows::app_menu);
     let inner = Inner::new();
@@ -531,7 +530,7 @@ pub fn run() {
         .setup(|app| {
             app_log::start(app.path().app_log_dir()?);
             editor::move_roaming_drafts(app.handle());
-            // One queue for the receiver's events and the quizmaster's commands (A7).
+            // One queue for the receiver's events and the quizmaster's commands.
             let (queue, events) = mpsc::channel();
             let hardware = Hardware::start(app.handle(), queue.clone(), *SHOW_CLOCK);
             if let Some(handle) = hardware.handle() {
@@ -741,7 +740,7 @@ mod tests {
         let root = sessions_dir("rules-1");
         let mut inner = journaled_show_under(1, &root, up_to_the_first_question());
         let slide = inner.game.as_ref().unwrap().slide_index();
-        // Version 1 restarted the question after a crash with a jump to it (G11);
+        // Version 1 restarted the question after a crash with a jump to it;
         // today's rules refuse that jump, so it is written as it was.
         let session = inner.session.as_mut().unwrap();
         session.append(&Stamped { at_ms: 60_000, command: Command::GoTo { slide } }).unwrap();

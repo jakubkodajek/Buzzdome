@@ -85,7 +85,7 @@ pub struct ReceiverConfig {
 
 impl ReceiverConfig {
     /// The usual settings, stamping reports with the app's show `clock`:
-    /// there is no default clock, so presses and commands share one (A6).
+    /// there is no default clock, so presses and commands share one.
     pub fn new(clock: ShowClock) -> ReceiverConfig {
         ReceiverConfig { retry: Duration::from_secs(2), read_timeout_ms: 20, repeat_gap_ms: 150, clock }
     }

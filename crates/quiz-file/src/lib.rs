@@ -42,7 +42,7 @@ pub const MAX_UNPACKED_BYTES: u64 = 4 << 30;
 pub const MAX_ENTRIES: usize = 10_000;
 /// `quiz.json` is parsed whole, into many times its size, so it gets far
 /// less room than media: a small file must not unpack to one that takes the
-/// app's memory (A20). Text-only quizzes stay well under it.
+/// app's memory. Text-only quizzes stay well under it.
 pub const MAX_QUIZ_JSON_BYTES: u64 = 16 << 20;
 
 const ZIP_MAGIC: &[u8; 4] = b"PK\x03\x04";

@@ -21,10 +21,10 @@ pub type BuzzerId = u16;
 /// before and is taken now needs no bump, as a refused command is never
 /// journaled.
 ///
-/// 1: refused presses that were journaled count (N3), and renaming a player
-/// takes the name from another buzzer (R17). 2: a question in play restarts
+/// 1: refused presses that were journaled count, and renaming a player
+/// takes the name from another buzzer. 2: a question in play restarts
 /// with `RestartQuestion`, which takes its score changes back, and refuses
-/// `GoTo` and `GoToFinal` (A3). 3: only the time of right answers breaks
+/// `GoTo` and `GoToFinal`. 3: only the time of right answers breaks
 /// ties, switching a player on or off in a running question closes it when
 /// nobody is left to answer, and names are the same however their accents
 /// are encoded.
@@ -455,7 +455,7 @@ impl Game {
 
     /// The question can start again: it is in play, or it closed and its
     /// answer is not shown yet. So a restart the quizmaster asked for still
-    /// works when time ran out while they confirmed it (J20).
+    /// works when time ran out while they confirmed it.
     fn question_restartable(&self) -> bool {
         self.question_in_play() || self.phase == Phase::Question(QuestionStep::Closed)
     }
@@ -836,7 +836,7 @@ impl Game {
 
     /// Whether applying `stamped` would leave the show as it is: a press that
     /// does not play, such as a second answer or one after time up. The app
-    /// neither journals nor shows such a press (A8), so a burst of them
+    /// neither journals nor shows such a press, so a burst of them
     /// cannot hold up the show. A press of a new buzzer always counts, as it
     /// registers the buzzer.
     pub fn ignores(&self, stamped: &Stamped) -> bool {
