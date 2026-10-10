@@ -1,6 +1,8 @@
 // Small parts the media player's list and sound board share.
 
 import { useEffect, useState, type DragEvent } from "react";
+import { useLatest } from "../hooks";
+import { showClockAt, type HeardMedia } from "../media-player";
 import { PictureIcon, SoundIcon, VideoIcon } from "../icons";
 import type { MediaKind } from "../types";
 
@@ -16,13 +18,20 @@ export function carriesFiles(e: DragEvent): boolean {
   return e.dataTransfer.types.includes("Files");
 }
 
-/** The time now, renewed often while `running`, for what plays to count on screen. */
-export function useTicking(running: boolean): number {
-  const [now, setNow] = useState(Date.now);
+/**
+ * The show clock now, counted on from what plays as this window heard it,
+ * renewed often while it plays, for what plays to count on screen.
+ */
+export function useTicking(media: HeardMedia | null): number {
+  const latest = useLatest(media);
+  const [now, setNow] = useState(() => (media ? showClockAt(media, performance.now()) : 0));
+  const running = (media?.now?.sinceMs ?? null) !== null;
   useEffect(() => {
     if (!running) return;
-    const timer = setInterval(() => setNow(Date.now()), 100);
+    const timer = setInterval(() => {
+      if (latest.current) setNow(showClockAt(latest.current, performance.now()));
+    }, 100);
     return () => clearInterval(timer);
-  }, [running]);
+  }, [running, latest]);
   return now;
 }

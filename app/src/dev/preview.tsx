@@ -17,6 +17,7 @@ import type {
   GameView,
   IconColor,
   MediaLibrary,
+  MediaNow,
   NowPlaying,
   Pad,
   PlayerCommand,
@@ -368,14 +369,17 @@ let board: SoundBoard = {
     return pads[place] ?? { source: null, label: "", color: null };
   }),
 };
+/** The backend's show clock, which reads nothing like the wall clock, as in the app (G2). */
+const showClockMs = () => Math.round(performance.now());
 let nowPlaying: NowPlaying | null =
-  playing === "picture" ? { id: 1, reference: "media/landscape.svg", kind: "image", positionMs: 0, sinceMs: Date.now() }
-  : playing === "video" ? { id: 1, reference: "media/clip.webm", kind: "video", positionMs: 3_000, sinceMs: Date.now() }
+  playing === "picture" ? { id: 1, reference: "media/landscape.svg", kind: "image", positionMs: 0, sinceMs: showClockMs() }
+  : playing === "video" ? { id: 1, reference: "media/clip.webm", kind: "video", positionMs: 3_000, sinceMs: showClockMs() }
   : null;
+const mediaNow = (): MediaNow => ({ now: nowPlaying, atMs: showClockMs() });
 
 /** A rough stand-in for the backend's media player (`quiz_core::MediaPlayer`), enough to click through the tab. */
 function control(command: PlayerCommand) {
-  const at = Date.now();
+  const at = showClockMs();
   const start = (reference: string) => {
     const kind = LIBRARY.files.find((file) => file.reference === reference)?.kind ?? "audio";
     nowPlaying = { id: (nowPlaying?.id ?? 0) + 1, reference, kind, positionMs: 0, sinceMs: at };
@@ -412,7 +416,7 @@ function control(command: PlayerCommand) {
       if (nowPlaying?.id === command.id) nowPlaying = null;
       break;
   }
-  void emit("media-playing", nowPlaying);
+  void emit("media-playing", mediaNow());
 }
 
 let playerVolume = MAX_PLAYER_VOLUME;
@@ -484,7 +488,7 @@ mockIPC(
         changeBoard((payload as { change: BoardChange }).change);
         return null;
       case "media_now":
-        return nowPlaying;
+        return mediaNow();
       case "media_control":
         called.push({ cmd, ...(payload as object) });
         control((payload as { command: PlayerCommand }).command);

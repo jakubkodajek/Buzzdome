@@ -2,7 +2,8 @@ import { listen } from "@tauri-apps/api/event";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { api, type BackendEvents } from "./api";
 import { MAX_PLAYER_VOLUME } from "./bindings/Constants";
-import type { AppError, ClockView, GameView, IconColor, LearnProgress, MediaLibrary, NowPlaying, Quiz, SessionSummary, SettingsLost, SoundBoard } from "./types";
+import { heard, type HeardMedia } from "./media-player";
+import type { AppError, ClockView, GameView, IconColor, LearnProgress, MediaLibrary, Quiz, SessionSummary, SettingsLost, SoundBoard } from "./types";
 
 /** A ref that always holds the latest `value`, for callbacks that outlive a render. */
 export function useLatest<T>(value: T): { readonly current: T } {
@@ -61,21 +62,27 @@ function useBackendValue<T>(load: () => Promise<T>, initial: T, refreshOn: keyof
  * comes from `load`, unless a push already arrived; null until then.
  */
 function usePushedValue<E extends keyof BackendEvents>(event: E, load: () => Promise<BackendEvents[E]>): BackendEvents[E] | null {
-  const [value, setValue] = useState<BackendEvents[E] | null>(null);
+  return useReceivedValue(event, load, (value) => value);
+}
+
+/** `usePushedValue`, keeping what `receive` makes of each value as it arrives. */
+function useReceivedValue<E extends keyof BackendEvents, T>(event: E, load: () => Promise<BackendEvents[E]>, receive: (value: BackendEvents[E]) => T): T | null {
+  const [value, setValue] = useState<T | null>(null);
   const pushed = useRef(false);
   const initial = useRef(load);
+  const latestReceive = useLatest(receive);
   useBackendEvent(event, (next) => {
     pushed.current = true;
-    setValue(next);
+    setValue(latestReceive.current(next));
   });
   useEffect(() => {
     initial
       .current()
       .then((first) => {
-        if (!pushed.current) setValue(first);
+        if (!pushed.current) setValue(latestReceive.current(first));
       })
       .catch((e) => console.error(e));
-  }, []);
+  }, [latestReceive]);
   return value;
 }
 
@@ -114,9 +121,9 @@ export function useSoundBoard(): SoundBoard | null {
   return usePushedValue("sound-board", api.soundBoard);
 }
 
-/** What the media player plays, if anything. */
-export function useNowPlaying(): NowPlaying | null {
-  return usePushedValue("media-playing", api.mediaNow);
+/** What the media player plays, as this window heard it; null until loaded. */
+export function useNowPlaying(): HeardMedia | null {
+  return useReceivedValue("media-playing", api.mediaNow, (media) => heard(media, performance.now()));
 }
 
 /** The colour of the windows' icon; null until loaded. */

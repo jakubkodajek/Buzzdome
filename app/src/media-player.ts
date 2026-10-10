@@ -3,14 +3,35 @@
 
 import { MAX_BOARD_COLUMNS } from "./bindings/Constants";
 import { mediaFileName } from "./media";
-import type { LibraryFile, NowPlaying, Pad, PadColor, SoundBoard } from "./types";
+import type { LibraryFile, MediaNow, NowPlaying, Pad, PadColor, SoundBoard } from "./types";
 
 /** The colours a pad can have, and the ones its column gives it when it has none of its own. */
 export const PAD_COLORS: readonly PadColor[] = ["red", "orange", "yellow", "green", "teal", "blue", "purple", "pink"];
 
 /**
- * Where `now` is at `atMs`. The same rule as `NowPlaying::position_at` in
- * quiz-core, which the Director needs many times a second for the pads.
+ * What the media player plays, as a window heard it: the show clock read
+ * `atMs` when `performance.now()` read `heardAt`. The window counts on from
+ * there on that monotonic clock, never on its wall clock, which may stand
+ * apart from the show clock by any amount (G2).
+ */
+export interface HeardMedia extends MediaNow {
+  heardAt: number;
+}
+
+/** `media` as heard at `heardAt` (by `performance.now()`). */
+export function heard(media: MediaNow, heardAt: number): HeardMedia {
+  return { ...media, heardAt };
+}
+
+/** The show clock at `localMs` (by `performance.now()`), counted on from what was heard. */
+export function showClockAt(media: HeardMedia, localMs: number): number {
+  return media.atMs + Math.max(0, localMs - media.heardAt);
+}
+
+/**
+ * Where `now` is at `atMs` on the show clock. The same rule as
+ * `NowPlaying::position_at` in quiz-core, which the Director needs many
+ * times a second for the pads.
  */
 export function positionAt(now: NowPlaying, atMs: number): number {
   return now.positionMs + (now.sinceMs === null ? 0 : Math.max(0, atMs - now.sinceMs));

@@ -102,7 +102,7 @@ two windows cannot disagree with each other or with the score.
 | `show-not-saved` | `AppError` or null | the running show's journal refused a write, or works again |
 | `teams-changed` | string list | the prepared team names changed, or a show started or ended |
 | `media-library`, `sound-board` | `MediaLibrary`, `SoundBoard` | the media player's library or pads changed |
-| `media-playing`, `media-volume` | `NowPlaying` or null, number | the media player started, paused or stopped; its volume changed |
+| `media-playing`, `media-volume` | `MediaNow`, number | the media player started, paused or stopped (with the show clock's time then); its volume changed |
 | `app-icon` | `IconColor` | the windows' icon took another colour |
 
 - **Clock.** Every command and press is stamped by one show clock
@@ -629,7 +629,10 @@ packages users will install are read the same way.
 - **Playing.** `quiz_core::MediaPlayer` keeps what plays (`NowPlaying`:
   the file, where it stood and since when it plays) and what a click on a
   pad does. It is no show state, so it is not journaled; `media-playing`
-  tells the windows. The Director plays sounds (`useMediaPlayer`, a
+  (and `media_now` for a window that opens) tells the windows, with the
+  show clock's time when it was sent (`MediaNow`). `since` is on the show
+  clock, never the wall clock, which can jump: a window counts on from
+  that time by its own monotonic clock (`showClockAt`). The Director plays sounds (`useMediaPlayer`, a
   `ClipPlayer` per start); the projector shows a picture or video over the
   stage (`MediaOverlay`) and seeks a video to where the player stands, so
   a projector opened mid-file joins in. The Director reads each file's

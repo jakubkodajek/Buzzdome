@@ -54,7 +54,7 @@ export function MediaPlayerTab({ player, sound, view }: { player: MediaPlayer; s
   const [menu, setMenu] = useState<{ file: LibraryFile; x: number; y: number } | null>(null);
   const [dropping, setDropping] = useState(false);
   const body = useRef<HTMLDivElement>(null);
-  const ticking = useTicking(now?.sinceMs !== null && now !== null);
+  const ticking = useTicking(player.heard);
 
   const files = library?.files ?? [];
   const found = searchFiles(files, query);

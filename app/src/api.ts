@@ -16,8 +16,8 @@ import type {
   ListSeparator,
   MediaKind,
   MediaLibrary,
+  MediaNow,
   MonitorInfo,
-  NowPlaying,
   Picker,
   PlayerCommand,
   Press,
@@ -85,7 +85,7 @@ export const api = {
   soundBoard: () => invoke<SoundBoard>("sound_board"),
   soundBoardChange: (change: BoardChange) => invoke<void>("sound_board_change", { change }),
   /** What the media player plays, if anything. */
-  mediaNow: () => invoke<NowPlaying | null>("media_now"),
+  mediaNow: () => invoke<MediaNow>("media_now"),
   mediaControl: (command: PlayerCommand) => invoke<void>("media_control", { command }),
   /** The player's volume in percent, the level everything the show plays sounds at. */
   mediaVolume: () => invoke<number>("media_volume"),
@@ -160,7 +160,7 @@ export interface BackendEvents {
   "media-library": MediaLibrary;
   "sound-board": SoundBoard;
   /** The media player started, paused or stopped something. */
-  "media-playing": NowPlaying | null;
+  "media-playing": MediaNow;
   /** The player's volume changed, in percent. */
   "media-volume": number;
   /** The windows' icon took another colour. */

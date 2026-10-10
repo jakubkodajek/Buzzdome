@@ -50,7 +50,11 @@ export function readMediaLength(url: string, kind: Exclude<MediaKind, "image">, 
       media.load();
       settle();
     }
-    media.onloadedmetadata = () => done(() => resolve(Number.isFinite(media.duration) ? media.duration * 1000 : Number.NaN));
+    media.onloadedmetadata = () => {
+      // Read before `done` lets go of the file, which forgets its length.
+      const ms = Number.isFinite(media.duration) ? media.duration * 1000 : Number.NaN;
+      done(() => resolve(ms));
+    };
     media.onerror = () => done(() => resolve(Number.NaN));
     media.src = url;
   });

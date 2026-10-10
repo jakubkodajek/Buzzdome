@@ -1,7 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { MAX_BOARD_COLUMNS } from "./bindings/Constants";
 import type { LibraryFile, NowPlaying, SoundBoard } from "./types";
-import { msToEnd, padColor, positionAt, progressOf, searchFiles, shownRows } from "./media-player";
+import { heard, msToEnd, padColor, positionAt, progressOf, searchFiles, showClockAt, shownRows } from "./media-player";
 // The cases quiz-core tests `NowPlaying::position_at` with.
 import POSITION_CASES from "../../crates/quiz-core/tests/data/position-at.json";
 
@@ -9,6 +9,23 @@ const SONG: NowPlaying = { id: 1, reference: "media/song.mp3", kind: "audio", po
 const PAUSED: NowPlaying = { ...SONG, sinceMs: null };
 
 describe("media player", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("counts on the show clock from what the window heard, never on the wall clock", () => {
+    // The show clock and the window's clocks read nothing alike; the wall clock is not read at all.
+    vi.spyOn(Date, "now").mockImplementation(() => {
+      throw new Error("the wall clock was read");
+    });
+    const media = heard({ now: SONG, atMs: 10_200 }, 777_000);
+    expect(showClockAt(media, 777_000)).toBe(10_200);
+    expect(showClockAt(media, 777_300)).toBe(10_500);
+    expect(positionAt(SONG, showClockAt(media, 777_300))).toBe(2_500);
+    // A frame drawn before the event was taken in does not count back.
+    expect(showClockAt(media, 776_990)).toBe(10_200);
+  });
+
   it("counts the position as the core does", () => {
     expect(POSITION_CASES.length).toBeGreaterThan(0);
     for (const { name, positionMs, sinceMs, atMs, expected } of POSITION_CASES) expect(positionAt({ ...SONG, positionMs, sinceMs }, atMs), name).toBe(expected);
