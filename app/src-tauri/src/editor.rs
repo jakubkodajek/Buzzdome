@@ -257,11 +257,7 @@ pub async fn editor_open(app: AppHandle, window: Window, recent: Option<String>,
         }
         let (folder, root) = new_draft_folder(dir)?;
         let source_path = path.to_string_lossy().into_owned();
-        let opened = quiz_file::open_into(&path, &root).inspect_err(|_| {
-            if path.metadata().is_err_and(|e| e.kind() == std::io::ErrorKind::NotFound) {
-                app.state::<RecentFiles>().forget(&source_path);
-            }
-        })?;
+        let opened = quiz_file::open_into(&path, &root).inspect_err(|_| app.state::<RecentFiles>().forget_if_gone(&source_path))?;
         // A quiz that opening changed has to be saved to keep the change.
         let pointer = Pointer { folder, source_path: Some(source_path.clone()), unsaved: opened.changed, dropped: opened.dropped };
         switch_to(app, dir, &pointer)?;

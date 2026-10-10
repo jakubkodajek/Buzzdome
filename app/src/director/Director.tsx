@@ -52,6 +52,7 @@ import { SettingsTab, useProjectorSettings, type ProjectorSettings } from "./Set
 import { TeamsTab } from "./TeamsTab";
 import { confirmAction } from "../confirm";
 import { useMediaPlayer, type MediaPlayer } from "./useMediaPlayer";
+import { restartOutcome } from "./restart";
 import { VirtualBuzzers } from "./VirtualBuzzers";
 import "./director.css";
 
@@ -262,22 +263,18 @@ function CommandPanel(props: { view: GameView | null; projector: ProjectorSettin
   const openQuiz = () => run(api.startShowFromFile(quizPicker(t)));
 
   const controls = view?.controls;
-  const latestControls = useLatest(controls);
+  const latestView = useLatest(view);
   const hint = (key: string) => keyHint(t, key);
   // Asked first, with the clock paused meanwhile so time cannot run out
-  // while the quizmaster decides. A question closed by then shows its
-  // results and does not start again.
+  // while the quizmaster decides; the answer acts on the show as it is by
+  // then (`restartOutcome`).
   const restartQuestion = () => {
     const paused = controls?.pauseClock === true;
     if (paused) dispatch({ type: "pauseClock" });
     const answered = (yes: boolean) => {
-      if (!yes) {
-        if (paused && latestControls.current?.resumeClock) dispatch({ type: "resumeClock" });
-      } else if (latestControls.current?.restartQuestion) {
-        dispatch({ type: "restartQuestion" });
-      } else {
-        notify(t("restartTooLate"));
-      }
+      const outcome = restartOutcome(yes, paused, latestView.current);
+      if (outcome && "command" in outcome) dispatch(outcome.command);
+      else if (outcome) notify(t(outcome.notice));
     };
     run(confirmAction(t, t("restartQuestionConfirm")).then(answered));
   };

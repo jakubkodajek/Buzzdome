@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { NO_CONTROLS, previewView } from "./host/preview";
 import { translator } from "./i18n";
-import { PROJECTOR_COMMANDS } from "./bindings/ProjectorCommands";
+import { KEY_BUZZERS, PROJECTOR_COMMANDS } from "./bindings/ProjectorCommands";
 import { commandForKey, isFieldTarget, isHeldButtonPress, isPlainKey, isProjectorCloseKey, isTypingTarget, keyCombo, keyHint, KEYS } from "./keyboard";
 import type { Controls, GameView } from "./types";
 
@@ -37,6 +37,13 @@ describe("commandForKey", () => {
     const given = new Set(views.flatMap((view) => keys.map((key) => commandForKey(key, view)?.type).filter((type) => type !== undefined)));
     expect([...given].filter((type) => !PROJECTOR_COMMANDS.includes(type))).toEqual([]);
     expect(given.size).toBe(PROJECTOR_COMMANDS.length);
+  });
+
+  it("presses exactly the buzzers the projector may press, with the big button", () => {
+    const presses = [..."0123456789"].map((key) => commandForKey(key, viewWith({})));
+    for (const press of presses) expect(press).toMatchObject({ type: "press", button: "big" });
+    const buzzers = presses.map((press) => (press?.type === "press" ? press.buzzer : null));
+    expect(buzzers.sort((a, b) => (a ?? 0) - (b ?? 0))).toEqual(KEY_BUZZERS);
   });
 
   it("toggles the leaderboard", () => {

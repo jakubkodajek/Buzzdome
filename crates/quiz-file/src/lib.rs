@@ -14,6 +14,7 @@ pub use sheet::{
     export_sheet, import_sheet, read_tables, SheetExport, SheetImport, SheetRead, CSV_EXTENSION, MAX_SHEET_BYTES, MAX_SHEET_COLUMNS, MAX_SHEET_REPORT_BYTES,
     MAX_SHEET_ROWS, MAX_SHEET_TEXT_BYTES, SHEET_EXTENSIONS,
 };
+pub use zip_end::MAX_END_RECORDS;
 
 use quiz_core::{
     file_key, is_safe_reference, portable_name, portable_reference, MediaIssue, Problem, Quiz, QuizJsonError, ReadQuiz, SheetError,
@@ -27,7 +28,7 @@ use std::fs::{self, File};
 use std::io::{self, Read, Write};
 use std::path::{Component, Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use ts_rs::TS;
 use zip::write::SimpleFileOptions;
 use zip::{CompressionMethod, ZipArchive, ZipWriter};
@@ -76,6 +77,8 @@ pub enum QuizFileError {
     TooLarge,
     #[error("the quiz file has more than {MAX_ENTRIES} files")]
     TooManyFiles,
+    #[error("the file has more than {MAX_END_RECORDS} ZIP end records")]
+    TooManyEndRecords,
     #[error("{QUIZ_JSON} is larger than {} MB", MAX_QUIZ_JSON_BYTES >> 20)]
     QuizJsonTooLarge,
     #[error("the quiz has problems: {}", .0.iter().map(ToString::to_string).collect::<Vec<_>>().join("; "))]
@@ -351,14 +354,24 @@ pub fn write_atomic(dest: &Path, contents: &[u8]) -> Result<()> {
     })
 }
 
+/// How long a temporary twin of a file (`replace_file`) has to be left
+/// untouched before a write removes it. No write takes that long, so the
+/// twin was left by a process that stopped mid-write (a crash or power cut),
+/// never by one still writing, such as another computer saving into a
+/// shared folder.
+const STALE_TWIN_AFTER: Duration = Duration::from_secs(60 * 60);
+
 /// Writes `dest` through a temporary file next to it, renamed over `dest`
 /// only once `write` has finished. Each write has a temporary file of its
 /// own, so two writes of one file at once cannot write into each other's:
-/// the last renamed wins, whole.
+/// the last renamed wins, whole. The twins a stopped process left are
+/// removed first (`remove_stale_twins`), so crashes do not pile hidden
+/// copies up next to the file.
 fn replace_file(dest: &Path, write: impl FnOnce(&Path) -> Result<()>) -> Result<()> {
     static WRITES: AtomicU64 = AtomicU64::new(0);
     let name = dest.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
-    let temp = dest.with_file_name(format!(".{name}.{}-{}.saving", std::process::id(), WRITES.fetch_add(1, Ordering::Relaxed)));
+    remove_stale_twins(dest, &name);
+    let temp = dest.with_file_name(twin_name(&name, std::process::id(), WRITES.fetch_add(1, Ordering::Relaxed)));
     let written = write(&temp).and_then(|()| fs::rename(&temp, dest).context(FileAction::Write, dest));
     if written.is_err() {
         let _ = fs::remove_file(&temp);
@@ -369,6 +382,34 @@ fn replace_file(dest: &Path, write: impl FnOnce(&Path) -> Result<()>) -> Result<
         other => other,
     })?;
     sync_dir(dest.parent().unwrap_or(Path::new(".")))
+}
+
+/// The temporary twin of the file `name` for write `n` of process `pid`.
+fn twin_name(name: &str, pid: u32, n: u64) -> String {
+    format!(".{name}.{pid}-{n}.saving")
+}
+
+/// Removes the temporary twins of `dest` (named `name`) that another
+/// process left untouched for `STALE_TWIN_AFTER`. Best effort: a twin that
+/// cannot be read or removed stays, and this process's own are never
+/// touched, whatever their age.
+fn remove_stale_twins(dest: &Path, name: &str) {
+    let folder = dest.parent().filter(|folder| !folder.as_os_str().is_empty()).unwrap_or(Path::new("."));
+    let Ok(entries) = fs::read_dir(folder) else { return };
+    let prefix = format!(".{name}.");
+    for entry in entries.flatten() {
+        let file_name = entry.file_name();
+        let Some(writer) = file_name.to_str().and_then(|f| f.strip_prefix(&prefix)).and_then(|rest| rest.strip_suffix(".saving")) else {
+            continue;
+        };
+        let foreign = writer.split_once('-').is_some_and(|(pid, n)| {
+            pid.parse::<u32>().is_ok_and(|pid| pid != std::process::id()) && n.parse::<u64>().is_ok()
+        });
+        let stale = entry.metadata().and_then(|meta| meta.modified()).is_ok_and(|at| at.elapsed().is_ok_and(|age| age >= STALE_TWIN_AFTER));
+        if foreign && stale {
+            let _ = fs::remove_file(entry.path());
+        }
+    }
 }
 
 /// Makes the files created, renamed or deleted in `dir` durable. Only Unix
@@ -687,8 +728,10 @@ fn is_zip(path: &Path) -> Result<bool> {
 /// names that would leave the media folder) are skipped.
 fn unpack_zip(path: &Path, dest: &Path) -> Result<Unpacked> {
     let mut file = File::open(path).context(FileAction::Read, path)?;
-    if zip_end::counts_more_than(&mut file, MAX_ENTRIES as u64).context(FileAction::Read, path)? {
-        return Err(QuizFileError::TooManyFiles);
+    match zip_end::check(&mut file, MAX_ENTRIES as u64).context(FileAction::Read, path)? {
+        zip_end::Verdict::Opens => {}
+        zip_end::Verdict::CountsTooMany => return Err(QuizFileError::TooManyFiles),
+        zip_end::Verdict::TooManyEndRecords => return Err(QuizFileError::TooManyEndRecords),
     }
     let mut archive = ZipArchive::new(file)?;
     if archive.len() > MAX_ENTRIES {
@@ -909,6 +952,10 @@ mod tests {
         zip.write_all(&zip_end::tests::zip64_end(3_000_000, 0)).unwrap();
         zip.finish().unwrap();
         assert!(matches!(open(&hidden, &temp("hidden-cache")), Err(QuizFileError::TooManyFiles)));
+        // A file of many end records is refused for them, not for what they count.
+        let ends = temp("ends").join("ends.quiz");
+        fs::write(&ends, [&b"PK\x03\x04"[..], &b"PK\x05\x06".repeat(MAX_END_RECORDS + 1)].concat()).unwrap();
+        assert!(matches!(open(&ends, &temp("ends-cache")), Err(QuizFileError::TooManyEndRecords)));
         // Bytes with no end record are not a quiz file, whatever they start with.
         let bare = temp("bare").join("bare.quiz");
         fs::write(&bare, b"PK\x03\x04 and nothing after").unwrap();
@@ -1015,6 +1062,29 @@ mod tests {
         assert_eq!(fs::read(&dest).unwrap(), b"first", "the last renamed wins, whole");
         let names: Vec<String> = fs::read_dir(&folder).unwrap().map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned()).collect();
         assert_eq!(names, ["receiver.json"], "no temporary file is left");
+    }
+
+    #[test]
+    fn a_write_removes_only_the_twins_a_stopped_process_left() {
+        let folder = temp("save-stale-twins");
+        let dest = folder.join("round.quiz");
+        let long_ago = SystemTime::now() - STALE_TWIN_AFTER - Duration::from_secs(60);
+        let leave = |name: String, modified: SystemTime| {
+            let path = folder.join(name);
+            File::create(&path).and_then(|file| file.set_modified(modified)).unwrap();
+            path
+        };
+        let crashed = leave(twin_name("round.quiz", u32::MAX, 7), long_ago);
+        let still_writing = leave(twin_name("round.quiz", u32::MAX, 8), SystemTime::now());
+        let ours = leave(twin_name("round.quiz", std::process::id(), u64::MAX), long_ago);
+        let other_file = leave(twin_name("other.quiz", u32::MAX, 7), long_ago);
+        let unrelated = leave(".round.quiz.backup.saving".into(), long_ago);
+        write_atomic(&dest, b"quiz").unwrap();
+        assert!(!crashed.exists(), "a twin another process left long ago goes");
+        for kept in [still_writing, ours, other_file, unrelated] {
+            assert!(kept.exists(), "{kept:?} stays");
+        }
+        assert_eq!(fs::read(&dest).unwrap(), b"quiz");
     }
 
     #[test]

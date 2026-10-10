@@ -18,11 +18,14 @@ pub(crate) fn name_key(name: &str) -> String {
 }
 
 /// The key file names are told apart by on some disk the quiz may be
-/// opened on. Windows disks compare names in upper case and macOS disks
-/// in lower case, so the key is the name in upper case, then in lower case
-/// (`σ` and `ς` are one letter in upper case), and composed, as macOS disks
-/// also ignore how accents are encoded. Two media files whose names have
-/// one key are one file on Windows or on macOS.
+/// opened on. Windows disks compare names in upper case, a letter for a
+/// letter; macOS disks compare their caseless form, which folds case fully
+/// (Unicode's canonical caseless match, D145, per `bsd/sys/unicode.h` in
+/// Apple's xnu), so `ß` matches `ss` there. The key is the name in upper
+/// case, then in lower case (`σ` and `ς` are one letter in upper case, and
+/// `ß` becomes `ss`), and composed, as macOS disks also ignore how accents
+/// are encoded. Two media files whose names have one key are one file on
+/// Windows or on macOS.
 pub fn file_key(name: &str) -> String {
     name.to_uppercase().to_lowercase().nfc().collect()
 }
@@ -40,6 +43,8 @@ mod tests {
         assert_eq!(file_key("media/Ku\u{30a}n\u{30c}.PNG"), file_key("media/kůň.png"));
         // Windows folds names to upper case, where the two sigmas are one letter.
         assert_eq!(file_key("media/ς.png"), file_key("media/σ.png"));
+        // Two files on Windows, one on macOS.
+        assert_eq!(file_key("media/Straße.png"), file_key("media/STRASSE.png"));
         assert_ne!(file_key("media/ kůň.png"), file_key("media/kůň.png"), "spaces are part of a file name");
     }
 }

@@ -41,9 +41,11 @@ pub struct SessionMeta {
 }
 
 impl SessionMeta {
-    /// Whether replaying the show's journal may give another show than the one it recorded.
+    /// Whether replaying the show's journal may give another show than the
+    /// one it recorded: it began under rules from before
+    /// `REPLAYS_AS_PLAYED_FROM`, or under a newer app's.
     pub fn rules_changed(&self) -> bool {
-        self.rules_version != quiz_core::RULES_VERSION
+        !(quiz_core::REPLAYS_AS_PLAYED_FROM..=quiz_core::RULES_VERSION).contains(&self.rules_version)
     }
 }
 
@@ -677,12 +679,17 @@ mod tests {
     }
 
     #[test]
-    fn a_show_from_before_the_rules_version_was_kept_says_its_rules_changed() {
+    fn only_a_show_that_may_replay_otherwise_says_its_rules_changed() {
         let old: SessionMeta = serde_json::from_str(r#"{"quizTitle":"T","sourcePath":null,"startedMs":1,"mediaRoot":null}"#).unwrap();
-        assert_eq!(old.rules_version, 0);
+        assert_eq!(old.rules_version, 0, "a show from before the rules version was kept");
         assert!(old.rules_changed());
-        let now = SessionMeta { rules_version: quiz_core::RULES_VERSION, ..old };
-        assert!(!now.rules_changed());
+        let under = |rules_version| SessionMeta { rules_version, ..old.clone() };
+        assert!(under(quiz_core::REPLAYS_AS_PLAYED_FROM - 1).rules_changed());
+        // Every change since is kept to the shows begun under it.
+        for rules_version in quiz_core::REPLAYS_AS_PLAYED_FROM..=quiz_core::RULES_VERSION {
+            assert!(!under(rules_version).rules_changed(), "{rules_version}");
+        }
+        assert!(under(quiz_core::RULES_VERSION + 1).rules_changed(), "a newer app's");
     }
 
     #[test]

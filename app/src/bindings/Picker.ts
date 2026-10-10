@@ -9,7 +9,8 @@ export type Picker = {
  */
 filter: string, 
 /**
- * The name a save picker offers, without the extension it adds. Only a
- * plain file name is offered (`plain_name`).
+ * The name a save picker offers, without the extension it adds, worded
+ * freely (a quiz title): the backend turns it into a file name that
+ * every supported system can store.
  */
 fileName?: string, };

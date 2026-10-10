@@ -45,6 +45,7 @@ const ERROR_KEYS: Record<Exclude<AppError["code"], WordedApart>, StringKey> = {
   tooLarge: "errTooLarge",
   quizJsonTooLarge: "errQuizJsonTooLarge",
   tooManyFiles: "errTooManyFiles",
+  tooManyEndRecords: "errTooManyEndRecords",
   noDraft: "errNoDraft",
   notRecent: "errNotRecent",
   draftChanged: "errDraftChanged",

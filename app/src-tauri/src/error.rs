@@ -68,7 +68,8 @@ pub enum AppError {
     /// started, so it is not written over until the app reads it again.
     #[error("{path} could not be read, so it is not written over")]
     FileLeftUnread { path: String },
-    /// A resumed show began under other rules (`RULES_VERSION`); it runs.
+    /// A resumed show began under rules its journal may not replay the same
+    /// under (`SessionMeta::rules_changed`); it runs.
     #[error("the show began in another version of the app; its scores may differ")]
     RulesChanged,
     /// A resumed show's media are in a folder the windows may not load
@@ -92,6 +93,11 @@ pub enum AppError {
     TooLarge { max_mb: u64 },
     #[error("the quiz file has more than {max} files")]
     TooManyFiles { max: usize },
+    /// A file of more ZIP end records than a quiz file holds
+    /// (`quiz_file::MAX_END_RECORDS`): not a quiz file, and refused before
+    /// it is opened, which would read its entries again for each of them.
+    #[error("the file has more than {max} ZIP end records")]
+    TooManyEndRecords { max: usize },
     #[error("quiz.json is larger than {max_mb} MB")]
     #[serde(rename_all = "camelCase")]
     QuizJsonTooLarge { max_mb: u64 },
@@ -237,6 +243,7 @@ impl From<QuizFileError> for AppError {
             QuizFileError::MissingQuizJson => AppError::MissingQuizJson,
             QuizFileError::TooLarge => AppError::TooLarge { max_mb: quiz_file::MAX_UNPACKED_BYTES >> 20 },
             QuizFileError::TooManyFiles => AppError::TooManyFiles { max: quiz_file::MAX_ENTRIES },
+            QuizFileError::TooManyEndRecords => AppError::TooManyEndRecords { max: quiz_file::MAX_END_RECORDS },
             QuizFileError::QuizJsonTooLarge => AppError::QuizJsonTooLarge { max_mb: quiz_file::MAX_QUIZ_JSON_BYTES >> 20 },
             QuizFileError::Invalid(problems) => AppError::QuizInvalid { problems },
             QuizFileError::Spreadsheet(detail) => AppError::NotASpreadsheet { detail },

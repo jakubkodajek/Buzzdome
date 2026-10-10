@@ -9,7 +9,8 @@ use crate::app_file::AppFile;
 use crate::app_log;
 use crate::error::{AppError, CmdResult};
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
+use std::io;
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 /// The file the list is kept in, per computer: losing it loses nothing else.
@@ -50,9 +51,11 @@ impl RecentFiles {
         self.change(|paths| *paths = put_first(paths, path));
     }
 
-    /// Takes `path` off the list, as a file that is no longer there.
-    pub fn forget(&self, path: &str) {
-        self.change(|paths| paths.retain(|kept| kept != path));
+    /// Takes `path` off the list once the file is gone (`is_gone`).
+    pub fn forget_if_gone(&self, path: &str) {
+        if is_gone(Path::new(path)) {
+            self.change(|paths| paths.retain(|kept| kept != path));
+        }
     }
 
     /// Changes the list by `change` and keeps it on disk if it changed.
@@ -72,6 +75,14 @@ impl RecentFiles {
             app_log::note(&format!("keeping the recent files: {e}"));
         }
     }
+}
+
+/// Whether the file `path` is gone: its folder is there and it is not. A
+/// file whose folder is not there either, on a USB stick that is not
+/// plugged in, say, may come back.
+fn is_gone(path: &Path) -> bool {
+    let missing = path.metadata().is_err_and(|e| e.kind() == io::ErrorKind::NotFound);
+    missing && path.parent().is_some_and(Path::is_dir)
 }
 
 /// `paths` with `path` first, once, and at most `KEEP` of them.
@@ -118,11 +129,25 @@ mod tests {
         assert_eq!(again.paths(), ["/q/b.quiz", "/q/a.quiz"]);
         assert_eq!(again.get("/q/a.quiz").unwrap(), PathBuf::from("/q/a.quiz"));
         assert_eq!(again.get("//server/q/a.quiz").unwrap_err(), AppError::NotRecent);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
 
-        again.forget("/q/a.quiz");
-        again.forget("/q/never.quiz");
-        assert_eq!(RecentFiles::load(path).paths(), ["/q/b.quiz"]);
-        assert_eq!(again.get("/q/a.quiz").unwrap_err(), AppError::NotRecent);
+    #[test]
+    fn a_file_is_forgotten_once_it_is_gone_from_its_folder() {
+        let dir = folder("gone");
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join(RECENT_FILES);
+        let recent = RecentFiles::load(path.clone());
+        let here = dir.join("here.quiz");
+        std::fs::write(&here, b"quiz").unwrap();
+        let names = [here, dir.join("gone.quiz"), dir.join("unplugged").join("round.quiz")];
+        let [here, gone, unplugged] = names.map(|name| name.to_string_lossy().into_owned());
+        for name in [&here, &gone, &unplugged] {
+            recent.remember(name);
+            recent.forget_if_gone(name);
+        }
+        assert_eq!(RecentFiles::load(path).paths(), [unplugged, here]);
+        assert_eq!(recent.get(&gone).unwrap_err(), AppError::NotRecent);
         std::fs::remove_dir_all(&dir).unwrap();
     }
 }

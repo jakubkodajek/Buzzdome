@@ -6,7 +6,7 @@
 //! the Director's.
 
 use crate::error::CmdResult;
-use crate::{app_icon, app_log, AppState};
+use crate::{app_icon, app_log, off_ui, AppState};
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex, TryLockError};
 use std::time::{Duration, Instant};
@@ -138,11 +138,16 @@ pub async fn close_host_window(app: AppHandle) -> CmdResult<()> {
 
 /// Passes on a problem the projector met, such as a background that does
 /// not load, worded for the Director to show: the projector has nowhere to.
-/// It goes in the log too, to look into after the show.
+/// It goes in the log too, to look into after the show, off the windows'
+/// thread (`off_ui`): a disk that does not answer freezes no window.
 #[tauri::command]
-pub fn report_host_problem(app: AppHandle, message: String) {
-    app_log::note(&format!("the projector: {message}"));
-    let _ = app.emit("host-problem", message);
+pub async fn report_host_problem(app: AppHandle, message: String) -> CmdResult<()> {
+    off_ui(move || {
+        app_log::note(&format!("the projector: {message}"));
+        let _ = app.emit("host-problem", message);
+        Ok(())
+    })
+    .await
 }
 
 /// The most of a window's problem that goes in the log: a window can send
@@ -150,10 +155,15 @@ pub fn report_host_problem(app: AppHandle, message: String) {
 const LOGGED_PROBLEM_CHARS: usize = 2_000;
 
 /// Notes in the log a problem a window has nowhere to show, such as the
-/// Director's close dialog not opening once its screen failed.
+/// Director's close dialog not opening once its screen failed. Written off
+/// the windows' thread (`off_ui`), as a window may note many.
 #[tauri::command]
-pub fn log_problem(window: Window, message: String) {
-    app_log::note(&format!("the {} window: {}", window.label(), logged_problem(&message)));
+pub async fn log_problem(window: Window, message: String) -> CmdResult<()> {
+    off_ui(move || {
+        app_log::note(&format!("the {} window: {}", window.label(), logged_problem(&message)));
+        Ok(())
+    })
+    .await
 }
 
 /// `message` as it goes in the log: cut after `LOGGED_PROBLEM_CHARS`.

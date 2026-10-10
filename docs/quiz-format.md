@@ -39,7 +39,8 @@ Rules for readers and writers (implemented in `crates/quiz-file`):
 - Entries outside `quiz.json` and `media/` (for example the `__MACOSX/`
   folder some ZIP tools add) are ignored.
 - A file does not open at all if it unpacks to more than 4 GB or has more
-  than 10,000 entries, if `quiz.json` is missing or is not JSON of this
+  than 10,000 entries, if it holds more than 64 ZIP end records (a quiz
+  file holds one), if `quiz.json` is missing or is not JSON of this
   format, or if its `schemaVersion` is newer than the app's.
 - The show also refuses a file that breaks any other rule in this
   document, for example a slide referring to a media file that is not in

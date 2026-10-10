@@ -138,7 +138,7 @@ export function useQuizEditor(onTestRun: () => void): QuizEditor {
     attempt("save", async (draftApi) => {
       if (!open) return false;
       const quiz = open.history.present;
-      const picker = quizPicker(t, fileStem(quiz.title || t("untitledQuiz")));
+      const picker = quizPicker(t, quiz.title || t("untitledQuiz"));
       const path = await draftApi.editorSave(open.draftId, quiz, saveAs, picker);
       if (path === null) return false;
       dispatch({ type: "saved", quiz, path });
@@ -210,7 +210,7 @@ export function useQuizEditor(onTestRun: () => void): QuizEditor {
     exportSheet: (quiz, name) =>
       attempt("export", async (draftApi) => {
         if (!open) return false;
-        const picker = { filter: t("csvFile"), fileName: fileStem(name) };
+        const picker = { filter: t("csvFile"), fileName: name };
         return (await draftApi.editorExportSheet(open.draftId, quiz, listSeparator(lang), picker)) ?? false;
       }),
     testRun: (from) =>
@@ -239,10 +239,4 @@ export function useDraftState<T>(draftId: string | null): [T | null, (value: T |
 /** The id of the draft open in `editor`, if one is. */
 export function openDraftId(editor: QuizEditor): string | null {
   return editor.state.status === "open" ? editor.state.draftId : null;
-}
-
-/** A quiz title as a file name, for the backend to add the extension to. */
-function fileStem(title: string): string {
-  const stem = title.replace(/[\\/:*?"<>|\p{Cc}]/gu, "_").trim();
-  return stem.replace(/^\.+|\.+$/g, "") || "quiz";
 }

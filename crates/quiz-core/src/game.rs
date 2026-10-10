@@ -31,6 +31,12 @@ pub type BuzzerId = u16;
 /// shows its results.
 pub const RULES_VERSION: u32 = 4;
 
+/// The oldest `RULES_VERSION` whose shows replay today as they were played:
+/// every later change applies only to shows begun under it
+/// (`Game::rules_version`). A change that cannot be kept to newer shows
+/// raises this to its version.
+pub const REPLAYS_AS_PLAYED_FROM: u32 = 3;
+
 /// Steps of the final score reveal: drum roll, 3rd, 2nd, 1st, full ranking.
 pub const FINAL_LAST_STEP: u8 = 4;
 
@@ -194,8 +200,9 @@ pub struct Controls {
     /// `GoTo` and `GoToFinal`: not while a question is in play.
     pub go_to: bool,
     /// `RestartQuestion`: while a question is in play, the way to leave it
-    /// without scoring it, and once it closed, until its answer is shown,
-    /// the way to take its scores back and ask it again.
+    /// without scoring it and ask it again. Not once it closed, as its
+    /// results are on screen; a show begun before rules version 4 also
+    /// restarts it closed, until its answer is shown.
     pub restart_question: bool,
 }
 

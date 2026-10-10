@@ -196,7 +196,7 @@ const SCENES: Record<string, GameView | null> = {
     answeredCount: 4,
     answerCounts: [1, 2, 1, 0],
     results: { right: 2, wrong: 2, none: 1 },
-    controls: { ...NO_CONTROLS, next: true, goTo: true, restartQuestion: true },
+    controls: { ...NO_CONTROLS, next: true, goTo: true },
   }),
   revealed: view({
     phase: { phase: "question", step: "revealed", winner: null },
@@ -271,7 +271,7 @@ const SCENES: Record<string, GameView | null> = {
     slide: { ...quiz.slides[2], video: VIDEO },
     phase: { phase: "question", step: "closed" },
     onHold: true,
-    controls: { ...NO_CONTROLS, next: true, goTo: true, playVideo: true, restartQuestion: true },
+    controls: { ...NO_CONTROLS, next: true, goTo: true, playVideo: true },
   }),
   videoRevealed: view({ slideIndex: 2, slide: { ...quiz.slides[2], video: VIDEO }, phase: { phase: "question", step: "revealed", winner: null }, onHold: true }),
   // A video that waits for the quizmaster, before and after Play video.

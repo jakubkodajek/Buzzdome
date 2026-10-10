@@ -20,8 +20,9 @@ use ts_rs::TS;
 pub struct Picker {
     /// Names the files offered, such as "Quiz files".
     pub filter: String,
-    /// The name a save picker offers, without the extension it adds. Only a
-    /// plain file name is offered (`plain_name`).
+    /// The name a save picker offers, without the extension it adds, worded
+    /// freely (a quiz title): the backend turns it into a file name that
+    /// every supported system can store.
     #[ts(optional)]
     pub file_name: Option<String>,
 }
@@ -69,15 +70,20 @@ fn local(picked: FilePath) -> Option<PathBuf> {
     picked.into_path().ok()
 }
 
-/// `offered`, a name the page words, as a plain file name: only its last
-/// part, as any system splits a path, without the colon that names a drive
-/// or a stream on Windows, and without control characters. None when
-/// nothing of a name is left.
+/// The longest name a save picker offers, in characters: a long quiz title
+/// stays well under the 255 that file systems allow, extension included.
+const MAX_OFFERED_CHARS: usize = 100;
+
+/// `offered`, a name the page words, as a file name every supported system
+/// can store (`quiz_core::portable_name`): a character some system refuses,
+/// a path separator among them, becomes `_`, and a Windows device name is
+/// prefixed. Cut to `MAX_OFFERED_CHARS` and without leading or trailing dots
+/// and spaces, so it is never hidden, `.` or `..`. None when nothing of a
+/// name is left.
 fn plain_name(offered: &str) -> Option<PathBuf> {
-    let last = offered.rsplit(['/', '\\']).next().unwrap_or_default();
-    let name: String = last.chars().filter(|&c| c != ':' && !c.is_control()).collect();
-    let name = name.trim();
-    (!name.is_empty() && name != "." && name != "..").then(|| PathBuf::from(name))
+    let capped: String = offered.chars().take(MAX_OFFERED_CHARS).collect();
+    let name = capped.trim_matches(|c: char| c == '.' || c.is_whitespace());
+    (!name.is_empty()).then(|| PathBuf::from(quiz_core::portable_name(name)))
 }
 
 /// `path`, ending in `.extension` (in any case) as a save picker may not.
@@ -106,16 +112,23 @@ mod tests {
     }
 
     #[test]
-    fn a_save_picker_offers_only_a_plain_file_name() {
-        let plain = |offered| plain_name(offered).map(|name| name.to_string_lossy().into_owned());
+    fn a_save_picker_offers_a_name_every_system_stores() {
+        let plain = |offered: &str| plain_name(offered).map(|name| name.to_string_lossy().into_owned());
         assert_eq!(plain("Round 1").as_deref(), Some("Round 1"));
-        assert_eq!(plain("../../etc/passwd").as_deref(), Some("passwd"));
-        assert_eq!(plain("C:\\Windows\\win.ini").as_deref(), Some("win.ini"));
-        assert_eq!(plain("\\\\server\\share\\quiz").as_deref(), Some("quiz"));
-        assert_eq!(plain("C:quiz").as_deref(), Some("Cquiz"));
-        assert_eq!(plain("quiz:stream").as_deref(), Some("quizstream"));
-        assert_eq!(plain(" Pub\u{0}\nquiz ").as_deref(), Some("Pubquiz"));
-        for nothing in ["", "/", "a/", "..", ".", " : ", "\u{7}"] {
+        assert_eq!(plain("Rock/Pop: 80s?").as_deref(), Some("Rock_Pop_ 80s_"));
+        assert_eq!(plain("../../etc/passwd").as_deref(), Some("_.._etc_passwd"));
+        assert_eq!(plain("C:\\Windows\\win.ini").as_deref(), Some("C__Windows_win.ini"));
+        assert_eq!(plain("\\\\server\\share").as_deref(), Some("__server_share"));
+        assert_eq!(plain("a*b\"c<d>e|f").as_deref(), Some("a_b_c_d_e_f"));
+        assert_eq!(plain(" Pub\u{0}\nquiz ").as_deref(), Some("Pub__quiz"));
+        assert_eq!(plain(".hidden.").as_deref(), Some("hidden"));
+        assert_eq!(plain("CON").as_deref(), Some("_CON"));
+        assert_eq!(plain("Kvíz č. 1").as_deref(), Some("Kvíz č. 1"));
+        let long = "ř".repeat(MAX_OFFERED_CHARS + 50);
+        assert_eq!(plain(&long).map(|name| name.chars().count()), Some(MAX_OFFERED_CHARS));
+        // A cut that ends in a space or dot loses it.
+        assert_eq!(plain(&format!("{} x", "a".repeat(MAX_OFFERED_CHARS - 1))), Some("a".repeat(MAX_OFFERED_CHARS - 1)));
+        for nothing in ["", " ", "..", ".", " . ", "\t"] {
             assert_eq!(plain(nothing), None, "{nothing:?}");
         }
     }

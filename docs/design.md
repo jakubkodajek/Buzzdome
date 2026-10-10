@@ -208,10 +208,11 @@ draws slides without a show.
   server's, so the release smoke check in `docs/hardware-test.md` runs
   under it; what it blocks goes in the log (`csp-report.ts`). Files the
   quizmaster opens, saves, imports or exports are picked by the backend
-  (`dialogs.rs`, worded by the UI's `Picker`, whose offered name is cut to
-  a plain file name), never named by a page: the editor's recent files are
-  kept by the backend (`recent_files.rs`), and the page opens one by its
-  path, which has to be in that list. The
+  (`dialogs.rs`, worded by the UI's `Picker`, whose offered name, a quiz
+  title, the backend turns into a portable file name), never named by a
+  page: the editor's recent files are kept by the backend
+  (`recent_files.rs`), and the page opens one by its path, which has to be
+  in that list; a file leaves the list once it is gone from its folder. The
   pages confirm through the dialog plugin's `ask`
   (`confirm.ts`, with Yes and No in the UI's language); ESLint refuses `alert`, `confirm`, `prompt` and the
   plugin's file pickers.
@@ -311,7 +312,9 @@ through a link that leads out of its folder, and the show path keeps such
 a file refused.
 A `.quiz` file of more than 10,000 entries (`MAX_ENTRIES`) is refused. Its
 ZIP64 end records are checked before the archive is opened (`zip_end.rs`),
-as opening reads every entry header the record it takes counts.
+as opening reads every entry header the record it takes counts, and a file
+of more than 64 end records (`MAX_END_RECORDS`) is refused as not a quiz
+file, as the reader would read the entry headers again for each one.
 A `quiz.json` over 16 MB (`MAX_QUIZ_JSON_BYTES`) is refused before it is
 parsed, whether read from a package, from the disk or about to be saved, so
 a small packed file cannot unpack into a huge quiz.
@@ -338,16 +341,19 @@ show finds its media even if the original file was moved. When a show
 starts, every other unpacked quiz is deleted, because only the latest show can
 be resumed. If the folder is gone on resume, the show still resumes and the
 Director shows a warning. `meta.json` also records `RULES_VERSION`, which
-quiz-core bumps whenever the same journal would replay into another show;
-a show begun under another version still resumes with today's rules, and
-the Director says its scores may differ. What would put the replay a step
-off is kept from the show's own version, and the game keeps that version
-to the show's end (`Game::replay`), so what is journaled after a resume
-replays the same way at the next one: a show begun before version 2 jumps
-out of a question in play, as the app then restarted a question after a
-crash with a `GoTo` to it, one begun before version 3 switches a player
-off without closing the question, and one begun before version 4 restarts
-a closed question.
+quiz-core bumps whenever the same journal would replay into another show.
+What would put the replay a step off is kept from the show's own version,
+and the game keeps that version to the show's end (`Game::replay`), so
+what is journaled after a resume replays the same way at the next one: a
+show begun before version 2 jumps out of a question in play, as the app
+then restarted a question after a crash with a `GoTo` to it, one begun
+before version 3 switches a player off without closing the question, and
+one begun before version 4 restarts a closed question. Version 3 also
+changed what is not kept so (ties, accents in names), so a show begun
+before it, or under a newer app's rules, resumes with a warning that its
+scores may differ (`RulesChanged`); from version 3 on
+(`REPLAYS_AS_PLAYED_FROM`) a show replays as it was played and resumes
+without one.
 
 The windows load media through Tauri's asset protocol. Its scope is empty
 in `tauri.conf.json`; at startup the shell allows the folder of unpacked
