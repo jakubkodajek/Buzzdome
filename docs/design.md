@@ -435,7 +435,11 @@ applies the command to a copy of the game, appends it to the journal
 and only then emits the new state to the windows. If the journal write
 fails, the press is rejected and the screen does not change. A new show's
 session folder, and the journal's entry in it, are synced to disk when the
-show starts, so a power cut cannot lose the journal itself.
+show starts, so a power cut cannot lose the journal itself. Commands from
+the windows (`dispatch`: keyboard and on-screen buzzers, the quizmaster's
+buttons) are timed the same way: `timed_lock` reads the time before waiting
+for the lock, so a keyboard press made during a burst of buzzer presses
+counts as on time.
 
 Because a press can be applied a moment after it was received, the core
 judges it by its `at_ms`: it counts only if it was received while the

@@ -75,9 +75,13 @@ fn emit_show_changed(app: &AppHandle, inner: &Inner) {
     emit_state(app, inner.game.as_ref());
 }
 
-/// Applies `command` as of now; see `execute_at`.
-fn execute(app: &AppHandle, inner: &mut Inner, command: Command) -> CmdResult<()> {
-    execute_at(app, inner, command, now_ms())
+/// Locks `mutex` and says when the caller asked for it, read from `clock`
+/// before waiting: a command happened when it was given, not when it got the
+/// show state, which a burst of journaled buzzer presses can hold for a
+/// while (S7).
+fn timed_lock<T>(mutex: &Mutex<T>, clock: impl FnOnce() -> u64) -> (MutexGuard<'_, T>, u64) {
+    let at_ms = clock();
+    (mutex.lock().unwrap(), at_ms)
 }
 
 /// Applies a command that happened at `at_ms` on a copy, journals it, then
@@ -225,7 +229,7 @@ fn resume_last_session(app: AppHandle, state: State<AppState>) -> CmdResult<Opti
     inner.session = Some(session);
     emit_show_changed(&app, &inner);
     if let Some(command) = recovery {
-        execute(&app, &mut inner, command)?;
+        execute_at(&app, &mut inner, command, now_ms())?;
     }
     Ok(warning)
 }
@@ -242,7 +246,8 @@ fn end_show(app: AppHandle, state: State<AppState>) {
 
 #[tauri::command]
 fn dispatch(app: AppHandle, state: State<AppState>, command: Command) -> CmdResult<()> {
-    execute(&app, &mut state.0.lock().unwrap(), command)
+    let (mut inner, at_ms) = timed_lock(&state.0, now_ms);
+    execute_at(&app, &mut inner, command, at_ms)
 }
 
 /// Feeds a press the receiver got at `at_ms` into the running show, if any.
@@ -360,7 +365,7 @@ fn tick(app: &AppHandle, last_clock_event: &mut Instant) {
     let mut inner = state.0.lock().unwrap();
     let now = now_ms();
     if let Some(command) = inner.game.as_ref().and_then(|g| g.due_command(now)) {
-        if let Err(e) = execute(app, &mut inner, command) {
+        if let Err(e) = execute_at(app, &mut inner, command, now) {
             eprintln!("ticker: {e}");
         }
     } else if last_clock_event.elapsed() >= CLOCK_EVENT_EVERY {
@@ -439,4 +444,31 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::{mpsc, Arc};
+
+    #[test]
+    fn a_command_is_timed_before_it_waits_for_the_show_state() {
+        let shared = Arc::new(Mutex::new(()));
+        let held = shared.lock().unwrap();
+        let (timed, was_timed) = mpsc::channel();
+        let waiter = {
+            let shared = Arc::clone(&shared);
+            std::thread::spawn(move || {
+                // The "time" read is whether someone else still held the state then.
+                let (_inner, held_then) = timed_lock(&shared, || {
+                    timed.send(()).unwrap();
+                    u64::from(shared.try_lock().is_err())
+                });
+                held_then
+            })
+        };
+        was_timed.recv().unwrap();
+        drop(held);
+        assert_eq!(waiter.join().unwrap(), 1);
+    }
 }
