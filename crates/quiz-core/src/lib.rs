@@ -9,6 +9,7 @@ pub mod model;
 pub mod sheet;
 pub mod sound_board;
 pub mod style;
+mod text;
 pub mod theme;
 pub mod view;
 
@@ -29,6 +30,7 @@ pub use model::{
     MIN_EVERYONE_ANSWERS, SCHEMA_VERSION,
 };
 pub use sheet::{export_table, import_tables, ImportIssue, ImportNote, ImportedRows, Notes, Place, SheetError, Table};
+pub use text::file_key;
 pub use sound_board::{BoardChange, BoardError, Pad, PadClick, PadColor, PadSource, SoundBoard};
 pub use style::{
     Color, FontName, Gradient, GradientKind, SlideStyle, TextAlign, TextSize, TextStyle, TimerDesign, Transparency, MAX_FONT_NAME_CHARS, MAX_TEXT_SIZE,

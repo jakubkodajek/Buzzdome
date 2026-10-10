@@ -331,7 +331,8 @@ function FinalScores({ players, step, title, titled, titleStyle, sample }: Final
       </div>
     );
   }
-  // Steps 1..3 reveal third, second, then first place on a podium.
+  // Steps 1..3 reveal third, second, then first place on a podium; players
+  // equal in score and time share a place, so its number is theirs.
   const places = [2, 1, 3];
   return (
     <div className="center-slide">
@@ -351,7 +352,7 @@ function FinalScores({ players, step, title, titled, titleStyle, sample }: Final
                 )}
                 {shown && !p && sample && <span className="name placeholder">{t("place", { n: place })}</span>}
               </div>
-              <div className="podium-block">{place}</div>
+              <div className="podium-block">{p?.rank ?? place}</div>
             </div>
           );
         })}

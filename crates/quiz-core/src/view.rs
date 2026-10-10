@@ -1,8 +1,9 @@
 //! What the windows render: a read-only snapshot of the game at one moment.
 
-use crate::game::{same_name, BuzzerId, Button, Controls, Game, Phase, QuestionStep};
-use crate::model::{AnswerMode, Slide, SlideContent};
+use crate::game::{same_name, BuzzerId, Button, Controls, Game, Phase, QuestionStep, Response};
+use crate::model::{AnswerMode, Slide};
 use serde::Serialize;
+use std::collections::BTreeMap;
 use ts_rs::TS;
 
 #[derive(Debug, Clone, Serialize, TS)]
@@ -14,8 +15,10 @@ pub struct GameView {
     pub slide_count: usize,
     pub phase: Phase,
     pub slide: Option<Slide>,
-    /// Title of the next slide, for the quizmaster.
-    pub next_slide_title: Option<String>,
+    /// The slide `Next` goes to once the current one is done
+    /// (`Game::following`), for the quizmaster: past the last slide for the
+    /// final ranking, none once the show is over.
+    pub next_slide: Option<usize>,
     pub clock: Option<ClockView>,
     pub players: Vec<PlayerView>,
     /// The team names prepared for the show, in order, with their buzzers.
@@ -23,13 +26,14 @@ pub struct GameView {
     pub enabled_count: usize,
     /// Enabled players who answered the current question.
     pub answered_count: usize,
-    /// Answers per button (A, B, ...), only once the question is closed.
+    /// Everyone-answers: how many of the players it counted gave each
+    /// answer, in order, once the question is closed.
     pub answer_counts: Option<Vec<usize>>,
     /// The current question's answers in order, each with the share of the
     /// points it scores (`FULL_SHARE` when fully right), none for a wrong
     /// one; empty on another slide. Windows mark the right answers from it.
     pub answer_shares: Vec<Option<u8>>,
-    /// Everyone-answers: how the enabled players did, once the question is closed.
+    /// Everyone-answers: how the players it counted did, once the question is closed.
     pub results: Option<AnswerResults>,
     pub buzzed: Option<BuzzerId>,
     pub leaderboard_visible: bool,
@@ -41,7 +45,7 @@ pub struct GameView {
     pub video_plays: u32,
 }
 
-/// Enabled players by outcome of an everyone-answers question.
+/// The players a closed everyone-answers question counted, by outcome.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
 #[ts(export)]
 #[serde(rename_all = "camelCase")]
@@ -83,7 +87,8 @@ pub struct PlayerView {
     pub score: i32,
     pub enabled: bool,
     pub total_answer_ms: u64,
-    /// 1-based position in the ranking; `None` for disabled players.
+    /// The player's place in the ranking, from 1, shared with the players
+    /// equal to them (`Game::ranking`); `None` for disabled players.
     pub rank: Option<usize>,
     pub answered: bool,
     /// The player's answer in the current question. For the Director only;
@@ -95,14 +100,6 @@ pub struct PlayerView {
     pub locked_out: bool,
     /// Score change from the current question.
     pub delta: Option<i32>,
-}
-
-pub fn slide_title(slide: &Slide) -> String {
-    match &slide.content {
-        SlideContent::Billboard { title, .. } | SlideContent::EndOfRound { title } | SlideContent::Final { title } => title.clone(),
-        SlideContent::Question(q) => q.text.clone(),
-        SlideContent::Explanation { text } => text.clone(),
-    }
 }
 
 impl Game {
@@ -121,9 +118,33 @@ impl Game {
         })
     }
 
+    /// How the players a closed everyone-answers question counted did.
+    fn results(&self) -> Option<AnswerResults> {
+        let question = self.question().filter(|q| q.mode == AnswerMode::Everyone && self.is_closed())?;
+        let answers: Vec<&Response> = self.counted().iter().filter_map(|b| self.responses().get(b)).collect();
+        let right = answers.iter().filter(|r| r.is_right(question)).count();
+        Some(AnswerResults { right, wrong: answers.len() - right, none: self.counted().len() - answers.len() })
+    }
+
+    /// How many of the players a closed everyone-answers question counted
+    /// gave each of its answers.
+    fn answer_counts(&self) -> Option<Vec<usize>> {
+        let question = self.question().filter(|q| q.mode == AnswerMode::Everyone && self.is_closed())?;
+        let mut counts = vec![0; question.answers.len()];
+        for response in self.counted().iter().filter_map(|b| self.responses().get(b)) {
+            if let Some(count) = response.button.answer_index().and_then(|i| counts.get_mut(i)) {
+                *count += 1;
+            }
+        }
+        Some(counts)
+    }
+
+    fn is_closed(&self) -> bool {
+        matches!(self.phase(), Phase::Question(QuestionStep::Closed | QuestionStep::Revealed { .. }))
+    }
+
     pub fn view(&self, now: u64) -> GameView {
-        let ranking = self.ranking();
-        let rank_of = |buzzer: BuzzerId| ranking.iter().position(|p| p.buzzer == buzzer).map(|i| i + 1);
+        let ranks: BTreeMap<BuzzerId, usize> = self.ranking().into_iter().map(|(place, p)| (p.buzzer, place)).collect();
         let question = self.question();
         let mut players: Vec<PlayerView> = self
             .players()
@@ -133,13 +154,10 @@ impl Game {
                 score: p.score,
                 enabled: p.enabled,
                 total_answer_ms: p.total_answer_ms,
-                rank: rank_of(p.buzzer),
+                rank: ranks.get(&p.buzzer).copied(),
                 answered: self.responses().contains_key(&p.buzzer),
                 answer: self.responses().get(&p.buzzer).map(|r| r.button),
-                answer_correct: self
-                    .responses()
-                    .get(&p.buzzer)
-                    .map(|r| r.button.answer_index().zip(question).is_some_and(|(i, q)| q.is_correct(i))),
+                answer_correct: self.responses().get(&p.buzzer).map(|r| question.is_some_and(|q| r.is_right(q))),
                 answer_ms: self.responses().get(&p.buzzer).map(|r| r.elapsed_ms),
                 locked_out: self.locked_out().contains(&p.buzzer),
                 delta: self.delta(p.buzzer),
@@ -147,46 +165,20 @@ impl Game {
             .collect();
         players.sort_by_key(|p| (p.rank.unwrap_or(usize::MAX), p.buzzer));
 
-        let closed = matches!(
-            self.phase(),
-            Phase::Question(QuestionStep::Closed | QuestionStep::Revealed { .. })
-        );
         let enabled: Vec<&PlayerView> = players.iter().filter(|p| p.enabled).collect();
-        let results = match self.question() {
-            Some(q) if closed && q.mode == AnswerMode::Everyone => {
-                let right = enabled.iter().filter(|p| p.answer_correct == Some(true)).count();
-                let answered = enabled.iter().filter(|p| p.answered).count();
-                Some(AnswerResults { right, wrong: answered - right, none: enabled.len() - answered })
-            }
-            _ => None,
-        };
-        let answer_counts = match self.current_slide().map(|s| &s.content) {
-            Some(SlideContent::Question(q)) if closed && !q.answers.is_empty() => {
-                let mut counts = vec![0; q.answers.len()];
-                for response in self.responses().values() {
-                    if let Some(i) = response.button.answer_index().filter(|i| *i < counts.len()) {
-                        counts[i] += 1;
-                    }
-                }
-                Some(counts)
-            }
-            _ => None,
-        };
-
-
         GameView {
             quiz_title: self.quiz().title.clone(),
             slide_index: self.slide_index(),
             slide_count: self.quiz().slides.len(),
             phase: self.phase().clone(),
             slide: self.current_slide().cloned(),
-            next_slide_title: self.following().and_then(|i| self.quiz().slides.get(i)).map(slide_title),
+            next_slide: self.following(),
             clock: self.clock_view(now),
             enabled_count: enabled.len(),
             answered_count: enabled.iter().filter(|p| p.answered).count(),
-            answer_counts,
+            answer_counts: self.answer_counts(),
             answer_shares: question.map(|q| (0..q.answers.len()).map(|i| q.share_of(i)).collect()).unwrap_or_default(),
-            results,
+            results: self.results(),
             buzzed: match self.phase() {
                 Phase::Question(QuestionStep::Buzzed { buzzer, .. }) => Some(*buzzer),
                 _ => None,

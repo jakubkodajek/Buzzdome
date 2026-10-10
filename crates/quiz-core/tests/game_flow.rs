@@ -575,20 +575,34 @@ fn scores_stop_at_the_limits_instead_of_wrapping() {
     assert_eq!(show.score(1), i32::MIN);
 }
 
+/// A question that scores the same however late the answer.
+fn flat(mut slide: Slide) -> Slide {
+    if let SlideContent::Question(q) = &mut slide.content {
+        q.points_end = None;
+    }
+    slide
+}
+
 #[test]
-fn ranking_breaks_ties_on_total_answer_time() {
-    let mut show = Show::new(vec![question("q1", AnswerMode::Everyone)]);
-    show.run(0, Command::AddPlayer { buzzer: 1, name: "Slow".into() }).unwrap();
-    show.run(0, Command::AddPlayer { buzzer: 2, name: "Fast".into() }).unwrap();
-    show.run(0, Command::AdjustScore { buzzer: 1, delta: 50 }).unwrap();
+fn ranking_breaks_ties_on_the_time_of_right_answers_and_equal_players_share_a_place() {
+    let mut show = Show::new(vec![flat(question("q1", AnswerMode::Everyone))]);
+    for buzzer in 1..=5 {
+        show.press(0, buzzer, Button::Big);
+    }
     show.run(0, Command::Next).unwrap();
     show.run(0, Command::Next).unwrap();
-    show.press(9_000, 1, Button::A); // wrong, slow
-    show.press(1_000, 2, Button::B); // right after 1 s: 95 points
-    show.run(1_000, Command::AdjustScore { buzzer: 2, delta: -25 }).unwrap();
-    // Slow: 50 - 20 = 30; Fast: 95 - 25 = 70.
-    let names: Vec<&str> = show.game.ranking().iter().map(|p| p.name.as_str()).collect();
-    assert_eq!(names, vec!["Fast", "Slow"]);
+    show.press(3_000, 1, Button::B); // right after 3 s: 100
+    show.press(1_000, 2, Button::B); // right after 1 s: 100
+    show.press(500, 3, Button::A); // wrong: -20, and its time does not count
+    show.run(4_000, Command::CloseQuestion).unwrap();
+    let answering: Vec<u64> = show.game.players().map(|p| p.total_answer_ms).collect();
+    assert_eq!(answering, [3_000, 1_000, 0, 0, 0]);
+
+    let ranking: Vec<(usize, u16)> = show.game.ranking().into_iter().map(|(place, p)| (place, p.buzzer)).collect();
+    // 4 and 5 neither scored nor answered right: they share third place, and nobody is fourth.
+    assert_eq!(ranking, [(1, 2), (2, 1), (3, 4), (3, 5), (5, 3)]);
+    let ranks: Vec<(u16, Option<usize>)> = show.game.view(4_000).players.iter().map(|p| (p.buzzer, p.rank)).collect();
+    assert_eq!(ranks, [(2, Some(1)), (1, Some(2)), (4, Some(3)), (5, Some(3)), (3, Some(5))]);
 }
 
 #[test]
@@ -756,7 +770,7 @@ fn a_final_slide_shows_the_ranking_where_it_stands_and_the_show_ends_with_the_la
     assert_eq!(show.game.phase(), &Phase::Final { step: 0 });
     // The final slide is on screen, so its sound and background play.
     assert_eq!(show.game.current_slide().map(|s| s.id.as_str()), Some("final"));
-    assert_eq!(show.game.view(0).next_slide_title.as_deref(), Some("thanks"));
+    assert_eq!(show.game.view(0).next_slide, Some(2));
     for expected in 1..=4 {
         show.run(0, Command::Next).unwrap();
         assert_eq!(show.game.phase(), &Phase::Final { step: expected });
@@ -766,7 +780,7 @@ fn a_final_slide_shows_the_ranking_where_it_stands_and_the_show_ends_with_the_la
     // No second ranking after the last slide: the quiz has its own.
     assert!(!show.game.controls().next);
     assert_eq!(show.run(0, Command::Next), Err(GameError::NotNow));
-    assert_eq!(show.game.view(0).next_slide_title, None);
+    assert_eq!(show.game.view(0).next_slide, None);
 
     show.run(0, Command::GoToFinal).unwrap();
     assert_eq!(show.game.current_slide().map(|s| s.id.as_str()), Some("final"));
@@ -849,7 +863,7 @@ fn view_marks_each_answer_right_or_wrong() {
 }
 
 #[test]
-fn view_counts_results_of_enabled_players_only() {
+fn view_counts_results_of_the_players_the_question_counted() {
     let mut show = Show::new(vec![question("q1", AnswerMode::Everyone)]);
     for b in 1..=3 {
         show.press(0, b, Button::Big);
@@ -864,4 +878,166 @@ fn view_counts_results_of_enabled_players_only() {
     let view = show.game.view(5_000);
     assert_eq!(view.results, Some(AnswerResults { right: 1, wrong: 0, none: 1 }));
     assert_eq!(view.answered_count, 1);
+}
+
+#[test]
+fn switching_off_the_last_player_to_answer_closes_the_question_and_later_switches_change_nothing() {
+    let mut show = Show::new(vec![question("q1", AnswerMode::Everyone)]);
+    for buzzer in 1..=3 {
+        show.press(0, buzzer, Button::Big);
+    }
+    show.run(0, Command::Next).unwrap();
+    show.run(0, Command::Next).unwrap();
+    show.press(1_000, 1, Button::B); // right
+    show.press(2_000, 2, Button::A); // wrong
+    let effects = show.run(3_000, Command::SetPlayerEnabled { buzzer: 3, enabled: false }).unwrap();
+    assert_eq!(step(&show.game), QuestionStep::Closed, "nobody is left to answer");
+    assert_eq!(effects, [Effect::Lights { lights: vec![(3, Light::Locked)] }, Effect::Lights { lights: vec![(1, Light::Off), (2, Light::Off)] }]);
+    assert_eq!((show.score(1), show.score(2), show.score(3)), (95, -20, 0));
+
+    // Who counts was settled when the question closed.
+    show.run(4_000, Command::SetPlayerEnabled { buzzer: 1, enabled: false }).unwrap();
+    let effects = show.run(4_000, Command::SetPlayerEnabled { buzzer: 3, enabled: true }).unwrap();
+    assert_eq!(effects, [Effect::Lights { lights: vec![(3, Light::Off)] }]);
+    let view = show.game.view(4_000);
+    assert_eq!(view.results, Some(AnswerResults { right: 1, wrong: 1, none: 0 }));
+    assert_eq!(view.answer_counts, Some(vec![1, 1, 0, 0]));
+    show.run(5_000, Command::SetPlayerEnabled { buzzer: 1, enabled: true }).unwrap();
+    let effects = show.run(6_000, Command::Next).unwrap();
+    assert!(effects.contains(&Effect::Lights { lights: vec![(1, Light::Correct), (2, Light::Wrong), (3, Light::Off)] }));
+    assert_eq!(show.game.counted().iter().copied().collect::<Vec<_>>(), [1, 2]);
+    assert_eq!(Game::replay(show.game.quiz().clone(), &show.journal, RULES_VERSION), show.game);
+}
+
+#[test]
+fn a_player_switched_on_mid_question_can_still_answer_and_one_switched_off_cannot() {
+    let mut show = Show::new(vec![question("q1", AnswerMode::FastestFinger)]);
+    for buzzer in 1..=3 {
+        show.press(0, buzzer, Button::Big);
+    }
+    show.run(0, Command::SetPlayerEnabled { buzzer: 3, enabled: false }).unwrap();
+    show.run(0, Command::Next).unwrap();
+    show.run(0, Command::Next).unwrap();
+    assert!(show.press(500, 3, Button::Big).is_empty(), "switched off");
+    let effects = show.run(600, Command::SetPlayerEnabled { buzzer: 3, enabled: true }).unwrap();
+    assert_eq!(effects, [Effect::Lights { lights: vec![(3, Light::Ready)] }]);
+
+    show.press(1_000, 1, Button::Big);
+    let effects = show.run(2_000, Command::JudgeWrong).unwrap();
+    assert_eq!(show.score(1), -20);
+    assert!(effects.contains(&Effect::Lights { lights: vec![(1, Light::Locked), (2, Light::Ready), (3, Light::Ready)] }));
+    show.run(2_500, Command::SetPlayerEnabled { buzzer: 1, enabled: false }).unwrap();
+    show.run(2_500, Command::SetPlayerEnabled { buzzer: 1, enabled: true }).unwrap();
+    assert!(show.press(3_000, 1, Button::Big).is_empty(), "still locked out");
+    show.press(3_000, 3, Button::Big);
+    show.run(4_000, Command::JudgeWrong).unwrap();
+    // Only 2 is left; switching it off leaves nobody to buzz.
+    let effects = show.run(5_000, Command::SetPlayerEnabled { buzzer: 2, enabled: false }).unwrap();
+    assert_eq!(step(&show.game), QuestionStep::Closed);
+    assert_eq!(effects[1], Effect::Lights { lights: vec![(1, Light::Off), (3, Light::Off)] });
+    let answering: Vec<u64> = show.game.players().map(|p| p.total_answer_ms).collect();
+    assert_eq!(answering, [0, 0, 0], "wrong answers add no answering time");
+    assert_eq!(show.game.view(5_000).answer_counts, None, "fastest finger counts no answers");
+}
+
+#[test]
+fn the_last_wrong_buzz_closes_the_question_and_darkens_the_lights() {
+    let mut show = Show::new(vec![question("q1", AnswerMode::FastestFinger)]);
+    show.press(0, 1, Button::Big);
+    show.press(0, 2, Button::Big);
+    show.run(0, Command::Next).unwrap();
+    show.run(0, Command::Next).unwrap();
+    show.press(1_000, 1, Button::Big);
+    show.run(2_000, Command::JudgeWrong).unwrap();
+    show.press(3_000, 2, Button::Big);
+    let effects = show.run(4_000, Command::JudgeWrong).unwrap();
+    assert_eq!(step(&show.game), QuestionStep::Closed);
+    assert_eq!(
+        effects,
+        [
+            Effect::Lights { lights: vec![(2, Light::Wrong)] },
+            Effect::Sound { cue: Cue::Wrong },
+            Effect::Lights { lights: vec![(1, Light::Off), (2, Light::Off)] },
+        ]
+    );
+}
+
+#[test]
+fn a_journal_begun_under_rules_version_2_replays_switching_a_player_off_as_then() {
+    let mut show = Show::new(vec![question("q1", AnswerMode::Everyone)]);
+    show.press(0, 1, Button::Big);
+    show.press(0, 2, Button::Big);
+    show.run(0, Command::Next).unwrap();
+    show.run(0, Command::Next).unwrap();
+    show.press(1_000, 1, Button::B);
+    let mut journal = show.journal.clone();
+    journal.push(Stamped { at_ms: 2_000, command: Command::SetPlayerEnabled { buzzer: 2, enabled: false } });
+    // Version 2 left the question open, so the quizmaster closed it with Next.
+    journal.push(Stamped { at_ms: 3_000, command: Command::Next });
+
+    let replayed = Game::replay(show.game.quiz().clone(), &journal, 2);
+    assert_eq!(step(&replayed), QuestionStep::Closed);
+    let today = Game::replay(show.game.quiz().clone(), &journal, RULES_VERSION);
+    assert_eq!(step(&today), QuestionStep::Revealed { winner: None }, "today the switch closes it");
+}
+
+#[test]
+fn recovery_restarts_a_question_whose_buzz_waited_for_judgement() {
+    let mut show = Show::new(vec![question("q1", AnswerMode::FastestFinger)]);
+    show.press(0, 1, Button::Big);
+    show.run(0, Command::Next).unwrap();
+    show.run(0, Command::Next).unwrap();
+    show.press(1_000, 1, Button::Big);
+    let mut crashed = Game::replay(show.game.quiz().clone(), &show.journal, RULES_VERSION);
+    let command = crashed.recovery_command().expect("a buzz waiting for judgement needs recovery");
+    crashed.apply(&Stamped { at_ms: 60_000, command }).unwrap();
+    assert_eq!(step(&crashed), QuestionStep::Ready);
+    assert_eq!(crashed.players().map(|p| p.score).collect::<Vec<_>>(), [0]);
+}
+
+#[test]
+fn an_untimed_question_never_runs_out_and_scores_its_full_points() {
+    let mut slide = question("q1", AnswerMode::Everyone);
+    if let SlideContent::Question(q) = &mut slide.content {
+        q.time_limit_s = 0;
+    }
+    let mut show = Show::new(vec![slide]);
+    show.press(0, 1, Button::Big);
+    show.press(0, 2, Button::Big);
+    show.run(0, Command::Next).unwrap();
+    show.run(0, Command::Next).unwrap();
+    let late = 3_600_000;
+    assert_eq!(show.game.due_command(late), None);
+    let clock = show.game.clock_view(late).unwrap();
+    assert_eq!((clock.remaining_ms, clock.elapsed_ms, clock.points), (None, late, 100));
+    show.press(late, 1, Button::B);
+    show.run(late + 1, Command::Next).unwrap();
+    assert_eq!(step(&show.game), QuestionStep::Closed);
+    assert_eq!((show.score(1), show.score(2)), (100, 0));
+}
+
+#[test]
+fn a_jump_past_the_last_slide_and_a_second_player_on_one_buzzer_are_refused() {
+    let mut show = Show::new(vec![question("q1", AnswerMode::Everyone)]);
+    assert_eq!(show.run(0, Command::GoTo { slide: 1 }), Err(GameError::NoSuchSlide(1)));
+    show.run(0, Command::AddPlayer { buzzer: 1, name: "Ann".into() }).unwrap();
+    assert_eq!(show.run(0, Command::AddPlayer { buzzer: 1, name: "Bob".into() }), Err(GameError::DuplicateBuzzer(1)));
+    assert_eq!(show.game.players().map(|p| p.name.as_str()).collect::<Vec<_>>(), ["Ann"]);
+}
+
+#[test]
+fn a_name_is_the_same_however_its_accents_are_encoded() {
+    let mut show = Show::new(vec![question("q1", AnswerMode::Everyone)]);
+    show.press(0, 1, Button::Big);
+    show.press(0, 2, Button::Big);
+    // As pasted from a macOS file name: "e" and an accent rather than "é".
+    let decomposed = "Z\u{30c}lut\u{30c}ouc\u{30c}ky\u{301}";
+    show.run(0, Command::SetTeams { names: names(&["Žluťoučký", decomposed, "Kůň"]) }).unwrap();
+    assert_eq!(show.game.teams(), ["Žluťoučký", "Kůň"]);
+    show.run(0, Command::PairTeam { buzzer: 1, name: decomposed.into() }).unwrap();
+    assert_eq!(teams(&show.game), [("Žluťoučký".to_string(), Some(1)), ("Kůň".to_string(), None)]);
+    assert_eq!(show.game.players().next().unwrap().name, "Žluťoučký", "kept composed");
+    show.run(0, Command::RenamePlayer { buzzer: 2, name: "žluťoučký".into() }).unwrap();
+    let players: Vec<&str> = show.game.players().map(|p| p.name.as_str()).collect();
+    assert_eq!(players, ["", "žluťoučký"], "the name moved to the other buzzer");
 }

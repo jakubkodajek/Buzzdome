@@ -141,7 +141,7 @@ function view(partial: Partial<GameView>): GameView {
     slideCount: quiz.slides.length,
     phase: { phase: "question", step: "ready" },
     slide: quiz.slides[1],
-    nextSlideTitle: "Která řeka protéká Českými Budějovicemi?",
+    nextSlide: 2,
     clock: null,
     players: players(),
     teams: [],

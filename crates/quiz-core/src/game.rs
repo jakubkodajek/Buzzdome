@@ -5,8 +5,10 @@
 //! clock inside this module: each command carries its own `at_ms`.
 
 use crate::model::{AnswerMode, Question, Quiz, Slide, SlideContent};
+use crate::text::{composed, name_key};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
+use std::cmp::Reverse;
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 
 pub type BuzzerId = u16;
@@ -21,8 +23,11 @@ pub type BuzzerId = u16;
 /// 1: refused presses that were journaled count (N3), and renaming a player
 /// takes the name from another buzzer (R17). 2: a question in play restarts
 /// with `RestartQuestion`, which takes its score changes back, and refuses
-/// `GoTo` and `GoToFinal` (A3).
-pub const RULES_VERSION: u32 = 2;
+/// `GoTo` and `GoToFinal` (A3). 3: only the time of right answers breaks
+/// ties, switching a player on or off in a running question closes it when
+/// nobody is left to answer, and names are the same however their accents
+/// are encoded.
+pub const RULES_VERSION: u32 = 3;
 
 /// Steps of the final score reveal: drum roll, 3rd, 2nd, 1st, full ranking.
 pub const FINAL_LAST_STEP: u8 = 4;
@@ -128,7 +133,7 @@ pub enum Command {
     #[serde(rename_all = "camelCase")]
     RenamePlayer { buzzer: BuzzerId, name: String },
     /// Replaces the team names prepared for the show, in order. Empty names
-    /// and repeats (ignoring case) are left out.
+    /// and repeats (`same_name`) are left out.
     SetTeams { names: Vec<String> },
     /// Gives a buzzer a team name; a player who had that name loses it.
     #[serde(rename_all = "camelCase")]
@@ -298,15 +303,15 @@ pub enum Phase {
     Final { step: u8 },
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Player {
     pub buzzer: BuzzerId,
     /// Empty until the quizmaster names the player; the UI shows the buzzer number.
     pub name: String,
     pub score: i32,
     pub enabled: bool,
-    /// Sum of answering times; breaks ties in the ranking.
+    /// How long the player took for their right answers, together; breaks
+    /// ties in the ranking (`Game::ranking`).
     pub total_answer_ms: u64,
 }
 
@@ -315,11 +320,18 @@ impl Player {
     fn add_score(&mut self, delta: i32) {
         self.score = self.score.saturating_add(delta);
     }
+
+    /// What places the player, best first: the higher score, then the less
+    /// answering time.
+    fn standing(&self) -> (Reverse<i32>, u64) {
+        (Reverse(self.score), self.total_answer_ms)
+    }
 }
 
-/// A name as typed, without surrounding spaces and at most `MAX_NAME_CHARS` long.
+/// A name as typed, without surrounding spaces, composed (`text::composed`)
+/// and at most `MAX_NAME_CHARS` long.
 fn clean_name(name: &str) -> String {
-    name.trim().chars().take(MAX_NAME_CHARS).collect::<String>().trim_end().to_string()
+    composed(name.trim()).chars().take(MAX_NAME_CHARS).collect::<String>().trim_end().to_string()
 }
 
 /// The team names to prepare from `names` as given: trimmed and cut to
@@ -330,7 +342,7 @@ pub fn team_names<'a>(names: impl IntoIterator<Item = &'a str>) -> Result<Vec<St
     let mut seen = HashSet::new();
     let mut teams = Vec::new();
     for name in names.into_iter().map(clean_name) {
-        if name.is_empty() || !seen.insert(name.to_lowercase()) {
+        if name.is_empty() || !seen.insert(name_key(&name)) {
             continue;
         }
         if teams.len() == MAX_TEAMS {
@@ -341,29 +353,33 @@ pub fn team_names<'a>(names: impl IntoIterator<Item = &'a str>) -> Result<Vec<St
     Ok(teams)
 }
 
-/// Two names are the same team when they differ only in case; an empty
-/// name is nobody's.
+/// Two names are the same team when they differ only in case or in how
+/// their accents are encoded (`text::name_key`); an empty name is nobody's.
 pub fn same_name(a: &str, b: &str) -> bool {
-    !a.is_empty() && a.to_lowercase() == b.to_lowercase()
+    !a.is_empty() && name_key(a) == name_key(b)
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Response {
     pub button: Button,
     pub elapsed_ms: u64,
 }
 
+impl Response {
+    /// Whether the answer is one of `question`'s right ones.
+    pub fn is_right(&self, question: &Question) -> bool {
+        self.button.answer_index().is_some_and(|i| question.is_correct(i))
+    }
+}
+
 /// What the current question gave a player, which `RestartQuestion` takes back.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 struct Gain {
     points: i32,
     answer_ms: u64,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Game {
     quiz: Quiz,
     slide: usize,
@@ -371,6 +387,10 @@ pub struct Game {
     players: BTreeMap<BuzzerId, Player>,
     /// Everyone-answers: the first answer of each player in the current question.
     responses: BTreeMap<BuzzerId, Response>,
+    /// Everyone-answers: the players the closed question counts, those
+    /// switched on when it closed. Its scores, results, answer counts and
+    /// lights go by them alone, whoever is switched on or off later.
+    counted: BTreeSet<BuzzerId>,
     /// Fastest finger: players who answered wrong in the current question.
     locked_out: BTreeSet<BuzzerId>,
     /// What the current question gave each player (`credit`).
@@ -392,6 +412,7 @@ impl Game {
             phase: Phase::Lobby,
             players: BTreeMap::new(),
             responses: BTreeMap::new(),
+            counted: BTreeSet::new(),
             locked_out: BTreeSet::new(),
             gains: BTreeMap::new(),
             leaderboard_visible: false,
@@ -410,14 +431,19 @@ impl Game {
         game
     }
 
-    /// `apply`, for a journal begun under `rules_version`. Before version 2
-    /// a jump left a question in play, and the app restarted one after a
-    /// crash with a `GoTo` to it: replayed with today's refusal, every later
-    /// `Next` would land a step off (G11).
+    /// `apply`, for a journal begun under `rules_version`, keeping the old
+    /// rules that would otherwise put every later `Next` a step off. Before
+    /// version 2 a jump left a question in play, and the app restarted one
+    /// after a crash with a `GoTo` to it (G11). Before version 3 switching a
+    /// player on or off never closed a question.
     fn apply_under(&mut self, stamped: &Stamped, rules_version: u32) -> Result<Vec<Effect>, GameError> {
         match stamped.command {
             Command::GoTo { slide } if rules_version < 2 && slide < self.quiz.slides.len() => Ok(self.enter_slide(slide)),
             Command::GoToFinal if rules_version < 2 => Ok(self.enter_slide(self.final_index())),
+            Command::SetPlayerEnabled { buzzer, enabled } if rules_version < 3 => {
+                self.player_mut(buzzer)?.enabled = enabled;
+                Ok(vec![])
+            }
             _ => self.apply(stamped),
         }
     }
@@ -502,6 +528,11 @@ impl Game {
         &self.locked_out
     }
 
+    /// See `counted`: empty until an everyone-answers question closes.
+    pub fn counted(&self) -> &BTreeSet<BuzzerId> {
+        &self.counted
+    }
+
     /// The points the current question gave `buzzer`'s player, for feedback on screen.
     pub fn delta(&self, buzzer: BuzzerId) -> Option<i32> {
         self.gains.get(&buzzer).map(|gain| gain.points)
@@ -511,16 +542,22 @@ impl Game {
         self.leaderboard_visible
     }
 
-    /// Players by score (high first), then total answering time, then buzzer.
-    pub fn ranking(&self) -> Vec<&Player> {
+    /// The players switched on, each with their place: by score (high
+    /// first), then by the time their right answers took (less first).
+    /// Players equal in both share a place, and as many places as share it
+    /// are skipped after it (1, 1, 3); they are listed by buzzer.
+    pub fn ranking(&self) -> Vec<(usize, &Player)> {
         let mut players: Vec<&Player> = self.players.values().filter(|p| p.enabled).collect();
-        players.sort_by(|a, b| {
-            b.score
-                .cmp(&a.score)
-                .then(a.total_answer_ms.cmp(&b.total_answer_ms))
-                .then(a.buzzer.cmp(&b.buzzer))
-        });
-        players
+        players.sort_by_key(|p| (p.standing(), p.buzzer));
+        let mut ranking: Vec<(usize, &Player)> = Vec::with_capacity(players.len());
+        for (i, player) in players.into_iter().enumerate() {
+            let place = match ranking.last() {
+                Some(&(place, above)) if above.standing() == player.standing() => place,
+                _ => i + 1,
+            };
+            ranking.push((place, player));
+        }
+        ranking
     }
 
     pub fn clock(&self) -> Option<&Clock> {
@@ -600,17 +637,45 @@ impl Game {
         self.players.values().filter(|p| p.enabled).map(|p| p.buzzer)
     }
 
-    fn lights_all(&self, light: Light) -> Effect {
-        Effect::Lights { lights: self.enabled_buzzers().map(|b| (b, light)).collect() }
+    /// The light a switched-on buzzer shows in the current step: ready while
+    /// its player can press (in the lobby to register), locked once they
+    /// answered or answered wrong or another player buzzed, first for the
+    /// buzz being judged, and from the reveal the result: right or wrong
+    /// for the players an everyone-answers question counted, right for the
+    /// fastest finger judged right. Dark otherwise, also once a question
+    /// closed, until its reveal. A switched-off buzzer shows locked. A
+    /// wrong answer shows wrong only as it is judged (`judge`).
+    fn light_of(&self, buzzer: BuzzerId) -> Light {
+        match &self.phase {
+            Phase::Lobby => Light::Ready,
+            Phase::Question(QuestionStep::Running { .. }) => {
+                let done = self.responses.contains_key(&buzzer) || self.locked_out.contains(&buzzer);
+                if done { Light::Locked } else { Light::Ready }
+            }
+            Phase::Question(QuestionStep::Buzzed { buzzer: first, .. }) => {
+                if *first == buzzer { Light::First } else { Light::Locked }
+            }
+            Phase::Question(QuestionStep::Revealed { winner: Some(winner) }) => {
+                if *winner == buzzer { Light::Correct } else { Light::Locked }
+            }
+            Phase::Question(QuestionStep::Revealed { winner: None }) if self.counted.contains(&buzzer) => {
+                let right = self.question().zip(self.responses.get(&buzzer)).is_some_and(|(q, r)| r.is_right(q));
+                if right { Light::Correct } else { Light::Wrong }
+            }
+            _ => Light::Off,
+        }
     }
 
-    /// Lights while a fastest-finger question waits for a buzz.
-    fn lights_waiting(&self) -> Effect {
-        let lights = self
-            .enabled_buzzers()
-            .map(|b| (b, if self.locked_out.contains(&b) { Light::Locked } else { Light::Ready }))
-            .collect();
-        Effect::Lights { lights }
+    /// Every switched-on buzzer's light in the current step (`light_of`).
+    fn lights_now(&self) -> Effect {
+        Effect::Lights { lights: self.enabled_buzzers().map(|b| (b, self.light_of(b))).collect() }
+    }
+
+    /// Whether the running question has nobody left to wait for: every
+    /// player switched on answered it, or in fastest finger answered it
+    /// wrong.
+    fn nobody_left_to_answer(&self) -> bool {
+        self.enabled_buzzers().all(|b| self.responses.contains_key(&b) || self.locked_out.contains(&b))
     }
 
     pub fn apply(&mut self, stamped: &Stamped) -> Result<Vec<Effect>, GameError> {
@@ -686,11 +751,7 @@ impl Game {
                 self.player_mut(*buzzer)?.name = name;
                 Ok(vec![])
             }
-            Command::SetPlayerEnabled { buzzer, enabled } => {
-                self.player_mut(*buzzer)?.enabled = *enabled;
-                let light = if *enabled { Light::Off } else { Light::Locked };
-                Ok(vec![Effect::Lights { lights: vec![(*buzzer, light)] }])
-            }
+            Command::SetPlayerEnabled { buzzer, enabled } => self.set_enabled(*buzzer, *enabled),
             Command::AdjustScore { buzzer, delta } => {
                 self.player_mut(*buzzer)?.add_score(*delta);
                 Ok(vec![])
@@ -713,6 +774,18 @@ impl Game {
         self.players.get_mut(&buzzer).ok_or(GameError::UnknownBuzzer(buzzer))
     }
 
+    /// Switches a player on or off. A running question that then has nobody
+    /// left to answer closes, as it would on the last answer.
+    fn set_enabled(&mut self, buzzer: BuzzerId, enabled: bool) -> Result<Vec<Effect>, GameError> {
+        self.player_mut(buzzer)?.enabled = enabled;
+        let light = if enabled { self.light_of(buzzer) } else { Light::Locked };
+        let mut effects = vec![Effect::Lights { lights: vec![(buzzer, light)] }];
+        if matches!(self.phase, Phase::Question(QuestionStep::Running { .. })) && self.nobody_left_to_answer() {
+            effects.extend(self.close_question());
+        }
+        Ok(effects)
+    }
+
     fn register(&mut self, buzzer: BuzzerId, name: String) {
         self.players.entry(buzzer).or_insert(Player {
             buzzer,
@@ -728,7 +801,7 @@ impl Game {
         if !self.players.contains_key(&buzzer) {
             self.register(buzzer, String::new());
             if self.phase == Phase::Lobby {
-                return vec![Effect::Lights { lights: vec![(buzzer, Light::Ready)] }];
+                return vec![Effect::Lights { lights: vec![(buzzer, self.light_of(buzzer))] }];
             }
         }
         match self.press_play(buzzer, button, now) {
@@ -739,11 +812,7 @@ impl Game {
             Some(PressPlay::Buzz { mut clock }) => {
                 clock.pause(now);
                 self.phase = Phase::Question(QuestionStep::Buzzed { buzzer, clock });
-                let lights = self
-                    .enabled_buzzers()
-                    .map(|b| (b, if b == buzzer { Light::First } else { Light::Locked }))
-                    .collect();
-                vec![Effect::Lights { lights }, Effect::Sound { cue: Cue::Buzz }]
+                vec![self.lights_now(), Effect::Sound { cue: Cue::Buzz }]
             }
         }
     }
@@ -788,28 +857,31 @@ impl Game {
 
     fn record_answer(&mut self, buzzer: BuzzerId, button: Button, elapsed_ms: u64) -> Vec<Effect> {
         self.responses.insert(buzzer, Response { button, elapsed_ms });
-        let mut effects = vec![Effect::Lights { lights: vec![(buzzer, Light::Locked)] }];
-        if self.enabled_buzzers().all(|b| self.responses.contains_key(&b)) {
+        let mut effects = vec![Effect::Lights { lights: vec![(buzzer, self.light_of(buzzer))] }];
+        if self.nobody_left_to_answer() {
             effects.extend(self.close_question());
         }
         effects
     }
 
+    /// Closes the running question. An everyone-answers question counts
+    /// the players switched on now (`counted`) and scores their answers;
+    /// a right answer adds its time to the player's answering time.
     fn close_question(&mut self) -> Vec<Effect> {
         let Some(q) = self.question().cloned() else {
             return vec![];
         };
         self.phase = Phase::Question(QuestionStep::Closed);
-        if q.mode != AnswerMode::Everyone {
-            return vec![self.lights_all(Light::Off)];
-        }
-        for (buzzer, response) in self.responses.clone() {
-            if self.players.get(&buzzer).is_some_and(|player| player.enabled) {
-                self.credit(buzzer, q.points_for(response.button.answer_index(), response.elapsed_ms), response.elapsed_ms);
+        if q.mode == AnswerMode::Everyone {
+            self.counted = self.enabled_buzzers().collect();
+            for buzzer in self.counted.clone() {
+                if let Some(response) = self.responses.get(&buzzer).copied() {
+                    let answer_ms = if response.is_right(&q) { response.elapsed_ms } else { 0 };
+                    self.credit(buzzer, q.points_for(response.button.answer_index(), response.elapsed_ms), answer_ms);
+                }
             }
         }
-        // The lights show the result only at the reveal; until then they go dark.
-        vec![self.lights_all(Light::Off)]
+        vec![self.lights_now()]
     }
 
     /// Gives `buzzer`'s player `points` and `answer_ms` of answering time
@@ -833,25 +905,26 @@ impl Game {
             self.credit(buzzer, q.points_at(elapsed), elapsed);
             self.phase = Phase::Question(QuestionStep::Revealed { winner: Some(buzzer) });
             return Ok(vec![
-                Effect::Lights { lights: vec![(buzzer, Light::Correct)] },
+                Effect::Lights { lights: vec![(buzzer, self.light_of(buzzer))] },
                 Effect::Sound { cue: Cue::Correct },
             ]);
         }
         self.credit(buzzer, -q.penalty, 0);
         self.locked_out.insert(buzzer);
+        // The buzz paused the clock before time up (`Clock::takes_press_at`),
+        // so time is left for the others.
+        let mut clock = clock;
+        clock.go_on_after_buzz(now);
+        self.phase = Phase::Question(QuestionStep::Running { clock });
         let mut effects = vec![
             Effect::Lights { lights: vec![(buzzer, Light::Wrong)] },
             Effect::Sound { cue: Cue::Wrong },
         ];
-        let anyone_left = self.enabled_buzzers().any(|b| !self.locked_out.contains(&b));
-        if !anyone_left || clock.expired(now) {
-            self.phase = Phase::Question(QuestionStep::Closed);
-            return Ok(effects);
+        if self.nobody_left_to_answer() {
+            effects.extend(self.close_question());
+        } else {
+            effects.push(self.lights_now());
         }
-        let mut clock = clock;
-        clock.go_on_after_buzz(now);
-        self.phase = Phase::Question(QuestionStep::Running { clock });
-        effects.push(self.lights_waiting());
         Ok(effects)
     }
 
@@ -866,15 +939,16 @@ impl Game {
                 QuestionStep::Ready => {
                     let limit = self.question().and_then(Question::time_limit_ms);
                     self.phase = Phase::Question(QuestionStep::Running { clock: Clock::start(limit, now) });
-                    Ok(vec![self.lights_waiting(), Effect::Sound { cue: Cue::ClockStart }])
+                    Ok(vec![self.lights_now(), Effect::Sound { cue: Cue::ClockStart }])
                 }
                 QuestionStep::Running { .. } => Ok(self.close_question()),
                 QuestionStep::Buzzed { .. } => Err(GameError::NotNow),
                 QuestionStep::Closed => {
                     self.phase = Phase::Question(QuestionStep::Revealed { winner: None });
                     let mut effects = vec![Effect::Sound { cue: Cue::Reveal }];
-                    if let Some(lights) = self.result_lights() {
-                        effects.insert(0, lights);
+                    // The lights stay dark after a fastest-finger question nobody won.
+                    if !self.counted.is_empty() {
+                        effects.insert(0, self.lights_now());
                     }
                     Ok(effects)
                 }
@@ -885,22 +959,6 @@ impl Game {
                 Ok(vec![])
             }
         }
-    }
-
-    /// Everyone-answers: green for right, red for wrong or no answer.
-    fn result_lights(&self) -> Option<Effect> {
-        let q = self.question()?;
-        if q.mode != AnswerMode::Everyone {
-            return None;
-        }
-        let lights = self
-            .enabled_buzzers()
-            .map(|b| {
-                let right = self.responses.get(&b).and_then(|r| r.button.answer_index()).is_some_and(|i| q.is_correct(i));
-                (b, if right { Light::Correct } else { Light::Wrong })
-            })
-            .collect();
-        Some(Effect::Lights { lights })
     }
 
     /// Where `GoToFinal` jumps: the final slide, or past the last slide.
@@ -917,6 +975,7 @@ impl Game {
 
     fn enter_slide(&mut self, index: usize) -> Vec<Effect> {
         self.responses.clear();
+        self.counted.clear();
         self.locked_out.clear();
         self.gains.clear();
         self.leaderboard_visible = false;
@@ -930,6 +989,6 @@ impl Game {
             Some(SlideContent::Final { .. }) => Phase::Final { step: 0 },
             Some(SlideContent::Question(_)) => Phase::Question(QuestionStep::Ready),
         };
-        vec![self.lights_all(Light::Off)]
+        vec![self.lights_now()]
     }
 }

@@ -41,9 +41,12 @@ and a crashed show is rebuilt by replaying the journal.
 ### 1.1 Between Rust and the UI
 
 The game core is the only place that knows the rules. Everything a window
-shows is either the `GameView` the core builds or a value the core computes
-(the points a correct answer earns now, whether an answer is right), so the
-two windows cannot disagree with each other or with the score.
+shows of the show is either the `GameView` the core builds or a value the
+core computes (the points a correct answer earns now, whether an answer is
+right), so the two windows cannot disagree with each other or with the
+score. What follows from the quiz alone, such as a question's number, is
+worked out from the quiz in `quiz.ts` (1.3, Rendering), as the editor
+draws slides without a show.
 
 - **Types.** Every type that crosses the boundary is defined once in Rust and
   exported to TypeScript by ts-rs (`#[derive(TS)] #[ts(export)]`) into
@@ -284,7 +287,13 @@ Only safe names inside `media/` are ever read or written, checked or not.
 A `.quiz` entry with a name that is not portable is stored under the
 closest portable one (`quiz_core::portable_reference`, numbered if taken)
 and the quiz's references are renamed with it (the draft then counts as
-unsaved); a plain `quiz.json` reads
+unsaved). So is an entry whose name is one file with an entry before it on
+Windows and macOS (`quiz_core::file_key`: the names differ only in letter
+case, or in how accents are encoded, which macOS ignores too), which would
+take its place there; a show refuses such a quiz (`MediaNameClash`), as it
+does a name it would have to rename. Media added in the editor, and media
+an export copies beside a sheet, take no name that is one file with a name
+in the folder, also on Linux. A plain `quiz.json` reads
 only safe names from the disk (no device names on Windows), nor any
 through a link that leads out of its folder, and the show path keeps such
 a file refused.
@@ -303,7 +312,8 @@ the quiz. A font name cannot hold quotes, so the UI can put it in a style
 sheet as it is.
 
 Reading a quiz (`Quiz::read_json`) also says what it left out
-(`ReadQuiz::dropped`): style values that did not read
+(`ReadQuiz::dropped`): a `theme` that is no theme id (`ThemeUnread`; the
+quiz then has the default look), style values that did not read
 (`SlideStyle::left_out`, by comparing the file's `style` with the style
 read) and what a slide's type cannot play (`drop_unplayable`), each as the
 `Problem` it would be. Opening a file in the editor writes the draft
@@ -319,9 +329,10 @@ Director shows a warning. `meta.json` also records `RULES_VERSION`, which
 quiz-core bumps whenever the same journal would replay into another show;
 a show begun under another version still resumes, rebuilt with today's
 rules, and the Director says its scores may differ. What would put the
-replay a step off is kept: a journal begun before version 2 replays its
-jumps out of a question in play, as the app then restarted a question
-after a crash with a `GoTo` to it (`Game::replay`).
+replay a step off is kept (`Game::replay`): a journal begun before version
+2 replays its jumps out of a question in play, as the app then restarted a
+question after a crash with a `GoTo` to it, and one begun before version 3
+replays switching a player off without closing the question.
 
 The windows load media through Tauri's asset protocol. Its scope is empty
 in `tauri.conf.json`; at startup the shell allows the folder of unpacked
@@ -471,7 +482,11 @@ table view toggle. It edits a quiz; it never touches a running show.
   (`app/src/host/`). The editor and thumbnails feed it `previewView`, a
   `GameView` built from the slide alone. What a slide shows from the rest of
   the quiz comes in a `SlideContext` (`quiz.ts`): its question number and,
-  for an explanation slide, the question it explains. `MediaRootContext` sits above
+  for an explanation slide, the question it explains. It follows from the
+  quiz alone, not from the show, so `quiz.ts` is its one place, for the
+  editor, which draws slides without a show, and for the show's windows
+  alike; so is the line a slide is listed by (`slideTitle`), which the
+  Director shows for the next slide (`GameView.next_slide`). `MediaRootContext` sits above
   every screen that resolves media, so the editor, the Director and their
   sound hooks agree on the folder.
 - **Spreadsheets.** File › Import and Export (spec QZ-8, columns in
@@ -634,7 +649,7 @@ packages users will install are read the same way.
 
 - **Team names.** The game keeps the team names prepared for the show
   (`Game::teams`), set as a whole by `SetTeams`: `team_names` trims them,
-  drops blanks and repeats (ignoring case), cuts them to `MAX_NAME_CHARS`
+  drops blanks and repeats, cuts them to `MAX_NAME_CHARS`
   and refuses more than `MAX_TEAMS` as soon as it sees one more, so a wrong
   file of thousands of lines does not hold the show state. Being commands,
   they are journaled and come back after a crash like everything else.
@@ -656,6 +671,11 @@ packages users will install are read the same way.
   it) is left as it is: its `AppFile` refuses to write it until the app
   starts again, so a passing lock never costs the saved names, learned
   buttons or sound board.
+- **Names.** Player and team names are kept with their accents encoded
+  as single characters (NFC). They and category names are compared
+  ignoring case and that encoding (`text::name_key`), so "é" typed and
+  "é" pasted from a macOS file name, which encodes it as "e" and an
+  accent, are the same name.
 - **Pairing.** A team is paired with the buzzer whose player has its name,
   so the player's name is the only record; `GameView.teams` (`TeamView`)
   derives the pairs. `PairTeam` gives a buzzer a name and takes it from any
@@ -668,6 +688,27 @@ packages users will install are read the same way.
   also works on a touch screen.
 - **Projector.** The registration grid shows a paired team's name under its
   number.
+- **Scores.** A right everyone-answers answer scores the points the clock
+  shows when it was given (`Question::points_at`, falling or rising from
+  `points` to `points_end` over the time limit), times its share; a wrong
+  one costs the penalty, and no answer costs nothing. A fastest-finger buzz judged right scores the points at
+  the moment of the buzz, one judged wrong costs the penalty. An untimed
+  question always scores `points`.
+- **Who counts.** When an everyone-answers question closes, the players
+  switched on then are the ones it counts (`Game::counted`): its scores,
+  the result bars, the answer counts and the result lights go by them,
+  whoever is switched on or off afterwards. A question closes on time up,
+  on Next, or when nobody switched on is left to answer: everyone answered,
+  or in fastest finger everyone answered wrong. Switching a player on or
+  off is checked the same way, so switching off the last player who had
+  not answered closes the question. A player switched off cannot answer;
+  one switched on mid-question can, unless they already answered or were
+  locked out.
+- **Ranking.** `Game::ranking` orders the players switched on by score,
+  then by the time their right answers took together (`total_answer_ms`,
+  less first); wrong answers add no time, so not answering never helps.
+  Players equal in both share a place and the places after them are
+  skipped (1, 1, 3); the podium shows the shared number.
 
 ### 1.6 Media player and sound board
 
@@ -925,7 +966,12 @@ neither can slip in between the other's check and its start.
 ### 2.7 Lights
 
 `Game::apply` returns `Effect::Lights` with the light state of every affected
-buzzer. The shell passes it to `BuzzerDriver::set_lights`; for the hardware
+buzzer, from one function (`Game::light_of`): ready while a player can press,
+locked once they answered or another player buzzed, first for the buzz being
+judged, dark while a question is closed, and the result from the reveal. A
+wrong buzz shows wrong as it is judged, then the lights of the step that
+follows. A player switched on gets the light of the step at once, one
+switched off shows locked. The shell passes it to `BuzzerDriver::set_lights`; for the hardware
 driver that is a message to the receiver thread, which encodes it with the
 active protocol and writes the reports. Light failures are logged and never
 block the show. With the learned or raw protocol, `has_lights()` is false and
