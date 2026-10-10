@@ -1,0 +1,10 @@
+{
+  "format": 1,
+  "id": "builtin.bakchus-contours",
+  "version": "1.0.0",
+  "name": { "cs": "Bakchus vrstevnice", "en": "Bakchus Contours" },
+  "parent": "builtin.bakchus",
+  "backgrounds": {
+    "default": "backgrounds/contours.svg"
+  }
+}

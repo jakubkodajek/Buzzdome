@@ -17,7 +17,7 @@ macro_rules! builtin {
 }
 
 /// The built-in themes in gallery order, the default first.
-const BUILTIN: [(&str, &str); 11] = [
+const BUILTIN: [(&str, &str); 12] = [
     builtin!("builtin.classic"),
     builtin!("builtin.studio"),
     builtin!("builtin.night"),
@@ -29,6 +29,7 @@ const BUILTIN: [(&str, &str); 11] = [
     builtin!("builtin.chalkboard"),
     builtin!("builtin.gala"),
     builtin!("builtin.bakchus"),
+    builtin!("builtin.bakchus-contours"),
 ];
 
 /// The themes the windows can draw with, read once at start.

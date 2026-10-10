@@ -716,14 +716,14 @@
       "en": "Bakchus"
     },
     "colors": {
-      "text": "#ffffff",
-      "shadow": "#000000cc",
-      "glow": "#00000099",
-      "panel": "#00000099",
-      "bar": "#111111",
-      "barEdge": "#f26522",
-      "tile": "#212529",
-      "accent": "#f26522",
+      "text": "#000000",
+      "shadow": "#ffffffb3",
+      "glow": "#ffffffcc",
+      "panel": "#ededed",
+      "bar": "#1a1f28",
+      "barEdge": "#e8520e",
+      "tile": "#1a1f28",
+      "accent": "#e8520e",
       "answerA": "#1f78d1",
       "answerB": "#e8520e",
       "answerC": "#3a9a1f",
@@ -773,6 +773,77 @@
       "final": {
         "root": "/src-tauri/themes/builtin.bakchus/",
         "path": "backgrounds/bakchus.svg"
+      }
+    },
+    "buzzerColors": {
+      "ready": "#00ff00",
+      "first": "#0000ff"
+    }
+  },
+  {
+    "id": "builtin.bakchus-contours",
+    "name": {
+      "cs": "Bakchus vrstevnice",
+      "en": "Bakchus Contours"
+    },
+    "colors": {
+      "text": "#000000",
+      "shadow": "#ffffffb3",
+      "glow": "#ffffffcc",
+      "panel": "#ededed",
+      "bar": "#1a1f28",
+      "barEdge": "#e8520e",
+      "tile": "#1a1f28",
+      "accent": "#e8520e",
+      "answerA": "#1f78d1",
+      "answerB": "#e8520e",
+      "answerC": "#3a9a1f",
+      "answerD": "#f2c40c",
+      "answerE": "#7b4bd6",
+      "answerF": "#d8366a",
+      "correct": "#2fa84f",
+      "wrong": "#d62828"
+    },
+    "fonts": {
+      "heading": {
+        "root": "/src-tauri/themes/builtin.bakchus/",
+        "path": "fonts/FiraSansCondensed.woff2"
+      },
+      "body": {
+        "root": "/src-tauri/themes/builtin.daylight/",
+        "path": "fonts/Montserrat.woff2"
+      }
+    },
+    "corners": "square",
+    "headings": "uppercase",
+    "backgrounds": {
+      "default": {
+        "root": "/src-tauri/themes/builtin.bakchus-contours/",
+        "path": "backgrounds/contours.svg"
+      },
+      "welcome": {
+        "root": "/src-tauri/themes/builtin.bakchus-contours/",
+        "path": "backgrounds/contours.svg"
+      },
+      "question": {
+        "root": "/src-tauri/themes/builtin.bakchus-contours/",
+        "path": "backgrounds/contours.svg"
+      },
+      "answer": {
+        "root": "/src-tauri/themes/builtin.bakchus-contours/",
+        "path": "backgrounds/contours.svg"
+      },
+      "leaderboard": {
+        "root": "/src-tauri/themes/builtin.bakchus-contours/",
+        "path": "backgrounds/contours.svg"
+      },
+      "roundEnd": {
+        "root": "/src-tauri/themes/builtin.bakchus-contours/",
+        "path": "backgrounds/contours.svg"
+      },
+      "final": {
+        "root": "/src-tauri/themes/builtin.bakchus-contours/",
+        "path": "backgrounds/contours.svg"
       }
     },
     "buzzerColors": {

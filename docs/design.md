@@ -545,10 +545,14 @@ packages users will install are read the same way.
   font: each package has it as `fonts/OFL.txt`, and it ships with the
   installers. A cut font is a Modified Version under the licence, which may
   not keep a Reserved Font Name, so the built-in fonts are ones without one.
-  Bakchus follows the Bakchus Aktivity website (orange `#F26522`, black and
-  white, square corners, Fira Sans Condensed titles in capitals); the
-  site's body font, Raleway, has a Reserved Font Name, so Bakchus takes its
-  parent Daylight's Montserrat for body text.
+  Bakchus follows the pages of the Bakchus Aktivity website: black text on
+  white, its orange `#E8520E` for scores and edges, bars and score rows in
+  the dark `#1A1F28` of its photo captions, its light grey `#EDEDED` footer
+  band under an orange line, square corners and Fira Sans Condensed titles
+  in capitals. The site's body font, Raleway, has a Reserved Font Name, so
+  Bakchus takes its parent Daylight's Montserrat for body text. Bakchus
+  Contours is Bakchus over thin orange contour lines, all of one weight, so
+  no line stands out from the rest; it sets only its background.
 - **Choosing.** The editor's Design tab shows each installed theme on a
   sample question (`ThemeGallery.tsx`); when the ribbon is too narrow for
   all of them, the row pages with arrows at its ends (`GalleryStrip.tsx`)
