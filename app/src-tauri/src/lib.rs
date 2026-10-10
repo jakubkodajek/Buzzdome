@@ -112,18 +112,30 @@ fn execute_at(app: &AppHandle, inner: &mut Inner, command: Command, at_ms: u64) 
 /// then does the copy replace the show (S1). The effects are for `deliver`.
 fn apply_journaled(inner: &mut Inner, command: Command, at_ms: u64) -> CmdResult<Vec<Effect>> {
     let game = inner.game.as_ref().ok_or(AppError::NoShow)?;
-    let stamped = Stamped { at_ms, command };
-    let mut next = game.clone();
-    let effects = next.apply(&stamped)?;
-    if let Some(session) = inner.session.as_mut() {
-        session.append(&stamped).map_err(|e| AppError::ShowNotSaved { detail: e.to_string() })?;
-    }
+    let (next, effects) = apply_and_journal(game, inner.session.as_mut(), &Stamped { at_ms, command })?;
     inner.game = Some(next);
     Ok(effects)
 }
 
+/// Applies `stamped` to a copy of `game` and journals it in `session` (none
+/// in a test run). Gives the copy, to replace the show, and its effects.
+fn apply_and_journal(game: &Game, session: Option<&mut Session>, stamped: &Stamped) -> CmdResult<(Game, Vec<Effect>)> {
+    let mut next = game.clone();
+    let effects = next.apply(stamped)?;
+    if let Some(session) = session {
+        session.append(stamped)?;
+    }
+    Ok((next, effects))
+}
+
 /// Sends a show change's effects to the buzzers and the windows, then the new state.
 fn deliver(app: &AppHandle, inner: &mut Inner, effects: Vec<Effect>) {
+    send_effects(app, inner, effects);
+    emit_state(app, inner.game.as_ref());
+}
+
+/// Sends a show change's effects to the buzzer lights and the windows' sound.
+fn send_effects(app: &AppHandle, inner: &mut Inner, effects: Vec<Effect>) {
     for effect in effects {
         match effect {
             Effect::Lights { lights } => {
@@ -136,7 +148,6 @@ fn deliver(app: &AppHandle, inner: &mut Inner, effects: Vec<Effect>) {
             }
         }
     }
-    emit_state(app, inner.game.as_ref());
 }
 
 /// Locks the show state to start a show, refusing while one runs. Learn
@@ -186,7 +197,7 @@ fn begin_show(app: &AppHandle, inner: &mut Inner, game: Game, session: Option<Se
     // The show runs even if its journal refuses the names; the Director says why.
     let named = teams::begin(inner, game, session, now_ms());
     if let Ok(effects) = &named {
-        deliver(app, inner, effects.clone());
+        send_effects(app, inner, effects.clone());
     }
     emit_show_changed(app, inner);
     named.map(drop)
@@ -241,7 +252,7 @@ fn start_demo_show(app: AppHandle, state: State<AppState>) -> CmdResult<()> {
 
 #[tauri::command]
 fn last_session(app: AppHandle) -> CmdResult<Option<SessionSummary>> {
-    Session::latest_summary(&sessions_root(&app)?).map_err(|e| AppError::ShowNotRead { detail: e.to_string() })
+    Ok(Session::latest_summary(&sessions_root(&app)?)?)
 }
 
 /// What the quizmaster is told about a resumed show that runs: its media
@@ -251,29 +262,47 @@ fn resume_warnings(quiz: &Quiz, media_root: Option<&Path>, rules_changed: bool) 
     missing.into_iter().chain(rules_changed.then_some(AppError::RulesChanged)).collect()
 }
 
+/// The last show, rebuilt from its journal and ready to run.
+struct ResumedShow {
+    game: Game,
+    session: Session,
+    /// The quiz's media folder, if it is still there.
+    media_root: Option<PathBuf>,
+    /// What the recovery (`Game::recovery_command`) sends to the buzzers and windows.
+    effects: Vec<Effect>,
+    /// For the quizmaster (`resume_warnings`).
+    warnings: Vec<AppError>,
+}
+
+/// Rebuilds the latest show under `root` from its journal. A show that
+/// stopped mid-question has the question restarted, journaled at `at_ms`,
+/// before anything is shown: no window sees the stopped question (A2).
+fn resume_show(root: &Path, at_ms: u64) -> CmdResult<ResumedShow> {
+    let Resumed { mut session, quiz, journal, meta } = Session::resume_latest(root)?.ok_or(AppError::NoShowToResume)?;
+    let media_root = meta.media_root.as_deref().map(PathBuf::from);
+    // The show must go on: without its media it still runs, and the Director says why.
+    let warnings = resume_warnings(&quiz, media_root.as_deref(), meta.rules_changed());
+    let mut game = Game::replay(quiz, &journal);
+    let mut effects = Vec::new();
+    if let Some(command) = game.recovery_command() {
+        (game, effects) = apply_and_journal(&game, Some(&mut session), &Stamped { at_ms, command })?;
+    }
+    Ok(ResumedShow { game, session, media_root: media_root.filter(|root| root.is_dir()), effects, warnings })
+}
+
 /// Resumes the last show. Returns warnings for the quizmaster when the show
 /// runs but not quite as before (`resume_warnings`).
 #[tauri::command]
 fn resume_last_session(app: AppHandle, state: State<AppState>) -> CmdResult<Vec<AppError>> {
     // Locked first: the running show's journal must not be reopened.
     let mut inner = lock_for_new_show(&app, &state)?;
-    let Resumed { session, quiz, journal, meta } = Session::resume_latest(&sessions_root(&app)?)
-        .map_err(|e| AppError::ShowNotRead { detail: e.to_string() })?
-        .ok_or(AppError::NoShowToResume)?;
-    let rules_changed = meta.rules_changed();
-    let media_root = meta.media_root.map(PathBuf::from);
-    // The show must go on: without its media it still runs, and the Director says why.
-    let warnings = resume_warnings(&quiz, media_root.as_deref(), rules_changed);
-    serve_media(&app, &mut inner, media_root.filter(|root| root.is_dir()))?;
-    let game = Game::replay(quiz, &journal);
-    let recovery = game.recovery_command();
-    inner.game = Some(game);
-    inner.session = Some(session);
+    let show = resume_show(&sessions_root(&app)?, now_ms())?;
+    serve_media(&app, &mut inner, show.media_root)?;
+    inner.game = Some(show.game);
+    inner.session = Some(show.session);
+    send_effects(&app, &mut inner, show.effects);
     emit_show_changed(&app, &inner);
-    if let Some(command) = recovery {
-        execute_at(&app, &mut inner, command, now_ms())?;
-    }
-    Ok(warnings)
+    Ok(show.warnings)
 }
 
 /// Closes the running show. Its journal stays on disk, so it can be resumed.
@@ -558,6 +587,83 @@ mod tests {
         let quiz = Quiz::from_json(DEMO_QUIZ).unwrap();
         assert_eq!(serde_json::from_str::<serde_json::Value>(DEMO_QUIZ).unwrap()["schemaVersion"], quiz_core::SCHEMA_VERSION);
         assert_eq!(quiz.validate(), Ok(()));
+    }
+
+    /// Runs a show of the demo quiz journaled under `root` as the app runs
+    /// it, a command a second, then stops without closing anything, as a
+    /// crash does. Gives the show as the windows last saw it.
+    fn run_show_and_crash(root: &Path, commands: Vec<Command>) -> Game {
+        let quiz = Quiz::from_json(DEMO_QUIZ).unwrap();
+        let meta = SessionMeta {
+            quiz_title: quiz.title.clone(),
+            source_path: None,
+            started_ms: 1,
+            media_root: None,
+            rules_version: quiz_core::RULES_VERSION,
+        };
+        let session = Session::create(root, &quiz, &meta).unwrap();
+        let mut inner = Inner {
+            game: Some(Game::new(quiz)),
+            session: Some(session),
+            media_root: None,
+            driver: Box::new(VirtualDriver),
+            teams: Vec::new(),
+            teams_file: None,
+        };
+        for (n, command) in commands.into_iter().enumerate() {
+            apply_journaled(&mut inner, command, 1_000 * (n as u64 + 1)).unwrap();
+        }
+        inner.game.unwrap()
+    }
+
+    fn sessions_dir(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("resume-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        dir
+    }
+
+    /// The demo show up to its first question, with two players and a Czech name.
+    fn up_to_the_first_question() -> Vec<Command> {
+        vec![
+            Command::Press { buzzer: 1, button: quiz_core::Button::Big },
+            Command::AddPlayer { buzzer: 2, name: "Žluťoučký kůň".into() },
+            Command::Next, // the billboard
+            Command::Next, // the question
+            Command::Next, // its clock
+            Command::Press { buzzer: 1, button: quiz_core::Button::A },
+        ]
+    }
+
+    #[test]
+    fn a_show_resumes_after_a_crash_as_the_windows_last_saw_it() {
+        let root = sessions_dir("same");
+        let mut commands = up_to_the_first_question();
+        commands.extend([Command::Press { buzzer: 2, button: quiz_core::Button::C }, Command::Next]);
+        let before = run_show_and_crash(&root, commands);
+        assert!(matches!(before.phase(), quiz_core::Phase::Question(quiz_core::QuestionStep::Revealed { .. })), "{:?}", before.phase());
+
+        let resumed = resume_show(&root, 60_000).unwrap();
+        assert_eq!(resumed.game, before);
+        assert!(resumed.effects.is_empty());
+        assert_eq!(resumed.warnings, []);
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn a_question_a_crash_stopped_restarts_before_any_window_sees_it() {
+        let root = sessions_dir("mid-question");
+        let before = run_show_and_crash(&root, up_to_the_first_question());
+        let slide = before.slide_index();
+        assert_eq!(before.recovery_command(), Some(Command::GoTo { slide }), "{:?}", before.phase());
+
+        let resumed = resume_show(&root, 60_000).unwrap();
+        // What the windows will see is on disk: the restart is journaled.
+        let on_disk = Session::resume_latest(&root).unwrap().unwrap();
+        assert_eq!(on_disk.journal.last(), Some(&Stamped { at_ms: 60_000, command: Command::GoTo { slide } }));
+        assert_eq!(Game::replay(on_disk.quiz, &on_disk.journal), resumed.game);
+        assert_eq!(resumed.game.slide_index(), slide);
+        assert_ne!(resumed.game, before, "the question started again");
+        std::fs::remove_dir_all(&root).unwrap();
     }
 
     #[test]

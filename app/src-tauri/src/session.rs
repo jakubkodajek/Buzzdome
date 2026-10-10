@@ -8,7 +8,7 @@
 //! truncating is how a torn line is cut off on resume and a failed write is
 //! taken back. Every line is written at the end of the whole lines instead.
 
-use quiz_core::{Quiz, Stamped};
+use quiz_core::{Quiz, QuizJsonError, Stamped};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 use std::fs::{self, File, OpenOptions};
@@ -18,6 +18,8 @@ use std::path::{Path, PathBuf};
 const QUIZ_FILE: &str = "quiz.json";
 const META_FILE: &str = "meta.json";
 const JOURNAL_FILE: &str = "journal.jsonl";
+/// The journal as it was before resuming cut a torn last line off it.
+const TORN_JOURNAL_FILE: &str = "journal.jsonl.bak";
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export)]
@@ -57,6 +59,35 @@ pub struct Session {
     broken: bool,
 }
 
+/// Why the last show cannot be read or resumed.
+#[derive(Debug, thiserror::Error)]
+pub enum ResumeError {
+    #[error(transparent)]
+    Io(#[from] io::Error),
+    #[error("meta.json: {0}")]
+    Meta(#[from] serde_json::Error),
+    /// The show's copy of the quiz does not read, such as one from a newer app.
+    #[error(transparent)]
+    Quiz(#[from] QuizJsonError),
+    /// Line `line` (from 1) of the journal is whole but does not read: a
+    /// newer app wrote it, or the disk damaged it. Replaying without it
+    /// would rebuild another show, so the show is not resumed and its
+    /// journal is left as it is.
+    #[error("line {line} of the show's journal does not read")]
+    Damaged { line: usize },
+}
+
+/// Why a command was not journaled, so it must be rejected.
+#[derive(Debug, thiserror::Error)]
+pub enum NotSaved {
+    #[error(transparent)]
+    Io(#[from] io::Error),
+    /// An earlier write failed and could not be taken back, so nothing more
+    /// is appended until the show is resumed, which cuts the torn line off.
+    #[error("the journal could not be repaired after a failed write")]
+    Broken,
+}
+
 /// A session reopened after a restart, with everything needed to rebuild the show.
 pub struct Resumed {
     pub session: Session,
@@ -68,8 +99,7 @@ pub struct Resumed {
 impl Session {
     /// Starts a new session folder under `root`.
     pub fn create(root: &Path, quiz: &Quiz, meta: &SessionMeta) -> io::Result<Session> {
-        let dir = root.join(meta.started_ms.to_string());
-        fs::create_dir_all(&dir)?;
+        let dir = new_dir(root, meta.started_ms)?;
         // A power cut must not lose the new folder (or a sessions folder made
         // just now) or the journal's entry in it, only their unsynced data.
         for created in root.parent().into_iter().chain([root]) {
@@ -84,23 +114,31 @@ impl Session {
     }
 
     /// Reopens the most recent session for appending, with its quiz and journal.
-    pub fn resume_latest(root: &Path) -> io::Result<Option<Resumed>> {
+    pub fn resume_latest(root: &Path) -> Result<Option<Resumed>, ResumeError> {
         let Some(dir) = latest_dir(root)? else { return Ok(None) };
-        let quiz = Quiz::from_json(&fs::read_to_string(dir.join(QUIZ_FILE))?)
-            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
-        let meta: SessionMeta = serde_json::from_str(&fs::read_to_string(dir.join(META_FILE))?)?;
-        let (journal, valid_len) = read_journal(&dir.join(JOURNAL_FILE))?;
-        let file = open_journal(&dir.join(JOURNAL_FILE))?;
-        // Cut off a torn last line so new commands start on a clean line.
-        file.set_len(valid_len)?;
-        file.sync_data()?;
-        let session = Session { journal: file, len: valid_len, broken: false };
+        let quiz = Quiz::from_json(&fs::read_to_string(dir.join(QUIZ_FILE))?)?;
+        let meta = read_meta(&dir)?;
+        let path = dir.join(JOURNAL_FILE);
+        let (journal, whole_len) = read_journal(&path)?;
+        // A torn last line, which no window ever saw, is cut off so new
+        // commands start on a clean line; the journal as it was is kept first,
+        // before the journal is opened for writing.
+        let torn = fs::metadata(&path).is_ok_and(|journal| journal.len() > whole_len);
+        if torn {
+            fs::copy(&path, dir.join(TORN_JOURNAL_FILE))?;
+        }
+        let file = open_journal(&path)?;
+        if torn {
+            file.set_len(whole_len)?;
+            file.sync_data()?;
+        }
+        let session = Session { journal: file, len: whole_len, broken: false };
         Ok(Some(Resumed { session, quiz, journal, meta }))
     }
 
-    pub fn latest_summary(root: &Path) -> io::Result<Option<SessionSummary>> {
+    pub fn latest_summary(root: &Path) -> Result<Option<SessionSummary>, ResumeError> {
         let Some(dir) = latest_dir(root)? else { return Ok(None) };
-        let meta: SessionMeta = serde_json::from_str(&fs::read_to_string(dir.join(META_FILE))?)?;
+        let meta = read_meta(&dir)?;
         let command_count = read_journal(&dir.join(JOURNAL_FILE))?.0.len();
         Ok(Some(SessionSummary { meta, command_count }))
     }
@@ -113,18 +151,22 @@ impl Session {
 
     /// Appends one accepted command and waits until it is on disk. On an
     /// error the command is not in the journal and must be rejected.
-    pub fn append(&mut self, stamped: &Stamped) -> io::Result<()> {
+    pub fn append(&mut self, stamped: &Stamped) -> Result<(), NotSaved> {
         if self.broken {
-            return Err(io::Error::other("the show's journal could not be repaired after a failed write"));
+            return Err(NotSaved::Broken);
         }
-        let mut line = serde_json::to_string(stamped)?;
+        let mut line = serde_json::to_string(stamped).map_err(io::Error::from)?;
         line.push('\n');
         append_line(&mut self.journal, &mut self.len, line.as_bytes()).inspect_err(|e| {
             if let AppendError::Unrepaired(_) = e {
                 self.broken = true;
             }
-        }).map_err(AppendError::into_io)
+        }).map_err(|e| NotSaved::Io(e.into_io()))
     }
+}
+
+fn read_meta(dir: &Path) -> Result<SessionMeta, ResumeError> {
+    Ok(serde_json::from_str(&fs::read_to_string(dir.join(META_FILE))?)?)
 }
 
 /// Opens a journal for writing (and creates it), without append mode: see the module comment.
@@ -198,46 +240,67 @@ fn sync_dir(dir: &Path) -> io::Result<()> {
     quiz_file::sync_dir(dir).map_err(io::Error::other)
 }
 
-/// Session folders are named by start time in milliseconds.
-fn latest_dir(root: &Path) -> io::Result<Option<PathBuf>> {
-    if !root.exists() {
-        return Ok(None);
-    }
-    let mut latest: Option<(u64, PathBuf)> = None;
-    for entry in fs::read_dir(root)? {
+/// The session folders under `root` and their numbers. A folder is named by
+/// its show's start in milliseconds, or a number past the last folder's
+/// when the clock went back (`new_dir`): the latest show has the highest.
+fn session_dirs(root: &Path) -> io::Result<Vec<(u64, PathBuf)>> {
+    let entries = match fs::read_dir(root) {
+        Ok(entries) => entries,
+        Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(e) => return Err(e),
+    };
+    let mut dirs = Vec::new();
+    for entry in entries {
         let path = entry?.path();
-        let Some(started) = path.file_name().and_then(|n| n.to_str()).and_then(|n| n.parse::<u64>().ok()) else {
-            continue;
-        };
-        if path.join(QUIZ_FILE).exists() && latest.as_ref().is_none_or(|(t, _)| started > *t) {
-            latest = Some((started, path));
+        if let Some(number) = path.file_name().and_then(|n| n.to_str()).and_then(|n| n.parse::<u64>().ok()) {
+            dirs.push((number, path));
         }
     }
-    Ok(latest.map(|(_, path)| path))
+    Ok(dirs)
 }
 
-/// Reads the journal and returns the commands plus the byte length of the
-/// valid part. A torn last line (crash during a write) is dropped.
-fn read_journal(path: &Path) -> io::Result<(Vec<Stamped>, u64)> {
-    if !path.exists() {
-        return Ok((Vec::new(), 0));
+/// Makes the folder of a show started at `started_ms`, with a name higher
+/// than every folder's before it, so two shows never share one.
+fn new_dir(root: &Path, started_ms: u64) -> io::Result<PathBuf> {
+    fs::create_dir_all(root)?;
+    let last = session_dirs(root)?.into_iter().map(|(number, _)| number).max();
+    let mut number = last.map_or(started_ms, |last| started_ms.max(last + 1));
+    loop {
+        let dir = root.join(number.to_string());
+        match fs::create_dir(&dir) {
+            Ok(()) => return Ok(dir),
+            Err(e) if e.kind() == io::ErrorKind::AlreadyExists => number += 1,
+            Err(e) => return Err(e),
+        }
     }
-    let text = fs::read_to_string(path)?;
+}
+
+/// The latest show's folder, if any has its quiz.
+fn latest_dir(root: &Path) -> io::Result<Option<PathBuf>> {
+    let mut dirs = session_dirs(root)?;
+    dirs.retain(|(_, path)| path.join(QUIZ_FILE).exists());
+    Ok(dirs.into_iter().max_by_key(|(number, _)| *number).map(|(_, path)| path))
+}
+
+/// Reads the journal: its commands, and the length of its whole lines. A
+/// last line without its newline was being written when the app stopped,
+/// so it was never accepted and is left out; a whole line that does not
+/// read refuses the journal (`ResumeError::Damaged`).
+fn read_journal(path: &Path) -> Result<(Vec<Stamped>, u64), ResumeError> {
+    let bytes = match fs::read(path) {
+        Ok(bytes) => bytes,
+        Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok((Vec::new(), 0)),
+        Err(e) => return Err(e.into()),
+    };
+    let whole = bytes.iter().rposition(|&b| b == b'\n').map_or(0, |last| last + 1);
     let mut commands = Vec::new();
-    let mut valid_len = 0;
-    for line in text.split_inclusive('\n') {
-        if !line.ends_with('\n') {
-            break;
+    for (index, line) in bytes[..whole].split_inclusive(|&b| b == b'\n').enumerate() {
+        let line = line.trim_ascii();
+        if !line.is_empty() {
+            commands.push(serde_json::from_slice(line).map_err(|_| ResumeError::Damaged { line: index + 1 })?);
         }
-        if !line.trim().is_empty() {
-            match serde_json::from_str(line.trim()) {
-                Ok(stamped) => commands.push(stamped),
-                Err(_) => break,
-            }
-        }
-        valid_len += line.len() as u64;
     }
-    Ok((commands, valid_len))
+    Ok((commands, whole as u64))
 }
 
 #[cfg(test)]
@@ -249,6 +312,83 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("buzzdome-test-{name}-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         dir
+    }
+
+    fn meta(started_ms: u64) -> SessionMeta {
+        SessionMeta {
+            quiz_title: format!("show {started_ms}"),
+            source_path: None,
+            started_ms,
+            media_root: None,
+            rules_version: quiz_core::RULES_VERSION,
+        }
+    }
+
+    /// Starts a show under `root` that journals `Next` and a named player.
+    fn journaled_show(root: &Path, started_ms: u64) -> PathBuf {
+        let mut session = Session::create(root, &Quiz::new("T", vec![]), &meta(started_ms)).unwrap();
+        session.append(&Stamped { at_ms: 5, command: Command::Next }).unwrap();
+        session.append(&Stamped { at_ms: 6, command: Command::AddPlayer { buzzer: 1, name: "Šneci".into() } }).unwrap();
+        latest_dir(root).unwrap().unwrap()
+    }
+
+    #[test]
+    fn a_line_torn_inside_a_czech_letter_is_cut_off_and_kept_aside() {
+        let root = temp_root("torn-utf8");
+        let dir = journaled_show(&root, 1);
+        let journal = dir.join(JOURNAL_FILE);
+        let whole = fs::read(&journal).unwrap();
+        // The write stopped between the two bytes of "Š".
+        let torn = [&whole[..], &b"{\"atMs\":7,\"command\":{\"type\":\"addPlayer\",\"buzzer\":2,\"name\":\"\xc5"[..]].concat();
+        fs::write(&journal, &torn).unwrap();
+
+        assert_eq!(Session::latest_summary(&root).unwrap().unwrap().command_count, 2);
+        let resumed = Session::resume_latest(&root).unwrap().unwrap();
+        assert_eq!(resumed.journal.len(), 2);
+        assert_eq!(fs::read(&journal).unwrap(), whole, "the torn line is cut off");
+        assert_eq!(fs::read(dir.join(TORN_JOURNAL_FILE)).unwrap(), torn, "the journal as it was is kept");
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn a_whole_line_that_does_not_read_refuses_the_resume_and_changes_nothing() {
+        let root = temp_root("damaged");
+        let dir = journaled_show(&root, 1);
+        let journal = dir.join(JOURNAL_FILE);
+        let text = fs::read_to_string(&journal).unwrap();
+        let (first, second) = text.split_once('\n').unwrap();
+        // A command from a newer app between two this app knows.
+        let damaged = format!("{first}\n{{\"atMs\":6,\"command\":{{\"type\":\"newerCommand\"}}}}\n{second}");
+        fs::write(&journal, &damaged).unwrap();
+
+        assert!(matches!(Session::latest_summary(&root), Err(ResumeError::Damaged { line: 2 })));
+        assert!(matches!(Session::resume_latest(&root), Err(ResumeError::Damaged { line: 2 })));
+        assert_eq!(fs::read_to_string(&journal).unwrap(), damaged);
+        assert!(!dir.join(TORN_JOURNAL_FILE).exists());
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn the_latest_show_resumes_also_after_the_clock_went_back() {
+        let root = temp_root("clock");
+        journaled_show(&root, 50);
+        let mut later = Session::create(&root, &Quiz::new("T", vec![]), &meta(20)).unwrap();
+        later.append(&Stamped { at_ms: 7, command: Command::Next }).unwrap();
+        let summary = Session::latest_summary(&root).unwrap().unwrap();
+        assert_eq!((summary.meta.started_ms, summary.command_count), (20, 1));
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn two_shows_started_in_one_millisecond_get_a_folder_each() {
+        let root = temp_root("same-ms");
+        journaled_show(&root, 60);
+        Session::create(&root, &Quiz::new("T", vec![]), &meta(60)).unwrap();
+        let mut folders: Vec<u64> = session_dirs(&root).unwrap().into_iter().map(|(number, _)| number).collect();
+        folders.sort();
+        assert_eq!(folders, [60, 61]);
+        assert_eq!(Session::latest_summary(&root).unwrap().unwrap().command_count, 0);
+        fs::remove_dir_all(&root).unwrap();
     }
 
     #[test]

@@ -684,6 +684,23 @@ buttons) are timed the same way: `timed_lock` reads the time before waiting
 for the lock, so a keyboard press made during a burst of buzzer presses
 counts as on time.
 
+Resuming (`resume_show`) reads the latest session folder: the one with the
+highest number, as a folder is named by its show's start in milliseconds,
+or a number past the last folder's when the clock went back, so two shows
+never share one. The journal is read as bytes. Only a last line without its
+newline was being written when the app stopped; it was never accepted, so
+resume cuts it off, after keeping the journal as it was in
+`journal.jsonl.bak`. A whole line that does not read (a newer app wrote it,
+or the disk damaged it) refuses the resume with `journalDamaged` and leaves
+the journal as it is, since replaying without it would rebuild another show.
+A show that stopped mid-question has its question restarted
+(`Game::recovery_command`), and that command is journaled before
+`show-changed` reaches the windows, so no window shows the stopped question.
+The Director keeps a resume problem on screen, under the Resume button,
+until another show loads. When a failed journal write cannot be taken back,
+the session refuses every later command (`journalBroken`) until the show is
+resumed, which cuts the torn line off.
+
 Because a press can be applied a moment after it was received, the core
 judges it by its `at_ms`: it counts only if it was received while the
 question clock ran (or stood paused) and before time up. The clock keeps the

@@ -103,16 +103,17 @@ pub struct Package {
     pub root: PathBuf,
 }
 
-/// Opens a quiz file (`.quiz`, or a plain `quiz.json`), checks it, and unpacks
-/// it into a package folder under `cache`. The folder is named by the content
-/// hash (see `place_package`) and must not be changed afterwards; opening the
-/// same file reuses it.
+/// Opens a quiz file (`.quiz`, or a plain `quiz.json`) for a show, checks
+/// that it plays (`check_playable`), and unpacks it into a package folder
+/// under `cache`. The folder is named by the content hash (see
+/// `place_package`) and must not be changed afterwards; opening the same
+/// file reuses it.
 pub fn open(path: &Path, cache: &Path) -> Result<Package> {
     let incoming = incoming_dir(cache)?;
     let result = unpack(path, &incoming).and_then(|unpacked| {
         // The show plays the file as it is: a media name it would have to
         // rename is a problem to fix in the editor.
-        let quiz = read_checked(&incoming)?;
+        let quiz = read_playable(&incoming)?;
         let root = place_package(cache, &unpacked.hash, &incoming)?;
         Ok(Package { quiz, root })
     });
@@ -134,7 +135,7 @@ const MAX_PACKAGE_FOLDERS: usize = 16;
 fn place_package(cache: &Path, hash: &str, incoming: &Path) -> Result<PathBuf> {
     for n in 0..MAX_PACKAGE_FOLDERS {
         let root = if n == 0 { cache.join(hash) } else { cache.join(format!("{hash}-{n}")) };
-        if read_checked(&root).is_ok() {
+        if read_playable(&root).is_ok() {
             remove_dir(incoming);
             return Ok(root);
         }
@@ -222,11 +223,11 @@ fn set_aside(dir: &Path, cache: &Path) {
     }
 }
 
-/// Reads and checks the package in `root`: the quiz is valid and every media
-/// file it uses is there.
-pub fn read_checked(root: &Path) -> Result<Quiz> {
+/// Reads `quiz.json` from the package folder `root` and refuses a quiz a
+/// show cannot play (`check_playable`).
+fn read_playable(root: &Path) -> Result<Quiz> {
     let quiz = read_quiz_json(root)?;
-    check(&quiz, root)?;
+    check_playable(&quiz, root)?;
     Ok(quiz)
 }
 
@@ -1066,7 +1067,9 @@ mod tests {
         let mut quiz = open_into(&file, &draft).unwrap().quiz;
         quiz.title = "Edited".into();
         write_quiz_json(&draft, &quiz).unwrap();
-        assert_eq!(read_checked(&draft).unwrap().title, "Edited");
+        let written = read_quiz_json(&draft).unwrap();
+        assert_eq!(written.title, "Edited");
+        check(&written, &draft).unwrap();
         // Opening into an existing folder is refused, nothing is replaced.
         assert!(open_into(&file, &draft).is_err());
     }
@@ -1103,6 +1106,20 @@ mod tests {
         fs::remove_file(package.root.join("media/flag.png")).unwrap();
         let missing = Problem::Media { file: "media/flag.png".into(), issue: MediaIssue::Missing };
         assert!(matches!(check_playable(&quiz, &package.root), Err(QuizFileError::Invalid(found)) if found == [ValidationError { slide_id: Some("intro".into()), problem: missing }]));
+    }
+
+    #[test]
+    fn a_show_opens_a_quiz_file_whose_categories_have_problems() {
+        let mut quiz = quiz_with_picture("media/flag.png");
+        quiz.categories = vec![Category::new("c1", "Sport")];
+        quiz.categories[0].background = Some(Background::new("media/stadium.mp4"));
+        let file = zip_of("broken-category", &[(QUIZ_JSON, &serde_json::to_vec(&quiz).unwrap()), ("media/flag.png", b"png")]);
+        let cache = temp("broken-category-cache");
+        let package = open(&file, &cache).unwrap();
+        assert!(check(&package.quiz, &package.root).is_err());
+        // The folder it unpacked to is reused, not set aside as broken.
+        assert_eq!(open(&file, &cache).unwrap().root, package.root);
+        assert_eq!(fs::read_dir(&cache).unwrap().count(), 1);
     }
 
     #[test]

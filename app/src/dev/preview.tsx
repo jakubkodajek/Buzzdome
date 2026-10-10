@@ -57,6 +57,8 @@ const playing = params.get("media");
 const theme = params.get("theme");
 /** A design to draw the scene's question clock in (`TimerDesign`); the slide's own when missing. */
 const timer = params.get("timer") as TimerDesign | null;
+/** `damaged`: the last show's journal does not read; `failing`: resuming the last show fails. */
+const resume = params.get("resume");
 
 const NAMES = ["Kvízožrouti", "U Tří Lvů", "Mozkovna", "Hospodští géniové", "Tým Rychlík", "Bezejmenní", "Šprti", "Lvíčata"];
 
@@ -516,8 +518,10 @@ mockIPC(
         // Served by Vite from this folder (see the convertFileSrc mock below).
         return "/src/dev/";
       case "resume_last_session":
+        if (resume === "failing") return Promise.reject({ code: "showNotSaved", detail: "No space left on device (os error 28)" });
         return [];
       case "last_session":
+        if (resume === "damaged") return Promise.reject({ code: "journalDamaged", line: 58 });
         return { meta: { quizTitle: quiz.title, sourcePath: null, startedMs: Date.now() - 3_600_000 }, commandCount: 57 };
       case "editor_load":
         return { quiz: editorQuiz, sourcePath: "C:\\Kvizy\\hospodsky-kviz.quiz", unsaved: false, mediaRoot: "/src/dev/", problems: [], dropped: [] };
