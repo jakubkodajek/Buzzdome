@@ -191,6 +191,11 @@ const SCENES: Record<string, GameView | null> = {
     phase: { phase: "question", step: "ready" },
     slide: { ...quiz.slides[1], picture: "media/landscape.svg", sound: SONG },
   }),
+  // The same question revealed: the song's replay part plays after its delay.
+  pictureRevealed: view({
+    phase: { phase: "question", step: "revealed", winner: null },
+    slide: { ...quiz.slides[1], picture: "media/landscape.svg", sound: SONG },
+  }),
   billboardPicture: view({ phase: { phase: "billboard" }, slideIndex: 0, slide: { ...quiz.slides[0], picture: "media/landscape.svg" } }),
   background: view({ phase: { phase: "billboard" }, slideIndex: 0, slide: { ...quiz.slides[0], background: BACKGROUND } }),
   // A question's video in each step, with its effect fading over the answer time.

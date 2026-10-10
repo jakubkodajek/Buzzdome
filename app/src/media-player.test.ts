@@ -2,16 +2,16 @@ import { describe, expect, it } from "vitest";
 import { MAX_BOARD_COLUMNS } from "./bindings/Constants";
 import type { LibraryFile, NowPlaying, SoundBoard } from "./types";
 import { msToEnd, padColor, positionAt, progressOf, searchFiles, shownRows } from "./media-player";
+// The cases quiz-core tests `NowPlaying::position_at` with.
+import POSITION_CASES from "../../crates/quiz-core/tests/data/position-at.json";
 
 const SONG: NowPlaying = { id: 1, reference: "media/song.mp3", kind: "audio", positionMs: 2_000, sinceMs: 10_000 };
 const PAUSED: NowPlaying = { ...SONG, sinceMs: null };
 
 describe("media player", () => {
-  it("counts the position on from where the file last started", () => {
-    expect(positionAt(SONG, 10_500)).toBe(2_500);
-    expect(positionAt(PAUSED, 99_000)).toBe(2_000);
-    // A clock read just before the start does not go back.
-    expect(positionAt(SONG, 9_990)).toBe(2_000);
+  it("counts the position as the core does", () => {
+    expect(POSITION_CASES.length).toBeGreaterThan(0);
+    for (const { name, positionMs, sinceMs, atMs, expected } of POSITION_CASES) expect(positionAt({ ...SONG, positionMs, sinceMs }, atMs), name).toBe(expected);
   });
 
   it("lays the shown pads out row by row in their places of the largest grid", () => {

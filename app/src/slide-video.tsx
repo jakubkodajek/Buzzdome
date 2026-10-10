@@ -7,6 +7,7 @@
 import { useEffect, useLayoutEffect, useRef, type RefObject } from "react";
 import { timeLeft } from "./answer-time";
 import { PartPlayer } from "./audio/clip-player";
+import { useReplay } from "./audio/replay";
 import { useLatest } from "./hooks";
 import type { ClockView, GameView, VideoClip, VideoEffect } from "./types";
 import { blurRadius, mosaicColumns } from "./video-effect";
@@ -15,7 +16,7 @@ import { blurRadius, mosaicColumns } from "./video-effect";
 export function ShowVideo({ clip, url, view, clock }: { clip: VideoClip; url: string; view: GameView; clock: ClockView | null }) {
   const video = useRef<HTMLVideoElement>(null);
   const mosaic = useRef<HTMLCanvasElement>(null);
-  useSlideVideo(video, clip, view);
+  useSlideVideo(video, url, clip, view);
   useVideoEffect(video, mosaic, clip.effect, view, clock);
   return (
     <>
@@ -32,7 +33,7 @@ export function ShowVideo({ clip, url, view, clock }: { clip: VideoClip; url: st
  * (`onHold`) and goes on after, unless the quizmaster played it while the
  * show held. Once the answer is revealed it plays its replay part.
  */
-function useSlideVideo(element: RefObject<HTMLVideoElement | null>, clip: VideoClip, view: GameView) {
+function useSlideVideo(element: RefObject<HTMLVideoElement | null>, url: string, clip: VideoClip, view: GameView) {
   const player = useRef<PartPlayer | null>(null);
   /** The video was started and plays unless the show holds. */
   const started = useRef(false);
@@ -87,18 +88,11 @@ function useSlideVideo(element: RefObject<HTMLVideoElement | null>, clip: VideoC
     else if (!part.finished) part.play(current.part, { loop: current.repeat });
   }, [onHold, latest]);
 
+  // After the hold above, which a reveal can end in the same view.
   const revealed = view.phase.phase === "question" && view.phase.step === "revealed";
-  useEffect(() => {
-    const part = player.current;
-    const replay = latest.current.clip.replay;
-    if (!part || !revealed || !replay) return;
-    part.stop();
-    const timer = setTimeout(() => {
-      replaying.current = true;
-      part.play(replay.part, { fromMs: replay.part.fromMs });
-    }, replay.delayMs);
-    return () => clearTimeout(timer);
-  }, [revealed, latest]);
+  useReplay(player, url, revealed, clip.replay, () => {
+    replaying.current = true;
+  });
 }
 
 /**

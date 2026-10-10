@@ -98,8 +98,9 @@ two windows cannot disagree with each other or with the score.
   `app/src/audio/`: `context.ts` (one shared `AudioContext`), `cues.ts` (game
   effects), `clip-player.ts` (`PartPlayer` plays a part of any media
   element, looping or stopping at its end; `ClipPlayer` adds a sound file
-  at volume × loudness gain), `slide-sound.ts` (when a slide's sound plays, and its replay part
-  after the reveal), `loudness.ts` (ITU-R BS.1770-4 measurement and the gain
+  at volume × loudness gain), `slide-sound.ts` (when a slide's sound plays),
+  `replay.ts` (the replay part after the reveal, for a slide's sound and
+  its video alike), `loudness.ts` (ITU-R BS.1770-4 measurement and the gain
   that reaches a target) and `decode.ts`.
   - A gain above 1 goes through a Web Audio `GainNode` (an element's
     `volume` stops at 1). That needs the media response to allow the
@@ -124,7 +125,8 @@ two windows cannot disagree with each other or with the score.
   to the journaled `PlayVideo` command, so a Play video given before the
   projector window opened, or before a restart, still reaches it. Once
   started it follows `onHold` like a synced background, and after the
-  reveal it plays its replay part. The effect's strength is `timeLeft`
+  reveal it plays its replay part (`useReplay`, after the hold, since a
+  reveal can end a hold in the same view). The effect's strength is `timeLeft`
   (`answer-time.ts`, also the clock gauge's fill), read between the
   250 ms clock ticks from the time since the last tick, every frame; blur
   is a CSS filter, the mosaic draws the frame at a few blocks per row on a
@@ -398,7 +400,11 @@ packages users will install are read the same way.
   sends `ended` when a sound or video reaches its end, so a video ends
   even with the projector closed; `ended` names the start (`id`), so the
   end of an earlier file stops nothing. The slide's sound and video pads
-  play through the show (`useSlideSound`, `PlayVideo`).
+  play through the show (`useSlideSound`, `PlayVideo`). The one rule the
+  UI repeats instead of asking the core is where a file stands
+  (`positionAt` in `media-player.ts`, `NowPlaying::position_at`): the
+  Director needs it every frame for the pads' countdowns. Both are tested
+  with the same cases (`crates/quiz-core/tests/data/position-at.json`).
 
 ## 2. Buzzer link
 

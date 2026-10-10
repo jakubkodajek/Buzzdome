@@ -167,6 +167,27 @@ mod tests {
         PlayerCommand::Play { reference: reference.into() }
     }
 
+    /// The UI's `positionAt` (media-player.ts) repeats `position_at` for the
+    /// Director's every frame; both are tested with these cases (design.md).
+    #[test]
+    fn the_position_keeps_the_rule_the_ui_repeats() {
+        #[derive(Deserialize)]
+        #[serde(rename_all = "camelCase")]
+        struct Case {
+            name: String,
+            position_ms: u64,
+            since_ms: Option<u64>,
+            at_ms: u64,
+            expected: u64,
+        }
+        let cases: Vec<Case> = serde_json::from_str(include_str!("../tests/data/position-at.json")).unwrap();
+        assert!(!cases.is_empty());
+        for case in cases {
+            let now = NowPlaying { id: 1, reference: SONG.into(), kind: MediaKind::Audio, position_ms: case.position_ms, since_ms: case.since_ms };
+            assert_eq!(now.position_at(case.at_ms), case.expected, "{}", case.name);
+        }
+    }
+
     #[test]
     fn a_file_plays_pauses_and_goes_on_where_it_stood() {
         let board = board(PadClick::Stop);

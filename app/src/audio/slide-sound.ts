@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useMediaUrl } from "../media";
 import type { GameView, Span } from "../types";
 import { ClipPlayer, linearGain } from "./clip-player";
+import { useReplay } from "./replay";
 
 export interface SlideSound {
   /** The current slide has a sound that can be played. */
@@ -26,16 +27,8 @@ export function useSlideSound(view: GameView | null): SlideSound {
   const repeat = sound?.repeat ?? false;
   const gain = sound ? linearGain(sound.volume, sound.gainDb) : 1;
   const [fromMs, toMs] = [sound?.part.fromMs ?? 0, sound?.part.toMs ?? null];
-  const replay = sound?.replay ?? null;
-  const [replayFromMs, replayToMs, replayDelayMs] = [replay?.part.fromMs ?? 0, replay?.part.toMs ?? null, replay?.delayMs ?? null];
   const player = useRef<ClipPlayer | null>(null);
-  const pendingReplay = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [playing, setPlaying] = useState(false);
-
-  const cancelReplay = useCallback(() => {
-    if (pendingReplay.current !== null) clearTimeout(pendingReplay.current);
-    pendingReplay.current = null;
-  }, []);
 
   // One player per slide; leaving the slide stops it.
   useEffect(() => {
@@ -45,12 +38,11 @@ export function useSlideSound(view: GameView | null): SlideSound {
     player.current = clip;
     if (start === "onSlide") clip.play(part(fromMs, toMs), { loop: repeat });
     return () => {
-      cancelReplay();
       clip.dispose();
       player.current = null;
       setPlaying(false);
     };
-  }, [url, slideIndex, start, repeat, gain, fromMs, toMs, cancelReplay]);
+  }, [url, slideIndex, start, repeat, gain, fromMs, toMs]);
 
   // "With the clock": runs and pauses with the question clock.
   const step = view?.phase.phase === "question" ? view.phase.step : null;
@@ -63,17 +55,7 @@ export function useSlideSound(view: GameView | null): SlideSound {
   }, [clockRunning, start, repeat, fromMs, toMs, url, slideIndex]);
 
   // The replay part, once the answer is on screen.
-  const revealed = step === "revealed";
-  useEffect(() => {
-    const clip = player.current;
-    if (!clip || !revealed || replayDelayMs === null) return;
-    clip.stop();
-    pendingReplay.current = setTimeout(() => {
-      pendingReplay.current = null;
-      clip.play(part(replayFromMs, replayToMs), { fromMs: replayFromMs });
-    }, replayDelayMs);
-    return cancelReplay;
-  }, [revealed, replayFromMs, replayToMs, replayDelayMs, url, slideIndex, cancelReplay]);
+  const cancelReplay = useReplay(player, url, step === "revealed", sound?.replay ?? null);
 
   const playNow = useCallback(() => {
     cancelReplay();
