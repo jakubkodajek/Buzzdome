@@ -147,8 +147,7 @@ export function PartTimes({ parts, durationMs }: { parts: PartEditing; durationM
 
 /** The trim windows' keys: Space plays or stops, I and O set the start and the end; also on a slider, which takes no typing. */
 export function onPartKeys(event: KeyboardEvent, keys: { togglePlay: () => void; setStart: () => void; setEnd: () => void }) {
-  const slider = event.target instanceof HTMLInputElement && event.target.type === "range";
-  if ((isTypingTarget(event.target) && !slider) || event.ctrlKey || event.metaKey || event.altKey) return;
+  if (isTypingTarget(event.target) || event.ctrlKey || event.metaKey || event.altKey) return;
   const run = { " ": keys.togglePlay, i: keys.setStart, o: keys.setEnd }[event.key.toLowerCase()];
   if (!run) return;
   event.preventDefault();

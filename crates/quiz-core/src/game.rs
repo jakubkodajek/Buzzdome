@@ -15,8 +15,10 @@ pub type BuzzerId = u16;
 /// the same commands give another show: a resumed show begun under another
 /// version is rebuilt with today's rules, and the Director says its scores
 /// may differ. 1: refused presses that were journaled count (N3), and
-/// renaming a player takes the name from another buzzer (R17).
-pub const RULES_VERSION: u32 = 1;
+/// renaming a player takes the name from another buzzer (R17). 2: a
+/// question in play restarts with `RestartQuestion`, which takes its score
+/// changes back, and refuses `GoTo` and `GoToFinal` (A3).
+pub const RULES_VERSION: u32 = 2;
 
 /// Steps of the final score reveal: drum roll, 3rd, 2nd, 1st, full ranking.
 pub const FINAL_LAST_STEP: u8 = 4;
@@ -99,15 +101,20 @@ pub enum Command {
     Press { buzzer: BuzzerId, button: Button },
     /// Advance the show one step (Space in the original).
     Next,
-    /// Jump to a slide; a question there starts from the beginning.
+    /// Jump to a slide; a question there starts from the beginning. Refused
+    /// while a question is in play (`Controls::go_to`).
     #[serde(rename_all = "camelCase")]
     GoTo { slide: usize },
-    /// Skip the remaining slides and show the final scores.
+    /// Skip the remaining slides and show the final scores; refused as `GoTo` is.
     GoToFinal,
     PauseClock,
     ResumeClock,
     /// End the running question now (time up, or the quizmaster ends it).
     CloseQuestion,
+    /// Start the question in play again, as after a crash
+    /// (`Game::recovery_command`): its score changes are taken back, and it
+    /// waits for `Next` to start its clock.
+    RestartQuestion,
     JudgeRight,
     JudgeWrong,
     #[serde(rename_all = "camelCase")]
@@ -167,6 +174,8 @@ pub struct Controls {
     pub resume_clock: bool,
     pub close_question: bool,
     pub play_video: bool,
+    /// `GoTo` and `GoToFinal`: not while a question is in play.
+    pub go_to: bool,
 }
 
 /// A countdown that can pause. `limit_ms == None` means untimed.
@@ -375,12 +384,14 @@ impl Game {
     /// question starts again (as in the original, §9.1). Returns the command
     /// to apply and journal, if one is needed.
     pub fn recovery_command(&self) -> Option<Command> {
-        match &self.phase {
-            Phase::Question(QuestionStep::Running { .. } | QuestionStep::Buzzed { .. }) => {
-                Some(Command::GoTo { slide: self.slide })
-            }
-            _ => None,
-        }
+        self.question_in_play().then_some(Command::RestartQuestion)
+    }
+
+    /// A question's clock runs (or stands paused), or a buzz waits for the
+    /// quizmaster's judgement: leaving the slide would throw the question's
+    /// score changes away with it.
+    fn question_in_play(&self) -> bool {
+        matches!(self.phase, Phase::Question(QuestionStep::Running { .. } | QuestionStep::Buzzed { .. }))
     }
 
     pub fn quiz(&self) -> &Quiz {
@@ -489,6 +500,7 @@ impl Game {
             resume_clock: running.is_some_and(|clock| !clock.is_running()),
             close_question: running.is_some(),
             play_video: self.shows_video(),
+            go_to: !self.question_in_play(),
         }
     }
 
@@ -559,9 +571,9 @@ impl Game {
                 if *slide >= self.quiz.slides.len() {
                     return Err(GameError::NoSuchSlide(*slide));
                 }
-                Ok(self.enter_slide(*slide))
+                self.jump_to(*slide)
             }
-            Command::GoToFinal => Ok(self.enter_slide(self.quiz.final_slide().unwrap_or(self.quiz.slides.len()))),
+            Command::GoToFinal => self.jump_to(self.quiz.final_slide().unwrap_or(self.quiz.slides.len())),
             Command::PauseClock => match &mut self.phase {
                 Phase::Question(QuestionStep::Running { clock }) if clock.is_running() => {
                     clock.pause(now);
@@ -587,6 +599,17 @@ impl Game {
                 }
                 _ => Err(GameError::NotNow),
             },
+            Command::RestartQuestion => {
+                if !self.question_in_play() {
+                    return Err(GameError::NotNow);
+                }
+                for (buzzer, delta) in std::mem::take(&mut self.deltas) {
+                    if let Some(player) = self.players.get_mut(&buzzer) {
+                        player.add_score(-delta);
+                    }
+                }
+                Ok(self.enter_slide(self.slide))
+            }
             Command::JudgeRight => self.judge(true, now),
             Command::JudgeWrong => self.judge(false, now),
             Command::AddPlayer { buzzer, name } => {
@@ -813,6 +836,13 @@ impl Game {
             })
             .collect();
         Some(Effect::Lights { lights })
+    }
+
+    fn jump_to(&mut self, index: usize) -> Result<Vec<Effect>, GameError> {
+        if self.question_in_play() {
+            return Err(GameError::NotNow);
+        }
+        Ok(self.enter_slide(index))
     }
 
     fn enter_slide(&mut self, index: usize) -> Vec<Effect> {

@@ -1,4 +1,4 @@
-import { open } from "@tauri-apps/plugin-dialog";
+import { ask, open } from "@tauri-apps/plugin-dialog";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { api } from "../api";
 import { AppProvider, useApp, useDispatch, useRun } from "../app-context";
@@ -28,7 +28,7 @@ import {
 import { keyHint, KEYS, useShortcuts } from "../keyboard";
 import { MediaRootContext } from "../media";
 import { phaseLabel } from "../phase";
-import { slideContext } from "../quiz";
+import { quizOpenFilter, slideContext } from "../quiz";
 import { ThemeContext, ThemesProvider, useResolvedTheme, useThemes } from "../theme/context";
 import { isThemeMissing } from "../theme/themes";
 import type { GameView, Quiz } from "../types";
@@ -210,7 +210,7 @@ function CommandPanel(props: { view: GameView | null; projector: ProjectorSettin
   const problem = resumeProblem ?? last.problem;
 
   const openQuiz = async () => {
-    const path = await open({ multiple: false, filters: [{ name: t("quizFiles"), extensions: ["quiz", "json"] }] });
+    const path = await open({ multiple: false, filters: [quizOpenFilter(t)] });
     if (typeof path === "string") run(api.startShowFromFile(path));
   };
 
@@ -282,7 +282,12 @@ function CommandPanel(props: { view: GameView | null; projector: ProjectorSettin
         (testRun ? (
           <CommandButton icon={<BackIcon />} label={t("backToEditor")} onClick={() => run(api.endShow().then(onEditor))} />
         ) : (
-          <CommandButton icon={<PowerIcon />} label={t("endShow")} tone="bad" onClick={() => run(api.endShow())} />
+          <CommandButton
+            icon={<PowerIcon />}
+            label={t("endShow")}
+            tone="bad"
+            onClick={() => run(ask(t("endShowConfirm"), { kind: "warning" }).then((yes) => (yes ? api.endShow() : undefined)))}
+          />
         ))}
     </aside>
   );

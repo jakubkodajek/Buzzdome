@@ -25,10 +25,11 @@ fn variant(command: &Command) -> usize {
         Command::AdjustScore { .. } => 14,
         Command::ShowLeaderboard { .. } => 15,
         Command::PlayVideo => 16,
+        Command::RestartQuestion => 17,
     }
 }
 
-const VARIANTS: usize = 17;
+const VARIANTS: usize = 18;
 
 fn samples() -> Vec<Command> {
     vec![
@@ -49,6 +50,7 @@ fn samples() -> Vec<Command> {
         Command::AdjustScore { buzzer: 3, delta: -25 },
         Command::ShowLeaderboard { visible: true },
         Command::PlayVideo,
+        Command::RestartQuestion,
     ]
 }
 

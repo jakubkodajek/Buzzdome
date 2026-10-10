@@ -20,7 +20,7 @@ use ts_rs::TS;
 use std::collections::VecDeque;
 use std::path::Path;
 use std::sync::mpsc;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, MutexGuard};
 use tauri::{AppHandle, Emitter, Manager};
 
 const SETTINGS_FILE: &str = "receiver.json";
@@ -153,22 +153,11 @@ impl Hardware {
 
     /// Ends learn mode, if on, so presses play again.
     fn end_learning(&self, app: &AppHandle) {
-        if self.learn.lock().unwrap().take().is_some() {
-            let _ = app.emit("receiver-learn", self.learn_progress());
-        }
+        stop_learning(&mut self.learn.lock().unwrap(), app);
     }
 
     fn learn_progress(&self) -> LearnProgress {
-        match self.learn.lock().unwrap().as_ref() {
-            Some(r) => LearnProgress {
-                active: true,
-                buzzer: Some(r.buzzer),
-                button: Some(r.button),
-                samples: r.sample_count(),
-                can_save: r.can_save(),
-            },
-            None => LearnProgress { active: false, buzzer: None, button: None, samples: 0, can_save: false },
-        }
+        progress(self.learn.lock().unwrap().as_ref())
     }
 
     fn connected_device(&self) -> Option<DeviceInfo> {
@@ -179,11 +168,46 @@ impl Hardware {
     }
 }
 
-/// Ends learn mode for a new show: during a show every press must play.
-pub fn end_learning(app: &AppHandle) {
-    if let Some(hw) = app.try_state::<Hardware>() {
-        hw.end_learning(app);
+/// What the Receiver tab shows of learn mode.
+fn progress(recorder: Option<&Recorder>) -> LearnProgress {
+    match recorder {
+        Some(r) => LearnProgress {
+            active: true,
+            buzzer: Some(r.buzzer),
+            button: Some(r.button),
+            samples: r.sample_count(),
+            can_save: r.can_save(),
+        },
+        None => LearnProgress { active: false, buzzer: None, button: None, samples: 0, can_save: false },
     }
+}
+
+/// Ends the learn mode in `learn`, if on, and tells the windows.
+fn stop_learning(learn: &mut Option<Recorder>, app: &AppHandle) {
+    if learn.take().is_some() {
+        let _ = app.emit("receiver-learn", progress(None));
+    }
+}
+
+/// Starts learning `button` of `buzzer` in `learn`, unless a show runs: in
+/// a show every press must play, and learn mode drops them (A14).
+fn start_learning(learn: &mut Option<Recorder>, show_running: bool, buzzer: BuzzerId, button: Button) -> CmdResult<()> {
+    if show_running {
+        return Err(AppError::ShowRunning);
+    }
+    *learn = Some(Recorder::new(buzzer, button));
+    Ok(())
+}
+
+/// Ends learn mode for a new show, as during a show every press must play.
+/// Gives the learn lock, to keep until the show state is locked, so learn
+/// mode cannot start in between: `receiver_learn_start` too takes the learn
+/// lock first, then the show's.
+pub fn end_learning(app: &AppHandle) -> Option<MutexGuard<'_, Option<Recorder>>> {
+    let hw = app.try_state::<Hardware>()?.inner();
+    let mut learn = hw.learn.lock().unwrap();
+    stop_learning(&mut learn, app);
+    Some(learn)
 }
 
 /// Moves receiver events into the game and out to the windows.
@@ -258,7 +282,8 @@ pub fn receiver_learn_start(app: AppHandle, hw: tauri::State<Hardware>, buzzer: 
     if hw.connected_device().is_none() {
         return Err(AppError::ReceiverNotConnected);
     }
-    *hw.learn.lock().unwrap() = Some(Recorder::new(buzzer, button));
+    // The learn lock first, then the show's, as for a new show (`end_learning`).
+    start_learning(&mut hw.learn.lock().unwrap(), crate::show_running(&app), buzzer, button)?;
     let _ = app.emit("receiver-learn", hw.learn_progress());
     Ok(())
 }
@@ -327,6 +352,15 @@ pub fn receiver_udev_rule(hw: tauri::State<Hardware>) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn learn_mode_does_not_start_during_a_show() {
+        let mut learn = None;
+        assert_eq!(start_learning(&mut learn, true, 3, Button::A), Err(AppError::ShowRunning));
+        assert!(learn.is_none());
+        start_learning(&mut learn, false, 3, Button::A).unwrap();
+        assert_eq!(learn.map(|r| (r.buzzer, r.button)), Some((3, Button::A)));
+    }
 
     fn hardware(settings_path: std::path::PathBuf) -> Hardware {
         let (settings_file, settings) = AppFile::load(settings_path);

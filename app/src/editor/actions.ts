@@ -3,7 +3,7 @@
 
 import { useEffect, type ReactNode } from "react";
 import { useLatest } from "../hooks";
-import { isTypingTarget } from "../keyboard";
+import { isFieldTarget } from "../keyboard";
 
 export interface Action {
   label: string;
@@ -101,7 +101,7 @@ export function useActionKeys(actions: Action[]) {
     const onKey = (event: KeyboardEvent) => {
       const combo = keyCombo(event);
       // Fields keep their keys, and a focused button its Enter.
-      const typing = isTypingTarget(event.target) || (combo === "Enter" && event.target instanceof HTMLButtonElement);
+      const typing = isFieldTarget(event.target) || (combo === "Enter" && event.target instanceof HTMLButtonElement);
       const action = latest.current.find((a) => a.keys?.includes(combo) && (a.inFields || !typing));
       if (!action) return;
       event.preventDefault();
