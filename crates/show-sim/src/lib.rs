@@ -327,9 +327,22 @@ impl Show {
         for player in &view.players {
             assert_eq!(player.rank.is_some(), player.enabled, "rank of buzzer {}", player.buzzer);
         }
-        let mut ranks: Vec<usize> = view.players.iter().filter_map(|p| p.rank).collect();
-        ranks.sort_unstable();
-        assert_eq!(ranks, (1..=enabled).collect::<Vec<_>>(), "ranks are not 1 to {enabled}");
+        // The view's places are the game's (`Game::ranking`), best first: the
+        // first is 1, a player shares the place above or takes its own in the
+        // order (1, 1, 3), and a better place never has a lower score.
+        let ranking = game.ranking();
+        assert_eq!(ranking.len(), enabled);
+        for (i, &(place, player)) in ranking.iter().enumerate() {
+            let rank = view.players.iter().find(|p| p.buzzer == player.buzzer).and_then(|p| p.rank);
+            assert_eq!(rank, Some(place), "rank of buzzer {}", player.buzzer);
+            let Some(&(above_place, above)) = i.checked_sub(1).and_then(|above| ranking.get(above)) else {
+                assert_eq!(place, 1, "the best place is not 1");
+                continue;
+            };
+            assert!(place == above_place || place == i + 1, "place {place} after place {above_place} as number {}", i + 1);
+            assert!(above.score >= player.score, "place {above_place} scores {} and place {place} scores {}", above.score, player.score);
+            assert!(place != above_place || above.score == player.score, "a shared place {place} with scores {} and {}", above.score, player.score);
+        }
         if let Some(clock) = game.clock_view(self.now) {
             if let (Some(limit), Some(remaining)) = (clock.limit_ms, clock.remaining_ms) {
                 assert!(remaining <= limit && clock.elapsed_ms <= limit);
