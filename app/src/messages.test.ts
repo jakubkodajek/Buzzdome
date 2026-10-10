@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { translator } from "./i18n";
-import { errorText, problemText, protocolText, receiverProblemText } from "./messages";
+import { errorText, importIssueText, placesText, problemText, protocolText, receiverProblemText } from "./messages";
 
 const cs = translator("cs");
 const en = translator("en");
@@ -48,6 +48,24 @@ describe("problemText", () => {
       "media/a.txt: musí to být obrázek (png, jpg, jpeg, webp, gif, svg) nebo video (mp4, webm)",
     );
     expect(problemText(en, { code: "media", file: "media/a.png", issue: { type: "missing" } })).toBe("media/a.png: the file is missing");
+  });
+});
+
+describe("import notes", () => {
+  it("word each issue with its parameters and leave the format's own braces", () => {
+    expect(importIssueText(en, { code: "badSetting", column: "VIDEO", setting: "speed", value: "500" })).toBe(
+      "Setting speed=500 in column VIDEO is not valid; the default was kept.",
+    );
+    expect(importIssueText(cs, { code: "linkedFile" })).toContain("označené {L}");
+    expect(importIssueText(en, { code: "notEveryone", answers: 5 })).toContain("with 5 answers");
+  });
+
+  it("list the rows by sheet, a few of them", () => {
+    expect(placesText(en, [{ sheet: "", row: 4 }])).toBe("row 4");
+    const rows = [3, 5, 7].map((row) => ({ sheet: "Round 1", row }));
+    expect(placesText(cs, [...rows, { sheet: "Round 2", row: 2 }])).toBe("list „Round 1“, řádky 3, 5, 7; list „Round 2“, řádek 2");
+    const many = Array.from({ length: 11 }, (_, i) => ({ sheet: "", row: i + 2 }));
+    expect(placesText(en, many)).toBe("rows 2, 3, 4, 5, 6, 7, 8, 9 and 3 more");
   });
 });
 

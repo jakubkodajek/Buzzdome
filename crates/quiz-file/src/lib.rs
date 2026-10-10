@@ -7,8 +7,12 @@
 //! working (and resumes after a crash) even if the original file is moved,
 //! and opening the same file twice reuses the same folder.
 
+mod sheet;
+
+pub use sheet::{export_sheet, import_sheet, read_tables, SheetExport, SheetImport};
+
 use quiz_core::{
-    is_safe_reference, portable_name, portable_reference, MediaIssue, Problem, Quiz, QuizJsonError, ValidationError,
+    is_safe_reference, portable_name, portable_reference, MediaIssue, Problem, Quiz, QuizJsonError, SheetError, ValidationError,
     MEDIA_PREFIX,
 };
 use serde::Serialize;
@@ -62,6 +66,10 @@ pub enum QuizFileError {
     TooManyFiles,
     #[error("the quiz has problems: {}", .0.iter().map(ToString::to_string).collect::<Vec<_>>().join("; "))]
     Invalid(Vec<ValidationError>),
+    #[error("the spreadsheet cannot be read: {0}")]
+    Spreadsheet(String),
+    #[error("{0}")]
+    Sheet(#[from] SheetError),
 }
 
 type Result<T> = std::result::Result<T, QuizFileError>;
@@ -314,25 +322,31 @@ impl MediaSource<'_> {
 
 /// Copies a media file into the package folder `root` and returns its
 /// reference (`media/<name>`). A file with the same name and contents is
-/// reused; a different one with the same name gets a number added. A copy
-/// that fails leaves nothing behind: it is written under a name no media
-/// file has (`.part`) and renamed when complete.
+/// reused; a different one with the same name gets a number added.
 pub fn import_media(root: &Path, source: MediaSource) -> Result<String> {
-    let first = format!("{MEDIA_PREFIX}{}", portable_name(&source.name()));
+    place_file(root, &format!("{MEDIA_PREFIX}{}", portable_name(&source.name())), source)
+}
+
+/// Copies `source` to `folder/name` and returns the name. A file with that
+/// name and the same contents is reused; a different one keeps its place
+/// and the copy gets a number added (see `numbered`). A copy that fails
+/// leaves nothing behind: it is written under a name no media file has
+/// (`.part`) and renamed when complete.
+fn place_file(folder: &Path, name: &str, source: MediaSource) -> Result<String> {
     for n in 1.. {
-        let reference = numbered(&first, n);
-        let path = root.join(&reference);
+        let name = numbered(name, n);
+        let path = folder.join(&name);
         if !path.exists() {
-            let partial = format!("{reference}.part");
-            let copied = source.write_to(root, &partial).and_then(|_| fs::rename(root.join(&partial), &path).context(FileAction::Move, &path));
+            let partial = format!("{name}.part");
+            let copied = source.write_to(folder, &partial).and_then(|_| fs::rename(folder.join(&partial), &path).context(FileAction::Move, &path));
             if copied.is_err() {
-                let _ = fs::remove_file(root.join(&partial));
+                let _ = fs::remove_file(folder.join(&partial));
             }
             copied?;
-            return Ok(reference);
+            return Ok(name);
         }
         if source.same_as(&path)? {
-            return Ok(reference);
+            return Ok(name);
         }
     }
     unreachable!("the loop returns")

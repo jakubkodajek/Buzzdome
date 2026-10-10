@@ -460,6 +460,8 @@ pub fn run() {
             editor::editor_update,
             editor::editor_save,
             editor::editor_add_media,
+            editor::editor_import_sheet,
+            editor::editor_export_sheet,
             editor::editor_close,
             editor_test_run,
             hardware::receiver_info,

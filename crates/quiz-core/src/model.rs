@@ -106,6 +106,32 @@ impl Slide {
         media
     }
 
+    /// Points the media references in `renamed` (old reference to new one)
+    /// to their new names.
+    pub fn rename_media(&mut self, renamed: &BTreeMap<String, String>) {
+        for file in self.media_mut() {
+            if let Some(new) = renamed.get(file.as_str()) {
+                file.clone_from(new);
+            }
+        }
+    }
+
+    /// Takes `file` off the slide wherever it is used, with its options.
+    pub fn remove_media(&mut self, file: &str) {
+        if self.picture.as_deref() == Some(file) {
+            self.picture = None;
+        }
+        if self.video.as_ref().is_some_and(|video| video.file == file) {
+            self.video = None;
+        }
+        if self.sound.as_ref().is_some_and(|sound| sound.file == file) {
+            self.sound = None;
+        }
+        if self.background.as_ref().is_some_and(|background| background.file == file) {
+            self.background = None;
+        }
+    }
+
     /// The same media references as `media`, to change in place.
     fn media_mut(&mut self) -> impl Iterator<Item = &mut String> {
         [
@@ -359,10 +385,8 @@ impl Quiz {
     /// Points the media references in `renamed` (old reference to new one)
     /// to their new names.
     pub fn rename_media(&mut self, renamed: &BTreeMap<String, String>) {
-        for file in self.slides.iter_mut().flat_map(Slide::media_mut) {
-            if let Some(new) = renamed.get(file.as_str()) {
-                file.clone_from(new);
-            }
+        for slide in &mut self.slides {
+            slide.rename_media(renamed);
         }
     }
 
@@ -697,6 +721,25 @@ mod tests {
     /// A sound with the options a quiz file gets when it names only the file.
     fn sound(file: &str) -> SoundClip {
         serde_json::from_value(serde_json::json!({ "file": file })).unwrap()
+    }
+
+    #[test]
+    fn removing_a_media_file_takes_it_off_wherever_the_slide_uses_it() {
+        let mut slide = Slide::new("s", SlideContent::Billboard { title: "t".into(), text: String::new() });
+        slide.picture = Some("media/a.png".into());
+        slide.sound = Some(sound("media/b.mp3"));
+        slide.background = Some(Background::new("media/a.png"));
+        slide.remove_media("media/a.png");
+        assert_eq!((&slide.picture, &slide.background), (&None, &None));
+        slide.remove_media("media/other.mp3");
+        assert_eq!(slide.sound, Some(sound("media/b.mp3")));
+        slide.remove_media("media/b.mp3");
+        assert_eq!(slide.sound, None);
+    }
+
+    #[test]
+    fn a_new_sound_has_the_options_of_a_file_that_names_only_it() {
+        assert_eq!(SoundClip::new("media/a.mp3"), sound("media/a.mp3"));
     }
 
     #[test]

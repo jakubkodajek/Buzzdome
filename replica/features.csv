@@ -41,7 +41,8 @@ Delay before answers appear so the quizmaster can read the question,studio,shoul
 Sound clip on a question,studio,should,yes,yes,"§3.7.4; clone: played by the Director: on slide, with the clock or on demand"
 Background image per slide,studio,should,yes,yes,§3.2.5.1 Background image; clone: image or video
 Design themes for the projector screen with inheritance,studio,should,yes,partial,quizxpress-docs skinning guide (skin.config); clone: theme.json packages (spec 5.2) with five built-in themes and a Design tab gallery; importing user themes planned
-Spreadsheet import of questions (one sheet per round),studio,should,yes,no,§3.10.1 columns Q A1..A6 CAT NOTES; CSV first
+Spreadsheet import of questions (one sheet per round),studio,should,yes,yes,§3.10.1 columns Q A1..A6 NOTES and media with settings; clone: xlsx xlsm xls ods csv (spec QZ-8); CAT P2-P6 and other slide types reported not imported; {L} files copied
+Export questions to a spreadsheet,studio,should,yes,yes,clone: CSV in the import columns with media next to it; re-importable (spec QZ-8)
 Table view to edit all questions at once,studio,should,yes,yes,§3.2.6.2
 Full-screen slide preview,studio,should,yes,partial,§3.2.6.1 F5; clone: Shift+F5 test-runs from the selected slide on the projector
 Response chart per answer,host screen,should,yes,no,§5.4.8 key C

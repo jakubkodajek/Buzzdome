@@ -5,7 +5,7 @@ import { questionCount } from "../quiz";
 import type { Action } from "./actions";
 import type { OpenQuiz } from "./editor-state";
 
-export type BackstagePage = "info" | "open";
+export type BackstagePage = "info" | "open" | "import" | "export";
 
 interface BackstageProps {
   /** The open quiz; null when none is open. */
@@ -21,6 +21,8 @@ interface BackstageProps {
   onTitle: (title: string) => void;
   /** Shows a slide (by id) in the editor. */
   onShowSlide: (id: string) => void;
+  /** Questions from a spreadsheet, the template for one, and the quiz as one (spec QZ-8). */
+  sheet: { importSheet: () => void; saveTemplate: () => void; exportSheet: () => void };
 }
 
 /** The FILE tab: the quiz as a whole and its file, over the whole window. */
@@ -34,7 +36,7 @@ export function Backstage(props: BackstageProps) {
     </button>
   );
   const pageItem = (id: BackstagePage, label: string) => (
-    <button type="button" className={shown === id ? "backstage-item active" : "backstage-item"} disabled={id === "info" && !open} onClick={() => onPage(id)}>
+    <button type="button" className={shown === id ? "backstage-item active" : "backstage-item"} disabled={id !== "open" && !open} onClick={() => onPage(id)}>
       {label}
     </button>
   );
@@ -52,13 +54,28 @@ export function Backstage(props: BackstageProps) {
         {pageItem("open", t("openFile"))}
         {item(actions.save)}
         {item(actions.saveAs)}
+        {pageItem("import", t("backstageImport"))}
+        {pageItem("export", t("backstageExport"))}
         {item(actions.closeQuiz)}
         <span className="backstage-gap" />
         {item(actions.exit)}
       </nav>
-      <div className="backstage-page">{shown === "info" && open ? <InfoPage {...props} open={open} /> : <OpenPage {...props} />}</div>
+      <div className="backstage-page">{open ? pageFor(shown, props, open) : <OpenPage {...props} />}</div>
     </div>
   );
+}
+
+function pageFor(page: BackstagePage, props: BackstageProps, open: OpenQuiz) {
+  switch (page) {
+    case "info":
+      return <InfoPage {...props} open={open} />;
+    case "open":
+      return <OpenPage {...props} />;
+    case "import":
+      return <ImportPage {...props} />;
+    case "export":
+      return <ExportPage {...props} />;
+  }
 }
 
 function InfoPage({ open, unsaved, onTitle, onShowSlide }: BackstageProps & { open: OpenQuiz }) {
@@ -106,6 +123,42 @@ function InfoPage({ open, unsaved, onTitle, onShowSlide }: BackstageProps & { op
           })}
         </ul>
       )}
+    </>
+  );
+}
+
+function ImportPage({ sheet }: BackstageProps) {
+  const { t } = useApp();
+  return (
+    <>
+      <h1>{t("backstageImport")}</h1>
+      <div className="backstage-task">
+        <button type="button" className="browse" onClick={sheet.importSheet}>
+          {t("importFromSheet")}
+        </button>
+        <p>{t("importFromSheetHint")}</p>
+      </div>
+      <div className="backstage-task">
+        <button type="button" className="browse" onClick={sheet.saveTemplate}>
+          {t("saveSheetTemplate")}
+        </button>
+        <p>{t("saveSheetTemplateHint")}</p>
+      </div>
+    </>
+  );
+}
+
+function ExportPage({ sheet }: BackstageProps) {
+  const { t } = useApp();
+  return (
+    <>
+      <h1>{t("backstageExport")}</h1>
+      <div className="backstage-task">
+        <button type="button" className="browse" onClick={sheet.exportSheet}>
+          {t("exportToSheet")}
+        </button>
+        <p>{t("exportToSheetHint")}</p>
+      </div>
     </>
   );
 }

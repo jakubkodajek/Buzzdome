@@ -183,6 +183,80 @@ quizmaster's "go to the final ranking" goes to the last `final` slide.
 | --- | --- | --- | --- |
 | `title` | text | `""` | Shown above the podium and the ranking; empty shows the default title. |
 
+## Spreadsheets
+
+Questions can also be written in a spreadsheet and imported into a quiz
+(spec QZ-8), in the columns of the reference app's Excel template; an
+export writes a quiz back in them. `quiz_core::sheet` turns rows into
+slides and back, `quiz-file` reads and writes the files.
+
+**Files.** Import reads `.xlsx`, `.xlsm`, `.xls`, `.ods` (every visible
+sheet) and `.csv`. A CSV file is UTF-8 or UTF-16 with a byte order mark,
+else UTF-8, else Windows-1250; its separator is whichever of `;`, tab and
+`,` the headings row uses most. Export writes UTF-8 with a byte order mark
+and CRLF line ends, separated by `;` when the app is in Czech and `,` in
+English, as Excel expects in those locales.
+
+**Sheets and rows.** The headings (any case) are in a sheet's first row
+with values, a CSV file's first line. A sheet without a `Q` column is
+skipped; with more than one sheet of questions, each is a round that a
+billboard with the sheet's name opens. Each row with a value is a slide.
+
+| Column | Value |
+| --- | --- |
+| `Q` | The text, after an optional prefix that gives the slide type (below). |
+| `A1`-`A6` | Answers. `[Paris]` marks the correct one; with none marked, `A1` is correct and the answers are shuffled. |
+| `P1` | The slide's picture. |
+| `NOTES` | Notes for the quizmaster. |
+| `SOUND`, `VIDEO` | The slide's sound and video. |
+| `BACKGROUND`, `BACKGROUND-VIDEO` | The slide's background (a picture or video; a video in the second). |
+| `ANSWER-TIME` | Seconds, 0 to 3600. |
+| `POINTS-START`, `POINTS-END` | Points, falling from the start to the end value when both are given. |
+| `PENALTY-POINTS-START` | Points taken for a wrong answer (either sign). |
+
+**Prefixes.** `{Q}` question, `{T}` test question (imported with no
+points), `{B}` billboard (the first line is its title, the rest its text),
+`{E}` end of round, and this app's own `{X}` explanation and `{F}` final
+results. A question takes the qualifier `EA` (everyone answers, 2 to 4
+answers) or `FF` (fastest finger, up to 6): `{Q, FF}`. Without a prefix, a
+row with text or answers is a question (everyone answers when it has 2 to
+4 answers) and a row with only media a billboard.
+
+**Media.** A cell names a file, relative to the sheet or as a full path;
+a file not found there is looked for by its name next to the sheet. It is
+copied into the quiz (`{L}`, the reference's mark for a linked file, is
+read and the file copied all the same). Settings follow in braces,
+separated by `;`: `intro.mp4{start-at=00:00:05;loop=false}`. Times are
+`hh:mm:ss`, `mm:ss` or seconds, with a fraction; flags are `true`/`false`,
+`yes`/`no` or `1`/`0`.
+
+| Setting | On | Value |
+| --- | --- | --- |
+| `start-at`, `stop-at` | sound, video | The part that plays. |
+| `loop` | sound, video, background video | Flag. |
+| `volume` | sound, video | 0 to 100. |
+| `silent` | video, background video | Flag. |
+| `speed` | video | 25 to 250 (%). |
+| `effect` | video | `blur`, `mosaic` or `none`. |
+| `intro-pause` | video | Seconds before it starts (1 by default, as in the editor). |
+| `sync-with-quiz` | background video | Flag: holds with the show. |
+| `autoplay` | video | This app's own. Flag: starts by itself or waits for Play video. |
+| `plays` | sound | This app's own. `on-slide`, `with-clock` (questions) or `on-demand`. |
+| `gain` | sound | This app's own. Loudness gain in dB. |
+| `replay`, `replay-start-at`, `replay-stop-at`, `replay-delay` | sound, video on a question | This app's own. The part played again after the reveal, and the seconds before it. |
+
+Export writes only the settings that differ from these defaults, every
+media file next to the CSV file under its own name (numbered when another
+file has it), and the correct answer in brackets, so an exported quiz
+imports as it was.
+
+**What is left out.** The reference's other columns (`CAT`, `P2`-`P6`,
+`A7`, `A8`, the bonus and evaluation columns, `STYLE`, `TRANSITION`...),
+its other slide types (imported as billboards with their text), a second
+language after `||`, a picture next to a video, media a slide cannot have
+and files that are not there are left out, and the import lists each with
+the rows it came up in.
+
 ## Playback notes
 
 - Pictures and videos are shown by the system's web view (WebView2 on

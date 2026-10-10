@@ -22,6 +22,7 @@ import {
   setVideo,
   setVideoOptions,
   withAnswerCount,
+  withFreshIds,
 } from "./slides";
 
 const question = (patch: Partial<QuestionSlide> = {}): QuestionSlide => ({ ...(newSlide("question", "q") as QuestionSlide), ...patch });
@@ -231,5 +232,14 @@ describe("slides", () => {
     const quiz: Quiz = { schemaVersion: 1, title: "", theme: null, slides: [newSlide("billboard", "s-a")] };
     const ids = ["a", "a", "b"];
     expect(freshSlideId(quiz, () => ids.shift() as string)).toBe("s-b");
+  });
+
+  it("gives slides to insert ids no slide has, nor each other", () => {
+    const quiz: Quiz = { schemaVersion: 1, title: "", theme: null, slides: [newSlide("billboard", "s-a")] };
+    const ids = ["a", "b", "b", "c"];
+    const imported = [newSlide("billboard", "import-1"), newSlide("explanation", "import-2")];
+    const fresh = withFreshIds(quiz, imported, () => ids.shift() as string);
+    expect(fresh.map((slide) => slide.id)).toEqual(["s-b", "s-c"]);
+    expect(fresh[1]).toEqual({ ...imported[1], id: "s-c" });
   });
 });

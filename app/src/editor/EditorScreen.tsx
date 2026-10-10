@@ -35,12 +35,14 @@ import {
 import { isVideo, mediaFileName, MediaRootContext, mediaUrl, type MediaKind } from "../media";
 import { NO_CONTEXT, showsRanking, slideContexts } from "../quiz";
 import { ThemeContext } from "../theme/context";
-import type { Slide, ValidationError } from "../types";
+import { useLatest } from "../hooks";
+import type { ImportNote, Slide, ValidationError } from "../types";
 import { tooltip, useActionKeys, type Action, type Actions } from "./actions";
 import { Backstage, type BackstagePage } from "./Backstage";
 import { ContextMenu } from "./controls";
 import { DesignArea, NotesBox } from "./DesignArea";
 import { EditSlideDialog } from "./EditSlideDialog";
+import { ImportNotesDialog } from "./ImportNotesDialog";
 import { isUnsaved, type OpenQuiz } from "./editor-state";
 import { answerIndex, hasElement, type ElementId } from "./elements";
 import { LayoutGallery } from "./LayoutGallery";
@@ -50,7 +52,20 @@ import { gainChange, LOUDNESS_STATUS_KEYS, measureSound, readLoudnessTarget } fr
 import { PropertiesPanel } from "./PropertiesPanel";
 import { slideProperties, type SlideEditing } from "./properties";
 import { Ribbon, type RibbonTab } from "./Ribbon";
-import { duplicateSlide, freshSlideId, setBackground, setCorrect, setNotes, setPicture, setSound, setSoundOptions, setVideo, setVideoOptions } from "./slides";
+import { templateQuiz } from "./sheet";
+import {
+  duplicateSlide,
+  freshSlideId,
+  setBackground,
+  setCorrect,
+  setNotes,
+  setPicture,
+  setSound,
+  setSoundOptions,
+  setVideo,
+  setVideoOptions,
+  withFreshIds,
+} from "./slides";
 import { TableView } from "./TableView";
 import { Thumbnails } from "./Thumbnails";
 import { TrimDialog } from "./TrimDialog";
@@ -114,6 +129,8 @@ function Studio({ editor, open, onExit }: { editor: QuizEditor; open: OpenQuiz |
   /** The slide whose sound or video is being trimmed. */
   const [trimOf, setTrimOf] = useState<{ id: string; media: "sound" | "video" } | null>(null);
   const [loudness, setLoudness] = useState(false);
+  /** What the last spreadsheet import could not take over, until read. */
+  const [importNotes, setImportNotes] = useState<{ imported: number; notes: ImportNote[] } | null>(null);
   /** The slide whose background video plays in the design area. */
   const [playingBackgroundOf, setPlayingBackgroundOf] = useState<string | null>(null);
 
@@ -202,6 +219,29 @@ function Studio({ editor, open, onExit }: { editor: QuizEditor; open: OpenQuiz |
     if (!slide) return;
     if (isMedia(part)) chooseMedia(slide.id, MEDIA[part].kinds, MEDIA[part].set, part);
     else setDialog({ id: slide.id, focus: part });
+  };
+  // The quiz and place as they are once a spreadsheet is read, after its dialogs.
+  const latest = useLatest({ quiz, index });
+  const sheet = {
+    importSheet: () =>
+      void editor.importSheet().then((result) => {
+        const { quiz: now, index: at } = latest.current;
+        if (!result || !now) return;
+        const inserted = withFreshIds(now, result.slides);
+        editor.edit({ type: "batch", edits: inserted.map((s, i) => ({ type: "insertSlide", index: at + 1 + i, slide: s })) });
+        if (inserted.length > 0) setSelection({ id: inserted[0].id, index: at + 1, element: "slide" });
+        setBackstage(null);
+        if (result.notes.length > 0) setImportNotes({ imported: inserted.length, notes: result.notes });
+        else notify(inserted.length > 0 ? t("sheetImported", { n: inserted.length }) : t("sheetImportedNone"));
+      }),
+    saveTemplate: () => quiz && void editor.exportSheet(templateQuiz(t, quiz), t("templateFileName")).then((done) => done && notify(t("sheetTemplateSaved"))),
+    exportSheet: () =>
+      quiz &&
+      void editor.exportSheet(quiz, quiz.title || t("untitledQuiz")).then((report) => {
+        if (!report) return;
+        const missing = report.missing.map(mediaFileName).join(", ");
+        notify([t("sheetExported", { n: quiz.slides.length, media: report.media }), missing && t("sheetExportMissing", { files: missing })].filter(Boolean).join(" "));
+      }),
   };
   const testRun = (from?: number) => {
     if (open && open.problems.length > 0) {
@@ -365,7 +405,7 @@ function Studio({ editor, open, onExit }: { editor: QuizEditor; open: OpenQuiz |
   };
   const all = [...Object.values(actions), escape];
   // Dialogs and menus take the keys; the FILE page only the ones that work anywhere.
-  useActionKeys(dialog || menu || gallery || trimSlide || loudness ? [] : backstageShown ? all.filter((a) => a.inFields) : all);
+  useActionKeys(dialog || menu || gallery || trimSlide || loudness || importNotes ? [] : backstageShown ? all.filter((a) => a.inFields) : all);
 
   const menuItems = (target: MenuTarget, x: number, y: number): (Action | "separator")[] => {
     const galleryHere = { ...actions.newSlide, run: () => setGallery({ x, y }) };
@@ -457,6 +497,7 @@ function Studio({ editor, open, onExit }: { editor: QuizEditor; open: OpenQuiz |
                 setView("graphical");
                 setBackstage(null);
               }}
+              sheet={sheet}
             />
           ) : (
             quiz && (
@@ -576,6 +617,7 @@ function Studio({ editor, open, onExit }: { editor: QuizEditor; open: OpenQuiz |
               onClose={() => setLoudness(false)}
             />
           )}
+          {importNotes && <ImportNotesDialog {...importNotes} onClose={() => setImportNotes(null)} />}
           {dialog && dialogSlide && (
             <EditSlideDialog
               slide={dialogSlide}

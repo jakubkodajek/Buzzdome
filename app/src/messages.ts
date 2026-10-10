@@ -6,7 +6,7 @@ import { buttonLabel } from "./answers";
 import { MEDIA_EXTENSIONS } from "./bindings/MediaExtensions";
 import type { StringKey, Translate } from "./i18n";
 import { mediaFileName } from "./media";
-import type { AppError, FileAction, MediaIssue, MediaKind, Problem, ProtocolKind, ReceiverProblem } from "./types";
+import type { AppError, FileAction, ImportIssue, MediaIssue, MediaKind, Place, Problem, ProtocolKind, ReceiverProblem } from "./types";
 
 type Params = Record<string, string | number>;
 
@@ -37,6 +37,8 @@ const ERROR_KEYS: Record<Exclude<AppError["code"], WordedApart>, StringKey> = {
   tooLarge: "errTooLarge",
   tooManyFiles: "errTooManyFiles",
   noDraft: "errNoDraft",
+  notASpreadsheet: "errNotASpreadsheet",
+  noQuestionColumn: "errNoQuestionColumn",
   notAMediaFile: "errNotAMediaFile",
   usbUnavailable: "errUsbUnavailable",
   usbListFailed: "errUsbListFailed",
@@ -166,4 +168,48 @@ export function receiverProblemText(t: Translate, problem: ReceiverProblem, deta
 /** Which protocol reads the receiver. */
 export function protocolText(t: Translate, protocol: ProtocolKind): string {
   return protocol.type === "learned" ? t("protocolLearned", { buttons: protocol.buttons }) : t("protocolRawOnly");
+}
+
+const IMPORT_ISSUE_KEYS: Record<ImportIssue["code"], StringKey> = {
+  noQuestionColumn: "importNoQuestionColumn",
+  unknownColumn: "importUnknownColumn",
+  unsupportedColumn: "importUnsupportedColumn",
+  duplicateColumn: "importDuplicateColumn",
+  secondLanguage: "importSecondLanguage",
+  linkedFile: "importLinkedFile",
+  slideTypeNotSupported: "importSlideTypeNotSupported",
+  testQuestion: "importTestQuestion",
+  qualifierNotSupported: "importQualifierNotSupported",
+  notEveryone: "importNotEveryone",
+  severalCorrect: "importSeveralCorrect",
+  answersLeftOut: "importAnswersLeftOut",
+  pictureAndVideo: "importPictureAndVideo",
+  twoBackgrounds: "importTwoBackgrounds",
+  mediaOnFinal: "importMediaOnFinal",
+  wrongMediaType: "importWrongMediaType",
+  badValue: "importBadValue",
+  unknownSetting: "importUnknownSetting",
+  badSetting: "importBadSetting",
+  settingNotUsed: "importSettingNotUsed",
+  fileNotFound: "importFileNotFound",
+};
+
+/** Something a spreadsheet import could not take over as the sheet has it. */
+export function importIssueText(t: Translate, issue: ImportIssue): string {
+  return t(IMPORT_ISSUE_KEYS[issue.code], params(issue));
+}
+
+/** Rows of an import note listed before "and n more". */
+const PLACES_SHOWN = 8;
+
+/** The rows an import note came up in, by sheet: "rows 3, 5; sheet “Round 2”, row 4". */
+export function placesText(t: Translate, places: Place[]): string {
+  const sheets = new Map<string, number[]>();
+  for (const { sheet, row } of places.slice(0, PLACES_SHOWN)) sheets.set(sheet, [...(sheets.get(sheet) ?? []), row]);
+  const parts = [...sheets].map(([sheet, rows]) => {
+    const worded = t(rows.length === 1 ? "importRow" : "importRows", { rows: rows.join(", ") });
+    return sheet ? t("importSheetRows", { sheet, rows: worded }) : worded;
+  });
+  const more = places.length - PLACES_SHOWN;
+  return more > 0 ? `${parts.join("; ")} ${t("importMore", { n: more })}` : parts.join("; ");
 }

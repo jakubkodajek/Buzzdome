@@ -4,7 +4,7 @@
 //! message, which the UI shows as it is.
 
 use buzzers::learned::LearnError;
-use quiz_core::{BoardError, BuzzerId, Button, GameError, QuizJsonError, ValidationError, MAX_TEAMS};
+use quiz_core::{BoardError, BuzzerId, Button, GameError, QuizJsonError, SheetError, ValidationError, MAX_TEAMS};
 use quiz_file::{FileAction, QuizFileError};
 use serde::Serialize;
 use std::path::Path;
@@ -57,6 +57,10 @@ pub enum AppError {
     QuizInvalid { problems: Vec<ValidationError> },
     #[error("no quiz is open in the editor")]
     NoDraft,
+    #[error("the spreadsheet cannot be read: {detail}")]
+    NotASpreadsheet { detail: String },
+    #[error("no sheet has a Q column")]
+    NoQuestionColumn,
 
     // The media player.
     #[error("{name} is not a picture, sound or video")]
@@ -144,6 +148,8 @@ impl From<QuizFileError> for AppError {
             QuizFileError::TooLarge => AppError::TooLarge { max_mb: quiz_file::MAX_UNPACKED_BYTES >> 20 },
             QuizFileError::TooManyFiles => AppError::TooManyFiles { max: quiz_file::MAX_ENTRIES },
             QuizFileError::Invalid(problems) => AppError::QuizInvalid { problems },
+            QuizFileError::Spreadsheet(detail) => AppError::NotASpreadsheet { detail },
+            QuizFileError::Sheet(SheetError::NoQuestionColumn) => AppError::NoQuestionColumn,
         }
     }
 }

@@ -4,11 +4,12 @@ import { api } from "../api";
 import { useApp, useDispatch, useReport } from "../app-context";
 import { useLatest } from "../hooks";
 import { mediaFileFilter, type MediaKind } from "../media";
-import type { Quiz, ValidationError } from "../types";
+import type { Quiz, SheetExport, SheetImport, ValidationError } from "../types";
 import { DraftQueue } from "./draft-queue";
 import { editorReducer, isUnsaved, LOADING, type EditorState } from "./editor-state";
 import type { Edit } from "./history";
 import { readRecentFiles, rememberRecentFile } from "./recent";
+import { CSV_EXTENSION, listSeparator, SHEET_EXTENSIONS } from "./sheet";
 
 const QUIZ_EXTENSION = "quiz";
 
@@ -52,6 +53,10 @@ export interface QuizEditor {
   pickMedia: (kinds: MediaKind[]) => Promise<string | null>;
   /** Plays the quiz as a show (see `onTestRun`), from its start or from slide `from`. */
   testRun: (from?: number) => Promise<boolean>;
+  /** Asks for a spreadsheet and reads its slides, copying their media into the quiz, for the editor to insert. */
+  importSheet: () => Promise<SheetImport | false>;
+  /** Asks where to and writes `quiz` as a CSV file named after `name`, with its media next to it. */
+  exportSheet: (quiz: Quiz, name: string) => Promise<SheetExport | false>;
 }
 
 /**
@@ -60,7 +65,7 @@ export interface QuizEditor {
  * a test show has started.
  */
 export function useQuizEditor(onTestRun: () => void): QuizEditor {
-  const { t } = useApp();
+  const { t, lang } = useApp();
   const [state, dispatch] = useReducer(editorReducer, LOADING);
   const report = useLatest(useReport());
   const dispatchCommand = useDispatch();
@@ -172,6 +177,18 @@ export function useQuizEditor(onTestRun: () => void): QuizEditor {
         return null;
       }
     },
+    importSheet: () =>
+      attempt(async () => {
+        const path = await openDialog({ multiple: false, filters: [{ name: t("sheetFiles"), extensions: SHEET_EXTENSIONS }] });
+        return typeof path === "string" ? await draftQueue.run(() => api.editorImportSheet(path)) : false;
+      }),
+    exportSheet: (quiz, name) =>
+      attempt(async () => {
+        const path = await saveDialog({ defaultPath: `${fileStem(name)}.${CSV_EXTENSION}`, filters: [{ name: t("csvFile"), extensions: [CSV_EXTENSION] }] });
+        if (!path) return false;
+        const csv = path.toLowerCase().endsWith(`.${CSV_EXTENSION}`) ? path : `${path}.${CSV_EXTENSION}`;
+        return await draftQueue.run(() => api.editorExportSheet(quiz, csv, listSeparator(lang)));
+      }),
     testRun: (from) =>
       attempt(async () => {
         if (!open) return false;

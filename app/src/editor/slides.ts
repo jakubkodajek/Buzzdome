@@ -94,9 +94,24 @@ export function convertSlide(slide: Slide, type: SlideType): Slide {
   return setHeadline({ ...newSlide(type, id), notes, ...media, sound, background }, slideTitle(slide));
 }
 
+const randomId = () => Math.random().toString(36).slice(2, 10);
+
 /** An id no slide of `quiz` has yet. */
-export function freshSlideId(quiz: Quiz, random: () => string = () => Math.random().toString(36).slice(2, 10)): string {
+export function freshSlideId(quiz: Quiz, random: () => string = randomId): string {
+  return freshId(new Set(quiz.slides.map((slide) => slide.id)), random);
+}
+
+/** `slides` with ids no slide of `quiz` has, nor each other, to insert them all. */
+export function withFreshIds(quiz: Quiz, slides: Slide[], random: () => string = randomId): Slide[] {
   const taken = new Set(quiz.slides.map((slide) => slide.id));
+  return slides.map((slide) => {
+    const id = freshId(taken, random);
+    taken.add(id);
+    return { ...slide, id };
+  });
+}
+
+function freshId(taken: Set<string>, random: () => string): string {
   for (;;) {
     const id = `s-${random()}`;
     if (!taken.has(id)) return id;

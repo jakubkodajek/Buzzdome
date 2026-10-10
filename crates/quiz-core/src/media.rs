@@ -198,6 +198,13 @@ pub struct SoundClip {
     pub replay: Option<Replay>,
 }
 
+impl SoundClip {
+    /// `file` with the options a quiz file that names only the file gets.
+    pub fn new(file: impl Into<String>) -> SoundClip {
+        SoundClip { file: file.into(), start: SoundStart::OnSlide, repeat: false, volume: full_volume(), part: Span::default(), gain_db: 0.0, replay: None }
+    }
+}
+
 /// The part of a question's sound played again once its answer is revealed,
 /// such as the chorus of the song the players had to name.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]

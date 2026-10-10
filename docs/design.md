@@ -25,7 +25,8 @@ How the app is built, with the buzzer link in most detail. Requirements are in
 │  └── hardware.rs  receiver setup, learn mode, raw log   │
 │  Rust crates                                            │
 │  ├── quiz-core    pure game state machine, scoring,     │
-│  │                themes                                │
+│  │                themes, spreadsheet rows              │
+│  ├── quiz-file    .quiz files, media, spreadsheets      │
 │  └── buzzers      driver trait, HID receiver, protocols │
 └─────────────────────────────────────────────────────────┘
 ```
@@ -215,6 +216,20 @@ table view toggle. It edits a quiz; it never touches a running show.
   for an explanation slide, the question it explains. `MediaRootContext` sits above
   every screen that resolves media, so the editor, the Director and their
   sound hooks agree on the folder.
+- **Spreadsheets.** File › Import and Export (spec QZ-8, columns in
+  quiz-format.md). `quiz_file::read_tables` reads a workbook (calamine,
+  visible worksheets) or a CSV file (encoding and separator detected) into
+  `Table`s; `quiz_core::import_tables` turns them into slides and notes
+  (pure; a seed from the shell shuffles unmarked answers); `import_sheet`
+  then finds each media file, copies it in with `import_media` and drops a
+  missing one with a note. The editor gives the slides fresh ids
+  (`withFreshIds`), inserts them as one batch and shows the notes
+  (`ImportNotesDialog`, worded by `messages.ts`). Export is the reverse:
+  `export_table` builds the rows and `export_sheet` places each media file
+  next to the CSV (`place_file`, shared with media imports: the same name
+  with the same bytes is reused, another gets a number) and writes the file
+  atomically. `sheet.ts` holds the extensions, the separator per language
+  and the sample sheet.
 - **Test run.** F5 (from the start) and Shift+F5 (from the selected slide)
   start a show of the draft with keyboard and on-screen buzzers. The
   Director shows a test run badge and "Back to the editor" ends the show
@@ -607,6 +622,7 @@ them.
 | Themes: `theme.json` rules, inheritance, built-in packages complete with their files and font licences; gallery, fonts, a broken theme background warns once | `cargo test` (`quiz_core::theme`, shell `themes`), `npm test`, headless Chromium against the preview | pass |
 | Teams: names, pairing, replay, names kept between shows; drag, click, paste and CSV import (Windows-1250), preparing names before a show | `cargo test` (`game_flow`, shell `teams`, `app_file`), `npm test` (`team-names`), headless Chromium against the preview | pass |
 | Media player and sound board: library list and order, board rules (filling, placing, swapping, resizing, mending a stored board), playing, pausing, pad clicks, ends; Director tab (search, pads lit and counting down, menus, drag and drop, layout) and the projector's picture and video | `cargo test` (`quiz_core::sound_board`, `media_player`, shell `media_player`, `quiz-file` imports), `npm test` (`media-player`), headless Chromium against the preview with generated sounds | pass |
+| Spreadsheets: columns, prefixes, settings, notes, shuffling, rounds per sheet, CSV encodings and separators, workbooks, media found and copied, export and re-import; File › Import and Export, notes dialog, one undo step, sample sheet | `cargo test` (`quiz_core::sheet`, `quiz-file` sheet), `npm test` (`sheet`, `slides`, `messages`), headless Chromium against the preview | pass |
 | Loudness measurement | `npm test`: a full-scale 997 Hz sine in one channel measures -3.01 LUFS as BS.1770-4 states; gating, channel sum, part, peak limit | pass |
 | Trim and Normalize volume windows, video trim window, background video menu and options, slide video (intro pause, Play video, speed, volume, part, holding with the show, blur and mosaic, replay) | headless Chromium against the preview with generated test media (a song and a test-pattern video, not in the repo) | pass |
 | Media through the asset protocol, autoplay of video and sound | needs the installed app on each OS | **not tested** |

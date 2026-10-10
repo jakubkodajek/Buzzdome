@@ -5,6 +5,7 @@ pub mod game;
 pub mod media;
 pub mod media_player;
 pub mod model;
+pub mod sheet;
 pub mod sound_board;
 pub mod theme;
 pub mod view;
@@ -23,6 +24,7 @@ pub use model::{
     DEFAULT_TIME_LIMIT_S, MAX_ANSWERS, MAX_EVERYONE_ANSWERS, MAX_POINTS, MAX_TIME_LIMIT_S, MIN_EVERYONE_ANSWERS,
     SCHEMA_VERSION,
 };
+pub use sheet::{export_table, import_tables, ImportIssue, ImportNote, ImportedRows, Notes, Place, SheetError, Table};
 pub use sound_board::{BoardChange, BoardError, Pad, PadClick, PadColor, PadSource, SoundBoard};
 pub use theme::{
     is_theme_id, resolve_themes, ResolvedThemes, ScreenKey, SkippedTheme, Theme, ThemeError, ThemeFile, ThemeManifest, ThemeSource, UnknownKey,

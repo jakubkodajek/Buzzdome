@@ -11,5 +11,10 @@ serde_json.workspace = true
 thiserror.workspace = true
 ts-rs.workspace = true
 sha2 = "0.11"
+# Questions from spreadsheets (spec QZ-8): Excel and OpenDocument workbooks,
+# CSV files, and the Windows code page Excel saves CSV files in.
+calamine = "0.36"
+csv = "1.4"
+encoding_rs = "0.8"
 # Deflate only: quiz.json is compressed, media files are stored as they are.
 zip = { version = "9", default-features = false, features = ["deflate-flate2-zlib-rs"] }

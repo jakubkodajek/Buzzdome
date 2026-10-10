@@ -1461,6 +1461,50 @@
   font-size: 15px;
 }
 
+.backstage-task {
+  display: flex;
+  align-items: flex-start;
+  gap: 18px;
+  max-width: 820px;
+  margin-bottom: 18px;
+}
+
+.backstage-task .browse {
+  flex: none;
+  min-width: 190px;
+  padding: 8px 14px;
+}
+
+.backstage-task p {
+  margin: 2px 0 0;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.import-notes-dialog {
+  width: min(640px, 92vw);
+}
+
+.import-notes {
+  max-height: 50vh;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.import-notes li {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 0;
+  border-bottom: 1px solid #eee;
+}
+
+.import-notes small {
+  color: var(--muted);
+}
+
 .info-list {
   display: grid;
   grid-template-columns: 110px 1fr;

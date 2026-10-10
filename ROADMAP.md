@@ -58,8 +58,9 @@ Status keys: `[x]` done, `[~]` in progress, `[ ]` not started.
 - [x] Editor in the reference's layout: ribbon, thumbnails, slide canvas, properties panel, Edit question form, table view, File page; undo, crash-safe draft, test run
 - [x] Pictures, videos and backgrounds per slide on the projector; slide sounds from the Director (on slide, with the clock, on demand)
 - [x] Sound trim on a waveform with a replay part after the reveal (SN-8), loudness normalization to a LUFS target (SN-9), background video options and preview (BG-4); quiz format v3
-- [ ] Rest of the manual's new features, P2 (`quizxpress-docs` gap list): video options, CSV import and export, category background video, properties panel, sound board, media list search
-- [ ] Excel import of questions
+- [x] Video options and Play video (QZ-4), the Director's media player with a sound board and search (SN-7): docs gap items 4, 8, 9
+- [x] Questions from Excel, OpenDocument and CSV sheets, and export to CSV (QZ-8): docs gap item 5
+- [ ] Rest of the manual's new features, P2 (`quizxpress-docs` gap list): category background video, properties panel
 - [ ] Show settings: team names, sounds, welcome screen, end-of-question actions
 
 ### M4: Show polish (week 3-4)

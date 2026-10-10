@@ -10,7 +10,7 @@ import demoQuiz from "../../../samples/demo-quiz.json";
 import builtinThemes from "../bindings/BuiltinThemes.json";
 import { NO_CONTROLS } from "../host/preview";
 import { MAX_BOARD_COLUMNS, MAX_BOARD_ROWS } from "../bindings/Constants";
-import type { Background, BoardChange, GameView, MediaLibrary, NowPlaying, Pad, PlayerCommand, PlayerView, Quiz, SoundBoard, SoundClip, VideoClip } from "../types";
+import type { Background, BoardChange, GameView, MediaLibrary, NowPlaying, Pad, PlayerCommand, PlayerView, Quiz, SheetImport, SoundBoard, SoundClip, VideoClip } from "../types";
 import "../styles.css";
 
 // The backend fills serde defaults; the raw JSON file leaves them out.
@@ -249,6 +249,34 @@ mockWindows(windowLabel, windowLabel === "host" ? "director" : "host");
 const dispatched: unknown[] = [];
 (window as unknown as { dispatched: unknown[] }).dispatched = dispatched;
 /** Other backend calls that change something, as `{ cmd, ...payload }`, for the same checks. */
+/** What the stand-in spreadsheet import gives. */
+const SHEET_IMPORT: SheetImport = {
+  slides: [
+    { id: "import-1", notes: "", picture: null, video: null, sound: null, background: null, type: "billboard", title: "Kolo 2", text: "Filmy" },
+    {
+      id: "import-2",
+      notes: "",
+      picture: null,
+      video: null,
+      sound: null,
+      background: null,
+      type: "question",
+      text: "Kdo natočil Vetřelce?",
+      mode: "everyone",
+      answers: ["James Cameron", "Ridley Scott", "David Fincher"],
+      correct: 1,
+      timeLimitS: 20,
+      points: 10,
+      pointsEnd: null,
+      penalty: 0,
+    },
+  ],
+  notes: [
+    { issue: { code: "unsupportedColumn", column: "CAT" }, places: [{ sheet: "Kolo 2", row: 1 }] },
+    { issue: { code: "fileNotFound", file: "ridley.jpg" }, places: [{ sheet: "Kolo 2", row: 3 }] },
+  ],
+};
+
 const called: unknown[] = [];
 (window as unknown as { called: unknown[] }).called = called;
 /** The team names prepared before a show (the running show's in a show scene). */
@@ -420,6 +448,16 @@ mockIPC(
         return { quiz: editorQuiz, sourcePath: "C:\\Kvizy\\hospodsky-kviz.quiz", unsaved: false, mediaRoot: "/src/dev/", problems: [] };
       case "editor_update":
         return [];
+      // Dialogs answer what a check sets in `window.dialogAnswer`; cancelled otherwise.
+      case "plugin:dialog|open":
+      case "plugin:dialog|save":
+        return (window as unknown as { dialogAnswer?: string }).dialogAnswer ?? null;
+      case "editor_import_sheet":
+        called.push({ cmd, ...(payload as object) });
+        return SHEET_IMPORT;
+      case "editor_export_sheet":
+        called.push({ cmd, ...(payload as object) });
+        return { media: 2, missing: ["media/gone.mp3"] };
       case "receiver_info":
         return {
           status: { kind: "error", problem: "cannotOpen", detail: "access denied" },

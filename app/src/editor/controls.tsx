@@ -148,9 +148,9 @@ export function Dialog(props: { title: string; onClose: () => void; children: Re
   const { title, onClose, children, footer, className } = props;
   const box = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    // Focus the control marked for it, or else the first field, so typing starts at once.
+    // Focus the control marked for it (a footer button too), or else the first field, so typing starts at once.
     const body = box.current?.querySelector(".dialog-body");
-    (body?.querySelector<HTMLElement>("[data-autofocus]") ?? body?.querySelector<HTMLElement>("textarea, input, select, button"))?.focus();
+    (box.current?.querySelector<HTMLElement>("[data-autofocus]") ?? body?.querySelector<HTMLElement>("textarea, input, select, button"))?.focus();
   }, []);
   return (
     <div className="dialog-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>

@@ -11,6 +11,7 @@ import type {
   EditorDraft,
   GameView,
   LearnProgress,
+  ListSeparator,
   MediaLibrary,
   MonitorInfo,
   NowPlaying,
@@ -22,6 +23,8 @@ import type {
   ReceiverInfo,
   ReceiverStatus,
   SessionSummary,
+  SheetExport,
+  SheetImport,
   SoundBoard,
   Theme,
   ValidationError,
@@ -87,6 +90,11 @@ export const api = {
   editorSave: (quiz: Quiz, path: string) => invoke<void>("editor_save", { quiz, path }),
   /** Copies a media file into the draft; returns its reference (`media/...`). */
   editorAddMedia: (path: string) => invoke<string>("editor_add_media", { path }),
+  /** Reads questions from a spreadsheet, copying their media into the draft, for the editor to insert. */
+  editorImportSheet: (path: string) => invoke<SheetImport>("editor_import_sheet", { path }),
+  /** Writes the quiz as a CSV file with its media next to it. */
+  editorExportSheet: (quiz: Quiz, path: string, separator: ListSeparator) =>
+    invoke<SheetExport>("editor_export_sheet", { quiz, path, separator }),
   editorClose: () => invoke<void>("editor_close"),
   /** Plays the editor's quiz as a show that is not kept for resuming. */
   editorTestRun: (quiz: Quiz) => invoke<void>("editor_test_run", { quiz }),
