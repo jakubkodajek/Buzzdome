@@ -195,8 +195,8 @@ pub struct SlideStyle {
     #[serde(default, skip_serializing_if = "Option::is_none", with = "lenient")]
     #[ts(as = "Option<Gradient>", optional)]
     pub fill: Option<Gradient>,
-    /// The question, or the title of another slide, so it is kept when the
-    /// slide changes type.
+    /// The question, or the title of another slide: the headline, whose
+    /// look a change of type keeps (an explanation's headline is its text).
     #[serde(default, skip_serializing_if = "TextStyle::is_empty", with = "lenient_or_default")]
     #[ts(as = "TextStyle")]
     pub headline: TextStyle,

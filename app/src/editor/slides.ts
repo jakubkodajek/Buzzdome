@@ -96,18 +96,40 @@ export function setNotes(slide: Slide, notes: string): Slide {
  * What the new type cannot play goes (`plays`): without a reveal, the
  * replay parts of the sound and video; without a clock, a video effect,
  * and a sound waiting for the clock plays when the slide opens; on a
- * ranking, the picture and video. The style stays, the headline's with the
- * headline.
+ * ranking, the picture and video. The fill behind the slide stays, and the
+ * headline keeps its look (`headlinePart`); the texts that start anew start
+ * with the theme's look.
  */
 export function convertSlide(slide: Slide, type: SlideType): Slide {
   if (slide.type === type) return slide;
-  const { id, notes, background, style } = slide;
+  const { id, notes, background } = slide;
   const { pictureAndVideo, clockAndReveal } = plays(type);
   const sound =
     slide.sound && !clockAndReveal ? { ...slide.sound, start: slide.sound.start === "withClock" ? "onSlide" : slide.sound.start, replay: null } : slide.sound;
   const video = slide.video && !clockAndReveal ? { ...slide.video, replay: null, effect: null } : slide.video;
   const media = pictureAndVideo ? { picture: slide.picture, video } : { picture: null, video: null };
-  return setHeadline({ ...newSlide(type, id), notes, ...media, sound, background, style }, slideTitle(slide));
+  const converted = setHeadline({ ...newSlide(type, id), notes, ...media, sound, background }, slideTitle(slide));
+  return withStyle(converted, { fill: slide.style?.fill, [headlinePart(type)]: slide.style?.[headlinePart(slide.type)] });
+}
+
+/** The part whose look the slide's headline (`slideTitle`) has: an explanation's text is its headline. */
+export function headlinePart(type: SlideType): StyledPart {
+  return type === "explanation" ? "text" : "headline";
+}
+
+/** The texts of a slide that have a look of their own, its headline's first. */
+export function styledParts(slide: Slide): StyledPart[] {
+  switch (slide.type) {
+    case "question":
+      return ["headline", "answers"];
+    case "billboard":
+      return ["headline", "text"];
+    case "explanation":
+      return ["text"];
+    case "endOfRound":
+    case "final":
+      return ["headline"];
+  }
 }
 
 const randomId = () => Math.random().toString(36).slice(2, 10);

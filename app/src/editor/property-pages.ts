@@ -8,8 +8,8 @@ import type { Slide } from "../types";
 import { answerIndex, type ElementId } from "./elements";
 import { slideProperties, type SlideEditing, type SlideProperties } from "./properties";
 import { commonRows, type PropertyRow } from "./property-rows";
-import type { StyledPart } from "./slides";
-import { lookTitle, styledPartOf, styledParts, styleProperties, type StyleProperties } from "./style-properties";
+import { styledParts, type StyledPart } from "./slides";
+import { lookTitle, styledPartOf, styleProperties, type StyleProperties } from "./style-properties";
 
 export type PageId = "gameplay" | "scoring" | "text" | "media" | "design" | "advanced";
 

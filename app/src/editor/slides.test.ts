@@ -6,6 +6,7 @@ import {
   convertSlide,
   freshSlideId,
   fullyCorrect,
+  headlinePart,
   newSlide,
   removeAnswer,
   setAnswerAt,
@@ -26,6 +27,7 @@ import {
   setVideo,
   setVideoOptions,
   setTextStyle,
+  styledParts,
   toggleCorrect,
   withAnswerCount,
   withFreshIds,
@@ -251,6 +253,29 @@ describe("slides", () => {
     const plain = setSlideFill(setTextStyle(styled, "headline", { color: undefined, bold: undefined }), null);
     expect(plain.style).toBeUndefined();
     expect(JSON.stringify(plain)).toBe(JSON.stringify(question()));
+  });
+
+  it("keeps the headline's look with the headline when the type changes, and starts the other texts anew", () => {
+    const fill = { from: "#000000", to: "#FFFFFF", kind: "vertical" } as const;
+    const headline = { color: "#FF0000" };
+    const styled = setTextStyle(setTextStyle(setSlideFill(question({ text: "Why?" }), fill), "headline", headline), "answers", { bold: true });
+    // An explanation's text is its headline, so the question's look goes there; it has no answers.
+    const explanation = convertSlide(styled, "explanation");
+    expect(explanation).toMatchObject({ type: "explanation", text: "Why?" });
+    expect(explanation.style).toEqual({ fill, text: headline });
+    expect(styledParts(explanation)).toContain(headlinePart("explanation"));
+    // And back from its text to a billboard's title; the billboard's own text starts as the theme has it.
+    expect(convertSlide(explanation, "billboard").style).toEqual({ fill, headline });
+    const billboard = setTextStyle(convertSlide(explanation, "billboard"), "text", { italic: true });
+    expect(convertSlide(billboard, "endOfRound").style).toEqual({ fill, headline });
+    // A slide without a look of its own stays without one.
+    expect(convertSlide(question(), "explanation").style).toBeUndefined();
+  });
+
+  it("styles the headline of every type of slide as one of its parts", () => {
+    for (const type of ["billboard", "question", "explanation", "endOfRound", "final"] as const) {
+      expect(styledParts(newSlide(type, "s"))[0]).toBe(headlinePart(type));
+    }
   });
 
   it("plays a sound that went with the clock when the slide opens once the slide has no clock", () => {

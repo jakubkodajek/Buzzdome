@@ -11,8 +11,8 @@ export type SlideStyle = {
  */
 fill?: Gradient, 
 /**
- * The question, or the title of another slide, so it is kept when the
- * slide changes type.
+ * The question, or the title of another slide: the headline, whose
+ * look a change of type keeps (an explanation's headline is its text).
  */
 headline?: TextStyle, 
 /**

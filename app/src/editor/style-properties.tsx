@@ -11,21 +11,6 @@ import type { PropertyRow } from "./property-rows";
 import { rowBuilders } from "./row-builders";
 import { setSlideFill, setTextStyle, type StyledPart } from "./slides";
 
-/** The texts of a slide that have a look of their own. */
-export function styledParts(slide: Slide): StyledPart[] {
-  switch (slide.type) {
-    case "question":
-      return ["headline", "answers"];
-    case "billboard":
-      return ["headline", "text"];
-    case "explanation":
-      return ["text"];
-    case "endOfRound":
-    case "final":
-      return ["headline"];
-  }
-}
-
 /** The text whose look a part of the slide selected on the canvas sets; null for a picture, a sound or the slide. */
 export function styledPartOf(element: ElementId): StyledPart | null {
   if (element.startsWith("answer-")) return "answers";

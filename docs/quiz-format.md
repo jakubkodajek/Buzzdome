@@ -151,8 +151,13 @@ slide with nothing set has no `style`.
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `fill` | gradient | Behind the slide when it has no `background`; over the theme's background. |
-| `headline` | text style | The question of a question slide, the title of another; kept when the slide changes type. |
+| `headline` | text style | The question of a question slide, the title of another. |
 | `text` | text style | The text of a `billboard` or an `explanation`. |
+
+When the editor changes a slide's type, the headline (the question, the
+title, or an explanation's text) keeps its look in the part the new type
+styles it with (`text` on an explanation, `headline` elsewhere), and the
+`fill` stays; the texts that start anew start with the theme's look.
 | `answers` | text style | Every answer of a question alike. |
 
 A **text style** has:
