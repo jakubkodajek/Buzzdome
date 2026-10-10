@@ -54,12 +54,16 @@ export function readColor(text: string): Color | null {
   return parsed && formatColor(parsed);
 }
 
+/** How much of `color` covers what is behind it, 0 to 1, with `transparency` percent of it showing through on top of its own opacity. */
+export function opacity(color: Color, transparency = 0): number {
+  return (parseColor(color)?.a ?? 0) * (1 - transparency / 100);
+}
+
 /** `color` for CSS, with `transparency` percent of it showing through on top of its own opacity. */
 export function cssColor(color: Color, transparency = 0): string {
   const parsed = parseColor(color);
   if (!parsed) return "transparent";
-  const alpha = Math.round(parsed.a * (1 - transparency / 100) * 1000) / 1000;
-  return `rgba(${parsed.r}, ${parsed.g}, ${parsed.b}, ${alpha})`;
+  return `rgba(${parsed.r}, ${parsed.g}, ${parsed.b}, ${Math.round(opacity(color, transparency) * 1000) / 1000})`;
 }
 
 export function toHsv({ r, g, b }: Pick<Rgba, "r" | "g" | "b">): Hsv {

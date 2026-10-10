@@ -81,5 +81,9 @@ describe("slide styles as CSS", () => {
     // A colour of its own stays, and a fill that mostly shows through leaves the theme's.
     expect(color({ fill: fill("#FFFFFF", "#FFFFFF"), color: "#FF0000" }, "answer")).toBe("rgba(255, 0, 0, 1)");
     expect(color({ fill: fill("#FFFFFF", "#FFFFFF"), transparency: 60 }, "answer")).toBeUndefined();
+    // The colours' own opacity counts too, with the transparency.
+    expect(color({ fill: fill("#FFFFFF20", "#FFFFFF20") }, "question")).toBeUndefined();
+    expect(color({ fill: fill("#FFFFFFCC", "#FFFFFFCC"), transparency: 40 }, "question")).toBeUndefined();
+    expect(color({ fill: fill("#FFFFFFCC", "#FFFFFF") }, "question")).toBe("#1a1a1a");
   });
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cssColor, formatColor, fromHsv, parseColor, readColor, toHsv } from "./color";
+import { cssColor, formatColor, fromHsv, opacity, parseColor, readColor, toHsv } from "./color";
 
 describe("colours", () => {
   it("reads and writes the quiz file's hex colours", () => {
@@ -27,6 +27,7 @@ describe("colours", () => {
     expect(cssColor("#FF8000", 25)).toBe("rgba(255, 128, 0, 0.75)");
     expect(cssColor("#FF800080", 50)).toBe("rgba(255, 128, 0, 0.251)");
     expect(cssColor("nonsense")).toBe("transparent");
+    expect([opacity("#FF8000"), opacity("#FF800080", 50), opacity("nonsense")]).toEqual([1, 128 / 255 / 2, 0]);
   });
 
   it("goes to hue, saturation and value and back", () => {

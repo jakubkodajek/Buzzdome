@@ -6,7 +6,7 @@
 
 import type { CSSProperties } from "react";
 import type { Gradient, GradientKind, SlideStyle, TextStyle } from "../types";
-import { cssColor } from "./color";
+import { cssColor, opacity } from "./color";
 import { readableText } from "./themes";
 
 /** The texts a style applies to, as slide.css draws them. */
@@ -57,7 +57,8 @@ export const THEME_TEXT: Record<StyledText, { bold: boolean; shadow: boolean }> 
  * `--answer-fill`, under the theme's sheen; another text's fill becomes a
  * box around it. Text on a fill of its own and in no colour of its own is
  * made readable on the fill (the theme's colour suits the theme's fill),
- * unless the fill mostly shows through.
+ * unless the fill mostly shows through: on average over its ends, its
+ * colours' own opacity and the transparency leave less than half of it.
  */
 export function textStyleCss(style: TextStyle | undefined, text: StyledText): CSSProperties {
   if (!style) return {};
@@ -76,7 +77,8 @@ export function textStyleCss(style: TextStyle | undefined, text: StyledText): CS
   if (style.shadow !== undefined) css["--style-shadow"] = style.shadow ? "var(--text-shadow)" : "none";
   if (style.shadowColor) css["--style-shadow-color"] = cssColor(style.shadowColor);
   const transparency = style.transparency ?? 0;
-  if (style.fill && !style.color && transparency < 50) css["--style-color"] = readableText(style.fill.from, style.fill.to);
+  const covers = style.fill && (opacity(style.fill.from, transparency) + opacity(style.fill.to, transparency)) / 2 > 0.5;
+  if (style.fill && !style.color && covers) css["--style-color"] = readableText(style.fill.from, style.fill.to);
   if (text === "answer") {
     if (style.fill) css["--answer-fill"] = gradientCss(style.fill, transparency);
     else if (transparency > 0) css["--answer-fill"] = `color-mix(in srgb, var(--answer) ${100 - transparency}%, transparent)`;
