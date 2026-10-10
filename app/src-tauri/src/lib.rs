@@ -68,8 +68,10 @@ impl Inner {
 
 struct AppState(Mutex<Inner>);
 
-/// The show state. Code that holds it must not wait for the learn lock
-/// (`lock_for_new_show`).
+/// The show state. The app's locks are taken in one order: the editor's
+/// (`editor::lock`), then this one, then the learn lock (`hardware`). So
+/// code holding the learn lock never waits for this one, which a journal
+/// write can hold for a while (G16).
 fn lock_show(app: &AppHandle) -> MutexGuard<'_, Inner> {
     app.state::<AppState>().inner().0.lock().unwrap()
 }
@@ -233,16 +235,15 @@ fn send_effects(app: &AppHandle, inner: &mut Inner, effects: Vec<Effect>) {
 }
 
 /// Locks the show state to start a show, refusing while one runs. Learn
-/// mode ends first, because in a show every press must play. Its lock is
-/// taken before this one and kept until this one is held, so learn mode
-/// cannot start in between; no code may wait for the learn lock while
-/// holding this one.
+/// mode ends, because in a show every press must play; learn mode starts
+/// only while holding the show state (`hardware::receiver_learn_start`),
+/// so it cannot start again until the show has.
 fn lock_for_new_show(app: &AppHandle) -> CmdResult<MutexGuard<'_, Inner>> {
-    let _learning = hardware::end_learning(app);
     let inner = lock_show(app);
     if inner.game.is_some() {
         return Err(AppError::ShowRunning);
     }
+    hardware::end_learning(app);
     Ok(inner)
 }
 
@@ -301,8 +302,8 @@ fn show_running(app: &AppHandle) -> bool {
 
 // The commands that read or start the show are async, so Tauri runs them
 // off the windows' thread, and they take the show state on a thread that
-// may wait (`off_ui`, A7). Those that change a running show run on the show
-// thread (`show_thread::run`).
+// may wait (`off_ui`, A7). Those that change or end a running show run on
+// the show thread (`show_thread::run`).
 
 #[tauri::command]
 async fn get_view(app: AppHandle) -> CmdResult<Option<GameView>> {
@@ -322,11 +323,12 @@ async fn media_root(app: AppHandle) -> CmdResult<Option<String>> {
     read_show(app, |inner| inner.media_root.as_ref().map(|root| root.join("").to_string_lossy().into_owned())).await
 }
 
-/// Why the running show's journal cannot be written, if so; also sent with
-/// `show-not-saved` whenever it changes (A9).
+/// Why the running show's journal cannot be written, or that a write does
+/// not finish, if so; also sent with `show-not-saved` whenever it changes
+/// (A9, G17).
 #[tauri::command]
 async fn show_not_saved(app: AppHandle) -> CmdResult<Option<AppError>> {
-    read_show(app, |inner| inner.save_problem.clone()).await
+    Ok(show_thread::not_saved(&app))
 }
 
 /// Opens a quiz file the quizmaster picks (`.quiz` or a plain quiz JSON)
@@ -407,7 +409,7 @@ fn resume_show(root: &Path, at_ms: u64, media_folders: &[PathBuf]) -> CmdResult<
     };
     // The show must go on: without its media it still runs, and the Director says why.
     let warnings = resume_warnings(&quiz, media_root.as_deref(), refused.as_deref(), meta.rules_changed());
-    let mut game = Game::replay(quiz, &journal);
+    let mut game = Game::replay(quiz, &journal, meta.rules_version);
     let mut effects = Vec::new();
     if let Some(command) = game.recovery_command() {
         (game, effects) = apply_and_journal(&game, Some(&mut session), &Stamped { at_ms, command })?;
@@ -432,14 +434,15 @@ async fn resume_last_session(app: AppHandle) -> CmdResult<Vec<AppError>> {
     .await
 }
 
-/// Closes the running show. Its journal stays on disk, so it can be resumed.
+/// Closes the running show. Its journal stays on disk, so it can be
+/// resumed. In order with the show's commands, so a step given before it
+/// still counts and none given after it reaches the show (G18).
 #[tauri::command]
 async fn end_show(app: AppHandle) -> CmdResult<()> {
-    off_ui(move || {
-        let mut inner = lock_show(&app);
-        replace_show(&mut inner, None, None);
+    show_thread::run(&app, |app, inner, _| {
+        replace_show(inner, None, None);
         inner.media_root = None;
-        emit_show_changed(&app, &inner);
+        emit_show_changed(app, inner);
         Ok(())
     })
     .await
@@ -675,9 +678,31 @@ mod tests {
         // What the windows will see is on disk: the restart is journaled.
         let on_disk = Session::resume_latest(&root).unwrap().unwrap();
         assert_eq!(on_disk.journal.last(), Some(&Stamped { at_ms: 60_000, command: Command::RestartQuestion }));
-        assert_eq!(Game::replay(on_disk.quiz, &on_disk.journal), resumed.game);
+        assert_eq!(Game::replay(on_disk.quiz, &on_disk.journal, quiz_core::RULES_VERSION), resumed.game);
         assert_eq!(resumed.game.slide_index(), slide);
         assert_ne!(resumed.game, before, "the question started again");
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn a_resumed_show_plays_on_when_the_new_runs_clock_reads_earlier() {
+        // The system clock went back between the runs, so the new run's show
+        // clock reads before the journal's last command (6 s).
+        let root = sessions_dir("clock-back");
+        run_show_and_crash(&root, up_to_the_first_question());
+        let resumed = resume_show(&root, 500, &[]).unwrap();
+        let mut inner = Inner { game: Some(resumed.game), session: Some(resumed.session), ..Inner::new() };
+        apply_journaled(&mut inner, Command::Next, 600).unwrap(); // the restarted question's clock
+        let press = Command::Press { buzzer: 2, button: quiz_core::Button::C };
+        assert!(apply_journaled(&mut inner, press, 700).unwrap().is_some(), "the press counts");
+        let game = inner.game.as_ref().unwrap();
+        assert_eq!(game.responses().keys().collect::<Vec<_>>(), [&2]);
+        // Time is up 20 s after the new start, not after the old one.
+        assert_eq!(game.due_command(20_000), None);
+        assert_eq!(game.due_command(21_000), Some(Command::CloseQuestion));
+        // The journal, with both runs' times, replays into the same show.
+        let on_disk = Session::resume_latest(&root).unwrap().unwrap();
+        assert_eq!(&Game::replay(on_disk.quiz, &on_disk.journal, quiz_core::RULES_VERSION), game);
         std::fs::remove_dir_all(&root).unwrap();
     }
 

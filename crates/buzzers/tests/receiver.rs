@@ -1,6 +1,7 @@
 //! Receiver thread against a fake HID backend: connect, decode, lights,
 //! unplug and replug.
 
+use buzzers::clock::ShowClock;
 use buzzers::hid::{DeviceInfo, DeviceSelector, HidBackend, HidDevice};
 use buzzers::protocol::{Protocol, ProtocolKind};
 use buzzers::receiver::{spawn, ReceiverConfig, ReceiverEvent, ReceiverHandle, ReceiverProblem, ReceiverStatus};
@@ -121,7 +122,7 @@ impl Protocol for TestProtocol {
 }
 
 fn config() -> ReceiverConfig {
-    ReceiverConfig { retry: Duration::from_millis(30), read_timeout_ms: 5, repeat_gap_ms: 150, ..ReceiverConfig::default() }
+    ReceiverConfig { retry: Duration::from_millis(30), read_timeout_ms: 5, repeat_gap_ms: 150, ..ReceiverConfig::new(ShowClock::start()) }
 }
 
 fn selector() -> DeviceSelector {

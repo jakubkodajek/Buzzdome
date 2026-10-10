@@ -13,8 +13,8 @@ pub type BuzzerId = u16;
 
 /// The version of the rules a journal is replayed with. Bump it whenever
 /// the same commands give another show: a resumed show begun under another
-/// version is rebuilt with today's rules, and the Director says its scores
-/// may differ. 1: refused presses that were journaled count (N3), and
+/// version is rebuilt with today's rules, but for what `Game::replay` keeps
+/// of older ones, and the Director says its scores may differ. 1: refused presses that were journaled count (N3), and
 /// renaming a player takes the name from another buzzer (R17). 2: a
 /// question in play restarts with `RestartQuestion`, which takes its score
 /// changes back, and refuses `GoTo` and `GoToFinal` (A3).
@@ -182,6 +182,9 @@ pub struct Controls {
     pub play_video: bool,
     /// `GoTo` and `GoToFinal`: not while a question is in play.
     pub go_to: bool,
+    /// `RestartQuestion`: while a question is in play, the way to leave it
+    /// without scoring it (G14).
+    pub restart_question: bool,
 }
 
 /// A countdown that can pause. `limit_ms == None` means untimed.
@@ -384,14 +387,26 @@ impl Game {
         }
     }
 
-    /// Rebuilds a game from a journal. Commands that fail are skipped, exactly
-    /// as they were rejected when first applied.
-    pub fn replay<'a>(quiz: Quiz, journal: impl IntoIterator<Item = &'a Stamped>) -> Game {
+    /// Rebuilds a game from a journal begun under `rules_version`. Commands
+    /// that fail are skipped, exactly as they were rejected when first applied.
+    pub fn replay<'a>(quiz: Quiz, journal: impl IntoIterator<Item = &'a Stamped>, rules_version: u32) -> Game {
         let mut game = Game::new(quiz);
         for stamped in journal {
-            let _ = game.apply(stamped);
+            let _ = game.apply_under(stamped, rules_version);
         }
         game
+    }
+
+    /// `apply`, for a journal begun under `rules_version`. Before version 2
+    /// a jump left a question in play, and the app restarted one after a
+    /// crash with a `GoTo` to it: replayed with today's refusal, every later
+    /// `Next` would land a step off (G11).
+    fn apply_under(&mut self, stamped: &Stamped, rules_version: u32) -> Result<Vec<Effect>, GameError> {
+        match stamped.command {
+            Command::GoTo { slide } if rules_version < 2 && slide < self.quiz.slides.len() => Ok(self.enter_slide(slide)),
+            Command::GoToFinal if rules_version < 2 => Ok(self.enter_slide(self.final_index())),
+            _ => self.apply(stamped),
+        }
     }
 
     /// After a crash the clock of a running question is meaningless, so the
@@ -515,6 +530,7 @@ impl Game {
             close_question: running.is_some(),
             play_video: self.shows_video(),
             go_to: !self.question_in_play(),
+            restart_question: self.question_in_play(),
         }
     }
 
@@ -587,7 +603,7 @@ impl Game {
                 }
                 self.jump_to(*slide)
             }
-            Command::GoToFinal => self.jump_to(self.quiz.final_slide().unwrap_or(self.quiz.slides.len())),
+            Command::GoToFinal => self.jump_to(self.final_index()),
             Command::PauseClock => match &mut self.phase {
                 Phase::Question(QuestionStep::Running { clock }) if clock.is_running() => {
                     clock.pause(now);
@@ -867,6 +883,11 @@ impl Game {
             })
             .collect();
         Some(Effect::Lights { lights })
+    }
+
+    /// Where `GoToFinal` jumps: the final slide, or past the last slide.
+    fn final_index(&self) -> usize {
+        self.quiz.final_slide().unwrap_or(self.quiz.slides.len())
     }
 
     fn jump_to(&mut self, index: usize) -> Result<Vec<Effect>, GameError> {

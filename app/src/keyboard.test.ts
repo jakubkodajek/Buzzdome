@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { NO_CONTROLS, previewView } from "./host/preview";
 import { translator } from "./i18n";
-import { commandForKey, isFieldTarget, isTypingTarget, keyHint, KEYS } from "./keyboard";
+import { commandForKey, isFieldTarget, isHeldButtonPress, isTypingTarget, keyHint, KEYS } from "./keyboard";
 import type { Controls, GameView } from "./types";
 
 const slide = { id: "q1", type: "billboard", title: "Round 1", text: "", notes: "", picture: null, video: null, sound: null, background: null } as const;
@@ -40,6 +40,20 @@ describe("keyHint", () => {
   it("writes keys as on the keyboard, in the quizmaster's language", () => {
     expect(keyHint(translator("cs"), KEYS.next)).toBe("Mezerník");
     expect(keyHint(translator("en"), KEYS.right)).toBe("Y");
+  });
+});
+
+describe("isHeldButtonPress", () => {
+  const press = (key: string, repeat: boolean, tagName: string) => ({ key, repeat, target: { tagName } as unknown as EventTarget });
+
+  it("takes Enter held on a button, not its first press", () => {
+    expect(isHeldButtonPress(press("Enter", true, "BUTTON"))).toBe(true);
+    expect(isHeldButtonPress(press("Enter", false, "BUTTON"))).toBe(false);
+  });
+
+  it("leaves other keys and other targets alone", () => {
+    expect(isHeldButtonPress(press("a", true, "BUTTON"))).toBe(false);
+    expect(isHeldButtonPress(press("Enter", true, "TEXTAREA"))).toBe(false);
   });
 });
 

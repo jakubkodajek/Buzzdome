@@ -143,7 +143,8 @@ async fn on_draft<T: Send + 'static>(
     .await
 }
 
-/// Holds the editor's folder, as every editor command does.
+/// Holds the editor's folder, as every editor command does. Taken before
+/// the show state, never while holding it (`crate::lock_show`).
 pub(crate) fn lock(app: &AppHandle) -> MutexGuard<'_, ()> {
     app.state::<EditorLock>().inner().0.lock().unwrap()
 }

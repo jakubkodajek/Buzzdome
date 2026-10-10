@@ -61,7 +61,7 @@ const theme = params.get("theme");
 const timer = params.get("timer") as TimerDesign | null;
 /** `damaged`: the last show's journal does not read; `failing`: resuming the last show fails. */
 const resume = params.get("resume");
-/** `full`: the running show's journal refuses writes, as on a full disk; `broken`: it cannot be repaired. */
+/** `full`: the running show's journal refuses writes, as on a full disk; `broken`: it cannot be repaired; `hangs`: a write does not finish. */
 const saving = params.get("saving");
 /** `unreadable`: the editor's draft does not read; `failing`: writing it fails, as on a full disk. */
 const draft = params.get("draft");
@@ -188,7 +188,7 @@ const SCENES: Record<string, GameView | null> = {
     clock: { limitMs: 20000, remainingMs: 12400, elapsedMs: 7600, running: true, points: 81 },
     players: players(answered),
     answeredCount: 4,
-    controls: { ...NO_CONTROLS, next: true, pauseClock: true, closeQuestion: true },
+    controls: { ...NO_CONTROLS, next: true, pauseClock: true, closeQuestion: true, restartQuestion: true },
   }),
   closed: view({
     phase: { phase: "question", step: "closed" },
@@ -210,7 +210,7 @@ const SCENES: Record<string, GameView | null> = {
     slide: quiz.slides[7],
     clock: { limitMs: 30000, remainingMs: 25700, elapsedMs: 4300, running: false, points: 129 },
     buzzed: 3,
-    controls: { ...NO_CONTROLS, judge: true },
+    controls: { ...NO_CONTROLS, judge: true, restartQuestion: true },
   }),
   ffRevealed: view({
     phase: { phase: "question", step: "revealed", winner: 3 },
@@ -249,14 +249,14 @@ const SCENES: Record<string, GameView | null> = {
     slide: { ...quiz.slides[2], video: VIDEO },
     phase: { phase: "question", step: "running", clock: { limitMs: 20000, elapsedBeforeMs: 0, runningSinceMs: 0, pressesFromMs: 0 } },
     clock: { limitMs: 20000, remainingMs: 12000, elapsedMs: 8000, running: true, points: 81 },
-    controls: { ...NO_CONTROLS, next: true, pauseClock: true, closeQuestion: true, playVideo: true },
+    controls: { ...NO_CONTROLS, next: true, pauseClock: true, closeQuestion: true, playVideo: true, restartQuestion: true },
   }),
   videoBlur: view({
     slideIndex: 2,
     slide: { ...quiz.slides[2], video: { ...VIDEO, effect: "blur" } },
     phase: { phase: "question", step: "running", clock: { limitMs: 20000, elapsedBeforeMs: 0, runningSinceMs: 0, pressesFromMs: 0 } },
     clock: { limitMs: 20000, remainingMs: 10000, elapsedMs: 10000, running: false, points: 81 },
-    controls: { ...NO_CONTROLS, next: true, resumeClock: true, closeQuestion: true, playVideo: true },
+    controls: { ...NO_CONTROLS, next: true, resumeClock: true, closeQuestion: true, playVideo: true, restartQuestion: true },
   }),
   videoClosed: view({ slideIndex: 2, slide: { ...quiz.slides[2], video: VIDEO }, phase: { phase: "question", step: "closed" }, onHold: true }),
   videoRevealed: view({ slideIndex: 2, slide: { ...quiz.slides[2], video: VIDEO }, phase: { phase: "question", step: "revealed", winner: null }, onHold: true }),
@@ -549,6 +549,7 @@ mockIPC(
         return "/src/dev/";
       case "show_not_saved":
         if (saving === "full") return { code: "showNotSaved", detail: "No space left on device (os error 28)" };
+        if (saving === "hangs") return { code: "saveHangs" };
         return saving === "broken" ? { code: "journalBroken" } : null;
       case "resume_last_session":
         if (resume === "failing") return Promise.reject({ code: "showNotSaved", detail: "No space left on device (os error 28)" });
