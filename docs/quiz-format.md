@@ -122,11 +122,55 @@ was moved or deleted.
 | `background.repeat` | yes/no | `true` | Video only: loops. |
 | `background.muted` | yes/no | `true` | Video only: plays without its sound. |
 | `background.sync` | yes/no | `false` | Video only: pauses while a player answers, while the clock is paused and once the question is over. |
+| `style` | object | none | Colours, gradients and fonts over the theme's; see [Slide style](#slide-style). |
 
 A **span** is `{ "fromMs": number, "toMs": number or null }`, milliseconds
 from the start of the file; `toMs: null` runs to the end of the file, so the
 whole file is `{ "fromMs": 0, "toMs": null }`. A span must not end before it
 starts.
+
+### Slide style
+
+```json
+"style": {
+  "fill": { "from": "#0B1E3F", "to": "#3A6EA5", "kind": "vertical" },
+  "headline": { "color": "#FFCC00", "font": "Georgia", "size": 120, "italic": true },
+  "answers": { "fill": { "from": "#FFFFFF", "to": "#D0D8E0", "kind": "vertical" }, "color": "#102030", "transparency": 20 }
+}
+```
+
+Every field is optional and falls back to the theme's look. A field with a
+value that does not fit the rules below (a colour that is not hex, a size
+out of range, an unknown kind) reads as missing, so a style never keeps a
+quiz from opening or playing. Writers leave out what is not set, and a
+slide with nothing set has no `style`.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `fill` | gradient | Behind the slide when it has no `background`; over the theme's background. |
+| `headline` | text style | The question of a question slide, the title of another; kept when the slide changes type. |
+| `text` | text style | The text of a `billboard` or an `explanation`. |
+| `answers` | text style | Every answer of a question alike. |
+
+A **text style** has:
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `color` | colour | Of the text. |
+| `font` | text | Name of a font installed on the computer that shows the quiz, at most 64 characters, without `" ' \ ; { } < >` or control characters. Not installed there: the theme's font. |
+| `size` | 50 to 200 | Percent of the theme's size for this text. |
+| `bold`, `italic`, `underline` | yes/no | `false` turns off what the theme has (titles and questions are bold). |
+| `align` | `left`, `center`, `right` | |
+| `shadow` | yes/no | A drop shadow under the text; titles and questions have one in the built-in themes. |
+| `shadowColor` | colour | Of that shadow. |
+| `fill` | gradient | Behind the text: an answer's panel, or a box around a title or text. |
+| `transparency` | 0 to 100 | Percent of the fill (`fill` or the theme's) that shows through: 0 is solid, 100 invisible. |
+
+A **colour** is `#RRGGBB`, or `#RRGGBBAA` with its opacity (`00` invisible,
+`FF` solid). A **gradient** is `{ "from": colour, "to": colour, "kind": … }`
+with `kind` one of `vertical` (top down), `horizontal` (left to right),
+`diagonal` (top left to bottom right), `diagonalUp` (bottom left to top
+right) or `radial` (middle out); `from` and `to` alike make a plain colour.
 
 ### `billboard`
 
@@ -282,7 +326,7 @@ the rows it came up in.
 | 1 | First version. |
 | 2 | Adds `explanation` slides and, later within version 2, the quiz `theme` (builds from before that drop it when they save). Version 1 files read as version 2 unchanged. |
 | 3 | `background` becomes an object with video options; sounds get `part`, `gainDb` and `replay`. Version 1 and 2 files read as version 3 unchanged. Later within version 3, a `fastestFinger` question may have up to 6 answers instead of 4; earlier builds list such a question as a problem. |
-| 4 | Adds `final` slides. Version 1 to 3 files read as version 4 unchanged. Later within version 4, videos get `introPauseMs`, `volume`, `speed`, `part`, `effect` and `replay`; a video without them plays as before. |
+| 4 | Adds `final` slides. Version 1 to 3 files read as version 4 unchanged. Later within version 4, videos get `introPauseMs`, `volume`, `speed`, `part`, `effect` and `replay`; a video without them plays as before. Later still, slides get `style`; builds before it show the theme's look and drop the style when they save. |
 
 Fields may be added within a version as long as older files keep their
 meaning; readers ignore fields they do not know. Anything else (a new slide

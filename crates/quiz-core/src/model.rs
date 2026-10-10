@@ -5,6 +5,7 @@ use crate::media::{
     check_reference, Background, MediaIssue, MediaKind, Playback, SoundClip, SoundStart, VideoClip, MAX_GAIN_DB, MAX_INTRO_PAUSE_MS,
     MAX_REPLAY_DELAY_MS, MAX_VIDEO_SPEED, MIN_GAIN_DB, MIN_VIDEO_SPEED,
 };
+use crate::style::SlideStyle;
 use crate::theme::is_theme_id;
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::{BTreeMap, BTreeSet, HashSet};
@@ -13,8 +14,9 @@ use ts_rs::TS;
 /// 1: first version. 2: adds explanation slides. 3: backgrounds become
 /// objects with video options; sounds get a part, a loudness gain and a
 /// replay part; later within 3, fastest finger questions may have 6
-/// answers instead of 4 (builds before refuse more). 4: adds final slides.
-/// Older files read unchanged.
+/// answers instead of 4 (builds before refuse more). 4: adds final slides;
+/// later within 4, video options and slide styles (builds before drop them
+/// when they save). Older files read unchanged.
 pub const SCHEMA_VERSION: u32 = 4;
 
 /// Most answers a question can show (A-F, as many as the reference app's
@@ -76,6 +78,10 @@ pub struct Slide {
     #[serde(default, with = "crate::media::background_any_version")]
     #[ts(as = "Option<Background>")]
     pub background: Option<Background>,
+    /// Colours, gradients and fonts over the theme's.
+    #[serde(default, skip_serializing_if = "SlideStyle::is_empty", with = "crate::style::lenient_or_default")]
+    #[ts(as = "SlideStyle")]
+    pub style: SlideStyle,
     #[serde(flatten)]
     pub content: SlideContent,
 }
@@ -83,7 +89,7 @@ pub struct Slide {
 impl Slide {
     /// A slide without notes or media.
     pub fn new(id: impl Into<String>, content: SlideContent) -> Slide {
-        Slide { id: id.into(), notes: String::new(), picture: None, video: None, sound: None, background: None, content }
+        Slide { id: id.into(), notes: String::new(), picture: None, video: None, sound: None, background: None, style: SlideStyle::default(), content }
     }
 
     /// Drops what the slide's type cannot play: only a question has a clock
@@ -879,6 +885,23 @@ mod tests {
         let (video, sound) = (question.video.as_ref().unwrap(), question.sound.as_ref().unwrap());
         assert!(video.effect.is_some() && video.replay.is_some() && sound.replay.is_some());
         assert_eq!(sound.start, SoundStart::WithClock);
+    }
+
+    #[test]
+    fn a_slide_keeps_its_style_and_writes_none_without_one() {
+        let quiz = Quiz::from_json(
+            r##"{"schemaVersion": 4, "title": "x", "slides": [
+                {"id": "a", "type": "billboard", "title": "", "style": {"headline": {"color": "#FFCC00", "size": 150}, "text": {}}},
+                {"id": "b", "type": "billboard", "title": "", "style": "red"}
+            ]}"##,
+        )
+        .unwrap();
+        let written = serde_json::to_value(&quiz).unwrap();
+        assert_eq!(written["slides"][0]["style"], serde_json::json!({"headline": {"color": "#FFCC00", "size": 150}}));
+        // An unreadable style is the theme's, and a slide with none writes none.
+        assert!(quiz.slides[1].style.is_empty());
+        assert!(written["slides"][1].get("style").is_none());
+        assert_eq!(Quiz::from_json(&written.to_string()).unwrap(), quiz);
     }
 
     #[test]

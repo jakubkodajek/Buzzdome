@@ -3,6 +3,7 @@
 //! rest from the parents, so the UI gets every value of every theme.
 
 use crate::media::{extension, is_portable_path, MediaKind};
+use crate::style::is_hex_color;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashSet};
 use ts_rs::TS;
@@ -335,10 +336,6 @@ fn label(field: &str, text: String) -> Result<String, ThemeError> {
         return Err(bad(field, &text));
     }
     Ok(text)
-}
-
-fn is_hex_color(color: &str) -> bool {
-    color.strip_prefix('#').is_some_and(|hex| matches!(hex.len(), 6 | 8) && hex.bytes().all(|b| b.is_ascii_hexdigit()))
 }
 
 /// A file path inside the package (TH-3) with one of the extensions in `types`.

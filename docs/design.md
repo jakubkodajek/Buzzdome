@@ -165,6 +165,13 @@ unsaved); a plain `quiz.json` reads
 only safe names from the disk (no device names on Windows), and the show
 path keeps such a file refused.
 
+A slide's `style` (`quiz_core::style`) is typed: `Color`, `FontName`,
+`TextSize` and `Transparency` check their values whenever they are read,
+from a file or from the UI, and each style field reads through `lenient`,
+so a wrong value reads as missing (the theme's look) instead of refusing
+the quiz. A font name cannot hold quotes, so the UI can put it in a style
+sheet as it is.
+
 The session's `meta.json` records that folder (`mediaRoot`), so a resumed
 show finds its media even if the original file was moved. When a show
 starts, every other unpacked quiz is deleted, because only the latest show can
