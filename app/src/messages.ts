@@ -18,7 +18,7 @@ function params(fields: object): Params {
 }
 
 /** Codes worded with their own parameters, see `errorText`. */
-type WordedApart = "file" | "noSuchSlide" | "noSuchPad" | "notInLibrary" | "learnConflict" | "quizInvalid";
+type WordedApart = "file" | "noSuchSlide" | "noSuchPad" | "notInLibrary" | "learnConflict" | "quizInvalid" | "journalBroken";
 
 const ERROR_KEYS: Record<Exclude<AppError["code"], WordedApart>, StringKey> = {
   noShow: "noShow",
@@ -29,7 +29,6 @@ const ERROR_KEYS: Record<Exclude<AppError["code"], WordedApart>, StringKey> = {
   duplicateBuzzer: "errDuplicateBuzzer",
   tooManyTeams: "errTooManyTeams",
   showNotSaved: "errShowNotSaved",
-  journalBroken: "errJournalBroken",
   showStopped: "errShowStopped",
   showNotRead: "errShowNotRead",
   journalDamaged: "errJournalDamaged",
@@ -92,6 +91,8 @@ export function errorText(t: Translate, error: unknown): string {
       return t("errNotInLibrary", { reference: mediaFileName(error.reference) });
     case "learnConflict":
       return t("errLearnConflict", { buzzer: error.buzzer, button: buttonLabel(error.button) });
+    case "journalBroken":
+      return t("errJournalBroken", { resume: t("resume") });
     case "quizInvalid": {
       const first = error.problems[0];
       return t("errQuizInvalid", { n: error.problems.length, first: first ? problemText(t, first.problem) : "" });
