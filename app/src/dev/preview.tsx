@@ -31,7 +31,7 @@ import type {
   VideoClip,
 } from "../types";
 import "../styles.css";
-import { BUILTIN_THEMES } from "./builtin-themes";
+import { BUILTIN_THEMES } from "../bindings/BuiltinThemes";
 
 // The backend fills serde defaults; the raw JSON file leaves them out.
 const quiz = {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BUILTIN_THEMES } from "../dev/builtin-themes";
+import { BUILTIN_THEMES } from "../bindings/BuiltinThemes";
 import { newSlide, setBackground, setSlideFill } from "../editor/slides";
 import { resolveBackground } from "./background";
 

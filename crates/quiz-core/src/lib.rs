@@ -35,8 +35,8 @@ pub use style::{
     MAX_TRANSPARENCY, MIN_TEXT_SIZE,
 };
 pub use theme::{
-    is_theme_id, resolve_themes, Corners, HeadingCase, ResolvedThemes, ScreenKey, SkippedTheme, Theme, ThemeError, ThemeFile, ThemeManifest, ThemeSource,
-    UnknownKey, BUILTIN_PREFIX, DEFAULT_THEME_ID,
+    is_theme_id, resolve_themes, Corners, HeadingCase, Ignored, ResolvedThemes, ScreenKey, SkippedTheme, Theme, ThemeError, ThemeFile, ThemeManifest,
+    ThemeSource, BUILTIN_PREFIX, DEFAULT_THEME_ID,
 };
 pub use view::GameView;
 
