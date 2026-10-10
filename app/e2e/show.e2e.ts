@@ -221,8 +221,12 @@ describe("a show of the demo quiz", () => {
       view = await app.waitView(`final step ${step + 1}`, (v) => phaseOf(v) === "final" && (v.phase as { step: number }).step === step + 1);
     }
     expect(await app.hasButton("next")).toBe(false);
-    const ranking = await projectorText();
-    for (const player of view.players) expect(ranking).toContain(String(player.score));
+    // The projector draws the last step a moment after the backend took it.
+    const scores = view.players.map((player) => String(player.score));
+    await waitFor("every score on the projector", async () => {
+      const ranking = await projectorText();
+      return scores.every((score) => ranking.includes(score));
+    });
   });
 
   test("nothing failed in either window", async () => {
