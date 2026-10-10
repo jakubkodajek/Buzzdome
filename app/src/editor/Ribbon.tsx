@@ -89,6 +89,9 @@ export function Ribbon({ tab, onTab, actions, onGallery, slide, element, propert
             <Group title="groupEditing">
               <BigButton action={actions.edit} />
             </Group>
+            <Group title="groupTools">
+              <BigButton action={actions.normalizeAll} />
+            </Group>
           </>
         )}
         {shown === "insert" && (
@@ -142,10 +145,20 @@ export function Ribbon({ tab, onTab, actions, onGallery, slide, element, propert
                 <Fields rows={properties.videoOptions} />
               </Group>
             )}
-            {element === "sound" && properties.soundOptions.length > 0 && (
-              <Group title="groupPlayback">
-                <Fields rows={properties.soundOptions} />
-              </Group>
+            {element === "sound" && properties.gain && (
+              <>
+                <Group title="groupPlayback">
+                  <Fields rows={properties.soundOptions} />
+                </Group>
+                <Group title="groupTiming">
+                  <BigButton action={actions.trimSound} />
+                  {properties.replay.length > 0 && <Fields rows={properties.replay} />}
+                </Group>
+                <Group title="groupEffects">
+                  <BigButton action={actions.normalizeSound} />
+                  <Fields rows={[properties.gain]} />
+                </Group>
+              </>
             )}
           </>
         )}

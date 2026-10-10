@@ -5,6 +5,7 @@ import type { Slide } from "./bindings/Slide";
 
 export type { AnswerMode } from "./bindings/AnswerMode";
 export type { AppError } from "./bindings/AppError";
+export type { Background } from "./bindings/Background";
 export type { AnswerResults } from "./bindings/AnswerResults";
 export type { Button } from "./bindings/Button";
 export type { ClockView } from "./bindings/ClockView";
@@ -31,11 +32,13 @@ export type { RawReport } from "./bindings/RawReport";
 export type { ReceiverInfo } from "./bindings/ReceiverInfo";
 export type { ReceiverProblem } from "./bindings/ReceiverProblem";
 export type { ReceiverStatus } from "./bindings/ReceiverStatus";
+export type { Replay } from "./bindings/Replay";
 export type { SessionSummary } from "./bindings/SessionSummary";
 export type { SettingsLost } from "./bindings/SettingsLost";
 export type { Slide } from "./bindings/Slide";
 export type { SoundClip } from "./bindings/SoundClip";
 export type { SoundStart } from "./bindings/SoundStart";
+export type { Span } from "./bindings/Span";
 export type { ValidationError } from "./bindings/ValidationError";
 export type { VideoClip } from "./bindings/VideoClip";
 

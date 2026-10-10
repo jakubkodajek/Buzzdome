@@ -24,6 +24,7 @@ export function previewView(slide: Slide, slideIndex: number, slideCount: number
     buzzed: null,
     leaderboardVisible: false,
     controls: NO_CONTROLS,
+    onHold: false,
   };
 }
 

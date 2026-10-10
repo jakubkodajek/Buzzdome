@@ -112,6 +112,31 @@ pub enum SoundStart {
     OnDemand,
 }
 
+/// Lowest loudness gain of a sound, in dB (SN-9).
+pub const MIN_GAIN_DB: i32 = -30;
+/// Highest loudness gain of a sound, in dB (SN-9).
+pub const MAX_GAIN_DB: i32 = 20;
+
+/// A stretch of a media file, in milliseconds from its start. The default is
+/// the whole file.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+#[serde(rename_all = "camelCase")]
+pub struct Span {
+    #[serde(default)]
+    pub from_ms: u32,
+    /// `None` runs to the end of the file.
+    #[serde(default)]
+    pub to_ms: Option<u32>,
+}
+
+impl Span {
+    /// True when nothing would play: it ends where or before it starts.
+    pub fn is_empty(&self) -> bool {
+        self.to_ms.is_some_and(|to| to <= self.from_ms)
+    }
+}
+
 /// A sound that belongs to a slide (a music question, a jingle).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[ts(export)]
@@ -120,12 +145,42 @@ pub struct SoundClip {
     pub file: String,
     #[serde(default)]
     pub start: SoundStart,
-    /// Play again from the start until the slide ends.
+    /// Play `part` again from its start until the slide ends.
     #[serde(default)]
     pub repeat: bool,
     /// Volume in percent, 0 to 100.
     #[serde(default = "full_volume")]
     pub volume: u8,
+    /// The part of the file that plays (SN-8).
+    #[serde(default)]
+    pub part: Span,
+    /// Loudness gain in dB, on top of `volume`, that brings the sound to the
+    /// quiz's loudness (SN-9). `MIN_GAIN_DB` to `MAX_GAIN_DB`.
+    #[serde(default)]
+    pub gain_db: f32,
+    /// Played once when the answer is revealed; questions only (SN-8).
+    #[serde(default)]
+    pub replay: Option<Replay>,
+}
+
+impl SoundClip {
+    /// The parts of the file this sound plays.
+    pub fn parts(&self) -> impl Iterator<Item = &Span> {
+        std::iter::once(&self.part).chain(self.replay.as_ref().map(|r| &r.part))
+    }
+}
+
+/// The part of a question's sound played again once its answer is revealed,
+/// such as the chorus of the song the players had to name.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+#[serde(rename_all = "camelCase")]
+pub struct Replay {
+    #[serde(default)]
+    pub part: Span,
+    /// Time between the reveal and the start of `part`.
+    #[serde(default)]
+    pub delay_ms: u32,
 }
 
 /// A video shown on a slide in place of a picture.
@@ -141,6 +196,56 @@ pub struct VideoClip {
     pub muted: bool,
     #[serde(default)]
     pub repeat: bool,
+}
+
+/// A picture or video behind a slide's content, in place of the theme's
+/// (spec section 5). The options apply to videos only.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+#[serde(rename_all = "camelCase")]
+pub struct Background {
+    pub file: String,
+    /// Start again at the end; otherwise the last frame stays.
+    #[serde(default = "yes")]
+    pub repeat: bool,
+    /// Play without the video's sound.
+    #[serde(default = "yes")]
+    pub muted: bool,
+    /// Pause while a player answers, while the clock is paused and once the
+    /// question is over (BG-4).
+    #[serde(default)]
+    pub sync: bool,
+}
+
+impl Background {
+    /// `file` with the default options: a silent loop.
+    pub fn new(file: impl Into<String>) -> Background {
+        Background { file: file.into(), repeat: true, muted: true, sync: false }
+    }
+}
+
+/// A slide's background as `#[serde(with)]` module: written as schema version
+/// 3 writes it, read also as the bare file name versions 1 and 2 wrote.
+pub(crate) mod background_any_version {
+    use super::Background;
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+    pub fn serialize<S: Serializer>(background: &Option<Background>, serializer: S) -> Result<S::Ok, S::Error> {
+        background.serialize(serializer)
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Option<Background>, D::Error> {
+        #[derive(Deserialize)]
+        #[serde(untagged)]
+        enum Stored {
+            File(String),
+            Full(Background),
+        }
+        Ok(Option::<Stored>::deserialize(deserializer)?.map(|stored| match stored {
+            Stored::File(file) => Background::new(file),
+            Stored::Full(background) => background,
+        }))
+    }
 }
 
 fn full_volume() -> u8 {

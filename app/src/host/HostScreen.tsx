@@ -39,7 +39,7 @@ function HostLayout() {
         <Stage className="host-viewport" screen={view ? screenOf(view) : "default"}>
           {view && (
             <>
-              {view.slide && <SlideBackground slide={view.slide} />}
+              {view.slide && <SlideBackground slide={view.slide} onHold={view.onHold} />}
               <SlideScreen view={view} context={slideContext(quiz, view.slideIndex)} clock={clock} />
               {verdict && <div className={`verdict verdict-${verdict}`}>{verdict === "correct" ? <CheckIcon /> : <CrossIcon />}</div>}
               {view.leaderboardVisible && (

@@ -1,4 +1,5 @@
-import type { Cue } from "./types";
+import type { Cue } from "../types";
+import { audioContext } from "./context";
 
 // Placeholder tones until the show has its own sound set.
 const TONES: Record<Cue, { freq: number[]; ms: number }> = {
@@ -10,11 +11,8 @@ const TONES: Record<Cue, { freq: number[]; ms: number }> = {
   reveal: { freq: [587, 784], ms: 160 },
 };
 
-let context: AudioContext | null = null;
-
 export function playCue(cue: Cue) {
-  context ??= new AudioContext();
-  const ctx = context;
+  const ctx = audioContext();
   const { freq, ms } = TONES[cue];
   freq.forEach((f, i) => {
     const start = ctx.currentTime + (i * ms) / 1000;

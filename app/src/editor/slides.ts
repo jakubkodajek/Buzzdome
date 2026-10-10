@@ -2,9 +2,19 @@
 // way to make a question the show would refuse (see `Quiz::validate` in
 // crates/quiz-core/src/model.rs).
 
-import { DEFAULT_POINTS, DEFAULT_TIME_LIMIT_S, MAX_ANSWERS, MAX_POINTS, MAX_TIME_LIMIT_S, MIN_EVERYONE_ANSWERS } from "../bindings/Constants";
+import { WHOLE_FILE } from "../audio/clip-player";
+import {
+  DEFAULT_POINTS,
+  DEFAULT_TIME_LIMIT_S,
+  MAX_ANSWERS,
+  MAX_GAIN_DB,
+  MAX_POINTS,
+  MAX_TIME_LIMIT_S,
+  MIN_EVERYONE_ANSWERS,
+  MIN_GAIN_DB,
+} from "../bindings/Constants";
 import { slideTitle } from "../quiz";
-import type { AnswerMode, Quiz, QuestionSlide, Slide, SlideType, SoundClip, VideoClip } from "../types";
+import type { AnswerMode, Background, Quiz, QuestionSlide, Replay, Slide, SlideType, SoundClip, Span, VideoClip } from "../types";
 
 /** Answers a new everyone-answers question starts with: one per buzzer button. */
 const DEFAULT_ANSWERS = MAX_ANSWERS;
@@ -41,13 +51,25 @@ export function setHeadline(slide: Slide, text: string): Slide {
   return slide.type === "question" || slide.type === "explanation" ? { ...slide, text } : { ...slide, title: text };
 }
 
+/** Sets the text under a billboard's title; other slides have none. */
+export function setBodyText(slide: Slide, text: string): Slide {
+  return slide.type === "billboard" ? { ...slide, text } : slide;
+}
+
+export function setNotes(slide: Slide, notes: string): Slide {
+  return { ...slide, notes };
+}
+
 /**
  * The slide as another type. Its id, notes and media stay, the question,
  * explanation or title carries over, and the rest starts as on a new slide.
+ * Only a question reveals an answer, so only a question keeps its sound's
+ * replay part.
  */
 export function convertSlide(slide: Slide, type: SlideType): Slide {
   if (slide.type === type) return slide;
-  const { id, notes, picture, video, sound, background } = slide;
+  const { id, notes, picture, video, background } = slide;
+  const sound = slide.sound && type !== "question" ? { ...slide.sound, replay: null } : slide.sound;
   return setHeadline({ ...newSlide(type, id), notes, picture, video, sound, background }, slideTitle(slide));
 }
 
@@ -143,8 +165,13 @@ function clampInt(value: number, min: number, max: number): number {
   return Number.isFinite(value) ? Math.min(max, Math.max(min, Math.round(value))) : 0;
 }
 
+/** Longest wait before a replay part, in ms; the field offers no more. */
+export const MAX_REPLAY_DELAY_MS = 60_000;
+
+/** The options a quiz file gets when it names only the file (crates/quiz-core/src/media.rs). */
 const NEW_VIDEO: Omit<VideoClip, "file"> = { autoplay: true, muted: false, repeat: false };
-const NEW_SOUND: Omit<SoundClip, "file"> = { start: "onSlide", repeat: false, volume: 100 };
+const NEW_SOUND: Omit<SoundClip, "file"> = { start: "onSlide", repeat: false, volume: 100, part: WHOLE_FILE, gainDb: 0, replay: null };
+const NEW_BACKGROUND: Omit<Background, "file"> = { repeat: true, muted: true, sync: false };
 
 /** Shows a picture; a slide shows a picture or a video, so the video goes. */
 export function setPicture(slide: Slide, file: string | null): Slide {
@@ -167,12 +194,41 @@ export function setSound(slide: Slide, file: string | null): Slide {
   return { ...slide, sound: { ...(slide.sound ?? NEW_SOUND), file } };
 }
 
+/**
+ * Changes the sound's options, kept playable: volume a whole percentage,
+ * loudness gain within its limits to 0.1 dB, and a replay part on questions
+ * only. A part that would hold no sound is refused.
+ */
 export function setSoundOptions(slide: Slide, options: Partial<Omit<SoundClip, "file">>): Slide {
   if (!slide.sound) return slide;
-  const volume = Math.round(Math.min(100, Math.max(0, options.volume ?? slide.sound.volume)));
-  return { ...slide, sound: { ...slide.sound, ...options, volume } };
+  const next = { ...slide.sound, ...options };
+  const part = wholeMs(next.part);
+  const replay = slide.type === "question" && next.replay ? { part: wholeMs(next.replay.part), delayMs: clampInt(next.replay.delayMs, 0, MAX_REPLAY_DELAY_MS) } : null;
+  if (isEmptySpan(part) || (replay && isEmptySpan(replay.part))) return slide;
+  const gainDb = Math.round(Math.min(MAX_GAIN_DB, Math.max(MIN_GAIN_DB, Number.isFinite(next.gainDb) ? next.gainDb : 0)) * 10) / 10;
+  return { ...slide, sound: { ...next, volume: clampInt(next.volume, 0, 100), gainDb, part, replay } };
 }
 
+/** A replay part as it is first ticked: the part that plays, at once after the reveal. */
+export function newReplay(part: Span): Replay {
+  return { part, delayMs: 0 };
+}
+
+/** `span` in whole, non-negative milliseconds. */
+function wholeMs(span: Span): Span {
+  return { fromMs: Math.max(0, Math.round(span.fromMs)), toMs: span.toMs === null ? null : Math.max(0, Math.round(span.toMs)) };
+}
+
+/** Holds no sound: ends where or before it starts (`Span::is_empty` in Rust). */
+export function isEmptySpan(span: Span): boolean {
+  return span.toMs !== null && span.toMs <= span.fromMs;
+}
+
+/** Shows a picture or video behind the slide (keeping its options when the file is replaced). */
 export function setBackground(slide: Slide, file: string | null): Slide {
-  return { ...slide, background: file };
+  return { ...slide, background: file === null ? null : { ...(slide.background ?? NEW_BACKGROUND), file } };
+}
+
+export function setBackgroundOptions(slide: Slide, options: Partial<Omit<Background, "file">>): Slide {
+  return slide.background ? { ...slide, background: { ...slide.background, ...options } } : slide;
 }

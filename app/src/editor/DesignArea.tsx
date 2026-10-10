@@ -18,6 +18,8 @@ interface DesignAreaProps {
   context: SlideContext;
   /** The part of the slide that is selected; outlined. */
   element: ElementId;
+  /** The background video plays (it shows its first frame otherwise). */
+  playingBackground: boolean;
   onSelect: (element: ElementId) => void;
   onEdit: (element: ElementId) => void;
   onMenu: (event: MouseEvent, element: ElementId) => void;
@@ -27,7 +29,7 @@ interface DesignAreaProps {
  * The selected slide as the audience will see it. A click selects the part
  * under the pointer, a double click edits it.
  */
-export function DesignArea({ quiz, index, slide, context, element, onSelect, onEdit, onMenu }: DesignAreaProps) {
+export function DesignArea({ quiz, index, slide, context, element, playingBackground, onSelect, onEdit, onMenu }: DesignAreaProps) {
   const { t } = useApp();
   const view = previewView(slide, index, quiz.slides.length, quiz.title);
   return (
@@ -44,7 +46,7 @@ export function DesignArea({ quiz, index, slide, context, element, onSelect, onE
       }}
     >
       <Stage className="design-stage" screen={screenOf(view)}>
-        <SlideBackground slide={slide} mode="preview" />
+        <SlideBackground slide={slide} mode="preview" playing={playingBackground} />
         <SlideScreen view={view} context={context} clock={null} mode="preview" />
         {slide.sound && (
           <div className="sound-badge" data-element="sound" title={t("mediaSound")}>

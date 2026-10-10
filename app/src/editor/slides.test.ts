@@ -8,8 +8,13 @@ import {
   newSlide,
   removeAnswer,
   setAnswerAt,
+  setBackground,
+  setBackgroundOptions,
+  setBodyText,
   setCorrect,
+  setHeadline,
   setMode,
+  setNotes,
   setPicture,
   setScoring,
   setSound,
@@ -99,8 +104,47 @@ describe("slides", () => {
 
   it("keeps sound options when the file changes and the volume in percent", () => {
     const loud = setSoundOptions(setSound(question(), "media/a.mp3"), { start: "withClock", volume: 150 });
-    expect(loud.sound).toEqual({ file: "media/a.mp3", start: "withClock", repeat: false, volume: 100 });
+    expect(loud.sound).toEqual({
+      file: "media/a.mp3",
+      start: "withClock",
+      repeat: false,
+      volume: 100,
+      part: { fromMs: 0, toMs: null },
+      gainDb: 0,
+      replay: null,
+    });
     expect(setSound(loud, "media/b.mp3").sound).toMatchObject({ file: "media/b.mp3", start: "withClock" });
+  });
+
+  it("keeps a sound's parts playable and its gain within limits", () => {
+    const song = setSound(question(), "media/song.mp3");
+    const chorus = setSoundOptions(song, { part: { fromMs: 15_000.4, toMs: 45_000 }, gainDb: 3.14159 });
+    expect(chorus.sound).toMatchObject({ part: { fromMs: 15_000, toMs: 45_000 }, gainDb: 3.1 });
+    // A part that holds no sound is refused; the gain stops at its limits.
+    expect(setSoundOptions(chorus, { part: { fromMs: 9_000, toMs: 9_000 } })).toBe(chorus);
+    expect(setSoundOptions(chorus, { gainDb: 99 }).sound?.gainDb).toBe(20);
+    expect(setSoundOptions(chorus, { gainDb: -99 }).sound?.gainDb).toBe(-30);
+    const replay = { part: { fromMs: 60_000, toMs: null }, delayMs: 999_999 };
+    expect(setSoundOptions(chorus, { replay }).sound?.replay).toEqual({ part: { fromMs: 60_000, toMs: null }, delayMs: 60_000 });
+    expect(setSoundOptions(chorus, { replay: { part: { fromMs: 5, toMs: 1 }, delayMs: 0 } })).toBe(chorus);
+  });
+
+  it("gives only questions a replay part, since only they reveal an answer", () => {
+    const replay = { part: { fromMs: 0, toMs: 10_000 }, delayMs: 1_000 };
+    const music = setSoundOptions(setSound(question(), "media/song.mp3"), { replay });
+    expect(music.sound?.replay).toEqual(replay);
+    const billboard = convertSlide(music, "billboard");
+    expect(billboard.sound).toMatchObject({ file: "media/song.mp3", replay: null });
+    expect(setSoundOptions(billboard, { replay }).sound?.replay).toBeNull();
+  });
+
+  it("keeps background options when the file changes", () => {
+    const loop = setBackground(question(), "media/stage.mp4");
+    expect(loop.background).toEqual({ file: "media/stage.mp4", repeat: true, muted: true, sync: false });
+    const synced = setBackground(setBackgroundOptions(loop, { sync: true, muted: false }), "media/other.mp4");
+    expect(synced.background).toEqual({ file: "media/other.mp4", repeat: true, muted: false, sync: true });
+    expect(setBackground(synced, null).background).toBeNull();
+    expect(setBackgroundOptions(question(), { sync: true })).toEqual(question());
   });
 
   it("converts a slide to another type, keeping its text, notes and media", () => {
@@ -110,6 +154,18 @@ describe("slides", () => {
     const back = convertSlide(billboard, "question");
     expect(back).toMatchObject({ type: "question", text: "Who?", answers: ["", "", "", ""], correct: 0 });
     expect(convertSlide(q, "question")).toBe(q);
+  });
+
+  it("sets each slide's texts where that slide has them", () => {
+    expect(setHeadline(question(), "Who?")).toMatchObject({ text: "Who?" });
+    expect(setHeadline(newSlide("explanation", "e"), "Because")).toMatchObject({ text: "Because" });
+    expect(setHeadline(newSlide("endOfRound", "r"), "End")).toMatchObject({ title: "End" });
+    const billboard = setBodyText(setHeadline(newSlide("billboard", "b"), "Round 1"), "Geography");
+    expect(billboard).toMatchObject({ title: "Round 1", text: "Geography" });
+    // Only a billboard has text under its title.
+    const end = newSlide("endOfRound", "r");
+    expect(setBodyText(end, "x")).toBe(end);
+    expect(setNotes(end, "Applause")).toMatchObject({ notes: "Applause" });
   });
 
   it("makes ids no slide has", () => {

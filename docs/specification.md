@@ -145,10 +145,10 @@ background gallery and round or quiz backgrounds are planned.
 
 | ID | Requirement |
 | --- | --- |
-| BG-1 | Image formats: PNG, JPEG, WebP. Video format: MP4 (H.264 video; any audio is muted). |
+| BG-1 | Image formats: PNG, JPEG, WebP. Video formats: MP4 (H.264) and WebM. A video's sound plays only with Silent off (BG-4). |
 | BG-2 | Aspect ratio 16:9. Recommended size 1920 x 1080 px; minimum 1280 x 720; maximum 3840 x 2160. Images up to 20 MB, videos up to 200 MB. |
 | BG-3 | A background that is not 16:9 is scaled to cover the screen and cropped around its centre; the import dialog shows the crop and warns. Smaller than the minimum or larger than the limits is refused. |
-| BG-4 | Videos loop and play silently. Option "pause with the show": the video pauses while a team is answering or the clock is paused. |
+| BG-4 | A background video starts as soon as its slide appears and has its own options: Loop (on), Silent (on) and Sync with quiz (off), which pauses it while a player answers, while the clock is paused and once the question is over. The editor shows its first frame with a video mark, and the slide's context menu can play or stop it there, or remove the background. Done. |
 | BG-5 | Backgrounds sit behind all content. The app draws its own panels behind text, so any background stays readable; designers should still keep the middle band calm (layout guide in 5.4). |
 | BG-6 | Choice per slide, per round, per quiz and per theme. The most specific wins: slide > round > quiz > theme > built-in. |
 | BG-7 | A quiz file embeds every background it uses (in `media/`), so a quiz moved to another computer looks the same. Nothing is linked to an outside path during a show. |
@@ -362,7 +362,7 @@ the Host screen.
 | QZ-1 | Quiz editor in the Director, after the reference editor's layout: ribbon (File, Home, Insert, Question, View, Quiz show, and a contextual tab for the selected picture, video or sound), slide thumbnails (add from a layout gallery, cut, copy, paste, duplicate, delete, reorder by drag), the slide as the audience sees it with its parts selectable, a properties panel (pages, foldable sections, search, descriptions), an Edit question form, a table view for typing many questions, quizmaster notes under the slide. Undo and redo; the draft survives a crash. | done |
 | QZ-2 | Slide types: billboard, question (2 to 4 answers, one per answer button A-D; multiple choice or fastest finger), answer explanation, end of round. An explanation is optional: the author inserts it after a question, and it shows that question with its correct answer above the author's text, picture or video. More types come with the reference's other formats. | done |
 | QZ-3 | Per question: text, answers, correct answer, time limit, points (fixed or falling from a start to an end value), penalty, notes for the quizmaster. | done |
-| QZ-4 | Media per slide: a picture, a sound clip and a video, each with its options (sound: when the slide opens, with the clock or on demand, loop, volume; video: autoplay, muted, loop). A background per slide overrides the theme's (BG rules in section 5). | done |
+| QZ-4 | Media per slide: a picture, a sound clip and a video, each with its options (sound: when the slide opens, with the clock or on demand, loop, volume, the part that plays, loudness gain, a replay part; video: autoplay, muted, loop). A background per slide, with its video options, overrides the theme's (BG rules in section 5). | done |
 | QZ-5 | Quiz file: one file (`.quiz`, a ZIP) with `quiz.json` and a `media/` folder, so a quiz with all its pictures and sounds can be copied to the event laptop as one file. Format version in `quiz.json`; older versions keep opening. | done: [`quiz-format.md`](quiz-format.md) |
 | QZ-6 | The editor checks a quiz before saving and before starting (missing media, no correct answer, empty answers) with the same rules the game core uses. | done: the editor cannot make an unplayable question; other problems (e.g. a missing media file) are listed under File › Info and marked on the thumbnails |
 | QZ-7 | Test run: play the quiz from the editor with virtual buzzers, without touching the last real show. | done: from the start (F5) or from the selected slide (Shift+F5); the Director's End show becomes Back to editor |
@@ -378,6 +378,8 @@ the Host screen.
 | SN-5 | Sounds play from the app itself, not from a window, so they keep playing when the projector window is closed or moved, and they never play twice. | planned |
 | SN-6 | A theme can bring its own sound set (section 5.2) that replaces the defaults. | planned |
 | SN-7 | Sound pad: up to 12 short sounds the quizmaster can fire from the Director. Jingle per team when it buzzes first. | planned (could) |
+| SN-8 | Trim: a slide's sound plays only a chosen part of its file, set on a waveform in the Trim window (sound ribbon › Timing, the sound's context menu, or the Part row in the properties). Drag to select, click to place the cursor, Play selection (Space) or from the cursor, Set start (I) and Set end (O) while listening, times typed as `75`, `1:15`, `0:01:15` or `1:15.5`, mouse wheel to zoom, Shift + wheel or the scroll bar to pan. On a question the sound can also replay a part once, after an optional delay, when the answer is revealed. The file is not changed; OK is one undo step. | done |
+| SN-9 | Normalize volume: measures the loudness of the part of each sound that plays (ITU-R BS.1770-4, gated, in LUFS) and sets its loudness gain (-30 to +20 dB, on top of Volume) to a target: Standard -16 LUFS, Quieter -18 or Broadcast -23 (EBU R 128); the choice is remembered on the computer. Raising stops where the sample peak would pass -1 dBFS (status "limited"). Home › Tools › Normalize volume lists every sound with its loudness, peak, change and status, ticked where it changes, and applies the ticked ones as one undo step; Normalize on the sound ribbon or context menu does one sound at the remembered target. A trim re-measures a sound that has a gain. Files are not changed. | done |
 
 ## 11. Open questions
 

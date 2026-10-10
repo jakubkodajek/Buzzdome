@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { VideoIcon } from "./icons";
 import { isVideo, useMediaUrl } from "./media";
 import type { Slide } from "./types";
 
@@ -36,20 +37,51 @@ export function SlideMedia({ slide, className, mode = "show" }: { slide: Slide; 
   return null;
 }
 
-/** A picture or looping video filling the stage behind the slide. */
-export function SlideBackground({ slide, mode = "show" }: { slide: Slide; mode?: ScreenMode }) {
+/**
+ * The slide's own picture or video, filling the stage behind its content.
+ * In the show a video plays as its background options say: looped or once,
+ * silent or not, and held while the show holds (`onHold`) when synced
+ * (BG-4). Elsewhere it is silent and stands on its first frame, with a mark
+ * that it is a video, unless the editor plays it (`playing`).
+ */
+export function SlideBackground(props: { slide: Slide; mode?: ScreenMode; onHold?: boolean; playing?: boolean }) {
+  const { slide, mode = "show", onHold = false, playing = false } = props;
   const toUrl = useMediaUrl();
-  const url = toUrl(slide.background);
-  if (!url || !slide.background) return null;
+  const background = slide.background;
+  const url = toUrl(background?.file ?? null);
+  if (!url || !background) return null;
+  const show = mode === "show";
   return (
     <div className="slide-background">
-      {isVideo(slide.background) ? (
-        <video key={url} src={url} autoPlay={mode !== "thumbnail"} muted loop playsInline preload="metadata" />
+      {isVideo(background.file) ? (
+        <>
+          <BackgroundVideo
+            key={url}
+            src={url}
+            playing={show ? !(background.sync && onHold) : playing}
+            loop={!show || background.repeat}
+            muted={!show || background.muted}
+            preload={show ? "auto" : "metadata"}
+          />
+          {!show && <VideoIcon className="background-video-mark" />}
+        </>
       ) : (
         <Picture key={url} src={url} />
       )}
     </div>
   );
+}
+
+function BackgroundVideo(props: { src: string; playing: boolean; loop: boolean; muted: boolean; preload: "auto" | "metadata" }) {
+  const { src, playing, loop, muted, preload } = props;
+  const video = useRef<HTMLVideoElement>(null);
+  useEffect(() => {
+    const element = video.current;
+    if (!element) return;
+    if (playing) element.play().catch((e: unknown) => console.error("background video:", e));
+    else element.pause();
+  }, [playing]);
+  return <video ref={video} src={src} loop={loop} muted={muted} playsInline preload={preload} />;
 }
 
 function Picture({ src }: { src: string }) {

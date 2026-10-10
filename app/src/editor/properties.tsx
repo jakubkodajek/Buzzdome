@@ -3,20 +3,28 @@
 
 import type { ReactNode } from "react";
 import { ANSWER_LETTERS } from "../answers";
-import { MAX_ANSWERS, MAX_POINTS, MAX_TIME_LIMIT_S, MIN_EVERYONE_ANSWERS } from "../bindings/Constants";
+import { MAX_ANSWERS, MAX_GAIN_DB, MAX_POINTS, MAX_TIME_LIMIT_S, MIN_EVERYONE_ANSWERS, MIN_GAIN_DB } from "../bindings/Constants";
+import { sameSpan, WHOLE_FILE } from "../audio/clip-player";
+import { trackTime } from "../format";
 import type { StringKey, Translate } from "../i18n";
 import { SoundIcon } from "../icons";
-import type { MediaKind } from "../media";
+import { isVideo, type MediaKind } from "../media";
 import { SLIDE_TYPE_LABEL, type SlideContext } from "../quiz";
-import type { QuestionSlide, Slide, SlideType, SoundStart } from "../types";
+import type { QuestionSlide, Slide, SlideType, SoundStart, Span } from "../types";
 import { MediaPicker, NumberBox, Select, Switch } from "./controls";
 import {
   convertSlide,
+  MAX_REPLAY_DELAY_MS,
+  newReplay,
   removeAnswer,
   setAnswer,
   setBackground,
+  setBackgroundOptions,
+  setBodyText,
   setCorrect,
+  setHeadline,
   setMode,
+  setNotes,
   setPicture,
   setScoring,
   setSound,
@@ -35,6 +43,10 @@ export interface SlideEditing {
   update: (change: (slide: Slide) => Slide, field?: string) => void;
   /** Asks for a media file and applies it to the slide as it is by then. */
   chooseMedia: (kinds: MediaKind[], apply: (slide: Slide, file: string) => Slide) => void;
+  /** Opens the trim window for the slide's sound. */
+  trimSound: () => void;
+  /** Measures the slide's sound and sets its loudness gain to the remembered target. */
+  normalizeSound: () => void;
 }
 
 export interface PropertyRow {
@@ -48,7 +60,7 @@ export interface PropertyRow {
 const SLIDE_TYPES: SlideType[] = ["question", "billboard", "explanation", "endOfRound"];
 
 /** Every property row of the slide being edited. */
-export function slideProperties(t: Translate, { slide, context, update, chooseMedia }: SlideEditing) {
+export function slideProperties(t: Translate, { slide, context, update, chooseMedia, trimSound, normalizeSound }: SlideEditing) {
   const question = (change: (q: QuestionSlide) => QuestionSlide, field?: string) => update((s) => (s.type === "question" ? change(s) : s), field);
   const row = (label: StringKey, description: StringKey, control: ReactNode, wide = false): PropertyRow => ({
     label: t(label),
@@ -64,6 +76,10 @@ export function slideProperties(t: Translate, { slide, context, update, chooseMe
     ["withClock", t("soundWithClock")],
     ["onDemand", t("soundOnDemand")],
   ];
+  const spanText = (span: Span) =>
+    sameSpan(span, WHOLE_FILE) ? t("wholeTrack") : `${trackTime(span.fromMs)} – ${span.toMs === null ? t("trackEnd") : trackTime(span.toMs)}`;
+  const sound = slide.sound;
+  const video = slide.background && isVideo(slide.background.file) ? slide.background : null;
 
   return {
     type: row(
@@ -181,28 +197,28 @@ export function slideProperties(t: Translate, { slide, context, update, chooseMe
       row(
         "questionField",
         "descQuestionText",
-        textArea("questionField", q.text, (text) => question((s) => ({ ...s, text }), "text")),
+        textArea("questionField", q.text, (text) => update((s) => setHeadline(s, text), "text")),
         true,
       ),
     title: (s: Extract<Slide, { type: "billboard" | "endOfRound" }>) =>
       row(
         "slideTitleField",
         "descTitle",
-        textArea("slideTitleField", s.title, (title) => update((x) => (x.type === "billboard" || x.type === "endOfRound" ? { ...x, title } : x), "title")),
+        textArea("slideTitleField", s.title, (title) => update((x) => setHeadline(x, title), "title")),
         true,
       ),
     bodyText: (s: Extract<Slide, { type: "billboard" }>) =>
       row(
         "slideTextField",
         "descBodyText",
-        textArea("slideTextField", s.text, (text) => update((x) => (x.type === "billboard" ? { ...x, text } : x), "text")),
+        textArea("slideTextField", s.text, (text) => update((x) => setBodyText(x, text), "text")),
         true,
       ),
     explanationText: (s: Extract<Slide, { type: "explanation" }>) =>
       row(
         "explanationField",
         "descExplanation",
-        textArea("explanationField", s.text, (text) => update((x) => (x.type === "explanation" ? { ...x, text } : x), "text")),
+        textArea("explanationField", s.text, (text) => update((x) => setHeadline(x, text), "text")),
         true,
       ),
     /** Which question an explanation slide explains; set by where it stands. */
@@ -217,7 +233,7 @@ export function slideProperties(t: Translate, { slide, context, update, chooseMe
     notes: row(
       "notes",
       "descNotes",
-      textArea("notes", slide.notes, (notes) => update((s) => ({ ...s, notes }), "notes")),
+      textArea("notes", slide.notes, (notes) => update((s) => setNotes(s, notes), "notes")),
       true,
     ),
 
@@ -327,21 +343,115 @@ export function slideProperties(t: Translate, { slide, context, update, chooseMe
                   update((s) => setSoundOptions(s, { volume }), "volume");
                 }}
               />
-              <span className="digits">{slide.sound.volume} %</span>
+              <span className="tabular">{slide.sound.volume} %</span>
             </span>,
           ),
         ]
       : [],
+    /** Which part of the sound plays; null without one. */
+    soundPart:
+      sound &&
+      row(
+        "propSoundPart",
+        "descSoundPart",
+        <span className="props-inline">
+          <span className="tabular">{spanText(sound.part)}</span>
+          <button type="button" className="props-button" onClick={trimSound}>
+            {t("trimAction")}
+          </button>
+        </span>,
+      ),
+    /** The part a question's sound replays after the reveal; none on other slides or without a sound. */
+    replay:
+      sound && slide.type === "question"
+        ? [
+            row(
+              "propReplay",
+              "descReplay",
+              <Switch
+                label={t("propReplay")}
+                checked={sound.replay !== null}
+                onChange={(on) => update((s) => (s.sound ? setSoundOptions(s, { replay: on ? newReplay(s.sound.part) : null }) : s))}
+              />,
+            ),
+            ...(sound.replay
+              ? [
+                  row("trimReplayPart", "descReplay", <span className="tabular props-readonly">{spanText(sound.replay.part)}</span>),
+                  row(
+                    "propReplayDelay",
+                    "descReplayDelay",
+                    <NumberBox
+                      label={t("propReplayDelay")}
+                      value={sound.replay.delayMs / 1000}
+                      min={0}
+                      max={MAX_REPLAY_DELAY_MS / 1000}
+                      step={0.1}
+                      unit="s"
+                      onChange={(seconds) =>
+                        update((s) => (s.sound?.replay ? setSoundOptions(s, { replay: { ...s.sound.replay, delayMs: seconds * 1000 } }) : s), "replayDelay")
+                      }
+                    />,
+                  ),
+                ]
+              : []),
+          ]
+        : [],
+    /** The sound's loudness gain; null without a sound. */
+    gain:
+      sound &&
+      row(
+        "propGain",
+        "descGain",
+        <NumberBox
+          label={t("propGain")}
+          value={sound.gainDb}
+          min={MIN_GAIN_DB}
+          max={MAX_GAIN_DB}
+          step={0.1}
+          unit="dB"
+          onChange={(gainDb) => update((s) => setSoundOptions(s, { gainDb }), "gainDb")}
+        />,
+      ),
+    /** Normalizing the sound; null without one. The ribbon has its own button. */
+    normalize:
+      sound &&
+      row(
+        "normalizeAction",
+        "descNormalize",
+        <button type="button" className="props-button" onClick={normalizeSound}>
+          {t("normalizeAction")}
+        </button>,
+      ),
     background: row(
       "propBackground",
       "descBackground",
       <MediaPicker
         label={t("propBackground")}
-        file={slide.background}
+        file={slide.background?.file ?? null}
         onChoose={() => chooseMedia(["image", "video"], setBackground)}
         onRemove={() => update((s) => setBackground(s, null))}
       />,
     ),
+    /** Options of a background video; none for a picture or without a background. */
+    backgroundOptions: video
+      ? [
+          row(
+            "repeat",
+            "descBackgroundRepeat",
+            <Switch label={t("repeat")} checked={video.repeat} onChange={(on) => update((s) => setBackgroundOptions(s, { repeat: on }))} />,
+          ),
+          row(
+            "videoMuted",
+            "descBackgroundMuted",
+            <Switch label={t("videoMuted")} checked={video.muted} onChange={(on) => update((s) => setBackgroundOptions(s, { muted: on }))} />,
+          ),
+          row(
+            "propBackgroundSync",
+            "descBackgroundSync",
+            <Switch label={t("propBackgroundSync")} checked={video.sync} onChange={(on) => update((s) => setBackgroundOptions(s, { sync: on }))} />,
+          ),
+        ]
+      : [],
   };
 }
 

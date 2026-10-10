@@ -62,6 +62,19 @@ describe("history", () => {
     expect(h.present.theme).toBe("builtin.night");
   });
 
+  it("applies a batch of edits as one undo step", () => {
+    const rename = (id: string, notes: string) => ({ type: "updateSlide" as const, id, update: (s: (typeof quiz.slides)[number]) => (s.notes === notes ? s : { ...s, notes }) });
+    let h = startHistory(quiz);
+    h = historyReducer(h, { type: "edit", edit: { type: "batch", edits: [rename("a", "x"), rename("c", "y")] }, at: 0 });
+    expect(h.present.slides.map((s) => s.notes)).toEqual(["x", "", "y"]);
+    expect(h.past).toHaveLength(1);
+    // A batch that changes nothing is no step at all.
+    const same = historyReducer(h, { type: "edit", edit: { type: "batch", edits: [rename("a", "x"), rename("gone", "z")] }, at: 1 });
+    expect(same).toBe(h);
+    h = historyReducer(h, { type: "undo" });
+    expect(h.present).toBe(quiz);
+  });
+
   it("updates a slide as it is when the update lands", () => {
     let h = startHistory(quiz);
     h = historyReducer(h, { type: "edit", edit: { type: "moveSlide", from: 0, to: 2 }, at: 0 });

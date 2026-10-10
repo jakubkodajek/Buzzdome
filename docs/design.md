@@ -80,8 +80,28 @@ two windows cannot disagree with each other or with the score.
   `useLastSession`). Small shared helpers live in `answers.ts`, `format.ts`,
   `quiz.ts`, `keyboard.ts` and `messages.ts`. ESLint with the React hooks rules runs in CI.
 - **Sound.** The Director window plays the cues and the slides' sound
-  clips (`slide-sound.ts`), because it stays open for the whole show and the
-  projector window may not. Spec SN-5 moves playback into the Rust shell later.
+  clips, because it stays open for the whole show and the projector window
+  may not. Spec SN-5 moves playback into the Rust shell later. The code is in
+  `app/src/audio/`: `context.ts` (one shared `AudioContext`), `cues.ts` (game
+  effects), `clip-player.ts` (plays a part of a file at volume × loudness
+  gain), `slide-sound.ts` (when a slide's sound plays, and its replay part
+  after the reveal), `loudness.ts` (ITU-R BS.1770-4 measurement and the gain
+  that reaches a target) and `decode.ts`.
+  - A gain above 1 goes through a Web Audio `GainNode` (an element's
+    `volume` stops at 1). That needs the media response to allow the
+    window's origin, which Tauri's asset protocol does; a gain at or below 1
+    uses `volume`, so most sounds do not depend on it.
+  - Files are decoded for measuring with an `OfflineAudioContext` at 48 kHz,
+    because `decodeAudioData` resamples to its context's rate (W3C Web Audio
+    API) and BS.1770-4 gives the K-weighting filter for 48 kHz.
+  - The editor's Trim window (`TrimDialog.tsx`, waveform maths in
+    `waveform.ts`) and Normalize volume window (`LoudnessDialog.tsx`,
+    `normalize.ts`) only change `part`, `replay` and `gainDb`; files are never
+    rewritten.
+- **Background video.** `slide-media.tsx` plays it with its options. Sync
+  with quiz reads `GameView.onHold` from the core (a player answering, the
+  clock paused, the question closed or revealed), so the rule lives in one
+  place.
 
 ### 1.2 Quiz files and media
 
@@ -419,6 +439,8 @@ them.
 | UI screens (Director, projector) render without errors, incl. a slide picture | preview with a mocked backend, headless Chromium | pass |
 | Editor: typing, undo and redo, copy and paste, delete, keys, Edit dialog, ribbon fields, layout gallery, drag reorder, table view, File page | `npm test` (history, draft queue, slide changes, layouts) and 22 flows in headless Chromium against the preview | pass |
 | Quiz files: save, open, reuse, unsafe entries, size limit, missing media | `cargo test -p quiz-file` | pass |
+| Loudness measurement | `npm test`: a full-scale 997 Hz sine in one channel measures -3.01 LUFS as BS.1770-4 states; gating, channel sum, part, peak limit | pass |
+| Trim and Normalize volume windows, background video menu and options | headless Chromium against the preview with generated test media (a song and a test-pattern video, not in the repo) | pass |
 | Media through the asset protocol, autoplay of video and sound | needs the installed app on each OS | **not tested** |
 | Windows and macOS installers | CI | see the PR's checks |
 | Real receiver: detection, raw reports, learn mode, presses in a show | needs the hardware | **not tested** |

@@ -5,6 +5,7 @@ import { SlideThumbnail } from "../host/SlideThumbnail";
 import type { StringKey } from "../i18n";
 import { NextIcon, TrophyIcon } from "../icons";
 import { mediaFileName } from "../media";
+import { readPreference, writePreference } from "../preferences";
 import { SLIDE_TYPE_LABEL, slideContexts, slideTitle, type SlideContext } from "../quiz";
 import { SlideMedia } from "../slide-media";
 import type { GameView, Quiz, Slide } from "../types";
@@ -14,11 +15,7 @@ type Layout = "horizontal" | "vertical";
 const LAYOUT_KEY = "quiz-show.questions-layout";
 
 function readLayout(): Layout {
-  try {
-    return localStorage.getItem(LAYOUT_KEY) === "vertical" ? "vertical" : "horizontal";
-  } catch {
-    return "horizontal";
-  }
+  return readPreference(LAYOUT_KEY) === "vertical" ? "vertical" : "horizontal";
 }
 
 /** Slide table with the current slide highlighted, and a preview pane beside or under it. */
@@ -35,11 +32,7 @@ export function QuestionsTab({ view, quiz }: { view: GameView; quiz: Quiz | null
   const [layout, setLayoutState] = useState<Layout>(readLayout);
   const setLayout = (next: Layout) => {
     setLayoutState(next);
-    try {
-      localStorage.setItem(LAYOUT_KEY, next);
-    } catch {
-      // The layout then lasts only until the window closes.
-    }
+    writePreference(LAYOUT_KEY, next);
   };
 
   useEffect(() => {
@@ -196,7 +189,7 @@ function MediaList({ slide }: { slide: Slide }) {
     ["mediaPicture", slide.picture],
     ["mediaVideo", slide.video?.file],
     ["mediaSound", slide.sound?.file],
-    ["mediaBackground", slide.background],
+    ["mediaBackground", slide.background?.file],
   ];
   const present = items.filter((item): item is [StringKey, string] => Boolean(item[1]));
   if (present.length === 0) return null;

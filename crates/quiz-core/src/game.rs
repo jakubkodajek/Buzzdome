@@ -384,6 +384,17 @@ impl Game {
         }
     }
 
+    /// True while the show holds still: a player is answering, the question
+    /// clock is paused, or the question is over. Synced background videos
+    /// pause then (BG-4).
+    pub fn on_hold(&self) -> bool {
+        match &self.phase {
+            Phase::Question(QuestionStep::Running { clock }) => !clock.is_running(),
+            Phase::Question(QuestionStep::Buzzed { .. } | QuestionStep::Closed | QuestionStep::Revealed { .. }) => true,
+            _ => false,
+        }
+    }
+
     /// A command the app must issue on its own at `now`, such as time up
     /// (`PRESS_GRACE_MS` after the clock runs out).
     pub fn due_command(&self, now: u64) -> Option<Command> {

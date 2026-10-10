@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { readPreference, writePreference } from "./preferences";
 
 export type Lang = "cs" | "en";
 
@@ -313,6 +314,68 @@ const strings = {
     descVolume: "Hlasitost zvuku v procentech.",
     propBackground: "Pozadí",
     descBackground: "Obrázek nebo smyčka videa za celým snímkem.",
+    // Sound part, replay and loudness (SN-8, SN-9); background video options (BG-1).
+    propSoundPart: "Úsek",
+    descSoundPart: "Která část souboru hraje. Soubor se nemění; úsek se nastavuje v okně Střih.",
+    wholeTrack: "Celá stopa",
+    trackEnd: "konec",
+    trimAction: "Střih…",
+    propReplay: "Opakovat po odhalení odpovědi",
+    descReplay: "Po odhalení odpovědi zvuk jednou přehraje úsek k opakování; ten se nastavuje v okně Střih.",
+    propReplayDelay: "Zpoždění opakování",
+    descReplayDelay: "Za kolik sekund po odhalení odpovědi se úsek k opakování přehraje.",
+    propGain: "Zisk hlasitosti",
+    descGain: "Zesílení nebo zeslabení zvuku v dB navíc k hlasitosti: hlasitost umí jen ztlumit, zisk i zesílit. Nastavuje ho vyrovnání hlasitosti.",
+    normalizeAction: "Vyrovnat",
+    descNormalize: "Změří úsek, který hraje, a nastaví zisk na cílovou hlasitost naposledy zvolenou ve Vyrovnat hlasitost.",
+    normalizeAll: "Vyrovnat hlasitost",
+    normalizeDone: "Hlasitost vyrovnána, zisk {gain} dB. Zpět Ctrl+Z.",
+    normalizeLimited: "Hlasitost vyrovnána jen zčásti, zisk {gain} dB, aby se zvuk nepřebudil. Zpět Ctrl+Z.",
+    propBackgroundSync: "Synchronizovat s kvízem",
+    descBackgroundSync: "Video pozadí se pozastaví, když hráč odpovídá, časomíra stojí nebo otázka skončila.",
+    descBackgroundRepeat: "Video pozadí hraje dokola.",
+    descBackgroundMuted: "Video pozadí hraje bez zvuku.",
+    playBackground: "Přehrát video pozadí",
+    stopBackground: "Zastavit video pozadí",
+    removeBackground: "Odebrat pozadí",
+    groupTiming: "Časování",
+    groupEffects: "Efekty",
+    groupTools: "Nástroje",
+    apply: "Použít",
+    trimTitle: "Střih zvuku – {name}",
+    trimPlayback: "Přehrávání",
+    trimReplayPart: "Opakování",
+    trimFailed: "Zvuk se nepodařilo načíst.",
+    trimScroll: "Posunout zobrazený úsek",
+    trimStart: "Začátek",
+    trimEnd: "Konec",
+    trimLength: "Délka",
+    trimPlaySelection: "Přehrát výběr",
+    trimPlayFromCursor: "Přehrát od kurzoru",
+    trimSetStart: "Nastavit začátek",
+    trimSetEnd: "Nastavit konec",
+    trimFit: "Zobrazit celé",
+    trimHint: "Tažením vyberete úsek, kliknutím umístíte kurzor. Kolečko myši přibližuje, Shift + kolečko posouvá.",
+    loudnessTarget: "Cílová hlasitost",
+    loudnessStandard: "Standardní (−16 LUFS)",
+    loudnessQuieter: "Tišší (−18 LUFS)",
+    loudnessBroadcast: "Vysílání, EBU R 128 (−23 LUFS)",
+    loudnessMeasuring: "Měřím {done} z {n}…",
+    loudnessDone: "Změřeno zvuků: {n}",
+    loudnessNoSounds: "Kvíz nemá žádné zvuky.",
+    loudnessSlide: "Snímek",
+    loudnessSound: "Zvuk",
+    loudnessLufs: "Hlasitost (LUFS)",
+    loudnessPeak: "Špička (dBFS)",
+    loudnessChange: "Změna (dB)",
+    loudnessStatus: "Stav",
+    loudnessWaiting: "Čeká na změření…",
+    loudnessChanged: "Upraví se",
+    loudnessAtTarget: "Už má cílovou hlasitost",
+    loudnessLimited: "Omezeno, aby se nepřebudil",
+    loudnessSilent: "Ticho, není co měřit",
+    loudnessTooShort: "Příliš krátký na změření",
+    loudnessFailed: "Soubor nejde přečíst",
     layoutsCommon: "Časté",
     layouts2: "2 odpovědi",
     layouts3: "3 odpovědi",
@@ -355,6 +418,8 @@ const strings = {
     problemMedia: "{file}: {issue}",
     problemPictureAndVideo: "Snímek může mít obrázek, nebo video, ne obojí.",
     problemSoundVolume: "Hlasitost zvuku je v procentech, 0 až 100.",
+    problemSoundPartEmpty: "Úsek zvuku končí dřív, než začne.",
+    problemSoundGainOutOfRange: "Zisk hlasitosti musí být mezi {min} a {max} dB.",
     problemTooManyAnswers: "Otázka může mít nejvýš {max} odpovědi.",
     problemTooFewAnswers: "Otázka, na kterou odpovídají všichni, potřebuje aspoň {min} odpovědi.",
     problemNoCorrectAnswer: "Otázka, na kterou odpovídají všichni, potřebuje správnou odpověď.",
@@ -694,6 +759,68 @@ const strings = {
     descVolume: "Sound volume in percent.",
     propBackground: "Background",
     descBackground: "A picture or looping video behind the whole slide.",
+    // Sound part, replay and loudness (SN-8, SN-9); background video options (BG-1).
+    propSoundPart: "Part",
+    descSoundPart: "Which part of the file plays. The file is not changed; the part is set in the Trim window.",
+    wholeTrack: "Whole track",
+    trackEnd: "end",
+    trimAction: "Trim…",
+    propReplay: "Replay after the answer is revealed",
+    descReplay: "Once the answer is revealed, the sound plays its replay part once; that part is set in the Trim window.",
+    propReplayDelay: "Replay delay",
+    descReplayDelay: "How many seconds after the answer is revealed the replay part plays.",
+    propGain: "Loudness gain",
+    descGain: "Makes the sound louder or quieter in dB on top of the volume: the volume can only lower it, the gain can also raise it. Normalizing sets it.",
+    normalizeAction: "Normalize",
+    descNormalize: "Measures the part that plays and sets the gain to the target last chosen under Normalize volume.",
+    normalizeAll: "Normalize volume",
+    normalizeDone: "Volume normalized, gain {gain} dB. Undo with Ctrl+Z.",
+    normalizeLimited: "Volume normalized only in part, gain {gain} dB, so the sound does not clip. Undo with Ctrl+Z.",
+    propBackgroundSync: "Sync with quiz",
+    descBackgroundSync: "The background video pauses while a player answers, the clock is paused or the question is over.",
+    descBackgroundRepeat: "The background video loops.",
+    descBackgroundMuted: "The background video plays without sound.",
+    playBackground: "Play background video",
+    stopBackground: "Stop background video",
+    removeBackground: "Remove background",
+    groupTiming: "Timing",
+    groupEffects: "Effects",
+    groupTools: "Tools",
+    apply: "Apply",
+    trimTitle: "Trim sound – {name}",
+    trimPlayback: "Playback",
+    trimReplayPart: "Replay",
+    trimFailed: "The sound could not be read.",
+    trimScroll: "Scroll the part in view",
+    trimStart: "Start",
+    trimEnd: "End",
+    trimLength: "Length",
+    trimPlaySelection: "Play selection",
+    trimPlayFromCursor: "Play from cursor",
+    trimSetStart: "Set start",
+    trimSetEnd: "Set end",
+    trimFit: "Zoom to fit",
+    trimHint: "Drag to select a part, click to place the cursor. The mouse wheel zooms, Shift + wheel scrolls.",
+    loudnessTarget: "Target loudness",
+    loudnessStandard: "Standard (−16 LUFS)",
+    loudnessQuieter: "Quieter (−18 LUFS)",
+    loudnessBroadcast: "Broadcast, EBU R 128 (−23 LUFS)",
+    loudnessMeasuring: "Measuring {done} of {n}…",
+    loudnessDone: "Sounds measured: {n}",
+    loudnessNoSounds: "The quiz has no sounds.",
+    loudnessSlide: "Slide",
+    loudnessSound: "Sound",
+    loudnessLufs: "Loudness (LUFS)",
+    loudnessPeak: "Peak (dBFS)",
+    loudnessChange: "Change (dB)",
+    loudnessStatus: "Status",
+    loudnessWaiting: "Waiting to be measured…",
+    loudnessChanged: "Changes",
+    loudnessAtTarget: "Already at the target",
+    loudnessLimited: "Limited so it does not clip",
+    loudnessSilent: "Silent, nothing to measure",
+    loudnessTooShort: "Too short to measure",
+    loudnessFailed: "The file cannot be read",
     layoutsCommon: "Common",
     layouts2: "2 answers",
     layouts3: "3 answers",
@@ -736,6 +863,8 @@ const strings = {
     problemMedia: "{file}: {issue}",
     problemPictureAndVideo: "A slide shows a picture or a video, not both.",
     problemSoundVolume: "Sound volume is a percentage, 0 to 100.",
+    problemSoundPartEmpty: "A part of the sound ends before it starts.",
+    problemSoundGainOutOfRange: "Loudness gain must be between {min} and {max} dB.",
     problemTooManyAnswers: "A question can have at most {max} answers.",
     problemTooFewAnswers: "An everyone-answers question needs at least {min} answers.",
     problemNoCorrectAnswer: "An everyone-answers question needs a correct answer.",
@@ -772,11 +901,7 @@ const strings = {
 export type StringKey = keyof (typeof strings)["cs"];
 
 function readLang(): Lang {
-  try {
-    return localStorage.getItem(STORAGE_KEY) === "en" ? "en" : "cs";
-  } catch {
-    return "cs";
-  }
+  return readPreference(STORAGE_KEY) === "en" ? "en" : "cs";
 }
 
 export function useLang(): [Lang, (lang: Lang) => void] {
@@ -788,11 +913,7 @@ export function useLang(): [Lang, (lang: Lang) => void] {
     return () => window.removeEventListener("storage", onStorage);
   }, []);
   const setLang = useCallback((next: Lang) => {
-    try {
-      localStorage.setItem(STORAGE_KEY, next);
-    } catch {
-      // Language then lasts only for this window.
-    }
+    writePreference(STORAGE_KEY, next);
     setLangState(next);
   }, []);
   return [lang, setLang];

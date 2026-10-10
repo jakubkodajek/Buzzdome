@@ -181,7 +181,7 @@ function propertyPages(slide: Slide, element: ElementId, rows: SlideProperties):
   if ((element === "title" || element === "text") && slide.type !== "question") return [page("text", [{ title: "sectionText", rows: textRows(slide, rows) }])];
   if (element === "picture") return [page("design", [{ title: "sectionPictureVideo", rows: [rows.picture] }])];
   if (element === "video") return [page("design", [{ title: "sectionPictureVideo", rows: [rows.video, ...rows.videoOptions] }])];
-  if (element === "sound") return [page("design", [{ title: "sectionSound", rows: [rows.sound, ...rows.soundOptions] }])];
+  if (element === "sound") return [page("design", [{ title: "sectionSound", rows: soundRows(rows) }])];
 
   // The slide itself.
   const pages: Page[] =
@@ -205,10 +205,19 @@ function propertyPages(slide: Slide, element: ElementId, rows: SlideProperties):
   const pictureVideo: Section[] =
     slide.type === "endOfRound" ? [] : [{ title: "sectionPictureVideo", rows: [rows.picture, rows.video, ...rows.videoOptions] }];
   pages.push(
-    page("design", [...pictureVideo, { title: "sectionSound", rows: [rows.sound, ...rows.soundOptions] }, { title: "sectionBackground", rows: [rows.background] }]),
+    page("design", [
+      ...pictureVideo,
+      { title: "sectionSound", rows: soundRows(rows) },
+      { title: "sectionBackground", rows: [rows.background, ...rows.backgroundOptions] },
+    ]),
     page("advanced", [{ title: "sectionMetadata", rows: [rows.id] }]),
   );
   return pages;
+}
+
+/** The sound's rows: the file, how it plays, which part plays, its loudness. */
+function soundRows(rows: SlideProperties): PropertyRow[] {
+  return [rows.sound, ...rows.soundOptions, rows.soundPart, ...rows.replay, rows.gain, rows.normalize].filter((row) => row !== null);
 }
 
 function textRows(slide: Exclude<Slide, { type: "question" }>, rows: SlideProperties): PropertyRow[] {

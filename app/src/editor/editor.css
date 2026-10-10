@@ -71,6 +71,11 @@
   color: var(--muted);
 }
 
+/* Numbers that line up as they change (times, levels, percentages). */
+.studio .tabular {
+  font-variant-numeric: tabular-nums;
+}
+
 /* Push buttons: dialogs, the FILE pages, the empty slide list */
 
 .studio .dialog-footer button,
@@ -1539,4 +1544,191 @@
 .status-view svg {
   width: 15px;
   height: 15px;
+}
+
+/* Trim window (TrimDialog.tsx) */
+
+.dialog.trim-dialog {
+  width: min(900px, 94vw);
+}
+
+.trim {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.trim-replay,
+.trim-times,
+.trim-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+}
+
+.trim-replay label,
+.trim-times label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.studio .segmented {
+  display: inline-flex;
+}
+
+.studio .segmented button {
+  padding: 3px 12px;
+  border: 1px solid #b9b9b9;
+  background: #fdfdfd;
+}
+
+.studio .segmented button + button {
+  border-left: none;
+}
+
+.studio .segmented button:first-child {
+  border-radius: 3px 0 0 3px;
+}
+
+.studio .segmented button:last-child {
+  border-radius: 0 3px 3px 0;
+}
+
+/* The pressed button takes the colour of the part it edits on the waveform (set by TrimDialog.tsx). */
+.studio .segmented .part[aria-pressed="true"] {
+  border-color: var(--trim-part);
+  background: var(--trim-part);
+  color: #fff;
+}
+
+.studio .segmented .replay[aria-pressed="true"] {
+  border-color: var(--trim-replay);
+  background: var(--trim-replay);
+  color: #fff;
+}
+
+.trim-wave {
+  position: relative;
+  border: 1px solid var(--line);
+}
+
+.trim-wave canvas {
+  display: block;
+  width: 100%;
+  cursor: crosshair;
+  touch-action: none;
+}
+
+.trim-wave canvas:focus {
+  outline: none;
+}
+
+.trim-wave:focus-within {
+  border-color: var(--accent);
+}
+
+.trim-status {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  margin: 0;
+  color: var(--muted);
+}
+
+.trim-scroll {
+  width: 100%;
+}
+
+.studio .time-box {
+  width: 92px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.studio .trim-times button,
+.studio .trim-buttons button {
+  padding: 4px 12px;
+  border: 1px solid #b9b9b9;
+  border-radius: 3px;
+  background: #fdfdfd;
+}
+
+.studio .trim-times button:hover:not(:disabled),
+.studio .trim-buttons button:hover:not(:disabled) {
+  border-color: var(--hover-line);
+  background: var(--hover);
+}
+
+.trim-buttons small {
+  margin-left: 4px;
+  color: var(--muted);
+}
+
+.trim-hint {
+  margin: 0;
+  color: var(--muted);
+}
+
+/* Normalize volume window (LoudnessDialog.tsx) */
+
+.dialog.loudness-dialog {
+  width: min(860px, 94vw);
+}
+
+.loudness-target {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 6px 0 10px;
+}
+
+.loudness-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.loudness-table th,
+.loudness-table td {
+  padding: 4px 8px;
+  border-bottom: 1px solid #ececec;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.loudness-table th {
+  position: sticky;
+  top: 0;
+  background: #fff;
+  font-weight: 600;
+}
+
+.loudness-table .tabular {
+  text-align: right;
+}
+
+.loudness-file {
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.loudness-progress {
+  align-self: center;
+  color: var(--muted);
+}
+
+/* A value with a button beside it in the properties panel. */
+.props-inline {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 0;
+}
+
+.props-inline > span {
+  white-space: nowrap;
 }

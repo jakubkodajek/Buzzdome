@@ -11,7 +11,9 @@ export type Edit =
   /** Applies `update` to the slide with this id as it is when the edit lands. */
   | { type: "updateSlide"; id: string; update: (slide: Slide) => Slide }
   | { type: "removeSlide"; index: number }
-  | { type: "moveSlide"; from: number; to: number };
+  | { type: "moveSlide"; from: number; to: number }
+  /** Several edits as one undo step, applied in order. */
+  | { type: "batch"; edits: Edit[] };
 
 export type HistoryAction =
   /** `merge` joins quick changes with the same key (typing in one field) into one undo step. */
@@ -68,6 +70,8 @@ export function applyEdit(quiz: Quiz, edit: Edit): Quiz {
       slides.splice(edit.to, 0, moved);
       return { ...quiz, slides };
     }
+    case "batch":
+      return edit.edits.reduce(applyEdit, quiz);
   }
 }
 

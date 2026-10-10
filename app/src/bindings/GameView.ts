@@ -26,4 +26,8 @@ results: AnswerResults | null, buzzed: number | null, leaderboardVisible: boolea
 /**
  * The quizmaster commands the current step takes.
  */
-controls: Controls, };
+controls: Controls, 
+/**
+ * See `Game::on_hold`.
+ */
+onHold: boolean, };

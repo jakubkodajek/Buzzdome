@@ -171,6 +171,29 @@ fn paused_clock_does_not_run_out() {
 }
 
 #[test]
+fn the_show_holds_while_a_player_answers_the_clock_is_paused_or_the_question_is_over() {
+    let intro = Slide::new("next", SlideContent::Billboard { title: "Next".into(), text: String::new() });
+    let mut show = Show::new(vec![question("q1", AnswerMode::FastestFinger), intro]);
+    show.press(0, 1, Button::Big);
+    show.press(0, 2, Button::Big);
+    let mut holds = vec![show.game.on_hold()];
+    let mut run = |show: &mut Show, at_ms: u64, command: Command| {
+        show.run(at_ms, command).unwrap();
+        holds.push(show.game.on_hold());
+    };
+    run(&mut show, 0, Command::Next); // ready
+    run(&mut show, 0, Command::Next); // running
+    run(&mut show, 1_000, Command::PauseClock);
+    run(&mut show, 2_000, Command::ResumeClock);
+    run(&mut show, 3_000, Command::Press { buzzer: 1, button: Button::Big });
+    run(&mut show, 4_000, Command::JudgeWrong); // running again
+    run(&mut show, 5_000, Command::CloseQuestion);
+    run(&mut show, 6_000, Command::Next); // revealed
+    run(&mut show, 7_000, Command::Next); // the billboard
+    assert_eq!(holds, [false, false, false, true, false, true, false, true, true, false]);
+}
+
+#[test]
 fn fastest_finger_wrong_locks_out_and_resumes_then_right_ends() {
     let mut show = Show::new(vec![question("q1", AnswerMode::FastestFinger)]);
     for b in 1..=3 {

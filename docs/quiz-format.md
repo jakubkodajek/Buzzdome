@@ -1,4 +1,4 @@
-# Quiz file format (version 2)
+# Quiz file format (version 3)
 
 A quiz travels as one file with the extension `.quiz`. It is a ZIP archive:
 
@@ -46,12 +46,13 @@ was moved or deleted.
 
 ```json
 {
-  "schemaVersion": 2,
+  "schemaVersion": 3,
   "title": "Pub quiz, March",
   "theme": "builtin.night",
   "slides": [
     { "id": "round-1", "type": "billboard", "title": "Round 1: Geography",
-      "picture": "media/map.jpg", "background": "media/stage.mp4" },
+      "picture": "media/map.jpg",
+      "background": { "file": "media/stage.mp4", "repeat": true, "muted": true, "sync": false } },
     { "id": "q1", "type": "question", "mode": "everyone",
       "text": "Which city is the capital of Moravia-Silesia?",
       "answers": ["Opava", "Ostrava", "Frýdek-Místek", "Karviná"], "correct": 1,
@@ -61,7 +62,9 @@ was moved or deleted.
       "text": "The region was created in 2000 with Ostrava as its seat." },
     { "id": "q2", "type": "question", "mode": "fastestFinger",
       "text": "Name this song.",
-      "sound": { "file": "media/song.mp3", "start": "withClock", "volume": 80 } },
+      "sound": { "file": "media/song.mp3", "start": "withClock", "volume": 80,
+                 "part": { "fromMs": 15000, "toMs": 45000 }, "gainDb": -2.5,
+                 "replay": { "part": { "fromMs": 45000, "toMs": null }, "delayMs": 1000 } } },
     { "id": "end-1", "type": "endOfRound", "title": "End of round 1" }
   ]
 }
@@ -71,7 +74,7 @@ was moved or deleted.
 
 | Field | Type | Meaning |
 | --- | --- | --- |
-| `schemaVersion` | number | `2`. Version 1 files open unchanged; a file with a higher version is refused with a message. |
+| `schemaVersion` | number | `3`. Version 1 and 2 files open unchanged; a file with a higher version is refused with a message. |
 | `title` | text | Shown on the welcome screen and in the Director. |
 | `theme` | text or `null` | Id of the look of the screens (`builtin.classic`, `builtin.studio`, `builtin.night`, `builtin.showtime`, `builtin.neon`, later installed themes, spec 5.2). Missing, `null` or not installed: the default look, so a quiz never fails to open or play over it. |
 | `slides` | list | The show in order. |
@@ -92,9 +95,23 @@ was moved or deleted.
 | `sound` | object | none | Played from the Director computer's sound output. |
 | `sound.file` | media path | required | MP3, WAV, OGG or M4A. |
 | `sound.start` | `onSlide`, `withClock`, `onDemand` | `onSlide` | When the slide opens; while the question clock runs (pauses with it); or only when the quizmaster presses Play. |
-| `sound.repeat` | yes/no | `false` | Loops until the slide ends. |
+| `sound.repeat` | yes/no | `false` | Plays `part` again from its start until the slide ends. |
 | `sound.volume` | 0 to 100 | `100` | Percent. |
-| `background` | media path | none | Picture or looping muted video behind this slide, instead of the theme's. |
+| `sound.part` | span | whole file | The part of the file that plays. The file itself is not changed. |
+| `sound.gainDb` | -30 to 20 | `0` | Loudness gain in dB on top of `volume`, to 0.1 dB: normalizing sets it so all sounds play equally loud (spec SN-9). |
+| `sound.replay` | object | none | Questions only: played once after the answer is revealed. |
+| `sound.replay.part` | span | required | The part to play then. |
+| `sound.replay.delayMs` | 0 to 60000 | `0` | Milliseconds between the reveal and the replay. |
+| `background` | object | none | Picture or video behind this slide, instead of the theme's. Versions 1 and 2 wrote the media path alone; it reads as a background with the default options. |
+| `background.file` | media path | required | A picture or a video (formats as `picture` and `video.file`). |
+| `background.repeat` | yes/no | `true` | Video only: loops. |
+| `background.muted` | yes/no | `true` | Video only: plays without its sound. |
+| `background.sync` | yes/no | `false` | Video only: pauses while a player answers, while the clock is paused and once the question is over. |
+
+A **span** is `{ "fromMs": number, "toMs": number or null }`, milliseconds
+from the start of the file; `toMs: null` runs to the end of the file, so the
+whole file is `{ "fromMs": 0, "toMs": null }`. A span must not end before it
+starts.
 
 ### `billboard`
 
@@ -151,6 +168,7 @@ shown. Players do not answer; the next step goes to the next slide.
 | --- | --- |
 | 1 | First version. |
 | 2 | Adds `explanation` slides and the quiz `theme`. Version 1 files read as version 2 unchanged. |
+| 3 | `background` becomes an object with video options; sounds get `part`, `gainDb` and `replay`. Version 1 and 2 files read as version 3 unchanged. |
 
 Fields may be added within a version as long as older files keep their
 meaning; readers ignore fields they do not know. Anything else (a new slide

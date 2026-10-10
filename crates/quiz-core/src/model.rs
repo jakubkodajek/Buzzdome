@@ -1,13 +1,15 @@
-//! Quiz file model (schema version 1). This is the contract with quiz authors:
+//! Quiz file model (schema version 3). This is the contract with quiz authors:
 //! change it only with a schema version bump and a migration.
 
-use crate::media::{check_reference, MediaIssue, MediaKind, SoundClip, VideoClip};
+use crate::media::{check_reference, Background, MediaIssue, MediaKind, SoundClip, VideoClip, MAX_GAIN_DB, MIN_GAIN_DB};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeSet, HashSet};
 use ts_rs::TS;
 
-/// 1: first version. 2: adds explanation slides; version 1 files read unchanged.
-pub const SCHEMA_VERSION: u32 = 2;
+/// 1: first version. 2: adds explanation slides. 3: backgrounds become
+/// objects with video options; sounds get a part, a loudness gain and a
+/// replay part. Older files read unchanged.
+pub const SCHEMA_VERSION: u32 = 3;
 
 /// Most answers a question can have: one per answer button of a buzzer (A-D).
 pub const MAX_ANSWERS: usize = 4;
@@ -52,9 +54,10 @@ pub struct Slide {
     pub video: Option<VideoClip>,
     #[serde(default)]
     pub sound: Option<SoundClip>,
-    /// Picture or looping video behind the slide; the theme's otherwise.
-    #[serde(default)]
-    pub background: Option<String>,
+    /// Picture or video behind the slide; the theme's otherwise.
+    #[serde(default, with = "crate::media::background_any_version")]
+    #[ts(as = "Option<Background>")]
+    pub background: Option<Background>,
     #[serde(flatten)]
     pub content: SlideContent,
 }
@@ -81,8 +84,8 @@ impl Slide {
         if let Some(sound) = &self.sound {
             media.push((sound.file.as_str(), AUDIO));
         }
-        if let Some(file) = &self.background {
-            media.push((file.as_str(), BACKGROUND));
+        if let Some(background) = &self.background {
+            media.push((background.file.as_str(), BACKGROUND));
         }
         media
     }
@@ -221,6 +224,10 @@ pub enum Problem {
     PictureAndVideo,
     #[error("sound volume is a percentage, 0 to 100")]
     SoundVolume,
+    #[error("a part of the sound ends before it starts")]
+    SoundPartEmpty,
+    #[error("loudness gain must be between {min} and {max} dB")]
+    SoundGainOutOfRange { min: i32, max: i32 },
     #[error("more than {max} answers")]
     TooManyAnswers { max: usize },
     #[error("an everyone-answers question needs at least {min} answers")]
@@ -303,8 +310,16 @@ impl Quiz {
             if slide.picture.is_some() && slide.video.is_some() {
                 found(Problem::PictureAndVideo);
             }
-            if slide.sound.as_ref().is_some_and(|s| s.volume > 100) {
-                found(Problem::SoundVolume);
+            if let Some(sound) = &slide.sound {
+                if sound.volume > 100 {
+                    found(Problem::SoundVolume);
+                }
+                if sound.parts().any(|part| part.is_empty()) {
+                    found(Problem::SoundPartEmpty);
+                }
+                if !(MIN_GAIN_DB as f32..=MAX_GAIN_DB as f32).contains(&sound.gain_db) {
+                    found(Problem::SoundGainOutOfRange { min: MIN_GAIN_DB, max: MAX_GAIN_DB });
+                }
             }
             if let SlideContent::Question(q) = &slide.content {
                 q.problems(&mut found);
@@ -322,6 +337,7 @@ impl Quiz {
 mod tests {
     use super::*;
     use crate::game::Button;
+    use crate::media::{Replay, Span};
 
     fn question(points: i32, points_end: Option<i32>, time_limit_s: u32) -> Question {
         Question {
@@ -448,9 +464,56 @@ mod tests {
         slide.video = Some(VideoClip { file: "media/clip.mp4".into(), autoplay: true, muted: false, repeat: false });
         assert_eq!(problems_of(vec![slide]), [Problem::PictureAndVideo]);
 
-        let mut slide = intro();
-        slide.sound = Some(SoundClip { file: "media/a.mp3".into(), start: Default::default(), repeat: false, volume: 101 });
-        assert_eq!(problems_of(vec![slide]), [Problem::SoundVolume]);
+        let with_sound = |edit: fn(&mut SoundClip)| {
+            let mut slide = intro();
+            let mut sound = sound("media/a.mp3");
+            edit(&mut sound);
+            slide.sound = Some(sound);
+            problems_of(vec![slide])
+        };
+        assert_eq!(with_sound(|s| s.volume = 101), [Problem::SoundVolume]);
+        assert_eq!(with_sound(|s| s.part = Span { from_ms: 500, to_ms: Some(500) }), [Problem::SoundPartEmpty]);
+        let empty_replay = |s: &mut SoundClip| s.replay = Some(Replay { part: Span { from_ms: 9_000, to_ms: Some(1_000) }, delay_ms: 0 });
+        assert_eq!(with_sound(empty_replay), [Problem::SoundPartEmpty]);
+        let gain = Problem::SoundGainOutOfRange { min: MIN_GAIN_DB, max: MAX_GAIN_DB };
+        assert_eq!(with_sound(|s| s.gain_db = MAX_GAIN_DB as f32 + 0.1), std::slice::from_ref(&gain));
+        assert_eq!(with_sound(|s| s.gain_db = MIN_GAIN_DB as f32 - 0.1), std::slice::from_ref(&gain));
+        // The limits themselves, and a part that runs to the end of the file, are fine.
+        assert_eq!(with_sound(|s| (s.volume, s.gain_db) = (100, MAX_GAIN_DB as f32)), []);
+        assert_eq!(with_sound(|s| (s.gain_db, s.part) = (MIN_GAIN_DB as f32, Span { from_ms: 60_000, to_ms: None })), []);
+    }
+
+    /// A sound with the options a quiz file gets when it names only the file.
+    fn sound(file: &str) -> SoundClip {
+        serde_json::from_value(serde_json::json!({ "file": file })).unwrap()
+    }
+
+    #[test]
+    fn a_sound_plays_the_whole_file_at_its_own_loudness_unless_told_otherwise() {
+        let plain = sound("media/a.mp3");
+        assert_eq!((plain.part, plain.gain_db, plain.replay), (Span::default(), 0.0, None));
+        let json = r#"{"file": "media/a.mp3", "part": {"fromMs": 15000, "toMs": 45000}, "gainDb": -4.5,
+                       "replay": {"part": {"fromMs": 60000}, "delayMs": 1500}}"#;
+        let trimmed: SoundClip = serde_json::from_str(json).unwrap();
+        assert_eq!(trimmed.part, Span { from_ms: 15_000, to_ms: Some(45_000) });
+        assert_eq!(trimmed.gain_db, -4.5);
+        assert_eq!(trimmed.replay, Some(Replay { part: Span { from_ms: 60_000, to_ms: None }, delay_ms: 1_500 }));
+        assert_eq!(serde_json::from_str::<SoundClip>(&serde_json::to_string(&trimmed).unwrap()).unwrap(), trimmed);
+    }
+
+    #[test]
+    fn reads_a_background_as_any_version_wrote_it() {
+        let slide = |background: &str| {
+            let json = format!(r#"{{"schemaVersion": 2, "title": "x", "slides": [{{"id": "a", "type": "endOfRound", "title": "", "background": {background}}}]}}"#);
+            Quiz::from_json(&json).unwrap().slides.remove(0).background
+        };
+        assert_eq!(slide(r#""media/stage.mp4""#), Some(Background::new("media/stage.mp4")));
+        assert_eq!(slide("null"), None);
+        let synced = slide(r#"{"file": "media/stage.mp4", "muted": false, "sync": true}"#).unwrap();
+        assert_eq!(synced, Background { file: "media/stage.mp4".into(), repeat: true, muted: false, sync: true });
+        let written = serde_json::to_value(&synced).unwrap();
+        assert_eq!(written, serde_json::json!({ "file": "media/stage.mp4", "repeat": true, "muted": false, "sync": true }));
+        assert!(Quiz::from_json(r#"{"schemaVersion": 3, "title": "x", "slides": [{"id": "a", "type": "endOfRound", "title": "", "background": 7}]}"#).is_err());
     }
 
     #[test]
@@ -485,7 +548,7 @@ mod tests {
         assert!(quiz.validate().is_ok());
 
         let mut broken = quiz.clone();
-        broken.slides[0].background = Some("media/stage.txt".into());
+        broken.slides[0].background = Some(Background::new("media/stage.txt"));
         let issue = MediaIssue::WrongType { expected: vec![MediaKind::Image, MediaKind::Video] };
         let problem = Problem::Media { file: "media/stage.txt".into(), issue };
         assert_eq!(broken.validate().unwrap_err(), [ValidationError { slide_id: Some("q1".into()), problem }]);

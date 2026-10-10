@@ -7,7 +7,7 @@ import type { Quiz, Slide } from "../types";
 import type { Action } from "./actions";
 import { ContextMenu } from "./controls";
 import { slideProperties, type SlideEditing } from "./properties";
-import { setAnswerAt, setHeadline } from "./slides";
+import { setAnswerAt, setHeadline, setNotes } from "./slides";
 
 type ColumnId = "answers" | "correct" | "time" | "points" | "pointsEnd" | "penalty" | "notes";
 
@@ -147,7 +147,7 @@ function SlideRow(props: { index: number; selected: boolean; editing: SlideEditi
             value={slide.notes}
             onChange={(e) => {
               const notes = e.target.value;
-              update((s) => ({ ...s, notes }), "notes");
+              update((s) => setNotes(s, notes), "notes");
             }}
           />
         </td>

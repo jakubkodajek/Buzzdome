@@ -7,7 +7,7 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import demoQuiz from "../../../samples/demo-quiz.json";
 import { NO_CONTROLS } from "../host/preview";
-import type { GameView, PlayerView, Quiz } from "../types";
+import type { GameView, PlayerView, Quiz, SoundClip } from "../types";
 import "../styles.css";
 
 // The backend fills serde defaults; the raw JSON file leaves them out.
@@ -54,6 +54,17 @@ function players(overrides: Partial<PlayerView>[] = []): PlayerView[] {
   return list;
 }
 
+/** A song for the scenes with media: played on demand, its chorus only. */
+const SONG: SoundClip = {
+  file: "media/song.mp3",
+  start: "onDemand",
+  repeat: false,
+  volume: 80,
+  part: { fromMs: 15_000, toMs: 45_000 },
+  gainDb: -2.5,
+  replay: { part: { fromMs: 45_000, toMs: null }, delayMs: 1_000 },
+};
+
 function view(partial: Partial<GameView>): GameView {
   return {
     quizTitle: quiz.title,
@@ -71,6 +82,7 @@ function view(partial: Partial<GameView>): GameView {
     buzzed: null,
     leaderboardVisible: false,
     controls: { ...NO_CONTROLS, next: true },
+    onHold: false,
     ...partial,
   };
 }
@@ -129,7 +141,7 @@ const SCENES: Record<string, GameView | null> = {
   final3: view({ phase: { phase: "final", step: 3 }, slide: null }),
   picture: view({
     phase: { phase: "question", step: "ready" },
-    slide: { ...quiz.slides[1], picture: "media/landscape.svg", sound: { file: "media/song.mp3", start: "onDemand", repeat: false, volume: 80 } },
+    slide: { ...quiz.slides[1], picture: "media/landscape.svg", sound: SONG },
   }),
   billboardPicture: view({ phase: { phase: "billboard" }, slideIndex: 0, slide: { ...quiz.slides[0], picture: "media/landscape.svg" } }),
 };
@@ -147,7 +159,7 @@ const editorQuiz: Quiz = {
   ...quiz,
   theme,
   slides: quiz.slides.map((slide, i) =>
-    i === 1 ? { ...slide, picture: "media/landscape.svg", sound: { file: "media/song.mp3", start: "onDemand", repeat: false, volume: 80 } } : slide,
+    i === 1 ? { ...slide, picture: "media/landscape.svg", sound: SONG } : slide,
   ),
 };
 

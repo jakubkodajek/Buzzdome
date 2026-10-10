@@ -29,6 +29,8 @@ pub struct GameView {
     pub leaderboard_visible: bool,
     /// The quizmaster commands the current step takes.
     pub controls: Controls,
+    /// See `Game::on_hold`.
+    pub on_hold: bool,
 }
 
 /// Enabled players by outcome of an everyone-answers question.
@@ -176,6 +178,7 @@ impl Game {
             },
             leaderboard_visible: self.leaderboard_visible(),
             controls: self.controls(),
+            on_hold: self.on_hold(),
             players,
         }
     }

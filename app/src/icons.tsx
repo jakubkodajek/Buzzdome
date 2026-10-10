@@ -206,6 +206,24 @@ export function VideoIcon(props: IconProps) {
   );
 }
 
+export function TrimIcon(props: IconProps) {
+  return (
+    <LineIcon {...props}>
+      <path d="M2 12h2M6 8v8M9 5v14M12 9v6M15 6v12M18 10v4M20 12h2" />
+      <path d="M7.5 3v18M16.5 3v18" strokeDasharray="2 2" />
+    </LineIcon>
+  );
+}
+
+export function LoudnessIcon(props: IconProps) {
+  return (
+    <LineIcon {...props}>
+      <path d="M4 20V14M9 20V9M14 20V12M19 20V5" />
+      <path d="M2 10h20" strokeDasharray="2 2" />
+    </LineIcon>
+  );
+}
+
 export function BackgroundIcon(props: IconProps) {
   return (
     <LineIcon {...props}>

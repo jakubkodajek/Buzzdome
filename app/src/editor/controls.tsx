@@ -2,6 +2,7 @@
 
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { useApp } from "../app-context";
+import { parseTrackTime, trackTime } from "../format";
 import { mediaFileName } from "../media";
 import { shortcutLabel, type Action } from "./actions";
 
@@ -22,11 +23,11 @@ export function Switch({ checked, onChange, disabled = false, label }: { checked
 }
 
 /**
- * A whole number. The text may be empty or half typed while focused; the
- * value changes whenever the text is a number.
+ * A number, whole unless `step` is a fraction. The text may be empty or half
+ * typed while focused; the value changes whenever the text is a number.
  */
-export function NumberBox(props: { value: number; onChange: (value: number) => void; min?: number; max?: number; unit?: string; label: string }) {
-  const { value, onChange, min, max, unit, label } = props;
+export function NumberBox(props: { value: number; onChange: (value: number) => void; min?: number; max?: number; step?: number; unit?: string; label: string }) {
+  const { value, onChange, min, max, step = 1, unit, label } = props;
   const [text, setText] = useState(String(value));
   const [shown, setShown] = useState(value);
   if (value !== shown) {
@@ -38,8 +39,8 @@ export function NumberBox(props: { value: number; onChange: (value: number) => v
     <span className="number-box">
       <input
         type="number"
-        inputMode="numeric"
-        step={1}
+        inputMode={Number.isInteger(step) ? "numeric" : "decimal"}
+        step={step}
         min={min}
         max={max}
         aria-label={label}
@@ -53,6 +54,37 @@ export function NumberBox(props: { value: number; onChange: (value: number) => v
       />
       {unit && <span className="unit">{unit}</span>}
     </span>
+  );
+}
+
+/**
+ * A time in a track, typed as `parseTrackTime` reads it. The text may be
+ * anything while focused; Enter or leaving the field applies it, and text
+ * that is no time in [min, max] goes back to the value.
+ */
+export function TimeBox(props: { value: number; onChange: (ms: number) => void; min?: number; max?: number; label: string; disabled?: boolean }) {
+  const { value, onChange, min = 0, max = Infinity, label, disabled } = props;
+  const [text, setText] = useState(trackTime(value));
+  const [shown, setShown] = useState(value);
+  if (value !== shown) {
+    setShown(value);
+    setText(trackTime(value));
+  }
+  const apply = () => {
+    const ms = parseTrackTime(text);
+    if (ms !== null && ms >= min && ms <= max && ms !== value) onChange(ms);
+    else setText(trackTime(value));
+  };
+  return (
+    <input
+      className="time-box"
+      aria-label={label}
+      value={text}
+      disabled={disabled}
+      onChange={(e) => setText(e.target.value)}
+      onBlur={apply}
+      onKeyDown={(e) => e.key === "Enter" && apply()}
+    />
   );
 }
 
@@ -98,17 +130,19 @@ export function MediaPicker({ file, onChoose, onRemove, label }: { file: string 
 }
 
 /** A dialog over the window; Escape or the close button cancels. */
-export function Dialog({ title, onClose, children, footer }: { title: string; onClose: () => void; children: ReactNode; footer: ReactNode }) {
+export function Dialog(props: { title: string; onClose: () => void; children: ReactNode; footer: ReactNode; className?: string }) {
+  const { title, onClose, children, footer, className } = props;
   const box = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    // Focus the first field so typing starts at once.
-    box.current?.querySelector<HTMLElement>("textarea, input, select, button")?.focus();
+    // Focus the control marked for it, or else the first field, so typing starts at once.
+    const body = box.current?.querySelector(".dialog-body");
+    (body?.querySelector<HTMLElement>("[data-autofocus]") ?? body?.querySelector<HTMLElement>("textarea, input, select, button"))?.focus();
   }, []);
   return (
     <div className="dialog-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div
         ref={box}
-        className="dialog"
+        className={className ? `dialog ${className}` : "dialog"}
         role="dialog"
         aria-modal="true"
         aria-label={title}

@@ -84,6 +84,8 @@ const PROBLEM_KEYS: Record<Problem["code"], StringKey> = {
   media: "problemMedia",
   pictureAndVideo: "problemPictureAndVideo",
   soundVolume: "problemSoundVolume",
+  soundPartEmpty: "problemSoundPartEmpty",
+  soundGainOutOfRange: "problemSoundGainOutOfRange",
   tooManyAnswers: "problemTooManyAnswers",
   tooFewAnswers: "problemTooFewAnswers",
   noCorrectAnswer: "problemNoCorrectAnswer",
