@@ -162,6 +162,7 @@ export function useQuizEditor(onTestRun: () => void): QuizEditor {
     state,
     status,
     edit: (edit, merge) => {
+      // eslint-disable-next-line no-restricted-properties -- when the author typed, to merge quick edits into one undo step
       if (editable()) dispatch({ type: "edit", edit, merge, at: Date.now() });
     },
     undo: () => {

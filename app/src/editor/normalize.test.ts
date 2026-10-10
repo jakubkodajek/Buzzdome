@@ -37,7 +37,9 @@ describe("normalize", () => {
   it("reads a sound whole up to ten minutes and a size, and one that tells no length while it is small", () => {
     expect(readsWhole(10 * 60_000, MAX_TIMED_BYTES)).toBe(true);
     expect(readsWhole(10 * 60_000 + 1, 0)).toBe(false);
-    // Ten minutes of a high-resolution WAV is too large to read whole.
+    // Ten minutes of a 48 kHz 16-bit stereo WAV is read whole, of a high-resolution one not.
+    expect(readsWhole(10 * 60_000, 10 * 60 * 48_000 * 2 * 2)).toBe(true);
+    expect(readsWhole(10 * 60_000, 10 * 60 * 48_000 * 3 * 2)).toBe(false);
     expect(readsWhole(10 * 60_000, 10 * 60 * 96_000 * 3 * 2)).toBe(false);
     // A sound that tells no length is read only while it is small.
     expect(readsWhole(Number.NaN, MAX_UNTIMED_BYTES)).toBe(true);

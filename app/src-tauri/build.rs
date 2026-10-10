@@ -37,6 +37,7 @@ const COMMANDS: &[&str] = &[
     "sound_board_change",
     "media_now",
     "media_control",
+    "media_ended",
     "media_volume",
     "media_set_volume",
     "app_icon",

@@ -94,6 +94,8 @@ export const api = {
   /** What the media player plays, if anything. */
   mediaNow: () => invoke<MediaNow>("media_now"),
   mediaControl: (command: PlayerCommand) => invoke<void>("media_control", { command }),
+  /** The projector's video `id` played to its end. */
+  mediaEnded: (id: number) => invoke<void>("media_ended", { id }),
   /** The player's volume in percent, the level everything the show plays sounds at. */
   mediaVolume: () => invoke<number>("media_volume"),
   mediaSetVolume: (volume: number) => invoke<void>("media_set_volume", { volume }),

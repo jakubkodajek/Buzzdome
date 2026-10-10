@@ -41,6 +41,7 @@
     "allow-sound-board-change",
     "allow-media-now",
     "allow-media-control",
+    "allow-media-ended",
     "allow-media-volume",
     "allow-media-set-volume",
     "allow-app-icon",

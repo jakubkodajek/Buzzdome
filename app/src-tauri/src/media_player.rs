@@ -306,6 +306,14 @@ pub fn media_control(app: AppHandle, state: State<MediaState>, command: PlayerCo
     Ok(())
 }
 
+/// The projector's video `id` played to its end, which only the window
+/// playing it can tell; the Director's timer is the fallback. One that no
+/// longer plays changes nothing.
+#[tauri::command]
+pub fn media_ended(app: AppHandle, state: State<MediaState>, id: u64) -> CmdResult<()> {
+    media_control(app, state, PlayerCommand::Ended { id })
+}
+
 /// The player's volume in percent.
 #[tauri::command]
 pub fn media_volume(state: State<MediaState>) -> u8 {

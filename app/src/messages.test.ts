@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { translator } from "./i18n";
-import { errorText, importIssueText, placesText, problemText, protocolText, receiverProblemText, settingsLostText } from "./messages";
+import { errorText, importIssueText, placesText, problemText, protocolText, receiverProblemText, settingsLostText, thrownText } from "./messages";
 
 const cs = translator("cs");
 const en = translator("en");
@@ -38,6 +38,19 @@ describe("errorText", () => {
   it("shows anything else as it is", () => {
     expect(errorText(cs, "command not found")).toBe("command not found");
     expect(errorText(cs, new Error("boom"))).toBe("boom");
+  });
+});
+
+describe("thrownText", () => {
+  it("gives anything thrown as text, and never throws itself", () => {
+    expect(thrownText(new Error("boom"))).toBe("boom");
+    expect(thrownText("command not found")).toBe("command not found");
+    expect(thrownText({ code: "notNow" })).toBe('{"code":"notNow"}');
+    expect(thrownText(undefined)).toBe("undefined");
+    const itself: { me?: unknown } = {};
+    itself.me = itself;
+    expect(thrownText(itself)).toBe("[object Object]");
+    expect(thrownText(10n)).toBe("10");
   });
 });
 

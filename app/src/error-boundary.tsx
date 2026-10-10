@@ -1,5 +1,6 @@
 import { Component, type ReactNode } from "react";
 import type { Translate } from "./i18n";
+import { thrownText } from "./messages";
 
 interface Props {
   /** What shows instead of `children` after one failed to render, given the error's message and a way to try again. */
@@ -20,12 +21,12 @@ export class ErrorBoundary extends Component<Props, { message: string | null }> 
   state = { message: null as string | null };
 
   static getDerivedStateFromError(error: unknown) {
-    return { message: error instanceof Error ? error.message : String(error) };
+    return { message: thrownText(error) };
   }
 
   componentDidCatch(error: unknown) {
     console.error(error);
-    this.props.onError?.(error instanceof Error ? error.message : String(error));
+    this.props.onError?.(thrownText(error));
   }
 
   componentDidUpdate(previous: Props, previousState: { message: string | null }) {
