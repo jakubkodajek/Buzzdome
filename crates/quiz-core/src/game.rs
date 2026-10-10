@@ -14,10 +14,14 @@ pub type BuzzerId = u16;
 /// The version of the rules a journal is replayed with. Bump it whenever
 /// the same commands give another show: a resumed show begun under another
 /// version is rebuilt with today's rules, but for what `Game::replay` keeps
-/// of older ones, and the Director says its scores may differ. 1: refused presses that were journaled count (N3), and
-/// renaming a player takes the name from another buzzer (R17). 2: a
-/// question in play restarts with `RestartQuestion`, which takes its score
-/// changes back, and refuses `GoTo` and `GoToFinal` (A3).
+/// of older ones, and the Director says its scores may differ. A command
+/// that was refused before and is taken now needs no bump, as a refused
+/// command is never journaled.
+///
+/// 1: refused presses that were journaled count (N3), and renaming a player
+/// takes the name from another buzzer (R17). 2: a question in play restarts
+/// with `RestartQuestion`, which takes its score changes back, and refuses
+/// `GoTo` and `GoToFinal` (A3).
 pub const RULES_VERSION: u32 = 2;
 
 /// Steps of the final score reveal: drum roll, 3rd, 2nd, 1st, full ranking.
@@ -183,7 +187,8 @@ pub struct Controls {
     /// `GoTo` and `GoToFinal`: not while a question is in play.
     pub go_to: bool,
     /// `RestartQuestion`: while a question is in play, the way to leave it
-    /// without scoring it (G14).
+    /// without scoring it, and once it closed, until its answer is shown,
+    /// the way to take its scores back and ask it again.
     pub restart_question: bool,
 }
 
@@ -349,6 +354,14 @@ pub struct Response {
     pub elapsed_ms: u64,
 }
 
+/// What the current question gave a player, which `RestartQuestion` takes back.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct Gain {
+    points: i32,
+    answer_ms: u64,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Game {
@@ -360,8 +373,8 @@ pub struct Game {
     responses: BTreeMap<BuzzerId, Response>,
     /// Fastest finger: players who answered wrong in the current question.
     locked_out: BTreeSet<BuzzerId>,
-    /// Score changes from the current question, for feedback on screen.
-    deltas: BTreeMap<BuzzerId, i32>,
+    /// What the current question gave each player (`credit`).
+    gains: BTreeMap<BuzzerId, Gain>,
     leaderboard_visible: bool,
     /// Team names prepared for the show; a team is paired with the buzzer
     /// whose player has its name (`view::TeamView`).
@@ -380,7 +393,7 @@ impl Game {
             players: BTreeMap::new(),
             responses: BTreeMap::new(),
             locked_out: BTreeSet::new(),
-            deltas: BTreeMap::new(),
+            gains: BTreeMap::new(),
             leaderboard_visible: false,
             teams: Vec::new(),
             video_plays: 0,
@@ -421,6 +434,13 @@ impl Game {
     /// score changes away with it.
     fn question_in_play(&self) -> bool {
         matches!(self.phase, Phase::Question(QuestionStep::Running { .. } | QuestionStep::Buzzed { .. }))
+    }
+
+    /// The question can start again: it is in play, or it closed and its
+    /// answer is not shown yet. So a restart the quizmaster asked for still
+    /// works when time ran out while they confirmed it (J20).
+    fn question_restartable(&self) -> bool {
+        self.question_in_play() || self.phase == Phase::Question(QuestionStep::Closed)
     }
 
     pub fn quiz(&self) -> &Quiz {
@@ -482,8 +502,9 @@ impl Game {
         &self.locked_out
     }
 
-    pub fn deltas(&self) -> &BTreeMap<BuzzerId, i32> {
-        &self.deltas
+    /// The points the current question gave `buzzer`'s player, for feedback on screen.
+    pub fn delta(&self, buzzer: BuzzerId) -> Option<i32> {
+        self.gains.get(&buzzer).map(|gain| gain.points)
     }
 
     pub fn leaderboard_visible(&self) -> bool {
@@ -530,7 +551,7 @@ impl Game {
             close_question: running.is_some(),
             play_video: self.shows_video(),
             go_to: !self.question_in_play(),
-            restart_question: self.question_in_play(),
+            restart_question: self.question_restartable(),
         }
     }
 
@@ -630,12 +651,13 @@ impl Game {
                 _ => Err(GameError::NotNow),
             },
             Command::RestartQuestion => {
-                if !self.question_in_play() {
+                if !self.question_restartable() {
                     return Err(GameError::NotNow);
                 }
-                for (buzzer, delta) in std::mem::take(&mut self.deltas) {
+                for (buzzer, gain) in std::mem::take(&mut self.gains) {
                     if let Some(player) = self.players.get_mut(&buzzer) {
-                        player.add_score(-delta);
+                        player.add_score(gain.points.saturating_neg());
+                        player.total_answer_ms = player.total_answer_ms.saturating_sub(gain.answer_ms);
                     }
                 }
                 Ok(self.enter_slide(self.slide))
@@ -782,22 +804,23 @@ impl Game {
             return vec![self.lights_all(Light::Off)];
         }
         for (buzzer, response) in self.responses.clone() {
-            let Some(player) = self.players.get_mut(&buzzer) else { continue };
-            if !player.enabled {
-                continue;
+            if self.players.get(&buzzer).is_some_and(|player| player.enabled) {
+                self.credit(buzzer, q.points_for(response.button.answer_index(), response.elapsed_ms), response.elapsed_ms);
             }
-            let delta = q.points_for(response.button.answer_index(), response.elapsed_ms);
-            player.add_score(delta);
-            player.total_answer_ms += response.elapsed_ms;
-            self.deltas.insert(buzzer, delta);
         }
         // The lights show the result only at the reveal; until then they go dark.
         vec![self.lights_all(Light::Off)]
     }
 
-    fn add_delta(&mut self, buzzer: BuzzerId, delta: i32) {
-        let total = self.deltas.entry(buzzer).or_default();
-        *total = total.saturating_add(delta);
+    /// Gives `buzzer`'s player `points` and `answer_ms` of answering time
+    /// from the current question, kept in `gains` for `RestartQuestion`.
+    fn credit(&mut self, buzzer: BuzzerId, points: i32, answer_ms: u64) {
+        let Some(player) = self.players.get_mut(&buzzer) else { return };
+        player.add_score(points);
+        player.total_answer_ms += answer_ms;
+        let gain = self.gains.entry(buzzer).or_default();
+        gain.points = gain.points.saturating_add(points);
+        gain.answer_ms += answer_ms;
     }
 
     fn judge(&mut self, right: bool, now: u64) -> Result<Vec<Effect>, GameError> {
@@ -806,20 +829,15 @@ impl Game {
         };
         let q = self.question().cloned().ok_or(GameError::NotNow)?;
         let elapsed = clock.elapsed_ms(now);
-        let player = self.player_mut(buzzer)?;
         if right {
-            let delta = q.points_at(elapsed);
-            player.add_score(delta);
-            player.total_answer_ms += elapsed;
-            self.add_delta(buzzer, delta);
+            self.credit(buzzer, q.points_at(elapsed), elapsed);
             self.phase = Phase::Question(QuestionStep::Revealed { winner: Some(buzzer) });
             return Ok(vec![
                 Effect::Lights { lights: vec![(buzzer, Light::Correct)] },
                 Effect::Sound { cue: Cue::Correct },
             ]);
         }
-        player.add_score(-q.penalty);
-        self.add_delta(buzzer, -q.penalty);
+        self.credit(buzzer, -q.penalty, 0);
         self.locked_out.insert(buzzer);
         let mut effects = vec![
             Effect::Lights { lights: vec![(buzzer, Light::Wrong)] },
@@ -900,7 +918,7 @@ impl Game {
     fn enter_slide(&mut self, index: usize) -> Vec<Effect> {
         self.responses.clear();
         self.locked_out.clear();
-        self.deltas.clear();
+        self.gains.clear();
         self.leaderboard_visible = false;
         self.video_plays = 0;
         self.slide = index;

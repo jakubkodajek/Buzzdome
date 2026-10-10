@@ -274,7 +274,7 @@ pub fn sound_board_change(app: AppHandle, state: State<MediaState>, change: Boar
 }
 
 /// What the media player plays, read on the show clock at `at_ms`. A window
-/// counts on from there with a monotonic clock of its own (G2): its wall
+/// counts on from there with a monotonic clock of its own: its wall
 /// clock may stand apart from the show clock by any amount.
 #[derive(Debug, Clone, Serialize, TS)]
 #[ts(export)]

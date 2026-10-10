@@ -23,7 +23,7 @@ mod themes;
 
 use buzzers::clock::ShowClock;
 use buzzers::receiver::HardwareDriver;
-use buzzers::{BuzzerDriver, VirtualDriver};
+use buzzers::{BuzzerDriver, Press, VirtualDriver};
 use dialogs::Picker;
 use error::CmdResult;
 pub use error::AppError;
@@ -51,6 +51,8 @@ struct Inner {
     /// Why the running show's last journal write failed, if it did; none
     /// once one works again. The Director shows it (A9).
     save_problem: Option<AppError>,
+    /// When the running show began on the show clock (`before_show`).
+    began_ms: u64,
 }
 
 impl Inner {
@@ -64,7 +66,15 @@ impl Inner {
             teams: Vec::new(),
             teams_file: None,
             save_problem: None,
+            began_ms: 0,
         }
+    }
+
+    /// Whether a command or press given at `at_ms` came before the running
+    /// show began, while it started: it was meant for no show or the one
+    /// before, and does not reach this one (J24).
+    fn before_show(&self, at_ms: u64) -> bool {
+        at_ms < self.began_ms
     }
 }
 
@@ -166,6 +176,9 @@ fn emit_show_changed(app: &AppHandle, inner: &Inner) {
 /// commits. The show never shows a state that is not on disk. Gives false
 /// for a press that changes nothing, which is neither journaled nor shown.
 fn execute_at(app: &AppHandle, inner: &mut Inner, command: Command, at_ms: u64) -> CmdResult<bool> {
+    if inner.before_show(at_ms) {
+        return Err(AppError::NoShow);
+    }
     let Some(effects) = apply_journaled(inner, command, at_ms)? else {
         return Ok(false);
     };
@@ -196,11 +209,12 @@ fn apply_journaled(inner: &mut Inner, command: Command, at_ms: u64) -> CmdResult
 }
 
 /// Makes `game` the running show, or none, journaled in `session` (none in
-/// a test run). A new journal has no failed write yet.
+/// a test run), beginning now. A new journal has no failed write yet.
 fn replace_show(inner: &mut Inner, game: Option<Game>, session: Option<Session>) {
     inner.game = game;
     inner.session = session;
     inner.save_problem = None;
+    inner.began_ms = now_ms();
 }
 
 /// Applies `stamped` to a copy of `game` and journals it in `session` (none
@@ -441,7 +455,10 @@ async fn resume_last_session(app: AppHandle) -> CmdResult<Vec<AppError>> {
 /// still counts and none given after it reaches the show (G18).
 #[tauri::command]
 async fn end_show(app: AppHandle) -> CmdResult<()> {
-    show_thread::run(&app, |app, inner, _| {
+    show_thread::run(&app, |app, inner, at_ms| {
+        if inner.before_show(at_ms) {
+            return Ok(());
+        }
         replace_show(inner, None, None);
         inner.media_root = None;
         emit_show_changed(app, inner);
@@ -452,6 +469,9 @@ async fn end_show(app: AppHandle) -> CmdResult<()> {
 
 #[tauri::command]
 async fn dispatch(app: AppHandle, command: Command) -> CmdResult<()> {
+    if let Command::Press { buzzer, button } = command {
+        return show_thread::press(&app, Press { buzzer, button });
+    }
     show_thread::run(&app, move |app, inner, at_ms| match command {
         // The names a show is given are the prepared ones, also kept on disk.
         Command::SetTeams { names } => teams::set(app, inner, names, at_ms),
@@ -460,12 +480,12 @@ async fn dispatch(app: AppHandle, command: Command) -> CmdResult<()> {
     .await
 }
 
-/// Feeds a press the receiver got at `at_ms` into the running show, if any.
-/// Returns whether the show took it. Why one failed is the Director's to
-/// show (`save_problem`).
-pub(crate) fn press_from_hardware(app: &AppHandle, command: Command, at_ms: u64) -> bool {
-    let mut inner = lock_show(app);
-    inner.game.is_some() && matches!(execute_at(app, &mut inner, command, at_ms), Ok(true))
+/// Feeds a press made at `at_ms`, on a buzzer, a key or an on-screen
+/// buzzer, into the running show, if any. Returns whether the show took it.
+/// Why one failed is the Director's to show (`save_problem`).
+pub(crate) fn play_press(app: &AppHandle, press: Press, at_ms: u64) -> bool {
+    let command = Command::Press { buzzer: press.buzzer, button: press.button };
+    matches!(execute_at(app, &mut lock_show(app), command, at_ms), Ok(true))
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -594,14 +614,13 @@ mod tests {
     /// The app's state with a show of the demo quiz journaled under `root`,
     /// given `commands` a second apart.
     fn journaled_show(root: &Path, commands: Vec<Command>) -> Inner {
+        journaled_show_under(quiz_core::RULES_VERSION, root, commands)
+    }
+
+    /// `journaled_show` for a show begun under `rules_version`.
+    fn journaled_show_under(rules_version: u32, root: &Path, commands: Vec<Command>) -> Inner {
         let quiz = Quiz::from_json(DEMO_QUIZ).unwrap();
-        let meta = SessionMeta {
-            quiz_title: quiz.title.clone(),
-            source_path: None,
-            started_ms: 1,
-            media_root: None,
-            rules_version: quiz_core::RULES_VERSION,
-        };
+        let meta = SessionMeta { quiz_title: quiz.title.clone(), source_path: None, started_ms: 1, media_root: None, rules_version };
         let session = Session::create(root, &quiz, &meta).unwrap();
         let mut inner = Inner { game: Some(Game::new(quiz)), session: Some(session), ..Inner::new() };
         for (n, command) in commands.into_iter().enumerate() {
@@ -687,6 +706,30 @@ mod tests {
     }
 
     #[test]
+    fn a_show_begun_under_rules_version_1_resumes_with_its_restart_by_go_to() {
+        let root = sessions_dir("rules-1");
+        let mut inner = journaled_show_under(1, &root, up_to_the_first_question());
+        let slide = inner.game.as_ref().unwrap().slide_index();
+        // Version 1 restarted the question after a crash with a jump to it (G11);
+        // today's rules refuse that jump, so it is written as it was.
+        let session = inner.session.as_mut().unwrap();
+        session.append(&Stamped { at_ms: 60_000, command: Command::GoTo { slide } }).unwrap();
+        session.append(&Stamped { at_ms: 61_000, command: Command::Next }).unwrap();
+        session.append(&Stamped { at_ms: 62_000, command: Command::Press { buzzer: 2, button: quiz_core::Button::C } }).unwrap();
+        drop(inner);
+
+        let resumed = resume_show(&root, 120_000, &[]).unwrap();
+        assert_eq!(resumed.warnings, [AppError::RulesChanged]);
+        // Replayed with its jump, the question ran again, so it is restarted once more.
+        let on_disk = Session::resume_latest(&root).unwrap().unwrap();
+        assert_eq!(on_disk.journal.last(), Some(&Stamped { at_ms: 120_000, command: Command::RestartQuestion }));
+        assert_eq!(Game::replay(on_disk.quiz, &on_disk.journal, on_disk.meta.rules_version), resumed.game);
+        assert_eq!(resumed.game.slide_index(), slide);
+        assert_eq!(resumed.game.phase(), &quiz_core::Phase::Question(quiz_core::QuestionStep::Ready));
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
     fn a_resumed_show_plays_on_when_the_new_runs_clock_reads_earlier() {
         // The system clock went back between the runs, so the new run's show
         // clock reads before the journal's last command (6 s).
@@ -746,6 +789,16 @@ mod tests {
         replace_show(&mut inner, None, None);
         assert_eq!(inner.save_problem, None);
         std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn what_was_given_before_a_show_began_does_not_reach_it() {
+        let mut inner = Inner::new();
+        let given = now_ms();
+        std::thread::sleep(std::time::Duration::from_millis(5));
+        replace_show(&mut inner, Some(Game::new(Quiz::from_json(DEMO_QUIZ).unwrap())), None);
+        assert!(inner.before_show(given));
+        assert!(!inner.before_show(now_ms()));
     }
 
     #[test]
