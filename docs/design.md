@@ -323,15 +323,23 @@ packages users will install are read the same way.
   the screen its background, the most specific first (BG-6: the slide's own,
   then the theme's for the screen, `screenOf(view)`, TH-5, and under another
   theme the built-in default's; round and quiz levels slot in between once
-  the format has them). `StageBackground`
-  (`slide-media.tsx`) draws the theme's picture or video and over it the
-  first more specific level that loads; one that fails gives way to the next
+  the format has them). A slide style's gradient is a level of its own
+  under the slide's file: it never fails, and the theme's background shows
+  through where its colours are transparent. `StageBackground`
+  (`slide-media.tsx`) draws the theme's picture or video, the gradient, and
+  over them the first more specific level that loads; one that fails gives way to the next
   and is reported once per media folder (BG-9), so the Director warns about
   a broken file. A theme's video loops silently. Every stage (projector,
   editor canvas, thumbnails) goes through `Stage`, and an overlay over it
   (the leaderboard) through `StageOverlay`, so none places a background
   itself. `slide.css` takes colours and fonts only from those
-  variables. Text on a filled area (bars, answers, rows) gets white or dark
+  variables, apart from a slide's own style: `textStyleCss`
+  (`theme/slide-style.ts`, tested) turns a text's style into an inline
+  style that sets only what the style changes, a size as `--text-scale`
+  (which the text's `font-size` multiplies) and an answer's fill as
+  `--answer-fill` under the theme's sheen, so a revealed or dimmed answer
+  keeps its look. A title and a question share the headline's style.
+  Text on a filled area (bars, answers, rows) gets white or dark
   text from `readableText`, which keeps at least the 3:1 contrast WCAG 2.2
   asks for large text (SC 1.4.3); a test checks every built-in colour.
 - **Fonts.** A theme font is a file. `registerFonts` (`theme/fonts.ts`) adds

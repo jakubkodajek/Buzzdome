@@ -8,9 +8,25 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import demoQuiz from "../../../samples/demo-quiz.json";
 import builtinThemes from "../bindings/BuiltinThemes.json";
+import { setBodyText } from "../editor/slides";
 import { NO_CONTROLS } from "../host/preview";
 import { MAX_BOARD_COLUMNS, MAX_BOARD_ROWS } from "../bindings/Constants";
-import type { Background, BoardChange, GameView, MediaLibrary, NowPlaying, Pad, PlayerCommand, PlayerView, Quiz, SheetImport, SoundBoard, SoundClip, VideoClip } from "../types";
+import type {
+  Background,
+  BoardChange,
+  GameView,
+  MediaLibrary,
+  NowPlaying,
+  Pad,
+  PlayerCommand,
+  PlayerView,
+  Quiz,
+  SheetImport,
+  SlideStyle,
+  SoundBoard,
+  SoundClip,
+  VideoClip,
+} from "../types";
 import "../styles.css";
 
 // The backend fills serde defaults; the raw JSON file leaves them out.
@@ -86,6 +102,14 @@ const VIDEO: VideoClip = {
   part: { fromMs: 5_000, toMs: 20_000 },
   effect: "mosaic",
   replay: { part: { fromMs: 25_000, toMs: null }, delayMs: 0 },
+};
+
+/** A slide's own look: a gradient behind it, a left-aligned serif headline, see-through answers. */
+const STYLE: SlideStyle = {
+  fill: { from: "#0B1E3F", to: "#3A6EA5CC", kind: "diagonal" },
+  headline: { color: "#FFCC00", font: "Georgia", size: 80, italic: true, align: "left", shadowColor: "#FF000080" },
+  text: { underline: true, fill: { from: "#00000099", to: "#00000033", kind: "horizontal" } },
+  answers: { fill: { from: "#FFFFFF", to: "#B8C8D8", kind: "vertical" }, color: "#102030", transparency: 20, align: "left", bold: false },
 };
 
 /** A picture behind a slide, with the options a new background gets. */
@@ -229,6 +253,8 @@ const SCENES: Record<string, GameView | null> = {
     videoPlays: 1,
   }),
   brokenBackground: view({ phase: { phase: "billboard" }, slideIndex: 0, slide: { ...quiz.slides[0], background: { ...BACKGROUND, file: "media/missing.png" } } }),
+  styled: view({ slide: { ...quiz.slides[1], style: STYLE } }),
+  styledBillboard: view({ phase: { phase: "billboard" }, slideIndex: 0, slide: { ...setBodyText(quiz.slides[0], "Zeměpis a historie"), style: STYLE } }),
 };
 
 // The quiz as the scene's view shows it (scenes may add media to a slide).

@@ -4,6 +4,7 @@ import { VideoIcon } from "./icons";
 import { isVideo, mediaFileName, MediaRootContext, themeFileUrl, useMediaUrl } from "./media";
 import { ShowVideo } from "./slide-video";
 import type { BackgroundLayer } from "./theme/background";
+import { gradientCss } from "./theme/slide-style";
 import type { Background, ClockView, GameView, Slide } from "./types";
 
 /**
@@ -68,7 +69,7 @@ const THEME_VIDEO: Pick<Background, "repeat" | "muted" | "sync"> = { repeat: tru
 
 /** A level's file, ready to draw. */
 interface Drawn {
-  level: BackgroundLayer["level"];
+  level: "slide" | "theme";
   /** The file as the quizmaster knows it, for the warning when it fails. */
   name: string;
   url: string;
@@ -78,8 +79,8 @@ interface Drawn {
 
 /**
  * The background of a stage from its levels (`resolveBackground`): the theme's
- * picture or video, and over it the most specific one that has not failed
- * to load. A failed one gives way to the next level and is reported once
+ * picture or video, over it the slide style's gradient, and over that the
+ * most specific file that has not failed to load. A failed one gives way to the next level and is reported once
  * (BG-9). In the show a video plays as its background options say: looped or
  * once, silent or not, and held while the show holds (`onHold`) when synced
  * (BG-4). Elsewhere it is silent and stands on its first frame, with a mark
@@ -95,6 +96,7 @@ export function StageBackground(props: { layers: BackgroundLayer[]; mode?: Scree
   const [failed, setFailed] = useState<Failed>({ root, urls: new Set() });
   const failedNow = failed.root === root ? failed.urls : null;
   const drawn = layers.flatMap((layer): Drawn[] => {
+    if (layer.level === "fill") return [];
     if (layer.level === "theme") {
       const { path } = layer.file;
       return [{ level: "theme", name: path, url: themeFileUrl(layer.file), video: isVideo(path), options: THEME_VIDEO }];
@@ -105,7 +107,8 @@ export function StageBackground(props: { layers: BackgroundLayer[]; mode?: Scree
   });
   const loading = drawn.filter((item) => !failedNow?.has(item.url));
   const theme = loading.find((item) => item.level === "theme");
-  const own = loading.find((item) => item.level !== "theme");
+  const own = loading.find((item) => item.level === "slide");
+  const fill = layers.find((layer) => layer.level === "fill");
   const show = mode === "show";
   const draw = (item: Drawn, playsHere: boolean) => {
     const fail = () => {
@@ -131,6 +134,7 @@ export function StageBackground(props: { layers: BackgroundLayer[]; mode?: Scree
   return (
     <>
       {theme && <div className="backdrop">{draw(theme, false)}</div>}
+      {fill && <div className="slide-fill" style={{ background: gradientCss(fill.gradient) }} />}
       {own && (
         <div className="slide-background">
           {draw(own, playing)}

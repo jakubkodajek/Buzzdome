@@ -19,7 +19,21 @@ import {
   NEW_VIDEO_INTRO_PAUSE_MS,
 } from "../bindings/Constants";
 import { hasTitle, showsRanking, slideTitle } from "../quiz";
-import type { AnswerMode, Background, Quiz, QuestionSlide, Replay, Slide, SlideType, SoundClip, Span, VideoClip } from "../types";
+import type {
+  AnswerMode,
+  Background,
+  Gradient,
+  Quiz,
+  QuestionSlide,
+  Replay,
+  Slide,
+  SlideStyle,
+  SlideType,
+  SoundClip,
+  Span,
+  TextStyle,
+  VideoClip,
+} from "../types";
 
 /** Answers a new everyone-answers question starts with: one per buzzer button. */
 const DEFAULT_ANSWERS = MAX_EVERYONE_ANSWERS;
@@ -78,15 +92,16 @@ export function setNotes(slide: Slide, notes: string): Slide {
  * parts of its sound and video; only a question has the clock a sound can
  * play with (elsewhere it plays when the slide opens) and the answer time a
  * video effect follows. A ranking shows no picture or video, so they go.
+ * The style stays, the headline's with the headline.
  */
 export function convertSlide(slide: Slide, type: SlideType): Slide {
   if (slide.type === type) return slide;
-  const { id, notes, background } = slide;
+  const { id, notes, background, style } = slide;
   const question = type === "question";
   const sound = slide.sound && !question ? { ...slide.sound, start: slide.sound.start === "withClock" ? "onSlide" : slide.sound.start, replay: null } : slide.sound;
   const video = slide.video && !question ? { ...slide.video, replay: null, effect: null } : slide.video;
   const media = showsRanking(type) ? { picture: null, video: null } : { picture: slide.picture, video };
-  return setHeadline({ ...newSlide(type, id), notes, ...media, sound, background }, slideTitle(slide));
+  return setHeadline({ ...newSlide(type, id), notes, ...media, sound, background, style }, slideTitle(slide));
 }
 
 const randomId = () => Math.random().toString(36).slice(2, 10);
@@ -286,4 +301,29 @@ export function setBackground(slide: Slide, file: string | null): Slide {
 
 export function setBackgroundOptions(slide: Slide, options: Partial<Omit<Background, "file">>): Slide {
   return slide.background ? { ...slide, background: { ...slide.background, ...options } } : slide;
+}
+
+/** The texts of a slide that have a style of their own (`SlideStyle`). */
+export type StyledPart = "headline" | "text" | "answers";
+
+/** Sets the gradient behind the slide; null shows the theme's background. */
+export function setSlideFill(slide: Slide, fill: Gradient | null): Slide {
+  return withStyle(slide, { ...slide.style, fill: fill ?? undefined });
+}
+
+/** Changes the style of one of the slide's texts; a value set to undefined is the theme's again. */
+export function setTextStyle(slide: Slide, part: StyledPart, change: Partial<TextStyle>): Slide {
+  return withStyle(slide, { ...slide.style, [part]: { ...slide.style?.[part], ...change } });
+}
+
+/** The slide with `style`, keeping only what is set: a slide that looks as its theme has no style. */
+function withStyle(slide: Slide, style: SlideStyle): Slide {
+  const parts = { fill: style.fill, headline: setOnly(style.headline ?? {}), text: setOnly(style.text ?? {}), answers: setOnly(style.answers ?? {}) };
+  return { ...slide, style: setOnly(parts) };
+}
+
+/** `value` without its undefined fields; undefined when none is left. */
+function setOnly<T extends object>(value: T): T | undefined {
+  const set = Object.entries(value).filter(([, field]) => field !== undefined);
+  return set.length > 0 ? (Object.fromEntries(set) as T) : undefined;
 }

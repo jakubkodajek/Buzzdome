@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import BUILTIN_THEMES from "../bindings/BuiltinThemes.json";
-import { newSlide, setBackground } from "../editor/slides";
+import { newSlide, setBackground, setSlideFill } from "../editor/slides";
 import type { Theme } from "../types";
 import { resolveBackground } from "./background";
 
@@ -12,6 +12,13 @@ describe("resolveBackground", () => {
     const layers = resolveBackground(slide, theme, "default");
     expect(layers.map((layer) => layer.level)).toEqual(["slide", "theme"]);
     expect(layers[0]).toMatchObject({ background: { file: "media/stage.mp4", repeat: true, muted: true, sync: false } });
+  });
+
+  it("puts the style's gradient between the slide's own background and the theme's", () => {
+    const gradient = { from: "#000000", to: "#336699", kind: "radial" } as const;
+    const slide = setSlideFill(setBackground(newSlide("question", "q"), "media/stage.png"), gradient);
+    expect(resolveBackground(slide, theme, "question").map((layer) => layer.level)).toEqual(["slide", "fill", "theme"]);
+    expect(resolveBackground(setBackground(slide, null), theme, "question")[0]).toEqual({ level: "fill", gradient });
   });
 
   it("ends with the theme's background for the screen", () => {

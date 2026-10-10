@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { timeLeft } from "../answer-time";
 import { ANSWER_LETTERS } from "../answers";
 import { useApp } from "../app-context";
@@ -8,7 +8,8 @@ import { playerName } from "../i18n";
 import { CheckIcon, CrossIcon, PeopleIcon, QuestionIcon, TrophyIcon } from "../icons";
 import type { QuestionPosition, SlideContext } from "../quiz";
 import { SlideMedia, type ScreenMode } from "../slide-media";
-import type { AnswerResults, ClockView, GameView, PlayerView, QuestionSlide } from "../types";
+import { styleOf, textStyleCss, type StyledText } from "../theme/slide-style";
+import type { AnswerResults, ClockView, GameView, PlayerView, QuestionSlide, Slide } from "../types";
 import "./slide.css";
 
 export function ranked(view: GameView): PlayerView[] {
@@ -26,18 +27,19 @@ export function SlideScreen(props: { view: GameView; context: SlideContext; cloc
   const { t } = useApp();
   const phase = view.phase;
   const placeholder = (text: string, empty: string) => (text || mode === "show" ? text : <span className="placeholder">{empty}</span>);
+  const look = (text: StyledText) => styledText(view.slide, text);
   switch (phase.phase) {
     case "lobby":
       return <Welcome view={view} />;
     case "billboard":
       return view.slide?.type === "billboard" ? (
         <div className="center-slide">
-          <h1 className="slide-title" data-element="title">
+          <h1 className="slide-title" data-element="title" style={look("title")}>
             {placeholder(view.slide.title, t("titlePlaceholder"))}
           </h1>
           <SlideMedia slide={view.slide} className="slide-media" mode={mode} live={{ view, clock }} />
           {(view.slide.text || mode === "preview") && (
-            <p className="slide-text" data-element="text">
+            <p className="slide-text" data-element="text" style={look("text")}>
               {placeholder(view.slide.text, t("textPlaceholder"))}
             </p>
           )}
@@ -52,7 +54,7 @@ export function SlideScreen(props: { view: GameView; context: SlideContext; cloc
             mode !== "show" && <p className="explained-missing">{t("noQuestionToExplain")}</p>
           )}
           <SlideMedia slide={view.slide} className="explanation-media" mode={mode} live={{ view, clock }} />
-          <p className="explanation-text" data-element="text">
+          <p className="explanation-text" data-element="text" style={look("text")}>
             {placeholder(view.slide.text, t("explanationPlaceholder"))}
           </p>
         </div>
@@ -60,7 +62,7 @@ export function SlideScreen(props: { view: GameView; context: SlideContext; cloc
     case "endOfRound":
       return (
         <div className="center-slide">
-          <h1 className="slide-title small" data-element="title">
+          <h1 className="slide-title small" data-element="title" style={view.slide?.type === "endOfRound" ? look("title") : undefined}>
             {view.slide?.type === "endOfRound" ? placeholder(view.slide.title, t("endOfRound")) : t("endOfRound")}
           </h1>
           <Leaderboard players={ranked(view)} />
@@ -74,6 +76,7 @@ export function SlideScreen(props: { view: GameView; context: SlideContext; cloc
           // A final slide's own title, or the default one.
           title={(view.slide?.type === "final" && placeholder(view.slide.title, t("final"))) || t("final")}
           titled={view.slide?.type === "final"}
+          titleStyle={view.slide?.type === "final" ? look("title") : {}}
           sample={mode !== "show"}
         />
       );
@@ -89,6 +92,11 @@ export function SlideScreen(props: { view: GameView; context: SlideContext; cloc
         />
       ) : null;
   }
+}
+
+/** The inline style of a slide's text from the slide's style (theme/slide-style.ts). */
+function styledText(slide: Slide | null, text: StyledText): CSSProperties {
+  return textStyleCss(styleOf(slide?.style, text), text);
 }
 
 /** Registration: every buzzer number, lit once it is pressed, with its team's name once paired. */
@@ -169,6 +177,7 @@ function QuestionScreen(props: {
   const winner = view.players.find((p) => p.buzzer === winnerId);
   const barPlayer = buzzed ?? winner;
   const hasMedia = question.picture !== null || question.video !== null;
+  const answerStyle = styledText(question, "answer");
 
   return (
     <div className={hasMedia ? "question-screen has-media" : "question-screen"}>
@@ -191,7 +200,7 @@ function QuestionScreen(props: {
         </div>
       </div>
 
-      <h1 className="question-text" data-element="question">
+      <h1 className="question-text" data-element="question" style={styledText(question, "question")}>
         {placeholder(question.text, t("questionPlaceholder"))}
       </h1>
       {hasMedia && <SlideMedia slide={question} className="question-media" mode={mode} live={{ view, clock }} />}
@@ -206,6 +215,7 @@ function QuestionScreen(props: {
                 key={i}
                 className={["answer", `answer-${i}`, revealed ? (isCorrect ? "is-correct" : "is-dim") : ""].join(" ")}
                 data-element={`answer-${i}`}
+                style={answerStyle}
               >
                 <span className="letter">{ANSWER_LETTERS[i]}</span>
                 <span className="answer-text">{placeholder(answer, t("answerPlaceholder", { letter: ANSWER_LETTERS[i] }))}</span>
@@ -308,14 +318,16 @@ interface FinalScoresProps {
   title: ReactNode;
   /** The title belongs to a final slide, which the editor can select. */
   titled: boolean;
+  /** The final slide's style for its title. */
+  titleStyle: CSSProperties;
   /** Outside the show: empty places show where the names go. */
   sample: boolean;
 }
 
-function FinalScores({ players, step, title, titled, sample }: FinalScoresProps) {
+function FinalScores({ players, step, title, titled, titleStyle, sample }: FinalScoresProps) {
   const { t } = useApp();
   const heading = (text: ReactNode) => (
-    <h1 className="slide-title small" data-element={titled ? "title" : undefined}>
+    <h1 className="slide-title small" data-element={titled ? "title" : undefined} style={titleStyle}>
       {text}
     </h1>
   );

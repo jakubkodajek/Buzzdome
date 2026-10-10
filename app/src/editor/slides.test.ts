@@ -17,10 +17,12 @@ import {
   setNotes,
   setPicture,
   setScoring,
+  setSlideFill,
   setSound,
   setSoundOptions,
   setVideo,
   setVideoOptions,
+  setTextStyle,
   withAnswerCount,
   withFreshIds,
 } from "./slides";
@@ -197,6 +199,18 @@ describe("slides", () => {
     const back = convertSlide(billboard, "question");
     expect(back).toMatchObject({ type: "question", text: "Who?", answers: ["", "", "", ""], correct: 0 });
     expect(convertSlide(q, "question")).toBe(q);
+  });
+
+  it("keeps only the style that is set, and the style through a change of type", () => {
+    const fill = { from: "#000000", to: "#FFFFFF", kind: "vertical" } as const;
+    const styled = setTextStyle(setSlideFill(question(), fill), "headline", { color: "#FF0000", bold: false });
+    expect(styled.style).toEqual({ fill, headline: { color: "#FF0000", bold: false } });
+    expect(setTextStyle(styled, "headline", { bold: undefined }).style).toEqual({ fill, headline: { color: "#FF0000" } });
+    expect(convertSlide(styled, "billboard").style).toEqual(styled.style);
+    // Back to the theme's look: no style at all.
+    const plain = setSlideFill(setTextStyle(styled, "headline", { color: undefined, bold: undefined }), null);
+    expect(plain.style).toBeUndefined();
+    expect(JSON.stringify(plain)).toBe(JSON.stringify(question()));
   });
 
   it("plays a sound that went with the clock when the slide opens once the slide has no clock", () => {

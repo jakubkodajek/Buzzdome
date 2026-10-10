@@ -5,6 +5,7 @@
 import type { CSSProperties } from "react";
 import { DEFAULT_THEME_ID } from "../bindings/Constants";
 import type { ColorKey, GameView, ScreenKey, Theme } from "../types";
+import { parseColor } from "./color";
 import { fontFamily } from "./fonts";
 
 /**
@@ -99,11 +100,12 @@ export function contrast(a: string, b: string): number {
   return (lighter + 0.05) / (darker + 0.05);
 }
 
-/** WCAG 2.2 relative luminance of `#rrggbb` or `#rrggbbaa`. */
+/** WCAG 2.2 relative luminance of `#rrggbb` or `#rrggbbaa`; black for anything else. */
 function luminance(hex: string): number {
-  const [r, g, b] = [1, 3, 5].map((at) => {
-    const channel = parseInt(hex.slice(at, at + 2), 16) / 255;
+  const { r, g, b } = parseColor(hex) ?? { r: 0, g: 0, b: 0 };
+  const [red, green, blue] = [r, g, b].map((value) => {
+    const channel = value / 255;
     return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
   });
-  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  return 0.2126 * red + 0.7152 * green + 0.0722 * blue;
 }
