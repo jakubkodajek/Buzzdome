@@ -24,20 +24,26 @@ export function mediaUrl(root: string, reference: string): string {
   return convertFileSrc(root + reference.split("/").join(separator));
 }
 
+/** How long reading a file's length may take; a file that takes longer tells none, so it holds up no other. */
+const MEDIA_LENGTH_TIMEOUT_MS = 10_000;
+
 /**
  * The length of a sound or video file in ms, read from its metadata; NaN
- * when it cannot be read or the file tells none (some only know it once
- * played through).
+ * when it cannot be read, the file tells none (some only know it once
+ * played through) or it does not tell within `MEDIA_LENGTH_TIMEOUT_MS`.
  */
 export function readMediaLength(url: string, kind: Exclude<MediaKind, "image">): Promise<number> {
   return new Promise((resolve) => {
     const media = document.createElement(kind);
     media.preload = "metadata";
-    const done = (ms: number) => {
+    const timer = setTimeout(() => done(Number.NaN), MEDIA_LENGTH_TIMEOUT_MS);
+    function done(ms: number) {
+      clearTimeout(timer);
+      media.onloadedmetadata = media.onerror = null;
       media.removeAttribute("src");
       media.load();
       resolve(ms);
-    };
+    }
     media.onloadedmetadata = () => done(Number.isFinite(media.duration) ? media.duration * 1000 : Number.NaN);
     media.onerror = () => done(Number.NaN);
     media.src = url;

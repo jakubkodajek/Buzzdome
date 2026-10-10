@@ -67,14 +67,16 @@ describe("media lengths", () => {
     expect(durations.lengths.get().get("a.mp3")).toBe(1500);
   });
 
-  it("do not keep a file that left the list while it waited", async () => {
-    const { read, answer } = reader();
+  it("skip a file that left the list before its turn and do not keep one that left while it was read", async () => {
+    const { read, asked, answer } = reader();
     const durations = mediaDurations(read);
-    durations.follow(files("a.mp3", "b.mp3"));
-    durations.follow(files("b.mp3"));
+    durations.follow(files("a.mp3", "b.mp3", "c.mp3"));
+    await settle();
+    durations.follow(files("c.mp3"));
     await answer(1000);
-    await answer(2000);
-    expect([...durations.lengths.get()]).toEqual([["b.mp3", 2000]]);
+    await answer(3000);
+    expect(asked).toEqual(["a.mp3", "c.mp3"]);
+    expect([...durations.lengths.get()]).toEqual([["c.mp3", 3000]]);
   });
 
   it("change nothing for a list that drops nothing new", () => {

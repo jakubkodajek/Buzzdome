@@ -13,9 +13,9 @@ export interface MediaDurations {
   /** Length in ms by file URL, as they become known; NaN for a file whose length cannot be read. */
   lengths: Store<ReadonlyMap<string, number>>;
   /**
-   * Measures the listed files not measured yet, one after another, and
-   * forgets the ones no longer listed, so a new file of the same name is
-   * measured again.
+   * Measures the listed files not measured yet, one after another (a file
+   * no longer listed when its turn comes is skipped), and forgets the ones
+   * no longer listed, so a new file of the same name is measured again.
    */
   follow: (files: ReadonlyMap<string, TimedKind>) => void;
 }
@@ -30,7 +30,7 @@ export function mediaDurations(read: (url: string, kind: TimedKind) => Promise<n
   const measure = (url: string, kind: TimedKind) => {
     queued.add(url);
     queue = queue
-      .then(() => read(url, kind))
+      .then(() => (listed.has(url) ? read(url, kind) : Number.NaN))
       .then((ms) => {
         queued.delete(url);
         // A file that left the list while it waited is not kept.
