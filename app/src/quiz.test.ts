@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { FULL_SHARE } from "./bindings/Constants";
 import { newSlide } from "./editor/slides";
-import { hasTitle, plays, sameContext, slideContexts, slideTitle } from "./quiz";
+import { hasTitle, isCorrect, plays, sameContext, shareOf, slideContexts, slideTitle } from "./quiz";
 import type { Quiz, SlideType } from "./types";
 
 const quizOf = (...types: SlideType[]): Quiz => ({
@@ -32,6 +33,14 @@ describe("slide kinds", () => {
     expect(["endOfRound", "final"].some((type) => plays(type as SlideType).pictureAndVideo)).toBe(false);
     expect(plays("billboard")).toEqual({ pictureAndVideo: true, clockAndReveal: false });
     expect(plays("question").clockAndReveal).toBe(true);
+  });
+});
+
+describe("shareOf", () => {
+  it("gives a right answer's share, and all the points on a fastest-finger question", () => {
+    const question = { mode: "everyone" as const, correct: [{ answer: 1, share: 50 }] };
+    expect([shareOf(question, 0), shareOf(question, 1), isCorrect(question, 1)]).toEqual([null, 50, true]);
+    expect(shareOf({ ...question, mode: "fastestFinger" }, 1)).toBe(FULL_SHARE);
   });
 });
 

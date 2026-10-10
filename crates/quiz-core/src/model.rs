@@ -119,8 +119,15 @@ impl Slide {
     /// tells `dropped` the problem each drop fixed. Files saved before
     /// `validate` refused these still have them (the editor's `convertSlide`
     /// kept them when a slide changed type, and drops them the same way
-    /// now). A sound that waited for the clock plays when the slide opens.
+    /// now). A sound that waited for the clock plays when the slide opens,
+    /// and a fastest-finger answer with a part of the points gives all of them.
     fn drop_unplayable(&mut self, dropped: &mut impl FnMut(Problem)) {
+        if let SlideContent::Question(q) = &mut self.content {
+            if q.part_shares_on_fastest_finger() {
+                q.correct.iter_mut().for_each(|c| c.share = FULL_SHARE);
+                dropped(Problem::ShareNotOnEveryone);
+            }
+        }
         let plays = self.content.slide_type().plays();
         if !plays.picture_and_video && (self.picture.is_some() || self.video.is_some()) {
             self.picture = None;
@@ -403,9 +410,17 @@ impl Question {
         (start + delta) as i32
     }
 
-    /// The share of the points `answer` gives; none for a wrong answer.
+    /// The share of the points `answer` gives; none for a wrong answer. A
+    /// fastest-finger question gives all of them, whatever a session saved
+    /// before `validate` refused part shares there says.
     pub fn share_of(&self, answer: usize) -> Option<u8> {
-        self.correct.iter().find(|c| c.answer == answer).map(|c| c.share)
+        let share = self.correct.iter().find(|c| c.answer == answer)?.share;
+        Some(if self.mode == AnswerMode::FastestFinger { FULL_SHARE } else { share })
+    }
+
+    /// A fastest-finger right answer gives a part of the points (`Problem::ShareNotOnEveryone`).
+    fn part_shares_on_fastest_finger(&self) -> bool {
+        self.mode == AnswerMode::FastestFinger && self.correct.iter().any(|c| (1..FULL_SHARE).contains(&c.share))
     }
 
     pub fn is_correct(&self, answer: usize) -> bool {
@@ -448,7 +463,7 @@ impl Question {
         if self.correct.iter().any(|c| !(1..=FULL_SHARE).contains(&c.share)) {
             found(Problem::ShareOutOfRange { max: FULL_SHARE });
         }
-        if self.mode == AnswerMode::FastestFinger && self.correct.iter().any(|c| (1..FULL_SHARE).contains(&c.share)) {
+        if self.part_shares_on_fastest_finger() {
             found(Problem::ShareNotOnEveryone);
         }
         let points = -MAX_POINTS..=MAX_POINTS;
@@ -790,6 +805,25 @@ mod tests {
         q.points_end = None;
         assert_eq!(q.points_for(Some(2), 0), -2, "rounded away from zero like positive points");
         assert!(q.is_correct(2) && !q.is_correct(1));
+        // A fastest-finger answer gives all the points, whatever its share says.
+        q.mode = AnswerMode::FastestFinger;
+        assert_eq!((q.share_of(2), q.points_for(Some(2), 0)), (Some(FULL_SHARE), -7));
+    }
+
+    #[test]
+    fn a_fastest_finger_part_share_saved_before_it_was_refused_reads_as_all_the_points() {
+        let json = r#"{"schemaVersion": 5, "title": "x", "slides": [
+            {"id": "a", "type": "question", "mode": "fastestFinger", "text": "?", "answers": ["a", "b"], "correct": [{"answer": 0}, {"answer": 1, "share": 50}]},
+            {"id": "b", "type": "question", "mode": "everyone", "text": "?", "answers": ["a", "b"], "correct": [{"answer": 1, "share": 50}]}
+        ]}"#;
+        let ReadQuiz { quiz, dropped } = Quiz::read_json(json).unwrap();
+        assert_eq!(dropped, [ValidationError { slide_id: Some("a".into()), problem: Problem::ShareNotOnEveryone }]);
+        let correct = |i: usize| match &quiz.slides[i].content {
+            SlideContent::Question(q) => q.correct.clone(),
+            _ => unreachable!(),
+        };
+        assert_eq!((correct(0), correct(1)), (vec![CorrectAnswer::full(0), CorrectAnswer::full(1)], vec![CorrectAnswer { answer: 1, share: 50 }]));
+        assert_eq!(quiz.validate(), Ok(()));
     }
 
     #[test]

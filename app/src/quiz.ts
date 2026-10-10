@@ -1,4 +1,4 @@
-import { SLIDE_PLAYS } from "./bindings/Constants";
+import { FULL_SHARE, SLIDE_PLAYS } from "./bindings/Constants";
 import type { StringKey } from "./i18n";
 import type { Plays, QuestionSlide, Quiz, Slide, SlideType, TitledSlide } from "./types";
 
@@ -29,13 +29,18 @@ export function plays(type: SlideType): Plays {
   return SLIDE_PLAYS[type];
 }
 
-/** The share of the points answer `index` gives, in percent (`FULL_SHARE` for a fully right one); null for a wrong answer. */
-export function shareOf(question: Pick<QuestionSlide, "correct">, index: number): number | null {
-  return question.correct.find((c) => c.answer === index)?.share ?? null;
+/**
+ * The share of the points answer `index` gives, in percent (`FULL_SHARE` for
+ * a fully right one); null for a wrong answer. A fastest-finger question
+ * gives all of them (`Question::share_of` in quiz-core).
+ */
+export function shareOf(question: Pick<QuestionSlide, "correct" | "mode">, index: number): number | null {
+  const share = question.correct.find((c) => c.answer === index)?.share ?? null;
+  return share !== null && question.mode === "fastestFinger" ? FULL_SHARE : share;
 }
 
 export function isCorrect(question: Pick<QuestionSlide, "correct">, index: number): boolean {
-  return shareOf(question, index) !== null;
+  return question.correct.some((c) => c.answer === index);
 }
 
 /** Position of a question among the questions, e.g. 3 of 12. */
