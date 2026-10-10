@@ -1017,8 +1017,8 @@ conflict detection. None of this proves the real receiver's format: see
 1. `check` (Ubuntu 22.04, every push): ESLint, type-check and build the UI,
    `cargo clippy -D warnings`, `cargo test --workspace` from an empty
    bindings folder, then fail if `app/src/bindings` changed.
-2. `installers` (matrix, after `check` and `windows-tests` (not `e2e`, so a flaky E2E run cannot hold back an installer), on `main`, tags `v*` and manual
-   runs, because macOS minutes are expensive): Windows NSIS, macOS universal DMG
+2. `installers` (matrix, after `check` and `windows-tests` (not `e2e`, so a flaky E2E run cannot hold back an installer), on tags `v*` and manual
+   runs only, because runner minutes are paid and macOS minutes cost the most): Windows NSIS, macOS universal DMG
    (`aarch64` and `x86_64` targets), Linux deb and AppImage on Ubuntu 22.04
    so the AppImage runs on older distributions. Each uploads its files as a
    run artifact (`buzzdome-windows`, `buzzdome-macos`, `buzzdome-linux`).
@@ -1036,7 +1036,11 @@ conflict detection. None of this proves the real receiver's format: see
    for WKWebView. When a test fails, each window's screenshot and text go up
    as the `e2e-output` artifact.
 
-`.github/workflows/nightly.yml` runs every night (and on "Run workflow"):
+A newer push to a branch cancels that branch's running checks; main checks
+every merge.
+
+`.github/workflows/nightly.yml` runs every night that main has a new commit
+(and always on "Run workflow"):
 30 000 random shows with up to 50 buzzers (`crates/show-sim`), 10 000 crash
 drills through the real journal (`app/src-tauri/src/crash_drill.rs`), both in
 release and from seeds no earlier night used, and the E2E suite five times.
