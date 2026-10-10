@@ -17,10 +17,11 @@ export const MAX_UNTIMED_BYTES = (MAX_DECODED_MINUTES * 60 * 64_000) / 8;
 
 /**
  * The largest file read whole when it tells its length: `MAX_DECODED_MINUTES`
- * of CD-quality WAV (1,411.2 kbit/s, about 106 MB). A high-resolution WAV of
- * the same length is three times that before it is even decoded.
+ * of 48 kHz 16-bit stereo WAV (1,536 kbit/s, about 115 MB), the sound of
+ * videos and most recorders. A high-resolution WAV of the same length is up
+ * to three times that before it is even decoded.
  */
-export const MAX_TIMED_BYTES = (MAX_DECODED_MINUTES * 60 * 1_411_200) / 8;
+export const MAX_TIMED_BYTES = (MAX_DECODED_MINUTES * 60 * 1_536_000) / 8;
 
 /**
  * How long reading a sound's length may take before it is read whole. The

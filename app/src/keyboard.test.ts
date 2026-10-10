@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { NO_CONTROLS, previewView } from "./host/preview";
 import { translator } from "./i18n";
 import { PROJECTOR_COMMANDS } from "./bindings/ProjectorCommands";
-import { commandForKey, isFieldTarget, isHeldButtonPress, isProjectorCloseKey, isTypingTarget, keyCombo, keyHint, KEYS } from "./keyboard";
+import { commandForKey, isFieldTarget, isHeldButtonPress, isPlainKey, isProjectorCloseKey, isTypingTarget, keyCombo, keyHint, KEYS } from "./keyboard";
 import type { Controls, GameView } from "./types";
 
 const slide = { id: "q1", type: "billboard", title: "Round 1", text: "", notes: "", picture: null, video: null, sound: null, background: null } as const;
@@ -73,6 +73,21 @@ describe("keyCombo", () => {
     expect(keyCombo(press("s", { metaKey: true }), true)).toBe("Ctrl+S");
     expect(keyCombo(press("f", { ctrlKey: true }), true)).toBe("Control+F");
     expect(keyCombo(press("ArrowLeft", { altKey: true }), true)).toBe("Alt+ArrowLeft");
+  });
+});
+
+describe("isPlainKey", () => {
+  const press = (more: Partial<KeyboardEvent> = {}) =>
+    ({ metaKey: false, ctrlKey: false, altKey: false, defaultPrevented: false, target: null, ...more }) as KeyboardEvent;
+
+  it("takes a key with no Ctrl, Cmd or Alt, typed nowhere and taken by no control", () => {
+    expect(isPlainKey(press())).toBe(true);
+    // Shift is part of the key itself (M, ?), and a slider takes no typing.
+    expect(isPlainKey(press({ shiftKey: true, target: { tagName: "INPUT", type: "range" } as unknown as EventTarget }))).toBe(true);
+    const typing = { tagName: "TEXTAREA" } as unknown as EventTarget;
+    for (const more of [{ ctrlKey: true }, { metaKey: true }, { altKey: true }, { target: typing }, { defaultPrevented: true }]) {
+      expect(isPlainKey(press(more)), JSON.stringify(more)).toBe(false);
+    }
   });
 });
 

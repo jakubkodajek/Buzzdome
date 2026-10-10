@@ -6,8 +6,9 @@ import { Director } from "./director/Director";
 import { ErrorBoundary, RenderFailed } from "./error-boundary";
 import { useBackendEvent } from "./hooks";
 import { HostScreen, reportToDirector } from "./host/HostScreen";
-import { translator, useLang, type Lang, type Translate } from "./i18n";
+import { menuWords, translator, useLang, type Lang, type Translate } from "./i18n";
 import { useProjectorCloseKeys } from "./keyboard";
+import { thrownText } from "./messages";
 
 // Both windows load the same bundle; the window label picks the screen.
 const isHost = getCurrentWindow().label === "host";
@@ -15,8 +16,7 @@ const isHost = getCurrentWindow().label === "host";
 /** A problem met above the window's screen, which has nowhere to show it: it goes in the app's log. */
 const logProblem = (error: unknown) => {
   console.error(error);
-  const message = error instanceof Error ? error.message : typeof error === "string" ? error : JSON.stringify(error);
-  api.logProblem(message).catch(() => undefined);
+  api.logProblem(thrownText(error)).catch(() => undefined);
 };
 
 /**
@@ -51,9 +51,7 @@ function DirectorWindow({ lang, t }: { lang: Lang; t: Translate }) {
   });
   // The macOS app menu in the UI's language.
   useEffect(() => {
-    const words = translator(lang);
-    const menu = { quit: words("menuQuit", { name: words("appTitle") }), file: words("menuFile"), edit: words("menuEdit"), view: words("menuView"), window: words("menuWindow") };
-    api.setMenuWords(menu).catch(logProblem);
+    api.setMenuWords(menuWords(translator(lang))).catch(logProblem);
   }, [lang]);
   return (
     <ErrorBoundary

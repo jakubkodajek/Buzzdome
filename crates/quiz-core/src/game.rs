@@ -15,10 +15,11 @@ pub type BuzzerId = u16;
 
 /// The version of the rules a journal is replayed with. Bump it whenever
 /// the same commands give another show: a resumed show begun under another
-/// version is rebuilt with today's rules, but for what `Game::replay` keeps
-/// of older ones, and the Director says its scores may differ. A command
-/// that was refused before and is taken now needs no bump, as a refused
-/// command is never journaled.
+/// version runs to its end with today's rules, but for what would put its
+/// replay a step off, which it keeps from its own version (`Game::replay`),
+/// and the Director says its scores may differ. A command that was refused
+/// before and is taken now needs no bump, as a refused command is never
+/// journaled.
 ///
 /// 1: refused presses that were journaled count (N3), and renaming a player
 /// takes the name from another buzzer (R17). 2: a question in play restarts
@@ -402,6 +403,11 @@ pub struct Game {
     /// How many times the quizmaster started the current slide's video
     /// (`Command::PlayVideo`); the projector starts it whenever this grows.
     video_plays: u32,
+    /// The `RULES_VERSION` the show runs under: today's for a new show, its
+    /// journal's for a replayed one (`replay`). A show resumed after an
+    /// update goes on under the rules it began with, so its whole journal,
+    /// from before the update and after, replays into the same show.
+    rules_version: u32,
 }
 
 impl Game {
@@ -418,34 +424,19 @@ impl Game {
             leaderboard_visible: false,
             teams: Vec::new(),
             video_plays: 0,
+            rules_version: RULES_VERSION,
         }
     }
 
-    /// Rebuilds a game from a journal begun under `rules_version`. Commands
-    /// that fail are skipped, exactly as they were rejected when first applied.
+    /// Rebuilds a game from a journal begun under `rules_version`, and keeps
+    /// running it under that version. Commands that fail are skipped,
+    /// exactly as they were rejected when first applied.
     pub fn replay<'a>(quiz: Quiz, journal: impl IntoIterator<Item = &'a Stamped>, rules_version: u32) -> Game {
-        let mut game = Game::new(quiz);
+        let mut game = Game { rules_version, ..Game::new(quiz) };
         for stamped in journal {
-            let _ = game.apply_under(stamped, rules_version);
+            let _ = game.apply(stamped);
         }
         game
-    }
-
-    /// `apply`, for a journal begun under `rules_version`, keeping the old
-    /// rules that would otherwise put every later `Next` a step off. Before
-    /// version 2 a jump left a question in play, and the app restarted one
-    /// after a crash with a `GoTo` to it (G11). Before version 3 switching a
-    /// player on or off never closed a question.
-    fn apply_under(&mut self, stamped: &Stamped, rules_version: u32) -> Result<Vec<Effect>, GameError> {
-        match stamped.command {
-            Command::GoTo { slide } if rules_version < 2 && slide < self.quiz.slides.len() => Ok(self.enter_slide(slide)),
-            Command::GoToFinal if rules_version < 2 => Ok(self.enter_slide(self.final_index())),
-            Command::SetPlayerEnabled { buzzer, enabled } if rules_version < 3 => {
-                self.player_mut(buzzer)?.enabled = enabled;
-                Ok(vec![])
-            }
-            _ => self.apply(stamped),
-        }
     }
 
     /// After a crash the clock of a running question is meaningless, so the
@@ -587,7 +578,7 @@ impl Game {
             resume_clock: running.is_some_and(|clock| !clock.is_running()),
             close_question: running.is_some(),
             play_video: self.shows_video(),
-            go_to: !self.question_in_play(),
+            go_to: self.jumps_out_of_a_question() || !self.question_in_play(),
             restart_question: self.question_restartable(),
         }
     }
@@ -780,7 +771,9 @@ impl Game {
         self.player_mut(buzzer)?.enabled = enabled;
         let light = if enabled { self.light_of(buzzer) } else { Light::Locked };
         let mut effects = vec![Effect::Lights { lights: vec![(buzzer, light)] }];
-        if matches!(self.phase, Phase::Question(QuestionStep::Running { .. })) && self.nobody_left_to_answer() {
+        // Before rules version 3 a switch never closed a question.
+        let running = matches!(self.phase, Phase::Question(QuestionStep::Running { .. }));
+        if self.rules_version >= 3 && running && self.nobody_left_to_answer() {
             effects.extend(self.close_question());
         }
         Ok(effects)
@@ -967,10 +960,16 @@ impl Game {
     }
 
     fn jump_to(&mut self, index: usize) -> Result<Vec<Effect>, GameError> {
-        if self.question_in_play() {
+        if self.question_in_play() && !self.jumps_out_of_a_question() {
             return Err(GameError::NotNow);
         }
         Ok(self.enter_slide(index))
+    }
+
+    /// Whether a jump may leave a question in play, as before rules version
+    /// 2: the app then restarted a question after a crash with a `GoTo` to it.
+    fn jumps_out_of_a_question(&self) -> bool {
+        self.rules_version < 2
     }
 
     fn enter_slide(&mut self, index: usize) -> Vec<Effect> {

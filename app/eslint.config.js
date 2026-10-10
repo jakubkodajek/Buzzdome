@@ -27,7 +27,8 @@ export default tseslint.config(
   },
   {
     // The windows count on the show clock from what they heard, by one clock (media-player.ts).
-    files: ["src/director/**", "src/host/**", "src/hooks.ts"],
+    files: ["src/**/*.{ts,tsx}"],
+    ignores: ["src/media-player.ts", "src/dev/**", "src/**/*.test.ts"],
     rules: {
       "no-restricted-properties": [
         "error",

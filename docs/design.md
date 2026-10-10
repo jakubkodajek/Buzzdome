@@ -117,9 +117,10 @@ draws slides without a show.
   The show thread (`show_thread.rs`) applies due timer commands (time up)
   and otherwise sends `clock-tick` with the core's `ClockView`. The UI never
   reads the wall clock: what plays counts on from the show clock it heard,
-  by one monotonic clock (`showClockNow` in `media-player.ts`; ESLint
-  refuses other clock reads in the windows), and the gauge animates
-  between ticks with CSS.
+  by one monotonic clock (`showClockNow` and `msSinceHeard` in
+  `media-player.ts`; ESLint refuses other clock reads anywhere in the UI,
+  but for a few marked ones that are not the show's), and the gauge
+  animates between ticks with CSS.
 - **Threads.** One show thread changes a running show: the receiver's
   events and the windows' commands that change or end the show
   (`dispatch`, team edits, `end_show`) reach it through one queue, so they
@@ -153,12 +154,13 @@ draws slides without a show.
   the Director during a show asks first (`close-requested`), and the app
   ends with the Director, so a full-screen projector is never left alone.
   The question is asked above the Director's screen (`App.tsx`), so it
-  comes even when the screen failed to render, and once: a second close
-  while it is open adds no dialog. A Director that does not answer within
-  10 s (its page hangs) does not keep the app open: a close in the next
-  minute goes through. A later close, or one after a show began or ended,
-  asks again, so a request whose answer was lost does not let an
-  accidental close through. On macOS the app menu has a Quit of its own
+  comes even when the screen failed to render. A second close in the next
+  10 s adds no dialog. A Director that does not answer within 10 s (its
+  page hangs) does not keep the app open: a close in the rest of that
+  minute goes through, whether or not the dialog is still open. A close
+  after that minute, or after a show began or ended (`replace_show`), asks
+  again, so a request whose answer was lost does not let an accidental
+  close through; a dialog still open by then gets a second one. On macOS the app menu has a Quit of its own
   (`app_menu`, worded in the UI's language by `set_menu_words`), as the
   system's ends the app at once: Cmd+Q asks like the close button, and
   only Quit from the Dock ends a show without asking (it stays saved).
@@ -327,12 +329,14 @@ starts, every other unpacked quiz is deleted, because only the latest show can
 be resumed. If the folder is gone on resume, the show still resumes and the
 Director shows a warning. `meta.json` also records `RULES_VERSION`, which
 quiz-core bumps whenever the same journal would replay into another show;
-a show begun under another version still resumes, rebuilt with today's
-rules, and the Director says its scores may differ. What would put the
-replay a step off is kept (`Game::replay`): a journal begun before version
-2 replays its jumps out of a question in play, as the app then restarted a
-question after a crash with a `GoTo` to it, and one begun before version 3
-replays switching a player off without closing the question.
+a show begun under another version still resumes with today's rules, and
+the Director says its scores may differ. What would put the replay a step
+off is kept from the show's own version, and the game keeps that version
+to the show's end (`Game::replay`), so what is journaled after a resume
+replays the same way at the next one: a show begun before version 2 jumps
+out of a question in play, as the app then restarted a question after a
+crash with a `GoTo` to it, and one begun before version 3 switches a
+player off without closing the question.
 
 The windows load media through Tauri's asset protocol. Its scope is empty
 in `tauri.conf.json`; at startup the shell allows the folder of unpacked

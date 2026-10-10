@@ -80,11 +80,27 @@ export function isAppError(value: unknown): value is AppError {
 }
 
 /**
+ * Anything thrown, as text: an error's message, a string itself, any other
+ * value as JSON where it has one. Never throws itself, not even on a value
+ * that refers to itself.
+ */
+export function thrownText(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (typeof error === "string") return error;
+  try {
+    // `undefined` and a function have no JSON.
+    return JSON.stringify(error) ?? String(error);
+  } catch {
+    return String(error);
+  }
+}
+
+/**
  * A failed backend call for the quizmaster. Anything that is not an
  * `AppError` (a failure inside Tauri's own IPC, a script error) is shown as it is.
  */
 export function errorText(t: Translate, error: unknown): string {
-  if (!isAppError(error)) return error instanceof Error ? error.message : String(error);
+  if (!isAppError(error)) return thrownText(error);
   switch (error.code) {
     case "file":
       return t(FILE_ACTION_KEYS[error.action], params(error));
