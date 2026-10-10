@@ -102,7 +102,7 @@ function HexField({ label, value, placeholder, onChange }: { label: string; valu
 interface EyeDropperApi {
   open: () => Promise<{ sRGBHex: string }>;
 }
-const EyeDropper = (window as unknown as { EyeDropper?: new () => EyeDropperApi }).EyeDropper;
+const EyeDropper = (globalThis as { EyeDropper?: new () => EyeDropperApi }).EyeDropper;
 
 /**
  * The picker's contents. A colour from the palettes is picked and closes
