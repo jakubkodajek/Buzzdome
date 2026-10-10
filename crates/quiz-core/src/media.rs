@@ -31,7 +31,20 @@ impl MediaKind {
 /// of it: `media/` followed by portable names (see `is_portable_name`)
 /// separated by `/`.
 pub fn is_safe_reference(reference: &str) -> bool {
-    reference.strip_prefix(MEDIA_PREFIX).is_some_and(|name| name.split('/').all(is_portable_name))
+    reference.strip_prefix(MEDIA_PREFIX).is_some_and(is_portable_path)
+}
+
+/// True when `path` is portable names (see `is_portable_name`) separated by
+/// `/`: relative, and with no way out of the folder it is read from.
+pub(crate) fn is_portable_path(path: &str) -> bool {
+    path.split('/').all(is_portable_name)
+}
+
+/// The extension of the file a `/`-separated path names, in lower case;
+/// empty when it has none.
+pub(crate) fn extension(path: &str) -> String {
+    let file = path.rsplit('/').next().unwrap_or(path);
+    file.rsplit_once('.').map(|(_, ext)| ext.to_ascii_lowercase()).unwrap_or_default()
 }
 
 /// Characters some supported system refuses in a file name.
@@ -106,8 +119,7 @@ pub fn check_reference(reference: &str, kinds: &[MediaKind]) -> Result<(), Media
     if !is_safe_reference(reference) {
         return Err(MediaIssue::BadName);
     }
-    let name = &reference[MEDIA_PREFIX.len()..];
-    let extension = name.rsplit_once('.').map(|(_, ext)| ext.to_ascii_lowercase()).unwrap_or_default();
+    let extension = extension(reference);
     if kinds.iter().any(|kind| kind.extensions().contains(&extension.as_str())) {
         return Ok(());
     }

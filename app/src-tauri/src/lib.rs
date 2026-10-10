@@ -6,6 +6,7 @@ mod error;
 mod hardware;
 mod pump;
 mod session;
+mod themes;
 
 use buzzers::receiver::HardwareDriver;
 use buzzers::{BuzzerDriver, VirtualDriver};
@@ -396,6 +397,11 @@ pub fn run() {
             // The event pump reads `Hardware` from the app, so it starts after `manage`.
             app.manage(hardware);
             spawn_show_pump(app.handle().clone(), events);
+            // The windows load theme pictures and fonts from the built-in packages.
+            let packages = app.path().resource_dir()?.join(themes::RESOURCE_FOLDER);
+            app.asset_protocol_scope().allow_directory(&packages, true)?;
+            let builtin = themes::builtin_themes(|id| packages.join(id).join("").to_string_lossy().into_owned())?;
+            app.manage(themes::Themes(builtin));
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -412,6 +418,7 @@ pub fn run() {
             open_host_window,
             close_host_window,
             host_window_open,
+            themes::list_themes,
             editor::editor_load,
             editor::editor_new,
             editor::editor_open,

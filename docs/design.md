@@ -1,7 +1,7 @@
 # Design
 
 How the app is built, with the buzzer link in most detail. Requirements are in
-[`specification.md`](specification.md). Last updated 2026-10-09.
+[`specification.md`](specification.md). Last updated 2026-10-10.
 
 ## 1. Overview
 
@@ -18,9 +18,11 @@ How the app is built, with the buzzer link in most detail. Requirements are in
 │  │                execute(): apply → journal → effects  │
 │  ├── session.rs   append-only journal per show          │
 │  ├── editor.rs    the editor's crash-safe draft         │
+│  ├── themes.rs    built-in themes, list_themes          │
 │  └── hardware.rs  receiver setup, learn mode, raw log   │
 │  Rust crates                                            │
-│  ├── quiz-core    pure game state machine, scoring      │
+│  ├── quiz-core    pure game state machine, scoring,     │
+│  │                themes                                │
 │  └── buzzers      driver trait, HID receiver, protocols │
 └─────────────────────────────────────────────────────────┘
 ```
@@ -41,8 +43,9 @@ two windows cannot disagree with each other or with the score.
   exported to TypeScript by ts-rs (`#[derive(TS)] #[ts(export)]`) into
   `app/src/bindings` when `cargo test` runs. `app/src/types.ts` re-exports
   them. Constants the UI needs (`MAX_ANSWERS`, question defaults and limits,
-  `FINAL_LAST_STEP`) go to `bindings/Constants.ts` the same way, and media
-  extensions to `bindings/MediaExtensions.ts`. CI fails when the committed
+  `FINAL_LAST_STEP`, `DEFAULT_THEME_ID`) go to `bindings/Constants.ts` the
+  same way, media extensions to `bindings/MediaExtensions.ts` and the
+  built-in themes to `bindings/BuiltinThemes.json` (1.4). CI fails when the committed
   bindings differ from the Rust types.
 - **Errors and messages.** No Rust code sends the UI an English sentence.
   A failed command returns an `AppError` (`app/src-tauri/src/error.rs`): a
@@ -196,45 +199,72 @@ table view toggle. It edits a quiz; it never touches a running show.
 ### 1.4 Themes
 
 A theme is the look of the stage: colours, two fonts and a background per
-screen (spec 5.2). The quiz stores only its id (`Quiz.theme`); everything
-else lives in the UI, because only the UI draws.
+screen (spec 5.2). The quiz stores only its id (`Quiz.theme`). Themes are
+data in the package layout of spec 5.2, so the built-in ones and the theme
+packages users will install are read the same way.
 
-- **Data.** `app/src/theme/themes.ts` holds the built-in themes as
-  `ThemeDefinition`s that list only what differs from their `parent`, and
-  `resolveTheme` fills in the rest (TH-2). An id that is not installed, a
-  missing parent or a parent loop ends at the default theme, so a look can
-  never stop a quiz from opening or playing. Colour keys: `text`, `shadow`,
-  `glow`, `panel`, `bar`, `barEdge`, `tile`, `accent`, `answerA`..`answerF`,
-  `correct`, `wrong`. Theme packages (planned) will be read by Rust and
-  handed to the UI in the same form.
-- **Drawing.** `ThemeContext` (`theme/context.ts`) carries the resolved
-  theme: the projector, the Director and the editor provide the quiz's.
-  `Stage` turns it into `--theme-*` CSS variables (`themeStyle`) and draws
-  the background. Which one is decided in one place:
-  `resolveBackground(slide, theme, screen)` (`theme/background.ts`, tested)
-  lists the levels that can give the screen its background, the most
-  specific first (BG-6: the slide's own, then the theme's for the screen,
-  `screenOf(view)`, TH-5; round and quiz levels slot in between once the
-  format has them). `StageBackground` (`slide-media.tsx`) draws the theme's
-  image and over it the first level that loads; one that fails gives way to
-  the next and is reported once per window (BG-9), so the Director's slide
-  list warns about a broken file. Every stage (projector, editor canvas,
-  thumbnails) goes through `Stage`, so none places a background itself.
-  `slide.css` takes colours and
-  fonts only from those variables. Text on a filled area (bars, answers,
-  rows) gets white or dark text from `readableText`, which keeps at least
-  the 3:1 contrast WCAG 2.2 asks for large text (SC 1.4.3); a test checks
-  every built-in colour.
-- **Choosing.** The editor's Design tab shows each theme on a sample
-  question (`ThemeGallery.tsx`). The theme under the pointer or focus is
-  shown on the slide canvas only, the thumbnails keep the quiz's; a click
+- **Packages.** The built-in themes are folders in
+  `app/src-tauri/themes/<id>/`: `theme.json`, `backgrounds/` and `fonts/`
+  (with each font's licence). They ship as resources (`bundle.resources`)
+  and the shell allows that folder in the asset protocol scope. Their
+  `theme.json` files are also compiled into the shell (`themes.rs`), so the
+  app always has its complete default theme; a test checks that every file
+  they name is in the package.
+- **Resolving.** `quiz_core::theme` reads `theme.json`
+  (`ThemeManifest::from_json`): it refuses an unknown `format` (TH-1),
+  colours that are not `#rrggbb` or `#rrggbbaa` (TH-4) and file paths that
+  leave the package or have the wrong type (TH-3), drops keys set to
+  `"default"` (TH-2) and returns unknown keys instead of failing on them
+  (TH-5). `resolve_themes` fills in every value from the parents, ending at
+  `builtin.classic`, which must set them all; a missing parent or a loop
+  ends there too, so a look never stops a quiz from opening or playing. A
+  screen without a background takes the theme's own background of the
+  screen it falls back to before any parent's. Each file comes out as a
+  `ThemeFile` (package folder and path), because one resolved theme can use
+  files of several packages. The keys of each section (`ThemeColors`,
+  `ThemeFonts`, `ThemeBackgrounds`, `BuzzerColors`) are written once, in a
+  macro that makes both the key enum and the filled-in struct. Colour keys:
+  `text`, `shadow`, `glow`, `panel`, `bar`, `barEdge`, `tile`, `accent`,
+  `answerA`..`answerF`, `correct`, `wrong`.
+- **In the windows.** `list_themes` returns the resolved themes, read once at
+  start. `ThemesProvider` (`theme/context.tsx`) loads them once per window
+  and `useResolvedTheme(id)` picks the quiz's (`pickTheme`: the default
+  theme for an id that is not installed). Until they are loaded a stage has
+  no theme and draws only the slide.
+- **Drawing.** `ThemeContext` carries the resolved theme: the projector, the
+  Director and the editor provide the quiz's. `Stage` turns it into
+  `--theme-*` CSS variables (`themeStyle`) and draws the background. Which
+  one is decided in one place: `resolveBackground(slide, theme, screen)`
+  (`theme/background.ts`, tested) lists the levels that can give the screen
+  its background, the most specific first (BG-6: the slide's own, then the
+  theme's for the screen, `screenOf(view)`, TH-5; round and quiz levels slot
+  in between once the format has them). `StageBackground`
+  (`slide-media.tsx`) draws the theme's picture or video and over it the
+  first more specific level that loads; one that fails gives way to the next
+  and is reported once per window (BG-9), so the Director warns about a
+  broken file. A theme's video loops silently. Every stage (projector,
+  editor canvas, thumbnails) goes through `Stage`, so none places a
+  background itself. `slide.css` takes colours and fonts only from those
+  variables. Text on a filled area (bars, answers, rows) gets white or dark
+  text from `readableText`, which keeps at least the 3:1 contrast WCAG 2.2
+  asks for large text (SC 1.4.3); a test checks every built-in colour.
+- **Fonts.** A theme font is a file. `registerFonts` (`theme/fonts.ts`) adds
+  each file to `document.fonts` once (CSS Font Loading API), under a family
+  named after the file, for every weight from 1 to 1000, so a variable font
+  gets its real weights; the stage's font stack ends with system fonts for
+  letters the file lacks. The built-in fonts (Inter, Nunito, Oswald, Exo 2)
+  are variable WOFF2 files cut by Google Fonts to Latin (Basic, Latin-1,
+  Extended-A and B) and common punctuation, 38 to 76 kB each. All four are
+  under the SIL Open Font License 1.1, which allows bundling as long as the
+  licence goes with the font: each package has it as `fonts/OFL.txt`, and
+  it ships with the installers.
+- **Choosing.** The editor's Design tab shows each installed theme on a
+  sample question (`ThemeGallery.tsx`). The theme under the pointer or focus
+  is shown on the slide canvas only, the thumbnails keep the quiz's; a click
   is a `setTheme` edit, so it is undone like any other change.
-- **Fonts.** Inter, Nunito, Oswald and Exo 2 come from the
-  `@fontsource-variable` packages and are bundled, so the projector needs
-  no network. All four are under the SIL Open Font License 1.1, which
-  allows bundling as long as the licence goes with the font
-  (`node_modules/@fontsource-variable/*/LICENSE`); an installer that is
-  given to anyone else has to include those files.
+- **Preview.** A test of the shell writes the built-in themes as
+  `list_themes` returns them to `app/src/bindings/BuiltinThemes.json`, with
+  folders that Vite serves; the browser preview and the UI tests use it.
 
 ## 2. Buzzer link
 
@@ -434,12 +464,14 @@ Developer ID; until then builds are unsigned (macOS ad-hoc), see PL-5.
 Not built yet; this is where they will attach, so current code does not block
 them.
 
-- **Theme packages and backgrounds.** Built-in themes are done (1.4).
-  Round and quiz backgrounds join the slide background in front of the
-  theme's (slide > round > quiz > theme > built-in). Theme packages unpack into
-  `<app data>/themes/<id>/`, are read into `ThemeDefinition`s by Rust and
-  served to the web view through Tauri's asset protocol, limited to that
-  folder. Quiz files copy used backgrounds into their `media/` folder on save.
+- **Theme packages and backgrounds.** Built-in themes are done (1.4), as
+  packages that `quiz_core::theme` reads and resolves. Round and quiz
+  backgrounds join the slide background in front of the theme's (slide >
+  round > quiz > theme > built-in). Installed theme packages unpack into
+  `<app data>/themes/<id>/`, go through the same `ThemeManifest::from_json`
+  and `resolve_themes` as the built-in ones, and are served to the web view
+  through Tauri's asset protocol, limited to that folder. Quiz files copy
+  used backgrounds into their `media/` folder on save.
 - **Plugins.** A plugin runs in an `<iframe sandbox="allow-scripts">` in the
   host window (screen plugins) or a hidden one in the Director (service
   plugins), loaded from `<app data>/plugins/<id>/` with a strict content
@@ -466,6 +498,7 @@ them.
 | UI screens (Director, projector) render without errors, incl. a slide picture | preview with a mocked backend, headless Chromium | pass |
 | Editor: typing, undo and redo, copy and paste, delete, keys, Edit dialog, ribbon fields, layout gallery, drag reorder, table view, File page | `npm test` (history, draft queue, slide changes, layouts) and 22 flows in headless Chromium against the preview | pass |
 | Quiz files: save, open, reuse, unsafe entries, size limit, missing media | `cargo test -p quiz-file` | pass |
+| Themes: `theme.json` rules, inheritance, built-in packages complete with their files and font licences; gallery, fonts, a broken theme background warns once | `cargo test` (`quiz_core::theme`, shell `themes`), `npm test`, headless Chromium against the preview | pass |
 | Loudness measurement | `npm test`: a full-scale 997 Hz sine in one channel measures -3.01 LUFS as BS.1770-4 states; gating, channel sum, part, peak limit | pass |
 | Trim and Normalize volume windows, background video menu and options | headless Chromium against the preview with generated test media (a song and a test-pattern video, not in the repo) | pass |
 | Media through the asset protocol, autoplay of video and sound | needs the installed app on each OS | **not tested** |

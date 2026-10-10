@@ -2,8 +2,8 @@ import { useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "reac
 import { StageBackground, type ScreenMode } from "../slide-media";
 import { resolveBackground } from "../theme/background";
 import { useTheme } from "../theme/context";
-import { themeStyle, type ScreenKey } from "../theme/themes";
-import type { Slide } from "../types";
+import { themeStyle } from "../theme/themes";
+import type { ScreenKey, Slide } from "../types";
 import "./slide.css";
 
 const STAGE_W = 1920;
@@ -33,7 +33,7 @@ interface StageProps {
 export function Stage({ className, screen, slide, mode, onHold, playingBackground, children }: StageProps) {
   const frame = useRef<HTMLDivElement>(null);
   const theme = useTheme();
-  const look = useMemo(() => themeStyle(theme), [theme]);
+  const look = useMemo(() => (theme ? themeStyle(theme) : undefined), [theme]);
   // Hidden until the frame is measured, so it never flashes at full size.
   const [scale, setScale] = useState(0);
   useLayoutEffect(() => {

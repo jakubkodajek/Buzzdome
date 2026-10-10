@@ -10,3 +10,4 @@ export const MAX_TIME_LIMIT_S = 3600;
 export const FINAL_LAST_STEP = 4;
 export const MIN_GAIN_DB = -30;
 export const MAX_GAIN_DB = 20;
+export const DEFAULT_THEME_ID = "builtin.classic";

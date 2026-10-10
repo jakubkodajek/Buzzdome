@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
+import BUILTIN_THEMES from "../bindings/BuiltinThemes.json";
 import { newSlide, setBackground } from "../editor/slides";
+import type { Theme } from "../types";
 import { resolveBackground } from "./background";
-import { DEFAULT_THEME_ID, resolveTheme } from "./themes";
 
-const theme = resolveTheme(DEFAULT_THEME_ID);
+const theme: Theme = BUILTIN_THEMES[0];
 
 describe("resolveBackground", () => {
   it("puts the slide's own background before the theme's", () => {
@@ -13,8 +14,14 @@ describe("resolveBackground", () => {
     expect(layers[0]).toMatchObject({ background: { file: "media/stage.mp4", repeat: true, muted: true, sync: false } });
   });
 
-  it("always ends with the theme's background for the screen", () => {
-    expect(resolveBackground(newSlide("question", "q"), theme, "question")).toEqual([{ level: "theme", url: theme.backgrounds.question }]);
-    expect(resolveBackground(null, theme, "leaderboard")).toEqual([{ level: "theme", url: theme.backgrounds.leaderboard }]);
+  it("ends with the theme's background for the screen", () => {
+    expect(resolveBackground(newSlide("question", "q"), theme, "question")).toEqual([{ level: "theme", file: theme.backgrounds.question }]);
+    expect(resolveBackground(null, theme, "leaderboard")).toEqual([{ level: "theme", file: theme.backgrounds.leaderboard }]);
+  });
+
+  it("has only the slide's own until the themes are loaded", () => {
+    const slide = setBackground(newSlide("billboard", "a"), "media/stage.png");
+    expect(resolveBackground(slide, null, "default").map((layer) => layer.level)).toEqual(["slide"]);
+    expect(resolveBackground(null, null, "default")).toEqual([]);
   });
 });

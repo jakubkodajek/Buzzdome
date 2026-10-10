@@ -5,7 +5,7 @@ import type { Quiz, Slide } from "../types";
 
 export type Edit =
   | { type: "setTitle"; title: string }
-  /** The look of the quiz's screens (`theme/themes.ts`). */
+  /** The look of the quiz's screens: a theme id (`Quiz.theme`). */
   | { type: "setTheme"; theme: string }
   | { type: "insertSlide"; index: number; slide: Slide }
   /** Applies `update` to the slide with this id as it is when the edit lands. */

@@ -6,6 +6,7 @@ import { clearMocks, mockIPC, mockWindows } from "@tauri-apps/api/mocks";
 import React from "react";
 import ReactDOM from "react-dom/client";
 import demoQuiz from "../../../samples/demo-quiz.json";
+import builtinThemes from "../bindings/BuiltinThemes.json";
 import { NO_CONTROLS } from "../host/preview";
 import type { Background, GameView, PlayerView, Quiz, SoundClip } from "../types";
 import "../styles.css";
@@ -30,7 +31,7 @@ const quiz = {
 const params = new URLSearchParams(location.search);
 const windowLabel = params.get("window") === "host" ? "host" : "director";
 const scene = params.get("scene") ?? "running";
-/** A theme id to draw the screens in (`theme/themes.ts`); the default when missing. */
+/** A theme id to draw the screens in; the default when missing. */
 const theme = params.get("theme");
 
 const NAMES = ["Kvízožrouti", "U Tří Lvů", "Mozkovna", "Hospodští géniové", "Tým Rychlík", "Bezejmenní", "Šprti", "Lvíčata"];
@@ -190,6 +191,9 @@ mockIPC((cmd) => {
       ];
     case "host_window_open":
       return false;
+    case "list_themes":
+      // Their files are served by Vite from src-tauri/themes.
+      return builtinThemes;
     case "media_root":
       // Served by Vite from this folder (see the convertFileSrc mock below).
       return "/src/dev/";

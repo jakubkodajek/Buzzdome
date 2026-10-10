@@ -1,0 +1,26 @@
+{
+  "format": 1,
+  "id": "builtin.showtime",
+  "version": "1.0.0",
+  "name": { "cs": "Show", "en": "Showtime" },
+  "parent": "builtin.classic",
+  "backgrounds": {
+    "default": "backgrounds/showtime.svg",
+    "final": "backgrounds/showtime-final.svg"
+  },
+  "colors": {
+    "glow": "#ff4fd880",
+    "panel": "#ffffff1f",
+    "bar": "#4a1270",
+    "barEdge": "#f5c542",
+    "tile": "#2e0b46",
+    "accent": "#ffd34d",
+    "answerA": "#2563eb",
+    "answerB": "#c81e6e",
+    "answerC": "#15803d",
+    "answerD": "#f59e0b"
+  },
+  "fonts": {
+    "heading": "fonts/Oswald.woff2"
+  }
+}

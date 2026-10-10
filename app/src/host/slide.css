@@ -25,9 +25,6 @@
   position: absolute;
   inset: 0;
   z-index: 0;
-  background-position: center;
-  background-size: cover;
-  background-repeat: no-repeat;
 }
 
 /* Titles, names and big numbers. */
@@ -662,6 +659,8 @@
   z-index: 0;
 }
 
+.stage .backdrop img,
+.stage .backdrop video,
 .slide-background img,
 .slide-background video {
   width: 100%;

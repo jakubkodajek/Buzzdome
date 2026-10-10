@@ -3,17 +3,15 @@ import { useApp } from "../app-context";
 import { useLatest } from "../hooks";
 import { SlideThumbnail } from "../host/SlideThumbnail";
 import { NO_CONTEXT } from "../quiz";
-import { ThemeContext } from "../theme/context";
-import { BUILTIN_THEMES, resolveTheme, type Theme } from "../theme/themes";
+import { ThemeContext, useThemes } from "../theme/context";
 import { DEFAULT_LAYOUT, slideFromLayout } from "./layouts";
 
 /** Each theme is drawn on an empty question, so its bars and answer colours show. */
 const SAMPLE = slideFromLayout(DEFAULT_LAYOUT, "theme-sample");
-const THEMES: readonly Theme[] = BUILTIN_THEMES.map((theme) => resolveTheme(theme.id));
 
 interface ThemeGalleryProps {
-  /** Id of the quiz's theme. */
-  current: string;
+  /** Id of the theme the quiz is drawn in. */
+  current: string | null;
   onPick: (id: string) => void;
   /** Called with the theme under the pointer or focus, null when there is none. */
   onPreview: (id: string | null) => void;
@@ -22,12 +20,13 @@ interface ThemeGalleryProps {
 /** The themes to choose from in the ribbon, as in an office suite: pointing at one previews it. */
 export function ThemeGallery({ current, onPick, onPreview }: ThemeGalleryProps) {
   const { lang } = useApp();
+  const themes = useThemes();
   const preview = useLatest(onPreview);
   // The gallery can go away under the pointer (another tab), and so must its preview.
   useEffect(() => () => preview.current(null), [preview]);
   return (
     <div className="theme-gallery">
-      {THEMES.map((theme) => (
+      {themes.map((theme) => (
         <button
           key={theme.id}
           type="button"

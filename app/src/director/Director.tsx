@@ -27,7 +27,7 @@ import { keyHint, KEYS, useShortcuts } from "../keyboard";
 import { MediaRootContext } from "../media";
 import { phaseLabel } from "../phase";
 import { slideContext } from "../quiz";
-import { ThemeContext, useResolvedTheme } from "../theme/context";
+import { ThemeContext, ThemesProvider, useResolvedTheme } from "../theme/context";
 import type { GameView, Quiz } from "../types";
 import { QuestionsTab } from "./QuestionsTab";
 import { ReceiverTab } from "./ReceiverTab";
@@ -55,7 +55,9 @@ export function Director() {
 
   return (
     <AppProvider notify={notify}>
-      <DirectorScreens />
+      <ThemesProvider>
+        <DirectorScreens />
+      </ThemesProvider>
       {error && (
         <div className="toast" role="alert">
           {error}

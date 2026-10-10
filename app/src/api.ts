@@ -18,6 +18,7 @@ import type {
   ReceiverInfo,
   ReceiverStatus,
   SessionSummary,
+  Theme,
   ValidationError,
 } from "./types";
 
@@ -39,6 +40,8 @@ export const api = {
     invoke<void>("open_host_window", { monitor, fullscreen }),
   closeHostWindow: () => invoke<void>("close_host_window"),
   hostWindowOpen: () => invoke<boolean>("host_window_open"),
+  /** Every installed theme with all its values, the default theme among them. */
+  listThemes: () => invoke<Theme[]>("list_themes"),
   receiverInfo: () => invoke<ReceiverInfo>("receiver_info"),
   receiverDevices: () => invoke<DeviceInfo[]>("receiver_devices"),
   receiverSelect: (device: DeviceInfo | null) => invoke<void>("receiver_select", { device }),

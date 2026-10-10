@@ -138,14 +138,16 @@ changes) with our own file format.
 
 Built so far: backgrounds per slide, and five built-in themes (Classic,
 Studio, Night, Showtime, Neon) chosen per quiz on the editor's Design tab,
-with a live preview while the pointer is on one. Theme packages, the
+with a live preview while the pointer is on one. The built-in themes are
+theme packages in the layout of 5.2 (unzipped) and are read and resolved by
+the same code that will read installed ones. Installing theme packages, the
 background gallery and round or quiz backgrounds are planned.
 
 ### 5.1 Background files
 
 | ID | Requirement |
 | --- | --- |
-| BG-1 | Image formats: PNG, JPEG, WebP. Video formats: MP4 (H.264) and WebM. A video's sound plays only with Silent off (BG-4). |
+| BG-1 | Image formats: PNG, JPEG, WebP (also GIF and SVG, which the app reads like any picture). Video formats: MP4 (H.264) and WebM. A video's sound plays only with Silent off (BG-4). |
 | BG-2 | Aspect ratio 16:9. Recommended size 1920 x 1080 px; minimum 1280 x 720; maximum 3840 x 2160. Images up to 20 MB, videos up to 200 MB. |
 | BG-3 | A background that is not 16:9 is scaled to cover the screen and cropped around its centre; the import dialog shows the crop and warns. Smaller than the minimum or larger than the limits is refused. |
 | BG-4 | A background video starts as soon as its slide appears and has its own options: Loop (on), Silent (on) and Sync with quiz (off), which pauses it while a player answers, while the clock is paused and once the question is over. The editor shows its first frame with a video mark, and the slide's context menu can play or stop it there, or remove the background. Done. |
@@ -195,7 +197,7 @@ autumn.qstheme
     "answerC": "#2fa84f",
     "answerD": "#d64545",
     "correct": "#2fa84f",
-    "wrong": "#d64545"
+    "wrong": "default"
   },
   "fonts": {
     "heading": "fonts/Heading.woff2",
@@ -213,7 +215,7 @@ autumn.qstheme
 | TH-1 | `format` is the theme format version; the app refuses a format it does not know, with a message. `id` is unique (reverse domain style); importing a theme with an existing `id` and a higher `version` updates it. |
 | TH-2 | Inheritance: every key that is missing, or set to `"default"`, comes from the `parent` theme, recursively, ending at a built-in theme. A theme only lists what it changes. Backgrounds are the exception: a screen the theme leaves out takes the theme's own background of the screen it falls back to (TH-5) before any parent's, so a theme that sets only `default` is not mixed with its parent's pictures. |
 | TH-3 | Paths are relative to the package root and must stay inside it. Every file is checked on import (format, size, BG-2). |
-| TH-4 | Colours are `#rrggbb` or `#rrggbbaa`. Fonts must be licensed for embedding; the import dialog reminds the user. |
+| TH-4 | Colours are `#rrggbb` or `#rrggbbaa`. Colour keys: `text` (on the background), `shadow` (under that text), `glow` (around slide titles), `panel` (boxes on the background), `bar` and `barEdge` (the bars at the top and bottom), `tile` (leaderboard rows), `accent` (scores and counters), `answerA` to `answerF` (A-D are the buzzer's buttons; E and F are read out in fastest finger questions), `correct`, `wrong`. The app picks white or dark text on filled areas itself, so text stays readable. Fonts are WOFF2, WOFF, TTF or OTF files, best variable fonts with a weight axis (a static font is used at its one weight); letters a font lacks come from system fonts. Fonts must be licensed for embedding; the import dialog reminds the user. |
 | TH-5 | Screen keys: `default` (every screen without its own), `welcome` (team registration before the first slide), `question` (a question being asked), `answer` (a question once its answer is shown, and explanation slides; falls back to `question`), `leaderboard` (the leaderboard shown over a slide), `roundEnd` (end-of-round slides; falls back to `leaderboard`), `final` (final results). Billboards use `default`. Unknown keys are ignored with a warning, so newer themes still load in older apps. |
 | TH-6 | Installed themes live in the app data folder under `themes/<id>/`; the quiz file stores the theme `id` and embeds the theme's files it uses (BG-7). |
 

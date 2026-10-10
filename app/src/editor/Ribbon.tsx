@@ -35,8 +35,8 @@ interface RibbonProps {
   element: ElementId;
   /** The selected slide's properties; null without a slide. */
   properties: SlideProperties | null;
-  /** Id of the quiz's theme. */
-  theme: string;
+  /** Id of the theme the quiz is drawn in; null until the themes are loaded. */
+  theme: string | null;
   onTheme: (id: string) => void;
   /** Shows a theme on the slide while it is pointed at; null ends that. */
   onPreviewTheme: (id: string | null) => void;

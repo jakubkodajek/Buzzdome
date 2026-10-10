@@ -465,7 +465,7 @@ function Studio({ editor, open, onExit }: { editor: QuizEditor; open: OpenQuiz |
                   slide={slide}
                   element={element}
                   properties={properties}
-                  theme={theme.id}
+                  theme={theme?.id ?? null}
                   onTheme={(id) => editor.edit({ type: "setTheme", theme: id })}
                   onPreviewTheme={setPreviewTheme}
                 />

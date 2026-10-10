@@ -1,0 +1,35 @@
+{
+  "format": 1,
+  "id": "builtin.classic",
+  "version": "1.0.0",
+  "name": { "cs": "Klasický", "en": "Classic" },
+  "backgrounds": {
+    "default": "backgrounds/classic.svg"
+  },
+  "colors": {
+    "text": "#ffffff",
+    "shadow": "#000000b3",
+    "glow": "#286eff8c",
+    "panel": "#ffffff24",
+    "bar": "#1b4aa6",
+    "barEdge": "#5d94ff",
+    "tile": "#1c2640",
+    "accent": "#ffd21f",
+    "answerA": "#1590e0",
+    "answerB": "#ec6f12",
+    "answerC": "#3fa31c",
+    "answerD": "#f2cd0c",
+    "answerE": "#8a47e6",
+    "answerF": "#df3f73",
+    "correct": "#25b864",
+    "wrong": "#e23d2b"
+  },
+  "fonts": {
+    "heading": "fonts/Inter.woff2",
+    "body": "fonts/Inter.woff2"
+  },
+  "buzzerColors": {
+    "ready": "#00ff00",
+    "first": "#0000ff"
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "format": 1,
+  "id": "builtin.studio",
+  "version": "1.0.0",
+  "name": { "cs": "Studio", "en": "Studio" },
+  "parent": "builtin.classic",
+  "backgrounds": {
+    "default": "backgrounds/studio.svg"
+  },
+  "colors": {
+    "glow": "#2dd4bf80",
+    "bar": "#0f6e68",
+    "barEdge": "#5eead4",
+    "tile": "#123f4a",
+    "accent": "#fde047",
+    "answerA": "#2f6fe4",
+    "answerB": "#e8620c",
+    "answerC": "#1d9a4b",
+    "answerD": "#eab308"
+  },
+  "fonts": {
+    "heading": "fonts/Nunito.woff2",
+    "body": "fonts/Nunito.woff2"
+  }
+}

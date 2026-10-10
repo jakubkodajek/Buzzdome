@@ -7,7 +7,7 @@ import { MediaRootContext } from "../media";
 import { slideContext } from "../quiz";
 import { StageBackground } from "../slide-media";
 import { resolveBackground } from "../theme/background";
-import { ThemeContext, useResolvedTheme } from "../theme/context";
+import { ThemeContext, ThemesProvider, useResolvedTheme } from "../theme/context";
 import { screenOf } from "../theme/themes";
 import { Leaderboard, ranked, SlideScreen } from "./SlideScreen";
 import { Stage } from "./Stage";
@@ -20,7 +20,9 @@ const logError = (message: string) => console.error(message);
 export function HostScreen() {
   return (
     <AppProvider notify={logError}>
-      <HostLayout />
+      <ThemesProvider>
+        <HostLayout />
+      </ThemesProvider>
     </AppProvider>
   );
 }
