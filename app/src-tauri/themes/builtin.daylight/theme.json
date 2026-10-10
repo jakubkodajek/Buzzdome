@@ -1,0 +1,32 @@
+{
+  "format": 1,
+  "id": "builtin.daylight",
+  "version": "1.0.0",
+  "name": { "cs": "Den", "en": "Daylight" },
+  "parent": "builtin.classic",
+  "backgrounds": {
+    "default": "backgrounds/daylight.svg"
+  },
+  "colors": {
+    "text": "#14213d",
+    "shadow": "#ffffffb3",
+    "glow": "#ffffffcc",
+    "panel": "#14213d14",
+    "bar": "#ffffff",
+    "barEdge": "#2f80ed",
+    "tile": "#e8eef8",
+    "accent": "#d9480f",
+    "answerA": "#1f6fd1",
+    "answerB": "#e8590c",
+    "answerC": "#2b9348",
+    "answerD": "#f5c211",
+    "answerE": "#7c3aed",
+    "answerF": "#d6336c",
+    "correct": "#2b9348",
+    "wrong": "#d62828"
+  },
+  "fonts": {
+    "heading": "fonts/Montserrat.woff2",
+    "body": "fonts/Montserrat.woff2"
+  }
+}

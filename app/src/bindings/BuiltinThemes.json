@@ -343,5 +343,350 @@
       "ready": "#00ff00",
       "first": "#0000ff"
     }
+  },
+  {
+    "id": "builtin.daylight",
+    "name": {
+      "cs": "Den",
+      "en": "Daylight"
+    },
+    "colors": {
+      "text": "#14213d",
+      "shadow": "#ffffffb3",
+      "glow": "#ffffffcc",
+      "panel": "#14213d14",
+      "bar": "#ffffff",
+      "barEdge": "#2f80ed",
+      "tile": "#e8eef8",
+      "accent": "#d9480f",
+      "answerA": "#1f6fd1",
+      "answerB": "#e8590c",
+      "answerC": "#2b9348",
+      "answerD": "#f5c211",
+      "answerE": "#7c3aed",
+      "answerF": "#d6336c",
+      "correct": "#2b9348",
+      "wrong": "#d62828"
+    },
+    "fonts": {
+      "heading": {
+        "root": "/src-tauri/themes/builtin.daylight/",
+        "path": "fonts/Montserrat.woff2"
+      },
+      "body": {
+        "root": "/src-tauri/themes/builtin.daylight/",
+        "path": "fonts/Montserrat.woff2"
+      }
+    },
+    "backgrounds": {
+      "default": {
+        "root": "/src-tauri/themes/builtin.daylight/",
+        "path": "backgrounds/daylight.svg"
+      },
+      "welcome": {
+        "root": "/src-tauri/themes/builtin.daylight/",
+        "path": "backgrounds/daylight.svg"
+      },
+      "question": {
+        "root": "/src-tauri/themes/builtin.daylight/",
+        "path": "backgrounds/daylight.svg"
+      },
+      "answer": {
+        "root": "/src-tauri/themes/builtin.daylight/",
+        "path": "backgrounds/daylight.svg"
+      },
+      "leaderboard": {
+        "root": "/src-tauri/themes/builtin.daylight/",
+        "path": "backgrounds/daylight.svg"
+      },
+      "roundEnd": {
+        "root": "/src-tauri/themes/builtin.daylight/",
+        "path": "backgrounds/daylight.svg"
+      },
+      "final": {
+        "root": "/src-tauri/themes/builtin.daylight/",
+        "path": "backgrounds/daylight.svg"
+      }
+    },
+    "buzzerColors": {
+      "ready": "#00ff00",
+      "first": "#0000ff"
+    }
+  },
+  {
+    "id": "builtin.aurora",
+    "name": {
+      "cs": "Polární záře",
+      "en": "Aurora"
+    },
+    "colors": {
+      "text": "#ffffff",
+      "shadow": "#000000b3",
+      "glow": "#34d39980",
+      "panel": "#ffffff1a",
+      "bar": "#0a2a33",
+      "barEdge": "#34d399",
+      "tile": "#0d2630",
+      "accent": "#7cf5c4",
+      "answerA": "#2563eb",
+      "answerB": "#9333ea",
+      "answerC": "#059669",
+      "answerD": "#eab308",
+      "answerE": "#8a47e6",
+      "answerF": "#df3f73",
+      "correct": "#25b864",
+      "wrong": "#e23d2b"
+    },
+    "fonts": {
+      "heading": {
+        "root": "/src-tauri/themes/builtin.aurora/",
+        "path": "fonts/Outfit.woff2"
+      },
+      "body": {
+        "root": "/src-tauri/themes/builtin.aurora/",
+        "path": "fonts/Outfit.woff2"
+      }
+    },
+    "backgrounds": {
+      "default": {
+        "root": "/src-tauri/themes/builtin.aurora/",
+        "path": "backgrounds/aurora.svg"
+      },
+      "welcome": {
+        "root": "/src-tauri/themes/builtin.aurora/",
+        "path": "backgrounds/aurora.svg"
+      },
+      "question": {
+        "root": "/src-tauri/themes/builtin.aurora/",
+        "path": "backgrounds/aurora.svg"
+      },
+      "answer": {
+        "root": "/src-tauri/themes/builtin.aurora/",
+        "path": "backgrounds/aurora.svg"
+      },
+      "leaderboard": {
+        "root": "/src-tauri/themes/builtin.aurora/",
+        "path": "backgrounds/aurora.svg"
+      },
+      "roundEnd": {
+        "root": "/src-tauri/themes/builtin.aurora/",
+        "path": "backgrounds/aurora.svg"
+      },
+      "final": {
+        "root": "/src-tauri/themes/builtin.aurora/",
+        "path": "backgrounds/aurora.svg"
+      }
+    },
+    "buzzerColors": {
+      "ready": "#00ff00",
+      "first": "#0000ff"
+    }
+  },
+  {
+    "id": "builtin.sunset",
+    "name": {
+      "cs": "Západ slunce",
+      "en": "Sunset"
+    },
+    "colors": {
+      "text": "#ffffff",
+      "shadow": "#000000b3",
+      "glow": "#ff8a3d99",
+      "panel": "#ffffff1f",
+      "bar": "#5b1a4a",
+      "barEdge": "#ffb347",
+      "tile": "#3d1035",
+      "accent": "#ffd23f",
+      "answerA": "#2f5fd0",
+      "answerB": "#d63a7a",
+      "answerC": "#16875a",
+      "answerD": "#f29e1f",
+      "answerE": "#8a47e6",
+      "answerF": "#df3f73",
+      "correct": "#25b864",
+      "wrong": "#e23d2b"
+    },
+    "fonts": {
+      "heading": {
+        "root": "/src-tauri/themes/builtin.sunset/",
+        "path": "fonts/Baloo2.woff2"
+      },
+      "body": {
+        "root": "/src-tauri/themes/builtin.sunset/",
+        "path": "fonts/Baloo2.woff2"
+      }
+    },
+    "backgrounds": {
+      "default": {
+        "root": "/src-tauri/themes/builtin.sunset/",
+        "path": "backgrounds/sunset.svg"
+      },
+      "welcome": {
+        "root": "/src-tauri/themes/builtin.sunset/",
+        "path": "backgrounds/sunset.svg"
+      },
+      "question": {
+        "root": "/src-tauri/themes/builtin.sunset/",
+        "path": "backgrounds/sunset.svg"
+      },
+      "answer": {
+        "root": "/src-tauri/themes/builtin.sunset/",
+        "path": "backgrounds/sunset.svg"
+      },
+      "leaderboard": {
+        "root": "/src-tauri/themes/builtin.sunset/",
+        "path": "backgrounds/sunset.svg"
+      },
+      "roundEnd": {
+        "root": "/src-tauri/themes/builtin.sunset/",
+        "path": "backgrounds/sunset.svg"
+      },
+      "final": {
+        "root": "/src-tauri/themes/builtin.sunset/",
+        "path": "backgrounds/sunset.svg"
+      }
+    },
+    "buzzerColors": {
+      "ready": "#00ff00",
+      "first": "#0000ff"
+    }
+  },
+  {
+    "id": "builtin.chalkboard",
+    "name": {
+      "cs": "Tabule",
+      "en": "Chalkboard"
+    },
+    "colors": {
+      "text": "#f7f5ee",
+      "shadow": "#00000080",
+      "glow": "#ffffff40",
+      "panel": "#ffffff14",
+      "bar": "#4a3020",
+      "barEdge": "#c8925e",
+      "tile": "#22382b",
+      "accent": "#fff3a3",
+      "answerA": "#2f6aa8",
+      "answerB": "#b8562e",
+      "answerC": "#3d7f4c",
+      "answerD": "#d4ab3c",
+      "answerE": "#8a47e6",
+      "answerF": "#df3f73",
+      "correct": "#25b864",
+      "wrong": "#e23d2b"
+    },
+    "fonts": {
+      "heading": {
+        "root": "/src-tauri/themes/builtin.chalkboard/",
+        "path": "fonts/Caveat.woff2"
+      },
+      "body": {
+        "root": "/src-tauri/themes/builtin.classic/",
+        "path": "fonts/Inter.woff2"
+      }
+    },
+    "backgrounds": {
+      "default": {
+        "root": "/src-tauri/themes/builtin.chalkboard/",
+        "path": "backgrounds/chalkboard.svg"
+      },
+      "welcome": {
+        "root": "/src-tauri/themes/builtin.chalkboard/",
+        "path": "backgrounds/chalkboard.svg"
+      },
+      "question": {
+        "root": "/src-tauri/themes/builtin.chalkboard/",
+        "path": "backgrounds/chalkboard.svg"
+      },
+      "answer": {
+        "root": "/src-tauri/themes/builtin.chalkboard/",
+        "path": "backgrounds/chalkboard.svg"
+      },
+      "leaderboard": {
+        "root": "/src-tauri/themes/builtin.chalkboard/",
+        "path": "backgrounds/chalkboard.svg"
+      },
+      "roundEnd": {
+        "root": "/src-tauri/themes/builtin.chalkboard/",
+        "path": "backgrounds/chalkboard.svg"
+      },
+      "final": {
+        "root": "/src-tauri/themes/builtin.chalkboard/",
+        "path": "backgrounds/chalkboard.svg"
+      }
+    },
+    "buzzerColors": {
+      "ready": "#00ff00",
+      "first": "#0000ff"
+    }
+  },
+  {
+    "id": "builtin.gala",
+    "name": {
+      "cs": "Gala",
+      "en": "Gala"
+    },
+    "colors": {
+      "text": "#ffffff",
+      "shadow": "#000000b3",
+      "glow": "#d4af3780",
+      "panel": "#d4af371f",
+      "bar": "#121212",
+      "barEdge": "#d4af37",
+      "tile": "#1a1712",
+      "accent": "#f2d272",
+      "answerA": "#1f3f8f",
+      "answerB": "#8c1c2c",
+      "answerC": "#1b5e3b",
+      "answerD": "#c9a227",
+      "answerE": "#8a47e6",
+      "answerF": "#df3f73",
+      "correct": "#1f8a4c",
+      "wrong": "#b3261e"
+    },
+    "fonts": {
+      "heading": {
+        "root": "/src-tauri/themes/builtin.gala/",
+        "path": "fonts/Cinzel.woff2"
+      },
+      "body": {
+        "root": "/src-tauri/themes/builtin.classic/",
+        "path": "fonts/Inter.woff2"
+      }
+    },
+    "backgrounds": {
+      "default": {
+        "root": "/src-tauri/themes/builtin.gala/",
+        "path": "backgrounds/gala.svg"
+      },
+      "welcome": {
+        "root": "/src-tauri/themes/builtin.gala/",
+        "path": "backgrounds/gala.svg"
+      },
+      "question": {
+        "root": "/src-tauri/themes/builtin.gala/",
+        "path": "backgrounds/gala.svg"
+      },
+      "answer": {
+        "root": "/src-tauri/themes/builtin.gala/",
+        "path": "backgrounds/gala.svg"
+      },
+      "leaderboard": {
+        "root": "/src-tauri/themes/builtin.gala/",
+        "path": "backgrounds/gala.svg"
+      },
+      "roundEnd": {
+        "root": "/src-tauri/themes/builtin.gala/",
+        "path": "backgrounds/gala.svg"
+      },
+      "final": {
+        "root": "/src-tauri/themes/builtin.gala/",
+        "path": "backgrounds/gala.svg"
+      }
+    },
+    "buzzerColors": {
+      "ready": "#00ff00",
+      "first": "#0000ff"
+    }
   }
 ]

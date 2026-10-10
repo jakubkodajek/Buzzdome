@@ -1,0 +1,26 @@
+{
+  "format": 1,
+  "id": "builtin.aurora",
+  "version": "1.0.0",
+  "name": { "cs": "Polární záře", "en": "Aurora" },
+  "parent": "builtin.night",
+  "backgrounds": {
+    "default": "backgrounds/aurora.svg"
+  },
+  "colors": {
+    "glow": "#34d39980",
+    "panel": "#ffffff1a",
+    "bar": "#0a2a33",
+    "barEdge": "#34d399",
+    "tile": "#0d2630",
+    "accent": "#7cf5c4",
+    "answerA": "#2563eb",
+    "answerB": "#9333ea",
+    "answerC": "#059669",
+    "answerD": "#eab308"
+  },
+  "fonts": {
+    "heading": "fonts/Outfit.woff2",
+    "body": "fonts/Outfit.woff2"
+  }
+}

@@ -137,9 +137,11 @@ app offers (background picture or looping video per slide, a gallery of
 backgrounds, skins that inherit from a built-in skin and override only what
 changes) with our own file format.
 
-Built so far: backgrounds per slide, and five built-in themes (Classic,
-Studio, Night, Showtime, Neon) chosen per quiz on the editor's Design tab,
-with a live preview while the pointer is on one. The built-in themes are
+Built so far: backgrounds per slide, and ten built-in themes (Classic,
+Studio, Night, Showtime, Neon, Daylight, Aurora, Sunset, Chalkboard, Gala)
+chosen per quiz on the editor's Design tab, with a live preview while the
+pointer is on one. Each question also picks how its clock is drawn (ring,
+bar, digital, hourglass or stopwatch). The built-in themes are
 theme packages in the layout of 5.2 (unzipped) and are read and resolved by
 the same code that will read installed ones. Installing theme packages, the
 background gallery and round or quiz backgrounds are planned.
@@ -356,7 +358,7 @@ the Host screen.
 | SF-4 | Registration: players press any button; their buzzer numbers light up in a grid on the projector and appear in the Director's Teams tab with an editable name. Late presses still register. | done |
 | SF-5 | Team names can be prepared in the Director's Teams tab, before a show starts or during it, and are kept for the next shows: typed, pasted (one name per line) or loaded from a text or CSV file (first column, UTF-8 or Windows-1250). A buzzer is paired with a team by dragging its number onto the name, or by clicking the number and then the name; its player takes the team's name (a player who had it loses it) and the registration screen shows the name under the number. Pairing works at any point of the show, for late teams too. | done; a saved buzzer-to-name list that pairs on the first press is planned |
 | SF-6 | Slides, questions, judging, scores and the final ranking as in the reference app; all keyboard shortcuts work. | done for billboard, multiple choice and fastest finger |
-| SF-7 | The projector screen is the user's own: theme, backgrounds and per-slide pictures or videos (section 5 and 9). | partial: per-slide pictures, videos and backgrounds done; five built-in themes (section 5.2) and the Design tab gallery done; importing user themes (TH-1, TH-6) planned |
+| SF-7 | The projector screen is the user's own: theme, backgrounds and per-slide pictures or videos (section 5 and 9). | partial: per-slide pictures, videos and backgrounds done; ten built-in themes (section 5.2), the Design tab gallery and five clock designs done; importing user themes (TH-1, TH-6) planned |
 
 ## 9. Quiz authoring and media
 

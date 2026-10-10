@@ -17,12 +17,17 @@ macro_rules! builtin {
 }
 
 /// The built-in themes in gallery order, the default first.
-const BUILTIN: [(&str, &str); 5] = [
+const BUILTIN: [(&str, &str); 10] = [
     builtin!("builtin.classic"),
     builtin!("builtin.studio"),
     builtin!("builtin.night"),
     builtin!("builtin.showtime"),
     builtin!("builtin.neon"),
+    builtin!("builtin.daylight"),
+    builtin!("builtin.aurora"),
+    builtin!("builtin.sunset"),
+    builtin!("builtin.chalkboard"),
+    builtin!("builtin.gala"),
 ];
 
 /// The themes the windows can draw with, read once at start.
@@ -79,10 +84,12 @@ mod tests {
             for ThemeFile { root, path } in backgrounds.into_iter().chain(fonts) {
                 assert!(Path::new(root).join(path).is_file(), "{}: {root}{path}", theme.id);
             }
-            // Fonts are under the SIL Open Font License, which goes with them.
+            // Fonts are under the SIL Open Font License, which goes with them. They are
+            // cut to Latin, a Modified Version, which may not keep a Reserved Font Name.
             for ThemeFile { root, path } in fonts {
                 let licence = Path::new(root).join(path).with_file_name("OFL.txt");
-                assert!(licence.is_file(), "{}: {}", theme.id, licence.display());
+                let text = std::fs::read_to_string(&licence).unwrap_or_else(|e| panic!("{}: {}: {e}", theme.id, licence.display()));
+                assert!(!text.contains("with Reserved Font Name"), "{}: {}", theme.id, licence.display());
             }
         }
     }

@@ -1,0 +1,26 @@
+{
+  "format": 1,
+  "id": "builtin.sunset",
+  "version": "1.0.0",
+  "name": { "cs": "Západ slunce", "en": "Sunset" },
+  "parent": "builtin.classic",
+  "backgrounds": {
+    "default": "backgrounds/sunset.svg"
+  },
+  "colors": {
+    "glow": "#ff8a3d99",
+    "panel": "#ffffff1f",
+    "bar": "#5b1a4a",
+    "barEdge": "#ffb347",
+    "tile": "#3d1035",
+    "accent": "#ffd23f",
+    "answerA": "#2f5fd0",
+    "answerB": "#d63a7a",
+    "answerC": "#16875a",
+    "answerD": "#f29e1f"
+  },
+  "fonts": {
+    "heading": "fonts/Baloo2.woff2",
+    "body": "fonts/Baloo2.woff2"
+  }
+}
