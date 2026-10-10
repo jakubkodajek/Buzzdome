@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
+import { useApp } from "./app-context";
 import { VideoIcon } from "./icons";
-import { isVideo, useMediaUrl } from "./media";
+import { isVideo, mediaFileName, useMediaUrl } from "./media";
+import type { BackgroundLayer } from "./theme/background";
 import type { Slide } from "./types";
 
 /**
@@ -37,43 +39,65 @@ export function SlideMedia({ slide, className, mode = "show" }: { slide: Slide; 
   return null;
 }
 
+/** Files whose background failed in this window; each is reported once. */
+const reported = new Set<string>();
+
 /**
- * The slide's own picture or video, filling the stage behind its content.
- * In the show a video plays as its background options say: looped or once,
- * silent or not, and held while the show holds (`onHold`) when synced
+ * The background of a stage from its levels (`resolveBackground`): the theme's
+ * image, and over it the most specific picture or video that has not failed
+ * to load. A failed one gives way to the next level and is reported once
+ * (BG-9). In the show a video plays as its background options say: looped or
+ * once, silent or not, and held while the show holds (`onHold`) when synced
  * (BG-4). Elsewhere it is silent and stands on its first frame, with a mark
  * that it is a video, unless the editor plays it (`playing`).
  */
-export function SlideBackground(props: { slide: Slide; mode?: ScreenMode; onHold?: boolean; playing?: boolean }) {
-  const { slide, mode = "show", onHold = false, playing = false } = props;
+export function StageBackground(props: { layers: BackgroundLayer[]; mode?: ScreenMode; onHold?: boolean; playing?: boolean }) {
+  const { layers, mode = "show", onHold = false, playing = false } = props;
+  const { t, notify } = useApp();
   const toUrl = useMediaUrl();
-  const background = slide.background;
-  const url = toUrl(background?.file ?? null);
-  if (!url || !background) return null;
+  const [failed, setFailed] = useState<ReadonlySet<string>>(new Set());
+  const theme = layers.find((layer) => layer.level === "theme");
+  const media = layers.flatMap((layer) => {
+    if (layer.level === "theme") return [];
+    const url = toUrl(layer.background.file);
+    return url && !failed.has(url) ? [{ background: layer.background, url }] : [];
+  })[0];
+  const fail = (file: string, url: string) => {
+    setFailed((current) => new Set(current).add(url));
+    if (reported.has(url)) return;
+    reported.add(url);
+    notify(t("backgroundFailed", { file: mediaFileName(file) }));
+  };
   const show = mode === "show";
   return (
-    <div className="slide-background">
-      {isVideo(background.file) ? (
-        <>
-          <BackgroundVideo
-            key={url}
-            src={url}
-            playing={show ? !(background.sync && onHold) : playing}
-            loop={!show || background.repeat}
-            muted={!show || background.muted}
-            preload={show ? "auto" : "metadata"}
-          />
-          {!show && <VideoIcon className="background-video-mark" />}
-        </>
-      ) : (
-        <Picture key={url} src={url} />
+    <>
+      {theme && <div className="backdrop" style={{ backgroundImage: `url("${theme.url}")` }} />}
+      {media && (
+        <div className="slide-background">
+          {isVideo(media.background.file) ? (
+            <>
+              <BackgroundVideo
+                key={media.url}
+                src={media.url}
+                playing={show ? !(media.background.sync && onHold) : playing}
+                loop={!show || media.background.repeat}
+                muted={!show || media.background.muted}
+                preload={show ? "auto" : "metadata"}
+                onError={() => fail(media.background.file, media.url)}
+              />
+              {!show && <VideoIcon className="background-video-mark" />}
+            </>
+          ) : (
+            <img key={media.url} src={media.url} alt="" onError={() => fail(media.background.file, media.url)} />
+          )}
+        </div>
       )}
-    </div>
+    </>
   );
 }
 
-function BackgroundVideo(props: { src: string; playing: boolean; loop: boolean; muted: boolean; preload: "auto" | "metadata" }) {
-  const { src, playing, loop, muted, preload } = props;
+function BackgroundVideo(props: { src: string; playing: boolean; loop: boolean; muted: boolean; preload: "auto" | "metadata"; onError: () => void }) {
+  const { src, playing, loop, muted, preload, onError } = props;
   const video = useRef<HTMLVideoElement>(null);
   useEffect(() => {
     const element = video.current;
@@ -81,7 +105,7 @@ function BackgroundVideo(props: { src: string; playing: boolean; loop: boolean; 
     if (playing) element.play().catch((e: unknown) => console.error("background video:", e));
     else element.pause();
   }, [playing]);
-  return <video ref={video} src={src} loop={loop} muted={muted} playsInline preload={preload} />;
+  return <video ref={video} src={src} loop={loop} muted={muted} playsInline preload={preload} onError={onError} />;
 }
 
 function Picture({ src }: { src: string }) {

@@ -5,11 +5,12 @@ import { CheckIcon, CrossIcon } from "../icons";
 import { useShortcuts } from "../keyboard";
 import { MediaRootContext } from "../media";
 import { slideContext } from "../quiz";
-import { SlideBackground } from "../slide-media";
+import { StageBackground } from "../slide-media";
+import { resolveBackground } from "../theme/background";
 import { ThemeContext, useResolvedTheme } from "../theme/context";
 import { screenOf } from "../theme/themes";
 import { Leaderboard, ranked, SlideScreen } from "./SlideScreen";
-import { Backdrop, Stage } from "./Stage";
+import { Stage } from "./Stage";
 import "./host.css";
 
 // The projector has nowhere to show errors; the Director reports them.
@@ -36,15 +37,14 @@ function HostLayout() {
   return (
     <MediaRootContext value={mediaRoot}>
       <ThemeContext value={theme}>
-        <Stage className="host-viewport" screen={view ? screenOf(view) : "default"}>
+        <Stage className="host-viewport" screen={view ? screenOf(view) : "default"} slide={view?.slide ?? null} onHold={view?.onHold}>
           {view && (
             <>
-              {view.slide && <SlideBackground slide={view.slide} onHold={view.onHold} />}
               <SlideScreen view={view} context={slideContext(quiz, view.slideIndex)} clock={clock} />
               {verdict && <div className={`verdict verdict-${verdict}`}>{verdict === "correct" ? <CheckIcon /> : <CrossIcon />}</div>}
               {view.leaderboardVisible && (
                 <div className="overlay">
-                  <Backdrop screen="leaderboard" />
+                  <StageBackground layers={resolveBackground(null, theme, "leaderboard")} />
                   <Leaderboard players={ranked(view)} />
                 </div>
               )}

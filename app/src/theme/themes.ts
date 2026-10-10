@@ -298,11 +298,6 @@ export function themeStyle(theme: Theme): CSSProperties {
   return vars as CSSProperties;
 }
 
-/** The background of `screen` as inline style. */
-export function backgroundStyle(theme: Theme, screen: ScreenKey): CSSProperties {
-  return { backgroundImage: `url("${theme.backgrounds[screen]}")` };
-}
-
 /** `color` (`#rrggbb` or `#rrggbbaa`) with its alpha set to `alpha` (0-255). */
 export function withAlpha(color: string, alpha: number): string {
   return color.slice(0, 7) + alpha.toString(16).padStart(2, "0");

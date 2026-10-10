@@ -6,7 +6,6 @@ import { Stage } from "../host/Stage";
 import { SoundIcon } from "../icons";
 import { mediaFileName } from "../media";
 import type { SlideContext } from "../quiz";
-import { SlideBackground } from "../slide-media";
 import { screenOf } from "../theme/themes";
 import type { Quiz, Slide } from "../types";
 import { elementAt, type ElementId } from "./elements";
@@ -45,8 +44,7 @@ export function DesignArea({ quiz, index, slide, context, element, playingBackgr
         onMenu(e, target);
       }}
     >
-      <Stage className="design-stage" screen={screenOf(view)}>
-        <SlideBackground slide={slide} mode="preview" playing={playingBackground} />
+      <Stage className="design-stage" screen={screenOf(view)} slide={slide} mode="preview" playingBackground={playingBackground}>
         <SlideScreen view={view} context={context} clock={null} mode="preview" />
         {slide.sound && (
           <div className="sound-badge" data-element="sound" title={t("mediaSound")}>

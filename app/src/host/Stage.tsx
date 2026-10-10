@@ -1,17 +1,36 @@
 import { useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { StageBackground, type ScreenMode } from "../slide-media";
+import { resolveBackground } from "../theme/background";
 import { useTheme } from "../theme/context";
-import { backgroundStyle, themeStyle, type ScreenKey } from "../theme/themes";
+import { themeStyle, type ScreenKey } from "../theme/themes";
+import type { Slide } from "../types";
 import "./slide.css";
 
 const STAGE_W = 1920;
 const STAGE_H = 1080;
 
+interface StageProps {
+  /** Styles the element the stage fits into. */
+  className: string;
+  /** The screen shown, for the theme's background (TH-5). */
+  screen: ScreenKey;
+  /** The slide shown, for its own background; none between slides. */
+  slide: Slide | null;
+  /** Where the stage is drawn, for how a background video plays. */
+  mode?: ScreenMode;
+  /** The show holds: a synced background video pauses (BG-4). */
+  onHold?: boolean;
+  /** The editor plays the slide's background video. */
+  playingBackground?: boolean;
+  children: ReactNode;
+}
+
 /**
- * A fixed 1920x1080 canvas scaled to fit the element it is placed in (styled
- * by `className`), letterboxed. Sizes inside are in stage pixels. It is drawn
- * in the theme of `ThemeContext`, with that theme's background for `screen`.
+ * A fixed 1920x1080 canvas scaled to fit the element it is placed in,
+ * letterboxed. Sizes inside are in stage pixels. It is drawn in the theme of
+ * `ThemeContext`, behind it the background `resolveBackground` picks.
  */
-export function Stage({ className, screen, children }: { className: string; screen: ScreenKey; children: ReactNode }) {
+export function Stage({ className, screen, slide, mode, onHold, playingBackground, children }: StageProps) {
   const frame = useRef<HTMLDivElement>(null);
   const theme = useTheme();
   const look = useMemo(() => themeStyle(theme), [theme]);
@@ -30,15 +49,9 @@ export function Stage({ className, screen, children }: { className: string; scre
   return (
     <div ref={frame} className={className}>
       <div className="stage" style={{ ...look, width: STAGE_W, height: STAGE_H, transform: `translate(-50%, -50%) scale(${scale})` }}>
-        <Backdrop screen={screen} />
+        <StageBackground layers={resolveBackground(slide, theme, screen)} mode={mode} onHold={onHold} playing={playingBackground} />
         {children}
       </div>
     </div>
   );
-}
-
-/** The theme's background for `screen`, filling its parent; a slide's own background covers it. */
-export function Backdrop({ screen }: { screen: ScreenKey }) {
-  const theme = useTheme();
-  return <div className="backdrop" style={backgroundStyle(theme, screen)} />;
 }

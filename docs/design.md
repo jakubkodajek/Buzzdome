@@ -99,7 +99,8 @@ two windows cannot disagree with each other or with the score.
     `waveform.ts`) and Normalize volume window (`LoudnessDialog.tsx`,
     `normalize.ts`) only change `part`, `replay` and `gainDb`; files are never
     rewritten.
-- **Background video.** `slide-media.tsx` plays it with its options. Sync
+- **Background video.** `StageBackground` (`slide-media.tsx`) plays it with
+  its options. Sync
   with quiz reads `GameView.onHold` from the core (a player answering, the
   clock paused, the question closed or revealed), so the rule lives in one
   place.
@@ -209,8 +210,17 @@ else lives in the UI, because only the UI draws.
 - **Drawing.** `ThemeContext` (`theme/context.ts`) carries the resolved
   theme: the projector, the Director and the editor provide the quiz's.
   `Stage` turns it into `--theme-*` CSS variables (`themeStyle`) and draws
-  the background for its screen (`screenOf(view)`, TH-5) under the slide;
-  a slide's own background covers it (BG-6). `slide.css` takes colours and
+  the background. Which one is decided in one place:
+  `resolveBackground(slide, theme, screen)` (`theme/background.ts`, tested)
+  lists the levels that can give the screen its background, the most
+  specific first (BG-6: the slide's own, then the theme's for the screen,
+  `screenOf(view)`, TH-5; round and quiz levels slot in between once the
+  format has them). `StageBackground` (`slide-media.tsx`) draws the theme's
+  image and over it the first level that loads; one that fails gives way to
+  the next and is reported once per window (BG-9), so the Director's slide
+  list warns about a broken file. Every stage (projector, editor canvas,
+  thumbnails) goes through `Stage`, so none places a background itself.
+  `slide.css` takes colours and
   fonts only from those variables. Text on a filled area (bars, answers,
   rows) gets white or dark text from `readableText`, which keeps at least
   the 3:1 contrast WCAG 2.2 asks for large text (SC 1.4.3); a test checks

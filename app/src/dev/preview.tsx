@@ -7,7 +7,7 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import demoQuiz from "../../../samples/demo-quiz.json";
 import { NO_CONTROLS } from "../host/preview";
-import type { GameView, PlayerView, Quiz, SoundClip } from "../types";
+import type { Background, GameView, PlayerView, Quiz, SoundClip } from "../types";
 import "../styles.css";
 
 // The backend fills serde defaults; the raw JSON file leaves them out.
@@ -64,6 +64,9 @@ const SONG: SoundClip = {
   gainDb: -2.5,
   replay: { part: { fromMs: 45_000, toMs: null }, delayMs: 1_000 },
 };
+
+/** A picture behind a slide, with the options a new background gets. */
+const BACKGROUND: Background = { file: "media/landscape.svg", repeat: true, muted: true, sync: false };
 
 function view(partial: Partial<GameView>): GameView {
   return {
@@ -151,6 +154,8 @@ const SCENES: Record<string, GameView | null> = {
     slide: { ...quiz.slides[1], picture: "media/landscape.svg", sound: SONG },
   }),
   billboardPicture: view({ phase: { phase: "billboard" }, slideIndex: 0, slide: { ...quiz.slides[0], picture: "media/landscape.svg" } }),
+  background: view({ phase: { phase: "billboard" }, slideIndex: 0, slide: { ...quiz.slides[0], background: BACKGROUND } }),
+  brokenBackground: view({ phase: { phase: "billboard" }, slideIndex: 0, slide: { ...quiz.slides[0], background: { ...BACKGROUND, file: "media/missing.png" } } }),
 };
 
 // The quiz as the scene's view shows it (scenes may add media to a slide).

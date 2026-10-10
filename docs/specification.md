@@ -150,10 +150,10 @@ background gallery and round or quiz backgrounds are planned.
 | BG-3 | A background that is not 16:9 is scaled to cover the screen and cropped around its centre; the import dialog shows the crop and warns. Smaller than the minimum or larger than the limits is refused. |
 | BG-4 | A background video starts as soon as its slide appears and has its own options: Loop (on), Silent (on) and Sync with quiz (off), which pauses it while a player answers, while the clock is paused and once the question is over. The editor shows its first frame with a video mark, and the slide's context menu can play or stop it there, or remove the background. Done. |
 | BG-5 | Backgrounds sit behind all content. The app draws its own panels behind text, so any background stays readable; designers should still keep the middle band calm (layout guide in 5.4). |
-| BG-6 | Choice per slide, per round, per quiz and per theme. The most specific wins: slide > round > quiz > theme > built-in. |
+| BG-6 | Choice per slide, per round, per quiz and per theme. The most specific wins: slide > round > quiz > theme > built-in. Slide, theme and built-in done; round and quiz to come. |
 | BG-7 | A quiz file embeds every background it uses (in `media/`), so a quiz moved to another computer looks the same. Nothing is linked to an outside path during a show. |
 | BG-8 | The Director has a background gallery: import files or a theme package, preview on a 16:9 frame with the layout guide, delete, and filter. |
-| BG-9 | A broken or missing background never stops the show: the next level in BG-6 is used and the Director shows a warning. |
+| BG-9 | A broken or missing background never stops the show: the next level in BG-6 is used and the Director shows a warning. Done. |
 
 ### 5.2 Theme package
 

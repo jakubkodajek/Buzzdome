@@ -1,6 +1,5 @@
 import { memo } from "react";
 import { sameContext, type SlideContext } from "../quiz";
-import { SlideBackground } from "../slide-media";
 import { screenOf } from "../theme/themes";
 import type { Slide } from "../types";
 import { previewView } from "./preview";
@@ -22,8 +21,7 @@ interface SlideThumbnailProps {
 export const SlideThumbnail = memo(function SlideThumbnail({ className, slide, index, count, context }: SlideThumbnailProps) {
   const view = previewView(slide, index, count, "");
   return (
-    <Stage className={className} screen={screenOf(view)}>
-      <SlideBackground slide={slide} mode="thumbnail" />
+    <Stage className={className} screen={screenOf(view)} slide={slide} mode="thumbnail">
       <SlideScreen view={view} context={context} clock={null} mode="thumbnail" />
     </Stage>
   );
