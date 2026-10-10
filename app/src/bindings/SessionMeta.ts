@@ -4,4 +4,8 @@ export type SessionMeta = { quizTitle: string, sourcePath: string | null, starte
 /**
  * Folder with the quiz's unpacked media (see the quiz-file crate).
  */
-mediaRoot: string | null, };
+mediaRoot: string | null, 
+/**
+ * The `RULES_VERSION` the show began under; 0 for a show from before it was kept.
+ */
+rulesVersion: number, };

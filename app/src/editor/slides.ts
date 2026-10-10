@@ -4,9 +4,9 @@
 
 import { WHOLE_FILE } from "../audio/clip-player";
 import {
+  ANSWER_LIMITS,
   DEFAULT_POINTS,
   DEFAULT_TIME_LIMIT_S,
-  MAX_ANSWERS,
   MAX_EVERYONE_ANSWERS,
   MAX_GAIN_DB,
   MAX_INTRO_PAUSE_MS,
@@ -14,7 +14,6 @@ import {
   MAX_REPLAY_DELAY_MS,
   MAX_TIME_LIMIT_S,
   MAX_VIDEO_SPEED,
-  MIN_EVERYONE_ANSWERS,
   MIN_GAIN_DB,
   MIN_VIDEO_SPEED,
   NEW_VIDEO_INTRO_PAUSE_MS,
@@ -25,14 +24,9 @@ import type { AnswerMode, Background, Quiz, QuestionSlide, Replay, Slide, SlideT
 /** Answers a new everyone-answers question starts with: one per buzzer button. */
 const DEFAULT_ANSWERS = MAX_EVERYONE_ANSWERS;
 
-/**
- * Fewest and most answers a question can have in `mode`
- * (`Question::problems` in crates/quiz-core/src/model.rs): everyone answers
- * with a button, so 2 to 4; a fastest finger question is answered aloud, so
- * none to all six letters.
- */
+/** Fewest and most answers a question can have in `mode` (`AnswerMode::answer_limits` in quiz-core). */
 export function answerLimits(mode: AnswerMode): { fewest: number; most: number } {
-  return mode === "everyone" ? { fewest: MIN_EVERYONE_ANSWERS, most: MAX_EVERYONE_ANSWERS } : { fewest: 0, most: MAX_ANSWERS };
+  return ANSWER_LIMITS[mode];
 }
 
 /** A new, empty slide. */

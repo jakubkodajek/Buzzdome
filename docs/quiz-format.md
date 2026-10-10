@@ -281,7 +281,7 @@ the rows it came up in.
 | --- | --- |
 | 1 | First version. |
 | 2 | Adds `explanation` slides and, later within version 2, the quiz `theme` (builds from before that drop it when they save). Version 1 files read as version 2 unchanged. |
-| 3 | `background` becomes an object with video options; sounds get `part`, `gainDb` and `replay`. Version 1 and 2 files read as version 3 unchanged. |
+| 3 | `background` becomes an object with video options; sounds get `part`, `gainDb` and `replay`. Version 1 and 2 files read as version 3 unchanged. Later within version 3, a `fastestFinger` question may have up to 6 answers instead of 4; earlier builds list such a question as a problem. |
 | 4 | Adds `final` slides. Version 1 to 3 files read as version 4 unchanged. Later within version 4, videos get `introPauseMs`, `volume`, `speed`, `part`, `effect` and `replay`; a video without them plays as before. |
 
 Fields may be added within a version as long as older files keep their

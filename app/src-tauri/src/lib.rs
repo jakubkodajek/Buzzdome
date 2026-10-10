@@ -159,6 +159,7 @@ fn start_show(
         source_path,
         started_ms: now_ms(),
         media_root: media_root.as_ref().map(|root| root.to_string_lossy().into_owned()),
+        rules_version: quiz_core::RULES_VERSION,
     };
     let session = Session::create(&sessions_root(app)?, &quiz, &meta).map_err(|e| AppError::ShowNotSaved { detail: e.to_string() })?;
     serve_media(app, inner, media_root)?;
@@ -237,7 +238,8 @@ fn last_session(app: AppHandle) -> CmdResult<Option<SessionSummary>> {
 }
 
 /// Resumes the last show. Returns a warning for the quizmaster when the show
-/// runs but something is missing (its media were deleted).
+/// runs but something is missing (its media were deleted), or else when it
+/// began under other rules.
 #[tauri::command]
 fn resume_last_session(app: AppHandle, state: State<AppState>) -> CmdResult<Option<AppError>> {
     // Locked first: the running show's journal must not be reopened.
@@ -245,12 +247,14 @@ fn resume_last_session(app: AppHandle, state: State<AppState>) -> CmdResult<Opti
     let Resumed { session, quiz, journal, meta } = Session::resume_latest(&sessions_root(&app)?)
         .map_err(|e| AppError::ShowNotRead { detail: e.to_string() })?
         .ok_or(AppError::NoShowToResume)?;
+    let rules_changed = meta.rules_changed();
     let media_root = meta.media_root.map(PathBuf::from);
     // The show must go on: without its media it still runs, and the Director says why.
     let warning = match &media_root {
         Some(root) => quiz_file::check(&quiz, root).err().map(AppError::from),
         None => None,
-    };
+    }
+    .or_else(|| rules_changed.then_some(AppError::RulesChanged));
     serve_media(&app, &mut inner, media_root.filter(|root| root.is_dir()))?;
     let game = Game::replay(quiz, &journal);
     let recovery = game.recovery_command();

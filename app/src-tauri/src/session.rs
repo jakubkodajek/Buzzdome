@@ -29,6 +29,16 @@ pub struct SessionMeta {
     /// Folder with the quiz's unpacked media (see the quiz-file crate).
     #[serde(default)]
     pub media_root: Option<String>,
+    /// The `RULES_VERSION` the show began under; 0 for a show from before it was kept.
+    #[serde(default)]
+    pub rules_version: u32,
+}
+
+impl SessionMeta {
+    /// Whether replaying the show's journal may give another show than the one it recorded.
+    pub fn rules_changed(&self) -> bool {
+        self.rules_version != quiz_core::RULES_VERSION
+    }
 }
 
 #[derive(Debug, Clone, Serialize, TS)]
@@ -251,6 +261,7 @@ mod tests {
                 source_path: None,
                 started_ms,
                 media_root: Some(format!("/media/{started_ms}")),
+                rules_version: quiz_core::RULES_VERSION,
             };
             let mut session = Session::create(&root, &quiz, &meta).unwrap();
             session.append(&Stamped { at_ms: 5, command: Command::Next }).unwrap();
@@ -346,6 +357,15 @@ mod tests {
         drop(file);
         assert_eq!(fs::read(&path).unwrap(), b"one\ntwo\n");
         fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn a_show_from_before_the_rules_version_was_kept_says_its_rules_changed() {
+        let old: SessionMeta = serde_json::from_str(r#"{"quizTitle":"T","sourcePath":null,"startedMs":1,"mediaRoot":null}"#).unwrap();
+        assert_eq!(old.rules_version, 0);
+        assert!(old.rules_changed());
+        let now = SessionMeta { rules_version: quiz_core::RULES_VERSION, ..old };
+        assert!(!now.rules_changed());
     }
 
     #[test]

@@ -36,6 +36,9 @@ pub enum AppError {
     ShowNotSaved { detail: String },
     #[error("the last show cannot be read: {detail}")]
     ShowNotRead { detail: String },
+    /// A resumed show began under other rules (`RULES_VERSION`); it runs.
+    #[error("the show began in another version of the app; its scores may differ")]
+    RulesChanged,
 
     // Quiz files and the editor.
     #[error("cannot {action:?} {path}: {detail}")]

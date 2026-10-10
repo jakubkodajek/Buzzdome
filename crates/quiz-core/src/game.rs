@@ -11,6 +11,13 @@ use std::collections::{BTreeMap, BTreeSet, HashSet};
 
 pub type BuzzerId = u16;
 
+/// The version of the rules a journal is replayed with. Bump it whenever
+/// the same commands give another show: a resumed show begun under another
+/// version is rebuilt with today's rules, and the Director says its scores
+/// may differ. 1: refused presses that were journaled count (N3), and
+/// renaming a player takes the name from another buzzer (R17).
+pub const RULES_VERSION: u32 = 1;
+
 /// Steps of the final score reveal: drum roll, 3rd, 2nd, 1st, full ranking.
 pub const FINAL_LAST_STEP: u8 = 4;
 
@@ -105,6 +112,8 @@ pub enum Command {
     JudgeWrong,
     #[serde(rename_all = "camelCase")]
     AddPlayer { buzzer: BuzzerId, name: String },
+    /// Names a buzzer's player; as with `PairTeam`, a player who had that
+    /// name loses it, so a name is never on two buzzers.
     #[serde(rename_all = "camelCase")]
     RenamePlayer { buzzer: BuzzerId, name: String },
     /// Replaces the team names prepared for the show, in order. Empty names
@@ -587,15 +596,11 @@ impl Game {
                 self.register(*buzzer, name.clone());
                 Ok(vec![])
             }
-            Command::RenamePlayer { buzzer, name } => {
-                self.player_mut(*buzzer)?.name = clean_name(name);
-                Ok(vec![])
-            }
             Command::SetTeams { names } => {
                 self.teams = team_names(names.iter().map(String::as_str))?;
                 Ok(vec![])
             }
-            Command::PairTeam { buzzer, name } => {
+            Command::RenamePlayer { buzzer, name } | Command::PairTeam { buzzer, name } => {
                 let name = clean_name(name);
                 self.player_mut(*buzzer)?;
                 for player in self.players.values_mut() {

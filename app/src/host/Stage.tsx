@@ -55,3 +55,18 @@ export function Stage({ className, screen, slide, mode, onHold, playingBackgroun
     </div>
   );
 }
+
+/**
+ * A screen drawn over the stage's slide, such as the leaderboard the
+ * quizmaster shows mid-question, with the theme's background for `screen`.
+ * Backgrounds are only drawn here and in `Stage`.
+ */
+export function StageOverlay({ screen, children }: { screen: ScreenKey; children: ReactNode }) {
+  const theme = useTheme();
+  return (
+    <div className="overlay">
+      <StageBackground layers={resolveBackground(null, theme, screen)} />
+      {children}
+    </div>
+  );
+}

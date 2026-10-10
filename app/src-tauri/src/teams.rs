@@ -136,7 +136,7 @@ mod tests {
     }
 
     fn session(root: &Path) -> Session {
-        let meta = SessionMeta { quiz_title: "Quiz".into(), source_path: None, started_ms: 1, media_root: None };
+        let meta = SessionMeta { quiz_title: "Quiz".into(), source_path: None, started_ms: 1, media_root: None, rules_version: quiz_core::RULES_VERSION };
         Session::create(root, &Quiz::new("Quiz", Vec::new()), &meta).unwrap()
     }
 

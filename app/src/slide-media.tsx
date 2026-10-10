@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
 import { useApp } from "./app-context";
 import { VideoIcon } from "./icons";
-import { isVideo, mediaFileName, themeFileUrl, useMediaUrl } from "./media";
+import { isVideo, mediaFileName, MediaRootContext, themeFileUrl, useMediaUrl } from "./media";
 import { ShowVideo } from "./slide-video";
 import type { BackgroundLayer } from "./theme/background";
 import type { Background, ClockView, GameView, Slide } from "./types";
@@ -51,8 +51,17 @@ export function SlideMedia(props: { slide: Slide; className: string; mode?: Scre
   return null;
 }
 
-/** Files whose background failed in this window; each is reported once. */
+/**
+ * Files whose background failed in this window, with the media folder open
+ * then; each is reported once while that folder is open.
+ */
 const reported = new Set<string>();
+
+/** The backgrounds that failed with the media folder `root`. */
+interface Failed {
+  root: string | null;
+  urls: ReadonlySet<string>;
+}
 
 /** A theme's background video loops silently, as a new slide background does (BG-4). */
 const THEME_VIDEO: Pick<Background, "repeat" | "muted" | "sync"> = { repeat: true, muted: true, sync: false };
@@ -81,7 +90,10 @@ export function StageBackground(props: { layers: BackgroundLayer[]; mode?: Scree
   const { layers, mode = "show", onHold = false, playing = false } = props;
   const { t, notify } = useApp();
   const toUrl = useMediaUrl();
-  const [failed, setFailed] = useState<ReadonlySet<string>>(new Set());
+  // Another show or draft tries every file again, so a file mended since loads.
+  const root = useContext(MediaRootContext);
+  const [failed, setFailed] = useState<Failed>({ root, urls: new Set() });
+  const failedNow = failed.root === root ? failed.urls : null;
   const drawn = layers.flatMap((layer): Drawn[] => {
     if (layer.level === "theme") {
       const { path } = layer.file;
@@ -91,15 +103,16 @@ export function StageBackground(props: { layers: BackgroundLayer[]; mode?: Scree
     const url = toUrl(background.file);
     return url ? [{ level: "slide", name: mediaFileName(background.file), url, video: isVideo(background.file), options: background }] : [];
   });
-  const loading = drawn.filter((item) => !failed.has(item.url));
+  const loading = drawn.filter((item) => !failedNow?.has(item.url));
   const theme = loading.find((item) => item.level === "theme");
   const own = loading.find((item) => item.level !== "theme");
   const show = mode === "show";
   const draw = (item: Drawn, playsHere: boolean) => {
     const fail = () => {
-      setFailed((current) => new Set(current).add(item.url));
-      if (reported.has(item.url)) return;
-      reported.add(item.url);
+      setFailed((current) => ({ root, urls: new Set(current.root === root ? current.urls : []).add(item.url) }));
+      const once = `${root}\n${item.url}`;
+      if (reported.has(once)) return;
+      reported.add(once);
       notify(t(item.level === "theme" ? "themeBackgroundFailed" : "backgroundFailed", { file: item.name }));
     };
     if (!item.video) return <img key={item.url} src={item.url} alt="" onError={fail} />;

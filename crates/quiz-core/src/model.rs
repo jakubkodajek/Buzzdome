@@ -12,7 +12,9 @@ use ts_rs::TS;
 
 /// 1: first version. 2: adds explanation slides. 3: backgrounds become
 /// objects with video options; sounds get a part, a loudness gain and a
-/// replay part. 4: adds final slides. Older files read unchanged.
+/// replay part; later within 3, fastest finger questions may have 6
+/// answers instead of 4 (builds before refuse more). 4: adds final slides.
+/// Older files read unchanged.
 pub const SCHEMA_VERSION: u32 = 4;
 
 /// Most answers a question can show (A-F, as many as the reference app's
@@ -215,6 +217,26 @@ pub enum AnswerMode {
     FastestFinger,
 }
 
+/// How many answers a question of one mode can have.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub struct AnswerLimits {
+    pub fewest: usize,
+    pub most: usize,
+}
+
+impl AnswerMode {
+    pub const ALL: [AnswerMode; 2] = [AnswerMode::Everyone, AnswerMode::FastestFinger];
+
+    /// Everyone answers with a button, so 2 to 4; a fastest finger question
+    /// is answered aloud, so none to all six letters.
+    pub fn answer_limits(self) -> AnswerLimits {
+        match self {
+            AnswerMode::Everyone => AnswerLimits { fewest: MIN_EVERYONE_ANSWERS, most: MAX_EVERYONE_ANSWERS },
+            AnswerMode::FastestFinger => AnswerLimits { fewest: 0, most: MAX_ANSWERS },
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[ts(export)]
 #[serde(rename_all = "camelCase")]
@@ -272,20 +294,15 @@ impl Question {
 
     /// Adds the problems of this question to `found`.
     fn problems(&self, found: &mut impl FnMut(Problem)) {
-        let max = match self.mode {
-            AnswerMode::Everyone => MAX_EVERYONE_ANSWERS,
-            AnswerMode::FastestFinger => MAX_ANSWERS,
-        };
-        if self.answers.len() > max {
-            found(Problem::TooManyAnswers { max });
+        let AnswerLimits { fewest, most } = self.mode.answer_limits();
+        if self.answers.len() > most {
+            found(Problem::TooManyAnswers { max: most });
         }
-        if self.mode == AnswerMode::Everyone {
-            if self.answers.len() < MIN_EVERYONE_ANSWERS {
-                found(Problem::TooFewAnswers { min: MIN_EVERYONE_ANSWERS });
-            }
-            if self.correct.is_none() {
-                found(Problem::NoCorrectAnswer);
-            }
+        if self.answers.len() < fewest {
+            found(Problem::TooFewAnswers { min: fewest });
+        }
+        if self.mode == AnswerMode::Everyone && self.correct.is_none() {
+            found(Problem::NoCorrectAnswer);
         }
         if self.correct.is_some_and(|c| c >= self.answers.len()) {
             found(Problem::CorrectOutOfRange);

@@ -5,13 +5,11 @@ import { CheckIcon, CrossIcon } from "../icons";
 import { useShortcuts } from "../keyboard";
 import { MediaRootContext } from "../media";
 import { slideContext } from "../quiz";
-import { StageBackground } from "../slide-media";
-import { resolveBackground } from "../theme/background";
 import { ThemeContext, ThemesProvider, useResolvedTheme } from "../theme/context";
 import { screenOf } from "../theme/themes";
 import { MediaOverlay } from "./MediaOverlay";
 import { Leaderboard, ranked, SlideScreen } from "./SlideScreen";
-import { Stage } from "./Stage";
+import { Stage, StageOverlay } from "./Stage";
 import "./host.css";
 
 // The projector has nowhere to show errors; the Director reports them.
@@ -46,10 +44,9 @@ function HostLayout() {
               <SlideScreen view={view} context={slideContext(quiz, view.slideIndex)} clock={clock} />
               {verdict && <div className={`verdict verdict-${verdict}`}>{verdict === "correct" ? <CheckIcon /> : <CrossIcon />}</div>}
               {view.leaderboardVisible && (
-                <div className="overlay">
-                  <StageBackground layers={resolveBackground(null, theme, "leaderboard")} />
+                <StageOverlay screen="leaderboard">
                   <Leaderboard players={ranked(view)} />
-                </div>
+                </StageOverlay>
               )}
             </>
           )}

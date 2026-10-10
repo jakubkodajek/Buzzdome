@@ -30,6 +30,7 @@ const ERROR_KEYS: Record<Exclude<AppError["code"], WordedApart>, StringKey> = {
   tooManyTeams: "errTooManyTeams",
   showNotSaved: "errShowNotSaved",
   showNotRead: "errShowNotRead",
+  rulesChanged: "errRulesChanged",
   notAQuizFile: "errNotAQuizFile",
   missingQuizJson: "errMissingQuizJson",
   badQuizJson: "errBadQuizJson",

@@ -12,7 +12,7 @@ pub mod view;
 
 pub use game::{
     team_names, BuzzerId, Button, Clock, Command, Controls, Cue, Effect, Game, GameError, Light, Phase, QuestionStep, Stamped,
-    MAX_NAME_CHARS, MAX_TEAMS, PRESS_GRACE_MS,
+    MAX_NAME_CHARS, MAX_TEAMS, PRESS_GRACE_MS, RULES_VERSION,
 };
 pub use media::{
     is_safe_reference, portable_name, portable_reference, Background, MediaIssue, MediaKind, Playback, Replay, SoundClip, SoundStart, Span,
@@ -21,7 +21,7 @@ pub use media::{
 };
 pub use media_player::{MediaPlayer, NowPlaying, PlayerCommand, MAX_DROPPED_MB};
 pub use model::{
-    AnswerMode, Problem, Question, Quiz, QuizJsonError, Slide, SlideContent, ValidationError, DEFAULT_POINTS,
+    AnswerLimits, AnswerMode, Problem, Question, Quiz, QuizJsonError, Slide, SlideContent, ValidationError, DEFAULT_POINTS,
     DEFAULT_TIME_LIMIT_S, MAX_ANSWERS, MAX_EVERYONE_ANSWERS, MAX_POINTS, MAX_TIME_LIMIT_S, MIN_EVERYONE_ANSWERS,
     SCHEMA_VERSION,
 };
@@ -44,6 +44,7 @@ mod ui_constants {
             ("MAX_ANSWERS", crate::MAX_ANSWERS.to_string()),
             ("MAX_EVERYONE_ANSWERS", crate::MAX_EVERYONE_ANSWERS.to_string()),
             ("MIN_EVERYONE_ANSWERS", crate::MIN_EVERYONE_ANSWERS.to_string()),
+            ("ANSWER_LIMITS", answer_limits()),
             ("DEFAULT_TIME_LIMIT_S", crate::DEFAULT_TIME_LIMIT_S.to_string()),
             ("DEFAULT_POINTS", crate::DEFAULT_POINTS.to_string()),
             ("MAX_POINTS", crate::MAX_POINTS.to_string()),
@@ -71,5 +72,14 @@ mod ui_constants {
             ts.push_str(&format!("export const {name} = {value};\n"));
         }
         std::fs::write(std::path::Path::new(&dir).join("Constants.ts"), ts).unwrap();
+    }
+
+    /// Each answer mode's limits, by the mode's name in the quiz file.
+    fn answer_limits() -> String {
+        let limits: serde_json::Map<String, serde_json::Value> = crate::AnswerMode::ALL
+            .iter()
+            .map(|mode| (serde_json::to_value(mode).unwrap().as_str().unwrap().to_owned(), serde_json::to_value(mode.answer_limits()).unwrap()))
+            .collect();
+        serde_json::to_string(&limits).unwrap()
     }
 }

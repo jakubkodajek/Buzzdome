@@ -135,6 +135,27 @@ fn pairing_gives_a_buzzer_the_team_name_and_moves_it_from_another() {
 }
 
 #[test]
+fn renaming_a_player_to_a_name_another_has_takes_it_from_them() {
+    let mut show = Show::new(vec![question("q1", AnswerMode::Everyone)]);
+    show.run(0, Command::SetTeams { names: names(&["Hawks", "Owls"]) }).unwrap();
+    show.press(0, 3, Button::Big);
+    show.press(0, 5, Button::Big);
+    show.run(0, Command::PairTeam { buzzer: 3, name: "Hawks".into() }).unwrap();
+
+    // Typing a paired team's name in the table pairs the team with this buzzer, as dragging does.
+    show.run(0, Command::RenamePlayer { buzzer: 5, name: " HAWKS".into() }).unwrap();
+    assert_eq!(teams(&show.game), vec![("Hawks".into(), Some(5)), ("Owls".into(), None)]);
+    let names_now: Vec<String> = show.game.players().map(|p| p.name.clone()).collect();
+    assert_eq!(names_now.iter().filter(|n| n.eq_ignore_ascii_case("hawks")).count(), 1, "{names_now:?}");
+    // The same for a name that is no team.
+    show.run(0, Command::RenamePlayer { buzzer: 3, name: "Eagles".into() }).unwrap();
+    show.run(0, Command::RenamePlayer { buzzer: 5, name: "eagles".into() }).unwrap();
+    assert_eq!(show.game.players().filter(|p| p.name.eq_ignore_ascii_case("eagles")).count(), 1);
+    let replayed = Game::replay(show.game.quiz().clone(), &show.journal);
+    assert!(replayed.players().map(|p| &p.name).eq(show.game.players().map(|p| &p.name)));
+}
+
+#[test]
 fn everyone_answers_scores_by_speed_and_closes_when_all_answered() {
     let mut show = Show::new(vec![question("q1", AnswerMode::Everyone)]);
     for b in 1..=3 {

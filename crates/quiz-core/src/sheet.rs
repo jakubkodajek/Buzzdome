@@ -8,10 +8,7 @@ use crate::media::{
     Background, MediaKind, Replay, SoundClip, SoundStart, Span, VideoClip, VideoEffect, MAX_GAIN_DB, MAX_INTRO_PAUSE_MS, MAX_REPLAY_DELAY_MS,
     MAX_VIDEO_SPEED, MIN_GAIN_DB, MIN_VIDEO_SPEED, NEW_VIDEO_INTRO_PAUSE_MS,
 };
-use crate::model::{
-    AnswerMode, Question, Quiz, Slide, SlideContent, DEFAULT_POINTS, DEFAULT_TIME_LIMIT_S, MAX_ANSWERS, MAX_EVERYONE_ANSWERS, MAX_POINTS,
-    MAX_TIME_LIMIT_S, MIN_EVERYONE_ANSWERS,
-};
+use crate::model::{AnswerMode, Question, Quiz, Slide, SlideContent, DEFAULT_POINTS, DEFAULT_TIME_LIMIT_S, MAX_ANSWERS, MAX_POINTS, MAX_TIME_LIMIT_S};
 use serde::Serialize;
 use std::ops::RangeInclusive;
 use ts_rs::TS;
@@ -500,7 +497,8 @@ fn question(
         correct = order.iter().position(|&i| i == 0);
         texts = order.iter().map(|&i| texts[i].clone()).collect();
     }
-    let fits = (MIN_EVERYONE_ANSWERS..=MAX_EVERYONE_ANSWERS).contains(&texts.len());
+    let everyone = AnswerMode::Everyone.answer_limits();
+    let fits = (everyone.fewest..=everyone.most).contains(&texts.len());
     let mode = match asked {
         Some(AnswerMode::Everyone) if !fits => {
             notes.add(ImportIssue::NotEveryone { answers: texts.len() }, place);

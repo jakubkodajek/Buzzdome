@@ -167,7 +167,10 @@ The session's `meta.json` records that folder (`mediaRoot`), so a resumed
 show finds its media even if the original file was moved. When a show
 starts, every other unpacked quiz is deleted, because only the latest show can
 be resumed. If the folder is gone on resume, the show still resumes and the
-Director shows a warning.
+Director shows a warning. `meta.json` also records `RULES_VERSION`, which
+quiz-core bumps whenever the same journal would replay into another show;
+a show begun under another version still resumes, rebuilt with today's
+rules, and the Director says its scores may differ.
 
 The windows load media through Tauri's asset protocol. Its scope starts
 empty and the shell allows exactly the current quiz folder, the editor's
@@ -210,7 +213,7 @@ table view toggle. It edits a quiz; it never touches a running show.
 - **Slide changes.** `slides.ts` holds every change to a slide as a pure
   function that keeps the slide playable (an everyone-answers question
   always has 2 to 4 answers and a correct one, a fastest finger question at
-  most 6, and so on; `answerLimits` mirrors the core's rule). Nothing in the
+  most 6, and so on; `answerLimits` reads the core's `ANSWER_LIMITS`). Nothing in the
   UI edits a slide object by hand. Tested in `slides.test.ts`.
 - **Actions.** `actions.ts` defines an `Action` (label, icon, keys,
   disabled, checked, run). `EditorScreen.tsx` builds the one record of all
