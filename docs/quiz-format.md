@@ -84,7 +84,7 @@ was moved or deleted.
 | --- | --- | --- |
 | `schemaVersion` | number | `5`. Version 1 to 4 files open with the same meaning (see Versioning); a file with a higher version is refused with a message. |
 | `title` | text | Shown on the welcome screen and in the Director. |
-| `theme` | text or `null` | Id of the look of the screens (`builtin.classic`, `builtin.studio`, `builtin.night`, `builtin.showtime`, `builtin.neon`, `builtin.daylight`, `builtin.aurora`, `builtin.sunset`, `builtin.chalkboard`, `builtin.gala`, later installed themes, spec 5.2). Missing, `null` or not installed: the default look, so a quiz never fails to open or play over it. A value that is not a theme id (dot-separated parts of lower-case letters, digits, `-` and `_`, at least two parts, at most 100 bytes) reads as missing. |
+| `theme` | text or `null` | Id of the look of the screens (`builtin.classic`, `builtin.studio`, `builtin.night`, `builtin.showtime`, `builtin.neon`, `builtin.daylight`, `builtin.aurora`, `builtin.sunset`, `builtin.chalkboard`, `builtin.gala`, `builtin.bakchus`, later installed themes, spec 5.2). Missing, `null` or not installed: the default look, so a quiz never fails to open or play over it. A value that is not a theme id (dot-separated parts of lower-case letters, digits, `-` and `_`, at least two parts, at most 100 bytes) reads as missing. |
 | `slides` | list | The show in order. |
 | `categories` | list | Named looks the slides can take on; see [Categories](#categories). Left out when there are none. |
 

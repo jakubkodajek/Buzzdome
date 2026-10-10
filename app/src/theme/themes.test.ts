@@ -1,13 +1,13 @@
 import { describe, expect, it } from "vitest";
-import BUILTIN_THEMES from "../bindings/BuiltinThemes.json";
+import { BUILTIN_THEMES } from "../dev/builtin-themes";
 import { DEFAULT_THEME_ID } from "../bindings/Constants";
 import { newSlide } from "../editor/slides";
 import { previewView } from "../host/preview";
-import type { Phase, Theme } from "../types";
+import type { Phase } from "../types";
 import { fontFamily } from "./fonts";
 import { contrast, isThemeMissing, pickTheme, readableText, screenOf, themeStyle, withAlpha } from "./themes";
 
-const THEMES: readonly Theme[] = BUILTIN_THEMES;
+const THEMES = BUILTIN_THEMES;
 const classic = THEMES.find((theme) => theme.id === DEFAULT_THEME_ID)!;
 
 describe("themes", () => {
@@ -54,6 +54,10 @@ describe("themes", () => {
     expect(style["--theme-bar-text"]).toBe("#ffffff");
     // The theme's font file first, then fonts for letters it does not have.
     expect(style["--theme-font-heading"]).toMatch(new RegExp(`^${JSON.stringify(fontFamily(classic.fonts.heading))}, .*sans-serif$`));
+    // Rounded corners and titles as written, unless a theme says otherwise.
+    expect([style["--theme-roundness"], style["--theme-heading-case"]]).toEqual(["1", "none"]);
+    const bakchus = themeStyle(THEMES.find((theme) => theme.id === "builtin.bakchus")!) as Record<string, string>;
+    expect([bakchus["--theme-roundness"], bakchus["--theme-heading-case"]]).toEqual(["0", "uppercase"]);
     expect(withAlpha("#ffd21f", 0x73)).toBe("#ffd21f73");
     expect(withAlpha("#ffd21f80", 0)).toBe("#ffd21f00");
   });

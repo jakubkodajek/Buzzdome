@@ -7,7 +7,6 @@ import { clearMocks, mockIPC, mockWindows } from "@tauri-apps/api/mocks";
 import React from "react";
 import ReactDOM from "react-dom/client";
 import demoQuiz from "../../../samples/demo-quiz.json";
-import builtinThemes from "../bindings/BuiltinThemes.json";
 import { setBodyText } from "../editor/slides";
 import { answerShares, NO_CONTROLS } from "../host/preview";
 import { MAX_BOARD_COLUMNS, MAX_BOARD_ROWS, MAX_PLAYER_VOLUME } from "../bindings/Constants";
@@ -30,6 +29,7 @@ import type {
   VideoClip,
 } from "../types";
 import "../styles.css";
+import { BUILTIN_THEMES } from "./builtin-themes";
 
 // The backend fills serde defaults; the raw JSON file leaves them out.
 const quiz = {
@@ -509,7 +509,7 @@ mockIPC(
         return null;
       case "list_themes":
         // Their files are served by Vite from src-tauri/themes.
-        return builtinThemes;
+        return BUILTIN_THEMES;
       case "installed_fonts":
         return ["Arial", "Courier New", "DejaVu Sans", "Georgia", "Impact", "Times New Roman", "Verdana"];
       case "media_root":

@@ -138,9 +138,9 @@ app offers (background picture or looping video per slide, a gallery of
 backgrounds, skins that inherit from a built-in skin and override only what
 changes) with our own file format.
 
-Built so far: backgrounds per slide, and ten built-in themes (Classic,
-Studio, Night, Showtime, Neon, Daylight, Aurora, Sunset, Chalkboard, Gala)
-chosen per quiz on the editor's Design tab, with a live preview while the
+Built so far: backgrounds per slide, and eleven built-in themes (Classic,
+Studio, Night, Showtime, Neon, Daylight, Aurora, Sunset, Chalkboard, Gala,
+Bakchus) chosen per quiz on the editor's Design tab, with a live preview while the
 pointer is on one. Each question also picks how its clock is drawn (ring,
 bar, digital, hourglass or stopwatch). The built-in themes are
 theme packages in the layout of 5.2 (unzipped) and are read and resolved by
@@ -207,6 +207,8 @@ autumn.qstheme
     "heading": "fonts/Heading.woff2",
     "body": "fonts/Body.woff2"
   },
+  "corners": "square",
+  "headings": "uppercase",
   "buzzerColors": {
     "ready": "#00ff00",
     "first": "#0000ff"
@@ -219,7 +221,7 @@ autumn.qstheme
 | TH-1 | `format` is the theme format version; the app refuses a format it does not know, with a message. `id` is unique (reverse domain style); ids starting with `builtin.` belong to the app's own themes. Importing a theme with an existing `id` and a higher `version` updates it; a theme package that takes a reserved or taken id is left out with a message, and the other themes stay. |
 | TH-2 | Inheritance: every key that is missing, or set to `"default"`, comes from the `parent` theme, recursively, ending at a built-in theme. A theme only lists what it changes. Backgrounds are the exception: a screen the theme leaves out takes the theme's own background of the screen it falls back to (TH-5) before any parent's, so a theme that sets only `default` is not mixed with its parent's pictures. |
 | TH-3 | Paths are relative to the package root and must stay inside it. Every file is checked on import (format, size, BG-2). |
-| TH-4 | Colours are `#rrggbb` or `#rrggbbaa`. Colour keys: `text` (on the background), `shadow` (under that text), `glow` (around slide titles), `panel` (boxes on the background), `bar` and `barEdge` (the bars at the top and bottom), `tile` (leaderboard rows), `accent` (scores and counters), `answerA` to `answerF` (A-D are the buzzer's buttons; E and F are read out in fastest finger questions), `correct`, `wrong`. The app picks white or dark text on filled areas itself, so text stays readable. Fonts are WOFF2, WOFF, TTF or OTF files, best variable fonts with a weight axis (a static font is used at its one weight); letters a font lacks come from system fonts. Fonts must be licensed for embedding; the import dialog reminds the user. |
+| TH-4 | Colours are `#rrggbb` or `#rrggbbaa`. Colour keys: `text` (on the background), `shadow` (under that text), `glow` (around slide titles), `panel` (boxes on the background), `bar` and `barEdge` (the bars at the top and bottom), `tile` (leaderboard rows), `accent` (scores and counters), `answerA` to `answerF` (A-D are the buzzer's buttons; E and F are read out in fastest finger questions), `correct`, `wrong`. The app picks white or dark text on filled areas itself, so text stays readable. Fonts are WOFF2, WOFF, TTF or OTF files, best variable fonts with a weight axis (a static font is used at its one weight); letters a font lacks come from system fonts. Fonts must be licensed for embedding; the import dialog reminds the user. `corners` is `round` or `square` (boxes, bars and badges on the stage; clock faces stay round); `headings` is `asWritten` or `uppercase` (the text in the heading font: titles, team names and big numbers). |
 | TH-5 | Screen keys: `default` (every screen without its own), `welcome` (team registration before the first slide), `question` (a question being asked), `answer` (a question once its answer is shown, and explanation slides; falls back to `question`), `leaderboard` (the leaderboard shown over a slide), `roundEnd` (end-of-round slides; falls back to `leaderboard`), `final` (final results). Billboards use `default`. Unknown keys are ignored with a warning, so newer themes still load in older apps. |
 | TH-6 | Installed themes live in the app data folder under `themes/<id>/`; the quiz file stores the theme `id` and embeds the theme's files it uses (BG-7). |
 
@@ -359,7 +361,7 @@ the Host screen.
 | SF-4 | Registration: players press any button; their buzzer numbers light up in a grid on the projector and appear in the Director's Teams tab with an editable name. Late presses still register. | done |
 | SF-5 | Team names can be prepared in the Director's Teams tab, before a show starts or during it, and are kept for the next shows: typed, pasted (one name per line) or loaded from a text or CSV file (first column, UTF-8 or Windows-1250). A buzzer is paired with a team by dragging its number onto the name, or by clicking the number and then the name; its player takes the team's name (a player who had it loses it) and the registration screen shows the name under the number. Pairing works at any point of the show, for late teams too. | done; a saved buzzer-to-name list that pairs on the first press is planned |
 | SF-6 | Slides, questions, judging, scores and the final ranking as in the reference app; all keyboard shortcuts work. | done for billboard, multiple choice and fastest finger |
-| SF-7 | The projector screen is the user's own: theme, backgrounds and per-slide pictures or videos (section 5 and 9). | partial: per-slide pictures, videos and backgrounds done; ten built-in themes (section 5.2), the Design tab gallery and five clock designs done; importing user themes (TH-1, TH-6) planned |
+| SF-7 | The projector screen is the user's own: theme, backgrounds and per-slide pictures or videos (section 5 and 9). | partial: per-slide pictures, videos and backgrounds done; eleven built-in themes (section 5.2), the Design tab gallery and five clock designs done; importing user themes (TH-1, TH-6) planned |
 
 ## 9. Quiz authoring and media
 

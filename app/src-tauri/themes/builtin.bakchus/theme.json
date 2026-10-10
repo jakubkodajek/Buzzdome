@@ -1,0 +1,33 @@
+{
+  "format": 1,
+  "id": "builtin.bakchus",
+  "version": "1.0.0",
+  "name": { "cs": "Bakchus", "en": "Bakchus" },
+  "parent": "builtin.daylight",
+  "backgrounds": {
+    "default": "backgrounds/bakchus.svg"
+  },
+  "colors": {
+    "text": "#ffffff",
+    "shadow": "#000000cc",
+    "glow": "#00000099",
+    "panel": "#00000099",
+    "bar": "#111111",
+    "barEdge": "#f26522",
+    "tile": "#212529",
+    "accent": "#f26522",
+    "answerA": "#1f78d1",
+    "answerB": "#e8520e",
+    "answerC": "#3a9a1f",
+    "answerD": "#f2c40c",
+    "answerE": "#7b4bd6",
+    "answerF": "#d8366a",
+    "correct": "#2fa84f",
+    "wrong": "#d62828"
+  },
+  "fonts": {
+    "heading": "fonts/FiraSansCondensed.woff2"
+  },
+  "corners": "square",
+  "headings": "uppercase"
+}

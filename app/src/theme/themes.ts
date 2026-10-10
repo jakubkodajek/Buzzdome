@@ -4,7 +4,7 @@
 
 import type { CSSProperties } from "react";
 import { DEFAULT_THEME_ID } from "../bindings/Constants";
-import type { ColorKey, GameView, ScreenKey, Theme } from "../types";
+import type { ColorKey, Corners, GameView, HeadingCase, ScreenKey, Theme } from "../types";
 import { parseColor } from "./color";
 import { fontFamily } from "./fonts";
 
@@ -47,6 +47,12 @@ export function screenOf(view: GameView): ScreenKey {
 
 const ANSWER_KEYS: readonly ColorKey[] = ["answerA", "answerB", "answerC", "answerD", "answerE", "answerF"];
 
+/** What every rounded corner on the stage is multiplied by (slide.css). */
+const ROUNDNESS: Record<Corners, string> = { round: "1", square: "0" };
+
+/** The `text-transform` of the text in the heading font. */
+const HEADING_CASE: Record<HeadingCase, string> = { asWritten: "none", uppercase: "uppercase" };
+
 /** Fonts for text a theme font has no letters for. */
 const FALLBACK_FONTS = '"Segoe UI", "Helvetica Neue", Arial, sans-serif';
 
@@ -79,6 +85,8 @@ export function themeStyle(theme: Theme): CSSProperties {
     "--theme-wrong-text": readableText(colors.wrong),
     "--theme-font-heading": fontStack(fontFamily(fonts.heading)),
     "--theme-font-body": fontStack(fontFamily(fonts.body)),
+    "--theme-roundness": ROUNDNESS[theme.corners],
+    "--theme-heading-case": HEADING_CASE[theme.headings],
   };
   ANSWER_KEYS.forEach((key, i) => {
     vars[`--theme-answer-${i}`] = colors[key];
