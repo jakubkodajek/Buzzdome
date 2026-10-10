@@ -149,8 +149,10 @@ Unpacking writes into a temporary folder, syncs each file, checks the quiz
 folder into place, so a half-unpacked quiz is never used. Opening the same
 file again reuses the folder. A folder left broken (by a crash, or a `prune`
 that could not finish) is first renamed aside into `.trash-*` and then
-deleted: renaming works where deleting may not (a read-only file, or on
-Windows a file another program holds open), and `prune` deletes what is left.
+deleted: renaming works where deleting may not (a read-only file), and
+`prune` deletes what is left. On Windows a folder with a file still open in
+it (a previous show's video) can be neither renamed nor emptied; then the
+package goes to `<hash>-1` (`-2`, ...), and that folder is reused next time.
 
 The editor opens a file with `open_into`, which unpacks the same way but
 does not check the quiz: a file an older version wrote may break rules added

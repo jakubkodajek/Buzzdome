@@ -96,28 +96,47 @@ pub struct Package {
 
 /// Opens a quiz file (`.quiz`, or a plain `quiz.json`), checks it, and unpacks
 /// it into a package folder under `cache`. The folder is named by the content
-/// hash and must not be changed afterwards; opening the same file reuses it.
+/// hash (see `place_package`) and must not be changed afterwards; opening the
+/// same file reuses it.
 pub fn open(path: &Path, cache: &Path) -> Result<Package> {
     let incoming = incoming_dir(cache)?;
     let result = unpack(path, &incoming).and_then(|unpacked| {
         // The show plays the file as it is: a media name it would have to
         // rename is a problem to fix in the editor.
         let quiz = read_checked(&incoming)?;
-        let root = cache.join(unpacked.hash);
-        if read_checked(&root).is_ok() {
-            // The same content was opened before.
-            remove_dir(&incoming);
-        } else {
-            // Not there, or left half-deleted by a `prune` that could not finish.
-            set_aside(&root, cache);
-            fs::rename(&incoming, &root).context(FileAction::Move, &root)?;
-        }
+        let root = place_package(cache, &unpacked.hash, &incoming)?;
         Ok(Package { quiz, root })
     });
     if result.is_err() {
         remove_dir(&incoming);
     }
     result
+}
+
+/// Most package folders tried for one content hash.
+const MAX_PACKAGE_FOLDERS: usize = 16;
+
+/// Moves the package unpacked in `incoming` to its folder under `cache`,
+/// named `hash`, or reuses a folder that holds the same content already. A
+/// stale folder (left half-deleted by a `prune` that could not finish) is
+/// cleared out of the way; one that cannot be, such as on Windows while a
+/// file in it is still open, is left for `prune`, and the package goes to
+/// `<hash>-1`, `<hash>-2`, ... instead.
+fn place_package(cache: &Path, hash: &str, incoming: &Path) -> Result<PathBuf> {
+    for n in 0..MAX_PACKAGE_FOLDERS {
+        let root = if n == 0 { cache.join(hash) } else { cache.join(format!("{hash}-{n}")) };
+        if read_checked(&root).is_ok() {
+            remove_dir(incoming);
+            return Ok(root);
+        }
+        set_aside(&root, cache);
+        if fs::symlink_metadata(&root).is_err() {
+            fs::rename(incoming, &root).context(FileAction::Move, &root)?;
+            return Ok(root);
+        }
+    }
+    let root = cache.join(hash);
+    Err(io::Error::from(io::ErrorKind::AlreadyExists)).context(FileAction::Move, &root)
 }
 
 /// A quiz opened for editing.
@@ -734,6 +753,31 @@ mod tests {
         assert_eq!(again.root, first.root);
         assert_eq!(again.quiz, quiz);
         unlock(&cache);
+        prune(&cache, &[&again.root]).unwrap();
+        assert_eq!(fs::read_dir(&cache).unwrap().count(), 1);
+    }
+
+    /// On Windows a folder with an open file in it can be neither renamed
+    /// nor emptied, as when a previous show's video still plays from it.
+    #[cfg(windows)]
+    #[test]
+    fn a_stale_folder_held_open_leaves_the_package_to_another_folder() {
+        use std::os::windows::fs::OpenOptionsExt;
+        let quiz = quiz_with_picture("media/flag.png");
+        let media = media_folder("held-media", &[("media/flag.png", b"png bytes")]);
+        let file = temp("held-out").join("test.quiz");
+        save(&quiz, &media, &file).unwrap();
+        let cache = temp("held-cache");
+        let first = open(&file, &cache).unwrap();
+        fs::remove_file(first.root.join(QUIZ_JSON)).unwrap();
+        let held = fs::OpenOptions::new().read(true).share_mode(0).open(first.root.join("media/flag.png")).unwrap();
+
+        // The stale folder stays while the file is open, so the package goes elsewhere.
+        let again = open(&file, &cache).unwrap();
+        assert_eq!(again.quiz, quiz);
+        // Opening once more reuses that folder.
+        assert_eq!(open(&file, &cache).unwrap().root, again.root);
+        drop(held);
         prune(&cache, &[&again.root]).unwrap();
         assert_eq!(fs::read_dir(&cache).unwrap().count(), 1);
     }
