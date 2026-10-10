@@ -4,6 +4,7 @@
 
 use crate::media::{extension, is_portable_path, MediaKind};
 use crate::style::is_hex_color;
+use serde::de::IgnoredAny;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashSet};
 use ts_rs::TS;
@@ -19,6 +20,9 @@ pub const BUILTIN_PREFIX: &str = "builtin.";
 pub const MAX_THEME_ID_LEN: usize = 100;
 /// Longest theme name or author, in characters.
 const MAX_LABEL_CHARS: usize = 100;
+/// Largest `theme.json` read, in bytes: the built-in ones are under 1 KB,
+/// and a package's file is read no further.
+pub const MAX_THEME_JSON_BYTES: usize = 64 << 10;
 /// The value that takes a key from the parent theme (TH-2).
 const INHERIT: &str = "default";
 /// Font files a theme can bring.
@@ -219,14 +223,20 @@ pub struct ThemeManifest {
 /// A key the app does not know, ignored so that newer themes still load (TH-5).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UnknownKey {
-    /// The section of `theme.json` it is in, such as `backgrounds`.
-    pub section: &'static str,
+    /// The section of `theme.json` it is in, such as `backgrounds`; none
+    /// for a key at the top level.
+    pub section: Option<&'static str>,
     pub key: String,
 }
 
-/// Why a theme cannot be used.
+/// Why a theme cannot be used. The wording is for logs: today only a broken
+/// built-in package meets one, and the app does not start. A theme importer
+/// turns them into coded `AppError`s worded in the quizmaster's language,
+/// as the app does with `QuizFileError`.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum ThemeError {
+    #[error("theme.json is larger than {} KB", MAX_THEME_JSON_BYTES >> 10)]
+    TooLarge,
     #[error("theme.json is not valid: {0}")]
     Json(String),
     #[error("theme format {0} is not known (this app reads format {THEME_FORMAT})")]
@@ -247,6 +257,9 @@ pub enum ThemeError {
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct RawManifest {
+    /// Read first, on its own (`Format`).
+    #[serde(rename = "format")]
+    _format: IgnoredAny,
     id: String,
     version: String,
     name: LocalizedText,
@@ -262,6 +275,9 @@ struct RawManifest {
     backgrounds: BTreeMap<String, String>,
     #[serde(default)]
     buzzer_colors: BTreeMap<String, String>,
+    /// The keys the app does not know.
+    #[serde(flatten)]
+    other: BTreeMap<String, IgnoredAny>,
 }
 
 impl ThemeManifest {
@@ -274,6 +290,9 @@ impl ThemeManifest {
         struct Format {
             format: u32,
         }
+        if json.len() > MAX_THEME_JSON_BYTES {
+            return Err(ThemeError::TooLarge);
+        }
         let json_error = |e: serde_json::Error| ThemeError::Json(e.to_string());
         // The format comes first: a newer format may not have the fields below.
         let Format { format } = serde_json::from_str(json).map_err(json_error)?;
@@ -281,7 +300,7 @@ impl ThemeManifest {
             return Err(ThemeError::UnknownFormat(format));
         }
         let raw: RawManifest = serde_json::from_str(json).map_err(json_error)?;
-        let mut unknown = Vec::new();
+        let mut unknown: Vec<UnknownKey> = raw.other.into_keys().map(|key| UnknownKey { section: None, key }).collect();
         let manifest = ThemeManifest {
             version: parse_version(&raw.version).ok_or_else(|| bad("version", &raw.version))?,
             name: LocalizedText { cs: label("name.cs", raw.name.cs)?, en: label("name.en", raw.name.en)? },
@@ -356,7 +375,7 @@ fn section<K: Ord>(
     let mut known = BTreeMap::new();
     for (key, value) in raw {
         let Some(parsed) = parse(&key) else {
-            unknown.push(UnknownKey { section: name, key });
+            unknown.push(UnknownKey { section: Some(name), key });
             continue;
         };
         if value == INHERIT {
@@ -551,11 +570,16 @@ mod tests {
         json["colors"]["sparkle"] = "#ffffff".into();
         json["sounds"] = serde_json::json!({ "correct": "sounds/yes.ogg" });
         let (theme, unknown) = ThemeManifest::from_json(&json.to_string()).unwrap();
-        assert_eq!(
-            unknown,
-            [UnknownKey { section: "colors", key: "sparkle".into() }, UnknownKey { section: "backgrounds", key: "lobby".into() }]
-        );
+        let found: Vec<(Option<&str>, &str)> = unknown.iter().map(|u| (u.section, u.key.as_str())).collect();
+        assert_eq!(found, [(None, "sounds"), (Some("colors"), "sparkle"), (Some("backgrounds"), "lobby")]);
         assert_eq!(theme.backgrounds.len(), 2);
+    }
+
+    #[test]
+    fn refuses_a_theme_json_past_its_size_limit() {
+        let mut json = root_json();
+        json["notes"] = "x".repeat(MAX_THEME_JSON_BYTES).into();
+        assert_eq!(ThemeManifest::from_json(&json.to_string()), Err(ThemeError::TooLarge));
     }
 
     #[test]
