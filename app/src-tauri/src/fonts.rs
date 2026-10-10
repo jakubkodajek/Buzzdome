@@ -24,11 +24,13 @@ fn read_installed() -> Vec<String> {
     family_names(fonts.faces().filter_map(|face| face.families.first().map(|(name, _)| name.clone())))
 }
 
-/// `names` sorted regardless of case, each once, without those a quiz cannot store.
+/// `names` sorted regardless of case, each once (CSS matches a family name
+/// regardless of case, so the first spelling stands for all), without
+/// those a quiz cannot store.
 fn family_names(names: impl Iterator<Item = String>) -> Vec<String> {
     let mut names: Vec<String> = names.filter(|name| FontName::try_from(name.clone()).is_ok()).collect();
-    names.sort_by_key(|name| name.to_lowercase());
-    names.dedup();
+    names.sort_by_cached_key(|name| name.to_lowercase());
+    names.dedup_by_key(|name| name.to_lowercase());
     names
 }
 
@@ -38,7 +40,7 @@ mod tests {
 
     #[test]
     fn lists_each_family_once_in_order_and_only_storable_names() {
-        let faces = ["Noto Sans", "arial", "Noto Sans", "Bad \"Font\"", "Arial Black", "Noto Sans"];
+        let faces = ["Noto Sans", "arial", "Noto Sans", "Bad \"Font\"", "Arial Black", "Noto Sans", "Arial", "NOTO SANS"];
         assert_eq!(family_names(faces.into_iter().map(String::from)), ["arial", "Arial Black", "Noto Sans"]);
     }
 }
