@@ -5,14 +5,19 @@ name: E2E
 # (WebKitWebDriver, a virtual display) and on Windows (msedgedriver with
 # WebView2, as on the event laptop). macOS has no WebDriver for its web view.
 # Called by build.yml on every push and by nightly.yml, which plays the
-# suite several times over.
+# suite several times over. Windows minutes cost more, so the Windows suite
+# runs only where the caller asks for it.
 on:
   workflow_call:
     inputs:
       runs:
-        description: How many times the whole suite runs.
+        description: How many times the whole suite runs on Linux.
         type: number
         default: 1
+      windows-runs:
+        description: How many times the whole suite runs on Windows (0 skips it).
+        type: number
+        default: 0
 
 permissions:
   contents: read
@@ -84,6 +89,7 @@ jobs:
           retention-days: 14
 
   windows:
+    if: inputs.windows-runs > 0
     runs-on: windows-latest
     timeout-minutes: 90
     steps:
@@ -134,7 +140,7 @@ jobs:
       - name: Run the E2E tests
         working-directory: app
         env:
-          RUNS: ${{ inputs.runs }}
+          RUNS: ${{ inputs.windows-runs }}
         run: |
           for ($run = 1; $run -le [int]$env:RUNS; $run++) {
             Write-Output "::group::run $run of $env:RUNS"

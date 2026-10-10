@@ -85,3 +85,4 @@ jobs:
     uses: ./.github/workflows/e2e.yml
     with:
       runs: 5
+      windows-runs: 1

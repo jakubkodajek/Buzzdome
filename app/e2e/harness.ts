@@ -13,8 +13,8 @@
 //
 // Windows: the app finds its folders through the OS, not the environment, so
 // tests use the real app data folders (design.md, section 3) and wipe them
-// between tests. They therefore run only on a throwaway CI machine
-// (GITHUB_ACTIONS), never on the event laptop. Needs `tauri-driver` on PATH
+// between tests. They therefore run only on a throwaway GitHub-hosted CI
+// machine, never on the event laptop or a self-hosted runner. Needs `tauri-driver` on PATH
 // and the msedgedriver matching WebView2 named by NATIVE_DRIVER. The file
 // picker test is Linux only.
 //
@@ -129,7 +129,8 @@ export class App {
 
   /** Starts the app on `data` (a fresh folder unless given) and waits for the Director. */
   static async launch(data = dataFolder()): Promise<App> {
-    if (WINDOWS && process.env.GITHUB_ACTIONS !== "true") throw new Error("on Windows the E2E tests use the real app data, so they run only on CI machines (harness.ts header)");
+    // Self-hosted runners set GITHUB_ACTIONS too, so ask for a GitHub-hosted (throwaway) one.
+    if (WINDOWS && (process.env.GITHUB_ACTIONS !== "true" || process.env.RUNNER_ENVIRONMENT !== "github-hosted")) throw new Error("on Windows the E2E tests use the real app data, so they run only on GitHub-hosted CI machines (harness.ts header)");
     if (!WINDOWS && process.platform !== "linux") throw new Error("the E2E tests run on Linux and, on CI, Windows (harness.ts header)");
     // A test's first launch starts from empty app data; a later one on the same folder resumes from it.
     if (!App.launched.has(data)) wipeWindowsData();

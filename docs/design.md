@@ -1022,9 +1022,9 @@ conflict detection. None of this proves the real receiver's format: see
    (`aarch64` and `x86_64` targets), Linux deb and AppImage on Ubuntu 22.04
    so the AppImage runs on older distributions. Each uploads its files as a
    run artifact (`buzzdome-windows`, `buzzdome-macos`, `buzzdome-linux`).
-3. `e2e` (`.github/workflows/e2e.yml`, every push, on Ubuntu 22.04 with
-   `WebKitWebDriver` under `xvfb-run` and on Windows with `msedgedriver` and
-   WebView2): the real app built with `--debug --no-bundle` and driven
+3. `e2e` (`.github/workflows/e2e.yml`: every push on Ubuntu 22.04 with
+   `WebKitWebDriver` under `xvfb-run`; on Windows with `msedgedriver` and
+   WebView2 only on main, tags and "Run workflow", as Windows minutes cost more): the real app built with `--debug --no-bundle` and driven
    through `tauri-driver` (`app/e2e`): a whole demo show
    with the on-screen and keyboard buzzers and the projector checked at
    each step, crashes (the app killed) and resumes, every button on every
@@ -1032,7 +1032,7 @@ conflict detection. None of this proves the real receiver's format: see
    the end, a quiz saved and opened through the system's file picker
    (`xdotool`, Linux only). On Windows the app ignores environment
    overrides of its data folders, so the tests use the real ones and wipe
-   them; the harness refuses to run there outside CI. macOS has no WebDriver
+   them; the harness refuses to run there except on a GitHub-hosted runner. macOS has no WebDriver
    for WKWebView. When a test fails, each window's screenshot and text go up
    as the `e2e-output` artifact.
 
@@ -1043,7 +1043,7 @@ every merge.
 (and always on "Run workflow"):
 30 000 random shows with up to 50 buzzers (`crates/show-sim`), 10 000 crash
 drills through the real journal (`app/src-tauri/src/crash_drill.rs`), both in
-release and from seeds no earlier night used, and the E2E suite five times.
+release and from seeds no earlier night used, and the E2E suite five times on Linux and once on Windows.
 A failing random show prints `SOAK_SEED=<n>`; that variable replays it alone.
 
 Signing and notarization need a Windows code-signing certificate and an Apple
@@ -1097,7 +1097,7 @@ them.
 | Trim and Normalize volume windows, video trim window, background video menu and options, slide video (intro pause, Play video, speed, volume, part, holding with the show, blur and mosaic, replay) | headless Chromium against the preview with generated test media (a song and a test-pattern video, not in the repo) | pass |
 | Game rules under random shows: refused commands change nothing, controls match what the game accepts, scores add up, results only after close, places as the game ranks them (shared on a tie, 1, 1, 3), replay from the journal gives the same game; 1 to 50 buzzers, random quizzes of every slide kind | `crates/show-sim` (`cargo test -p show-sim`: 40 shows on every push; 30 000 and a 3000-step evening nightly); 30 000 shows locally | pass |
 | Crash and resume through the real journal, incl. a torn, zeroed or garbage last line, with the random shows' rule checks after every step | `crash_drill.rs` (40 per push, 10 000 nightly) | pass |
-| The real app end to end: show, crash and resume, every Director and editor button, file picker | `app/e2e` on Linux (WebKitGTK) and Windows (WebView2, no file picker), every push and five times nightly | Linux pass; Windows see the PR's checks |
+| The real app end to end: show, crash and resume, every Director and editor button, file picker | `app/e2e` on Linux (WebKitGTK) and Windows (WebView2, no file picker), Linux on every push and five times nightly, Windows on main and once nightly | Linux pass; Windows see the PR's checks |
 | Media through the asset protocol, autoplay of video and sound | needs the installed app on each OS | **not tested** |
 | Windows and macOS installers | CI | see the PR's checks |
 | Real receiver: detection, raw reports, learn mode, presses in a show | needs the hardware | **not tested** |
