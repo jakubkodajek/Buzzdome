@@ -54,6 +54,7 @@ Feature-level parity is tracked row by row in
 | PL-5 | Builds are not code-signed yet. The install notes explain the one-time OS prompt (Windows SmartScreen "More info > Run anyway"; macOS "Open Anyway" in Privacy & Security). The macOS build is ad-hoc signed so Apple silicon Macs will run it. | done |
 | PL-6 | Signed and notarized builds (Windows code-signing certificate, Apple Developer ID). | planned, needs accounts |
 | PL-7 | The app is called Buzzdome; its icon is a top view of a dome buzzer, orange by default. In Settings the quizmaster picks another of its six colours (orange, blue, green, purple, red, yellow) for the windows and their taskbar buttons, kept for the next start; installed shortcuts and the macOS Dock keep the orange one. | done |
+| PL-8 | One copy of the app runs at a time, as two would write one show journal: starting it again brings the running Director forward. | done |
 
 ## 4. Buzzer link
 

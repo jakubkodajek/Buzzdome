@@ -30,6 +30,8 @@ use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder
 
 const DEMO_QUIZ: &str = include_str!("../../../samples/demo-quiz.json");
 const HOST_LABEL: &str = "host";
+/// The quizmaster's window (`tauri.conf.json`).
+const DIRECTOR_LABEL: &str = "director";
 const TICK: Duration = Duration::from_millis(50);
 /// How often the windows get the running clock (seconds and points on screen).
 const CLOCK_EVENT_EVERY: Duration = Duration::from_millis(250);
@@ -435,6 +437,15 @@ fn tick(app: &AppHandle, last_clock_event: &mut Instant) {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        // First, so a second start ends before it touches the show: it brings
+        // the running app's Director forward instead (Z2).
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            if let Some(director) = app.get_webview_window(DIRECTOR_LABEL) {
+                let _ = director.unminimize();
+                let _ = director.show();
+                let _ = director.set_focus();
+            }
+        }))
         .plugin(tauri_plugin_dialog::init())
         // However the projector closes (also from its title bar), the Director hears of it.
         .on_window_event(|window, event| {
