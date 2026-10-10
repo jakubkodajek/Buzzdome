@@ -69,8 +69,8 @@ pub enum ImportIssue {
     PictureAndVideo,
     /// A background picture and a background video: the picture is left out.
     TwoBackgrounds,
-    /// A picture or video on a final slide, which shows the ranking: left out.
-    MediaOnFinal,
+    /// A picture or video on an end of round or final slide, which shows the ranking: left out.
+    MediaOnRanking,
     /// A file this column cannot use (a sound in VIDEO, or a type the app
     /// cannot play): left out.
     WrongMediaType { column: String, file: String },
@@ -737,17 +737,18 @@ fn fit(slide: &mut Slide, place: &Place, notes: &mut Notes) {
         notes.add(ImportIssue::PictureAndVideo, place);
         slide.picture = None;
     }
-    if matches!(slide.content, SlideContent::Final { .. }) && (slide.picture.is_some() || slide.video.is_some()) {
-        notes.add(ImportIssue::MediaOnFinal, place);
+    let plays = slide.content.slide_type().plays();
+    if !plays.picture_and_video && (slide.picture.is_some() || slide.video.is_some()) {
+        notes.add(ImportIssue::MediaOnRanking, place);
         (slide.picture, slide.video) = (None, None);
     }
-    if matches!(slide.content, SlideContent::Question(_)) {
+    if plays.clock_and_reveal {
         return;
     }
     let mut not_used = |field: Field, setting: &str| {
         notes.add(ImportIssue::SettingNotUsed { column: field.heading(), setting: setting.to_string() }, place);
     };
-    // A clock, a reveal and an answer time are a question's.
+    // Only a question has a clock and a reveal (`SlideType::plays`).
     if let Some(sound) = &mut slide.sound {
         if sound.start == SoundStart::WithClock {
             sound.start = SoundStart::OnSlide;
@@ -1295,7 +1296,7 @@ mod tests {
                 &ImportIssue::WrongMediaType { column: "SOUND".into(), file: "e.wmv".into() },
                 &ImportIssue::TwoBackgrounds,
                 &ImportIssue::PictureAndVideo,
-                &ImportIssue::MediaOnFinal,
+                &ImportIssue::MediaOnRanking,
             ]
         );
     }

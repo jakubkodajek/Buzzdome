@@ -19,7 +19,7 @@ import {
   MIN_VIDEO_SPEED,
   NEW_VIDEO_INTRO_PAUSE_MS,
 } from "../bindings/Constants";
-import { hasTitle, isCorrect, showsRanking, slideTitle } from "../quiz";
+import { hasTitle, isCorrect, plays, slideTitle } from "../quiz";
 import type {
   AnswerMode,
   Background,
@@ -93,19 +93,20 @@ export function setNotes(slide: Slide, notes: string): Slide {
 /**
  * The slide as another type. Its id, notes and media stay, the question,
  * explanation or title carries over, and the rest starts as on a new slide.
- * Only a question reveals an answer, so only a question keeps the replay
- * parts of its sound and video; only a question has the clock a sound can
- * play with (elsewhere it plays when the slide opens) and the answer time a
- * video effect follows. A ranking shows no picture or video, so they go.
- * The style stays, the headline's with the headline.
+ * What the new type cannot play goes (`plays`): without a reveal, the
+ * replay parts of the sound and video; without a clock, a video effect,
+ * and a sound waiting for the clock plays when the slide opens; on a
+ * ranking, the picture and video. The style stays, the headline's with the
+ * headline.
  */
 export function convertSlide(slide: Slide, type: SlideType): Slide {
   if (slide.type === type) return slide;
   const { id, notes, background, style } = slide;
-  const question = type === "question";
-  const sound = slide.sound && !question ? { ...slide.sound, start: slide.sound.start === "withClock" ? "onSlide" : slide.sound.start, replay: null } : slide.sound;
-  const video = slide.video && !question ? { ...slide.video, replay: null, effect: null } : slide.video;
-  const media = showsRanking(type) ? { picture: null, video: null } : { picture: slide.picture, video };
+  const { pictureAndVideo, clockAndReveal } = plays(type);
+  const sound =
+    slide.sound && !clockAndReveal ? { ...slide.sound, start: slide.sound.start === "withClock" ? "onSlide" : slide.sound.start, replay: null } : slide.sound;
+  const video = slide.video && !clockAndReveal ? { ...slide.video, replay: null, effect: null } : slide.video;
+  const media = pictureAndVideo ? { picture: slide.picture, video } : { picture: null, video: null };
   return setHeadline({ ...newSlide(type, id), notes, ...media, sound, background, style }, slideTitle(slide));
 }
 
@@ -283,7 +284,7 @@ export function setVideoOptions(slide: Slide, options: Partial<Omit<VideoClip, "
   if (!video) return slide;
   const speed = clampInt(video.speed, MIN_VIDEO_SPEED, MAX_VIDEO_SPEED);
   const introPauseMs = clampInt(video.introPauseMs, 0, MAX_INTRO_PAUSE_MS);
-  return { ...slide, video: { ...video, speed, introPauseMs, effect: slide.type === "question" ? video.effect : null } };
+  return { ...slide, video: { ...video, speed, introPauseMs, effect: plays(slide.type).clockAndReveal ? video.effect : null } };
 }
 
 /** Plays a sound (keeping its options when the file is replaced). */
@@ -311,7 +312,8 @@ export function setSoundOptions(slide: Slide, options: Partial<Omit<SoundClip, "
  */
 function playable<T extends { volume: number; part: Span; replay: Replay | null }>(slide: Slide, clip: T): T | null {
   const part = wholeMs(clip.part);
-  const replay = slide.type === "question" && clip.replay ? { part: wholeMs(clip.replay.part), delayMs: clampInt(clip.replay.delayMs, 0, MAX_REPLAY_DELAY_MS) } : null;
+  const replay =
+    plays(slide.type).clockAndReveal && clip.replay ? { part: wholeMs(clip.replay.part), delayMs: clampInt(clip.replay.delayMs, 0, MAX_REPLAY_DELAY_MS) } : null;
   if (isEmptySpan(part) || (replay && isEmptySpan(replay.part))) return null;
   return { ...clip, volume: clampInt(clip.volume, 0, 100), part, replay };
 }

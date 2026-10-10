@@ -1,3 +1,4 @@
+import { SLIDE_PLAYS } from "./bindings/Constants";
 import type { StringKey } from "./i18n";
 import type { QuestionSlide, Quiz, Slide, SlideType, TitledSlide } from "./types";
 
@@ -19,9 +20,13 @@ export function hasTitle(slide: Slide): slide is TitledSlide {
   return slide.type === "billboard" || slide.type === "endOfRound" || slide.type === "final";
 }
 
-/** The slide shows a ranking where others have a picture or video. */
-export function showsRanking(type: SlideType): boolean {
-  return type === "endOfRound" || type === "final";
+/**
+ * What a slide of the type can play (`SlideType::plays` in quiz-core): a
+ * picture or video (a ranking shows the ranking instead), and a clock and
+ * a reveal (only a question).
+ */
+export function plays(type: SlideType): { pictureAndVideo: boolean; clockAndReveal: boolean } {
+  return SLIDE_PLAYS[type];
 }
 
 /** The share of the points answer `index` gives, in percent (`FULL_SHARE` for a fully right one); null for a wrong answer. */

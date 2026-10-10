@@ -3,7 +3,7 @@
 // the ribbon, which marks the same values as Mixed.
 
 import type { StringKey, Translate } from "../i18n";
-import { isCorrect, showsRanking } from "../quiz";
+import { isCorrect, plays } from "../quiz";
 import type { Slide } from "../types";
 import { answerIndex, type ElementId } from "./elements";
 import { slideProperties, type SlideEditing, type SlideProperties } from "./properties";
@@ -98,10 +98,7 @@ function propertyPages(slide: Slide, element: ElementId, { slide: rows, style }:
           page("text", [{ title: "sectionText", rows: [rows.questionText(slide), rows.notes] }]),
         ]
       : [page("gameplay", [{ title: "sectionSlide", rows: [rows.type] }]), page("text", [{ title: "sectionText", rows: [...textRows(slide, rows), rows.notes] }])];
-  // Ranking screens show the ranking, not a picture or video.
-  const pictureVideo: Section[] = showsRanking(slide.type)
-    ? []
-    : [{ title: "sectionPictureVideo", rows: [rows.picture, ...videoRows(rows)] }];
+  const pictureVideo: Section[] = plays(slide.type).pictureAndVideo ? [{ title: "sectionPictureVideo", rows: [rows.picture, ...videoRows(rows)] }] : [];
   pages.push(
     page("media", [...pictureVideo, { title: "sectionSound", rows: soundRows(rows) }]),
     page("design", [{ title: "sectionBackground", rows: [style.fill, rows.background, ...rows.backgroundOptions] }, ...styledParts(slide).map(look)]),

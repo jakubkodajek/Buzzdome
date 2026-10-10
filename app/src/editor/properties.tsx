@@ -18,7 +18,7 @@ import { sameSpan, WHOLE_FILE } from "../audio/clip-player";
 import { trackTime } from "../format";
 import type { StringKey, Translate } from "../i18n";
 import { isVideo, mediaKindOf, type MediaKind } from "../media";
-import { isCorrect, shareOf, SLIDE_TYPE_LABEL, type SlideContext } from "../quiz";
+import { isCorrect, plays, shareOf, SLIDE_TYPE_LABEL, type SlideContext } from "../quiz";
 import type { QuestionSlide, Replay, Slide, SlideType, SoundClip, SoundStart, Span, TitledSlide, VideoClip, VideoEffect } from "../types";
 import { AnswerToggles, MediaPicker } from "./controls";
 import type { PropertyRow } from "./property-rows";
@@ -99,10 +99,10 @@ export function slideProperties(t: Translate, { slide, context, update, chooseMe
   const textArea = (label: StringKey, value: string, onChange: (text: string) => void) => (
     <textarea rows={3} aria-label={t(label)} value={value} onChange={(e) => onChange(e.target.value)} />
   );
-  // Only a question has a clock.
+  const { clockAndReveal } = plays(slide.type);
   const soundStarts: [SoundStart, string][] = [
     ["onSlide", t("soundOnSlide")],
-    ...(slide.type === "question" ? [["withClock", t("soundWithClock")] as [SoundStart, string]] : []),
+    ...(clockAndReveal ? [["withClock", t("soundWithClock")] as [SoundStart, string]] : []),
     ["onDemand", t("soundOnDemand")],
   ];
   const spanText = (span: Span) =>
@@ -147,7 +147,7 @@ export function slideProperties(t: Translate, { slide, context, update, chooseMe
     );
   /** Replaying a part after the reveal; questions only. */
   const replay = (key: "sound" | "video", clip: { replay: Replay | null }, description: StringKey): PropertyRow[] =>
-    slide.type !== "question"
+    !clockAndReveal
       ? []
       : [
           flagRow(`${key}.replay`, "propReplay", description, {
@@ -406,7 +406,7 @@ export function slideProperties(t: Translate, { slide, context, update, chooseMe
     videoReplay: video ? replay("video", video, "descVideoReplay") : [],
     /** The effect over a question's video; null on other slides or without a video. */
     videoEffect:
-      video && slide.type === "question"
+      video && clockAndReveal
         ? choiceRow("video.effect", "propEffect", "descEffect", {
             value: video.effect ?? "none",
             initial: "none",

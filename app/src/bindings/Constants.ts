@@ -4,6 +4,7 @@ export const MAX_ANSWERS = 6;
 export const MAX_EVERYONE_ANSWERS = 4;
 export const MIN_EVERYONE_ANSWERS = 2;
 export const ANSWER_LIMITS = {"everyone":{"fewest":2,"most":4},"fastestFinger":{"fewest":0,"most":6}};
+export const SLIDE_PLAYS = {"billboard":{"clockAndReveal":false,"pictureAndVideo":true},"endOfRound":{"clockAndReveal":false,"pictureAndVideo":false},"explanation":{"clockAndReveal":false,"pictureAndVideo":true},"final":{"clockAndReveal":false,"pictureAndVideo":false},"question":{"clockAndReveal":true,"pictureAndVideo":true}};
 export const DEFAULT_TIME_LIMIT_S = 20;
 export const DEFAULT_POINTS = 10;
 export const MAX_POINTS = 100000;

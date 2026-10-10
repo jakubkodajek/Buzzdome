@@ -22,7 +22,7 @@ pub use media::{
 };
 pub use media_player::{MediaPlayer, NowPlaying, PlayerCommand, MAX_DROPPED_MB};
 pub use model::{
-    AnswerLimits, AnswerMode, CorrectAnswer, Problem, Question, Quiz, QuizJsonError, Slide, SlideContent, ValidationError,
+    AnswerLimits, AnswerMode, CorrectAnswer, Plays, Problem, Question, Quiz, QuizJsonError, Slide, SlideContent, SlideType, ValidationError,
     DEFAULT_POINTS, DEFAULT_TIME_LIMIT_S, FULL_SHARE, MAX_ANSWERS, MAX_EVERYONE_ANSWERS, MAX_POINTS, MAX_TIME_LIMIT_S,
     MIN_EVERYONE_ANSWERS, SCHEMA_VERSION,
 };
@@ -50,6 +50,7 @@ mod ui_constants {
             ("MAX_EVERYONE_ANSWERS", crate::MAX_EVERYONE_ANSWERS.to_string()),
             ("MIN_EVERYONE_ANSWERS", crate::MIN_EVERYONE_ANSWERS.to_string()),
             ("ANSWER_LIMITS", answer_limits()),
+            ("SLIDE_PLAYS", slide_plays()),
             ("DEFAULT_TIME_LIMIT_S", crate::DEFAULT_TIME_LIMIT_S.to_string()),
             ("DEFAULT_POINTS", crate::DEFAULT_POINTS.to_string()),
             ("MAX_POINTS", crate::MAX_POINTS.to_string()),
@@ -81,6 +82,15 @@ mod ui_constants {
             ts.push_str(&format!("export const {name} = {value};\n"));
         }
         std::fs::write(std::path::Path::new(&dir).join("Constants.ts"), ts).unwrap();
+    }
+
+    /// What each slide type can play, by the type's name in the quiz file.
+    fn slide_plays() -> String {
+        let plays: serde_json::Map<String, serde_json::Value> = crate::SlideType::ALL
+            .iter()
+            .map(|kind| (serde_json::to_value(kind).unwrap().as_str().unwrap().to_owned(), serde_json::to_value(kind.plays()).unwrap()))
+            .collect();
+        serde_json::to_string(&plays).unwrap()
     }
 
     /// Each answer mode's limits, by the mode's name in the quiz file.

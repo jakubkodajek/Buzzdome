@@ -29,7 +29,7 @@ import {
   VideoIcon,
 } from "../icons";
 import { isVideo, MediaRootContext, type MediaKind } from "../media";
-import { isCorrect, NO_CONTEXT, showsRanking, slideContexts } from "../quiz";
+import { isCorrect, NO_CONTEXT, plays, slideContexts } from "../quiz";
 import { ThemeContext } from "../theme/context";
 import { useLatest } from "../hooks";
 import type { Slide, ValidationError } from "../types";
@@ -332,14 +332,13 @@ function Studio({ editor, open, onExit }: { editor: QuizEditor; open: OpenQuiz |
     insertPicture: {
       label: t("mediaPicture"),
       icon: <PictureIcon />,
-      // Ranking screens have the ranking where a picture would go.
-      disabled: noSlide || showsRanking(slide.type),
+      disabled: noSlide || !plays(slide.type).pictureAndVideo,
       run: () => slide && chooseMedia([slide.id], MEDIA.picture.kinds, setPicture, "picture"),
     },
     insertVideo: {
       label: t("mediaVideo"),
       icon: <VideoIcon />,
-      disabled: noSlide || showsRanking(slide.type),
+      disabled: noSlide || !plays(slide.type).pictureAndVideo,
       run: () => slide && chooseMedia([slide.id], MEDIA.video.kinds, setVideo, "video"),
     },
     insertSound: { label: t("mediaSound"), icon: <SoundIcon />, disabled: noSlide, run: () => slide && chooseMedia([slide.id], MEDIA.sound.kinds, setSound, "sound") },

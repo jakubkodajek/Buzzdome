@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { newSlide } from "./editor/slides";
-import { hasTitle, sameContext, showsRanking, slideContexts, slideTitle } from "./quiz";
+import { hasTitle, plays, sameContext, slideContexts, slideTitle } from "./quiz";
 import type { Quiz, SlideType } from "./types";
 
 const quizOf = (...types: SlideType[]): Quiz => ({
@@ -29,8 +29,9 @@ describe("slide kinds", () => {
     expect(hasTitle(final)).toBe(true);
     expect(slideTitle(final)).toBe("Winners");
     expect(hasTitle(newSlide("explanation", "e"))).toBe(false);
-    expect(["endOfRound", "final"].every((type) => showsRanking(type as SlideType))).toBe(true);
-    expect(showsRanking("billboard")).toBe(false);
+    expect(["endOfRound", "final"].some((type) => plays(type as SlideType).pictureAndVideo)).toBe(false);
+    expect(plays("billboard")).toEqual({ pictureAndVideo: true, clockAndReveal: false });
+    expect(plays("question").clockAndReveal).toBe(true);
   });
 });
 

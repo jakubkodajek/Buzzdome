@@ -222,7 +222,11 @@ table view toggle. It edits a quiz; it never touches a running show.
 - **Slide changes.** `slides.ts` holds every change to a slide as a pure
   function that keeps the slide playable (an everyone-answers question
   always has 2 to 4 answers and at least one right one, a fastest finger question at
-  most 6, and so on; `answerLimits` reads the core's `ANSWER_LIMITS`). Nothing in the
+  most 6, and so on; `answerLimits` reads the core's `ANSWER_LIMITS`). What
+  a slide type can play (a picture or video; a clock and a reveal) is one
+  rule, `SlideType::plays` in quiz-core: `validate`, opening a file, the
+  spreadsheet import and the editor (`plays` in `quiz.ts`, over the
+  generated `SLIDE_PLAYS`) all read it. Nothing in the
   UI edits a slide object by hand. Tested in `slides.test.ts`.
 - **Actions.** `actions.ts` defines an `Action` (label, icon, keys,
   disabled, checked, run). `EditorScreen.tsx` builds the one record of all

@@ -96,19 +96,18 @@ impl Slide {
         Slide { id: id.into(), notes: String::new(), picture: None, video: None, sound: None, background: None, style: SlideStyle::default(), content }
     }
 
-    /// Drops what the slide's type cannot play: only a question has a clock
-    /// to start a sound with and reveals an answer to replay a part after,
-    /// or to end a video effect on, and the final ranking shows no picture
-    /// or video. Files saved before `validate` refused these still have
-    /// them (the editor's `convertSlide` kept them when a slide changed
-    /// type, and drops them the same way now). A sound that waited for the
-    /// clock plays when the slide opens.
+    /// Drops what the slide's type cannot play (`SlideType::plays`). Files
+    /// saved before `validate` refused these still have them (the editor's
+    /// `convertSlide` kept them when a slide changed type, and drops them
+    /// the same way now). A sound that waited for the clock plays when the
+    /// slide opens.
     fn drop_unplayable(&mut self) {
-        if matches!(self.content, SlideContent::Final { .. }) {
+        let plays = self.content.slide_type().plays();
+        if !plays.picture_and_video {
             self.picture = None;
             self.video = None;
         }
-        if matches!(self.content, SlideContent::Question(_)) {
+        if plays.clock_and_reveal {
             return;
         }
         if let Some(sound) = &mut self.sound {
@@ -215,6 +214,53 @@ pub enum SlideContent {
         #[serde(default)]
         title: String,
     },
+}
+
+impl SlideContent {
+    pub fn slide_type(&self) -> SlideType {
+        match self {
+            SlideContent::Billboard { .. } => SlideType::Billboard,
+            SlideContent::Question(_) => SlideType::Question,
+            SlideContent::Explanation { .. } => SlideType::Explanation,
+            SlideContent::EndOfRound { .. } => SlideType::EndOfRound,
+            SlideContent::Final { .. } => SlideType::Final,
+        }
+    }
+}
+
+/// A slide's type, named as the quiz file's `type` names it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum SlideType {
+    Billboard,
+    Question,
+    Explanation,
+    EndOfRound,
+    Final,
+}
+
+/// What a slide of a type can play.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Plays {
+    /// A picture or a video.
+    pub picture_and_video: bool,
+    /// A clock, for a sound to start with and a video effect to follow,
+    /// and a reveal, for a sound or video to replay a part after.
+    pub clock_and_reveal: bool,
+}
+
+impl SlideType {
+    pub const ALL: [SlideType; 5] = [SlideType::Billboard, SlideType::Question, SlideType::Explanation, SlideType::EndOfRound, SlideType::Final];
+
+    /// The one rule of what a slide of this type can play (spec QZ-2), which
+    /// `Quiz::validate`, opening a file, the spreadsheet import and the
+    /// editor (`SLIDE_PLAYS` in Constants.ts) follow: a ranking (end of
+    /// round, final) shows the ranking where others have a picture or
+    /// video, and only a question has a clock and reveals an answer.
+    pub fn plays(self) -> Plays {
+        Plays { picture_and_video: !matches!(self, SlideType::EndOfRound | SlideType::Final), clock_and_reveal: self == SlideType::Question }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -417,8 +463,8 @@ pub enum Problem {
     WithClockNotOnQuestion,
     #[error("only a question has an answer time for a video effect to fade over")]
     EffectNotOnQuestion,
-    #[error("a final slide shows the ranking, not a picture or a video")]
-    MediaOnFinal,
+    #[error("an end of round or final slide shows the ranking, not a picture or a video")]
+    MediaOnRanking,
     #[error("more than {max} answers")]
     TooManyAnswers { max: usize },
     #[error("an everyone-answers question needs at least {min} answers")]
@@ -547,11 +593,11 @@ impl Quiz {
             if slide.picture.is_some() && slide.video.is_some() {
                 found(Problem::PictureAndVideo);
             }
-            // An end of round's picture or video is not shown either, but files from before final slides may have one.
-            if matches!(slide.content, SlideContent::Final { .. }) && (slide.picture.is_some() || slide.video.is_some()) {
-                found(Problem::MediaOnFinal);
+            let plays = slide.content.slide_type().plays();
+            if !plays.picture_and_video && (slide.picture.is_some() || slide.video.is_some()) {
+                found(Problem::MediaOnRanking);
             }
-            let question = matches!(slide.content, SlideContent::Question(_));
+            let question = plays.clock_and_reveal;
             if let Some(sound) = &slide.sound {
                 playback_problems(sound, question, &mut found);
                 if !(MIN_GAIN_DB as f32..=MAX_GAIN_DB as f32).contains(&sound.gain_db) {
@@ -866,7 +912,7 @@ mod tests {
     }
 
     #[test]
-    fn a_final_slide_shows_no_picture_or_video_but_plays_its_sound() {
+    fn a_ranking_shows_no_picture_or_video_but_plays_its_sound() {
         let with_media = |content: SlideContent, picture: bool| {
             let mut slide = Slide::new("s", content);
             if picture {
@@ -878,10 +924,26 @@ mod tests {
             problems_of(vec![slide])
         };
         let final_slide = || SlideContent::Final { title: String::new() };
-        assert_eq!(with_media(final_slide(), true), [Problem::MediaOnFinal]);
-        assert_eq!(with_media(final_slide(), false), [Problem::MediaOnFinal]);
-        // Older files may carry one on an end of round, where it is not shown.
-        assert_eq!(with_media(SlideContent::EndOfRound { title: String::new() }, true), []);
+        assert_eq!(with_media(final_slide(), true), [Problem::MediaOnRanking]);
+        assert_eq!(with_media(final_slide(), false), [Problem::MediaOnRanking]);
+        assert_eq!(with_media(SlideContent::EndOfRound { title: String::new() }, true), [Problem::MediaOnRanking]);
+        assert_eq!(with_media(SlideContent::Explanation { text: String::new() }, true), []);
+    }
+
+    #[test]
+    fn slide_types_are_named_as_the_file_names_them() {
+        let contents = [
+            SlideContent::Billboard { title: String::new(), text: String::new() },
+            SlideContent::Question(question(10, None, 20)),
+            SlideContent::Explanation { text: String::new() },
+            SlideContent::EndOfRound { title: String::new() },
+            SlideContent::Final { title: String::new() },
+        ];
+        let types: Vec<SlideType> = contents.iter().map(SlideContent::slide_type).collect();
+        assert_eq!(types, SlideType::ALL);
+        for content in &contents {
+            assert_eq!(serde_json::to_value(content).unwrap()["type"], serde_json::to_value(content.slide_type()).unwrap());
+        }
     }
 
     #[test]
@@ -995,6 +1057,7 @@ mod tests {
             r#"{"schemaVersion": 4, "title": "x", "slides": [
                 {"id": "f", "type": "final", "picture": "media/a.png", "sound": {"file": "media/win.mp3", "start": "withClock", "replay": {}}},
                 {"id": "v", "type": "final", "video": {"file": "media/a.mp4"}},
+                {"id": "e", "type": "endOfRound", "title": "", "picture": "media/a.png"},
                 {"id": "b", "type": "billboard", "title": "", "video": {"file": "media/a.mp4", "effect": "mosaic", "replay": {}},
                  "sound": {"file": "media/a.mp3", "start": "onDemand", "replay": {}}},
                 {"id": "q", "type": "question", "mode": "fastestFinger", "text": "?", "video": {"file": "media/a.mp4", "effect": "blur", "replay": {}},
@@ -1003,8 +1066,8 @@ mod tests {
         )
         .unwrap();
         assert_eq!(quiz.validate(), Ok(()));
-        let [final_slide, final_video, billboard, question] = &quiz.slides[..] else { panic!("four slides") };
-        assert_eq!((&final_slide.picture, &final_video.video), (&None, &None));
+        let [final_slide, final_video, end_of_round, billboard, question] = &quiz.slides[..] else { panic!("five slides") };
+        assert_eq!((&final_slide.picture, &final_video.video, &end_of_round.picture), (&None, &None, &None));
         let sound = final_slide.sound.as_ref().unwrap();
         assert_eq!((sound.start, sound.replay), (SoundStart::OnSlide, None));
         let (video, sound) = (billboard.video.as_ref().unwrap(), billboard.sound.as_ref().unwrap());
