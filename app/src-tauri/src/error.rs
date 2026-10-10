@@ -3,6 +3,7 @@
 //! (`errorText` in `app/src/i18n.ts`). `detail` fields carry the system's own
 //! message, which the UI shows as it is.
 
+use crate::session::{NotSaved, ResumeError};
 use buzzers::learned::LearnError;
 use quiz_core::{BoardError, BuzzerId, Button, GameError, QuizJsonError, SheetError, ValidationError, MAX_TEAMS};
 use quiz_file::{FileAction, QuizFileError};
@@ -34,8 +35,16 @@ pub enum AppError {
     /// The show's journal cannot be written, so the change was not made.
     #[error("the show cannot be saved: {detail}")]
     ShowNotSaved { detail: String },
+    /// An earlier write to the show's journal failed and could not be taken
+    /// back, so nothing more is saved until the show is resumed.
+    #[error("the show's journal could not be repaired after a failed write")]
+    JournalBroken,
     #[error("the last show cannot be read: {detail}")]
     ShowNotRead { detail: String },
+    /// Line `line` of the last show's journal does not read, so the show is
+    /// not resumed and its journal is left as it is.
+    #[error("line {line} of the last show's journal does not read")]
+    JournalDamaged { line: usize },
     /// A file the app keeps (`app_file`) could not be read when the app
     /// started, so it is not written over until the app reads it again.
     #[error("{path} could not be read, so it is not written over")]
@@ -157,6 +166,26 @@ impl From<QuizJsonError> for AppError {
         match e {
             QuizJsonError::NewerSchema { found, supported } => AppError::NewerSchema { found, supported },
             QuizJsonError::Syntax(detail) => AppError::BadQuizJson { detail },
+        }
+    }
+}
+
+impl From<NotSaved> for AppError {
+    fn from(e: NotSaved) -> AppError {
+        match e {
+            NotSaved::Io(e) => AppError::ShowNotSaved { detail: e.to_string() },
+            NotSaved::Broken => AppError::JournalBroken,
+        }
+    }
+}
+
+impl From<ResumeError> for AppError {
+    fn from(e: ResumeError) -> AppError {
+        match e {
+            ResumeError::Io(e) => AppError::ShowNotRead { detail: e.to_string() },
+            ResumeError::Meta(e) => AppError::ShowNotRead { detail: e.to_string() },
+            ResumeError::Quiz(e) => e.into(),
+            ResumeError::Damaged { line } => AppError::JournalDamaged { line },
         }
     }
 }

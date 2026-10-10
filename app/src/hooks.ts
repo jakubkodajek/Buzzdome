@@ -148,7 +148,19 @@ export function useTeamsLost(): SettingsLost | null {
   return useBackendValue(api.teamsLost, null, "teams-changed");
 }
 
-/** The show that can be resumed after a crash, if any. */
-export function useLastSession(): SessionSummary | null {
-  return useBackendValue(api.lastSession, null, "show-changed");
+/** The show that can be resumed after a crash, if any, or why the last show cannot be read. */
+export interface LastSession {
+  session: SessionSummary | null;
+  /** The error `last_session` gave (an `AppError`, for `errorText`); null when it read. */
+  problem: unknown;
+}
+
+const NO_SESSION: LastSession = { session: null, problem: null };
+
+export function useLastSession(): LastSession {
+  const load = () => api.lastSession().then(
+    (session): LastSession => ({ session, problem: null }),
+    (problem: unknown): LastSession => ({ session: null, problem }),
+  );
+  return useBackendValue(load, NO_SESSION, "show-changed");
 }

@@ -81,7 +81,7 @@ Status keys: `[x]` done, `[~]` in progress, `[ ]` not started.
 
 - [ ] Unit tests for scoring and the state machine
 - [ ] Simulated show with 50 virtual buzzers
-- [ ] Crash drill: kill the app mid-question, restart, continue
+- [~] Crash drill: kill the app mid-question, restart, continue (automated as run, crash and resume tests in `app/src-tauri/src/lib.rs`; the drill on the event laptop to do)
 - [ ] Rehearsal on the event laptop with the projector and real buzzers
 - [ ] Parity check against `features.csv`
 

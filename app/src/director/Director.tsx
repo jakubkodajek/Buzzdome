@@ -199,6 +199,15 @@ function CommandPanel(props: { view: GameView | null; projector: ProjectorSettin
   const dispatch = useDispatch();
   const run = useRun();
   const last = useLastSession();
+  // Why Resume failed, kept on screen until another show loads: the show
+  // waits on it (A1).
+  const [resumeProblem, setResumeProblem] = useState<unknown>(null);
+  useBackendEvent("show-changed", () => setResumeProblem(null));
+  const resume = () => {
+    setResumeProblem(null);
+    api.resumeLastSession().then((warnings) => warnings.length > 0 && notify(warnings.map((w) => errorText(t, w)).join(" ")), setResumeProblem);
+  };
+  const problem = resumeProblem ?? last.problem;
 
   const openQuiz = async () => {
     const path = await open({ multiple: false, filters: [{ name: t("quizFiles"), extensions: ["quiz", "json"] }] });
@@ -215,13 +224,18 @@ function CommandPanel(props: { view: GameView | null; projector: ProjectorSettin
           <CommandButton icon={<FolderIcon />} label={t("openQuiz")} onClick={openQuiz} />
           <CommandButton icon={<PlayIcon />} label={t("demoQuiz")} onClick={() => run(api.startDemoShow())} />
           <CommandButton icon={<EditIcon />} label={t("quizEditor")} onClick={onEditor} />
-          {last && (
+          {last.session && (
             <CommandButton
               icon={<NextIcon />}
               label={t("resume")}
-              hint={t("resumeInfo", { title: last.meta.quizTitle, count: last.commandCount })}
-              onClick={() => run(api.resumeLastSession().then((warnings) => warnings.length > 0 && notify(warnings.map((w) => errorText(t, w)).join(" "))))}
+              hint={t("resumeInfo", { title: last.session.meta.quizTitle, count: last.session.commandCount })}
+              onClick={resume}
             />
+          )}
+          {problem !== null && (
+            <p className="command-problem" role="alert">
+              {t("resumeProblem", { problem: errorText(t, problem) })}
+            </p>
           )}
         </>
       ) : (
