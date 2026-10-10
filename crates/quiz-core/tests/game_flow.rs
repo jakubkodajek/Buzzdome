@@ -1,6 +1,6 @@
 use quiz_core::{
     AnswerMode, Button, Command, CorrectAnswer, Cue, Effect, Game, GameError, Light, Phase, Question, QuestionStep, Quiz, Slide,
-    SlideContent, Stamped, VideoClip, team_names, FULL_SHARE, MAX_NAME_CHARS, MAX_TEAMS, PRESS_GRACE_MS,
+    SlideContent, Stamped, VideoClip, team_names, FULL_SHARE, MAX_NAME_CHARS, MAX_TEAMS, PRESS_GRACE_MS, RULES_VERSION,
 };
 use quiz_core::game::FINAL_LAST_STEP;
 use quiz_core::view::AnswerResults;
@@ -131,7 +131,7 @@ fn pairing_gives_a_buzzer_the_team_name_and_moves_it_from_another() {
     // Pairing also works later in the show, for a team that came late.
     show.run(0, Command::Next).unwrap();
     show.run(0, Command::PairTeam { buzzer: 3, name: "Owls".into() }).unwrap();
-    assert_eq!(Game::replay(show.game.quiz().clone(), &show.journal).view(0).teams, show.game.view(0).teams);
+    assert_eq!(Game::replay(show.game.quiz().clone(), &show.journal, RULES_VERSION).view(0).teams, show.game.view(0).teams);
 }
 
 #[test]
@@ -151,7 +151,7 @@ fn renaming_a_player_to_a_name_another_has_takes_it_from_them() {
     show.run(0, Command::RenamePlayer { buzzer: 3, name: "Eagles".into() }).unwrap();
     show.run(0, Command::RenamePlayer { buzzer: 5, name: "eagles".into() }).unwrap();
     assert_eq!(show.game.players().filter(|p| p.name.eq_ignore_ascii_case("eagles")).count(), 1);
-    let replayed = Game::replay(show.game.quiz().clone(), &show.journal);
+    let replayed = Game::replay(show.game.quiz().clone(), &show.journal, RULES_VERSION);
     assert!(replayed.players().map(|p| &p.name).eq(show.game.players().map(|p| &p.name)));
 }
 
@@ -428,6 +428,7 @@ fn assert_controls_match_apply(game: &Game, at_ms: u64) {
         (controls.play_video, Command::PlayVideo),
         (controls.go_to, Command::GoTo { slide: 0 }),
         (controls.go_to, Command::GoToFinal),
+        (controls.restart_question, Command::RestartQuestion),
     ];
     for (allowed, command) in offered {
         let taken = game.clone().apply(&Stamped { at_ms, command: command.clone() }).is_ok();
@@ -551,7 +552,7 @@ fn the_quizmaster_starts_a_slide_video_as_often_as_needed_until_the_slide_change
     assert_eq!(show.game.view(0).video_plays, 2);
     show.press(1_000, 1, Button::B); // closes the question: everyone answered
     show.run(0, Command::PlayVideo).unwrap();
-    assert_eq!(Game::replay(show.game.quiz().clone(), &show.journal), show.game);
+    assert_eq!(Game::replay(show.game.quiz().clone(), &show.journal, RULES_VERSION), show.game);
 
     show.run(0, Command::Next).unwrap(); // revealed
     show.run(0, Command::Next).unwrap(); // a slide without a video
@@ -608,7 +609,7 @@ fn replaying_the_journal_rebuilds_the_same_game() {
     show.run(14_000, Command::Next).unwrap();
     show.press(15_000, 4, Button::Big);
 
-    let replayed = Game::replay(show.game.quiz().clone(), &show.journal);
+    let replayed = Game::replay(show.game.quiz().clone(), &show.journal, RULES_VERSION);
     assert_eq!(replayed, show.game);
 }
 
@@ -622,13 +623,34 @@ fn recovery_restarts_a_question_that_was_running() {
     show.run(0, Command::Next).unwrap();
     show.press(1_000, 1, Button::B);
 
-    let mut crashed = Game::replay(show.game.quiz().clone(), &show.journal);
+    let mut crashed = Game::replay(show.game.quiz().clone(), &show.journal, RULES_VERSION);
     let command = crashed.recovery_command().expect("a running question needs recovery");
     assert_eq!(command, Command::RestartQuestion);
     crashed.apply(&Stamped { at_ms: 99_000, command }).unwrap();
     assert_eq!(step(&crashed), QuestionStep::Ready);
     assert!(crashed.responses().is_empty());
     assert_eq!(crashed.recovery_command(), None);
+}
+
+#[test]
+fn a_journal_begun_under_rules_version_1_replays_its_restart_by_go_to() {
+    let mut show = Show::new(vec![question("q1", AnswerMode::Everyone)]);
+    show.press(0, 1, Button::Big);
+    show.press(0, 2, Button::Big);
+    show.run(0, Command::Next).unwrap();
+    show.run(0, Command::Next).unwrap();
+    show.press(1_000, 1, Button::B);
+    // Version 1 restarted the question after a crash with a jump to it.
+    let mut journal = show.journal.clone();
+    journal.push(Stamped { at_ms: 60_000, command: Command::GoTo { slide: 0 } });
+    journal.push(Stamped { at_ms: 61_000, command: Command::Next });
+
+    let replayed = Game::replay(show.game.quiz().clone(), &journal, 1);
+    assert!(matches!(step(&replayed), QuestionStep::Running { .. }), "{:?}", replayed.phase());
+    assert!(replayed.responses().is_empty(), "the question started again");
+    // Today's rules refuse that jump, so the Next would close the question instead.
+    let today = Game::replay(show.game.quiz().clone(), &journal, RULES_VERSION);
+    assert_eq!(step(&today), QuestionStep::Closed);
 }
 
 #[test]
@@ -643,7 +665,7 @@ fn a_wrong_answer_before_a_crash_is_charged_once_after_it() {
     assert_eq!(show.score(1), -20);
 
     // The app stops; the resumed show restarts the question, penalty and all.
-    let mut resumed = Show { game: Game::replay(show.game.quiz().clone(), &show.journal), journal: show.journal.clone() };
+    let mut resumed = Show { game: Game::replay(show.game.quiz().clone(), &show.journal, RULES_VERSION), journal: show.journal.clone() };
     let restart = resumed.game.recovery_command().expect("the question was in play");
     resumed.run(60_000, restart).unwrap();
     assert_eq!(resumed.score(1), 0);
@@ -652,7 +674,7 @@ fn a_wrong_answer_before_a_crash_is_charged_once_after_it() {
     resumed.press(62_000, 1, Button::Big);
     resumed.run(62_500, Command::JudgeWrong).unwrap();
     assert_eq!(resumed.score(1), -20);
-    assert_eq!(Game::replay(resumed.game.quiz().clone(), &resumed.journal), resumed.game);
+    assert_eq!(Game::replay(resumed.game.quiz().clone(), &resumed.journal, RULES_VERSION), resumed.game);
 }
 
 #[test]

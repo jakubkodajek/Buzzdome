@@ -69,6 +69,11 @@ function isShowKey(key: string): boolean {
   return /^[0-9]$/.test(key) || NEXT_KEYS.includes(lower) || [KEYS.right, KEYS.wrong, KEYS.clock, KEYS.leaderboard].some((k) => k === lower);
 }
 
+/** True for Enter held down on a button, which would press it again with every repeat (G13). */
+export function isHeldButtonPress(event: Pick<KeyboardEvent, "key" | "repeat" | "target">): boolean {
+  return event.repeat && event.key === "Enter" && (event.target as KeyTarget | null)?.tagName === "BUTTON";
+}
+
 /**
  * Quizmaster keys, the same in the Director and on the projector window.
  * `onToggleProjector` adds M: in the Director it opens or closes the
@@ -80,6 +85,10 @@ export function useShortcuts(view: GameView | null, onToggleProjector?: () => vo
     const onKey = (event: KeyboardEvent) => {
       // A key a control already took (Space on a focused team chip) is not the show's.
       if (event.defaultPrevented || isTypingTarget(event.target) || event.metaKey || event.ctrlKey || event.altKey) return;
+      if (isHeldButtonPress(event)) {
+        event.preventDefault();
+        return;
+      }
       if (event.key.toLowerCase() === KEYS.projector && onToggleProjector) {
         event.preventDefault();
         if (!event.repeat) onToggleProjector();

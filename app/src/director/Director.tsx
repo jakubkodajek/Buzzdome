@@ -20,6 +20,7 @@ import {
   PauseIcon,
   PlayIcon,
   PowerIcon,
+  RewindIcon,
   ScreenIcon,
   SoundIcon,
   StopIcon,
@@ -290,6 +291,13 @@ function CommandPanel(props: { view: GameView | null; projector: ProjectorSettin
           )}
           {controls?.closeQuestion && (
             <CommandButton icon={<StopIcon />} label={t("endQuestion")} onClick={() => dispatch({ type: "closeQuestion" })} />
+          )}
+          {controls?.restartQuestion && (
+            <CommandButton
+              icon={<RewindIcon />}
+              label={t("restartQuestion")}
+              onClick={() => run(confirmAction(t, t("restartQuestionConfirm")).then((yes) => yes && dispatch({ type: "restartQuestion" })))}
+            />
           )}
           {sound.available &&
             (sound.playing ? (

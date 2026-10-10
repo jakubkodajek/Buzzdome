@@ -37,8 +37,21 @@ describe("step guard", () => {
     expect(show.send({ type: "judgeWrong" })).toBeNull();
     show.answer();
     await first;
+    show.wait(STEP_PAUSE_MS);
     expect(show.send({ type: "judgeWrong" })).not.toBeNull();
     expect(show.sent).toEqual(["judgeWrong", "judgeWrong"]);
+  });
+
+  it("counts the pause from the answer, so a slow answer does not use it up", async () => {
+    const show = guarded();
+    const first = show.send({ type: "next" });
+    show.wait(2 * STEP_PAUSE_MS);
+    show.answer();
+    await first;
+    expect(show.send({ type: "next" })).toBeNull();
+    show.wait(STEP_PAUSE_MS);
+    expect(show.send({ type: "next" })).not.toBeNull();
+    expect(show.sent).toEqual(["next", "next"]);
   });
 
   it("lets presses and score changes through at any rate", () => {

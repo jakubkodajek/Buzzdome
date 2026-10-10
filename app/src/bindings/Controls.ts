@@ -12,4 +12,9 @@ judge: boolean, pauseClock: boolean, resumeClock: boolean, closeQuestion: boolea
 /**
  * `GoTo` and `GoToFinal`: not while a question is in play.
  */
-goTo: boolean, };
+goTo: boolean, 
+/**
+ * `RestartQuestion`: while a question is in play, the way to leave it
+ * without scoring it (G14).
+ */
+restartQuestion: boolean, };

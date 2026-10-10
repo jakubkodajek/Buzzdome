@@ -409,7 +409,7 @@ fn resume_show(root: &Path, at_ms: u64, media_folders: &[PathBuf]) -> CmdResult<
     };
     // The show must go on: without its media it still runs, and the Director says why.
     let warnings = resume_warnings(&quiz, media_root.as_deref(), refused.as_deref(), meta.rules_changed());
-    let mut game = Game::replay(quiz, &journal);
+    let mut game = Game::replay(quiz, &journal, meta.rules_version);
     let mut effects = Vec::new();
     if let Some(command) = game.recovery_command() {
         (game, effects) = apply_and_journal(&game, Some(&mut session), &Stamped { at_ms, command })?;
@@ -678,9 +678,31 @@ mod tests {
         // What the windows will see is on disk: the restart is journaled.
         let on_disk = Session::resume_latest(&root).unwrap().unwrap();
         assert_eq!(on_disk.journal.last(), Some(&Stamped { at_ms: 60_000, command: Command::RestartQuestion }));
-        assert_eq!(Game::replay(on_disk.quiz, &on_disk.journal), resumed.game);
+        assert_eq!(Game::replay(on_disk.quiz, &on_disk.journal, quiz_core::RULES_VERSION), resumed.game);
         assert_eq!(resumed.game.slide_index(), slide);
         assert_ne!(resumed.game, before, "the question started again");
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn a_resumed_show_plays_on_when_the_new_runs_clock_reads_earlier() {
+        // The system clock went back between the runs, so the new run's show
+        // clock reads before the journal's last command (6 s).
+        let root = sessions_dir("clock-back");
+        run_show_and_crash(&root, up_to_the_first_question());
+        let resumed = resume_show(&root, 500, &[]).unwrap();
+        let mut inner = Inner { game: Some(resumed.game), session: Some(resumed.session), ..Inner::new() };
+        apply_journaled(&mut inner, Command::Next, 600).unwrap(); // the restarted question's clock
+        let press = Command::Press { buzzer: 2, button: quiz_core::Button::C };
+        assert!(apply_journaled(&mut inner, press, 700).unwrap().is_some(), "the press counts");
+        let game = inner.game.as_ref().unwrap();
+        assert_eq!(game.responses().keys().collect::<Vec<_>>(), [&2]);
+        // Time is up 20 s after the new start, not after the old one.
+        assert_eq!(game.due_command(20_000), None);
+        assert_eq!(game.due_command(21_000), Some(Command::CloseQuestion));
+        // The journal, with both runs' times, replays into the same show.
+        let on_disk = Session::resume_latest(&root).unwrap().unwrap();
+        assert_eq!(&Game::replay(on_disk.quiz, &on_disk.journal, quiz_core::RULES_VERSION), game);
         std::fs::remove_dir_all(&root).unwrap();
     }
 

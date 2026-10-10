@@ -70,12 +70,13 @@ two windows cannot disagree with each other or with the score.
   waits for judgement) cannot be jumped away from, as that would throw its
   score changes away; the Director jumps only with its Go to buttons, and
   asks before Go to the end and End show.
-- **One step per press.** A key held down sends one command, and a key a
-  focused control already took (Space on a team chip) is not the show's.
-  `useDispatch` drops a step command (`step-guard.ts`) while the last one
-  is unanswered and for `STEP_PAUSE_MS` (300 ms) after it, less than a
-  person takes to see the new step, so a double press never runs the step
-  after the one on screen. Presses and score changes are never dropped.
+- **One step per press.** A key held down sends one command, Enter held
+  on a focused button presses it once, and a key a focused control already
+  took (Space on a team chip) is not the show's. `useDispatch` drops a step
+  command (`step-guard.ts`) while the last one is unanswered and for
+  `STEP_PAUSE_MS` (300 ms) after its answer, less than a person takes to
+  see the new step, so a double press never runs the step after the one on
+  screen, however long the journal write took. Presses and score changes are never dropped.
   Show keys count as typing only in text fields: after the quizmaster
   touched a slider, checkbox or list, the keys still work, and a slider
   lets go of the focus when released.
@@ -290,7 +291,10 @@ be resumed. If the folder is gone on resume, the show still resumes and the
 Director shows a warning. `meta.json` also records `RULES_VERSION`, which
 quiz-core bumps whenever the same journal would replay into another show;
 a show begun under another version still resumes, rebuilt with today's
-rules, and the Director says its scores may differ.
+rules, and the Director says its scores may differ. What would put the
+replay a step off is kept: a journal begun before version 2 replays its
+jumps out of a question in play, as the app then restarted a question
+after a crash with a `GoTo` to it (`Game::replay`).
 
 The windows load media through Tauri's asset protocol. Its scope starts
 empty and the shell allows exactly the current quiz folder, the editor's
@@ -834,7 +838,11 @@ A show that stopped mid-question has its question restarted
 (`Game::recovery_command` gives `RestartQuestion`, which takes the
 question's score changes back, so a wrong answer before the crash is not
 charged twice), and that command is journaled before `show-changed`
-reaches the windows, so no window shows the stopped question.
+reaches the windows, so no window shows the stopped question. The
+quizmaster can restart a question in play too (Restart question, after a
+confirmation): it is the way to leave a question without scoring it, since
+a jump is refused then. Score changes made by hand (`AdjustScore`) are not
+the question's and stay.
 The Director keeps a resume problem on screen, under the Resume button,
 until another show loads. When a failed journal write cannot be taken back,
 the session refuses every later command (`journalBroken`) until the show is
