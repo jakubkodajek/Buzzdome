@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { NO_CONTROLS, previewView } from "./host/preview";
 import { translator } from "./i18n";
 import { PROJECTOR_COMMANDS } from "./bindings/ProjectorCommands";
-import { commandForKey, isFieldTarget, isHeldButtonPress, isTypingTarget, keyHint, KEYS } from "./keyboard";
+import { commandForKey, isFieldTarget, isHeldButtonPress, isProjectorCloseKey, isTypingTarget, keyCombo, keyHint, KEYS } from "./keyboard";
 import type { Controls, GameView } from "./types";
 
 const slide = { id: "q1", type: "billboard", title: "Round 1", text: "", notes: "", picture: null, video: null, sound: null, background: null } as const;
@@ -50,6 +50,46 @@ describe("keyHint", () => {
   it("writes keys as on the keyboard, in the quizmaster's language", () => {
     expect(keyHint(translator("cs"), KEYS.next)).toBe("Mezerník");
     expect(keyHint(translator("en"), KEYS.right)).toBe("Y");
+  });
+});
+
+describe("keyCombo", () => {
+  const press = (key: string, modifiers: Partial<Record<"ctrlKey" | "metaKey" | "altKey" | "shiftKey", boolean>>) => ({
+    key,
+    ctrlKey: false,
+    metaKey: false,
+    altKey: false,
+    shiftKey: false,
+    ...modifiers,
+  });
+
+  it("writes Ctrl for Ctrl, and for the Windows key, outside macOS", () => {
+    expect(keyCombo(press("s", { ctrlKey: true }), false)).toBe("Ctrl+S");
+    expect(keyCombo(press("z", { metaKey: true, shiftKey: true }), false)).toBe("Ctrl+Shift+Z");
+    expect(keyCombo(press("F5", {}), false)).toBe("F5");
+  });
+
+  it("writes Ctrl for Cmd on macOS, and Control apart, so the caret keys of text fields stay theirs", () => {
+    expect(keyCombo(press("s", { metaKey: true }), true)).toBe("Ctrl+S");
+    expect(keyCombo(press("f", { ctrlKey: true }), true)).toBe("Control+F");
+    expect(keyCombo(press("ArrowLeft", { altKey: true }), true)).toBe("Alt+ArrowLeft");
+  });
+});
+
+describe("isProjectorCloseKey", () => {
+  const key = (k: string, more: Partial<KeyboardEvent> = {}) =>
+    ({ key: k, repeat: false, metaKey: false, ctrlKey: false, altKey: false, defaultPrevented: false, target: null, ...more }) as KeyboardEvent;
+
+  it("closes the projector with M or Esc", () => {
+    expect([key("m"), key("M"), key("Escape")].map(isProjectorCloseKey)).toEqual([true, true, true]);
+    expect([key("n"), key(" "), key("Enter")].map(isProjectorCloseKey)).toEqual([false, false, false]);
+  });
+
+  it("leaves a held key, a key with a modifier, typing and a key a control took", () => {
+    const typing = { tagName: "INPUT", type: "text" } as unknown as EventTarget;
+    for (const more of [{ repeat: true }, { ctrlKey: true }, { metaKey: true }, { altKey: true }, { target: typing }, { defaultPrevented: true }]) {
+      expect(isProjectorCloseKey(key("m", more)), JSON.stringify(more)).toBe(false);
+    }
   });
 });
 

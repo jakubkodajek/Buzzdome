@@ -19,8 +19,8 @@ describe("errorText", () => {
   });
 
   it("names the button that resumes a show as the Director labels it", () => {
-    expect(errorText(cs, { code: "journalBroken" })).toContain("tlačítkem Pokračovat v poslední show.");
-    expect(errorText(en, { code: "journalBroken" })).toContain("with Resume last show.");
+    expect(errorText(cs, { code: "journalBroken" })).toContain("tlačítkem Pokračovat v poslední show;");
+    expect(errorText(en, { code: "journalBroken" })).toContain("with Resume last show;");
   });
 
   it("numbers slides from one, as the quizmaster sees them", () => {

@@ -51,6 +51,7 @@ export function ReceiverTab() {
     reload();
   });
   useBackendEvent("receiver-raw", (report) => setRaw((list) => [report, ...list].slice(0, LOG_LEN)));
+  // eslint-disable-next-line no-restricted-properties -- the time of day a press came, as the log shows it, not the show clock
   useBackendEvent("receiver-press", (event) => setPresses((list) => [{ ...event, at: Date.now() }, ...list].slice(0, LOG_LEN)));
   const learn = useLearnProgress();
   // Learning stops with the tab, so presses never stay muted in a show.

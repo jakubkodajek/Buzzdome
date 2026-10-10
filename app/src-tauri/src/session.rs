@@ -190,6 +190,8 @@ fn keep_aside(path: &Path, dir: &Path) -> io::Result<PathBuf> {
         match OpenOptions::new().write(true).create_new(true).open(&copy) {
             Ok(mut file) => {
                 io::copy(&mut File::open(path)?, &mut file)?;
+                // On disk before the journal is cut, so a crash in between loses neither.
+                file.sync_all()?;
                 return Ok(copy);
             }
             Err(e) if e.kind() == io::ErrorKind::AlreadyExists => number += 1,
@@ -324,10 +326,10 @@ fn latest_dir(root: &Path) -> io::Result<Option<PathBuf>> {
 /// Each line is synced before the next is written, so only the last one can
 /// be a line the app never accepted, and that is left out: one without its
 /// newline, which was being written when the app stopped, or a whole one
-/// that is not JSON at all or holds a NUL, which a power cut leaves when the
-/// disk kept the newline but not the bytes before it. Any other line that
-/// does not read as a command refuses the journal (`ResumeError::Damaged`):
-/// a newer app wrote it, or the disk damaged it.
+/// that is no journal line at all (`is_journal_line`), which a power cut
+/// leaves when the disk kept the newline but not the bytes before it. Any
+/// other line that does not read as a command refuses the journal
+/// (`ResumeError::Damaged`): a newer app wrote it, or the disk damaged it.
 fn read_journal(path: &Path) -> Result<(Vec<Stamped>, u64), ResumeError> {
     let bytes = match fs::read(path) {
         Ok(bytes) => bytes,
@@ -347,16 +349,19 @@ fn read_journal(path: &Path) -> Result<(Vec<Stamped>, u64), ResumeError> {
         }
         match serde_json::from_slice(line) {
             Ok(command) => commands.push(command),
-            Err(_) if end == bytes.len() && !is_json(line) => return Ok((commands, line_start as u64)),
+            Err(_) if end == bytes.len() && !is_journal_line(line) => return Ok((commands, line_start as u64)),
             Err(_) => return Err(ResumeError::Damaged { line: index + 1 }),
         }
     }
     Ok((commands, whole as u64))
 }
 
-/// Whether `line` is JSON, whatever it holds: the app never writes a NUL.
-fn is_json(line: &[u8]) -> bool {
-    !line.contains(&0) && serde_json::from_slice::<serde::de::IgnoredAny>(line).is_ok()
+/// Whether `line` is a journal line as some version of the app writes it:
+/// an object with a time and a command, whatever the command. The app never
+/// writes a NUL.
+fn is_journal_line(line: &[u8]) -> bool {
+    !line.contains(&0)
+        && serde_json::from_slice::<serde_json::Map<String, serde_json::Value>>(line).is_ok_and(|line| line.contains_key("atMs") && line.contains_key("command"))
 }
 
 #[cfg(test)]
@@ -419,7 +424,13 @@ mod tests {
     #[test]
     fn a_whole_last_line_that_is_not_json_is_cut_off_like_a_torn_one() {
         // A power cut kept the page with the newline but not the bytes before it.
-        for (name, tail) in [("nul", &b"\0\0\0\0\0\0\0\0\n"[..]), ("cut", b"{\"atMs\":7,\"comm\n"), ("nul-in-json", b"{\"atMs\":7,\"command\":{\"type\":\"next\"}}\0\n")] {
+        for (name, tail) in [
+            ("nul", &b"\0\0\0\0\0\0\0\0\n"[..]),
+            ("cut", b"{\"atMs\":7,\"comm\n"),
+            ("nul-in-json", b"{\"atMs\":7,\"command\":{\"type\":\"next\"}}\0\n"),
+            ("json-but-no-line", b"7\n"),
+            ("object-but-no-line", b"{\"atMs\":7}\n"),
+        ] {
             let root = temp_root(&format!("garbled-{name}"));
             let (dir, whole) = show_ending_in(&root, tail);
             assert_eq!(Session::latest_summary(&root).unwrap().unwrap().command_count, 2, "{name}");
@@ -465,7 +476,10 @@ mod tests {
         // Saved again in an editor: CRLF line ends and a byte order mark.
         fs::write(&journal, [BOM, lines.replace('\n', "\r\n").as_bytes()].concat()).unwrap();
         assert_eq!(Session::resume_latest(&root).unwrap().unwrap().journal.len(), 2);
-        for (contents, kept) in [(&b""[..], 0), (b"{\"atMs\":1,\"comm", 0), (BOM, 3)] {
+        // Nothing at all, a torn line, a byte order mark alone or before a
+        // torn line, and a garbled line alone.
+        let bom_torn = [BOM, b"{\"atMs\":1,\"comm"].concat();
+        for (contents, kept) in [(&b""[..], 0), (b"{\"atMs\":1,\"comm", 0), (BOM, 3), (&bom_torn[..], 3), (b"\0\0\0\n", 0)] {
             fs::write(&journal, contents).unwrap();
             let mut resumed = Session::resume_latest(&root).unwrap().unwrap();
             assert!(resumed.journal.is_empty());

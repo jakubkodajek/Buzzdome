@@ -17,6 +17,7 @@
     "allow-media-volume",
     "allow-dispatch",
     "allow-close-host-window",
-    "allow-report-host-problem"
+    "allow-report-host-problem",
+    "allow-log-problem"
   ]
 }

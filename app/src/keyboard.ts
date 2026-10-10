@@ -50,13 +50,18 @@ export function isFieldTarget(target: EventTarget | null): boolean {
   return tag === "INPUT" || tag === "SELECT" || isTypingTarget(target);
 }
 
+/** Whether the app runs on macOS, where Cmd does what Ctrl does elsewhere. */
+const IS_MAC = typeof navigator !== "undefined" && /Mac/.test(navigator.userAgent);
+
 /**
  * A key press written as the editor's `Action.keys` are, e.g. "Ctrl+S": modifiers in the order Ctrl, Alt,
- * Shift, then the key. Ctrl stands for Cmd on macOS too.
+ * Shift, then the key. Ctrl stands for Cmd on macOS (`mac`), where Control is written "Control": it moves
+ * the caret in text fields there (Control+F, Control+H), so it stands for none of the app's keys.
  */
-export function keyCombo(event: Pick<KeyboardEvent, "key" | "ctrlKey" | "metaKey" | "altKey" | "shiftKey">): string {
+export function keyCombo(event: Pick<KeyboardEvent, "key" | "ctrlKey" | "metaKey" | "altKey" | "shiftKey">, mac = IS_MAC): string {
   const parts: string[] = [];
-  if (event.ctrlKey || event.metaKey) parts.push("Ctrl");
+  if (mac ? event.metaKey : event.ctrlKey || event.metaKey) parts.push("Ctrl");
+  if (mac && event.ctrlKey) parts.push("Control");
   if (event.altKey) parts.push("Alt");
   if (event.shiftKey) parts.push("Shift");
   parts.push(event.key.length === 1 ? event.key.toUpperCase() : event.key);
@@ -76,8 +81,8 @@ export function isHeldButtonPress(event: Pick<KeyboardEvent, "key" | "repeat" | 
 
 /**
  * Quizmaster keys, the same in the Director and on the projector window.
- * `onToggleProjector` adds M: in the Director it opens or closes the
- * projector, on the projector it closes it.
+ * `onToggleProjector` adds M, which opens or closes the projector from the
+ * Director; the projector closes itself (`useProjectorCloseKeys`).
  */
 export function useShortcuts(view: GameView | null, onToggleProjector?: () => void) {
   const dispatch = useDispatch();
@@ -115,6 +120,28 @@ export function useShortcuts(view: GameView | null, onToggleProjector?: () => vo
       window.removeEventListener("pointerup", onPointerUp);
     };
   }, [view, dispatch, onToggleProjector]);
+}
+
+/** True for a key press that closes the projector from itself: M or Esc, held or not, with no modifier. */
+export function isProjectorCloseKey(event: Pick<KeyboardEvent, "key" | "repeat" | "metaKey" | "ctrlKey" | "altKey" | "defaultPrevented" | "target">): boolean {
+  if (event.defaultPrevented || event.repeat || event.metaKey || event.ctrlKey || event.altKey || isTypingTarget(event.target)) return false;
+  return event.key === "Escape" || event.key.toLowerCase() === KEYS.projector;
+}
+
+/**
+ * M or Esc closes the projector from itself: full screen over the Director,
+ * it is the window that has the keys (A13), also once its screen failed.
+ */
+export function useProjectorCloseKeys(close: () => void) {
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (!isProjectorCloseKey(event)) return;
+      event.preventDefault();
+      close();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [close]);
 }
 
 /** The command a key stands for, or null when the current step does not take it (see `Controls`). */

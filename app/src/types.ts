@@ -36,6 +36,7 @@ export type { MediaLibrary } from "./bindings/MediaLibrary";
 export type { MediaNow } from "./bindings/MediaNow";
 export type { MediaIssue } from "./bindings/MediaIssue";
 export type { MediaKind } from "./bindings/MediaKind";
+export type { MenuWords } from "./bindings/MenuWords";
 export type { MonitorInfo } from "./bindings/MonitorInfo";
 export type { NowPlaying } from "./bindings/NowPlaying";
 export type { Pad } from "./bindings/Pad";

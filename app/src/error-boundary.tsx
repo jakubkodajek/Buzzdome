@@ -28,8 +28,10 @@ export class ErrorBoundary extends Component<Props, { message: string | null }> 
     this.props.onError?.(error instanceof Error ? error.message : String(error));
   }
 
-  componentDidUpdate(previous: Props) {
-    if (this.state.message !== null && !Object.is(previous.resetOn, this.props.resetOn)) this.setState({ message: null });
+  componentDidUpdate(previous: Props, previousState: { message: string | null }) {
+    // An error caught in this very render, as `resetOn` changed, stays: trying at once would fail and report it again.
+    const failedBefore = previousState.message !== null && this.state.message !== null;
+    if (failedBefore && !Object.is(previous.resetOn, this.props.resetOn)) this.setState({ message: null });
   }
 
   render() {

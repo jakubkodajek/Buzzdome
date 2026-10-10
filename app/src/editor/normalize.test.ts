@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { MAX_UNTIMED_BYTES, readAtMost, readsWhole, SoundTooLong } from "../audio/decode";
+import { MAX_TIMED_BYTES, MAX_UNTIMED_BYTES, readAtMost, readsWhole, SoundTooLong } from "../audio/decode";
 import { gainAfterTrim, gainChange, readLoudnessTarget, unreadSound, writeLoudnessTarget } from "./normalize";
 
 describe("normalize", () => {
@@ -34,9 +34,11 @@ describe("normalize", () => {
     expect(gainAfterTrim(3, { lufs: null, peakDb: -20, durationMs: 100 }, -16)).toBe(3);
   });
 
-  it("reads a sound whole up to ten minutes, and one that tells no length while it is small", () => {
-    expect(readsWhole(10 * 60_000, Number.MAX_SAFE_INTEGER)).toBe(true);
+  it("reads a sound whole up to ten minutes and a size, and one that tells no length while it is small", () => {
+    expect(readsWhole(10 * 60_000, MAX_TIMED_BYTES)).toBe(true);
     expect(readsWhole(10 * 60_000 + 1, 0)).toBe(false);
+    // Ten minutes of a high-resolution WAV is too large to read whole.
+    expect(readsWhole(10 * 60_000, 10 * 60 * 96_000 * 3 * 2)).toBe(false);
     // A sound that tells no length is read only while it is small.
     expect(readsWhole(Number.NaN, MAX_UNTIMED_BYTES)).toBe(true);
     expect(readsWhole(Number.NaN, MAX_UNTIMED_BYTES + 1)).toBe(false);

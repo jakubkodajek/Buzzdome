@@ -545,6 +545,10 @@ mockIPC(
       case "close_host_window":
         called.push({ cmd });
         return null;
+      case "log_problem":
+      case "set_menu_words":
+        called.push({ cmd, ...(payload as object) });
+        return null;
       case "report_host_problem":
         called.push({ cmd, ...(payload as object) });
         void emit("host-problem", (payload as { message: string }).message);
