@@ -4,14 +4,13 @@ import { api } from "../api";
 import { useApp, useDispatch, useReport } from "../app-context";
 import { useLatest } from "../hooks";
 import { mediaFileFilter, type MediaKind } from "../media";
+import { QUIZ_EXTENSION, quizOpenFilter } from "../quiz";
 import type { EditorDraft, Quiz, SheetExport, SheetImport, ValidationError } from "../types";
 import { DraftQueue } from "./draft-queue";
 import { editorReducer, isUnsaved, LOADING, type EditorState } from "./editor-state";
 import type { Edit } from "./history";
 import { readRecentFiles, rememberRecentFile } from "./recent";
 import { CSV_EXTENSION, listSeparator, SHEET_EXTENSIONS } from "./sheet";
-
-const QUIZ_EXTENSION = "quiz";
 
 interface DraftWrite {
   quiz: Quiz;
@@ -147,7 +146,7 @@ export function useQuizEditor(onTestRun: () => void): QuizEditor {
     openQuiz: (given) =>
       attempt(async () => {
         if (!(await mayDiscard())) return false;
-        const path = given ?? (await openDialog({ multiple: false, filters: [{ name: t("quizFiles"), extensions: [QUIZ_EXTENSION, "json"] }] }));
+        const path = given ?? (await openDialog({ multiple: false, filters: [quizOpenFilter(t)] }));
         if (typeof path !== "string") return false;
         const draft = await draftQueue.run(() => api.editorOpen(path));
         load(draft);

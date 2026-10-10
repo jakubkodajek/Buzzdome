@@ -60,10 +60,23 @@ two windows cannot disagree with each other or with the score.
   `i18n.ts`; `detail` fields carry the system's own message as it is.
   `Display` on these types is for logs and tests only.
 - **Step controls.** `GameView.controls` says which step commands (next,
-  judge, pause, resume, end question) the current step takes;
-  `Game::controls` is checked against `apply` by a test over a whole show.
-  The Director shows only those buttons and `keyboard.ts` sends only those
-  keys, so no key produces "not now" in a show.
+  judge, pause, resume, end question, go to a slide or the final) the
+  current step takes; `Game::controls` is checked against `apply` by a test
+  over a whole show. The Director shows only those buttons and
+  `keyboard.ts` sends only those keys, so no key produces "not now" in a
+  show. A question in play (its clock runs or stands paused, or a buzz
+  waits for judgement) cannot be jumped away from, as that would throw its
+  score changes away; the Director jumps only with its Go to buttons, and
+  asks before Go to the end and End show.
+- **One step per press.** A key held down sends one command, and a key a
+  focused control already took (Space on a team chip) is not the show's.
+  `useDispatch` drops a step command (`step-guard.ts`) while the last one
+  is unanswered and for `STEP_PAUSE_MS` (300 ms) after it, less than a
+  person takes to see the new step, so a double press never runs the step
+  after the one on screen. Presses and score changes are never dropped.
+  Show keys count as typing only in text fields: after the quizmaster
+  touched a slider, checkbox or list, the keys still work, and a slider
+  lets go of the focus when released.
 - **Where Next goes.** `Game::following` decides it: the next slide, or
   after the last slide the final ranking, unless the quiz has a final slide
   of its own (`Quiz::final_slide`), which then is the ranking and the show
@@ -694,8 +707,10 @@ resume cuts it off, after keeping the journal as it was in
 or the disk damaged it) refuses the resume with `journalDamaged` and leaves
 the journal as it is, since replaying without it would rebuild another show.
 A show that stopped mid-question has its question restarted
-(`Game::recovery_command`), and that command is journaled before
-`show-changed` reaches the windows, so no window shows the stopped question.
+(`Game::recovery_command` gives `RestartQuestion`, which takes the
+question's score changes back, so a wrong answer before the crash is not
+charged twice), and that command is journaled before `show-changed`
+reaches the windows, so no window shows the stopped question.
 The Director keeps a resume problem on screen, under the Resume button,
 until another show loads. When a failed journal write cannot be taken back,
 the session refuses every later command (`journalBroken`) until the show is
@@ -727,8 +742,11 @@ on-screen buzzers are for shows without the hardware and for testing.
 
 While learn mode is active, presses are shown in the Receiver tab but not
 sent to the game. So that it can never mute the buzzers in a show, learn
-mode ends when a show starts, when the receiver disconnects and when the
-Receiver tab closes, and the Director shows a banner while it is on.
+mode cannot start while a show runs (`showRunning`), ends when a show
+starts, when the receiver disconnects and when the Receiver tab closes, and
+the Director shows a banner while it is on. The learn lock is taken before
+the show state's both when a show starts and when learning starts, so
+neither can slip in between the other's check and its start.
 
 ### 2.7 Lights
 

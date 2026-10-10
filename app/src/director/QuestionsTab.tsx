@@ -1,7 +1,8 @@
+import { ask } from "@tauri-apps/plugin-dialog";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ANSWER_LETTERS } from "../answers";
 import { FULL_SHARE } from "../bindings/Constants";
-import { useApp, useDispatch } from "../app-context";
+import { useApp, useDispatch, useRun } from "../app-context";
 import { SlideThumbnail } from "../host/SlideThumbnail";
 import type { StringKey } from "../i18n";
 import { NextIcon, TrophyIcon } from "../icons";
@@ -23,6 +24,7 @@ function readLayout(): Layout {
 export function QuestionsTab({ view, quiz }: { view: GameView; quiz: Quiz | null }) {
   const { t } = useApp();
   const dispatch = useDispatch();
+  const run = useRun();
   // None in the lobby and in the ranking after the last slide.
   const current = view.phase.phase === "lobby" || view.slideIndex >= view.slideCount ? null : view.slideIndex;
   // A selection lasts until the show moves on; then the current slide is shown again.
@@ -44,15 +46,21 @@ export function QuestionsTab({ view, quiz }: { view: GameView; quiz: Quiz | null
   if (!quiz) return null;
   const contexts = slideContexts(quiz);
   const preview = quiz.slides[shown];
-  const goTo = (slide: number) => dispatch({ type: "goTo", slide });
+  // Jumps only with the buttons, never mid-question, and the final asks first (A3).
+  const jumps = view.controls.goTo;
+  const goToFinal = () => run(ask(t("goToFinalConfirm"), { kind: "warning" }).then((yes) => yes && dispatch({ type: "goToFinal" })));
 
   return (
     <div className="questions-tab">
       <div className="toolbar dark-toolbar">
-        <ToolButton icon={<NextIcon />} disabled={selected === null || selected === current} onClick={() => selected !== null && goTo(selected)}>
+        <ToolButton
+          icon={<NextIcon />}
+          disabled={!jumps || selected === null || selected === current}
+          onClick={() => selected !== null && dispatch({ type: "goTo", slide: selected })}
+        >
           {t("goToSelected")}
         </ToolButton>
-        <ToolButton icon={<TrophyIcon />} disabled={view.phase.phase === "final"} onClick={() => dispatch({ type: "goToFinal" })}>
+        <ToolButton icon={<TrophyIcon />} disabled={!jumps || view.phase.phase === "final"} onClick={goToFinal}>
           {t("goToFinal")}
         </ToolButton>
         <span className="toolbar-separator" />
@@ -84,8 +92,17 @@ export function QuestionsTab({ view, quiz }: { view: GameView; quiz: Quiz | null
                   key={slide.id}
                   ref={i === current ? currentRow : undefined}
                   className={[i === current ? "current" : "", i === selected ? "selected" : ""].join(" ")}
+                  tabIndex={0}
+                  aria-selected={i === shown}
                   onClick={() => setSelected(i)}
-                  onDoubleClick={() => goTo(i)}
+                  onFocus={() => setSelected(i)}
+                  onKeyDown={(e) => {
+                    // The arrows move along the rows; Space stays the show's Next.
+                    const row = { ArrowDown: e.currentTarget.nextElementSibling, ArrowUp: e.currentTarget.previousElementSibling }[e.key];
+                    if (!(row instanceof HTMLElement)) return;
+                    e.preventDefault();
+                    row.focus();
+                  }}
                 >
                   <td className="num">{i + 1}</td>
                   <td className="num">{contexts[i].position?.n ?? ""}</td>
@@ -142,9 +159,14 @@ function SlidePreview({ slide, context, counts }: { slide: Slide; context: Slide
         {slide.type === "question" && (
           <>
             <p className="muted center">
-              {slide.mode === "everyone" ? t("everyone") : t("fastestFinger")} · {slide.timeLimitS ? `${slide.timeLimitS} s` : t("untimed")} ·{" "}
-              {t("points", { n: slide.pointsEnd !== null ? `${slide.points}→${slide.pointsEnd}` : slide.points })}
-              {slide.penalty > 0 && ` · −${slide.penalty}`}
+              {[
+                t(slide.mode === "everyone" ? "everyone" : "fastestFinger"),
+                slide.timeLimitS ? t("timeLimitSeconds", { n: slide.timeLimitS }) : t("untimed"),
+                t("points", { n: slide.pointsEnd !== null ? `${slide.points}→${slide.pointsEnd}` : slide.points }),
+                slide.penalty > 0 && t("penaltyPoints", { n: slide.penalty }),
+              ]
+                .filter(Boolean)
+                .join(" · ")}
             </p>
             <div className="preview-answers">
               {slide.answers.map((answer, i) => {

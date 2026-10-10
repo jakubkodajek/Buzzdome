@@ -426,6 +426,8 @@ fn assert_controls_match_apply(game: &Game, at_ms: u64) {
         (controls.resume_clock, Command::ResumeClock),
         (controls.close_question, Command::CloseQuestion),
         (controls.play_video, Command::PlayVideo),
+        (controls.go_to, Command::GoTo { slide: 0 }),
+        (controls.go_to, Command::GoToFinal),
     ];
     for (allowed, command) in offered {
         let taken = game.clone().apply(&Stamped { at_ms, command: command.clone() }).is_ok();
@@ -573,9 +575,56 @@ fn recovery_restarts_a_question_that_was_running() {
 
     let mut crashed = Game::replay(show.game.quiz().clone(), &show.journal);
     let command = crashed.recovery_command().expect("a running question needs recovery");
+    assert_eq!(command, Command::RestartQuestion);
     crashed.apply(&Stamped { at_ms: 99_000, command }).unwrap();
     assert_eq!(step(&crashed), QuestionStep::Ready);
     assert!(crashed.responses().is_empty());
+    assert_eq!(crashed.recovery_command(), None);
+}
+
+#[test]
+fn a_wrong_answer_before_a_crash_is_charged_once_after_it() {
+    let mut show = Show::new(vec![question("q1", AnswerMode::FastestFinger)]);
+    show.press(0, 1, Button::Big);
+    show.press(0, 2, Button::Big);
+    show.run(0, Command::Next).unwrap();
+    show.run(0, Command::Next).unwrap();
+    show.press(1_000, 1, Button::Big);
+    show.run(1_500, Command::JudgeWrong).unwrap();
+    assert_eq!(show.score(1), -20);
+
+    // The app stops; the resumed show restarts the question, penalty and all.
+    let mut resumed = Show { game: Game::replay(show.game.quiz().clone(), &show.journal), journal: show.journal.clone() };
+    let restart = resumed.game.recovery_command().expect("the question was in play");
+    resumed.run(60_000, restart).unwrap();
+    assert_eq!(resumed.score(1), 0);
+    assert!(resumed.game.view(60_000).players.iter().all(|p| p.delta.is_none()), "no score change shown from before");
+    resumed.run(61_000, Command::Next).unwrap();
+    resumed.press(62_000, 1, Button::Big);
+    resumed.run(62_500, Command::JudgeWrong).unwrap();
+    assert_eq!(resumed.score(1), -20);
+    assert_eq!(Game::replay(resumed.game.quiz().clone(), &resumed.journal), resumed.game);
+}
+
+#[test]
+fn a_question_in_play_cannot_be_jumped_away_from() {
+    let mut show = Show::new(vec![question("q1", AnswerMode::FastestFinger), question("q2", AnswerMode::Everyone)]);
+    show.press(0, 1, Button::Big);
+    show.run(0, Command::Next).unwrap();
+    assert!(show.game.controls().go_to, "a question not started yet can be left");
+    assert_eq!(show.run(0, Command::RestartQuestion), Err(GameError::NotNow));
+    show.run(0, Command::Next).unwrap();
+    for buzzed in [false, true] {
+        if buzzed {
+            show.press(1_000, 1, Button::Big);
+        }
+        assert!(!show.game.controls().go_to);
+        assert_eq!(show.run(2_000, Command::GoTo { slide: 1 }), Err(GameError::NotNow));
+        assert_eq!(show.run(2_000, Command::GoToFinal), Err(GameError::NotNow));
+    }
+    show.run(3_000, Command::JudgeRight).unwrap();
+    assert!(show.game.controls().go_to);
+    show.run(4_000, Command::GoTo { slide: 1 }).unwrap();
 }
 
 #[test]
@@ -657,7 +706,6 @@ fn an_explanation_follows_the_revealed_question_and_scores_nothing() {
 fn go_to_final_skips_the_remaining_slides() {
     let mut show = Show::new(vec![question("q1", AnswerMode::Everyone), question("q2", AnswerMode::Everyone)]);
     show.run(0, Command::Next).unwrap();
-    show.run(10, Command::Next).unwrap();
     show.run(20, Command::GoToFinal).unwrap();
     assert_eq!(show.game.phase(), &Phase::Final { step: 0 });
     assert!(show.game.current_slide().is_none());

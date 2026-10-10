@@ -151,11 +151,12 @@ fn send_effects(app: &AppHandle, inner: &mut Inner, effects: Vec<Effect>) {
 }
 
 /// Locks the show state to start a show, refusing while one runs. Learn
-/// mode ends first, because in a show every press must play; it is ended
-/// before the lock is taken, as no code may wait for the learn lock while
+/// mode ends first, because in a show every press must play. Its lock is
+/// taken before this one and kept until this one is held, so learn mode
+/// cannot start in between; no code may wait for the learn lock while
 /// holding this one.
 fn lock_for_new_show<'a>(app: &AppHandle, state: &'a AppState) -> CmdResult<MutexGuard<'a, Inner>> {
-    hardware::end_learning(app);
+    let _learning = hardware::end_learning(app);
     let inner = state.0.lock().unwrap();
     if inner.game.is_some() {
         return Err(AppError::ShowRunning);
@@ -201,6 +202,12 @@ fn begin_show(app: &AppHandle, inner: &mut Inner, game: Game, session: Option<Se
     }
     emit_show_changed(app, inner);
     named.map(drop)
+}
+
+/// Whether a show (or a test run) is running. Not to be called while
+/// holding the show state.
+fn show_running(app: &AppHandle) -> bool {
+    app.state::<AppState>().0.lock().unwrap().game.is_some()
 }
 
 #[tauri::command]
@@ -654,12 +661,12 @@ mod tests {
         let root = sessions_dir("mid-question");
         let before = run_show_and_crash(&root, up_to_the_first_question());
         let slide = before.slide_index();
-        assert_eq!(before.recovery_command(), Some(Command::GoTo { slide }), "{:?}", before.phase());
+        assert_eq!(before.recovery_command(), Some(Command::RestartQuestion), "{:?}", before.phase());
 
         let resumed = resume_show(&root, 60_000).unwrap();
         // What the windows will see is on disk: the restart is journaled.
         let on_disk = Session::resume_latest(&root).unwrap().unwrap();
-        assert_eq!(on_disk.journal.last(), Some(&Stamped { at_ms: 60_000, command: Command::GoTo { slide } }));
+        assert_eq!(on_disk.journal.last(), Some(&Stamped { at_ms: 60_000, command: Command::RestartQuestion }));
         assert_eq!(Game::replay(on_disk.quiz, &on_disk.journal), resumed.game);
         assert_eq!(resumed.game.slide_index(), slide);
         assert_ne!(resumed.game, before, "the question started again");

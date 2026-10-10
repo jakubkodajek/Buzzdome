@@ -1,7 +1,8 @@
-import { createContext, useCallback, useContext, useMemo, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
 import { api } from "./api";
 import { translator, useLang, type Lang, type Translate } from "./i18n";
 import { errorText } from "./messages";
+import { createStepGuard, type StepGuard } from "./step-guard";
 import type { Command } from "./types";
 
 interface AppContextValue {
@@ -10,6 +11,8 @@ interface AppContextValue {
   t: Translate;
   /** Shows a failed action to the quizmaster. */
   notify: (message: string) => void;
+  /** Lets one show step through per press or click, for the whole window (`useDispatch`). */
+  steps: StepGuard;
 }
 
 const AppContext = createContext<AppContextValue | null>(null);
@@ -17,7 +20,8 @@ const AppContext = createContext<AppContextValue | null>(null);
 /** Language, translations and error reporting for one window. */
 export function AppProvider({ notify, children }: { notify: (message: string) => void; children: ReactNode }) {
   const [lang, setLang] = useLang();
-  const value = useMemo(() => ({ lang, setLang, t: translator(lang), notify }), [lang, setLang, notify]);
+  const [steps] = useState(createStepGuard);
+  const value = useMemo(() => ({ lang, setLang, t: translator(lang), notify, steps }), [lang, setLang, notify, steps]);
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 }
 
@@ -39,8 +43,19 @@ export function useRun(): (call: Promise<unknown>) => void {
   return useCallback((call) => void call.catch(report), [report]);
 }
 
-/** Sends a game command, the same way for every button, key and buzzer. */
+/**
+ * Sends a game command, the same way for every button, key and buzzer. A
+ * command that moves the show on is dropped when it comes too soon after
+ * the last one (`StepGuard`).
+ */
 export function useDispatch(): (command: Command) => void {
   const run = useRun();
-  return useCallback((command) => run(api.dispatch(command)), [run]);
+  const { steps } = useApp();
+  return useCallback(
+    (command) => {
+      const sent = steps.send(command, () => api.dispatch(command));
+      if (sent) run(sent);
+    },
+    [run, steps],
+  );
 }

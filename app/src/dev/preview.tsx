@@ -138,7 +138,7 @@ function view(partial: Partial<GameView>): GameView {
     results: null,
     buzzed: null,
     leaderboardVisible: false,
-    controls: { ...NO_CONTROLS, next: true },
+    controls: { ...NO_CONTROLS, next: true, goTo: true },
     onHold: false,
     videoPlays: 0,
     ...partial,
@@ -236,12 +236,14 @@ const SCENES: Record<string, GameView | null> = {
     slide: { ...quiz.slides[2], video: VIDEO },
     phase: { phase: "question", step: "running", clock: { limitMs: 20000, elapsedBeforeMs: 0, runningSinceMs: 0, pressesFromMs: 0 } },
     clock: { limitMs: 20000, remainingMs: 12000, elapsedMs: 8000, running: true, points: 81 },
+    controls: { ...NO_CONTROLS, next: true, pauseClock: true, closeQuestion: true, playVideo: true },
   }),
   videoBlur: view({
     slideIndex: 2,
     slide: { ...quiz.slides[2], video: { ...VIDEO, effect: "blur" } },
     phase: { phase: "question", step: "running", clock: { limitMs: 20000, elapsedBeforeMs: 0, runningSinceMs: 0, pressesFromMs: 0 } },
     clock: { limitMs: 20000, remainingMs: 10000, elapsedMs: 10000, running: false, points: 81 },
+    controls: { ...NO_CONTROLS, next: true, resumeClock: true, closeQuestion: true, playVideo: true },
   }),
   videoClosed: view({ slideIndex: 2, slide: { ...quiz.slides[2], video: VIDEO }, phase: { phase: "question", step: "closed" }, onHold: true }),
   videoRevealed: view({ slideIndex: 2, slide: { ...quiz.slides[2], video: VIDEO }, phase: { phase: "question", step: "revealed", winner: null }, onHold: true }),
@@ -250,13 +252,13 @@ const SCENES: Record<string, GameView | null> = {
     phase: { phase: "billboard" },
     slideIndex: 0,
     slide: { ...quiz.slides[0], video: { ...VIDEO, autoplay: false, effect: null } },
-    controls: { ...NO_CONTROLS, next: true, playVideo: true },
+    controls: { ...NO_CONTROLS, next: true, playVideo: true, goTo: true },
   }),
   videoPlayed: view({
     phase: { phase: "billboard" },
     slideIndex: 0,
     slide: { ...quiz.slides[0], video: { ...VIDEO, autoplay: false, effect: null } },
-    controls: { ...NO_CONTROLS, next: true, playVideo: true },
+    controls: { ...NO_CONTROLS, next: true, playVideo: true, goTo: true },
     videoPlays: 1,
   }),
   brokenBackground: view({ phase: { phase: "billboard" }, slideIndex: 0, slide: { ...quiz.slides[0], background: { ...BACKGROUND, file: "media/missing.png" } } }),
@@ -541,6 +543,7 @@ mockIPC(
       // Dialogs answer what a check sets in `window.dialogAnswer`; cancelled otherwise.
       case "plugin:dialog|open":
       case "plugin:dialog|save":
+      case "plugin:dialog|message":
         return (window as unknown as { dialogAnswer?: string }).dialogAnswer ?? null;
       case "editor_category_name": {
         // A stand-in: the backend also skips the names taken.

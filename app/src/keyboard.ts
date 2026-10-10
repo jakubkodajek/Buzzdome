@@ -21,9 +21,33 @@ export function keyHint(t: Translate, key: string): string {
   return key === " " ? t("keySpace") : key.toUpperCase();
 }
 
-/** True when a key press is meant for a text field, not for the show. */
+/** Input types that take typed text; the others (sliders, checkboxes, colours) take none. */
+const TEXT_INPUT_TYPES: readonly string[] = ["text", "search", "email", "url", "tel", "password", "number"];
+
+/** What a key press's target says about the keys it takes. */
+type KeyTarget = Partial<Pick<HTMLInputElement, "tagName" | "type" | "isContentEditable">>;
+
+/**
+ * True when a key press is typed text: in a text field, a text area or
+ * editable text. A slider, checkbox or list takes no typing, so the show's
+ * keys still work after the quizmaster touched one (A5).
+ */
 export function isTypingTarget(target: EventTarget | null): boolean {
-  return target instanceof HTMLElement && (["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName) || target.isContentEditable);
+  const element = target as KeyTarget | null;
+  switch (element?.tagName) {
+    case "INPUT":
+      return TEXT_INPUT_TYPES.includes(element.type ?? "text");
+    case "TEXTAREA":
+      return true;
+    default:
+      return element?.isContentEditable === true;
+  }
+}
+
+/** True when a key press goes to any form field, which keeps its keys (arrows in a list or on a slider). */
+export function isFieldTarget(target: EventTarget | null): boolean {
+  const tag = (target as KeyTarget | null)?.tagName;
+  return tag === "INPUT" || tag === "SELECT" || isTypingTarget(target);
 }
 
 /** True for the keys a running show takes, whether or not the current step has a use for them. */
@@ -40,20 +64,31 @@ export function useShortcuts(view: GameView | null, onToggleProjector?: () => vo
   const dispatch = useDispatch();
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (isTypingTarget(event.target) || event.metaKey || event.ctrlKey || event.altKey) return;
+      // A key a control already took (Space on a focused team chip) is not the show's.
+      if (event.defaultPrevented || isTypingTarget(event.target) || event.metaKey || event.ctrlKey || event.altKey) return;
       if (event.key.toLowerCase() === KEYS.projector && onToggleProjector) {
         event.preventDefault();
-        onToggleProjector();
+        if (!event.repeat) onToggleProjector();
         return;
       }
       if (!view || !isShowKey(event.key)) return;
       // Taken even when the step has no use for it, so Space never presses a focused button mid-show.
       event.preventDefault();
+      // A key held down sends one command, not one per repeat (A4).
+      if (event.repeat) return;
       const command = commandForKey(event.key, view);
       if (command) dispatch(command);
     };
+    // A slider keeps no focus once let go, so the arrow keys never move it unseen (A5).
+    const onPointerUp = (event: PointerEvent) => {
+      if (view && event.target instanceof HTMLInputElement && event.target.type === "range") event.target.blur();
+    };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    window.addEventListener("pointerup", onPointerUp);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("pointerup", onPointerUp);
+    };
   }, [view, dispatch, onToggleProjector]);
 }
 
