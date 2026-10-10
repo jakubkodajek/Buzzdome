@@ -5,13 +5,13 @@
 //! a show reaches the show (journaled first, S1) and then the file. The
 //! rules work on `Inner` and a path, so they are tested without windows.
 
-use crate::app_file::{self, SettingsLost};
-use crate::error::CmdResult;
+use crate::app_file::{AppFile, SettingsLost};
+use crate::error::{AppError, CmdResult};
 use crate::session::Session;
 use crate::{app_data, apply_journaled, deliver, now_ms, timed_lock, AppState, Inner};
 use quiz_core::{game::same_name, team_names, Command, Effect, Game, MAX_TEAMS};
 use serde::{Deserialize, Serialize};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use tauri::{AppHandle, Emitter, State};
 
 const TEAMS_FILE: &str = "teams.json";
@@ -27,13 +27,13 @@ pub fn teams_path(app: &AppHandle) -> CmdResult<PathBuf> {
     app_data(app, TEAMS_FILE)
 }
 
-/// The team names saved at `path`, as a show takes them (`team_names`). A
-/// file that cannot be read is kept aside and the app starts without names;
-/// why is shown in the Teams tab.
-pub fn load(path: &Path) -> (Vec<String>, Option<SettingsLost>) {
-    let (file, lost) = app_file::load::<TeamsFile>(path);
+/// The team names saved at `path`, as a show takes them (`team_names`), and
+/// the file to keep them in. A file that cannot be read is kept aside and
+/// the app starts without names; why is shown in the Teams tab.
+pub fn load(path: PathBuf) -> (Vec<String>, AppFile) {
+    let (file, saved) = AppFile::load::<TeamsFile>(path);
     // A file edited by hand may hold more names than a show takes: the first ones count.
-    (team_names(file.names.iter().take(MAX_TEAMS).map(String::as_str)).unwrap_or_default(), lost)
+    (team_names(saved.names.iter().take(MAX_TEAMS).map(String::as_str)).unwrap_or_default(), file)
 }
 
 /// The team names prepared for the next show, or the running show's.
@@ -54,20 +54,23 @@ pub fn begin(inner: &mut Inner, game: Game, session: Option<Session>, at_ms: u64
 }
 
 /// Makes `teams` the prepared names: in the running show first (journaled;
-/// when that fails nothing changes), then in `inner` and in the file at
-/// `path`. Gives the show's effects and whether the file was written.
-fn change(inner: &mut Inner, teams: Vec<String>, at_ms: u64, path: &Path) -> CmdResult<(Vec<Effect>, CmdResult<()>)> {
+/// when that fails nothing changes), then in `inner` and in its teams file.
+/// Gives the show's effects and whether the file was written.
+fn change(inner: &mut Inner, teams: Vec<String>, at_ms: u64) -> CmdResult<(Vec<Effect>, CmdResult<()>)> {
     let effects = match inner.game {
         Some(_) => apply_journaled(inner, Command::SetTeams { names: teams.clone() }, at_ms)?,
         None => Vec::new(),
     };
     inner.teams = teams;
-    Ok((effects, app_file::store(path, &TeamsFile { names: inner.teams.clone() })))
+    let file = TeamsFile { names: inner.teams.clone() };
+    // The file is known once the app has started, before any command.
+    let stored = inner.teams_file.as_ref().map_or(Err(AppError::system("no data folder for the team names")), |kept| kept.store(&file));
+    Ok((effects, stored))
 }
 
 /// `change`, then tells the buzzers and the windows.
 fn change_and_tell(app: &AppHandle, inner: &mut Inner, teams: Vec<String>, at_ms: u64) -> CmdResult<()> {
-    let (effects, stored) = change(inner, teams, at_ms, &teams_path(app)?)?;
+    let (effects, stored) = change(inner, teams, at_ms)?;
     if inner.game.is_some() {
         deliver(app, inner, effects);
     }
@@ -99,7 +102,7 @@ pub fn prepared_teams(state: State<AppState>) -> Vec<String> {
 /// Why the saved team names could not be read when the app started, if so.
 #[tauri::command]
 pub fn teams_lost(state: State<AppState>) -> Option<SettingsLost> {
-    state.0.lock().unwrap().teams_lost.clone()
+    state.0.lock().unwrap().teams_file.as_ref().and_then(AppFile::lost).cloned()
 }
 
 /// Adds team names after the prepared ones; names already there are kept once.
@@ -124,6 +127,7 @@ mod tests {
     use crate::session::SessionMeta;
     use buzzers::VirtualDriver;
     use quiz_core::Quiz;
+    use std::path::Path;
 
     fn temp_dir(name: &str) -> PathBuf {
         let dir = std::env::temp_dir().join(format!("teams-{name}-{}", std::process::id()));
@@ -131,8 +135,10 @@ mod tests {
         dir
     }
 
-    fn inner() -> Inner {
-        Inner { game: None, session: None, media_root: None, driver: Box::new(VirtualDriver), teams: Vec::new(), teams_lost: None }
+    /// The app's state with no names, keeping them in `path`.
+    fn inner(path: &Path) -> Inner {
+        let teams_file = Some(load(path.to_path_buf()).1);
+        Inner { game: None, session: None, media_root: None, driver: Box::new(VirtualDriver), teams: Vec::new(), teams_file }
     }
 
     fn session(root: &Path) -> Session {
@@ -152,14 +158,15 @@ mod tests {
     fn saved_names_read_back_as_a_show_takes_them() {
         let dir = temp_dir("load");
         let path = dir.join(TEAMS_FILE);
-        assert_eq!(load(&path), (Vec::new(), None));
+        let (teams, file) = load(path.clone());
+        assert_eq!((teams, file.lost()), (Vec::new(), None));
         let mut names: Vec<String> = vec![" Hawks ".into(), "hawks".into(), String::new()];
         names.extend((0..MAX_TEAMS + 5).map(|i| format!("Team {i}")));
-        app_file::store(&path, &TeamsFile { names }).unwrap();
-        let (teams, lost) = load(&path);
+        file.store(&TeamsFile { names }).unwrap();
+        let (teams, file) = load(path);
         assert_eq!(teams.len(), MAX_TEAMS - 2, "the first {MAX_TEAMS} lines, without the repeat and the blank");
         assert_eq!(teams[..2], ["Hawks".to_string(), "Team 0".to_string()]);
-        assert_eq!(lost, None);
+        assert_eq!(file.lost(), None);
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
@@ -167,15 +174,15 @@ mod tests {
     fn two_quick_edits_both_count_and_reach_the_file() {
         let dir = temp_dir("edits");
         let path = dir.join(TEAMS_FILE);
-        let mut inner = inner();
+        let mut inner = inner(&path);
         let teams = added(&inner, &names(&["Hawks"])).unwrap();
-        change(&mut inner, teams, 0, &path).unwrap().1.unwrap();
+        change(&mut inner, teams, 0).unwrap().1.unwrap();
         let teams = added(&inner, &names(&["Owls", "hawks"])).unwrap();
-        change(&mut inner, teams, 0, &path).unwrap().1.unwrap();
+        change(&mut inner, teams, 0).unwrap().1.unwrap();
         assert_eq!(inner.teams, names(&["Hawks", "Owls"]));
         let teams = removed(&inner, "HAWKS");
-        change(&mut inner, teams, 0, &path).unwrap().1.unwrap();
-        assert_eq!(load(&path).0, names(&["Owls"]));
+        change(&mut inner, teams, 0).unwrap().1.unwrap();
+        assert_eq!(load(path.clone()).0, names(&["Owls"]));
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
@@ -183,17 +190,17 @@ mod tests {
     fn a_change_in_a_show_is_journaled_before_it_is_kept() {
         let dir = temp_dir("show");
         let (path, root) = (dir.join(TEAMS_FILE), dir.join("sessions"));
-        let mut inner = inner();
+        let mut inner = inner(&path);
         begin(&mut inner, Game::new(Quiz::new("Quiz", Vec::new())), Some(session(&root)), 0).unwrap();
-        change(&mut inner, names(&["Hawks"]), 5, &path).unwrap().1.unwrap();
+        change(&mut inner, names(&["Hawks"]), 5).unwrap().1.unwrap();
         assert_eq!(current(&inner), names(&["Hawks"]));
         assert_eq!(journal(&root), [Command::SetTeams { names: names(&["Hawks"]) }]);
 
         // A change the journal refuses changes nothing, on disk neither.
         inner.session.as_mut().unwrap().break_for_test();
-        assert!(change(&mut inner, names(&["Owls"]), 6, &path).is_err());
+        assert!(change(&mut inner, names(&["Owls"]), 6).is_err());
         assert_eq!((current(&inner), &inner.teams[..]), (&names(&["Hawks"])[..], &names(&["Hawks"])[..]));
-        assert_eq!(load(&path).0, names(&["Hawks"]));
+        assert_eq!(load(path.clone()).0, names(&["Hawks"]));
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
@@ -201,7 +208,7 @@ mod tests {
     fn a_show_starts_with_the_prepared_names_as_its_first_command() {
         let dir = temp_dir("begin");
         let root = dir.join("sessions");
-        let mut inner = inner();
+        let mut inner = inner(&dir.join(TEAMS_FILE));
         inner.teams = names(&["Hawks", "Owls"]);
         begin(&mut inner, Game::new(Quiz::new("Quiz", Vec::new())), Some(session(&root)), 0).unwrap();
         assert_eq!(current(&inner), inner.teams);

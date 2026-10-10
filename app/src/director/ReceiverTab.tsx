@@ -4,7 +4,7 @@ import { BUTTONS, buttonLabel } from "../answers";
 import { api } from "../api";
 import { useApp, useRun } from "../app-context";
 import { useBackendEvent, useLearnProgress } from "../hooks";
-import { errorText, protocolText, receiverProblemText } from "../messages";
+import { errorText, protocolText, receiverProblemText, settingsLostText } from "../messages";
 import type { Button, DeviceInfo, Press, PressEvent, RawReport, ReceiverInfo, ReceiverStatus } from "../types";
 
 const LOG_LEN = 40;
@@ -104,8 +104,7 @@ export function ReceiverTab() {
         {status?.kind === "connected" && !status.hasLights && <p className="muted">{t("receiverNoLights")}</p>}
         {info?.settingsError && (
           <p className="receiver-state error">
-            {t("receiverSettingsLost")} {info.settingsError.detail}
-            {info.settingsError.keptAs && ` ${t("settingsKeptAs", { path: info.settingsError.keptAs })}`}
+            {t("receiverSettingsLost")} {settingsLostText(t, info.settingsError)}
           </p>
         )}
         {status && status.kind !== "off" && (

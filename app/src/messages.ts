@@ -6,7 +6,7 @@ import { buttonLabel } from "./answers";
 import { MEDIA_EXTENSIONS } from "./bindings/MediaExtensions";
 import type { StringKey, Translate } from "./i18n";
 import { mediaFileName } from "./media";
-import type { AppError, FileAction, ImportIssue, MediaIssue, MediaKind, Place, Problem, ProtocolKind, ReceiverProblem } from "./types";
+import type { AppError, FileAction, ImportIssue, MediaIssue, MediaKind, Place, Problem, ProtocolKind, ReceiverProblem, SettingsLost } from "./types";
 
 type Params = Record<string, string | number>;
 
@@ -30,6 +30,7 @@ const ERROR_KEYS: Record<Exclude<AppError["code"], WordedApart>, StringKey> = {
   tooManyTeams: "errTooManyTeams",
   showNotSaved: "errShowNotSaved",
   showNotRead: "errShowNotRead",
+  fileLeftUnread: "errFileLeftUnread",
   rulesChanged: "errRulesChanged",
   notAQuizFile: "errNotAQuizFile",
   missingQuizJson: "errMissingQuizJson",
@@ -170,6 +171,12 @@ export function receiverProblemText(t: Translate, problem: ReceiverProblem, deta
   if (problem !== "cannotOpen") return text;
   const hint = platform === "linux" ? "receiverOpenHintLinux" : platform === "macos" ? "receiverOpenHintMacos" : "receiverOpenHintOther";
   return `${text} ${t(hint)}`;
+}
+
+/** Why a file the app keeps was not read, and what became of the file. */
+export function settingsLostText(t: Translate, lost: SettingsLost): string {
+  const file = lost.keptAs === null ? t("settingsLeftUnread") : t("settingsKeptAs", { path: lost.keptAs });
+  return `${lost.detail} ${file}`;
 }
 
 /** Which protocol reads the receiver. */

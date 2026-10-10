@@ -424,11 +424,15 @@ packages users will install are read the same way.
   the shell holds, so two quick edits cannot undo each other; in a show
   the change is journaled first and then saved. A `SetTeams` sent through
   `dispatch` (a window or a plugin) takes the same way, so the saved names
-  never differ from the show's. The rules work on `Inner` and a path
-  (`teams::begin`, `teams::change`) and are tested there. `teams-changed`
-  tells the windows. A `teams.json` that cannot be read is renamed aside
-  (`teams.json.broken`) so the next save does not overwrite it, and the
-  Teams tab says so.
+  never differ from the show's. The rules work on `Inner` and its teams
+  file (`teams::begin`, `teams::change`) and are tested there.
+  `teams-changed` tells the windows. A `teams.json` that does not hold
+  names is renamed aside (`teams.json.broken`, then `.broken-2` and on, so
+  an earlier one stays) so the next save does not overwrite it, and the
+  Teams tab says so. One that cannot be read at all (another program holds
+  it) is left as it is: its `AppFile` refuses to write it until the app
+  starts again, so a passing lock never costs the saved names, learned
+  buttons or sound board.
 - **Pairing.** A team is paired with the buzzer whose player has its name,
   so the player's name is the only record; `GameView.teams` (`TeamView`)
   derives the pairs. `PairTeam` gives a buzzer a name and takes it from any

@@ -36,6 +36,10 @@ pub enum AppError {
     ShowNotSaved { detail: String },
     #[error("the last show cannot be read: {detail}")]
     ShowNotRead { detail: String },
+    /// A file the app keeps (`app_file`) could not be read when the app
+    /// started, so it is not written over until the app reads it again.
+    #[error("{path} could not be read, so it is not written over")]
+    FileLeftUnread { path: String },
     /// A resumed show began under other rules (`RULES_VERSION`); it runs.
     #[error("the show began in another version of the app; its scores may differ")]
     RulesChanged,

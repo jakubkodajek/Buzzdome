@@ -4,6 +4,7 @@ import { useApp, useDispatch } from "../app-context";
 import { MAX_NAME_CHARS } from "../bindings/Constants";
 import { seconds, signed } from "../format";
 import { usePreparedTeams, useTeamsLost } from "../hooks";
+import { settingsLostText } from "../messages";
 import type { BuzzerId, Command, GameView, SettingsLost } from "../types";
 import { BuzzerChip, TeamList } from "./TeamList";
 
@@ -31,8 +32,7 @@ function TeamsLost({ lost }: { lost: SettingsLost | null }) {
   if (!lost) return null;
   return (
     <p className="teams-lost">
-      {t("teamsLost")} {lost.detail}
-      {lost.keptAs && ` ${t("settingsKeptAs", { path: lost.keptAs })}`}
+      {t("teamsLost")} {settingsLostText(t, lost)}
     </p>
   );
 }

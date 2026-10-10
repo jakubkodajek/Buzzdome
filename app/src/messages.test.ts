@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { translator } from "./i18n";
-import { errorText, importIssueText, placesText, problemText, protocolText, receiverProblemText } from "./messages";
+import { errorText, importIssueText, placesText, problemText, protocolText, receiverProblemText, settingsLostText } from "./messages";
 
 const cs = translator("cs");
 const en = translator("en");
@@ -79,5 +79,12 @@ describe("receiver texts", () => {
   it("names the protocol", () => {
     expect(protocolText(cs, { type: "learned", buttons: 5 })).toBe("naučená tlačítka (5)");
     expect(protocolText(en, { type: "rawOnly" })).toBe("raw reports only");
+  });
+
+  it("says where a file that was not read went, or that it was left alone", () => {
+    expect(settingsLostText(en, { detail: "bad json", keptAs: "/d/receiver.json.broken" })).toBe("bad json The old file was kept as /d/receiver.json.broken.");
+    expect(settingsLostText(en, { detail: "in use", keptAs: null })).toBe(
+      "in use The file was left as it is and is not written over until the app starts again.",
+    );
   });
 });

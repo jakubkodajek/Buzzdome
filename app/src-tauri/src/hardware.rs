@@ -7,7 +7,7 @@
 
 use buzzers::hid::{udev_rule, DeviceInfo, DeviceSelector, HidBackend};
 use buzzers::hidapi_backend::HidapiBackend;
-use crate::app_file::{self, SettingsLost};
+use crate::app_file::{AppFile, SettingsLost};
 use crate::error::{AppError, CmdResult};
 use buzzers::learned::{self, LearnedMapping, Recorder};
 use buzzers::protocol::{format_hex, Protocol};
@@ -18,7 +18,7 @@ use quiz_file::FileAction;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 use std::collections::VecDeque;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Emitter, Manager};
@@ -77,9 +77,9 @@ pub struct Hardware {
     backend: Option<Arc<HidapiBackend>>,
     handle: Option<ReceiverHandle>,
     init_error: Option<String>,
-    settings_error: Option<SettingsLost>,
     settings: Arc<Mutex<ReceiverSettings>>,
-    settings_path: PathBuf,
+    /// Where they are kept, and why they were not read, if so.
+    settings_file: AppFile,
     learn: Mutex<Option<Recorder>>,
     raw_log: Mutex<VecDeque<RawReport>>,
 }
@@ -94,7 +94,7 @@ impl Hardware {
     pub fn start(app: &AppHandle) -> (Hardware, Option<ReceiverEvents>) {
         let settings_path = app.path().app_data_dir().map(|d| d.join(SETTINGS_FILE)).unwrap_or_else(|_| SETTINGS_FILE.into());
         // Unreadable settings are reported in the Receiver tab: learned buttons are gone until learned again.
-        let (settings, settings_error) = app_file::load::<ReceiverSettings>(&settings_path);
+        let (settings_file, settings) = AppFile::load::<ReceiverSettings>(settings_path);
         let remembered = settings.receiver.clone();
         let settings = Arc::new(Mutex::new(settings));
 
@@ -105,9 +105,8 @@ impl Hardware {
                     backend: None,
                     handle: None,
                     init_error: Some(e.to_string()),
-                    settings_error,
                     settings,
-                    settings_path,
+                    settings_file,
                     learn: Mutex::new(None),
                     raw_log: Mutex::new(VecDeque::new()),
                 };
@@ -127,9 +126,8 @@ impl Hardware {
             backend: Some(backend),
             handle: Some(handle),
             init_error: None,
-            settings_error,
             settings,
-            settings_path,
+            settings_file,
             learn: Mutex::new(None),
             raw_log: Mutex::new(VecDeque::new()),
         };
@@ -148,7 +146,7 @@ impl Hardware {
     /// Writes `settings` to disk and only then uses them, so the app never
     /// works with settings that a restart would lose.
     fn store_settings(&self, settings: ReceiverSettings) -> CmdResult<()> {
-        app_file::store(&self.settings_path, &settings)?;
+        self.settings_file.store(&settings)?;
         *self.settings.lock().unwrap() = settings;
         Ok(())
     }
@@ -230,7 +228,7 @@ pub fn receiver_info(hw: tauri::State<Hardware>) -> ReceiverInfo {
     ReceiverInfo {
         status: hw.handle.as_ref().map(ReceiverHandle::status),
         init_error: hw.init_error.clone(),
-        settings_error: hw.settings_error.clone(),
+        settings_error: hw.settings_file.lost().cloned(),
         learned_buttons: hw.settings.lock().unwrap().learned.iter().map(|m| m.signatures.len()).sum(),
         learn: hw.learn_progress(),
         recent: log.iter().skip(skip).cloned().collect(),
@@ -330,14 +328,14 @@ pub fn receiver_udev_rule(hw: tauri::State<Hardware>) -> String {
 mod tests {
     use super::*;
 
-    fn hardware(settings_path: PathBuf) -> Hardware {
+    fn hardware(settings_path: std::path::PathBuf) -> Hardware {
+        let (settings_file, settings) = AppFile::load(settings_path);
         Hardware {
             backend: None,
             handle: None,
             init_error: None,
-            settings_error: None,
-            settings: Arc::new(Mutex::new(ReceiverSettings::default())),
-            settings_path,
+            settings: Arc::new(Mutex::new(settings)),
+            settings_file,
             learn: Mutex::new(None),
             raw_log: Mutex::new(VecDeque::new()),
         }
@@ -359,7 +357,7 @@ mod tests {
         let fine = hardware(dir.join(SETTINGS_FILE));
         fine.store_settings(ReceiverSettings { receiver: receiver(), ..fine.settings() }).unwrap();
         assert_eq!(fine.settings().receiver, receiver());
-        assert_eq!(app_file::load::<ReceiverSettings>(&dir.join(SETTINGS_FILE)).0.receiver, receiver());
+        assert_eq!(hardware(dir.join(SETTINGS_FILE)).settings().receiver, receiver());
         std::fs::remove_dir_all(&dir).unwrap();
     }
 }

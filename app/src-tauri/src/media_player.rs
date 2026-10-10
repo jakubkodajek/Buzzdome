@@ -9,7 +9,7 @@
 //! copied holding only the first, so the board and the player answer while
 //! a big video comes in.
 
-use crate::app_file;
+use crate::app_file::AppFile;
 use crate::error::{AppError, CmdResult};
 use crate::now_ms;
 use quiz_core::{is_safe_reference, BoardChange, MediaKind, MediaPlayer, NowPlaying, PlayerCommand, SoundBoard, MAX_DROPPED_MB, MEDIA_PREFIX};
@@ -29,6 +29,8 @@ const DROPPED_NAME_HEADER: &str = "file-name";
 
 pub struct MediaState {
     root: PathBuf,
+    /// Where the sound board is kept.
+    board_file: AppFile,
     imports: Mutex<()>,
     library: Mutex<Library>,
 }
@@ -63,12 +65,13 @@ impl MediaState {
     /// read is kept aside and the board starts empty.
     pub fn open(root: PathBuf) -> MediaState {
         let files = media_files(&root);
-        let (board, lost) = app_file::load::<SoundBoard>(&root.join(BOARD_FILE));
-        if let Some(lost) = lost {
+        let (board_file, board) = AppFile::load::<SoundBoard>(root.join(BOARD_FILE));
+        if let Some(lost) = board_file.lost() {
             eprintln!("sound board not read: {} (kept as {:?})", lost.detail, lost.kept_as);
         }
         let board = board.normalized(&files);
-        MediaState { root, imports: Mutex::new(()), library: Mutex::new(Library { files, board, player: MediaPlayer::default() }) }
+        let library = Mutex::new(Library { files, board, player: MediaPlayer::default() });
+        MediaState { root, board_file, imports: Mutex::new(()), library }
     }
 
     pub fn root(&self) -> &Path {
@@ -92,7 +95,7 @@ impl MediaState {
 
     fn board_changed(&self, app: &AppHandle, library: &Library) -> CmdResult<()> {
         let _ = app.emit("sound-board", &library.board);
-        app_file::store(&self.root.join(BOARD_FILE), &library.board)
+        self.board_file.store(&library.board)
     }
 }
 
@@ -225,7 +228,7 @@ mod tests {
         drop(library);
 
         let board = SoundBoard { click: quiz_core::PadClick::Pause, ..SoundBoard::default() };
-        app_file::store(&root.join(BOARD_FILE), &board).unwrap();
+        AppFile::load::<SoundBoard>(root.join(BOARD_FILE)).0.store(&board).unwrap();
         assert_eq!(MediaState::open(root.clone()).library.lock().unwrap().board.click, quiz_core::PadClick::Pause);
         std::fs::remove_dir_all(&root).unwrap();
     }

@@ -41,8 +41,9 @@ struct Inner {
     driver: Box<dyn BuzzerDriver>,
     /// The team names prepared for the next show (`teams`).
     teams: Vec<String>,
-    /// Why the saved team names could not be read, for the Teams tab.
-    teams_lost: Option<app_file::SettingsLost>,
+    /// Where the prepared names are kept, and why they were not read, if
+    /// so (for the Teams tab). Known once the app has started.
+    teams_file: Option<app_file::AppFile>,
 }
 
 struct AppState(Mutex<Inner>);
@@ -434,7 +435,7 @@ pub fn run() {
             media_root: None,
             driver: Box::new(VirtualDriver),
             teams: Vec::new(),
-            teams_lost: None,
+            teams_file: None,
         })))
         .setup(|app| {
             let (hardware, events) = Hardware::start(app.handle());
@@ -452,7 +453,8 @@ pub fn run() {
             if let Ok(path) = teams::teams_path(app.handle()) {
                 let state = app.state::<AppState>();
                 let mut inner = state.0.lock().unwrap();
-                (inner.teams, inner.teams_lost) = teams::load(&path);
+                let (teams, file) = teams::load(path);
+                (inner.teams, inner.teams_file) = (teams, Some(file));
             }
             let library = media_player::MediaState::open(app_data(app.handle(), media_player::LIBRARY_FOLDER)?);
             app.asset_protocol_scope().allow_directory(library.root(), true)?;
