@@ -523,7 +523,11 @@ packages users will install are read the same way.
   sounds, videos and cues by it (`playerLevel`, `ClipPlayer::setGain`), and
   `media-volume` tells them at once, so what plays changes as the slider
   moves. It is kept in `library/player.json` (`app_file.rs`); a broken file
-  is kept aside and the volume starts full.
+  is kept aside and the volume starts full. A drag sends every value it passes,
+  faster than a disk writes, so `media_set_volume` (async, off the main
+  thread) only changes the volume and tells it; the first step since the
+  file was written writes it a quarter second later, with whatever volume
+  the drag has come to by then, and the steps meanwhile write nothing.
 
 ## 2. Buzzer link
 

@@ -7,9 +7,10 @@
 //! player's volume, kept with the library, is the level everything the
 //! show plays sounds at, set while it plays.
 //!
-//! Lock order: `MediaState::imports`, then `MediaState::library`. Files are
-//! copied holding only the first, so the board and the player answer while
-//! a big video comes in.
+//! Lock order: `MediaState::imports`, then `MediaState::library`, and
+//! `MediaState::player_file` before `MediaState::library`. Files are copied
+//! holding only `imports`, so the board and the player answer while a big
+//! video comes in.
 
 use crate::app_file::AppFile;
 use crate::error::{AppError, CmdResult};
@@ -20,9 +21,12 @@ use quiz_core::{
 use quiz_file::{FileAction, MediaSource};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
+use std::thread;
+use std::time::Duration;
 use tauri::ipc::{InvokeBody, Request};
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 use ts_rs::TS;
 
 /// The library's folder in the app's data folder: its files in `media/`, the board beside them.
@@ -31,13 +35,18 @@ const BOARD_FILE: &str = "soundboard.json";
 const PLAYER_FILE: &str = "player.json";
 /// The header that names a file dropped into the window (percent-encoded, as headers are ASCII).
 const DROPPED_NAME_HEADER: &str = "file-name";
+/// How long a new volume waits before it is kept, so that the steps of one
+/// drag of the slider, which come faster than a disk writes, are written once.
+const KEEP_VOLUME_AFTER: Duration = Duration::from_millis(250);
 
 pub struct MediaState {
     root: PathBuf,
     /// Where the sound board is kept.
     board_file: AppFile,
-    /// Where the player's volume is kept.
-    player_file: AppFile,
+    /// Where the player's volume is kept; held while it is written.
+    player_file: Mutex<AppFile>,
+    /// The volume changed since it was last kept.
+    volume_changed: AtomicBool,
     imports: Mutex<()>,
     library: Mutex<Library>,
 }
@@ -101,7 +110,7 @@ impl MediaState {
         let board = board.normalized(&files);
         let settings = PlayerSettings { volume: settings.volume.min(MAX_PLAYER_VOLUME) };
         let library = Mutex::new(Library { files, board, player: MediaPlayer::default(), settings });
-        MediaState { root, board_file, player_file, imports: Mutex::new(()), library }
+        MediaState { root, board_file, player_file: Mutex::new(player_file), volume_changed: AtomicBool::new(false), imports: Mutex::new(()), library }
     }
 
     pub fn root(&self) -> &Path {
@@ -126,6 +135,26 @@ impl MediaState {
     fn board_changed(&self, app: &AppHandle, library: &Library) -> CmdResult<()> {
         let _ = app.emit("sound-board", &library.board);
         self.board_file.store(&library.board)
+    }
+
+    /// Sets the player's volume, at most `MAX_PLAYER_VOLUME` percent, and
+    /// `tell`s it holding the lock, so the windows hear the volumes in the
+    /// order they were set. True when it was kept before, so this change is
+    /// the one to keep it again; the changes after it, till then, are kept with it.
+    fn set_volume(&self, volume: u8, tell: impl FnOnce(u8)) -> bool {
+        let mut library = self.library.lock().unwrap();
+        library.settings.volume = volume.min(MAX_PLAYER_VOLUME);
+        tell(library.settings.volume);
+        !self.volume_changed.swap(true, Ordering::SeqCst)
+    }
+
+    /// Writes the volume as it is now, for every change since it was last written.
+    fn keep_volume(&self) -> CmdResult<()> {
+        let file = self.player_file.lock().unwrap();
+        // Cleared before the volume is read: a change after the read keeps itself.
+        self.volume_changed.store(false, Ordering::SeqCst);
+        let settings = self.library.lock().unwrap().settings;
+        file.store(&settings)
     }
 }
 
@@ -242,13 +271,21 @@ pub fn media_volume(state: State<MediaState>) -> u8 {
 }
 
 /// Sets the player's volume, at most `MAX_PLAYER_VOLUME` percent; the
-/// windows change what plays at once. It is kept for the next start.
+/// windows change what plays at once. It is kept for the next start a
+/// moment later, off the main thread, with the changes that come meanwhile.
 #[tauri::command]
-pub fn media_set_volume(app: AppHandle, state: State<MediaState>, volume: u8) -> CmdResult<()> {
-    let mut library = state.library.lock().unwrap();
-    library.settings.volume = volume.min(MAX_PLAYER_VOLUME);
-    let _ = app.emit("media-volume", library.settings.volume);
-    state.player_file.store(&library.settings)
+pub async fn media_set_volume(app: AppHandle, state: State<'_, MediaState>, volume: u8) -> CmdResult<()> {
+    let told = |volume| {
+        let _ = app.emit("media-volume", volume);
+    };
+    if !state.set_volume(volume, told) {
+        return Ok(());
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        thread::sleep(KEEP_VOLUME_AFTER);
+        app.state::<MediaState>().keep_volume()
+    })
+    .await?
 }
 
 #[cfg(test)]
@@ -283,6 +320,23 @@ mod tests {
             std::fs::write(root.join(PLAYER_FILE), format!(r#"{{"volume": {kept}}}"#)).unwrap();
             assert_eq!(library_volume(&root), read);
         }
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn the_steps_of_one_drag_are_kept_by_its_first_step_with_the_last_volume() {
+        let root = std::env::temp_dir().join(format!("media-volume-{}", std::process::id()));
+        let state = MediaState::open(root.clone());
+        let set = |volume| state.set_volume(volume, |_| ());
+        assert!(set(40));
+        assert!(!set(30));
+        assert!(!set(250));
+        state.keep_volume().unwrap();
+        assert_eq!(library_volume(&root), MAX_PLAYER_VOLUME);
+        // Kept, the next change keeps itself again.
+        assert!(set(20));
+        state.keep_volume().unwrap();
+        assert_eq!(library_volume(&root), 20);
         std::fs::remove_dir_all(&root).unwrap();
     }
 
