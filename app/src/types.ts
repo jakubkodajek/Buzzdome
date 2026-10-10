@@ -23,6 +23,7 @@ export type { MediaKind } from "./bindings/MediaKind";
 export type { MonitorInfo } from "./bindings/MonitorInfo";
 export type { Phase } from "./bindings/Phase";
 export type { PlayerView } from "./bindings/PlayerView";
+export type { TeamView } from "./bindings/TeamView";
 export type { Press } from "./bindings/Press";
 export type { PressEvent } from "./bindings/PressEvent";
 export type { Problem } from "./bindings/Problem";

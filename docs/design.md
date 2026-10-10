@@ -14,11 +14,13 @@ How the app is built, with the buzzer link in most detail. Requirements are in
 │            ▲ events: game-state, clock-tick, ...        │
 │            │ commands: invoke(...)                      │
 │  Rust shell  app/src-tauri                              │
-│  ├── lib.rs       AppState { game, session, driver }    │
-│  │                execute(): apply → journal → effects  │
+│  ├── lib.rs       AppState { game, session, teams, .. } │
+│  │                execute_at(): apply → journal → emit  │
 │  ├── session.rs   append-only journal per show          │
 │  ├── editor.rs    the editor's crash-safe draft         │
+│  ├── teams.rs     team names kept between shows         │
 │  ├── themes.rs    built-in themes, list_themes          │
+│  ├── app_file.rs  small JSON files in app data          │
 │  └── hardware.rs  receiver setup, learn mode, raw log   │
 │  Rust crates                                            │
 │  ├── quiz-core    pure game state machine, scoring,     │
@@ -298,10 +300,20 @@ packages users will install are read the same way.
 ### 1.5 Teams and registration
 
 - **Team names.** The game keeps the team names prepared for the show
-  (`Game::teams`), set as a whole by `SetTeams`: the core trims them, drops
-  blanks and repeats (ignoring case), cuts them to `MAX_NAME_CHARS` and
-  refuses more than `MAX_TEAMS`. Being commands, they are journaled and come
-  back after a crash like everything else.
+  (`Game::teams`), set as a whole by `SetTeams`: `team_names` trims them,
+  drops blanks and repeats (ignoring case), cuts them to `MAX_NAME_CHARS`
+  and refuses more than `MAX_TEAMS` as soon as it sees one more, so a wrong
+  file of thousands of lines does not hold the show state. Being commands,
+  they are journaled and come back after a crash like everything else.
+- **Kept between shows.** The shell (`teams.rs`) keeps the names in
+  `<app data>/teams.json`, written atomically (`app_file.rs`, which the
+  receiver settings use too), so they can be typed before a show and
+  outlive it: ending a show, opening another quiz or a test run keeps them.
+  A show starts with them as its first journaled `SetTeams`. The Director
+  changes them with `add_teams` and `remove_team`, which work on the list
+  the shell holds, so two quick edits cannot undo each other; in a show
+  the change is journaled first and then saved. `teams-changed` tells the
+  windows.
 - **Pairing.** A team is paired with the buzzer whose player has its name,
   so the player's name is the only record; `GameView.teams` (`TeamView`)
   derives the pairs. `PairTeam` gives a buzzer a name and takes it from any
@@ -560,7 +572,7 @@ them.
 | Editor: typing, undo and redo, copy and paste, delete, keys, Edit dialog, ribbon fields, layout gallery, drag reorder, table view, File page | `npm test` (history, draft queue, slide changes, layouts) and 22 flows in headless Chromium against the preview | pass |
 | Quiz files: save, open, reuse, unsafe entries, size limit, missing media | `cargo test -p quiz-file` | pass |
 | Themes: `theme.json` rules, inheritance, built-in packages complete with their files and font licences; gallery, fonts, a broken theme background warns once | `cargo test` (`quiz_core::theme`, shell `themes`), `npm test`, headless Chromium against the preview | pass |
-| Teams: names, pairing, replay; drag, click, paste and CSV import (Windows-1250) | `cargo test` (`game_flow`), `npm test` (`team-names`), headless Chromium against the preview | pass |
+| Teams: names, pairing, replay, names kept between shows; drag, click, paste and CSV import (Windows-1250), preparing names before a show | `cargo test` (`game_flow`, shell `teams`, `app_file`), `npm test` (`team-names`), headless Chromium against the preview | pass |
 | Loudness measurement | `npm test`: a full-scale 997 Hz sine in one channel measures -3.01 LUFS as BS.1770-4 states; gating, channel sum, part, peak limit | pass |
 | Trim and Normalize volume windows, video trim window, background video menu and options, slide video (intro pause, Play video, speed, volume, part, holding with the show, blur and mosaic, replay) | headless Chromium against the preview with generated test media (a song and a test-pattern video, not in the repo) | pass |
 | Media through the asset protocol, autoplay of video and sound | needs the installed app on each OS | **not tested** |

@@ -3,14 +3,31 @@ import { buttonLabel } from "../answers";
 import { useApp, useDispatch } from "../app-context";
 import { MAX_NAME_CHARS } from "../bindings/Constants";
 import { seconds, signed } from "../format";
+import { usePreparedTeams } from "../hooks";
 import type { BuzzerId, Command, GameView } from "../types";
 import { BuzzerChip, TeamList } from "./TeamList";
+
+/**
+ * In a show, its players and teams (`ShowTeams`). Before one, the team
+ * names to prepare for it, which are kept from show to show.
+ */
+export function TeamsTab({ view }: { view: GameView | null }) {
+  const prepared = usePreparedTeams();
+  if (view) return <ShowTeams view={view} />;
+  return (
+    <div className="teams-tab">
+      <div className="teams-body">
+        <TeamList teams={prepared.map((name) => ({ name, buzzer: null }))} players={null} picked={null} onPick={() => {}} />
+      </div>
+    </div>
+  );
+}
 
 /**
  * Players with scores; select rows (Ctrl/Shift click) to change several at
  * once. Beside them, the team names the buzzers are paired with.
  */
-export function TeamsTab({ view }: { view: GameView }) {
+function ShowTeams({ view }: { view: GameView }) {
   const { t } = useApp();
   const dispatch = useDispatch();
   const [selected, setSelected] = useState<Set<BuzzerId>>(new Set());
@@ -122,7 +139,7 @@ export function TeamsTab({ view }: { view: GameView }) {
             </tbody>
           </table>
         </div>
-        <TeamList view={view} picked={picked} onPick={pick} />
+        <TeamList teams={view.teams} players={view.players} picked={picked} onPick={pick} />
       </div>
     </div>
   );

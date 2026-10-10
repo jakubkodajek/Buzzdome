@@ -147,12 +147,12 @@ function TabBody({ tab, view, quiz, projector }: { tab: Tab; view: GameView | nu
   // Setup tabs work without a show; the others need one.
   if (tab === "settings") return <SettingsTab projector={projector} />;
   if (tab === "receiver") return <ReceiverTab />;
+  // Team names can be prepared before a show.
+  if (tab === "teams") return <TeamsTab view={view} />;
   if (!view) return <p className="empty">{t("welcome")}</p>;
   switch (tab) {
     case "questions":
       return <QuestionsTab view={view} quiz={quiz} />;
-    case "teams":
-      return <TeamsTab view={view} />;
     case "responses":
       return <ResponsesTab view={view} />;
     case "buzzers":

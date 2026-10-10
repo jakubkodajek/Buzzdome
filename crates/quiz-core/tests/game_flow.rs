@@ -1,6 +1,6 @@
 use quiz_core::{
     AnswerMode, Button, Command, Cue, Effect, Game, GameError, Light, Phase, Question, QuestionStep, Quiz, Slide,
-    SlideContent, Stamped, VideoClip, MAX_NAME_CHARS, MAX_TEAMS, PRESS_GRACE_MS,
+    SlideContent, Stamped, VideoClip, team_names, MAX_NAME_CHARS, MAX_TEAMS, PRESS_GRACE_MS,
 };
 use quiz_core::game::FINAL_LAST_STEP;
 use quiz_core::view::AnswerResults;
@@ -88,6 +88,20 @@ fn team_names_are_kept_once_each_without_blanks_and_cut_to_length() {
     let too_many: Vec<String> = (0..=MAX_TEAMS).map(|i| format!("Team {i}")).collect();
     assert_eq!(show.run(0, Command::SetTeams { names: too_many }), Err(GameError::TooManyTeams));
     assert_eq!(show.game.teams().len(), 3, "a refused list leaves the old one");
+}
+
+#[test]
+fn a_list_of_names_counts_teams_not_lines_and_stops_reading_at_the_limit() {
+    // Repeats and blanks beyond the limit are not teams.
+    let mut lines: Vec<String> = (0..MAX_TEAMS).map(|i| format!("Team {i}")).collect();
+    lines.extend(["team 0".to_string(), String::new(), "  ".to_string()]);
+    assert_eq!(team_names(lines.iter().map(String::as_str)).map(|teams| teams.len()), Ok(MAX_TEAMS));
+    // A wrong file of many lines is refused at the first name too many.
+    let lines: Vec<String> = (0..MAX_TEAMS * 100).map(|i| format!("Team {i}")).collect();
+    let mut counted = 0;
+    let names = lines.iter().map(String::as_str).inspect(|_| counted += 1);
+    assert_eq!(team_names(names), Err(GameError::TooManyTeams));
+    assert_eq!(counted, MAX_TEAMS + 1);
 }
 
 #[test]

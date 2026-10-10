@@ -42,6 +42,10 @@ export const api = {
   hostWindowOpen: () => invoke<boolean>("host_window_open"),
   /** Every installed theme with all its values, the default theme among them. */
   listThemes: () => invoke<Theme[]>("list_themes"),
+  /** The team names prepared for shows (the running show's while one runs). */
+  preparedTeams: () => invoke<string[]>("prepared_teams"),
+  addTeams: (names: string[]) => invoke<void>("add_teams", { names }),
+  removeTeam: (name: string) => invoke<void>("remove_team", { name }),
   receiverInfo: () => invoke<ReceiverInfo>("receiver_info"),
   receiverDevices: () => invoke<DeviceInfo[]>("receiver_devices"),
   receiverSelect: (device: DeviceInfo | null) => invoke<void>("receiver_select", { device }),
@@ -81,4 +85,6 @@ export interface BackendEvents {
   "receiver-learn": LearnProgress;
   /** The projector window opened (true) or closed (false). */
   "host-window": boolean;
+  /** The prepared team names changed, or a show started or ended. */
+  "teams-changed": string[];
 }

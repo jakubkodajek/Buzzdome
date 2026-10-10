@@ -1,11 +1,13 @@
 //! Desktop shell: owns the live game, journals every accepted command before
 //! the windows see it, drives the buzzer lights and the projector window.
 
+mod app_file;
 mod editor;
 mod error;
 mod hardware;
 mod pump;
 mod session;
+mod teams;
 mod themes;
 
 use buzzers::receiver::HardwareDriver;
@@ -33,6 +35,8 @@ struct Inner {
     /// Folder with the running quiz's media files, served to the windows.
     media_root: Option<PathBuf>,
     driver: Box<dyn BuzzerDriver>,
+    /// The team names prepared for the next show (`teams`).
+    teams: Vec<String>,
 }
 
 struct AppState(Mutex<Inner>);
@@ -72,6 +76,8 @@ fn emit_state(app: &AppHandle, game: Option<&Game>) {
 /// reload the quiz.
 fn emit_show_changed(app: &AppHandle, inner: &Inner) {
     let _ = app.emit("show-changed", ());
+    // A show has its own team names, and the prepared ones are back after it.
+    let _ = app.emit("teams-changed", teams::current(inner));
     emit_state(app, inner.game.as_ref());
 }
 
@@ -141,15 +147,25 @@ fn start_show(
     };
     let session = Session::create(&sessions_root(app)?, &quiz, &meta).map_err(|e| AppError::ShowNotSaved { detail: e.to_string() })?;
     serve_media(app, inner, media_root)?;
-    inner.game = Some(Game::new(quiz));
-    inner.session = Some(session);
-    emit_show_changed(app, inner);
+    begin_show(app, inner, Game::new(quiz), Some(session))?;
     // Only the latest show can be resumed, so other unpacked quizzes can go.
     let keep: Vec<&Path> = inner.media_root.iter().map(PathBuf::as_path).collect();
     if let Err(e) = quiz_file::prune(&quizzes_cache(app)?, &keep) {
         eprintln!("cleaning unpacked quizzes: {e}");
     }
     Ok(())
+}
+
+/// Makes `game` the running show, journaled in `session` (none in a test
+/// run), and gives it the prepared team names as its first command.
+fn begin_show(app: &AppHandle, inner: &mut Inner, game: Game, session: Option<Session>) -> CmdResult<()> {
+    inner.game = Some(game);
+    inner.session = session;
+    let teams = (!inner.teams.is_empty()).then(|| Command::SetTeams { names: inner.teams.clone() });
+    // The show runs even if its journal refuses the names; the Director says why.
+    let named = teams.map_or(Ok(()), |command| execute_at(app, inner, command, now_ms()));
+    emit_show_changed(app, inner);
+    named
 }
 
 #[tauri::command]
@@ -190,10 +206,7 @@ fn editor_test_run(app: AppHandle, state: State<AppState>, quiz: Quiz) -> CmdRes
     quiz_file::check(&quiz, &root)?;
     let mut inner = lock_for_new_show(&app, &state)?;
     serve_media(&app, &mut inner, Some(root))?;
-    inner.game = Some(Game::new(quiz));
-    inner.session = None;
-    emit_show_changed(&app, &inner);
-    Ok(())
+    begin_show(&app, &mut inner, Game::new(quiz), None)
 }
 
 #[tauri::command]
@@ -393,6 +406,7 @@ pub fn run() {
             session: None,
             media_root: None,
             driver: Box::new(VirtualDriver),
+            teams: Vec::new(),
         })))
         .setup(|app| {
             let (hardware, events) = Hardware::start(app.handle());
@@ -407,6 +421,7 @@ pub fn run() {
             app.asset_protocol_scope().allow_directory(&packages, true)?;
             let builtin = themes::builtin_themes(|id| packages.join(id).join("").to_string_lossy().into_owned())?;
             app.manage(themes::Themes(builtin));
+            app.state::<AppState>().0.lock().unwrap().teams = teams::teams_path(app.handle()).map(|path| teams::load(&path)).unwrap_or_default();
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -424,6 +439,9 @@ pub fn run() {
             close_host_window,
             host_window_open,
             themes::list_themes,
+            teams::prepared_teams,
+            teams::add_teams,
+            teams::remove_team,
             editor::editor_load,
             editor::editor_new,
             editor::editor_open,

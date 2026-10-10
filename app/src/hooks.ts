@@ -83,14 +83,19 @@ export function useGameView(): GameView | null {
   return usePushedValue("game-state", api.getView);
 }
 
-/** Whether a buzzer button is being learned; presses do not play meanwhile. */
 /** Whether the projector window is open, however it was opened or closed. */
 export function useHostWindowOpen(): boolean {
   return usePushedValue("host-window", api.hostWindowOpen) ?? false;
 }
 
+/** Whether a buzzer button is being learned; presses do not play meanwhile. */
 export function useLearnProgress(): LearnProgress | null {
   return usePushedValue("receiver-learn", () => api.receiverInfo().then((info) => info.learn));
+}
+
+/** The team names prepared for shows, kept between them; empty until loaded. */
+export function usePreparedTeams(): string[] {
+  return usePushedValue("teams-changed", api.preparedTeams) ?? [];
 }
 
 /** The clock of the current question: from the game state, then from ticks. */

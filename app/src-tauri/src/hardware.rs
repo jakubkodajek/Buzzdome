@@ -2,11 +2,12 @@
 //! thread, learn mode and the commands behind the Director's Receiver tab.
 //!
 //! Hardware presses take the same path as keyboard and on-screen presses
-//! (`Command::Press` through `execute`), so they are journaled and replayed
+//! (`Command::Press` through `execute_at`), so they are journaled and replayed
 //! like everything else.
 
 use buzzers::hid::{udev_rule, DeviceInfo, DeviceSelector, HidBackend};
 use buzzers::hidapi_backend::HidapiBackend;
+use crate::app_file::{self, SettingsLost};
 use crate::error::{AppError, CmdResult};
 use buzzers::learned::{self, LearnedMapping, Recorder};
 use buzzers::protocol::{format_hex, Protocol};
@@ -63,18 +64,6 @@ pub struct ReceiverInfo {
     platform: &'static str,
 }
 
-/// The saved receiver settings could not be read, so learned buttons are
-/// gone until learned again.
-#[derive(Debug, Clone, Serialize, TS)]
-#[ts(export)]
-#[serde(rename_all = "camelCase")]
-pub struct SettingsLost {
-    /// The system's message.
-    detail: String,
-    /// Where the unreadable file was kept, if it could be moved aside.
-    kept_as: Option<String>,
-}
-
 #[derive(Debug, Clone, Serialize, TS)]
 #[ts(export)]
 #[serde(rename_all = "camelCase")]
@@ -104,7 +93,8 @@ impl Hardware {
     /// the returned `Hardware` is managed by the app (the pump reads it).
     pub fn start(app: &AppHandle) -> (Hardware, Option<ReceiverEvents>) {
         let settings_path = app.path().app_data_dir().map(|d| d.join(SETTINGS_FILE)).unwrap_or_else(|_| SETTINGS_FILE.into());
-        let (settings, settings_error) = load_settings(&settings_path);
+        // Unreadable settings are reported in the Receiver tab: learned buttons are gone until learned again.
+        let (settings, settings_error) = app_file::load::<ReceiverSettings>(&settings_path);
         let remembered = settings.receiver.clone();
         let settings = Arc::new(Mutex::new(settings));
 
@@ -158,11 +148,7 @@ impl Hardware {
     /// Writes `settings` to disk and only then uses them, so the app never
     /// works with settings that a restart would lose.
     fn store_settings(&self, settings: ReceiverSettings) -> CmdResult<()> {
-        let json = serde_json::to_string_pretty(&settings).expect("receiver settings serialize: no maps and no custom serializers");
-        if let Some(dir) = self.settings_path.parent() {
-            std::fs::create_dir_all(dir).map_err(|e| AppError::file(FileAction::CreateFolder, dir, e))?;
-        }
-        quiz_file::write_atomic(&self.settings_path, json.as_bytes())?;
+        app_file::store(&self.settings_path, &settings)?;
         *self.settings.lock().unwrap() = settings;
         Ok(())
     }
@@ -191,25 +177,6 @@ impl Hardware {
         match self.handle.as_ref()?.status() {
             ReceiverStatus::Connected { device, .. } => Some(device),
             _ => None,
-        }
-    }
-}
-
-/// Reads the remembered receiver settings. A file that cannot be read is
-/// renamed aside (so learned buttons can still be recovered by hand) and
-/// reported, instead of being silently replaced by defaults.
-fn load_settings(path: &Path) -> (ReceiverSettings, Option<SettingsLost>) {
-    let text = match std::fs::read_to_string(path) {
-        Ok(text) => text,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return (ReceiverSettings::default(), None),
-        Err(e) => return (ReceiverSettings::default(), Some(SettingsLost { detail: e.to_string(), kept_as: None })),
-    };
-    match serde_json::from_str(&text) {
-        Ok(settings) => (settings, None),
-        Err(e) => {
-            let aside = path.with_extension("json.broken");
-            let kept_as = std::fs::rename(path, &aside).ok().map(|()| aside.display().to_string());
-            (ReceiverSettings::default(), Some(SettingsLost { detail: e.to_string(), kept_as }))
         }
     }
 }
@@ -392,7 +359,7 @@ mod tests {
         let fine = hardware(dir.join(SETTINGS_FILE));
         fine.store_settings(ReceiverSettings { receiver: receiver(), ..fine.settings() }).unwrap();
         assert_eq!(fine.settings().receiver, receiver());
-        assert_eq!(load_settings(&dir.join(SETTINGS_FILE)).0.receiver, receiver());
+        assert_eq!(app_file::load::<ReceiverSettings>(&dir.join(SETTINGS_FILE)).0.receiver, receiver());
         std::fs::remove_dir_all(&dir).unwrap();
     }
 }

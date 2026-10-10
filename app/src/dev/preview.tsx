@@ -244,12 +244,23 @@ mockWindows(windowLabel, windowLabel === "host" ? "director" : "host");
 /** The commands the windows sent, for browser checks of the controls (nothing applies them here). */
 const dispatched: unknown[] = [];
 (window as unknown as { dispatched: unknown[] }).dispatched = dispatched;
+/** Other backend calls that change something, as `{ cmd, ...payload }`, for the same checks. */
+const called: unknown[] = [];
+(window as unknown as { called: unknown[] }).called = called;
+/** The team names prepared before a show (the running show's in a show scene). */
+const PREPARED_TEAMS = ["Kvízožrouti", "Pivní rytíři", "U Tří Lvů"];
 
 mockIPC((cmd, payload) => {
   switch (cmd) {
     case "dispatch":
       dispatched.push((payload as { command: unknown }).command);
       return null;
+    case "add_teams":
+    case "remove_team":
+      called.push({ cmd, ...(payload as object) });
+      return null;
+    case "prepared_teams":
+      return current ? current.teams.map((team) => team.name) : PREPARED_TEAMS;
     case "get_view":
       return current;
     case "get_quiz":

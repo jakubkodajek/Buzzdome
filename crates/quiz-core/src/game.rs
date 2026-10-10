@@ -7,7 +7,7 @@
 use crate::model::{AnswerMode, Question, Quiz, Slide, SlideContent};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 
 pub type BuzzerId = u16;
 
@@ -280,6 +280,25 @@ impl Player {
 /// A name as typed, without surrounding spaces and at most `MAX_NAME_CHARS` long.
 fn clean_name(name: &str) -> String {
     name.trim().chars().take(MAX_NAME_CHARS).collect::<String>().trim_end().to_string()
+}
+
+/// The team names to prepare from `names` as given: trimmed and cut to
+/// `MAX_NAME_CHARS`, without blanks or repeats (`same_name`), in their order.
+/// More than `MAX_TEAMS` is refused as soon as it is seen, so a wrong file of
+/// thousands of lines costs no more than reading `MAX_TEAMS` of them.
+pub fn team_names<'a>(names: impl IntoIterator<Item = &'a str>) -> Result<Vec<String>, GameError> {
+    let mut seen = HashSet::new();
+    let mut teams = Vec::new();
+    for name in names.into_iter().map(clean_name) {
+        if name.is_empty() || !seen.insert(name.to_lowercase()) {
+            continue;
+        }
+        if teams.len() == MAX_TEAMS {
+            return Err(GameError::TooManyTeams);
+        }
+        teams.push(name);
+    }
+    Ok(teams)
 }
 
 /// Two names are the same team when they differ only in case; an empty
@@ -573,16 +592,7 @@ impl Game {
                 Ok(vec![])
             }
             Command::SetTeams { names } => {
-                let mut teams: Vec<String> = Vec::new();
-                for name in names.iter().map(|name| clean_name(name)) {
-                    if !name.is_empty() && !teams.iter().any(|team| same_name(team, &name)) {
-                        teams.push(name);
-                    }
-                }
-                if teams.len() > MAX_TEAMS {
-                    return Err(GameError::TooManyTeams);
-                }
-                self.teams = teams;
+                self.teams = team_names(names.iter().map(String::as_str))?;
                 Ok(vec![])
             }
             Command::PairTeam { buzzer, name } => {

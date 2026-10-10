@@ -8,7 +8,7 @@ pub mod theme;
 pub mod view;
 
 pub use game::{
-    BuzzerId, Button, Clock, Command, Controls, Cue, Effect, Game, GameError, Light, Phase, QuestionStep, Stamped,
+    team_names, BuzzerId, Button, Clock, Command, Controls, Cue, Effect, Game, GameError, Light, Phase, QuestionStep, Stamped,
     MAX_NAME_CHARS, MAX_TEAMS, PRESS_GRACE_MS,
 };
 pub use media::{
