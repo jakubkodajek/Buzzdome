@@ -273,6 +273,26 @@ packages users will install are read the same way.
   `list_themes` returns them to `app/src/bindings/BuiltinThemes.json`, with
   folders that Vite serves; the browser preview and the UI tests use it.
 
+### 1.5 Teams and registration
+
+- **Team names.** The game keeps the team names prepared for the show
+  (`Game::teams`), set as a whole by `SetTeams`: the core trims them, drops
+  blanks and repeats (ignoring case), cuts them to `MAX_NAME_CHARS` and
+  refuses more than `MAX_TEAMS`. Being commands, they are journaled and come
+  back after a crash like everything else.
+- **Pairing.** A team is paired with the buzzer whose player has its name,
+  so the player's name is the only record; `GameView.teams` (`TeamView`)
+  derives the pairs. `PairTeam` gives a buzzer a name and takes it from any
+  other player; renaming a player in the table pairs or unpairs the same way.
+- **Director.** `TeamList.tsx` sits beside the players table: buzzers
+  without a team, the team names with their buzzers, and adding, pasting or
+  loading names (`team-names.ts`: lines, or a CSV file's first column, in
+  UTF-8 or Windows-1250). A buzzer number (`BuzzerChip`) is dragged onto a
+  name with HTML drag and drop, or clicked and then the name clicked, which
+  also works on a touch screen.
+- **Projector.** The registration grid shows a paired team's name under its
+  number.
+
 ## 2. Buzzer link
 
 ### 2.1 Layers
@@ -514,6 +534,7 @@ them.
 | Editor: typing, undo and redo, copy and paste, delete, keys, Edit dialog, ribbon fields, layout gallery, drag reorder, table view, File page | `npm test` (history, draft queue, slide changes, layouts) and 22 flows in headless Chromium against the preview | pass |
 | Quiz files: save, open, reuse, unsafe entries, size limit, missing media | `cargo test -p quiz-file` | pass |
 | Themes: `theme.json` rules, inheritance, built-in packages complete with their files and font licences; gallery, fonts, a broken theme background warns once | `cargo test` (`quiz_core::theme`, shell `themes`), `npm test`, headless Chromium against the preview | pass |
+| Teams: names, pairing, replay; drag, click, paste and CSV import (Windows-1250) | `cargo test` (`game_flow`), `npm test` (`team-names`), headless Chromium against the preview | pass |
 | Loudness measurement | `npm test`: a full-scale 997 Hz sine in one channel measures -3.01 LUFS as BS.1770-4 states; gating, channel sum, part, peak limit | pass |
 | Trim and Normalize volume windows, background video menu and options | headless Chromium against the preview with generated test media (a song and a test-pattern video, not in the repo) | pass |
 | Media through the asset protocol, autoplay of video and sound | needs the installed app on each OS | **not tested** |

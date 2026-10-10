@@ -4,7 +4,7 @@
 //! message, which the UI shows as it is.
 
 use buzzers::learned::LearnError;
-use quiz_core::{BuzzerId, Button, GameError, QuizJsonError, ValidationError};
+use quiz_core::{BuzzerId, Button, GameError, QuizJsonError, ValidationError, MAX_TEAMS};
 use quiz_file::{FileAction, QuizFileError};
 use serde::Serialize;
 use std::path::Path;
@@ -29,6 +29,8 @@ pub enum AppError {
     NoSuchSlide { slide: usize },
     #[error("buzzer {buzzer} already exists")]
     DuplicateBuzzer { buzzer: BuzzerId },
+    #[error("more than {max} team names")]
+    TooManyTeams { max: usize },
     /// The show's journal cannot be written, so the change was not made.
     #[error("the show cannot be saved: {detail}")]
     ShowNotSaved { detail: String },
@@ -101,6 +103,7 @@ impl From<GameError> for AppError {
             GameError::UnknownBuzzer(buzzer) => AppError::UnknownBuzzer { buzzer },
             GameError::NoSuchSlide(slide) => AppError::NoSuchSlide { slide },
             GameError::DuplicateBuzzer(buzzer) => AppError::DuplicateBuzzer { buzzer },
+            GameError::TooManyTeams => AppError::TooManyTeams { max: MAX_TEAMS },
         }
     }
 }

@@ -19,6 +19,13 @@ pub const FINAL_LAST_STEP: u8 = 4;
 /// by when it was received (its `at_ms`), not by when it is applied.
 pub const PRESS_GRACE_MS: u64 = 250;
 
+/// The most team names a show can have prepared.
+pub const MAX_TEAMS: usize = 200;
+
+/// Player and team names are cut to this many characters, so they fit the
+/// projector's lists.
+pub const MAX_NAME_CHARS: usize = 60;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[ts(export)]
 #[serde(rename_all = "camelCase")]
@@ -100,6 +107,12 @@ pub enum Command {
     AddPlayer { buzzer: BuzzerId, name: String },
     #[serde(rename_all = "camelCase")]
     RenamePlayer { buzzer: BuzzerId, name: String },
+    /// Replaces the team names prepared for the show, in order. Empty names
+    /// and repeats (ignoring case) are left out.
+    SetTeams { names: Vec<String> },
+    /// Gives a buzzer a team name; a player who had that name loses it.
+    #[serde(rename_all = "camelCase")]
+    PairTeam { buzzer: BuzzerId, name: String },
     #[serde(rename_all = "camelCase")]
     SetPlayerEnabled { buzzer: BuzzerId, enabled: bool },
     #[serde(rename_all = "camelCase")]
@@ -125,6 +138,8 @@ pub enum GameError {
     NoSuchSlide(usize),
     #[error("buzzer {0} already exists")]
     DuplicateBuzzer(BuzzerId),
+    #[error("more than {MAX_TEAMS} team names")]
+    TooManyTeams,
 }
 
 /// Which step-dependent quizmaster commands the current step takes
@@ -258,6 +273,17 @@ impl Player {
     }
 }
 
+/// A name as typed, without surrounding spaces and at most `MAX_NAME_CHARS` long.
+fn clean_name(name: &str) -> String {
+    name.trim().chars().take(MAX_NAME_CHARS).collect::<String>().trim_end().to_string()
+}
+
+/// Two names are the same team when they differ only in case; an empty
+/// name is nobody's.
+pub fn same_name(a: &str, b: &str) -> bool {
+    !a.is_empty() && a.to_lowercase() == b.to_lowercase()
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Response {
@@ -279,6 +305,9 @@ pub struct Game {
     /// Score changes from the current question, for feedback on screen.
     deltas: BTreeMap<BuzzerId, i32>,
     leaderboard_visible: bool,
+    /// Team names prepared for the show; a team is paired with the buzzer
+    /// whose player has its name (`view::TeamView`).
+    teams: Vec<String>,
 }
 
 impl Game {
@@ -292,6 +321,7 @@ impl Game {
             locked_out: BTreeSet::new(),
             deltas: BTreeMap::new(),
             leaderboard_visible: false,
+            teams: Vec::new(),
         }
     }
 
@@ -338,6 +368,10 @@ impl Game {
 
     pub fn players(&self) -> impl Iterator<Item = &Player> {
         self.players.values()
+    }
+
+    pub fn teams(&self) -> &[String] {
+        &self.teams
     }
 
     pub fn responses(&self) -> &BTreeMap<BuzzerId, Response> {
@@ -490,7 +524,31 @@ impl Game {
                 Ok(vec![])
             }
             Command::RenamePlayer { buzzer, name } => {
-                self.player_mut(*buzzer)?.name = name.trim().to_string();
+                self.player_mut(*buzzer)?.name = clean_name(name);
+                Ok(vec![])
+            }
+            Command::SetTeams { names } => {
+                let mut teams: Vec<String> = Vec::new();
+                for name in names.iter().map(|name| clean_name(name)) {
+                    if !name.is_empty() && !teams.iter().any(|team| same_name(team, &name)) {
+                        teams.push(name);
+                    }
+                }
+                if teams.len() > MAX_TEAMS {
+                    return Err(GameError::TooManyTeams);
+                }
+                self.teams = teams;
+                Ok(vec![])
+            }
+            Command::PairTeam { buzzer, name } => {
+                let name = clean_name(name);
+                self.player_mut(*buzzer)?;
+                for player in self.players.values_mut() {
+                    if player.buzzer != *buzzer && same_name(&player.name, &name) {
+                        player.name.clear();
+                    }
+                }
+                self.player_mut(*buzzer)?.name = name;
                 Ok(vec![])
             }
             Command::SetPlayerEnabled { buzzer, enabled } => {
@@ -516,7 +574,7 @@ impl Game {
     fn register(&mut self, buzzer: BuzzerId, name: String) {
         self.players.entry(buzzer).or_insert(Player {
             buzzer,
-            name: name.trim().to_string(),
+            name: clean_name(&name),
             score: 0,
             enabled: true,
             total_answer_ms: 0,

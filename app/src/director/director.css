@@ -732,3 +732,153 @@
 .pre-line {
   white-space: pre-line;
 }
+
+/* Teams tab: players beside the team names their buzzers are paired with */
+
+.teams-body {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+}
+
+.teams-body > .table-wrap {
+  border-right: 1px solid var(--line);
+}
+
+.buzzer-chip {
+  display: inline-block;
+  min-width: 28px;
+  padding: 1px 6px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  text-align: center;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  background: var(--chrome);
+  cursor: grab;
+}
+
+.buzzer-chip.free {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.buzzer-chip.picked {
+  color: #fff;
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+.buzzer-chip:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.team-panel {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  overflow: auto;
+}
+
+.team-panel h3 {
+  margin: 4px 0 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.free-buzzers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.team-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--line);
+}
+
+.team-list li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+  border-bottom: 1px solid #ececec;
+}
+
+.team-list li:last-child {
+  border-bottom: none;
+}
+
+.team-list li.pickable {
+  cursor: pointer;
+}
+
+.team-list li.pickable:hover,
+.team-list li.target {
+  background: var(--accent-soft);
+}
+
+.team-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.drop-hint {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.team-list .paired {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.team-panel .icon-button {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 3px;
+  border: none;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--muted);
+}
+
+.team-panel .icon-button:hover {
+  color: var(--text);
+  background: #e6e6e6;
+}
+
+.team-panel .icon-button svg {
+  width: 14px;
+  height: 14px;
+}
+
+.team-add {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.team-add input {
+  flex: 1 1 140px;
+  min-width: 0;
+}
+
+.team-hint {
+  margin: 0;
+  font-size: 11px;
+}

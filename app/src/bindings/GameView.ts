@@ -5,12 +5,17 @@ import type { Controls } from "./Controls";
 import type { Phase } from "./Phase";
 import type { PlayerView } from "./PlayerView";
 import type { Slide } from "./Slide";
+import type { TeamView } from "./TeamView";
 
 export type GameView = { quizTitle: string, slideIndex: number, slideCount: number, phase: Phase, slide: Slide | null, 
 /**
  * Title of the next slide, for the quizmaster.
  */
-nextSlideTitle: string | null, clock: ClockView | null, players: Array<PlayerView>, enabledCount: number, 
+nextSlideTitle: string | null, clock: ClockView | null, players: Array<PlayerView>, 
+/**
+ * The team names prepared for the show, in order, with their buzzers.
+ */
+teams: Array<TeamView>, enabledCount: number, 
 /**
  * Enabled players who answered the current question.
  */

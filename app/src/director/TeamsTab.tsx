@@ -1,16 +1,24 @@
 import { useState } from "react";
 import { buttonLabel } from "../answers";
 import { useApp, useDispatch } from "../app-context";
+import { MAX_NAME_CHARS } from "../bindings/Constants";
 import { seconds, signed } from "../format";
 import type { BuzzerId, Command, GameView } from "../types";
+import { BuzzerChip, TeamList } from "./TeamList";
 
-/** Players with scores; select rows (Ctrl/Shift click) to change several at once. */
+/**
+ * Players with scores; select rows (Ctrl/Shift click) to change several at
+ * once. Beside them, the team names the buzzers are paired with.
+ */
 export function TeamsTab({ view }: { view: GameView }) {
   const { t } = useApp();
   const dispatch = useDispatch();
   const [selected, setSelected] = useState<Set<BuzzerId>>(new Set());
   const [anchor, setAnchor] = useState<BuzzerId | null>(null);
   const [newBuzzer, setNewBuzzer] = useState("");
+  /** The buzzer clicked for pairing; clicking it again lets go of it. */
+  const [picked, setPicked] = useState<BuzzerId | null>(null);
+  const pick = (buzzer: BuzzerId | null) => setPicked((current) => (buzzer === current ? null : buzzer));
   const players = [...view.players].sort((a, b) => a.buzzer - b.buzzer);
 
   const select = (buzzer: BuzzerId, e: React.MouseEvent) => {
@@ -64,51 +72,57 @@ export function TeamsTab({ view }: { view: GameView }) {
         />
         <button onClick={addPlayer}>{t("addPlayer")}</button>
       </div>
-      <div className="table-wrap">
-        <table className="grid">
-          <thead>
-            <tr>
-              <th>{t("name")}</th>
-              <th>{t("colBuzzer")}</th>
-              <th>{t("score")}</th>
-              <th>{t("colLastResponse")}</th>
-              <th>{t("colTotalTime")}</th>
-              <th>{t("active")}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {players.map((p) => (
-              <tr
-                key={p.buzzer}
-                className={[selected.has(p.buzzer) ? "selected" : "", view.buzzed === p.buzzer ? "current" : "", p.enabled ? "" : "disabled"].join(" ")}
-                onClick={(e) => select(p.buzzer, e)}
-              >
-                <td>
-                  <input
-                    className="cell-input"
-                    key={p.name}
-                    defaultValue={p.name}
-                    placeholder={t("buzzer", { n: p.buzzer })}
-                    onClick={(e) => e.stopPropagation()}
-                    onBlur={(e) => e.target.value !== p.name && dispatch({ type: "renamePlayer", buzzer: p.buzzer, name: e.target.value })}
-                    onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
-                  />
-                </td>
-                <td className="num">{p.buzzer}</td>
-                <td className="num strong">
-                  {p.score}
-                  {p.delta !== null && p.delta !== 0 && <span className={p.delta > 0 ? "good-text" : "bad-text"}> ({signed(p.delta)})</span>}
-                </td>
-                <td>
-                  {p.answer ? buttonLabel(p.answer) : p.lockedOut ? "✕" : ""}
-                  {p.answerMs !== null && <span className="muted"> · {seconds(p.answerMs)} s</span>}
-                </td>
-                <td className="num">{seconds(p.totalAnswerMs)} s</td>
-                <td>{p.enabled ? t("yes") : t("no")}</td>
+      <div className="teams-body">
+        <div className="table-wrap">
+          <table className="grid">
+            <thead>
+              <tr>
+                <th>{t("name")}</th>
+                <th>{t("colBuzzer")}</th>
+                <th>{t("score")}</th>
+                <th>{t("colLastResponse")}</th>
+                <th>{t("colTotalTime")}</th>
+                <th>{t("active")}</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {players.map((p) => (
+                <tr
+                  key={p.buzzer}
+                  className={[selected.has(p.buzzer) ? "selected" : "", view.buzzed === p.buzzer ? "current" : "", p.enabled ? "" : "disabled"].join(" ")}
+                  onClick={(e) => select(p.buzzer, e)}
+                >
+                  <td>
+                    <input
+                      className="cell-input"
+                      key={p.name}
+                      defaultValue={p.name}
+                      maxLength={MAX_NAME_CHARS}
+                      placeholder={t("buzzer", { n: p.buzzer })}
+                      onClick={(e) => e.stopPropagation()}
+                      onBlur={(e) => e.target.value !== p.name && dispatch({ type: "renamePlayer", buzzer: p.buzzer, name: e.target.value })}
+                      onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
+                    />
+                  </td>
+                  <td className="num">
+                    <BuzzerChip buzzer={p.buzzer} free={!p.name} picked={picked === p.buzzer} onPick={pick} />
+                  </td>
+                  <td className="num strong">
+                    {p.score}
+                    {p.delta !== null && p.delta !== 0 && <span className={p.delta > 0 ? "good-text" : "bad-text"}> ({signed(p.delta)})</span>}
+                  </td>
+                  <td>
+                    {p.answer ? buttonLabel(p.answer) : p.lockedOut ? "✕" : ""}
+                    {p.answerMs !== null && <span className="muted"> · {seconds(p.answerMs)} s</span>}
+                  </td>
+                  <td className="num">{seconds(p.totalAnswerMs)} s</td>
+                  <td>{p.enabled ? t("yes") : t("no")}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <TeamList view={view} picked={picked} onPick={pick} />
       </div>
     </div>
   );

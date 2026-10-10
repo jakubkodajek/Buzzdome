@@ -25,7 +25,7 @@ Next and advance control from the Director,director,must,yes,no,§5.7 command pa
 Director runs on a second device (laptop tablet or phone),director,must,yes,no,§5.7 and §5.2.4.4; native in a web app
 Judge right or wrong from the Director,director,must,yes,no,§5.2.4.4 Right/Wrong buttons
 Edit a player's score and add or subtract points,director,must,yes,no,§5.7.2
-Teams table with name score and enabled state,director,must,yes,no,§5.7.2 Teams view
+Teams table with name score and enabled state,director,must,yes,yes,§5.7.2 Teams view; clone: team names paired with buzzers by dragging the buzzer number
 Resume a live show after a crash or reload,reliability,must,yes,no,§9.1 recovery mode: snapshot after every completed question; not in test mode
 Test run of a quiz with simulated players,studio,must,yes,partial,§3.15 Simulate keypads; also our way to test the realtime layer; clone: F5 / Shift+F5 from the editor with keyboard and on-screen buzzers; no automatic players
 Unique player names in one session,player,must,yes,no,§5.2.3 asks for a unique name

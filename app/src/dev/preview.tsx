@@ -79,6 +79,7 @@ function view(partial: Partial<GameView>): GameView {
     nextSlideTitle: "Která řeka protéká Českými Budějovicemi?",
     clock: null,
     players: players(),
+    teams: [],
     enabledCount: 8,
     answeredCount: 0,
     answerCounts: null,
@@ -101,7 +102,18 @@ const answered: Partial<PlayerView>[] = [
 
 const SCENES: Record<string, GameView | null> = {
   none: null,
-  lobby: view({ phase: { phase: "lobby" }, slide: null, players: players().slice(0, 5) }),
+  // Two buzzers paired with prepared teams, three still without a team.
+  lobby: view({
+    phase: { phase: "lobby" },
+    slide: null,
+    players: players([{}, {}, { name: "" }, { name: "" }, { name: "" }]).slice(0, 5),
+    teams: [
+      { name: NAMES[0], buzzer: 1 },
+      { name: "Pivní rytíři", buzzer: null },
+      { name: NAMES[1], buzzer: 2 },
+      { name: "Sovy", buzzer: null },
+    ],
+  }),
   billboard: view({ phase: { phase: "billboard" }, slideIndex: 0, slide: quiz.slides[0] }),
   ready: view({}),
   running: view({
@@ -178,8 +190,15 @@ const editorQuiz: Quiz = {
 
 clearMocks();
 mockWindows(windowLabel, windowLabel === "host" ? "director" : "host");
-mockIPC((cmd) => {
+/** The commands the windows sent, for browser checks of the controls (nothing applies them here). */
+const dispatched: unknown[] = [];
+(window as unknown as { dispatched: unknown[] }).dispatched = dispatched;
+
+mockIPC((cmd, payload) => {
   switch (cmd) {
+    case "dispatch":
+      dispatched.push((payload as { command: unknown }).command);
+      return null;
     case "get_view":
       return current;
     case "get_quiz":

@@ -191,8 +191,10 @@
 
 .register-grid span {
   height: 76px;
-  display: grid;
-  place-items: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
   font-size: 38px;
   font-weight: 700;
   border-radius: 12px;
@@ -207,6 +209,17 @@
   border-color: rgba(255, 255, 255, 0.7);
   box-shadow: 0 0 24px var(--theme-correct);
   opacity: 1;
+}
+
+.register-grid small {
+  max-width: 100%;
+  padding: 0 6px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.2;
 }
 
 /* Question screen */

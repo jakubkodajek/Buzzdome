@@ -26,6 +26,7 @@ const ERROR_KEYS: Record<Exclude<AppError["code"], WordedApart>, StringKey> = {
   notNow: "errNotNow",
   unknownBuzzer: "errUnknownBuzzer",
   duplicateBuzzer: "errDuplicateBuzzer",
+  tooManyTeams: "errTooManyTeams",
   showNotSaved: "errShowNotSaved",
   showNotRead: "errShowNotRead",
   notAQuizFile: "errNotAQuizFile",

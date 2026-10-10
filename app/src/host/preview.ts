@@ -17,6 +17,7 @@ export function previewView(slide: Slide, slideIndex: number, slideCount: number
     nextSlideTitle: null,
     clock: null,
     players: [],
+    teams: [],
     enabledCount: 0,
     answeredCount: 0,
     answerCounts: null,

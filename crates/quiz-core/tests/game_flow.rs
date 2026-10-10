@@ -1,6 +1,6 @@
 use quiz_core::{
     AnswerMode, Button, Command, Cue, Effect, Game, GameError, Light, Phase, Question, QuestionStep, Quiz, Slide,
-    SlideContent, Stamped, PRESS_GRACE_MS,
+    SlideContent, Stamped, MAX_NAME_CHARS, MAX_TEAMS, PRESS_GRACE_MS,
 };
 use quiz_core::view::AnswerResults;
 
@@ -67,6 +67,56 @@ fn lobby_registers_buzzers_on_any_press() {
     let buzzers: Vec<u16> = show.game.players().map(|p| p.buzzer).collect();
     assert_eq!(buzzers, vec![1, 3]);
     assert_eq!(show.game.phase(), &Phase::Lobby);
+}
+
+fn names(names: &[&str]) -> Vec<String> {
+    names.iter().map(|name| name.to_string()).collect()
+}
+
+fn teams(game: &Game) -> Vec<(String, Option<u16>)> {
+    game.view(0).teams.into_iter().map(|team| (team.name, team.buzzer)).collect()
+}
+
+#[test]
+fn team_names_are_kept_once_each_without_blanks_and_cut_to_length() {
+    let mut show = Show::new(vec![question("q1", AnswerMode::Everyone)]);
+    let long = "x".repeat(MAX_NAME_CHARS + 5);
+    show.run(0, Command::SetTeams { names: names(&["  Hawks ", "", "Owls", "hawks", "   ", &long]) }).unwrap();
+    assert_eq!(show.game.teams(), names(&["Hawks", "Owls", &"x".repeat(MAX_NAME_CHARS)]).as_slice());
+
+    let too_many: Vec<String> = (0..=MAX_TEAMS).map(|i| format!("Team {i}")).collect();
+    assert_eq!(show.run(0, Command::SetTeams { names: too_many }), Err(GameError::TooManyTeams));
+    assert_eq!(show.game.teams().len(), 3, "a refused list leaves the old one");
+}
+
+#[test]
+fn pairing_gives_a_buzzer_the_team_name_and_moves_it_from_another() {
+    let mut show = Show::new(vec![question("q1", AnswerMode::Everyone)]);
+    show.run(0, Command::SetTeams { names: names(&["Hawks", "Owls"]) }).unwrap();
+    show.press(0, 3, Button::Big);
+    show.press(0, 5, Button::Big);
+    assert_eq!(teams(&show.game), vec![("Hawks".into(), None), ("Owls".into(), None)]);
+
+    show.run(0, Command::PairTeam { buzzer: 3, name: "Hawks".into() }).unwrap();
+    assert_eq!(teams(&show.game), vec![("Hawks".into(), Some(3)), ("Owls".into(), None)]);
+
+    // Dragging buzzer 5 onto Hawks takes the name from buzzer 3.
+    show.run(0, Command::PairTeam { buzzer: 5, name: "hawks ".into() }).unwrap();
+    assert_eq!(teams(&show.game), vec![("Hawks".into(), Some(5)), ("Owls".into(), None)]);
+    let name_of = |game: &Game, buzzer| game.players().find(|p| p.buzzer == buzzer).map(|p| p.name.clone());
+    assert_eq!(name_of(&show.game, 3).as_deref(), Some(""));
+
+    // Moving buzzer 5 to Owls frees Hawks; renaming a player unpairs it too.
+    show.run(0, Command::PairTeam { buzzer: 5, name: "Owls".into() }).unwrap();
+    assert_eq!(teams(&show.game), vec![("Hawks".into(), None), ("Owls".into(), Some(5))]);
+    show.run(0, Command::RenamePlayer { buzzer: 5, name: String::new() }).unwrap();
+    assert_eq!(teams(&show.game), vec![("Hawks".into(), None), ("Owls".into(), None)]);
+
+    assert_eq!(show.run(0, Command::PairTeam { buzzer: 9, name: "Owls".into() }), Err(GameError::UnknownBuzzer(9)));
+    // Pairing also works later in the show, for a team that came late.
+    show.run(0, Command::Next).unwrap();
+    show.run(0, Command::PairTeam { buzzer: 3, name: "Owls".into() }).unwrap();
+    assert_eq!(Game::replay(show.game.quiz().clone(), &show.journal).view(0).teams, show.game.view(0).teams);
 }
 
 #[test]

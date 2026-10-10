@@ -1,6 +1,6 @@
 //! What the windows render: a read-only snapshot of the game at one moment.
 
-use crate::game::{BuzzerId, Button, Controls, Game, Phase, QuestionStep};
+use crate::game::{same_name, BuzzerId, Button, Controls, Game, Phase, QuestionStep};
 use crate::model::{AnswerMode, Slide, SlideContent};
 use serde::Serialize;
 use ts_rs::TS;
@@ -18,6 +18,8 @@ pub struct GameView {
     pub next_slide_title: Option<String>,
     pub clock: Option<ClockView>,
     pub players: Vec<PlayerView>,
+    /// The team names prepared for the show, in order, with their buzzers.
+    pub teams: Vec<TeamView>,
     pub enabled_count: usize,
     /// Enabled players who answered the current question.
     pub answered_count: usize,
@@ -42,6 +44,16 @@ pub struct AnswerResults {
     pub wrong: usize,
     /// No answer.
     pub none: usize,
+}
+
+/// A prepared team name and the buzzer paired with it: the lowest-numbered
+/// player who has the name.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
+#[serde(rename_all = "camelCase")]
+pub struct TeamView {
+    pub name: String,
+    pub buzzer: Option<BuzzerId>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, TS)]
@@ -179,6 +191,14 @@ impl Game {
             leaderboard_visible: self.leaderboard_visible(),
             controls: self.controls(),
             on_hold: self.on_hold(),
+            teams: self
+                .teams()
+                .iter()
+                .map(|name| TeamView {
+                    name: name.clone(),
+                    buzzer: self.players().find(|p| same_name(&p.name, name)).map(|p| p.buzzer),
+                })
+                .collect(),
             players,
         }
     }

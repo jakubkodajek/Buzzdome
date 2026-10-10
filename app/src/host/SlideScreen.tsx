@@ -81,9 +81,10 @@ export function SlideScreen(props: { view: GameView; context: SlideContext; cloc
   }
 }
 
+/** Registration: every buzzer number, lit once it is pressed, with its team's name once paired. */
 function Welcome({ view }: { view: GameView }) {
   const { t } = useApp();
-  const registered = new Set(view.players.map((p) => p.buzzer));
+  const names = new Map(view.players.map((p) => [p.buzzer, p.name]));
   const highest = Math.max(20, ...view.players.map((p) => p.buzzer));
   const cells = Array.from({ length: Math.min(highest, 100) }, (_, i) => i + 1);
   return (
@@ -93,8 +94,9 @@ function Welcome({ view }: { view: GameView }) {
         <p className="slide-text">{t("lobbyHint")}</p>
         <div className="register-grid">
           {cells.map((n) => (
-            <span key={n} className={registered.has(n) ? "on" : ""}>
+            <span key={n} className={names.has(n) ? "on" : ""}>
               {n}
+              {names.get(n) && <small>{names.get(n)}</small>}
             </span>
           ))}
         </div>
