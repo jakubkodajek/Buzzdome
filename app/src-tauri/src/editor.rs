@@ -194,13 +194,16 @@ pub async fn editor_add_media(app: AppHandle, lock: State<'_, EditorLock>, path:
 /// giving a row that names one of the quiz's `categories` its look.
 #[tauri::command]
 pub async fn editor_import_sheet(app: AppHandle, lock: State<'_, EditorLock>, path: String, categories: Vec<Category>) -> CmdResult<SheetImport> {
+    // The sheet reader may take until its time limit: it runs off the async
+    // workers, and the draft stays free for other commands meanwhile.
+    let path = PathBuf::from(path);
+    let read = path.clone();
+    let tables = tauri::async_runtime::spawn_blocking(move || crate::sheet_reader::read_tables(&read)).await??;
     let _one_at_a_time = lock.0.lock().unwrap();
     let (root, _) = current(&app)?;
-    let path = Path::new(&path);
-    let tables = crate::sheet_reader::read_tables(path)?;
     // Shuffles the answers of a question with none marked right.
     let seed = SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| d.as_nanos() as u64);
-    Ok(quiz_file::import_sheet(path, &tables, &categories, &root, seed)?)
+    Ok(quiz_file::import_sheet(&path, &tables, &categories, &root, seed)?)
 }
 
 /// The character between the cells of a CSV file. Excel splits a CSV file
