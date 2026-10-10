@@ -40,6 +40,7 @@ Audience poll that does not score plus a chart,studio,should,yes,no,§3.4.6
 Delay before answers appear so the quizmaster can read the question,studio,should,yes,no,§3.2.5.1 Delay before answer
 Sound clip on a question,studio,should,yes,yes,"§3.7.4; clone: played by the Director: on slide, with the clock or on demand"
 Background image per slide,studio,should,yes,yes,§3.2.5.1 Background image; clone: image or video
+Design themes for the projector screen with inheritance,studio,should,yes,partial,quizxpress-docs skinning guide (skin.config); clone: theme.json packages (spec 5.2) with five built-in themes and a Design tab gallery; importing user themes planned
 Spreadsheet import of questions (one sheet per round),studio,should,yes,no,§3.10.1 columns Q A1..A6 CAT NOTES; CSV first
 Table view to edit all questions at once,studio,should,yes,yes,§3.2.6.2
 Full-screen slide preview,studio,should,yes,partial,§3.2.6.1 F5; clone: Shift+F5 test-runs from the selected slide on the projector

@@ -2,7 +2,7 @@
 
 What the app must do, written as testable requirements. How it is built is in
 [`design.md`](design.md); how to check the buzzer link on real hardware is in
-[`hardware-test.md`](hardware-test.md). Last updated 2026-10-09.
+[`hardware-test.md`](hardware-test.md). Last updated 2026-10-10.
 
 Requirement IDs (`BZ-3`, `BG-2`, ...) are stable: refer to them in issues,
 commits and tests. Each requirement says whether it is **done**, **partial**
@@ -355,7 +355,7 @@ the Host screen.
 | SF-4 | Registration: players press any button; their buzzer numbers light up in a grid on the projector and appear in the Director's Teams tab with an editable name. Late presses still register. | done |
 | SF-5 | Team names can be prepared before the show (buzzer number to name) and loaded with it, so a registered buzzer shows its team name at once. | planned |
 | SF-6 | Slides, questions, judging, scores and the final ranking as in the reference app; all keyboard shortcuts work. | done for billboard, multiple choice and fastest finger |
-| SF-7 | The projector screen is the user's own: theme, backgrounds and per-slide pictures or videos (section 5 and 9). | partial: per-slide pictures, videos and backgrounds done; themes planned |
+| SF-7 | The projector screen is the user's own: theme, backgrounds and per-slide pictures or videos (section 5 and 9). | partial: per-slide pictures, videos and backgrounds done; five built-in themes (section 5.2) and the Design tab gallery done; importing user themes (TH-1, TH-6) planned |
 
 ## 9. Quiz authoring and media
 
