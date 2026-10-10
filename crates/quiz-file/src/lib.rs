@@ -248,7 +248,16 @@ fn read_quiz(root: &Path) -> Result<ReadQuiz> {
 
 /// Checks the quiz and that every media file it uses exists under `root`.
 pub fn check(quiz: &Quiz, root: &Path) -> Result<()> {
-    let found = problems(quiz, root);
+    refuse(problems(quiz, root))
+}
+
+/// Refuses a quiz a show cannot play: one with the `problems` that keep it
+/// from playing (`Problem::keeps_from_playing`). A show reads no categories.
+pub fn check_playable(quiz: &Quiz, root: &Path) -> Result<()> {
+    refuse(problems_where(quiz, root, Problem::keeps_from_playing))
+}
+
+fn refuse(found: Vec<ValidationError>) -> Result<()> {
     if found.is_empty() {
         Ok(())
     } else {
@@ -256,27 +265,32 @@ pub fn check(quiz: &Quiz, root: &Path) -> Result<()> {
     }
 }
 
-/// Everything that keeps the quiz from being played: the core's rules, then
+/// Everything that keeps the quiz from being saved: the core's rules, then
 /// media files missing under `root`.
 pub fn problems(quiz: &Quiz, root: &Path) -> Vec<ValidationError> {
-    if let Err(errors) = quiz.validate() {
-        return errors;
+    problems_where(quiz, root, |_| true)
+}
+
+/// The `problems` that `counts`.
+fn problems_where(quiz: &Quiz, root: &Path, counts: impl Fn(&Problem) -> bool) -> Vec<ValidationError> {
+    let rules: Vec<ValidationError> = quiz.validate().err().unwrap_or_default().into_iter().filter(|e| counts(&e.problem)).collect();
+    if !rules.is_empty() {
+        return rules;
     }
-    // References are safe paths now, so joining them stays inside `root`.
-    let missing = |file: &str| !root.join(file).is_file();
-    let slides = quiz.slides.iter().flat_map(|slide| slide.media().into_iter().map(move |(file, _)| (slide, file))).filter(|(_, file)| missing(file)).map(
-        |(slide, file)| ValidationError {
-            slide_id: Some(slide.id.clone()),
-            problem: Problem::Media { file: file.to_string(), issue: MediaIssue::Missing },
-        },
-    );
-    let categories = quiz.categories.iter().filter_map(|category| Some((category, category.media()?))).filter(|(_, file)| missing(file)).map(
-        |(category, file)| ValidationError {
-            slide_id: None,
-            problem: Problem::CategoryMedia { name: category.name.clone(), file: file.to_string(), issue: MediaIssue::Missing },
-        },
-    );
-    slides.chain(categories).collect()
+    let slides = quiz.slides.iter().flat_map(|slide| {
+        slide.media().into_iter().map(move |(file, _)| {
+            let problem = Problem::Media { file: file.to_string(), issue: MediaIssue::Missing };
+            (file, ValidationError { slide_id: Some(slide.id.clone()), problem })
+        })
+    });
+    let categories = quiz.categories.iter().filter_map(|category| {
+        let file = category.media()?;
+        let problem = Problem::CategoryMedia { name: category.name.clone(), file: file.to_string(), issue: MediaIssue::Missing };
+        Some((file, ValidationError { slide_id: None, problem }))
+    });
+    // Only the references that count are known to be safe paths now, so
+    // only they are joined to `root`, which keeps the join inside it.
+    slides.chain(categories).filter(|(file, e)| counts(&e.problem) && !root.join(file).is_file()).map(|(_, e)| e).collect()
 }
 
 /// Writes `quiz.json` into the package folder `root` (see `write_atomic`).
@@ -1078,6 +1092,17 @@ mod tests {
         fs::remove_file(package.root.join("media/stadium.mp4")).unwrap();
         let problem = Problem::CategoryMedia { name: "Sport".into(), file: "media/stadium.mp4".into(), issue: MediaIssue::Missing };
         assert_eq!(problems(&package.quiz, &package.root), [ValidationError { slide_id: None, problem }]);
+        // A show reads no categories, so it plays without their problems.
+        let mut quiz = package.quiz;
+        quiz.categories.push(Category::new("c2", " "));
+        assert!(check(&quiz, &package.root).is_err());
+        assert!(check_playable(&quiz, &package.root).is_ok());
+        // An unsafe category file is no reason to play, and is not looked for.
+        quiz.categories[0].background = Some(Background::new("../stadium.mp4"));
+        assert!(check_playable(&quiz, &package.root).is_ok());
+        fs::remove_file(package.root.join("media/flag.png")).unwrap();
+        let missing = Problem::Media { file: "media/flag.png".into(), issue: MediaIssue::Missing };
+        assert!(matches!(check_playable(&quiz, &package.root), Err(QuizFileError::Invalid(found)) if found == [ValidationError { slide_id: Some("intro".into()), problem: missing }]));
     }
 
     #[test]

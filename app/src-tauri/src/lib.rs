@@ -158,7 +158,7 @@ fn start_show(
     source_path: Option<String>,
     media_root: Option<PathBuf>,
 ) -> CmdResult<()> {
-    quiz_file::check(&quiz, media_root.as_deref().unwrap_or(Path::new("")))?;
+    quiz_file::check_playable(&quiz, media_root.as_deref().unwrap_or(Path::new("")))?;
     let meta = SessionMeta {
         quiz_title: quiz.title.clone(),
         source_path,
@@ -225,7 +225,7 @@ async fn start_show_from_file(app: AppHandle, state: State<'_, AppState>, path: 
 #[tauri::command]
 fn editor_test_run(app: AppHandle, state: State<AppState>, quiz: Quiz) -> CmdResult<()> {
     let root = editor::draft_root(&app)?;
-    quiz_file::check(&quiz, &root)?;
+    quiz_file::check_playable(&quiz, &root)?;
     let mut inner = lock_for_new_show(&app, &state)?;
     serve_media(&app, &mut inner, Some(root))?;
     begin_show(&app, &mut inner, Game::new(quiz), None)
@@ -245,7 +245,7 @@ fn last_session(app: AppHandle) -> CmdResult<Option<SessionSummary>> {
 /// What the quizmaster is told about a resumed show that runs: its media
 /// are missing (deleted, say), and it began under other rules.
 fn resume_warnings(quiz: &Quiz, media_root: Option<&Path>, rules_changed: bool) -> Vec<AppError> {
-    let missing = media_root.and_then(|root| quiz_file::check(quiz, root).err()).map(AppError::from);
+    let missing = media_root.and_then(|root| quiz_file::check_playable(quiz, root).err()).map(AppError::from);
     missing.into_iter().chain(rules_changed.then_some(AppError::RulesChanged)).collect()
 }
 

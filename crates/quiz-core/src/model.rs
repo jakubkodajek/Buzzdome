@@ -479,9 +479,10 @@ impl Question {
     }
 }
 
-/// A problem that keeps a quiz from being played, or that reading a file
-/// fixed by leaving something out (`ReadQuiz::dropped`). The UI words it in
-/// the quizmaster's language; `Display` is for logs.
+/// A problem that keeps a quiz from being saved, and most from being
+/// played (`Problem::keeps_from_playing`), or that reading a file fixed by
+/// leaving something out (`ReadQuiz::dropped`). The UI words it in the
+/// quizmaster's language; `Display` is for logs.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS, thiserror::Error)]
 #[ts(export)]
 #[serde(tag = "code", rename_all = "camelCase")]
@@ -558,6 +559,25 @@ pub enum Problem {
     /// `max` in seconds.
     #[error("time limit must be at most {max} s")]
     TimeLimitTooLong { max: u32 },
+}
+
+impl Problem {
+    /// Whether a show refuses the quiz for it. A show reads only the
+    /// slides: a category's look and background were copied onto its
+    /// slides when it was applied, so a category's problems only keep the
+    /// quiz from being saved.
+    pub fn keeps_from_playing(&self) -> bool {
+        !matches!(
+            self,
+            Problem::CategoryStyleUnread { .. }
+                | Problem::UnknownCategory
+                | Problem::DuplicateCategoryId { .. }
+                | Problem::CategoryUnnamed
+                | Problem::CategoryNameTooLong { .. }
+                | Problem::CategoryNameTaken { .. }
+                | Problem::CategoryMedia { .. }
+        )
+    }
 }
 
 /// A problem and where it is.

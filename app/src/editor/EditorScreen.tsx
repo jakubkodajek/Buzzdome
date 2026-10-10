@@ -73,7 +73,7 @@ export function EditorScreen({ onTestRun, onExit }: { onTestRun: () => void; onE
 }
 
 function Studio({ editor, open, onExit }: { editor: QuizEditor; open: OpenQuiz | null; onExit: () => void }) {
-  const { t, notify } = useApp();
+  const { t } = useApp();
   const [tab, setTab] = useState<RibbonTab>("home");
   const [backstage, setBackstage] = useState<BackstagePage | null>(null);
   const [view, setView] = useState<"graphical" | "table" | "categories">("graphical");
@@ -146,14 +146,12 @@ function Studio({ editor, open, onExit }: { editor: QuizEditor; open: OpenQuiz |
     setBackstage(null);
     return imported.length;
   });
-  const testRun = (from?: number) => {
-    if (open && open.problems.length > 0) {
-      notify(t("testRunNeedsFixes"));
-      setBackstage("info");
-    } else {
-      void editor.testRun(from);
-    }
-  };
+  // The backend refuses what a show cannot play (not a category's problems,
+  // say); what is to fix is then listed in File › Info.
+  const testRun = (from?: number) =>
+    void editor.testRun(from).then((started) => {
+      if (!started && open && open.problems.length > 0) setBackstage("info");
+    });
 
   const noSlide = slide === null;
   const actions: Actions = {

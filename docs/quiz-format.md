@@ -264,7 +264,9 @@ stored once in `media/`, however many slides use it.
 
 A duplicate id, a missing, too long or taken name, and a background that
 is not a picture or video in `media/` are problems that keep the quiz from
-being played.
+being saved. They do not keep it from being played: a show reads only the
+slides, which got the category's look when it was applied
+(`Problem::keeps_from_playing`).
 
 ## Spreadsheets
 
