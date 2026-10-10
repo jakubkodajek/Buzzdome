@@ -10,7 +10,7 @@
 // (`xvfb-run -a npm run e2e`) and drive the system's file picker with xdotool.
 
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -373,7 +373,7 @@ export class App {
 
   /** Kills the app at once, as a crash or a power cut would; its data stays. */
   async crash(): Promise<void> {
-    killApp();
+    killApp(this.data);
     this.session = null;
     await this.stopDriver();
   }
@@ -384,11 +384,12 @@ export class App {
       this.driver.kill();
       await exited;
     }
-    // The app takes a moment to close after its session ends, and writes its
-    // caches meanwhile; the next launch or `forget` must not race it.
+    // The app and its web view processes take a moment to close after the
+    // session ends, and write their caches meanwhile; the next launch or
+    // `forget` must not race them.
     const until = Date.now() + 15_000;
-    while (appRunning() && Date.now() < until) await sleep(200);
-    if (appRunning()) killApp();
+    while (appRunning(this.data) && Date.now() < until) await sleep(200);
+    if (appRunning(this.data)) killApp(this.data);
   }
 
   /** Removes the app's data folder; for after the last restart. */
@@ -398,12 +399,42 @@ export class App {
   }
 }
 
-function appRunning(): boolean {
+/**
+ * The app's processes: on Linux every process started with this data folder,
+ * which includes the web view's own processes (they outlive a killed app and
+ * keep writing its caches); on Windows the app by name.
+ */
+function appProcesses(data: string): number[] {
+  if (process.platform !== "linux") return [];
+  const mark = `XDG_DATA_HOME=${join(data, "share")}\0`;
+  const found: number[] = [];
+  for (const entry of readdirSync("/proc")) {
+    const pid = Number(entry);
+    if (!Number.isInteger(pid) || pid === process.pid) continue;
+    try {
+      if (readFileSync(`/proc/${pid}/environ`, "latin1").includes(mark)) found.push(pid);
+    } catch {
+      // Gone already, or not ours to read.
+    }
+  }
+  return found;
+}
+
+function appRunning(data: string): boolean {
   if (process.platform === "win32") return spawnSync("tasklist", ["/FI", "IMAGENAME eq buzzdome.exe", "/NH"], { encoding: "utf8" }).stdout.includes("buzzdome.exe");
+  if (process.platform === "linux") return appProcesses(data).length > 0;
   return spawnSync("pgrep", ["-x", "buzzdome"]).status === 0;
 }
 
-function killApp(): void {
+function killApp(data: string): void {
   if (process.platform === "win32") spawnSync("taskkill", ["/F", "/IM", "buzzdome.exe"]);
-  else spawnSync("pkill", ["-KILL", "-x", "buzzdome"]);
+  else if (process.platform === "linux") {
+    for (const pid of appProcesses(data)) {
+      try {
+        process.kill(pid, "SIGKILL");
+      } catch {
+        // Gone already.
+      }
+    }
+  } else spawnSync("pkill", ["-KILL", "-x", "buzzdome"]);
 }
