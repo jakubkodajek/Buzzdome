@@ -3,10 +3,11 @@ import { useRef, useState, type PointerEvent as ReactPointerEvent } from "react"
 import { api } from "../api";
 import { useApp, useReport, useRun } from "../app-context";
 import type { SlideSound } from "../audio/slide-sound";
-import { MAX_DROPPED_MB } from "../bindings/Constants";
+import { MAX_DROPPED_MB, MAX_PLAYER_VOLUME } from "../bindings/Constants";
 import { ContextMenu } from "../editor/controls";
 import { trackTime } from "../format";
-import { AddIcon, GridIcon, ListIcon, PauseIcon, PlayIcon, RewindIcon, StopIcon, TrashIcon } from "../icons";
+import { usePlayerVolume } from "../hooks";
+import { AddIcon, GridIcon, ListIcon, PauseIcon, PlayIcon, RewindIcon, SoundIcon, StopIcon, TrashIcon } from "../icons";
 import { mediaFileFilter, mediaFileName } from "../media";
 import { progressOf, searchFiles } from "../media-player";
 import { readPreference, writePreference } from "../preferences";
@@ -144,6 +145,7 @@ export function MediaPlayerTab({ player, sound, view }: { player: MediaPlayer; s
         <button disabled={!now} onClick={() => control({ type: "rewind" })}>
           <RewindIcon /> {t("mediaRewind")}
         </button>
+        <PlayerVolume />
         {now && (
           <span className="media-now">
             <KindIcon kind={now.kind} /> {mediaFileName(now.reference)}
@@ -246,5 +248,26 @@ export function MediaPlayerTab({ player, sound, view }: { player: MediaPlayer; s
         />
       )}
     </div>
+  );
+}
+
+/** The player's volume, which everything the show plays follows at once. */
+function PlayerVolume() {
+  const { t } = useApp();
+  const run = useRun();
+  const volume = usePlayerVolume();
+  return (
+    <label className="media-volume" title={t("playerVolumeHint")}>
+      <SoundIcon />
+      <input
+        type="range"
+        min={0}
+        max={MAX_PLAYER_VOLUME}
+        value={volume}
+        aria-label={t("playerVolume")}
+        onChange={(e) => run(api.mediaSetVolume(Number(e.target.value)))}
+      />
+      <span className="media-volume-value">{volume} %</span>
+    </label>
   );
 }

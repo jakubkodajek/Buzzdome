@@ -928,6 +928,28 @@
   width: 10px;
 }
 
+.media-volume {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 10px;
+}
+
+.media-volume svg {
+  width: 18px;
+  height: 18px;
+}
+
+.media-volume input {
+  width: 110px;
+}
+
+.media-volume-value {
+  min-width: 5ch;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
 .media-toolbar .toggle.on {
   border-color: var(--accent);
   background: var(--accent-soft);

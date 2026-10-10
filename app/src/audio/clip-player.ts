@@ -1,6 +1,7 @@
 // Plays the part of a sound or video file a quiz asks for (SN-8), a sound at
 // a gain that can go above the file's own level (SN-9).
 
+import { MAX_PLAYER_VOLUME } from "../bindings/Constants";
 import type { Span } from "../types";
 import { audioContext } from "./context";
 
@@ -13,6 +14,11 @@ export const WHOLE_FILE: Span = { fromMs: 0, toMs: null };
 /** What a sound's samples are multiplied by: its volume (0-100 %) and its loudness gain (dB). */
 export function linearGain(volume: number, gainDb: number): number {
   return (volume / 100) * 10 ** (gainDb / 20);
+}
+
+/** What the player's volume (percent, see `usePlayerVolume`) multiplies everything the show plays by. */
+export function playerLevel(volume: number): number {
+  return volume / MAX_PLAYER_VOLUME;
 }
 
 /** Whether `ms` lies in `span`; its end is not. */
@@ -137,7 +143,9 @@ export class PartPlayer {
  */
 export class ClipPlayer extends PartPlayer {
   private readonly source: MediaElementAudioSourceNode | null = null;
+  private readonly amplifier: GainNode | null = null;
 
+  /** `gain` is the most it plays at: above 1 only when made with a gain above 1. */
   constructor(url: string, gain = 1) {
     const audio = new Audio();
     super(audio);
@@ -147,10 +155,16 @@ export class ClipPlayer extends PartPlayer {
     if (gain > 1) {
       const context = audioContext();
       this.source = context.createMediaElementSource(audio);
-      this.source.connect(new GainNode(context, { gain })).connect(context.destination);
-    } else {
-      audio.volume = Math.max(0, gain);
+      this.amplifier = new GainNode(context, { gain });
+      this.source.connect(this.amplifier).connect(context.destination);
     }
+    this.setGain(gain);
+  }
+
+  /** Plays at `gain` from now on, also while it plays. */
+  setGain(gain: number) {
+    if (this.amplifier) this.amplifier.gain.value = Math.max(0, gain);
+    else this.media.volume = Math.min(1, Math.max(0, gain));
   }
 
   /** Stops for good and lets go of the file. */

@@ -13,6 +13,10 @@ use ts_rs::TS;
 /// Larger files come in with Add, which copies them on disk.
 pub const MAX_DROPPED_MB: u64 = 256;
 
+/// The loudest the player's volume goes, in percent: the files' own level.
+/// Everything the show plays sounds at that volume, set while it plays.
+pub const MAX_PLAYER_VOLUME: u8 = 100;
+
 /// The file that plays, or stands paused.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
 #[ts(export)]

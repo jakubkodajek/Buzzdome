@@ -22,7 +22,7 @@ pub use media::{
     VideoClip, VideoEffect, MAX_GAIN_DB, MAX_INTRO_PAUSE_MS, MAX_REPLAY_DELAY_MS, MAX_VIDEO_SPEED, MEDIA_PREFIX, MIN_GAIN_DB, MIN_VIDEO_SPEED,
     NEW_VIDEO_INTRO_PAUSE_MS,
 };
-pub use media_player::{MediaPlayer, NowPlaying, PlayerCommand, MAX_DROPPED_MB};
+pub use media_player::{MediaPlayer, NowPlaying, PlayerCommand, MAX_DROPPED_MB, MAX_PLAYER_VOLUME};
 pub use model::{
     AnswerLimits, AnswerMode, CorrectAnswer, Plays, Problem, Question, Quiz, QuizJsonError, ReadQuiz, Slide, SlideContent, SlideType, ValidationError,
     DEFAULT_POINTS, DEFAULT_TIME_LIMIT_S, FULL_SHARE, MAX_ANSWERS, MAX_EVERYONE_ANSWERS, MAX_POINTS, MAX_TIME_LIMIT_S,
@@ -74,6 +74,7 @@ mod ui_constants {
             ("MAX_BOARD_COLUMNS", crate::sound_board::MAX_COLUMNS.to_string()),
             ("MAX_PAD_LABEL_CHARS", crate::sound_board::MAX_PAD_LABEL_CHARS.to_string()),
             ("MAX_DROPPED_MB", crate::MAX_DROPPED_MB.to_string()),
+            ("MAX_PLAYER_VOLUME", crate::MAX_PLAYER_VOLUME.to_string()),
             ("MIN_TEXT_SIZE", crate::MIN_TEXT_SIZE.to_string()),
             ("MAX_TEXT_SIZE", crate::MAX_TEXT_SIZE.to_string()),
             ("MAX_FONT_NAME_CHARS", crate::MAX_FONT_NAME_CHARS.to_string()),

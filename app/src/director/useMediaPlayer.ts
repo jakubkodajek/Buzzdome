@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef } from "react";
 import { api } from "../api";
 import { useRun } from "../app-context";
-import { ClipPlayer, WHOLE_FILE } from "../audio/clip-player";
-import { useLatest, useMediaLibrary, useNowPlaying, useSoundBoard } from "../hooks";
+import { ClipPlayer, playerLevel, WHOLE_FILE } from "../audio/clip-player";
+import { useLatest, useMediaLibrary, useNowPlaying, usePlayerVolume, useSoundBoard } from "../hooks";
 import { mediaUrl } from "../media";
 import { msToEnd, positionAt } from "../media-player";
 import type { MediaLibrary, NowPlaying, SoundBoard } from "../types";
@@ -28,6 +28,7 @@ export function useMediaPlayer(): MediaPlayer {
   const library = useMediaLibrary();
   const board = useSoundBoard();
   const now = useNowPlaying();
+  const level = playerLevel(usePlayerVolume());
   const durations = useMediaDurations(library);
   const root = library?.root ?? null;
   const urlOf = useCallback((reference: string) => (root ? mediaUrl(root, reference) : null), [root]);
@@ -39,17 +40,20 @@ export function useMediaPlayer(): MediaPlayer {
   const [positionMs, sinceMs] = [now?.positionMs ?? 0, now?.sinceMs ?? null];
   const soundUrl = now?.kind === "audio" ? urlOf(now.reference) : null;
   const player = useRef<ClipPlayer | null>(null);
+  const latestLevel = useLatest(level);
 
   // One player per start of a sound.
   useEffect(() => {
     if (!soundUrl) return;
-    const clip = new ClipPlayer(soundUrl);
+    const clip = new ClipPlayer(soundUrl, latestLevel.current);
     player.current = clip;
     return () => {
       clip.dispose();
       player.current = null;
     };
-  }, [soundUrl, id]);
+  }, [soundUrl, id, latestLevel]);
+
+  useEffect(() => player.current?.setGain(level), [level]);
 
   useEffect(() => {
     const clip = player.current;

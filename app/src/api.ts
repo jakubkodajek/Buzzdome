@@ -76,6 +76,9 @@ export const api = {
   /** What the media player plays, if anything. */
   mediaNow: () => invoke<NowPlaying | null>("media_now"),
   mediaControl: (command: PlayerCommand) => invoke<void>("media_control", { command }),
+  /** The player's volume in percent, the level everything the show plays sounds at. */
+  mediaVolume: () => invoke<number>("media_volume"),
+  mediaSetVolume: (volume: number) => invoke<void>("media_set_volume", { volume }),
   receiverInfo: () => invoke<ReceiverInfo>("receiver_info"),
   receiverDevices: () => invoke<DeviceInfo[]>("receiver_devices"),
   receiverSelect: (device: DeviceInfo | null) => invoke<void>("receiver_select", { device }),
@@ -130,4 +133,6 @@ export interface BackendEvents {
   "sound-board": SoundBoard;
   /** The media player started, paused or stopped something. */
   "media-playing": NowPlaying | null;
+  /** The player's volume changed, in percent. */
+  "media-volume": number;
 }

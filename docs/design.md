@@ -504,6 +504,12 @@ packages users will install are read the same way.
   (`positionAt` in `media-player.ts`, `NowPlaying::position_at`): the
   Director needs it every frame for the pads' countdowns. Both are tested
   with the same cases (`crates/quiz-core/tests/data/position-at.json`).
+- **Volume.** The player's volume (0 to `MAX_PLAYER_VOLUME` percent) is the
+  level everything the show plays sounds at: each window multiplies its
+  sounds, videos and cues by it (`playerLevel`, `ClipPlayer::setGain`), and
+  `media-volume` tells them at once, so what plays changes as the slider
+  moves. It is kept in `library/player.json` (`app_file.rs`); a broken file
+  is kept aside and the volume starts full.
 
 ## 2. Buzzer link
 

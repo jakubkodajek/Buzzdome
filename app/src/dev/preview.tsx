@@ -10,7 +10,7 @@ import demoQuiz from "../../../samples/demo-quiz.json";
 import builtinThemes from "../bindings/BuiltinThemes.json";
 import { setBodyText } from "../editor/slides";
 import { answerShares, NO_CONTROLS } from "../host/preview";
-import { MAX_BOARD_COLUMNS, MAX_BOARD_ROWS } from "../bindings/Constants";
+import { MAX_BOARD_COLUMNS, MAX_BOARD_ROWS, MAX_PLAYER_VOLUME } from "../bindings/Constants";
 import type {
   Background,
   BoardChange,
@@ -399,6 +399,8 @@ function control(command: PlayerCommand) {
   void emit("media-playing", nowPlaying);
 }
 
+let playerVolume = MAX_PLAYER_VOLUME;
+
 /** The same for the board's changes the preview checks. */
 function changeBoard(change: BoardChange) {
   const pads = [...board.pads];
@@ -464,6 +466,13 @@ mockIPC(
       case "media_control":
         called.push({ cmd, ...(payload as object) });
         control((payload as { command: PlayerCommand }).command);
+        return null;
+      case "media_volume":
+        return playerVolume;
+      case "media_set_volume":
+        called.push({ cmd, ...(payload as object) });
+        playerVolume = (payload as { volume: number }).volume;
+        void emit("media-volume", playerVolume);
         return null;
       case "prepared_teams":
         return current ? current.teams.map((team) => team.name) : PREPARED_TEAMS;

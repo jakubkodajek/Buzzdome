@@ -11,7 +11,9 @@ const TONES: Record<Cue, { freq: number[]; ms: number }> = {
   reveal: { freq: [587, 784], ms: 160 },
 };
 
-export function playCue(cue: Cue) {
+/** Plays the tones of `cue`, `level` times as loud as they are (see `playerLevel`). */
+export function playCue(cue: Cue, level = 1) {
+  if (level <= 0) return;
   const ctx = audioContext();
   const { freq, ms } = TONES[cue];
   freq.forEach((f, i) => {
@@ -20,7 +22,7 @@ export function playCue(cue: Cue) {
     const gain = ctx.createGain();
     osc.frequency.value = f;
     osc.type = "triangle";
-    gain.gain.setValueAtTime(0.25, start);
+    gain.gain.setValueAtTime(0.25 * level, start);
     gain.gain.exponentialRampToValueAtTime(0.001, start + ms / 1000);
     osc.connect(gain).connect(ctx.destination);
     osc.start(start);

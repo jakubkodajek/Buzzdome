@@ -491,6 +491,8 @@ pub fn run() {
             media_player::sound_board_change,
             media_player::media_now,
             media_player::media_control,
+            media_player::media_volume,
+            media_player::media_set_volume,
             editor::editor_load,
             editor::editor_new,
             editor::editor_open,

@@ -26,6 +26,7 @@ export const MIN_BOARD_COLUMNS = 4;
 export const MAX_BOARD_COLUMNS = 8;
 export const MAX_PAD_LABEL_CHARS = 40;
 export const MAX_DROPPED_MB = 256;
+export const MAX_PLAYER_VOLUME = 100;
 export const MIN_TEXT_SIZE = 50;
 export const MAX_TEXT_SIZE = 200;
 export const MAX_FONT_NAME_CHARS = 64;

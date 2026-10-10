@@ -6,9 +6,9 @@
 
 import { useEffect, useLayoutEffect, useRef, type RefObject } from "react";
 import { timeLeft } from "./answer-time";
-import { PartPlayer } from "./audio/clip-player";
+import { PartPlayer, playerLevel } from "./audio/clip-player";
 import { useReplay } from "./audio/replay";
-import { useLatest } from "./hooks";
+import { useLatest, usePlayerVolume } from "./hooks";
 import type { ClockView, GameView, VideoClip, VideoEffect } from "./types";
 import { blurRadius, mosaicColumns } from "./video-effect";
 
@@ -31,7 +31,8 @@ export function ShowVideo({ clip, url, view, clock }: { clip: VideoClip; url: st
  * after the slide appears if it starts by itself, and from the start each
  * time the quizmaster plays it. Once started it pauses while the show holds
  * (`onHold`) and goes on after, unless the quizmaster played it while the
- * show held. Once the answer is revealed it plays its replay part.
+ * show held. Once the answer is revealed it plays its replay part. It
+ * sounds at its own volume times the player's volume.
  */
 function useSlideVideo(element: RefObject<HTMLVideoElement | null>, url: string, clip: VideoClip, view: GameView) {
   const player = useRef<PartPlayer | null>(null);
@@ -40,10 +41,11 @@ function useSlideVideo(element: RefObject<HTMLVideoElement | null>, url: string,
   const replaying = useRef(false);
   const latest = useLatest({ clip, onHold: view.onHold });
   const { speed, volume, muted } = clip;
+  const level = playerLevel(usePlayerVolume());
 
   useEffect(() => {
-    if (element.current) setPlayback(element.current, { speed, volume, muted });
-  }, [element, speed, volume, muted]);
+    if (element.current) setPlayback(element.current, { speed, volume: volume * level, muted });
+  }, [element, speed, volume, level, muted]);
 
   // Created first, so the effects below find it on the first render too.
   useEffect(() => {

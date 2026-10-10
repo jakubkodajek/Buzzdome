@@ -3,7 +3,9 @@
 //! folder and shared by every quiz. Files are copied in, so the library
 //! keeps working when the originals move, and removing one from the list
 //! deletes the copy. What plays is no show state, so it is not journaled
-//! (`quiz_core::MediaPlayer`); the windows hear of it by events.
+//! (`quiz_core::MediaPlayer`); the windows hear of it by events. The
+//! player's volume, kept with the library, is the level everything the
+//! show plays sounds at, set while it plays.
 //!
 //! Lock order: `MediaState::imports`, then `MediaState::library`. Files are
 //! copied holding only the first, so the board and the player answer while
@@ -12,9 +14,11 @@
 use crate::app_file::AppFile;
 use crate::error::{AppError, CmdResult};
 use crate::now_ms;
-use quiz_core::{is_safe_reference, BoardChange, MediaKind, MediaPlayer, NowPlaying, PlayerCommand, SoundBoard, MAX_DROPPED_MB, MEDIA_PREFIX};
+use quiz_core::{
+    is_safe_reference, BoardChange, MediaKind, MediaPlayer, NowPlaying, PlayerCommand, SoundBoard, MAX_DROPPED_MB, MAX_PLAYER_VOLUME, MEDIA_PREFIX,
+};
 use quiz_file::{FileAction, MediaSource};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use tauri::ipc::{InvokeBody, Request};
@@ -24,6 +28,7 @@ use ts_rs::TS;
 /// The library's folder in the app's data folder: its files in `media/`, the board beside them.
 pub const LIBRARY_FOLDER: &str = "library";
 const BOARD_FILE: &str = "soundboard.json";
+const PLAYER_FILE: &str = "player.json";
 /// The header that names a file dropped into the window (percent-encoded, as headers are ASCII).
 const DROPPED_NAME_HEADER: &str = "file-name";
 
@@ -31,6 +36,8 @@ pub struct MediaState {
     root: PathBuf,
     /// Where the sound board is kept.
     board_file: AppFile,
+    /// Where the player's volume is kept.
+    player_file: AppFile,
     imports: Mutex<()>,
     library: Mutex<Library>,
 }
@@ -40,6 +47,25 @@ struct Library {
     files: Vec<String>,
     board: SoundBoard,
     player: MediaPlayer,
+    settings: PlayerSettings,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PlayerSettings {
+    /// Percent, 0 to `MAX_PLAYER_VOLUME`.
+    #[serde(default = "full_volume")]
+    volume: u8,
+}
+
+impl Default for PlayerSettings {
+    fn default() -> Self {
+        PlayerSettings { volume: full_volume() }
+    }
+}
+
+fn full_volume() -> u8 {
+    MAX_PLAYER_VOLUME
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, TS)]
@@ -61,17 +87,21 @@ pub struct LibraryFile {
 }
 
 impl MediaState {
-    /// The library in `root` as it was left. A board file that cannot be
-    /// read is kept aside and the board starts empty.
+    /// The library in `root` as it was left. A board or volume file that
+    /// cannot be read is kept aside and the board starts empty, the volume full.
     pub fn open(root: PathBuf) -> MediaState {
         let files = media_files(&root);
         let (board_file, board) = AppFile::load::<SoundBoard>(root.join(BOARD_FILE));
-        if let Some(lost) = board_file.lost() {
-            eprintln!("sound board not read: {} (kept as {:?})", lost.detail, lost.kept_as);
+        let (player_file, settings) = AppFile::load::<PlayerSettings>(root.join(PLAYER_FILE));
+        for (what, file) in [("sound board", &board_file), ("player volume", &player_file)] {
+            if let Some(lost) = file.lost() {
+                eprintln!("{what} not read: {} (kept as {:?})", lost.detail, lost.kept_as);
+            }
         }
         let board = board.normalized(&files);
-        let library = Mutex::new(Library { files, board, player: MediaPlayer::default() });
-        MediaState { root, board_file, imports: Mutex::new(()), library }
+        let settings = PlayerSettings { volume: settings.volume.min(MAX_PLAYER_VOLUME) };
+        let library = Mutex::new(Library { files, board, player: MediaPlayer::default(), settings });
+        MediaState { root, board_file, player_file, imports: Mutex::new(()), library }
     }
 
     pub fn root(&self) -> &Path {
@@ -205,6 +235,22 @@ pub fn media_control(app: AppHandle, state: State<MediaState>, command: PlayerCo
     Ok(())
 }
 
+/// The player's volume in percent.
+#[tauri::command]
+pub fn media_volume(state: State<MediaState>) -> u8 {
+    state.library.lock().unwrap().settings.volume
+}
+
+/// Sets the player's volume, at most `MAX_PLAYER_VOLUME` percent; the
+/// windows change what plays at once. It is kept for the next start.
+#[tauri::command]
+pub fn media_set_volume(app: AppHandle, state: State<MediaState>, volume: u8) -> CmdResult<()> {
+    let mut library = state.library.lock().unwrap();
+    library.settings.volume = volume.min(MAX_PLAYER_VOLUME);
+    let _ = app.emit("media-volume", library.settings.volume);
+    state.player_file.store(&library.settings)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -227,9 +273,20 @@ mod tests {
         assert_eq!(library.board.pad(1).unwrap().source, Some(quiz_core::PadSource::File { reference: "media/b.mp3".into() }));
         drop(library);
 
+        assert_eq!(library_volume(&root), MAX_PLAYER_VOLUME);
+
         let board = SoundBoard { click: quiz_core::PadClick::Pause, ..SoundBoard::default() };
         AppFile::load::<SoundBoard>(root.join(BOARD_FILE)).0.store(&board).unwrap();
         assert_eq!(MediaState::open(root.clone()).library.lock().unwrap().board.click, quiz_core::PadClick::Pause);
+        // The volume is kept, and one past full (a file edited by hand) plays at full.
+        for (kept, read) in [(40, 40), (250, MAX_PLAYER_VOLUME)] {
+            std::fs::write(root.join(PLAYER_FILE), format!(r#"{{"volume": {kept}}}"#)).unwrap();
+            assert_eq!(library_volume(&root), read);
+        }
         std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    fn library_volume(root: &Path) -> u8 {
+        MediaState::open(root.to_path_buf()).library.lock().unwrap().settings.volume
     }
 }

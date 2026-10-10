@@ -2,12 +2,13 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { api } from "../api";
 import { AppProvider, useApp, useDispatch, useRun } from "../app-context";
+import { playerLevel } from "../audio/clip-player";
 import { playCue } from "../audio/cues";
 import { useSlideSound, type SlideSound } from "../audio/slide-sound";
 import { clockSeconds } from "../format";
 import { EditorScreen } from "../editor/EditorScreen";
 import { errorText } from "../messages";
-import { useBackendEvent, useClock, useGameView, useLastSession, useLearnProgress, useMediaRoot, useQuiz } from "../hooks";
+import { useBackendEvent, useClock, useGameView, useLastSession, useLearnProgress, useMediaRoot, usePlayerVolume, useQuiz } from "../hooks";
 import {
   BackIcon,
   CheckIcon,
@@ -95,7 +96,8 @@ function DirectorLayout({ testRun, onEditor }: { testRun: boolean; onEditor: () 
   const [tab, setTab] = useState<Tab>("questions");
   useShortcuts(view, projector.toggle);
   // Sounds play here: this window is open for the whole show, the projector may not be.
-  useBackendEvent("sound-cue", playCue);
+  const level = playerLevel(usePlayerVolume());
+  useBackendEvent("sound-cue", (cue) => playCue(cue, level));
   const sound = useSlideSound(view);
   // Here too, so what plays goes on and ends whichever tab is open.
   const player = useMediaPlayer();
