@@ -478,6 +478,8 @@ mockIPC(
       case "media_root":
         // Served by Vite from this folder (see the convertFileSrc mock below).
         return "/src/dev/";
+      case "resume_last_session":
+        return [];
       case "last_session":
         return { meta: { quizTitle: quiz.title, sourcePath: null, startedMs: Date.now() - 3_600_000 }, commandCount: 57 };
       case "editor_load":

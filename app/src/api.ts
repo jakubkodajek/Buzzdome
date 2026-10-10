@@ -43,8 +43,8 @@ export const api = {
   startShowFromFile: (path: string) => invoke<void>("start_show_from_file", { path }),
   startDemoShow: () => invoke<void>("start_demo_show"),
   lastSession: () => invoke<SessionSummary | null>("last_session"),
-  /** Resumes the last show; returns a warning when something is missing. */
-  resumeLastSession: () => invoke<AppError | null>("resume_last_session"),
+  /** Resumes the last show; returns warnings when it runs but not quite as before (its media are missing, other rules). */
+  resumeLastSession: () => invoke<AppError[]>("resume_last_session"),
   endShow: () => invoke<void>("end_show"),
   dispatch: (command: Command) => invoke<void>("dispatch", { command }),
   listMonitors: () => invoke<MonitorInfo[]>("list_monitors"),

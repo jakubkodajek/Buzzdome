@@ -241,11 +241,17 @@ fn last_session(app: AppHandle) -> CmdResult<Option<SessionSummary>> {
     Session::latest_summary(&sessions_root(&app)?).map_err(|e| AppError::ShowNotRead { detail: e.to_string() })
 }
 
-/// Resumes the last show. Returns a warning for the quizmaster when the show
-/// runs but something is missing (its media were deleted), or else when it
-/// began under other rules.
+/// What the quizmaster is told about a resumed show that runs: its media
+/// are missing (deleted, say), and it began under other rules.
+fn resume_warnings(quiz: &Quiz, media_root: Option<&Path>, rules_changed: bool) -> Vec<AppError> {
+    let missing = media_root.and_then(|root| quiz_file::check(quiz, root).err()).map(AppError::from);
+    missing.into_iter().chain(rules_changed.then_some(AppError::RulesChanged)).collect()
+}
+
+/// Resumes the last show. Returns warnings for the quizmaster when the show
+/// runs but not quite as before (`resume_warnings`).
 #[tauri::command]
-fn resume_last_session(app: AppHandle, state: State<AppState>) -> CmdResult<Option<AppError>> {
+fn resume_last_session(app: AppHandle, state: State<AppState>) -> CmdResult<Vec<AppError>> {
     // Locked first: the running show's journal must not be reopened.
     let mut inner = lock_for_new_show(&app, &state)?;
     let Resumed { session, quiz, journal, meta } = Session::resume_latest(&sessions_root(&app)?)
@@ -254,11 +260,7 @@ fn resume_last_session(app: AppHandle, state: State<AppState>) -> CmdResult<Opti
     let rules_changed = meta.rules_changed();
     let media_root = meta.media_root.map(PathBuf::from);
     // The show must go on: without its media it still runs, and the Director says why.
-    let warning = match &media_root {
-        Some(root) => quiz_file::check(&quiz, root).err().map(AppError::from),
-        None => None,
-    }
-    .or_else(|| rules_changed.then_some(AppError::RulesChanged));
+    let warnings = resume_warnings(&quiz, media_root.as_deref(), rules_changed);
     serve_media(&app, &mut inner, media_root.filter(|root| root.is_dir()))?;
     let game = Game::replay(quiz, &journal);
     let recovery = game.recovery_command();
@@ -268,7 +270,7 @@ fn resume_last_session(app: AppHandle, state: State<AppState>) -> CmdResult<Opti
     if let Some(command) = recovery {
         execute_at(&app, &mut inner, command, now_ms())?;
     }
-    Ok(warning)
+    Ok(warnings)
 }
 
 /// Closes the running show. Its journal stays on disk, so it can be resumed.
@@ -523,6 +525,19 @@ mod tests {
         let quiz = Quiz::from_json(DEMO_QUIZ).unwrap();
         assert_eq!(serde_json::from_str::<serde_json::Value>(DEMO_QUIZ).unwrap()["schemaVersion"], quiz_core::SCHEMA_VERSION);
         assert_eq!(quiz.validate(), Ok(()));
+    }
+
+    #[test]
+    fn a_resumed_show_warns_of_missing_media_and_of_other_rules_both() {
+        let mut quiz = Quiz::from_json(DEMO_QUIZ).unwrap();
+        let question = quiz.slides.iter_mut().find(|slide| matches!(slide.content, quiz_core::SlideContent::Question(_))).unwrap();
+        question.picture = Some("media/gone.png".into());
+        let empty = std::env::temp_dir().join(format!("resume-warnings-{}", std::process::id()));
+        std::fs::create_dir_all(&empty).unwrap();
+        let warnings = resume_warnings(&quiz, Some(&empty), true);
+        assert!(matches!(warnings[..], [AppError::QuizInvalid { .. }, AppError::RulesChanged]), "{warnings:?}");
+        assert_eq!(resume_warnings(&quiz, None, false), []);
+        std::fs::remove_dir_all(&empty).unwrap();
     }
 
     #[test]

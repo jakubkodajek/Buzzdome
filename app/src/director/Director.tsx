@@ -215,7 +215,7 @@ function CommandPanel(props: { view: GameView | null; projector: ProjectorSettin
               icon={<NextIcon />}
               label={t("resume")}
               hint={t("resumeInfo", { title: last.meta.quizTitle, count: last.commandCount })}
-              onClick={() => run(api.resumeLastSession().then((warning) => warning && notify(errorText(t, warning))))}
+              onClick={() => run(api.resumeLastSession().then((warnings) => warnings.length > 0 && notify(warnings.map((w) => errorText(t, w)).join(" "))))}
             />
           )}
         </>
