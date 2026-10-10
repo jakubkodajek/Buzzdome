@@ -98,7 +98,7 @@ two windows cannot disagree with each other or with the score.
 | `receiver-status`, `receiver-raw`, `receiver-press`, `receiver-learn` | see `hardware.rs` | receiver setup and diagnostics |
 | `host-window` | bool | the projector window opened or closed (also from its title bar) |
 | `host-problem` | string | the projector met a problem, worded for the Director to show |
-| `close-requested` | none | the quizmaster closed the Director or quit during a show (the Director asks, then `quit_app`) |
+| `close-requested` | none | the quizmaster closed the Director or quit during a show (the Director asks, then `quit_app` or `close_declined`) |
 | `show-not-saved` | `AppError` or null | the running show's journal refused a write, or works again |
 | `teams-changed` | string list | the prepared team names changed, or a show started or ended |
 | `media-library`, `sound-board` | `MediaLibrary`, `SoundBoard` | the media player's library or pads changed |
@@ -125,10 +125,17 @@ two windows cannot disagree with each other or with the score.
   a write works again (`show-not-saved`, `show_not_saved`). A due command
   that failed is tried again a second later.
 - **Windows.** `app_windows.rs` keeps both windows through a show. Closing
-  the Director (or quitting, Cmd+Q) during a show asks first
-  (`close-requested`), and the app ends with the Director, so a full-screen
-  projector is never left alone; starting the app again brings the Director
-  forward, or builds it again if it is gone. The projector opens on the
+  the Director during a show asks first (`close-requested`), and the app
+  ends with the Director, so a full-screen projector is never left alone.
+  The question is asked above the Director's screen (`App.tsx`), so it
+  comes even when the screen failed to render, and once: a second close
+  while it is open adds no dialog. A Director that does not answer within
+  10 s (its page hangs) does not keep the app open: the next close goes
+  through. On macOS the app menu has a Quit of its own (`app_menu`), as
+  the system's ends the app at once: Cmd+Q asks like the close button, and
+  only Quit from the Dock ends a show without asking (it stays saved).
+  Starting the app again brings the Director forward, or builds it again
+  if it is gone. The projector opens on the
   monitor chosen in Settings while it is connected, else on one the
   Director is not on, and full screen over the Director only when chosen
   there. The monitors are listed when it opens, so one plugged in late
@@ -140,9 +147,15 @@ two windows cannot disagree with each other or with the score.
   print; Option+arrows still move by words in a text field), its context
   menu outside text fields, and a drop that no drop zone takes. It listens
   as events come down to their target, so a part that stops one on its
-  way back up, as a popup menu does, cannot skip it. A part that fails to render shows the error in its place
-  (`ErrorBoundary`): a Director tab offers to try again, and a projector
-  slide leaves the stage as it is and tells the Director.
+  way back up, as a popup menu does, cannot skip it. A part that fails to
+  render shows the error in its place (`ErrorBoundary`, worded by
+  `RenderFailed`): the Director's window, the editor and each Director tab
+  offer to try again, the window also to close the app and the editor to
+  go back to the show; a slide drawn in a list, a preview or the editor
+  says it failed in its own box (`SlideBoundary`) and is drawn again once
+  it changes; a projector slide leaves the stage as it is and tells the
+  Director; a projector whose whole screen fails goes black, tells the
+  Director to reopen it, and still closes with M or Esc.
 - **What a page may do.** Each window gets only the commands it needs
   (`capabilities/director.json`, `capabilities/projector.json`; `build.rs`
   lists the app's commands so Tauri checks them, and a test in
@@ -153,7 +166,7 @@ two windows cannot disagree with each other or with the score.
   Files the quizmaster opens, saves, imports or exports are picked by the
   backend (`dialogs.rs`, worded by the UI's `Picker`), never named by a
   page, and the pages confirm through the dialog plugin's `ask`
-  (`confirm.ts`); ESLint refuses `alert`, `confirm`, `prompt` and the
+  (`confirm.ts`, with Yes and No in the UI's language); ESLint refuses `alert`, `confirm`, `prompt` and the
   plugin's file pickers.
 - **Log.** `app_log.rs` writes `buzzdome.log` in the app's log folder
   (section 3): the start, a panic with its backtrace, and problems that

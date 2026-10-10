@@ -64,6 +64,8 @@ export const api = {
   reportHostProblem: (message: string) => invoke<void>("report_host_problem", { message }),
   /** Ends the app; the running show stays saved for resuming. */
   quitApp: () => invoke<void>("quit_app"),
+  /** The quizmaster chose not to close the app during a show: the next close asks again. */
+  closeDeclined: () => invoke<void>("close_declined"),
   /** Every installed theme with all its values, the default theme among them. */
   listThemes: () => invoke<Theme[]>("list_themes"),
   /** The family names of the installed fonts, sorted; empty when they cannot be read. */
@@ -152,7 +154,7 @@ export interface BackendEvents {
   "host-window": boolean;
   /** A problem the projector met, worded for the Director to show. */
   "host-problem": string;
-  /** The Director was asked to close during a show: the quizmaster confirms it (`quitApp`). */
+  /** The Director was asked to close during a show: the quizmaster confirms it (`quitApp`) or not (`closeDeclined`). */
   "close-requested": null;
   /** The prepared team names changed, or a show started or ended. */
   "teams-changed": string[];

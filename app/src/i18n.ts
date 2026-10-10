@@ -793,7 +793,10 @@ const strings = {
     quitDuringShow: "Show běží. Přesto aplikaci zavřít? Show zůstane uložená a půjde v ní pokračovat.",
     partFailed: "Tuto část se nepodařilo zobrazit: {message}",
     windowFailed: "Okno se nepodařilo zobrazit: {message}",
+    closeAppKeepShow: "Zavřít aplikaci (rozehraná show zůstane uložená)",
+    projectorFailed: "Projektor se nepodařilo zobrazit: {message}. Zavřete ho a znovu otevřete klávesou M.",
     slideFailed: "Snímek se na projektoru nepodařilo zobrazit: {message}",
+    slideNotShown: "Snímek se nepodařilo zobrazit: {message}",
     tryAgain: "Zkusit znovu",
   },
   en: {
@@ -1582,7 +1585,10 @@ const strings = {
     quitDuringShow: "A show is running. Close the app anyway? The show stays saved and can be resumed.",
     partFailed: "This part could not be shown: {message}",
     windowFailed: "The window could not be shown: {message}",
+    closeAppKeepShow: "Close the app (a show in progress stays saved)",
+    projectorFailed: "The projector could not be shown: {message}. Close it and open it again with M.",
     slideFailed: "The projector could not show the slide: {message}",
+    slideNotShown: "The slide could not be shown: {message}",
     tryAgain: "Try again",
   },
 } as const;

@@ -79,7 +79,7 @@ export function MediaPlayerTab({ player, sound, view }: { player: MediaPlayer; s
   };
 
   const remove = async (reference: string) => {
-    if (await confirmAction(t("mediaRemoveConfirm", { name: mediaFileName(reference) }))) await api.mediaRemove(reference);
+    if (await confirmAction(t, t("mediaRemoveConfirm", { name: mediaFileName(reference) }))) await api.mediaRemove(reference);
   };
 
   /** Copies files dropped from the system into the library; returns the references of those that came in. */

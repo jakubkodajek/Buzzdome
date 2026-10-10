@@ -65,6 +65,11 @@ const resume = params.get("resume");
 const saving = params.get("saving");
 /** `unreadable`: the editor's draft does not read; `failing`: writing it fails, as on a full disk. */
 const draft = params.get("draft");
+/** `slide`: the fourth slide has no answers list, so it fails to render; `view`: the show's view has no players, so the Director's screen does. */
+const broken = params.get("broken");
+/** The slides, the fourth broken when asked (`broken`). */
+const maybeBroken = (slides: Quiz["slides"]): Quiz["slides"] =>
+  broken === "slide" ? slides.map((slide, i) => (i === 3 ? ({ ...slide, answers: null } as unknown as Quiz["slides"][number]) : slide)) : slides;
 /** The editor's drafts are numbered as the backend names their folders. */
 let drafts = 1;
 
@@ -280,15 +285,15 @@ const current = found && timer && found.slide ? { ...found, slide: { ...found.sl
 const sceneQuiz: Quiz = {
   ...quiz,
   theme,
-  slides: quiz.slides.map((slide, i) => (current?.slide && i === current.slideIndex ? current.slide : slide)),
+  slides: maybeBroken(quiz.slides.map((slide, i) => (current?.slide && i === current.slideIndex ? current.slide : slide))),
 };
 
 // The quiz the editor opens: the demo quiz, with media on its first two questions.
 const editorQuiz: Quiz = {
   ...quiz,
   theme,
-  slides: quiz.slides.map((slide, i) =>
-    i === 1 ? { ...slide, picture: "media/landscape.svg", sound: SONG } : i === 2 ? { ...slide, video: VIDEO } : slide,
+  slides: maybeBroken(
+    quiz.slides.map((slide, i) => (i === 1 ? { ...slide, picture: "media/landscape.svg", sound: SONG } : i === 2 ? { ...slide, video: VIDEO } : slide)),
   ),
   // A category with a looping background video, for the Categories view.
   categories: [
@@ -513,7 +518,7 @@ mockIPC(
         // `?teamsLost` shows the notice for saved names that could not be read.
         return params.has("teamsLost") ? { detail: "expected value at line 1 column 1", keptAs: "C:\\Data\\teams.json.broken" } : null;
       case "get_view":
-        return current;
+        return broken === "view" && current ? { ...current, players: null } : current;
       case "get_quiz":
         return sceneQuiz;
       case "list_monitors":
@@ -522,10 +527,14 @@ mockIPC(
           { id: "Projector@2560,0", name: "Projector", width: 1920, height: 1080, director: false },
         ];
       case "quit_app":
+      case "close_declined":
         called.push({ cmd });
         return null;
       case "host_window_open":
         return false;
+      case "close_host_window":
+        called.push({ cmd });
+        return null;
       case "report_host_problem":
         called.push({ cmd, ...(payload as object) });
         void emit("host-problem", (payload as { message: string }).message);
@@ -574,8 +583,12 @@ mockIPC(
       case "editor_save":
         called.push({ cmd, ...(payload as object) });
         return "C:\\Kvizy\\hospodsky-kviz.quiz";
-      case "plugin:dialog|message":
-        return dialogAnswer();
+      case "plugin:dialog|message": {
+        // "Yes" is the first button, which the app words itself.
+        const custom = (payload as { buttons?: { OkCancelCustom?: [string, string] } }).buttons?.OkCancelCustom;
+        const answer = dialogAnswer();
+        return answer === "Yes" && custom ? custom[0] : answer;
+      }
       case "editor_category_name": {
         // A stand-in: the backend also skips the names taken.
         const { categories, base } = payload as { categories: unknown[]; base: string };

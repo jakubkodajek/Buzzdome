@@ -208,7 +208,7 @@ export function ReceiverTab() {
             <span className="spacer" />
             <button
               disabled={!info?.learnedButtons}
-              onClick={() => run(confirmAction(t("learnForgetConfirm")).then((yes) => (yes ? api.receiverForgetLearned().then(reload) : undefined)))}
+              onClick={() => run(confirmAction(t, t("learnForgetConfirm")).then((yes) => (yes ? api.receiverForgetLearned().then(reload) : undefined)))}
             >
               {t("learnForget")}
             </button>
