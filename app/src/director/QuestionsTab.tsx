@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ANSWER_LETTERS } from "../answers";
 import { FULL_SHARE } from "../bindings/Constants";
 import { useApp, useDispatch, useRun } from "../app-context";
+import { SlideBoundary } from "../host/SlideBoundary";
 import { SlideThumbnail } from "../host/SlideThumbnail";
 import type { StringKey } from "../i18n";
 import { NextIcon, TrophyIcon } from "../icons";
@@ -48,7 +49,7 @@ export function QuestionsTab({ view, quiz }: { view: GameView; quiz: Quiz | null
   const preview = quiz.slides[shown];
   // Jumps only with the buttons, never mid-question, and the final asks first (A3).
   const jumps = view.controls.goTo;
-  const goToFinal = () => run(confirmAction(t("goToFinalConfirm")).then((yes) => yes && dispatch({ type: "goToFinal" })));
+  const goToFinal = () => run(confirmAction(t, t("goToFinalConfirm")).then((yes) => yes && dispatch({ type: "goToFinal" })));
 
   return (
     <div className="questions-tab">
@@ -122,7 +123,13 @@ export function QuestionsTab({ view, quiz }: { view: GameView; quiz: Quiz | null
             </tbody>
           </table>
         </div>
-        <div className="preview">{preview && <SlidePreview slide={preview} context={contexts[shown]} counts={shown === current ? view.answerCounts : null} />}</div>
+        <div className="preview">
+          {preview && (
+            <SlideBoundary className="preview-card" slide={preview}>
+              <SlidePreview slide={preview} context={contexts[shown]} counts={shown === current ? view.answerCounts : null} />
+            </SlideBoundary>
+          )}
+        </div>
       </div>
     </div>
   );

@@ -7,7 +7,7 @@
   ],
   "permissions": [
     "core:default",
-    "dialog:allow-ask",
+    "dialog:allow-message",
     "allow-get-view",
     "allow-get-quiz",
     "allow-media-root",
@@ -24,6 +24,7 @@
     "allow-host-window-open",
     "allow-report-host-problem",
     "allow-quit-app",
+    "allow-close-declined",
     "allow-list-themes",
     "allow-installed-fonts",
     "allow-prepared-teams",

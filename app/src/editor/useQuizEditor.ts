@@ -118,7 +118,7 @@ export function useQuizEditor(onTestRun: () => void): QuizEditor {
 
   /** Whether unsaved changes may be thrown away (asks if there are any). */
   const mayDiscard = async () =>
-    !open || !unsaved || (await confirmAction(t("discardChanges", { title: open.history.present.title || t("untitledQuiz") })));
+    !open || !unsaved || (await confirmAction(t, t("discardChanges", { title: open.history.present.title || t("untitledQuiz") })));
 
   /** Saves over the quiz file the draft came from, unless `saveAs`, else where the quizmaster picks. */
   const save = (saveAs: boolean) =>
@@ -179,7 +179,7 @@ export function useQuizEditor(onTestRun: () => void): QuizEditor {
     },
     discardUnreadable: () =>
       attempt("close", async (draftApi) => {
-        if (!(await confirmAction(t("discardUnreadableDraft")))) return false;
+        if (!(await confirmAction(t, t("discardUnreadableDraft")))) return false;
         await draftApi.editorClose();
         load(null);
         return true;

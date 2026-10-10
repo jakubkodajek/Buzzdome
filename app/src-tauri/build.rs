@@ -20,6 +20,7 @@ const COMMANDS: &[&str] = &[
     "host_window_open",
     "report_host_problem",
     "quit_app",
+    "close_declined",
     "list_themes",
     "installed_fonts",
     "prepared_teams",

@@ -18,6 +18,11 @@ describe("errorText", () => {
     expect(errorText(en, { ...error, action: "createFolder" })).toBe("Cannot create the folder /q/a.quiz: denied");
   });
 
+  it("names the button that resumes a show as the Director labels it", () => {
+    expect(errorText(cs, { code: "journalBroken" })).toContain("tlačítkem Pokračovat v poslední show.");
+    expect(errorText(en, { code: "journalBroken" })).toContain("with Resume last show.");
+  });
+
   it("numbers slides from one, as the quizmaster sees them", () => {
     expect(errorText(en, { code: "noSuchSlide", slide: 0 })).toBe("There is no slide 1.");
   });

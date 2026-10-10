@@ -36,6 +36,50 @@ body,
   background: var(--bad);
 }
 
+/* A window or a part of it that failed to render (`RenderFailed`). */
+.render-failed {
+  padding: 30px;
+}
+
+.render-failed p {
+  color: var(--bad);
+  font-weight: 600;
+}
+
+.render-failed-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* A slide that failed to render, in the box it was drawn in (`SlideBoundary`). */
+div.slide-failed {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 6px;
+  container-type: inline-size;
+  color: var(--bad);
+  background: #fdecea;
+  font-size: 13px;
+  text-align: center;
+}
+
+.slide-failed svg {
+  flex: none;
+  width: 32px;
+  max-width: 40%;
+}
+
+/* Too small to read: the sign alone, the text in its tooltip. */
+@container (max-width: 200px) {
+  .slide-failed span {
+    display: none;
+  }
+}
+
 .bad-text {
   color: var(--bad);
 }

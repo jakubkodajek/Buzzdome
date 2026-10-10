@@ -129,7 +129,7 @@ impl MediaState {
         library.board.library_changed(&library.files);
         library.player.library_changed(&library.files);
         let _ = app.emit("media-library", self.view(library));
-        let _ = app.emit("media-playing", library.player.now());
+        let _ = app.emit("media-playing", MediaNow::of(&library.player));
         self.board_changed(app, library)
     }
 
@@ -273,10 +273,27 @@ pub fn sound_board_change(app: AppHandle, state: State<MediaState>, change: Boar
     state.board_changed(&app, &library)
 }
 
+/// What the media player plays, read on the show clock at `at_ms`. A window
+/// counts on from there with a monotonic clock of its own (G2): its wall
+/// clock may stand apart from the show clock by any amount.
+#[derive(Debug, Clone, Serialize, TS)]
+#[ts(export)]
+#[serde(rename_all = "camelCase")]
+pub struct MediaNow {
+    pub now: Option<NowPlaying>,
+    pub at_ms: u64,
+}
+
+impl MediaNow {
+    fn of(player: &MediaPlayer) -> MediaNow {
+        MediaNow { now: player.now().cloned(), at_ms: now_ms() }
+    }
+}
+
 /// What the media player plays, if anything.
 #[tauri::command]
-pub fn media_now(state: State<MediaState>) -> Option<NowPlaying> {
-    state.library.lock().unwrap().player.now().cloned()
+pub fn media_now(state: State<MediaState>) -> MediaNow {
+    MediaNow::of(&state.library.lock().unwrap().player)
 }
 
 #[tauri::command]
@@ -285,7 +302,7 @@ pub fn media_control(app: AppHandle, state: State<MediaState>, command: PlayerCo
     let mut library = state.library.lock().unwrap();
     let Library { files, board, player, .. } = &mut *library;
     player.apply(command, board, files, at_ms)?;
-    let _ = app.emit("media-playing", player.now());
+    let _ = app.emit("media-playing", MediaNow::of(player));
     Ok(())
 }
 

@@ -149,7 +149,7 @@ export function SoundBoardGrid({ player, sound, view, selected, onSelect, import
     {
       label: t("boardClear"),
       icon: <TrashIcon />,
-      run: () => run(confirmAction(t("boardClearConfirm")).then((yes) => (yes ? api.soundBoardChange({ type: "clearAll" }) : undefined))),
+      run: () => run(confirmAction(t, t("boardClearConfirm")).then((yes) => (yes ? api.soundBoardChange({ type: "clearAll" }) : undefined))),
     },
   ];
 

@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { PartPlayer, playerLevel, WHOLE_FILE } from "../audio/clip-player";
-import { positionAt } from "../media-player";
+import { positionAt, showClockAt, type HeardMedia } from "../media-player";
 import { useLatest, useMediaLibrary, useNowPlaying, usePlayerVolume } from "../hooks";
 import { mediaUrl } from "../media";
 import type { NowPlaying } from "../types";
@@ -14,16 +14,17 @@ import type { NowPlaying } from "../types";
  */
 export function MediaOverlay() {
   const library = useMediaLibrary();
-  const now = useNowPlaying();
-  if (!library || !now || now.kind === "audio") return null;
+  const heard = useNowPlaying();
+  const now = heard?.now;
+  if (!library || !heard || !now || now.kind === "audio") return null;
   const url = mediaUrl(library.root, now.reference);
-  return <div className="media-overlay">{now.kind === "image" ? <img src={url} alt="" /> : <OverlayVideo url={url} now={now} />}</div>;
+  return <div className="media-overlay">{now.kind === "image" ? <img src={url} alt="" /> : <OverlayVideo url={url} now={now} heard={heard} />}</div>;
 }
 
-function OverlayVideo({ url, now }: { url: string; now: NowPlaying }) {
+function OverlayVideo({ url, now, heard }: { url: string; now: NowPlaying; heard: HeardMedia }) {
   const element = useRef<HTMLVideoElement>(null);
   const player = useRef<PartPlayer | null>(null);
-  const latest = useLatest(now);
+  const latest = useLatest(heard);
   const { id, positionMs, sinceMs } = now;
   const level = playerLevel(usePlayerVolume());
 
@@ -45,8 +46,9 @@ function OverlayVideo({ url, now }: { url: string; now: NowPlaying }) {
   useEffect(() => {
     const clip = player.current;
     if (!clip) return;
-    if (sinceMs === null) clip.pause();
-    else clip.play(WHOLE_FILE, { fromMs: positionAt(latest.current, Date.now()) });
+    const current = latest.current;
+    if (sinceMs === null || !current.now) clip.pause();
+    else clip.play(WHOLE_FILE, { fromMs: positionAt(current.now, showClockAt(current, performance.now())) });
   }, [url, id, positionMs, sinceMs, latest]);
 
   return <video key={`${url}#${id}`} ref={element} src={url} preload="auto" playsInline />;

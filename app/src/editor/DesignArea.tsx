@@ -1,6 +1,7 @@
 import type { MouseEvent } from "react";
 import { useApp } from "../app-context";
 import { previewView } from "../host/preview";
+import { SlideBoundary } from "../host/SlideBoundary";
 import { SlideScreen } from "../host/SlideScreen";
 import { Stage } from "../host/Stage";
 import { SoundIcon } from "../icons";
@@ -29,8 +30,6 @@ interface DesignAreaProps {
  * under the pointer, a double click edits it.
  */
 export function DesignArea({ quiz, index, slide, context, element, playingBackground, onSelect, onEdit, onMenu }: DesignAreaProps) {
-  const { t } = useApp();
-  const view = previewView(slide, index, quiz.slides.length, quiz.title);
   return (
     <div
       className="design-area"
@@ -44,16 +43,27 @@ export function DesignArea({ quiz, index, slide, context, element, playingBackgr
         onMenu(e, target);
       }}
     >
-      <Stage className="design-stage" screen={screenOf(view)} slide={slide} mode="preview" playingBackground={playingBackground}>
-        <SlideScreen view={view} context={context} clock={null} mode="preview" />
-        {slide.sound && (
-          <div className="sound-badge" data-element="sound" title={t("mediaSound")}>
-            <SoundIcon />
-            <span>{mediaFileName(slide.sound.file)}</span>
-          </div>
-        )}
-      </Stage>
+      <SlideBoundary className="design-stage" slide={slide}>
+        <DesignStage quiz={quiz} index={index} slide={slide} context={context} playingBackground={playingBackground} />
+      </SlideBoundary>
     </div>
+  );
+}
+
+/** The slide drawn in the design area, with its sound's name. */
+function DesignStage({ quiz, index, slide, context, playingBackground }: Pick<DesignAreaProps, "quiz" | "index" | "slide" | "context" | "playingBackground">) {
+  const { t } = useApp();
+  const view = previewView(slide, index, quiz.slides.length, quiz.title);
+  return (
+    <Stage className="design-stage" screen={screenOf(view)} slide={slide} mode="preview" playingBackground={playingBackground}>
+      <SlideScreen view={view} context={context} clock={null} mode="preview" />
+      {slide.sound && (
+        <div className="sound-badge" data-element="sound" title={t("mediaSound")}>
+          <SoundIcon />
+          <span>{mediaFileName(slide.sound.file)}</span>
+        </div>
+      )}
+    </Stage>
   );
 }
 

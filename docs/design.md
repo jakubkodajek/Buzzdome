@@ -98,11 +98,11 @@ two windows cannot disagree with each other or with the score.
 | `receiver-status`, `receiver-raw`, `receiver-press`, `receiver-learn` | see `hardware.rs` | receiver setup and diagnostics |
 | `host-window` | bool | the projector window opened or closed (also from its title bar) |
 | `host-problem` | string | the projector met a problem, worded for the Director to show |
-| `close-requested` | none | the quizmaster closed the Director or quit during a show (the Director asks, then `quit_app`) |
+| `close-requested` | none | the quizmaster closed the Director or quit during a show (the Director asks, then `quit_app` or `close_declined`) |
 | `show-not-saved` | `AppError` or null | the running show's journal refused a write, or works again |
 | `teams-changed` | string list | the prepared team names changed, or a show started or ended |
 | `media-library`, `sound-board` | `MediaLibrary`, `SoundBoard` | the media player's library or pads changed |
-| `media-playing`, `media-volume` | `NowPlaying` or null, number | the media player started, paused or stopped; its volume changed |
+| `media-playing`, `media-volume` | `MediaNow`, number | the media player started, paused or stopped (with the show clock's time then); its volume changed |
 | `app-icon` | `IconColor` | the windows' icon took another colour |
 
 - **Clock.** Every command and press is stamped by one show clock
@@ -125,10 +125,17 @@ two windows cannot disagree with each other or with the score.
   a write works again (`show-not-saved`, `show_not_saved`). A due command
   that failed is tried again a second later.
 - **Windows.** `app_windows.rs` keeps both windows through a show. Closing
-  the Director (or quitting, Cmd+Q) during a show asks first
-  (`close-requested`), and the app ends with the Director, so a full-screen
-  projector is never left alone; starting the app again brings the Director
-  forward, or builds it again if it is gone. The projector opens on the
+  the Director during a show asks first (`close-requested`), and the app
+  ends with the Director, so a full-screen projector is never left alone.
+  The question is asked above the Director's screen (`App.tsx`), so it
+  comes even when the screen failed to render, and once: a second close
+  while it is open adds no dialog. A Director that does not answer within
+  10 s (its page hangs) does not keep the app open: the next close goes
+  through. On macOS the app menu has a Quit of its own (`app_menu`), as
+  the system's ends the app at once: Cmd+Q asks like the close button, and
+  only Quit from the Dock ends a show without asking (it stays saved).
+  Starting the app again brings the Director forward, or builds it again
+  if it is gone. The projector opens on the
   monitor chosen in Settings while it is connected, else on one the
   Director is not on, and full screen over the Director only when chosen
   there. The monitors are listed when it opens, so one plugged in late
@@ -137,10 +144,18 @@ two windows cannot disagree with each other or with the score.
 - **Pages.** The windows stay on the app's own pages: a navigation guard
   (`app_windows::navigation_guard`) refuses every other URL, and
   `browser-guard.ts` takes the web view's own keys (reload, back, find,
-  print), its context menu outside text fields, and a drop that no drop
-  zone takes. A part that fails to render shows the error in its place
-  (`ErrorBoundary`): a Director tab offers to try again, and a projector
-  slide leaves the stage as it is and tells the Director.
+  print; Option+arrows still move by words in a text field), its context
+  menu outside text fields, and a drop that no drop zone takes. It listens
+  as events come down to their target, so a part that stops one on its
+  way back up, as a popup menu does, cannot skip it. A part that fails to
+  render shows the error in its place (`ErrorBoundary`, worded by
+  `RenderFailed`): the Director's window, the editor and each Director tab
+  offer to try again, the window also to close the app and the editor to
+  go back to the show; a slide drawn in a list, a preview or the editor
+  says it failed in its own box (`SlideBoundary`) and is drawn again once
+  it changes; a projector slide leaves the stage as it is and tells the
+  Director; a projector whose whole screen fails goes black, tells the
+  Director to reopen it, and still closes with M or Esc.
 - **What a page may do.** Each window gets only the commands it needs
   (`capabilities/director.json`, `capabilities/projector.json`; `build.rs`
   lists the app's commands so Tauri checks them, and a test in
@@ -151,7 +166,7 @@ two windows cannot disagree with each other or with the score.
   Files the quizmaster opens, saves, imports or exports are picked by the
   backend (`dialogs.rs`, worded by the UI's `Picker`), never named by a
   page, and the pages confirm through the dialog plugin's `ask`
-  (`confirm.ts`); ESLint refuses `alert`, `confirm`, `prompt` and the
+  (`confirm.ts`, with Yes and No in the UI's language); ESLint refuses `alert`, `confirm`, `prompt` and the
   plugin's file pickers.
 - **Log.** `app_log.rs` writes `buzzdome.log` in the app's log folder
   (section 3): the start, a panic with its backtrace, and problems that
@@ -629,7 +644,10 @@ packages users will install are read the same way.
 - **Playing.** `quiz_core::MediaPlayer` keeps what plays (`NowPlaying`:
   the file, where it stood and since when it plays) and what a click on a
   pad does. It is no show state, so it is not journaled; `media-playing`
-  tells the windows. The Director plays sounds (`useMediaPlayer`, a
+  (and `media_now` for a window that opens) tells the windows, with the
+  show clock's time when it was sent (`MediaNow`). `since` is on the show
+  clock, never the wall clock, which can jump: a window counts on from
+  that time by its own monotonic clock (`showClockAt`). The Director plays sounds (`useMediaPlayer`, a
   `ClipPlayer` per start); the projector shows a picture or video over the
   stage (`MediaOverlay`) and seeks a video to where the player stands, so
   a projector opened mid-file joins in. The Director reads each file's
@@ -790,11 +808,17 @@ of buzzer presses counts as on time.
 Resuming (`resume_show`) reads the latest session folder: the one with the
 highest number, as a folder is named by its show's start in milliseconds,
 or a number past the last folder's when the clock went back, so two shows
-never share one. The journal is read as bytes. Only a last line without its
-newline was being written when the app stopped; it was never accepted, so
-resume cuts it off, after keeping the journal as it was in
-`journal.jsonl.bak`. A whole line that does not read (a newer app wrote it,
-or the disk damaged it) refuses the resume with `journalDamaged` and leaves
+never share one. The journal is read as bytes (a byte order mark and CRLF
+line ends, which an editor may add, are taken as they come). Each line is
+synced before the next is written, so only the last line can be one the app
+never accepted: one without its newline, which was being written when the
+app stopped, or a whole one that is not JSON at all or holds a NUL, which a
+power cut leaves when the disk kept the newline but not the bytes before
+it. Resume cuts such a line off, after keeping the journal as it was in
+`torn/journal-<n>.jsonl` (a copy per cut; when the copy fails, as on a full
+disk, the log says so and the show resumes all the same). Any other line
+that does not read as a command (one from a newer app, or one the disk
+damaged before the end) refuses the resume with `journalDamaged` and leaves
 the journal as it is, since replaying without it would rebuild another show.
 A show that stopped mid-question has its question restarted
 (`Game::recovery_command` gives `RestartQuestion`, which takes the
@@ -804,7 +828,9 @@ reaches the windows, so no window shows the stopped question.
 The Director keeps a resume problem on screen, under the Resume button,
 until another show loads. When a failed journal write cannot be taken back,
 the session refuses every later command (`journalBroken`) until the show is
-resumed, which cuts the torn line off.
+resumed, which cuts the torn line off. If the line was written whole and
+only syncing it failed, it is not torn: resuming replays it, so the show
+then has the change that was refused.
 
 Because a press can be applied a moment after it was received, the core
 judges it by its `at_ms`: it counts only if it was received while the

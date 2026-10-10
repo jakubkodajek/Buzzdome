@@ -33,21 +33,38 @@ const BROWSER_KEYS: ReadonlySet<string> = new Set([
   "F7",
 ]);
 
+/** Keys that move the caret by words in a text field on macOS (Option+arrows), and go back or forward elsewhere. */
+const WORD_KEYS: ReadonlySet<string> = new Set(["Alt+ArrowLeft", "Alt+ArrowRight"]);
+
 /** True for a key press the webview would act on as a browser. */
-export function isBrowserKey(event: Pick<KeyboardEvent, "key" | "ctrlKey" | "metaKey" | "altKey" | "shiftKey">): boolean {
-  return BROWSER_KEYS.has(keyCombo(event));
+export function isBrowserKey(event: Pick<KeyboardEvent, "key" | "ctrlKey" | "metaKey" | "altKey" | "shiftKey" | "target">): boolean {
+  const combo = keyCombo(event);
+  return BROWSER_KEYS.has(combo) && !(WORD_KEYS.has(combo) && isTypingTarget(event.target));
 }
 
-/** Turns the browser behaviour off in `target`, a window. */
+/**
+ * Turns the browser behaviour off in `target`, a window. The guard listens
+ * as the event comes down to its target (capture), so a part that stops the
+ * event on its way back up, as a popup menu does, cannot skip it (G4).
+ */
 export function installBrowserGuard(target: Pick<Window, "addEventListener">) {
-  target.addEventListener("keydown", (event) => {
-    if (isBrowserKey(event)) event.preventDefault();
-  });
+  const capture = { capture: true };
+  target.addEventListener(
+    "keydown",
+    (event) => {
+      if (isBrowserKey(event)) event.preventDefault();
+    },
+    capture,
+  );
   // Text fields keep their menu (cut, copy, paste); everywhere else it is the browser's.
-  target.addEventListener("contextmenu", (event) => {
-    if (!isTypingTarget(event.target)) event.preventDefault();
-  });
+  target.addEventListener(
+    "contextmenu",
+    (event) => {
+      if (!isTypingTarget(event.target)) event.preventDefault();
+    },
+    capture,
+  );
   // The drop zones take files themselves; a drop anywhere else does nothing.
-  target.addEventListener("dragover", (event) => event.preventDefault());
-  target.addEventListener("drop", (event) => event.preventDefault());
+  target.addEventListener("dragover", (event) => event.preventDefault(), capture);
+  target.addEventListener("drop", (event) => event.preventDefault(), capture);
 }

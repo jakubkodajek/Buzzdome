@@ -16,8 +16,8 @@ import type {
   ListSeparator,
   MediaKind,
   MediaLibrary,
+  MediaNow,
   MonitorInfo,
-  NowPlaying,
   Picker,
   PlayerCommand,
   Press,
@@ -64,6 +64,8 @@ export const api = {
   reportHostProblem: (message: string) => invoke<void>("report_host_problem", { message }),
   /** Ends the app; the running show stays saved for resuming. */
   quitApp: () => invoke<void>("quit_app"),
+  /** The quizmaster chose not to close the app during a show: the next close asks again. */
+  closeDeclined: () => invoke<void>("close_declined"),
   /** Every installed theme with all its values, the default theme among them. */
   listThemes: () => invoke<Theme[]>("list_themes"),
   /** The family names of the installed fonts, sorted; empty when they cannot be read. */
@@ -85,7 +87,7 @@ export const api = {
   soundBoard: () => invoke<SoundBoard>("sound_board"),
   soundBoardChange: (change: BoardChange) => invoke<void>("sound_board_change", { change }),
   /** What the media player plays, if anything. */
-  mediaNow: () => invoke<NowPlaying | null>("media_now"),
+  mediaNow: () => invoke<MediaNow>("media_now"),
   mediaControl: (command: PlayerCommand) => invoke<void>("media_control", { command }),
   /** The player's volume in percent, the level everything the show plays sounds at. */
   mediaVolume: () => invoke<number>("media_volume"),
@@ -152,7 +154,7 @@ export interface BackendEvents {
   "host-window": boolean;
   /** A problem the projector met, worded for the Director to show. */
   "host-problem": string;
-  /** The Director was asked to close during a show: the quizmaster confirms it (`quitApp`). */
+  /** The Director was asked to close during a show: the quizmaster confirms it (`quitApp`) or not (`closeDeclined`). */
   "close-requested": null;
   /** The prepared team names changed, or a show started or ended. */
   "teams-changed": string[];
@@ -160,7 +162,7 @@ export interface BackendEvents {
   "media-library": MediaLibrary;
   "sound-board": SoundBoard;
   /** The media player started, paused or stopped something. */
-  "media-playing": NowPlaying | null;
+  "media-playing": MediaNow;
   /** The player's volume changed, in percent. */
   "media-volume": number;
   /** The windows' icon took another colour. */

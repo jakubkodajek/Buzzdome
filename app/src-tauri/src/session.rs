@@ -8,6 +8,7 @@
 //! truncating is how a torn line is cut off on resume and a failed write is
 //! taken back. Every line is written at the end of the whole lines instead.
 
+use crate::app_log;
 use quiz_core::{Quiz, QuizJsonError, Stamped};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
@@ -18,8 +19,11 @@ use std::path::{Path, PathBuf};
 const QUIZ_FILE: &str = "quiz.json";
 const META_FILE: &str = "meta.json";
 const JOURNAL_FILE: &str = "journal.jsonl";
-/// The journal as it was before resuming cut a torn last line off it.
-const TORN_JOURNAL_FILE: &str = "journal.jsonl.bak";
+/// Where the journal is kept as it was each time resuming cut a torn last
+/// line off it (`torn/journal-1.jsonl`, `-2`, ...).
+const TORN_DIR: &str = "torn";
+/// A UTF-8 byte order mark, which an editor may put at the start of a file.
+const BOM: &[u8] = b"\xEF\xBB\xBF";
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export)]
@@ -69,10 +73,10 @@ pub enum ResumeError {
     /// The show's copy of the quiz does not read, such as one from a newer app.
     #[error(transparent)]
     Quiz(#[from] QuizJsonError),
-    /// Line `line` (from 1) of the journal is whole but does not read: a
-    /// newer app wrote it, or the disk damaged it. Replaying without it
-    /// would rebuild another show, so the show is not resumed and its
-    /// journal is left as it is.
+    /// Line `line` (from 1) of the journal is whole but does not read as a
+    /// command: a newer app wrote it, or the disk damaged it. Replaying
+    /// without it would rebuild another show, so the show is not resumed
+    /// and its journal is left as it is.
     #[error("line {line} of the show's journal does not read")]
     Damaged { line: usize },
 }
@@ -83,7 +87,9 @@ pub enum NotSaved {
     #[error(transparent)]
     Io(#[from] io::Error),
     /// An earlier write failed and could not be taken back, so nothing more
-    /// is appended until the show is resumed, which cuts the torn line off.
+    /// is appended until the show is resumed. Resuming cuts a torn line off;
+    /// a line that was written whole (only syncing it failed) stays and is
+    /// replayed, although the command was refused.
     #[error("the journal could not be repaired after a failed write")]
     Broken,
 }
@@ -119,20 +125,23 @@ impl Session {
         let quiz = Quiz::from_json(&fs::read_to_string(dir.join(QUIZ_FILE))?)?;
         let meta = read_meta(&dir)?;
         let path = dir.join(JOURNAL_FILE);
-        let (journal, whole_len) = read_journal(&path)?;
+        let (journal, kept) = read_journal(&path)?;
         // A torn last line, which no window ever saw, is cut off so new
-        // commands start on a clean line; the journal as it was is kept first,
-        // before the journal is opened for writing.
-        let torn = fs::metadata(&path).is_ok_and(|journal| journal.len() > whole_len);
+        // commands start on a clean line. The journal as it was is kept
+        // aside first if it can be: it is only there to look into, so a
+        // full disk does not stop the show from resuming.
+        let torn = fs::metadata(&path).is_ok_and(|journal| journal.len() > kept);
         if torn {
-            fs::copy(&path, dir.join(TORN_JOURNAL_FILE))?;
+            if let Err(e) = keep_aside(&path, &dir) {
+                app_log::note(&format!("the torn journal {} was not kept aside: {e}", path.display()));
+            }
         }
         let file = open_journal(&path)?;
         if torn {
-            file.set_len(whole_len)?;
+            file.set_len(kept)?;
             file.sync_data()?;
         }
-        let session = Session { journal: file, len: whole_len, broken: false };
+        let session = Session { journal: file, len: kept, broken: false };
         Ok(Some(Resumed { session, quiz, journal, meta }))
     }
 
@@ -167,6 +176,25 @@ impl Session {
                 self.broken = true;
             }
         }).map_err(|e| NotSaved::Io(e.into_io()))
+    }
+}
+
+/// Copies the journal at `path` into the session's `TORN_DIR`, under a name
+/// no earlier copy has.
+fn keep_aside(path: &Path, dir: &Path) -> io::Result<PathBuf> {
+    let torn = dir.join(TORN_DIR);
+    fs::create_dir_all(&torn)?;
+    let mut number = 1u32;
+    loop {
+        let copy = torn.join(format!("journal-{number}.jsonl"));
+        match OpenOptions::new().write(true).create_new(true).open(&copy) {
+            Ok(mut file) => {
+                io::copy(&mut File::open(path)?, &mut file)?;
+                return Ok(copy);
+            }
+            Err(e) if e.kind() == io::ErrorKind::AlreadyExists => number += 1,
+            Err(e) => return Err(e),
+        }
     }
 }
 
@@ -268,13 +296,17 @@ fn session_dirs(root: &Path) -> io::Result<Vec<(u64, PathBuf)>> {
 /// than every folder's before it, so two shows never share one.
 fn new_dir(root: &Path, started_ms: u64) -> io::Result<PathBuf> {
     fs::create_dir_all(root)?;
-    let last = session_dirs(root)?.into_iter().map(|(number, _)| number).max();
-    let mut number = last.map_or(started_ms, |last| started_ms.max(last + 1));
+    // A number past the highest there is, which only a folder made by hand can be.
+    let after = |number: u64| number.checked_add(1).ok_or_else(|| io::Error::other("no session folder number is left"));
+    let mut number = match session_dirs(root)?.into_iter().map(|(number, _)| number).max() {
+        Some(last) => started_ms.max(after(last)?),
+        None => started_ms,
+    };
     loop {
         let dir = root.join(number.to_string());
         match fs::create_dir(&dir) {
             Ok(()) => return Ok(dir),
-            Err(e) if e.kind() == io::ErrorKind::AlreadyExists => number += 1,
+            Err(e) if e.kind() == io::ErrorKind::AlreadyExists => number = after(number)?,
             Err(e) => return Err(e),
         }
     }
@@ -287,25 +319,44 @@ fn latest_dir(root: &Path) -> io::Result<Option<PathBuf>> {
     Ok(dirs.into_iter().max_by_key(|(number, _)| *number).map(|(_, path)| path))
 }
 
-/// Reads the journal: its commands, and the length of its whole lines. A
-/// last line without its newline was being written when the app stopped,
-/// so it was never accepted and is left out; a whole line that does not
-/// read refuses the journal (`ResumeError::Damaged`).
+/// Reads the journal: its commands, and how many of its bytes hold them.
+///
+/// Each line is synced before the next is written, so only the last one can
+/// be a line the app never accepted, and that is left out: one without its
+/// newline, which was being written when the app stopped, or a whole one
+/// that is not JSON at all or holds a NUL, which a power cut leaves when the
+/// disk kept the newline but not the bytes before it. Any other line that
+/// does not read as a command refuses the journal (`ResumeError::Damaged`):
+/// a newer app wrote it, or the disk damaged it.
 fn read_journal(path: &Path) -> Result<(Vec<Stamped>, u64), ResumeError> {
     let bytes = match fs::read(path) {
         Ok(bytes) => bytes,
         Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok((Vec::new(), 0)),
         Err(e) => return Err(e.into()),
     };
-    let whole = bytes.iter().rposition(|&b| b == b'\n').map_or(0, |last| last + 1);
+    let start = if bytes.starts_with(BOM) { BOM.len() } else { 0 };
+    let whole = bytes.iter().rposition(|&b| b == b'\n').map_or(start, |last| last + 1);
     let mut commands = Vec::new();
-    for (index, line) in bytes[..whole].split_inclusive(|&b| b == b'\n').enumerate() {
+    let mut end = start;
+    for (index, line) in bytes[start..whole].split_inclusive(|&b| b == b'\n').enumerate() {
+        let line_start = end;
+        end += line.len();
         let line = line.trim_ascii();
-        if !line.is_empty() {
-            commands.push(serde_json::from_slice(line).map_err(|_| ResumeError::Damaged { line: index + 1 })?);
+        if line.is_empty() {
+            continue;
+        }
+        match serde_json::from_slice(line) {
+            Ok(command) => commands.push(command),
+            Err(_) if end == bytes.len() && !is_json(line) => return Ok((commands, line_start as u64)),
+            Err(_) => return Err(ResumeError::Damaged { line: index + 1 }),
         }
     }
     Ok((commands, whole as u64))
+}
+
+/// Whether `line` is JSON, whatever it holds: the app never writes a NUL.
+fn is_json(line: &[u8]) -> bool {
+    !line.contains(&0) && serde_json::from_slice::<serde::de::IgnoredAny>(line).is_ok()
 }
 
 #[cfg(test)]
@@ -351,7 +402,109 @@ mod tests {
         let resumed = Session::resume_latest(&root).unwrap().unwrap();
         assert_eq!(resumed.journal.len(), 2);
         assert_eq!(fs::read(&journal).unwrap(), whole, "the torn line is cut off");
-        assert_eq!(fs::read(dir.join(TORN_JOURNAL_FILE)).unwrap(), torn, "the journal as it was is kept");
+        assert_eq!(fs::read(dir.join(TORN_DIR).join("journal-1.jsonl")).unwrap(), torn, "the journal as it was is kept");
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    /// Writes `tail` after the journal of a show that journaled two commands,
+    /// and gives the show's folder and the journal as it was before.
+    fn show_ending_in(root: &Path, tail: &[u8]) -> (PathBuf, Vec<u8>) {
+        let dir = journaled_show(root, 1);
+        let journal = dir.join(JOURNAL_FILE);
+        let whole = fs::read(&journal).unwrap();
+        fs::write(&journal, [&whole[..], tail].concat()).unwrap();
+        (dir, whole)
+    }
+
+    #[test]
+    fn a_whole_last_line_that_is_not_json_is_cut_off_like_a_torn_one() {
+        // A power cut kept the page with the newline but not the bytes before it.
+        for (name, tail) in [("nul", &b"\0\0\0\0\0\0\0\0\n"[..]), ("cut", b"{\"atMs\":7,\"comm\n"), ("nul-in-json", b"{\"atMs\":7,\"command\":{\"type\":\"next\"}}\0\n")] {
+            let root = temp_root(&format!("garbled-{name}"));
+            let (dir, whole) = show_ending_in(&root, tail);
+            assert_eq!(Session::latest_summary(&root).unwrap().unwrap().command_count, 2, "{name}");
+            let resumed = Session::resume_latest(&root).unwrap().unwrap();
+            assert_eq!(resumed.journal.len(), 2, "{name}");
+            assert_eq!(fs::read(dir.join(JOURNAL_FILE)).unwrap(), whole, "{name}");
+            assert!(dir.join(TORN_DIR).join("journal-1.jsonl").exists(), "{name}");
+            fs::remove_dir_all(&root).unwrap();
+        }
+    }
+
+    #[test]
+    fn a_last_line_from_a_newer_app_refuses_the_resume() {
+        let root = temp_root("newer-last");
+        let tail = b"{\"atMs\":7,\"command\":{\"type\":\"newerCommand\"}}\n";
+        let (dir, whole) = show_ending_in(&root, tail);
+        assert!(matches!(Session::resume_latest(&root), Err(ResumeError::Damaged { line: 3 })));
+        assert_eq!(fs::read(dir.join(JOURNAL_FILE)).unwrap(), [&whole[..], tail].concat());
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn a_garbled_line_before_others_refuses_the_resume() {
+        for (name, tail) in [
+            ("then-a-line", &b"\0\0\0\n{\"atMs\":8,\"command\":{\"type\":\"next\"}}\n"[..]),
+            ("then-a-torn-line", b"\0\0\0\n{\"atMs\":8,\"comm"),
+            ("then-an-empty-line", b"\0\0\0\n\n"),
+        ] {
+            let root = temp_root(&format!("garbled-middle-{name}"));
+            let (dir, whole) = show_ending_in(&root, tail);
+            assert!(matches!(Session::resume_latest(&root), Err(ResumeError::Damaged { line: 3 })), "{name}");
+            assert_eq!(fs::read(dir.join(JOURNAL_FILE)).unwrap(), [&whole[..], tail].concat(), "{name}");
+            fs::remove_dir_all(&root).unwrap();
+        }
+    }
+
+    #[test]
+    fn journals_an_editor_wrote_or_with_nothing_whole_read() {
+        let root = temp_root("shapes");
+        let dir = journaled_show(&root, 1);
+        let journal = dir.join(JOURNAL_FILE);
+        let lines = fs::read_to_string(&journal).unwrap();
+        // Saved again in an editor: CRLF line ends and a byte order mark.
+        fs::write(&journal, [BOM, lines.replace('\n', "\r\n").as_bytes()].concat()).unwrap();
+        assert_eq!(Session::resume_latest(&root).unwrap().unwrap().journal.len(), 2);
+        for (contents, kept) in [(&b""[..], 0), (b"{\"atMs\":1,\"comm", 0), (BOM, 3)] {
+            fs::write(&journal, contents).unwrap();
+            let mut resumed = Session::resume_latest(&root).unwrap().unwrap();
+            assert!(resumed.journal.is_empty());
+            assert_eq!(fs::metadata(&journal).unwrap().len(), kept);
+            resumed.session.append(&Stamped { at_ms: 9, command: Command::Next }).unwrap();
+            assert_eq!(Session::latest_summary(&root).unwrap().unwrap().command_count, 1);
+        }
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn a_torn_line_is_cut_off_even_when_it_cannot_be_kept_aside() {
+        let root = temp_root("no-backup");
+        let (dir, whole) = show_ending_in(&root, b"{\"atMs\":7,\"comm");
+        // A file where the copies' folder belongs, so the copy fails.
+        fs::write(dir.join(TORN_DIR), b"").unwrap();
+        assert_eq!(Session::resume_latest(&root).unwrap().unwrap().journal.len(), 2);
+        assert_eq!(fs::read(dir.join(JOURNAL_FILE)).unwrap(), whole);
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn each_torn_line_cut_off_is_kept_in_a_copy_of_its_own() {
+        let root = temp_root("two-backups");
+        let (dir, whole) = show_ending_in(&root, b"{\"atMs\":7,\"comm");
+        drop(Session::resume_latest(&root).unwrap().unwrap());
+        fs::write(dir.join(JOURNAL_FILE), [&whole[..], b"\0\0\n"].concat()).unwrap();
+        drop(Session::resume_latest(&root).unwrap().unwrap());
+        let copy = |n: u32| fs::read(dir.join(TORN_DIR).join(format!("journal-{n}.jsonl"))).unwrap();
+        assert_eq!(copy(1), [&whole[..], b"{\"atMs\":7,\"comm"].concat());
+        assert_eq!(copy(2), [&whole[..], b"\0\0\n"].concat());
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn no_show_starts_past_the_highest_folder_number() {
+        let root = temp_root("last-number");
+        fs::create_dir_all(root.join(u64::MAX.to_string())).unwrap();
+        assert!(Session::create(&root, &Quiz::new("T", vec![]), &meta(1)).is_err());
         fs::remove_dir_all(&root).unwrap();
     }
 
@@ -369,7 +522,7 @@ mod tests {
         assert!(matches!(Session::latest_summary(&root), Err(ResumeError::Damaged { line: 2 })));
         assert!(matches!(Session::resume_latest(&root), Err(ResumeError::Damaged { line: 2 })));
         assert_eq!(fs::read_to_string(&journal).unwrap(), damaged);
-        assert!(!dir.join(TORN_JOURNAL_FILE).exists());
+        assert!(!dir.join(TORN_DIR).exists());
         fs::remove_dir_all(&root).unwrap();
     }
 

@@ -465,13 +465,19 @@ pub(crate) fn press_from_hardware(app: &AppHandle, command: Command, at_ms: u64)
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let builder = tauri::Builder::default()
         // First, so a second start ends before it touches the show: it brings
         // the running app's Director forward instead (Z2).
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| app_windows::show_director(app)))
         .plugin(tauri_plugin_dialog::init())
-        .plugin(app_windows::navigation_guard())
+        .plugin(app_windows::navigation_guard());
+    // Only macOS has an app menu, whose Quit asks during a show (G21).
+    #[cfg(target_os = "macos")]
+    let builder = builder.menu(app_windows::app_menu);
+    builder
         .on_window_event(app_windows::on_window_event)
+        .on_menu_event(app_windows::on_menu_event)
+        .manage(app_windows::CloseRequest::default())
         .manage(editor::EditorLock::default())
         .manage(AppState(Mutex::new(Inner::new())))
         .setup(|app| {
@@ -525,6 +531,7 @@ pub fn run() {
             app_windows::host_window_open,
             app_windows::report_host_problem,
             app_windows::quit_app,
+            app_windows::close_declined,
             themes::list_themes,
             fonts::installed_fonts,
             teams::prepared_teams,
@@ -564,9 +571,8 @@ pub fn run() {
             hardware::receiver_export_log,
             hardware::receiver_udev_rule,
         ])
-        .build(tauri::generate_context!())
-        .expect("error while building tauri application")
-        .run(app_windows::on_run_event);
+        .run(tauri::generate_context!())
+        .expect("error while running tauri application");
 }
 
 #[cfg(test)]
