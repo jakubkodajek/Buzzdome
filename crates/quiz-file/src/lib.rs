@@ -8,6 +8,7 @@
 //! and opening the same file twice reuses the same folder.
 
 mod sheet;
+mod zip_end;
 
 pub use sheet::{
     export_sheet, import_sheet, read_tables, SheetExport, SheetImport, SheetRead, CSV_EXTENSION, MAX_SHEET_BYTES, MAX_SHEET_COLUMNS, MAX_SHEET_REPORT_BYTES,
@@ -614,7 +615,10 @@ fn is_zip(path: &Path) -> Result<bool> {
 /// (see `renames`). Other entries (folders, links, files some ZIP tools add,
 /// names that would leave the media folder) are skipped.
 fn unpack_zip(path: &Path, dest: &Path) -> Result<Unpacked> {
-    let file = File::open(path).context(FileAction::Read, path)?;
+    let mut file = File::open(path).context(FileAction::Read, path)?;
+    if zip_end::counts_more_than(&mut file, MAX_ENTRIES as u64).context(FileAction::Read, path)? {
+        return Err(QuizFileError::TooManyFiles);
+    }
     let mut archive = ZipArchive::new(file)?;
     if archive.len() > MAX_ENTRIES {
         return Err(QuizFileError::TooManyFiles);
@@ -649,20 +653,22 @@ fn copy_json(path: &Path, dest: &Path) -> Result<Unpacked> {
     let json = read_json(path)?;
     let quiz = Quiz::from_json(&json)?;
     let source_root = path.parent().unwrap_or(Path::new("."));
+    let real_root = fs::canonicalize(source_root).context(FileAction::Read, source_root)?;
     let mut hasher = Sha256::new();
     let mut budget = MAX_UNPACKED_BYTES;
     budget -= write_file(dest, QUIZ_JSON, &mut json.as_bytes(), path, budget, &mut hasher)?;
     for reference in quiz.media_files() {
         // Only safe names are read: nothing outside the folder, and no
-        // device a name like `CON` opens on Windows.
+        // device a name like `CON` opens on Windows. Nor through a link
+        // that leads out of it: `media/x` linking to `/` would read any
+        // file of the disk into the draft.
         if !is_safe_reference(reference) {
             continue;
         }
         let source = source_root.join(reference);
-        let Ok(mut media) = File::open(&source) else {
-            // `problems` reports it as missing.
-            continue;
-        };
+        let inside = fs::canonicalize(&source).is_ok_and(|real| real.starts_with(&real_root));
+        // `problems` reports one not read as missing.
+        let Some(mut media) = inside.then(|| File::open(&source).ok()).flatten() else { continue };
         budget -= write_file(dest, reference, &mut media, &source, budget, &mut hasher)?;
     }
     Ok(Unpacked { hash: finish(hasher), renamed: BTreeMap::new() })
@@ -787,6 +793,27 @@ mod tests {
         let again = open(&file, &cache).unwrap();
         assert_eq!(again.root, package.root);
         assert_eq!(fs::read_dir(&cache).unwrap().count(), 1);
+    }
+
+    #[test]
+    fn a_file_of_too_many_entries_is_refused() {
+        let names: Vec<String> = (0..=MAX_ENTRIES).map(|n| format!("media/{n}.png")).collect();
+        let entries: Vec<(&str, &[u8])> = names.iter().map(|name| (name.as_str(), &b""[..])).collect();
+        let file = zip_of("many", &entries);
+        assert!(matches!(open(&file, &temp("many-cache")), Err(QuizFileError::TooManyFiles)));
+        // A ZIP64 end record counting millions inside an entry, which a reader
+        // would take if the end record after it did not read, is refused
+        // before the file is opened.
+        let hidden = temp("hidden").join("hidden.quiz");
+        let mut zip = ZipWriter::new(File::create(&hidden).unwrap());
+        zip.start_file("media/a.png", SimpleFileOptions::default().compression_method(CompressionMethod::Stored)).unwrap();
+        zip.write_all(&zip_end::tests::zip64_end(3_000_000, 0)).unwrap();
+        zip.finish().unwrap();
+        assert!(matches!(open(&hidden, &temp("hidden-cache")), Err(QuizFileError::TooManyFiles)));
+        // Bytes with no end record are not a quiz file, whatever they start with.
+        let bare = temp("bare").join("bare.quiz");
+        fs::write(&bare, b"PK\x03\x04 and nothing after").unwrap();
+        assert!(matches!(open(&bare, &temp("bare-cache")), Err(QuizFileError::Zip(_))));
     }
 
     #[cfg(unix)]
@@ -941,6 +968,34 @@ mod tests {
         assert!(!draft.join("media").exists());
         let problem = Problem::Media { file: "media/../../secret.png".into(), issue: MediaIssue::BadName };
         assert_eq!(problems(&opened, &draft), [ValidationError { slide_id: Some("intro".into()), problem }]);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_plain_json_quiz_cannot_reach_outside_its_folder_through_a_link() {
+        let outer = temp("json-link");
+        fs::write(outer.join("secret.png"), b"secret").unwrap();
+        let folder = outer.join("quiz");
+        fs::create_dir_all(folder.join("media")).unwrap();
+        std::os::unix::fs::symlink(&outer, folder.join("media/up")).unwrap();
+        std::os::unix::fs::symlink(folder.join("media/up/secret.png"), folder.join("media/linked.png")).unwrap();
+        fs::write(folder.join("media/inside.png"), b"png bytes").unwrap();
+        std::os::unix::fs::symlink(folder.join("media/inside.png"), folder.join("media/alias.png")).unwrap();
+        let mut quiz = quiz_with_picture("media/up/secret.png");
+        for picture in ["media/linked.png", "media/alias.png"] {
+            let mut slide = quiz.slides[0].clone();
+            slide.id = picture.into();
+            slide.picture = Some(picture.into());
+            quiz.slides.push(slide);
+        }
+        fs::write(folder.join("quiz.json"), serde_json::to_vec(&quiz).unwrap()).unwrap();
+
+        let draft = temp("json-link-draft").join("draft");
+        open_into(&folder.join("quiz.json"), &draft).unwrap();
+        assert!(!draft.join("media/up/secret.png").exists());
+        assert!(!draft.join("media/linked.png").exists());
+        // A link that stays inside the folder is read as the file it names.
+        assert_eq!(fs::read(draft.join("media/alias.png")).unwrap(), b"png bytes");
     }
 
     /// A quiz file made before the answer and points limits: an

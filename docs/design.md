@@ -268,8 +268,12 @@ A `.quiz` entry with a name that is not portable is stored under the
 closest portable one (`quiz_core::portable_reference`, numbered if taken)
 and the quiz's references are renamed with it (the draft then counts as
 unsaved); a plain `quiz.json` reads
-only safe names from the disk (no device names on Windows), and the show
-path keeps such a file refused.
+only safe names from the disk (no device names on Windows), nor any
+through a link that leads out of its folder, and the show path keeps such
+a file refused.
+A `.quiz` file of more than 10,000 entries (`MAX_ENTRIES`) is refused. Its
+ZIP64 end records are checked before the archive is opened (`zip_end.rs`),
+as opening reads every entry header the record it takes counts.
 A `quiz.json` over 16 MB (`MAX_QUIZ_JSON_BYTES`) is refused before it is
 parsed, whether read from a package, from the disk or about to be saved, so
 a small packed file cannot unpack into a huge quiz.

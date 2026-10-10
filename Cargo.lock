@@ -2942,6 +2942,7 @@ dependencies = [
  "calamine",
  "csv",
  "encoding_rs",
+ "memchr",
  "quiz-core",
  "serde",
  "serde_json",
