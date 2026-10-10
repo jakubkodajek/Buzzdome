@@ -25,6 +25,14 @@ pub const MAX_SHEET_BYTES: u64 = 50 << 20;
 pub const MAX_SHEET_ROWS: usize = 10_000;
 /// The most columns a sheet may span: far more than the template has.
 pub const MAX_SHEET_COLUMNS: usize = 200;
+/// The most text an import reads, in bytes over all sheets, their names
+/// included. A sheet of 10,000 questions with long texts holds under 10 MB;
+/// without a limit, cells that all name one long shared string would take
+/// gigabytes.
+pub const MAX_SHEET_TEXT_BYTES: usize = 16 << 20;
+/// The most JSON the sheet reader process reports (`SheetRead`): the
+/// tables of the largest import read.
+pub const MAX_SHEET_REPORT_BYTES: usize = report_bound(Room::FULL);
 
 /// The slides of a spreadsheet, ready for the editor to insert, and what
 /// the import could not take over as the sheet has it.
@@ -159,12 +167,45 @@ impl SheetRead {
 }
 
 /// The tables of a workbook's visible worksheets, or of a CSV file, within
-/// `MAX_SHEET_BYTES`, `MAX_SHEET_ROWS` and `MAX_SHEET_COLUMNS`.
+/// `MAX_SHEET_BYTES`, `MAX_SHEET_ROWS`, `MAX_SHEET_COLUMNS` and
+/// `MAX_SHEET_TEXT_BYTES`. A sheet without cells is left out, as an import
+/// skips it anyway.
 pub fn read_tables(path: &Path) -> Result<Vec<Table>> {
-    read_tables_within(path, MAX_SHEET_BYTES, MAX_SHEET_ROWS)
+    read_tables_within(path, MAX_SHEET_BYTES, Room::FULL)
 }
 
-fn read_tables_within(path: &Path, max_bytes: u64, max_rows: usize) -> Result<Vec<Table>> {
+/// How much of a spreadsheet is still read: rows and bytes of text.
+#[derive(Debug, Clone, Copy)]
+struct Room {
+    rows: usize,
+    text: usize,
+}
+
+impl Room {
+    const FULL: Room = Room { rows: MAX_SHEET_ROWS, text: MAX_SHEET_TEXT_BYTES };
+
+    /// What is left once `table`, which has rows, is read; `table` and
+    /// `csv_table` refuse a table that does not fit.
+    fn after(self, table: &Table) -> Room {
+        Room { rows: self.rows - table.rows.len(), text: self.text - text_bytes(table) }
+    }
+}
+
+fn text_bytes(table: &Table) -> usize {
+    table.name.len() + table.rows.iter().flatten().map(String::len).sum::<usize>()
+}
+
+/// The most JSON that tables read within `room` take as a `SheetRead`:
+/// each byte of text at most six (a control character is written
+/// `\u001f`), each cell three more (quotes and comma), each row three
+/// (brackets and comma) and each table, which has a row, its fields.
+const fn report_bound(room: Room) -> usize {
+    const TABLE: usize = r#"{"name":"","first_row":4294967295,"rows":[]},"#.len();
+    const REPORT: usize = r#"{"Tables":[]}"#.len();
+    6 * room.text + 3 * room.rows * MAX_SHEET_COLUMNS + 3 * room.rows + TABLE * room.rows + REPORT
+}
+
+fn read_tables_within(path: &Path, max_bytes: u64, mut room: Room) -> Result<Vec<Table>> {
     let size = fs::metadata(path).context(FileAction::Read, path)?.len();
     if size > max_bytes || unpacked_size(path, max_bytes)? > max_bytes {
         return Err(QuizFileError::SpreadsheetTooLarge);
@@ -172,14 +213,18 @@ fn read_tables_within(path: &Path, max_bytes: u64, max_rows: usize) -> Result<Ve
     let extension = path.extension().map(|extension| extension.to_string_lossy().to_ascii_lowercase());
     if extension.as_deref() == Some("csv") {
         let bytes = fs::read(path).context(FileAction::Read, path)?;
-        return Ok(vec![csv_table(&bytes, max_rows)?]);
+        let table = csv_table(&bytes, room)?;
+        return Ok(if table.rows.is_empty() { Vec::new() } else { vec![table] });
     }
     let mut workbook = open_workbook_auto(path).map_err(unreadable)?;
     let sheets = workbook.sheets_metadata().to_vec();
-    let mut tables: Vec<Table> = Vec::new();
+    let mut tables = Vec::new();
     for sheet in sheets.into_iter().filter(|sheet| sheet.typ == SheetType::WorkSheet && sheet.visible == SheetVisible::Visible) {
-        let rows_left = max_rows - tables.iter().map(|table| table.rows.len()).sum::<usize>();
-        tables.push(sheet_table(&mut workbook, sheet.name, rows_left)?);
+        let table = sheet_table(&mut workbook, sheet.name, room)?;
+        if !table.rows.is_empty() {
+            room = room.after(&table);
+            tables.push(table);
+        }
     }
     Ok(tables)
 }
@@ -188,17 +233,17 @@ fn unreadable(e: impl std::fmt::Display) -> QuizFileError {
     QuizFileError::Spreadsheet(e.to_string())
 }
 
-/// A worksheet as a table of at most `max_rows` rows. An Excel sheet is
-/// read cell by cell, so a cell far off is refused before the sheet takes
-/// memory for the cells in between; the parser reads an `.xls` or `.ods`
-/// sheet whole.
-fn sheet_table(workbook: &mut Sheets<BufReader<fs::File>>, name: String, max_rows: usize) -> Result<Table> {
+/// A worksheet as a table that fits in `room`. An Excel sheet is read cell
+/// by cell, so a cell far off is refused before the sheet takes memory for
+/// the cells in between; the parser reads an `.xls` or `.ods` sheet whole
+/// (the app's sheet reader process stops it past a memory limit).
+fn sheet_table(workbook: &mut Sheets<BufReader<fs::File>>, name: String, room: Room) -> Result<Table> {
     let text = |value: &DataRef| cell_text(&Data::from(value.clone()));
     match workbook {
         Sheets::Xlsx(book) => match book.worksheet_cells_reader(&name) {
             Ok(mut cells) => {
                 let cells = std::iter::from_fn(|| cells.next_cell().transpose());
-                table(name, cells.map(|cell| cell.map(|cell| (cell.get_position(), text(cell.get_value()))).map_err(unreadable)), max_rows)
+                table(name, cells.map(|cell| cell.map(|cell| (cell.get_position(), text(cell.get_value()))).map_err(unreadable)), room)
             }
             Err(XlsxError::NotAWorksheet(_)) => Ok(Table { name, first_row: 1, rows: Vec::new() }),
             Err(e) => Err(unreadable(e)),
@@ -206,13 +251,13 @@ fn sheet_table(workbook: &mut Sheets<BufReader<fs::File>>, name: String, max_row
         Sheets::Xlsb(book) => {
             let mut cells = book.worksheet_cells_reader(&name).map_err(unreadable)?;
             let cells = std::iter::from_fn(|| cells.next_cell().transpose());
-            table(name, cells.map(|cell| cell.map(|cell| (cell.get_position(), text(cell.get_value()))).map_err(unreadable)), max_rows)
+            table(name, cells.map(|cell| cell.map(|cell| (cell.get_position(), text(cell.get_value()))).map_err(unreadable)), room)
         }
         whole => {
             let range = whole.worksheet_range(&name).map_err(unreadable)?;
             let (top, left) = range.start().unwrap_or((0, 0));
             let cells = range.used_cells().map(|(row, column, value)| Ok(((top + row as u32, left + column as u32), cell_text(value))));
-            table(name, cells, max_rows)
+            table(name, cells, room)
         }
     }
 }
@@ -220,18 +265,20 @@ fn sheet_table(workbook: &mut Sheets<BufReader<fs::File>>, name: String, max_row
 /// A sheet's table from its cells and their (row, column), in any order.
 /// Its rows run from the first row with a value to the last, and cells keep
 /// their columns, so a note can name a column by its letters. Refused as
-/// soon as the cells with a value span more than `max_rows` rows or
-/// `MAX_SHEET_COLUMNS` columns.
-fn table(name: String, cells: impl Iterator<Item = Result<((u32, u32), String)>>, max_rows: usize) -> Result<Table> {
+/// soon as the cells with a value span more rows than `room` has or more
+/// than `MAX_SHEET_COLUMNS` columns, or hold more text with the name.
+fn table(name: String, cells: impl Iterator<Item = Result<((u32, u32), String)>>, room: Room) -> Result<Table> {
     let mut filled = Vec::new();
     let (mut top, mut bottom, mut right) = (u32::MAX, 0, 0);
+    let mut text_bytes = name.len();
     for cell in cells {
         let ((row, column), text) = cell?;
         if text.is_empty() {
             continue;
         }
         (top, bottom, right) = (top.min(row), bottom.max(row), right.max(column));
-        if (bottom - top) as usize >= max_rows || right as usize >= MAX_SHEET_COLUMNS {
+        text_bytes += text.len();
+        if (bottom - top) as usize >= room.rows || right as usize >= MAX_SHEET_COLUMNS || text_bytes > room.text {
             return Err(QuizFileError::SpreadsheetTooLarge);
         }
         filled.push((row, column, text));
@@ -276,17 +323,21 @@ fn cell_text(cell: &Data) -> String {
 /// list separator unless told otherwise, so both are recognised: UTF-8
 /// (with or without a byte order mark) or UTF-16 with one, else Windows-1250
 /// (Central European); semicolons, commas or tabs, by the headings row.
-/// Refused at the first record past `max_rows` or `MAX_SHEET_COLUMNS`.
-fn csv_table(bytes: &[u8], max_rows: usize) -> Result<Table> {
+/// Refused at the first record that does not fit in `room` or spans more
+/// than `MAX_SHEET_COLUMNS` columns.
+fn csv_table(bytes: &[u8], room: Room) -> Result<Table> {
     let text = decode(bytes);
     let mut reader = csv::ReaderBuilder::new().has_headers(false).flexible(true).delimiter(separator(&text)).from_reader(text.as_bytes());
     let mut rows: Vec<Vec<String>> = Vec::new();
+    let mut text_bytes = 0;
     for record in reader.records() {
         let record = record.map_err(unreadable)?;
-        if rows.len() == max_rows || record.len() > MAX_SHEET_COLUMNS {
+        let row: Vec<String> = record.iter().map(|cell| cell.replace("\r\n", "\n")).collect();
+        text_bytes += row.iter().map(String::len).sum::<usize>();
+        if rows.len() == room.rows || row.len() > MAX_SHEET_COLUMNS || text_bytes > room.text {
             return Err(QuizFileError::SpreadsheetTooLarge);
         }
-        rows.push(record.iter().map(|cell| cell.replace("\r\n", "\n")).collect());
+        rows.push(row);
     }
     Ok(Table { name: String::new(), first_row: 1, rows })
 }
@@ -359,17 +410,22 @@ mod tests {
         dir
     }
 
+    /// A room of `rows` rows and all the text.
+    fn room(rows: usize) -> Room {
+        Room { rows, ..Room::FULL }
+    }
+
     #[test]
     fn csv_files_are_read_in_the_encodings_and_separators_excel_writes() {
         let semicolons = b"Q;A1;A2\r\n\"P\xf8\xedli\x9a; \"\"\x9elu\x9dou\xe8k\xfd\"\"\";[ano];ne\r\n";
-        let table = csv_table(semicolons, MAX_SHEET_ROWS).unwrap();
+        let table = csv_table(semicolons, Room::FULL).unwrap();
         assert_eq!(table.rows, [vec!["Q", "A1", "A2"], vec!["Příliš; \"žluťoučký\"", "[ano]", "ne"]]);
 
         let utf8 = "\u{feff}Q,NOTES\r\n\"Two\r\nlines\",ok\r\n".as_bytes();
-        assert_eq!(csv_table(utf8, MAX_SHEET_ROWS).unwrap().rows[1], ["Two\nlines", "ok"]);
+        assert_eq!(csv_table(utf8, Room::FULL).unwrap().rows[1], ["Two\nlines", "ok"]);
 
         let utf16: Vec<u8> = [0xff, 0xfe].into_iter().chain("Q\tA1\nŽ\tx\n".encode_utf16().flat_map(u16::to_le_bytes)).collect();
-        assert_eq!(csv_table(&utf16, MAX_SHEET_ROWS).unwrap().rows[1], ["Ž", "x"]);
+        assert_eq!(csv_table(&utf16, Room::FULL).unwrap().rows[1], ["Ž", "x"]);
         assert_eq!((separator("Q"), separator("\"a;b\",c")), (b',', b','));
     }
 
@@ -379,9 +435,9 @@ mod tests {
         fs::create_dir_all(&dir).unwrap();
         let csv = dir.join("quiz.csv");
         fs::write(&csv, "Q\nOne?\nTwo?\n").unwrap();
-        assert_eq!(read_tables_within(&csv, 100, 3).unwrap()[0].rows.len(), 3);
-        assert!(matches!(read_tables_within(&csv, 100, 2), Err(QuizFileError::SpreadsheetTooLarge)));
-        assert!(matches!(read_tables_within(&csv, 10, 3), Err(QuizFileError::SpreadsheetTooLarge)));
+        assert_eq!(read_tables_within(&csv, 100, room(3)).unwrap()[0].rows.len(), 3);
+        assert!(matches!(read_tables_within(&csv, 100, room(2)), Err(QuizFileError::SpreadsheetTooLarge)));
+        assert!(matches!(read_tables_within(&csv, 10, room(3)), Err(QuizFileError::SpreadsheetTooLarge)));
 
         // A workbook is measured by what it unpacks to, not by the file.
         let xlsx = dir.join("quiz.xlsx");
@@ -389,8 +445,8 @@ mod tests {
         workbook(&xlsx, &[("Sheet1", false, &cells)]);
         let size = fs::metadata(&xlsx).unwrap().len();
         assert!(size < 10_000, "{size}");
-        assert!(read_tables_within(&xlsx, 10_000, 10).is_err_and(|e| matches!(e, QuizFileError::SpreadsheetTooLarge)));
-        assert_eq!(read_tables_within(&xlsx, 100_000, 10).unwrap()[0].rows.len(), 2);
+        assert!(read_tables_within(&xlsx, 10_000, room(10)).is_err_and(|e| matches!(e, QuizFileError::SpreadsheetTooLarge)));
+        assert_eq!(read_tables_within(&xlsx, 100_000, room(10)).unwrap()[0].rows.len(), 2);
 
         // Too many columns.
         fs::write(&csv, format!("Q{}\n", ";x".repeat(MAX_SHEET_COLUMNS))).unwrap();
@@ -411,9 +467,61 @@ mod tests {
         // The rows are counted over all sheets as they are read.
         let rows = |n: u32| (1..=n).map(|row| text(&format!("A{row}"), row)).collect::<String>();
         workbook(&path, &[("One", false, &rows(6)), ("Two", false, &rows(6))]);
-        assert!(matches!(read_tables_within(&path, MAX_SHEET_BYTES, 10), Err(QuizFileError::SpreadsheetTooLarge)));
-        assert_eq!(read_tables_within(&path, MAX_SHEET_BYTES, 12).unwrap().len(), 2);
+        assert!(matches!(read_tables_within(&path, MAX_SHEET_BYTES, room(10)), Err(QuizFileError::SpreadsheetTooLarge)));
+        assert_eq!(read_tables_within(&path, MAX_SHEET_BYTES, room(12)).unwrap().len(), 2);
         fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn the_text_read_is_counted_over_all_sheets_with_their_names() {
+        let dir = temp_dir("text");
+        let text = |n: usize| Room { text: n, ..Room::FULL };
+        let csv = dir.join("quiz.csv");
+        fs::write(&csv, "Q\nOne?\n").unwrap();
+        assert_eq!(read_tables_within(&csv, MAX_SHEET_BYTES, text(5)).unwrap()[0].rows.len(), 2);
+        assert!(matches!(read_tables_within(&csv, MAX_SHEET_BYTES, text(4)), Err(QuizFileError::SpreadsheetTooLarge)));
+
+        // Cells that all name one shared string count it each time.
+        let path = dir.join("quiz.xlsx");
+        let shared = |cell: &str| format!(r#"<c r="{cell}" t="s"><v>0</v></c>"#);
+        let strings = r#"<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><si><t>Paris</t></si></sst>"#;
+        let sheet = format!(r#"<row r="1">{}{}</row>"#, shared("A1"), shared("B1"));
+        workbook_with_strings(&path, &[("One", false, &sheet), ("Two", false, &sheet)], strings);
+        // Each sheet: its name (3) and two cells (5 each).
+        assert_eq!(read_tables_within(&path, MAX_SHEET_BYTES, text(26)).unwrap().len(), 2);
+        assert!(matches!(read_tables_within(&path, MAX_SHEET_BYTES, text(25)), Err(QuizFileError::SpreadsheetTooLarge)));
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn a_sheet_without_cells_is_left_out_and_takes_nothing() {
+        let dir = temp_dir("empty");
+        let path = dir.join("quiz.xlsx");
+        let cell = r#"<row r="1"><c r="A1" t="inlineStr"><is><t>Q</t></is></c></row>"#;
+        workbook(&path, &[("Q", false, cell), ("A rather long name", false, ""), ("R", false, cell)]);
+        let tables = read_tables_within(&path, MAX_SHEET_BYTES, Room { rows: 2, text: 4 }).unwrap();
+        assert_eq!(tables.iter().map(|table| table.name.as_str()).collect::<Vec<_>>(), ["Q", "R"]);
+        fs::write(dir.join("empty.csv"), "").unwrap();
+        assert_eq!(read_tables(&dir.join("empty.csv")).unwrap(), []);
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn the_report_of_the_most_a_room_holds_is_within_its_bound() {
+        // The worst case: a table for each row, every row as wide as allowed,
+        // all text control characters, which JSON writes six bytes long.
+        let room = Room { rows: 3, text: 30 };
+        let tables: Vec<Table> = (0..room.rows)
+            .map(|i| Table {
+                name: if i == 0 { "\u{1}".repeat(room.text) } else { String::new() },
+                first_row: u32::MAX,
+                rows: vec![vec![String::new(); MAX_SHEET_COLUMNS]],
+            })
+            .collect();
+        assert_eq!(tables.iter().map(text_bytes).sum::<usize>(), room.text);
+        let report = serde_json::to_string(&SheetRead::Tables(tables)).unwrap();
+        assert!(report.len() <= report_bound(room), "{} > {}", report.len(), report_bound(room));
+        assert!(report.len() + 10 > report_bound(room), "the bound stays close: {} < {}", report.len(), report_bound(room));
     }
 
     #[test]
@@ -535,6 +643,12 @@ mod tests {
 
     /// A minimal Excel workbook with these sheets.
     fn workbook(path: &Path, sheets: &[SheetXml]) {
+        workbook_with_strings(path, sheets, "");
+    }
+
+    /// A minimal Excel workbook with these sheets and, unless empty, this
+    /// shared strings part.
+    fn workbook_with_strings(path: &Path, sheets: &[SheetXml], strings: &str) {
         const MAIN: &str = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
         const RELS: &str = "http://schemas.openxmlformats.org/package/2006/relationships";
         const DOC: &str = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
@@ -563,6 +677,9 @@ mod tests {
         add("xl/_rels/workbook.xml.rels", format!(r#"<Relationships xmlns="{RELS}">{links}</Relationships>"#));
         for (n, (_, _, rows)) in sheets.iter().enumerate() {
             add(&format!("xl/worksheets/sheet{}.xml", n + 1), format!(r#"<worksheet xmlns="{MAIN}"><sheetData>{rows}</sheetData></worksheet>"#));
+        }
+        if !strings.is_empty() {
+            add("xl/sharedStrings.xml", strings.to_string());
         }
         zip.finish().unwrap();
     }

@@ -209,6 +209,7 @@ version = "0.1.0"
 dependencies = [
  "buzzers",
  "fontdb",
+ "libc",
  "percent-encoding",
  "quiz-core",
  "quiz-file",
@@ -219,6 +220,7 @@ dependencies = [
  "tauri-plugin-dialog",
  "thiserror 2.0.21",
  "ts-rs",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

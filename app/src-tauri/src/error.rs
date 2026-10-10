@@ -66,9 +66,9 @@ pub enum AppError {
     NoDraft,
     #[error("the spreadsheet cannot be read: {detail}")]
     NotASpreadsheet { detail: String },
-    #[error("the spreadsheet is larger than {max_mb} MB or has more than {max_rows} rows or {max_columns} columns")]
+    #[error("the spreadsheet is larger than {max_mb} MB, holds more than {max_text_mb} MB of text or has more than {max_rows} rows or {max_columns} columns")]
     #[serde(rename_all = "camelCase")]
-    SpreadsheetTooLarge { max_mb: u64, max_rows: usize, max_columns: usize },
+    SpreadsheetTooLarge { max_mb: u64, max_text_mb: usize, max_rows: usize, max_columns: usize },
     /// The sheet reader process (`sheet_reader.rs`) stopped, overran or could not start.
     #[error("the spreadsheet reader failed")]
     SpreadsheetReaderFailed,
@@ -170,6 +170,7 @@ impl From<QuizFileError> for AppError {
             QuizFileError::SpreadsheetTooLarge => {
                 AppError::SpreadsheetTooLarge {
                     max_mb: quiz_file::MAX_SHEET_BYTES >> 20,
+                    max_text_mb: quiz_file::MAX_SHEET_TEXT_BYTES >> 20,
                     max_rows: quiz_file::MAX_SHEET_ROWS,
                     max_columns: quiz_file::MAX_SHEET_COLUMNS,
                 }
