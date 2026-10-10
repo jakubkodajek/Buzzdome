@@ -39,6 +39,7 @@ import type { CopiedValue } from "./property-rows";
 import { clickSlide, FIRST, moveToGap, selectIds } from "./selection";
 import { Ribbon, type RibbonTab } from "./Ribbon";
 import { formatImported, freshSlideId, setNotes, withFreshIds } from "./slides";
+import { styleProperties } from "./style-properties";
 import { TableView } from "./TableView";
 import { Thumbnails } from "./Thumbnails";
 import { useCategories } from "./useCategories";
@@ -245,6 +246,7 @@ function Studio({ editor, open, onExit }: { editor: QuizEditor; open: OpenQuiz |
   const editings = selectedSlides.map((s) => editingFor(s, selected));
   const shared = selectionPages(t, editings, element);
   const properties = editings.length > 0 ? slideProperties(t, editings[0]) : null;
+  const timer = editings.length > 0 ? styleProperties(t, editings[0]).timer : null;
   // The panel shows the category in the Categories view, else the selected slides.
   const panelContent =
     view === "categories"
@@ -315,6 +317,7 @@ function Studio({ editor, open, onExit }: { editor: QuizEditor; open: OpenQuiz |
                   slide={slide}
                   element={view === "categories" ? categories.element : element}
                   properties={properties}
+                  timer={timer}
                   mixed={shared.mixed}
                   themeChoice={themeChoice}
                   categoryView={view === "categories" ? categories.actions : null}

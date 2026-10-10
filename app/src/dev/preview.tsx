@@ -26,6 +26,7 @@ import type {
   SlideStyle,
   SoundBoard,
   SoundClip,
+  TimerDesign,
   VideoClip,
 } from "../types";
 import "../styles.css";
@@ -54,6 +55,8 @@ const scene = params.get("scene") ?? "running";
 const playing = params.get("media");
 /** A theme id to draw the screens in; the default when missing. */
 const theme = params.get("theme");
+/** A design to draw the scene's question clock in (`TimerDesign`); the slide's own when missing. */
+const timer = params.get("timer") as TimerDesign | null;
 
 const NAMES = ["Kvízožrouti", "U Tří Lvů", "Mozkovna", "Hospodští géniové", "Tým Rychlík", "Bezejmenní", "Šprti", "Lvíčata"];
 
@@ -260,7 +263,8 @@ const SCENES: Record<string, GameView | null> = {
 };
 
 // The quiz as the scene's view shows it (scenes may add media to a slide).
-const current = SCENES[scene] ?? null;
+const found = SCENES[scene] ?? null;
+const current = found && timer && found.slide ? { ...found, slide: { ...found.slide, style: { ...found.slide.style, timer } } } : found;
 const sceneQuiz: Quiz = {
   ...quiz,
   theme,

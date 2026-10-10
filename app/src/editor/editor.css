@@ -381,6 +381,31 @@
   pointer-events: none;
 }
 
+/* A clock on the theme's bar, as at the left of the info panel. */
+.timer-sample {
+  position: relative;
+  width: 96px;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  color: var(--theme-bar-text);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.16), rgba(0, 0, 0, 0.3)),
+    var(--theme-bar);
+  font-family: var(--theme-font-body);
+  pointer-events: none;
+}
+
+.timer-fit {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+}
+
+/* The ring hangs below the panel on the projector, not in its tile. */
+.timer-fit .timer {
+  margin: 0;
+}
+
 .ribbon-fields {
   display: grid;
   grid-auto-flow: column;
@@ -599,6 +624,7 @@
 .design-area[data-selected="picture"] [data-element="picture"] > *,
 .design-area[data-selected="video"] [data-element="video"] > *,
 .design-area[data-selected="sound"] [data-element="sound"],
+.design-area[data-selected="timer"] [data-element="timer"],
 .design-area[data-selected="answer-0"] [data-element="answer-0"],
 .design-area[data-selected="answer-1"] [data-element="answer-1"],
 .design-area[data-selected="answer-2"] [data-element="answer-2"],

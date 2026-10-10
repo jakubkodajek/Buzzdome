@@ -156,11 +156,12 @@ slide with nothing set has no `style`.
 | `headline` | text style | The question of a question slide, the title of another. |
 | `text` | text style | The text of a `billboard` or an `explanation`. |
 | `answers` | text style | Every answer of a question alike. |
+| `timer` | text | How a question's clock is drawn: `ring` (the default, written as no value), `bar`, `digital`, `hourglass` or `stopwatch`. Another slide has no clock and keeps it for a change of type. |
 
 When the editor changes a slide's type, the headline (the question, the
 title, or an explanation's text) keeps its look in the part the new type
 styles it with (`text` on an explanation, `headline` elsewhere), and the
-`fill` stays; the texts that start anew start with the theme's look.
+`fill` and `timer` stay; the texts that start anew start with the theme's look.
 
 A **text style** has:
 
@@ -248,8 +249,9 @@ quizmaster's "go to the final ranking" goes to the last `final` slide.
 ```
 
 A category (spec QZ-10) is a look the slides copy: applying it gives a
-slide the category's `style` fill and the looks of the texts that slide
-shows, and the category's `background` when it has one; the slide's
+slide the category's `style` fill, the looks of the texts that slide
+shows and, to a question, its `timer`, and the category's `background`
+when it has one; the slide's
 picture, video and sound stay, and its `category` remembers the id.
 Changing the category later changes no slide until it is applied again,
 and deleting it leaves its slides' look as it is. A background video is
@@ -371,7 +373,7 @@ the rows it came up in.
 | 2 | Adds `explanation` slides and, later within version 2, the quiz `theme` (builds from before that drop it when they save). Version 1 files read as version 2 unchanged. |
 | 3 | `background` becomes an object with video options; sounds get `part`, `gainDb` and `replay`. Version 1 and 2 files read as version 3 unchanged. Later within version 3, a `fastestFinger` question may have up to 6 answers instead of 4; earlier builds list such a question as a problem. |
 | 4 | Adds `final` slides. Version 1 to 3 files read as version 4 unchanged. Later within version 4, videos get `introPauseMs`, `volume`, `speed`, `part`, `effect` and `replay`; a video without them plays as before. Later still, slides get `style`; builds before it show the theme's look and drop the style when they save. |
-| 5 | A question's `correct` becomes a list of right answers, each with a `share` of the points. A version 1 to 4 question with `correct: n` reads as `[{ "answer": n, "share": 100 }]`, and one without as `[]`. Later within version 5, the quiz gets `categories` and slides `category`; builds before it drop them when they save, and the slides keep the look they took on. |
+| 5 | A question's `correct` becomes a list of right answers, each with a `share` of the points. A version 1 to 4 question with `correct: n` reads as `[{ "answer": n, "share": 100 }]`, and one without as `[]`. Later within version 5, the quiz gets `categories` and slides `category`; builds before it drop them when they save, and the slides keep the look they took on. Later still, a slide's `style` gets `timer`; builds before it draw a ring and drop it when they save. |
 
 Fields may be added within a version as long as older files keep their
 meaning; readers ignore fields they do not know. Anything else (a new slide

@@ -30,6 +30,7 @@ import {
   setVideo,
   setVideoOptions,
   setTextStyle,
+  setTimer,
   styledParts,
   toggleCorrect,
   withAnswerCount,
@@ -282,6 +283,14 @@ describe("slides", () => {
     expect(convertSlide(question(), "explanation").style).toBeUndefined();
   });
 
+  it("sets a question's clock design, keeps it through a change of type and forgets the default", () => {
+    const hourglass = setTimer(question(), "hourglass");
+    expect(hourglass.style).toEqual({ timer: "hourglass" });
+    expect(convertSlide(convertSlide(hourglass, "billboard"), "question").style).toEqual({ timer: "hourglass" });
+    expect(setTimer(hourglass, null).style).toBeUndefined();
+    expect(setTimer(setTextStyle(hourglass, "answers", { bold: true }), null).style).toEqual({ answers: { bold: true } });
+  });
+
   it("styles the headline of every type of slide as one of its parts", () => {
     for (const type of ["billboard", "question", "explanation", "endOfRound", "final"] as const) {
       expect(styledParts(newSlide(type, "s"))[0]).toBe(headlinePart(type));
@@ -355,6 +364,14 @@ describe("categories on slides", () => {
     expect(formatted).toMatchObject({ background: films.background, category: "c-1", picture: "media/actor.jpg" });
     // A billboard shows a text and no answers.
     expect(formatLike(newSlide("billboard", "b"), films).style).toEqual({ fill: films.style?.fill, headline: { bold: true }, text: { italic: true } });
+  });
+
+  it("gives a question the category's clock design and keeps another slide's own", () => {
+    const digital: Category = { id: "c-3", name: "Quick", background: null, style: { timer: "digital" } };
+    expect(formatLike(setTimer(question(), "bar"), digital).style).toEqual({ timer: "digital" });
+    expect(formatLike(setTimer(question(), "bar"), films).style?.timer).toBeUndefined();
+    // A billboard has no clock, so it keeps the design it had as a question.
+    expect(formatLike(setTimer(newSlide("billboard", "b"), "bar"), digital).style).toEqual({ timer: "bar" });
   });
 
   it("keeps the slide's own background for a category without one, and an imported row's own", () => {

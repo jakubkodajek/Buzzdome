@@ -35,6 +35,7 @@ import type {
   SoundClip,
   Span,
   TextStyle,
+  TimerDesign,
   VideoClip,
 } from "../types";
 
@@ -97,9 +98,9 @@ export function setNotes(slide: Slide, notes: string): Slide {
  * What the new type cannot play goes (`plays`): without a reveal, the
  * replay parts of the sound and video; without a clock, a video effect,
  * and a sound waiting for the clock plays when the slide opens; on a
- * ranking, the picture and video. The fill behind the slide stays, and the
- * headline keeps its look (`headlinePart`); the texts that start anew start
- * with the theme's look.
+ * ranking, the picture and video. The fill behind the slide and the clock's
+ * design stay, and the headline keeps its look (`headlinePart`); the texts
+ * that start anew start with the theme's look.
  */
 export function convertSlide(slide: Slide, type: SlideType): Slide {
   if (slide.type === type) return slide;
@@ -110,7 +111,7 @@ export function convertSlide(slide: Slide, type: SlideType): Slide {
   const video = slide.video && !clockAndReveal ? { ...slide.video, replay: null, effect: null } : slide.video;
   const media = pictureAndVideo ? { picture: slide.picture, video } : { picture: null, video: null };
   const converted = setHeadline({ ...newSlide(type, id), notes, ...media, sound, background, category }, slideTitle(slide));
-  return withStyle(converted, { fill: slide.style?.fill, [headlinePart(type)]: slide.style?.[headlinePart(slide.type)] });
+  return withStyle(converted, { fill: slide.style?.fill, timer: slide.style?.timer, [headlinePart(type)]: slide.style?.[headlinePart(slide.type)] });
 }
 
 /** The part whose look the slide's headline (`slideTitle`) has: an explanation's text is its headline. */
@@ -389,16 +390,22 @@ export function setTextStyle(slide: Slide, part: StyledPart, change: Partial<Tex
   return withStyle(slide, { ...slide.style, [part]: { ...slide.style?.[part], ...change } });
 }
 
+/** Sets how a question's clock is drawn; null draws the default ring. */
+export function setTimer(slide: Slide, timer: TimerDesign | null): Slide {
+  return withStyle(slide, { ...slide.style, timer: timer ?? undefined });
+}
+
 /**
  * Gives the slide the look of `category` and remembers it (spec QZ-10): the
- * category's fill and the looks of the texts the slide shows in place of
- * the slide's, and its background when it has one. The slide's picture,
- * video and sound stay.
+ * category's fill, the looks of the texts the slide shows and a question's
+ * clock in place of the slide's, and its background when it has one. The
+ * slide's picture, video and sound stay.
  */
 export function formatLike(slide: Slide, category: Category): Slide {
   const style = category.style ?? {};
   const shown = Object.fromEntries(styledParts(slide).map((part) => [part, style[part]]));
-  return { ...withStyle(slide, { fill: style.fill, ...shown }), background: category.background ?? slide.background, category: category.id };
+  const timer = plays(slide.type).clockAndReveal ? style.timer : slide.style?.timer;
+  return { ...withStyle(slide, { fill: style.fill, timer, ...shown }), background: category.background ?? slide.background, category: category.id };
 }
 
 /**
@@ -417,7 +424,13 @@ export function forgetCategory(slide: Slide): Slide {
 
 /** The slide with `style`, keeping only what is set: a slide that looks as its theme has no style. */
 function withStyle(slide: Slide, style: SlideStyle): Slide {
-  const parts = { fill: style.fill, headline: setOnly(style.headline ?? {}), text: setOnly(style.text ?? {}), answers: setOnly(style.answers ?? {}) };
+  const parts = {
+    fill: style.fill,
+    headline: setOnly(style.headline ?? {}),
+    text: setOnly(style.text ?? {}),
+    answers: setOnly(style.answers ?? {}),
+    timer: style.timer,
+  };
   return { ...slide, style: setOnly(parts) };
 }
 

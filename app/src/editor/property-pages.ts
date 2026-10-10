@@ -79,6 +79,7 @@ function propertyPages(slide: Slide, element: ElementId, { slide: rows, style }:
   if (element === "picture") return [page("media", [{ title: "sectionPictureVideo", rows: [rows.picture] }])];
   if (element === "video") return [page("media", [{ title: "sectionPictureVideo", rows: videoRows(rows) }])];
   if (element === "sound") return [page("media", [{ title: "sectionSound", rows: soundRows(rows) }])];
+  if (element === "timer" && slide.type === "question") return [page("design", [{ title: "sectionTimer", rows: [style.timer] }])];
 
   // The slide itself.
   const pages: Page[] =
@@ -105,6 +106,7 @@ function propertyPages(slide: Slide, element: ElementId, { slide: rows, style }:
       ...(rows.category ? [{ title: "sectionCategory" as const, rows: [rows.category] }] : []),
       { title: "sectionBackground", rows: [style.fill, rows.background, ...rows.backgroundOptions] },
       ...styledParts(slide).map(look),
+      ...(plays(slide.type).clockAndReveal ? [{ title: "sectionTimer" as const, rows: [style.timer] }] : []),
     ]),
     page("advanced", [{ title: "sectionMetadata", rows: [rows.id] }]),
   );
@@ -120,15 +122,17 @@ const CATEGORY_LOOK_TITLE: Record<StyledPart, StringKey> = {
 
 /**
  * The pages for a category in the Categories view, edited as its sample
- * slide (`editing`): its `name`, the background and the looks it gives
- * slides; for a text selected on the sample, that text's look.
+ * slide (`editing`): its `name`, the background, the looks it gives slides
+ * and its questions' clock; for a part selected on the sample, that part's.
  */
 export function categoryPages(t: Translate, editing: SlideEditing, name: PropertyRow, element: ElementId): Page[] {
   const rows = slideProperties(t, editing);
   const style = styleProperties(t, editing);
   const look = (part: StyledPart): Section => ({ title: CATEGORY_LOOK_TITLE[part], rows: style.look(part) });
+  const timer: Section = { title: "sectionTimer", rows: [style.timer] };
   const part = styledPartOf(element);
   if (part) return [{ id: "design", sections: [look(part)] }];
+  if (element === "timer") return [{ id: "design", sections: [timer] }];
   return [
     {
       id: "design",
@@ -136,6 +140,7 @@ export function categoryPages(t: Translate, editing: SlideEditing, name: Propert
         { title: "sectionCategory", rows: [name] },
         { title: "sectionBackground", rows: [style.fill, rows.background, ...rows.backgroundOptions] },
         ...STYLED_PARTS.map(look),
+        timer,
       ],
     },
   ];

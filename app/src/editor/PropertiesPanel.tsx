@@ -11,9 +11,10 @@ import {
 import { ANSWER_LETTERS } from "../answers";
 import { useApp } from "../app-context";
 import type { StringKey, Translate } from "../i18n";
-import { CrossIcon, GamepadIcon, PaletteIcon, PictureIcon, QuestionIcon, SlideIcon, SoundIcon, StarIcon, VideoIcon } from "../icons";
+import { CrossIcon, GamepadIcon, PaletteIcon, PictureIcon, QuestionIcon, SlideIcon, SoundIcon, StarIcon, TimerIcon, VideoIcon } from "../icons";
 import { readPreference, writePreference } from "../preferences";
 import { SLIDE_TYPE_LABEL, slideTitle } from "../quiz";
+import { DEFAULT_TIMER, TIMER_LABEL } from "../timers";
 import type { Category, Slide } from "../types";
 import { keyCombo, type Action } from "./actions";
 import { ContextMenu, MixedContext } from "./controls";
@@ -431,6 +432,8 @@ export function selectionHeader(t: Translate, slide: Slide, count: number, eleme
       return { icon: <VideoIcon />, title: t("mediaVideo"), subtitle: slide.video?.file ?? "" };
     case "sound":
       return { icon: <SoundIcon />, title: t("mediaSound"), subtitle: slide.sound?.file ?? "" };
+    case "timer":
+      return { icon: <TimerIcon />, title: t("sectionTimer"), subtitle: t(TIMER_LABEL[slide.style?.timer ?? DEFAULT_TIMER]) };
     default:
       return {
         icon: slide.type === "question" ? <QuestionIcon /> : <SlideIcon />,

@@ -10,6 +10,7 @@ import type { QuestionPosition, SlideContext } from "../quiz";
 import { SlideMedia, type ScreenMode } from "../slide-media";
 import { styleOf, textStyleCss, type StyledText } from "../theme/slide-style";
 import type { AnswerResults, ClockView, GameView, PlayerView, QuestionSlide, Slide } from "../types";
+import { Timer } from "./Timer";
 import "./slide.css";
 
 export function ranked(view: GameView): PlayerView[] {
@@ -196,7 +197,8 @@ function QuestionScreen(props: {
   return (
     <div className={hasMedia ? "question-screen has-media" : "question-screen"}>
       <div className="info-panel">
-        <ClockGauge
+        <Timer
+          design={question.style?.timer}
           seconds={step === "ready" ? question.timeLimitS || null : closed ? 0 : remaining === null ? null : Math.ceil(remaining / 1000)}
           fraction={timeLeft(view.phase, clock)}
           label={position ? `${position.n}/${position.total}` : ""}
@@ -252,31 +254,6 @@ function QuestionScreen(props: {
       )}
       {question.mode === "fastestFinger" && step === "running" && !barPlayer && <div className="buzz-bar idle">{t("waitingForBuzz")}</div>}
       {question.mode === "fastestFinger" && step === "closed" && remaining === 0 && <div className="buzz-bar idle">{t("timeUp")}</div>}
-    </div>
-  );
-}
-
-function ClockGauge({ seconds, fraction, label }: { seconds: number | null; fraction: number; label: string }) {
-  const r = 70;
-  const circumference = 2 * Math.PI * r;
-  const urgent = seconds !== null && seconds <= 5;
-  return (
-    <div className={`clock-gauge ${urgent ? "urgent" : ""}`}>
-      <svg viewBox="0 0 180 180">
-        <circle cx="90" cy="90" r="86" className="gauge-face" />
-        <circle cx="90" cy="90" r={r} className="gauge-track" />
-        <circle
-          cx="90"
-          cy="90"
-          r={r}
-          className="gauge-fill"
-          strokeDasharray={circumference}
-          strokeDashoffset={circumference * (1 - Math.max(0, Math.min(1, fraction)))}
-          transform="rotate(-90 90 90)"
-        />
-      </svg>
-      <span className="gauge-seconds">{seconds === null ? "∞" : seconds}</span>
-      <span className="gauge-label">{label}</span>
     </div>
   );
 }

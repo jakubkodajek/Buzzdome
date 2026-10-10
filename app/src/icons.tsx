@@ -389,6 +389,16 @@ export function CategoryIcon(props: IconProps) {
   );
 }
 
+/** A stopwatch: a question's clock. */
+export function TimerIcon(props: IconProps) {
+  return (
+    <LineIcon {...props}>
+      <circle cx="12" cy="13.5" r="7" />
+      <path d="M10 3h4M12 3v3.5M12 13.5V10M18 6.5l1.5-1.5" />
+    </LineIcon>
+  );
+}
+
 export function AddIcon(props: IconProps) {
   return (
     <LineIcon {...props}>

@@ -4,7 +4,7 @@
 import { hasTitle } from "../quiz";
 import type { Slide } from "../types";
 
-export type ElementId = "slide" | "question" | "title" | "text" | "picture" | "video" | "sound" | `answer-${number}`;
+export type ElementId = "slide" | "question" | "title" | "text" | "picture" | "video" | "sound" | "timer" | `answer-${number}`;
 
 /** The parts of a slide that are a media file. */
 export type MediaElement = "picture" | "video" | "sound";
@@ -27,6 +27,7 @@ export function hasElement(slide: Slide, element: ElementId): boolean {
     case "slide":
       return true;
     case "question":
+    case "timer":
       return slide.type === "question";
     case "title":
       return hasTitle(slide);
@@ -51,5 +52,5 @@ export function elementAt(target: EventTarget | null): ElementId {
 }
 
 function isElementId(value: string): value is ElementId {
-  return ["slide", "question", "title", "text", "picture", "video", "sound"].includes(value) || /^answer-\d+$/.test(value);
+  return ["slide", "question", "title", "text", "picture", "video", "sound", "timer"].includes(value) || /^answer-\d+$/.test(value);
 }

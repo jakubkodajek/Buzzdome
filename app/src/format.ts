@@ -3,6 +3,11 @@ export function clockSeconds(ms: number): string {
   return String(Math.ceil(ms / 1000));
 }
 
+/** Whole seconds as minutes and seconds, as a digital clock shows them: "0:07", "1:30". */
+export function minutesAndSeconds(seconds: number): string {
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+}
+
 /** A duration in seconds with `digits` decimals, e.g. "2.4". */
 export function seconds(ms: number, digits = 1): string {
   return (ms / 1000).toFixed(digits);

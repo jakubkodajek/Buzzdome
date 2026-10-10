@@ -293,6 +293,14 @@ table view toggle. It edits a quiz; it never touches a running show.
   `#1E4A6B`), and pasting takes text from another program where the row
   can read it (`pasteText`), else the value copied in the panel. A hex box
   is a text field, so pasting into it works on every platform.
+- **Clock.** A question's clock has one of five designs (`TimerDesign` in
+  the slide's style; `host/Timer.tsx` draws each, `timer.css` colours what
+  runs out with the theme's accent). The `timer` row (`style-properties.tsx`)
+  is on the design page, alone when the clock is clicked on the canvas, and
+  the Question tab shows the same row as a gallery (`TimerGallery.tsx`)
+  that draws each design in the quiz's theme, measured and scaled to its
+  tile. The default design is stored as no value (`DEFAULT_TIMER`), so a
+  quiz without a choice reads in builds before the designs.
 - **Categories.** A category (spec QZ-10, `quiz_core::category`) is a
   background and a style that applying copies onto slides (`formatLike` in
   `slides.ts`), so drawing a slide never looks one up and the rule of what

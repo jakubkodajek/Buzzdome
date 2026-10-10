@@ -6,7 +6,7 @@ import { sampleSlide } from "./categories";
 import type { ElementId } from "./elements";
 import type { SlideEditing } from "./properties";
 import { categoryPages, selectionPages, type Page } from "./property-pages";
-import { newSlide } from "./slides";
+import { newSlide, setTimer } from "./slides";
 
 const t = translator("en");
 
@@ -41,7 +41,14 @@ describe("the pages for one slide", () => {
         { scoring: [{ sectionPoints: ["pointsStart", "falling", "penalty"] }] },
         { text: [{ sectionText: ["questionText", "notes"] }] },
         { media: [{ sectionPictureVideo: ["picture", "video"] }, { sectionSound: ["sound"] }] },
-        { design: [{ sectionBackground: ["fill", "background"] }, { sectionQuestionLook: look("headline") }, { sectionAnswersLook: look("answers") }] },
+        {
+          design: [
+            { sectionBackground: ["fill", "background"] },
+            { sectionQuestionLook: look("headline") },
+            { sectionAnswersLook: look("answers") },
+            { sectionTimer: ["timer"] },
+          ],
+        },
         { advanced: [{ sectionMetadata: ["id"] }] },
       ],
       mixed: [],
@@ -101,12 +108,16 @@ describe("the pages for a part of a slide", () => {
     expect(outline([question()], "video").pages).toEqual([{ media: [{ sectionPictureVideo: ["video"] }] }]);
     expect(outline([question()], "sound").pages).toEqual([{ media: [{ sectionSound: ["sound"] }] }]);
   });
+
+  it("are a question's clock design on the design page alone", () => {
+    expect(outline([question()], "timer").pages).toEqual([{ design: [{ sectionTimer: ["timer"] }] }]);
+  });
 });
 
 describe("the pages for several slides", () => {
   it("show the rows every slide has with a value, the ones they differ in mixed", () => {
-    const { pages, mixed } = outline([question(), question({ timeLimitS: 30, penalty: 5 })]);
-    expect(mixed).toEqual(["answerTime", "penalty"]);
+    const { pages, mixed } = outline([question(), setTimer(question({ timeLimitS: 30, penalty: 5 }), "stopwatch")]);
+    expect(mixed).toEqual(["answerTime", "penalty", "timer"]);
     // Texts and the id are each slide's own, so they and their pages go.
     expect(pages.map((p) => Object.keys(p)[0])).toEqual(["gameplay", "scoring", "media", "design"]);
     expect(rowIds([question(), question({ timeLimitS: 30 })])).not.toContain("questionText");
@@ -144,7 +155,7 @@ describe("categories in the pages", () => {
     expect(outline([question({ category: "c-1" }), question()], "slide", [films]).mixed).toEqual(["category"]);
   });
 
-  it("are a category's name, its background and the look of every text, or of the text selected on its sample", () => {
+  it("are a category's name, its background, the look of every text and its questions' clock, or the part selected on its sample", () => {
     const name = { id: "category.name", label: "Name", description: "", control: null };
     const pages = (element: ElementId) => outlined(categoryPages(t, editing(sampleSlide(films)), name, element));
     expect(pages("slide")).toEqual([
@@ -155,9 +166,11 @@ describe("categories in the pages", () => {
           { sectionHeadlineLook: look("headline") },
           { sectionTextLook: look("text") },
           { sectionAnswersLook: look("answers") },
+          { sectionTimer: ["timer"] },
         ],
       },
     ]);
     expect(pages("answer-2")).toEqual([{ design: [{ sectionAnswersLook: look("answers") }] }]);
+    expect(pages("timer")).toEqual([{ design: [{ sectionTimer: ["timer"] }] }]);
   });
 });

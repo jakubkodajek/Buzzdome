@@ -31,7 +31,7 @@ pub use model::{
 pub use sheet::{export_table, import_tables, ImportIssue, ImportNote, ImportedRows, Notes, Place, SheetError, Table};
 pub use sound_board::{BoardChange, BoardError, Pad, PadClick, PadColor, PadSource, SoundBoard};
 pub use style::{
-    Color, FontName, Gradient, GradientKind, SlideStyle, TextAlign, TextSize, TextStyle, Transparency, MAX_FONT_NAME_CHARS, MAX_TEXT_SIZE,
+    Color, FontName, Gradient, GradientKind, SlideStyle, TextAlign, TextSize, TextStyle, TimerDesign, Transparency, MAX_FONT_NAME_CHARS, MAX_TEXT_SIZE,
     MAX_TRANSPARENCY, MIN_TEXT_SIZE,
 };
 pub use theme::{

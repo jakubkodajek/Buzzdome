@@ -1,8 +1,8 @@
-//! How a slide looks apart from its theme: a gradient behind the slide, and
-//! the colour, font and fill of its texts. Every value is optional and
-//! falls back to the theme's. A value a file has wrong (a colour that is not
-//! hex, a size out of range) reads as missing, so a hand-edited style never
-//! keeps a quiz from opening.
+//! How a slide looks apart from its theme: a gradient behind the slide, the
+//! colour, font and fill of its texts, and how a question's clock is drawn.
+//! Every value is optional and falls back to the theme's. A value a file has
+//! wrong (a colour that is not hex, a size out of range) reads as missing, so
+//! a hand-edited style never keeps a quiz from opening.
 
 use serde::{Deserialize, Deserializer, Serialize};
 use ts_rs::TS;
@@ -137,6 +137,24 @@ pub enum TextAlign {
     Right,
 }
 
+/// How the projector draws a question's clock: the time left and the
+/// question's place in the quiz.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+#[serde(rename_all = "camelCase")]
+pub enum TimerDesign {
+    /// A dial whose ring empties, the seconds inside (the default).
+    Ring,
+    /// A bar that empties from right to left, the seconds beside it.
+    Bar,
+    /// Big lit digits, minutes and seconds, over a thin line that empties.
+    Digital,
+    /// An hourglass whose sand runs down.
+    Hourglass,
+    /// A stopwatch whose hand and slice go round as the time runs.
+    Stopwatch,
+}
+
 /// The look of a text on a slide. What is missing is the theme's.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[ts(export)]
@@ -210,6 +228,11 @@ pub struct SlideStyle {
     #[serde(default, skip_serializing_if = "TextStyle::is_empty", with = "lenient_or_default")]
     #[ts(as = "TextStyle")]
     pub answers: TextStyle,
+    /// A question's clock; kept on other slides, which have none, for a
+    /// change of type. None is a ring.
+    #[serde(default, skip_serializing_if = "Option::is_none", with = "lenient")]
+    #[ts(as = "Option<TimerDesign>", optional)]
+    pub timer: Option<TimerDesign>,
 }
 
 impl SlideStyle {
@@ -326,6 +349,16 @@ mod tests {
         );
         assert_eq!(serde_json::from_value::<SlideStyle>(json).unwrap(), style);
         assert_eq!(serde_json::to_value(SlideStyle::default()).unwrap(), serde_json::json!({}));
+    }
+
+    #[test]
+    fn a_timer_design_reads_by_its_name_and_an_unknown_one_is_left_out() {
+        let style: SlideStyle = serde_json::from_value(serde_json::json!({ "timer": "hourglass" })).unwrap();
+        assert_eq!(style.timer, Some(TimerDesign::Hourglass));
+        assert_eq!(serde_json::to_value(&style).unwrap(), serde_json::json!({ "timer": "hourglass" }));
+        let written = serde_json::json!({ "timer": "sundial" });
+        let style: SlideStyle = serde_json::from_value(written.clone()).unwrap();
+        assert_eq!((style.timer, style.left_out(&written)), (None, vec!["style.timer".to_owned()]));
     }
 
     #[test]

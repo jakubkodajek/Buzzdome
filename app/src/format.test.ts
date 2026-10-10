@@ -1,10 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { decibels, parseTrackTime, scoreDigits, signed, trackTime } from "./format";
+import { decibels, minutesAndSeconds, parseTrackTime, scoreDigits, signed, trackTime } from "./format";
 
 describe("format", () => {
   it("writes scores", () => {
     expect([signed(10), signed(0), signed(-5)]).toEqual(["+10", "0", "-5"]);
     expect([scoreDigits(42), scoreDigits(-5), scoreDigits(1234)]).toEqual(["042", "-05", "1234"]);
+  });
+
+  it("writes a countdown's seconds as minutes and seconds", () => {
+    expect([minutesAndSeconds(0), minutesAndSeconds(7), minutesAndSeconds(90), minutesAndSeconds(600)]).toEqual(["0:00", "0:07", "1:30", "10:00"]);
   });
 
   it("writes levels and changes in dB to a tenth", () => {

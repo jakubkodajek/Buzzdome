@@ -1,16 +1,17 @@
 // A slide's own look over its theme (quiz_core::style) as property rows:
-// the gradient behind it, and the font, colours, shadow and fill of each of
-// its texts. Only what differs from the theme is stored.
+// the gradient behind it, the font, colours, shadow and fill of each of its
+// texts, and a question's clock. Only what differs from the theme is stored.
 
 import { MAX_TRANSPARENCY } from "../bindings/Constants";
 import type { StringKey, Translate } from "../i18n";
 import { THEME_TEXT, type StyledText } from "../theme/slide-style";
+import { DEFAULT_TIMER, TIMER_DESIGNS, TIMER_LABEL } from "../timers";
 import type { Slide, TextAlign, TextStyle } from "../types";
 import type { ElementId } from "./elements";
 import type { SlideEditing } from "./properties";
 import type { PropertyRow } from "./property-rows";
 import { rowBuilders } from "./row-builders";
-import { setSlideFill, setTextStyle, type StyledPart } from "./slides";
+import { setSlideFill, setTextStyle, setTimer, type StyledPart } from "./slides";
 
 /** The text whose look a part of the slide selected on the canvas sets; null for a picture, a sound or the slide. */
 export function styledPartOf(element: ElementId): StyledPart | null {
@@ -50,7 +51,7 @@ function drawnAs(slide: Slide, part: StyledPart): StyledText {
   }
 }
 
-/** The slide's look as rows: `fill` behind the slide, `look` of one of its texts. */
+/** The slide's look as rows: `fill` behind the slide, `look` of one of its texts, the design of a question's `timer`. */
 export function styleProperties(t: Translate, { slide, update }: Pick<SlideEditing, "slide" | "update">) {
   const { choiceRow, colorRow, flagRow, fontRow, gradientRow, numberRow } = rowBuilders(t);
   const style = slide.style;
@@ -124,6 +125,12 @@ export function styleProperties(t: Translate, { slide, update }: Pick<SlideEditi
       change: (change, field) => update((s) => setSlideFill(s, change(s.style?.fill ?? null)), field),
     }),
     look,
+    timer: choiceRow("timer", "propTimer", "descTimer", {
+      value: style?.timer ?? DEFAULT_TIMER,
+      initial: DEFAULT_TIMER,
+      options: TIMER_DESIGNS.map((design) => [design, t(TIMER_LABEL[design])]),
+      set: (design) => update((s) => setTimer(s, design === DEFAULT_TIMER ? null : design)),
+    }),
   };
 }
 

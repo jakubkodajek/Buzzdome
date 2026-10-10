@@ -8,6 +8,7 @@ import { MixedContext } from "./controls";
 import type { ElementId } from "./elements";
 import type { PropertyRow, SlideProperties } from "./properties";
 import { ThemeGallery } from "./ThemeGallery";
+import { TimerGallery } from "./TimerGallery";
 import type { CategoryActions } from "./useCategories";
 import type { ThemeChoice } from "./useThemeChoice";
 
@@ -42,6 +43,8 @@ interface RibbonProps {
   element: ElementId;
   /** The properties of the slide on the canvas, which set every selected slide; null without a slide. */
   properties: SlideProperties | null;
+  /** The design of the clock of the slide on the canvas (`styleProperties`), which sets every selected slide; null without a slide. */
+  timer: PropertyRow | null;
   /** The ids of the properties the selected slides differ in. */
   mixed: ReadonlySet<string>;
   themeChoice: ThemeChoice;
@@ -52,7 +55,7 @@ interface RibbonProps {
 }
 
 /** The tabbed command area at the top, as in an office suite. */
-export function Ribbon({ tab, onTab, actions, onGallery, slide, element, properties, mixed, themeChoice, categoryView, categoryGallery }: RibbonProps) {
+export function Ribbon({ tab, onTab, actions, onGallery, slide, element, properties, timer, mixed, themeChoice, categoryView, categoryGallery }: RibbonProps) {
   const { t } = useApp();
   const mediaTab = MEDIA_TAB[element];
   const shown = tab === "media" && !mediaTab ? "home" : tab;
@@ -149,7 +152,7 @@ export function Ribbon({ tab, onTab, actions, onGallery, slide, element, propert
               )}
             </>
           )}
-          {shown === "question" && (categoryView ? <p className="ribbon-note">{t("categoryViewNote")}</p> : <QuestionTab slide={slide} properties={properties} />)}
+          {shown === "question" && (categoryView ? <p className="ribbon-note">{t("categoryViewNote")}</p> : <QuestionTab slide={slide} properties={properties} timer={timer} />)}
           {shown === "view" && (
             <>
               <Group title="groupViews">
@@ -219,9 +222,10 @@ export function Ribbon({ tab, onTab, actions, onGallery, slide, element, propert
   );
 }
 
-function QuestionTab({ slide, properties }: { slide: Slide | null; properties: SlideProperties | null }) {
+function QuestionTab({ slide, properties, timer }: { slide: Slide | null; properties: SlideProperties | null; timer: PropertyRow | null }) {
   const { t } = useApp();
-  if (!slide || !properties) return <p className="ribbon-note">{t("noSlideSelected")}</p>;
+  const mixed = useContext(MixedRowsContext);
+  if (!slide || !properties || !timer) return <p className="ribbon-note">{t("noSlideSelected")}</p>;
   if (slide.type !== "question") {
     return (
       <>
@@ -249,6 +253,9 @@ function QuestionTab({ slide, properties }: { slide: Slide | null; properties: S
             properties.penalty(slide),
           ]}
         />
+      </Group>
+      <Group title="groupTimer">
+        <TimerGallery row={timer} mixed={mixed.has(timer.id)} />
       </Group>
     </>
   );

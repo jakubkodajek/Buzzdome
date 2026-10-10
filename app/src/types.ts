@@ -72,6 +72,7 @@ export type { TextSize } from "./bindings/TextSize";
 export type { TextStyle } from "./bindings/TextStyle";
 export type { Theme } from "./bindings/Theme";
 export type { ThemeFile } from "./bindings/ThemeFile";
+export type { TimerDesign } from "./bindings/TimerDesign";
 export type { Transparency } from "./bindings/Transparency";
 export type { ValidationError } from "./bindings/ValidationError";
 export type { VideoClip } from "./bindings/VideoClip";
