@@ -311,17 +311,19 @@ packages users will install are read the same way.
 - **Drawing.** `ThemeContext` carries the resolved theme: the projector, the
   Director and the editor provide the quiz's. `Stage` turns it into
   `--theme-*` CSS variables (`themeStyle`) and draws the background. Which
-  one is decided in one place: `resolveBackground(slide, theme, screen)`
-  (`theme/background.ts`, tested) lists the levels that can give the screen
-  its background, the most specific first (BG-6: the slide's own, then the
-  theme's for the screen, `screenOf(view)`, TH-5; round and quiz levels slot
-  in between once the format has them). `StageBackground`
+  one is decided in one place: `resolveBackground(slide, theme, screen,
+  builtIn)` (`theme/background.ts`, tested) lists the levels that can give
+  the screen its background, the most specific first (BG-6: the slide's own,
+  then the theme's for the screen, `screenOf(view)`, TH-5, and under another
+  theme the built-in default's; round and quiz levels slot in between once
+  the format has them). `StageBackground`
   (`slide-media.tsx`) draws the theme's picture or video and over it the
   first more specific level that loads; one that fails gives way to the next
-  and is reported once per window (BG-9), so the Director warns about a
-  broken file. A theme's video loops silently. Every stage (projector,
-  editor canvas, thumbnails) goes through `Stage`, so none places a
-  background itself. `slide.css` takes colours and fonts only from those
+  and is reported once per media folder (BG-9), so the Director warns about
+  a broken file. A theme's video loops silently. Every stage (projector,
+  editor canvas, thumbnails) goes through `Stage`, and an overlay over it
+  (the leaderboard) through `StageOverlay`, so none places a background
+  itself. `slide.css` takes colours and fonts only from those
   variables. Text on a filled area (bars, answers, rows) gets white or dark
   text from `readableText`, which keeps at least the 3:1 contrast WCAG 2.2
   asks for large text (SC 1.4.3); a test checks every built-in colour.

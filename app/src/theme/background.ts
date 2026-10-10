@@ -7,20 +7,22 @@ import type { Background, ScreenKey, Slide, Theme, ThemeFile } from "../types";
 export type BackgroundLayer =
   /** A picture or video from the quiz file, with its video options (BG-4). */
   | { level: "slide"; background: Background }
-  /** The theme's picture or video for the screen (TH-2, TH-5). */
+  /** The theme's picture or video for the screen (TH-2, TH-5), or the built-in default theme's. */
   | { level: "theme"; file: ThemeFile };
 
 /**
  * The backgrounds that can be behind `screen`, the most specific first (BG-6:
- * slide > round > quiz > theme > built-in), ending with the theme's, which
- * its parents and the built-in default always fill in (none until the themes
- * are loaded). The first that loads is drawn; one that fails gives way to
- * the next (BG-9). Round and quiz levels join here once the quiz format has
- * them.
+ * slide > round > quiz > theme > built-in): the slide's own, the theme's,
+ * which its parents fill in, and under another theme the built-in default
+ * theme's `builtIn` (none until the themes are loaded). The first that loads
+ * is drawn; one that fails gives way to the next (BG-9), so a theme whose
+ * file is broken still has the app's own behind it. Round and quiz levels
+ * join here once the quiz format has them.
  */
-export function resolveBackground(slide: Slide | null, theme: Theme | null, screen: ScreenKey): BackgroundLayer[] {
+export function resolveBackground(slide: Slide | null, theme: Theme | null, screen: ScreenKey, builtIn: Theme | null = null): BackgroundLayer[] {
   const layers: BackgroundLayer[] = [];
   if (slide?.background) layers.push({ level: "slide", background: slide.background });
   if (theme) layers.push({ level: "theme", file: theme.backgrounds[screen] });
+  if (builtIn && builtIn.id !== theme?.id) layers.push({ level: "theme", file: builtIn.backgrounds[screen] });
   return layers;
 }

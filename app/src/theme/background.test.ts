@@ -19,6 +19,15 @@ describe("resolveBackground", () => {
     expect(resolveBackground(null, theme, "leaderboard")).toEqual([{ level: "theme", file: theme.backgrounds.leaderboard }]);
   });
 
+  it("puts the built-in default under another theme, once", () => {
+    const other: Theme = BUILTIN_THEMES[1];
+    expect(resolveBackground(null, other, "question", theme)).toEqual([
+      { level: "theme", file: other.backgrounds.question },
+      { level: "theme", file: theme.backgrounds.question },
+    ]);
+    expect(resolveBackground(null, theme, "question", theme)).toEqual([{ level: "theme", file: theme.backgrounds.question }]);
+  });
+
   it("has only the slide's own until the themes are loaded", () => {
     const slide = setBackground(newSlide("billboard", "a"), "media/stage.png");
     expect(resolveBackground(slide, null, "default").map((layer) => layer.level)).toEqual(["slide"]);
