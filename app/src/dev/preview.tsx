@@ -538,6 +538,11 @@ mockIPC(
       case "plugin:dialog|open":
       case "plugin:dialog|save":
         return (window as unknown as { dialogAnswer?: string }).dialogAnswer ?? null;
+      case "editor_category_name": {
+        // A stand-in: the backend also skips the names taken.
+        const { categories, base } = payload as { categories: unknown[]; base: string };
+        return `${base} ${categories.length + 1}`;
+      }
       case "editor_import_sheet":
         called.push({ cmd, ...(payload as object) });
         return SHEET_IMPORT;

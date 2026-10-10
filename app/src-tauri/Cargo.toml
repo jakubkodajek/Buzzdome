@@ -20,6 +20,8 @@ buzzers = { path = "../../crates/buzzers", features = ["hidapi"] }
 # protocol-asset serves the running quiz's media files to the windows.
 tauri = { version = "2", features = ["protocol-asset", "image-png"] }
 tauri-plugin-dialog = "2"
+# A second start shows the running app: two would share the show's journal.
+tauri-plugin-single-instance = "2"
 # Decodes the name of a file dropped into a window (an IPC header).
 percent-encoding = "2"
 # Lists the installed fonts for the editor's font picker.
@@ -29,9 +31,18 @@ serde_json.workspace = true
 thiserror.workspace = true
 ts-rs.workspace = true
 
-# Read how much memory the sheet reader process holds (sheet_reader.rs).
+# Read how much memory the sheet reader process holds, and on Windows cap it
+# (sheet_reader.rs).
 [target.'cfg(target_os = "macos")'.dependencies]
 libc = "0.2"
 
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_ProcessStatus"] }
+windows-sys = { version = "0.61", features = [
+  "Win32_Foundation",
+  "Win32_Security",
+  "Win32_System_IO",
+  "Win32_System_JobObjects",
+  "Win32_System_ProcessStatus",
+  "Win32_System_SystemServices",
+  "Win32_System_Threading",
+] }

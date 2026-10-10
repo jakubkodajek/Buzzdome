@@ -12,6 +12,13 @@ about 30 minutes with four buzzers.
   the big button, see `replica/hardware.md`).
 - The app installed from the latest CI run (GitHub > Actions > Build > the run
   > Artifacts: `buzzdome-windows`, `buzzdome-macos` or `buzzdome-linux`).
+- On Windows, a build from before the rename to Buzzdome uninstalled first:
+  Settings > Apps > **Quiz Show** > Uninstall, with "Delete the application
+  data" left unticked, as Buzzdome keeps its quizzes, teams and settings in
+  that same folder. The installer tells programs apart by name, so Buzzdome
+  installs beside Quiz Show rather than over it, and both would write the
+  same show journal. Buzzdome itself runs once (starting it again brings the
+  running Director forward), but an old Quiz Show does not step aside.
 - The vendor's quiz software closed: only one program can open the receiver.
 
 ## 1. Identify

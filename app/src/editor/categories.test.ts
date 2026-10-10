@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { slideTitle } from "../quiz";
 import type { Category, Quiz } from "../types";
-import { freshCategoryId, freshCategoryName, newCategory, sampleSlide, slidesOf, withLook } from "./categories";
+import { freshCategoryId, newCategory, sampleSlide, slidesOf, withLook } from "./categories";
 import { newSlide, setBackground, setSlideFill, setTextStyle } from "./slides";
 
 const films: Category = { id: "c-1", name: "Films", background: null, style: { headline: { bold: true } } };
@@ -14,12 +14,9 @@ const quiz: Quiz = {
 };
 
 describe("categories", () => {
-  it("get ids and names no category has, names told apart regardless of case", () => {
+  it("get ids no category has", () => {
     const ids = ["1", "2"];
     expect(freshCategoryId(quiz, () => ids.shift() as string)).toBe("c-2");
-    const categories = [{ ...films, name: " category 1 " }, { ...films, name: "Category 3" }];
-    expect(freshCategoryName(categories, "Category")).toBe("Category 2");
-    expect(freshCategoryName([], "Category")).toBe("Category 1");
   });
 
   it("start with the theme's look or the look of a slide", () => {

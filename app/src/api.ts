@@ -103,11 +103,13 @@ export const api = {
   editorSave: (quiz: Quiz, path: string) => invoke<void>("editor_save", { quiz, path }),
   /** Copies a media file into the draft; returns its reference (`media/...`). */
   editorAddMedia: (path: string) => invoke<string>("editor_add_media", { path }),
+  /** A name for a new category, "`base` 2" or so, that none of `categories` has. */
+  editorCategoryName: (categories: readonly Category[], base: string) => invoke<string>("editor_category_name", { categories, base }),
   /**
    * Reads questions from a spreadsheet, copying their media into the draft,
-   * for the editor to insert; a row's `CAT` names one of `categories`.
+   * for the editor to insert; a row's `CAT` names one of the draft's categories.
    */
-  editorImportSheet: (path: string, categories: readonly Category[]) => invoke<SheetImport>("editor_import_sheet", { path, categories }),
+  editorImportSheet: (path: string) => invoke<SheetImport>("editor_import_sheet", { path }),
   /** Writes the quiz as a CSV file with its media next to it. */
   editorExportSheet: (quiz: Quiz, path: string, separator: ListSeparator) =>
     invoke<SheetExport>("editor_export_sheet", { quiz, path, separator }),

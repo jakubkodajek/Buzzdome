@@ -75,8 +75,15 @@ impl AppIcon {
 
 /// Gives `window` the chosen icon; a window that cannot take it keeps the one it has.
 pub fn apply(app: &AppHandle, window: &WebviewWindow) {
-    let color = app.state::<AppIcon>().color();
-    if let Err(e) = color.image().and_then(|image| window.set_icon(image)) {
+    match app.state::<AppIcon>().color().image() {
+        Ok(image) => set_icon(window, image),
+        Err(e) => eprintln!("app icon not set on {}: {e}", window.label()),
+    }
+}
+
+/// Gives `window` the icon `image`, or logs why it keeps the one it has.
+fn set_icon(window: &WebviewWindow, image: Image<'static>) {
+    if let Err(e) = window.set_icon(image) {
         eprintln!("app icon not set on {}: {e}", window.label());
     }
 }
@@ -86,16 +93,22 @@ pub fn app_icon(state: State<AppIcon>) -> IconColor {
     state.color()
 }
 
-/// Gives every window the icon in `color` and keeps it for the next start.
+/// Keeps the icon in `color` for the next start, then gives it to every
+/// window. Kept first, so nothing shows a colour the next start would not
+/// have; a window that cannot take it keeps its icon and the rest change (Z11).
 #[tauri::command]
 pub fn set_app_icon(app: AppHandle, state: State<AppIcon>, color: IconColor) -> CmdResult<()> {
     let image = color.image()?;
-    *state.color.lock().unwrap() = color;
+    {
+        let mut kept = state.color.lock().unwrap();
+        state.file.store(&IconFile { color })?;
+        *kept = color;
+    }
     for window in app.webview_windows().values() {
-        window.set_icon(image.clone())?;
+        set_icon(window, image.clone());
     }
     let _ = app.emit("app-icon", color);
-    state.file.store(&IconFile { color })
+    Ok(())
 }
 
 #[cfg(test)]
