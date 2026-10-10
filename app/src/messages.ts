@@ -51,6 +51,7 @@ const ERROR_KEYS: Record<Exclude<AppError["code"], WordedApart>, StringKey> = {
   learnNotStarted: "errLearnNotStarted",
   learnTooFewPresses: "errLearnTooFewPresses",
   learnInconsistent: "errLearnInconsistent",
+  noDataFolder: "errNoDataFolder",
   system: "errSystem",
 };
 

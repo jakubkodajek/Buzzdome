@@ -104,6 +104,9 @@ pub enum AppError {
     // Windows and the operating system.
     #[error("monitor {index} not found")]
     NoSuchMonitor { index: usize },
+    /// The system gave the app no folder for its data (team names, sessions, the media library).
+    #[error("the app has no data folder")]
+    NoDataFolder,
     /// Something the app cannot do anything about (a window or a system
     /// folder failed); `detail` is the system's message.
     #[error("{detail}")]

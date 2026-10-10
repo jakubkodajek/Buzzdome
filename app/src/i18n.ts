@@ -684,6 +684,7 @@ const strings = {
     errLearnInconsistent: "Zaznamenané stisky se liší délkou. Zkuste to znovu.",
     errLearnConflict: "Tyto stisky vypadají stejně jako bzučák {buzzer}, tlačítko {button}. Zkuste to znovu, nebo naučte znovu to tlačítko.",
     errNoSuchMonitor: "Monitor {n} není připojený.",
+    errNoDataFolder: "Systém aplikaci nedal složku pro data, takže ji nelze uložit. Zkontrolujte, že má váš uživatelský účet domovskou složku.",
     errSystem: "Chyba systému: {detail}",
     // Quiz problems (Problem, MediaIssue).
     problemDuplicateSlideId: "Snímek má stejné ID jako jiný snímek.",
@@ -1423,6 +1424,7 @@ const strings = {
     errLearnInconsistent: "The recorded presses differ in length. Try again.",
     errLearnConflict: "These presses look the same as buzzer {buzzer}, button {button}. Try again or re-learn that button.",
     errNoSuchMonitor: "Display {n} is not connected.",
+    errNoDataFolder: "The system gave the app no folder for its data, so it cannot be saved. Check that your user account has a home folder.",
     errSystem: "System error: {detail}",
     // Quiz problems (Problem, MediaIssue).
     problemDuplicateSlideId: "The slide has the same id as another slide.",

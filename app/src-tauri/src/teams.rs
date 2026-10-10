@@ -64,7 +64,7 @@ fn change(inner: &mut Inner, teams: Vec<String>, at_ms: u64) -> CmdResult<(Vec<E
     inner.teams = teams;
     let file = TeamsFile { names: inner.teams.clone() };
     // The file is known once the app has started, before any command.
-    let stored = inner.teams_file.as_ref().map_or(Err(AppError::system("no data folder for the team names")), |kept| kept.store(&file));
+    let stored = inner.teams_file.as_ref().map_or(Err(AppError::NoDataFolder), |kept| kept.store(&file));
     Ok((effects, stored))
 }
 
