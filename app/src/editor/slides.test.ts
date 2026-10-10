@@ -64,6 +64,11 @@ describe("slides", () => {
     expect(setMode({ ...six, correct: right(4) }, "everyone")).toMatchObject({ answers: ["a", "b", "c", "d"], correct: right(0) });
   });
 
+  it("gives every right answer all of the points on a fastest finger question", () => {
+    const shared = question({ answers: ["a", "b", "c"], correct: [fullyCorrect(0), { answer: 2, share: 50 }] });
+    expect(setMode(shared, "fastestFinger").correct).toEqual(right(0, 2));
+  });
+
   it("keeps the right answers when another answer is removed", () => {
     const q = question({ answers: ["a", "b", "c", "d"], correct: [{ answer: 1, share: 50 }, fullyCorrect(2)] });
     expect(removeAnswer(q, 0)).toMatchObject({ answers: ["b", "c", "d"], correct: [{ answer: 0, share: 50 }, fullyCorrect(1)] });
@@ -140,8 +145,10 @@ describe("slides", () => {
     expect(setShare(q, 1, 49.6).correct).toEqual([fullyCorrect(0), { answer: 1, share: 50 }]);
     expect(setShare(q, 1, 0).correct[1].share).toBe(1);
     expect(setShare(q, 1, 250).correct[1].share).toBe(100);
-    // A wrong answer has no share to set.
+    // A wrong answer has no share to set, nor has a fastest finger one.
     expect(setShare(q, 2, 50)).toBe(q);
+    const fastest = setMode(q, "fastestFinger");
+    expect(setShare(fastest, 1, 50)).toBe(fastest);
   });
 
   it("keeps the clock and points whole and in range", () => {

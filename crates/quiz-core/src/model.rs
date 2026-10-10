@@ -348,7 +348,10 @@ pub struct Question {
 }
 
 /// A right answer of a question and the share of the question's points it
-/// gives, so a nearly right answer can give fewer points.
+/// gives, so a nearly right answer can give fewer points. Shares below 100
+/// are for everyone-answers questions: on a fastest finger question the
+/// quizmaster judges what was said, not which answer it was, so a right
+/// one gives all of the points.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[ts(export)]
 #[serde(rename_all = "camelCase")]
@@ -444,6 +447,9 @@ impl Question {
         if self.correct.iter().any(|c| !(1..=FULL_SHARE).contains(&c.share)) {
             found(Problem::ShareOutOfRange { max: FULL_SHARE });
         }
+        if self.mode == AnswerMode::FastestFinger && self.correct.iter().any(|c| (1..FULL_SHARE).contains(&c.share)) {
+            found(Problem::ShareNotOnEveryone);
+        }
         let points = -MAX_POINTS..=MAX_POINTS;
         if !points.contains(&self.points) || self.points_end.is_some_and(|end| !points.contains(&end)) {
             found(Problem::PointsOutOfRange { max: MAX_POINTS });
@@ -525,6 +531,10 @@ pub enum Problem {
     CorrectTwice,
     #[error("a correct answer's share of the points must be between 1 and {max} %")]
     ShareOutOfRange { max: u8 },
+    /// A share below 100 % on a fastest finger question, whose right answer
+    /// the quizmaster judges without knowing which one it was.
+    #[error("only an everyone-answers question can give a share of the points")]
+    ShareNotOnEveryone,
     #[error("points must be between -{max} and {max}")]
     PointsOutOfRange { max: i32 },
     #[error("penalty must be between 0 and {max}")]
@@ -902,7 +912,7 @@ mod tests {
 
     #[test]
     fn each_question_rule_names_its_problem() {
-        let cases: [(Edit, Problem); 12] = [
+        let cases: [(Edit, Problem); 13] = [
             (|q| q.answers = vec!["a".into(); MAX_EVERYONE_ANSWERS + 1], Problem::TooManyAnswers { max: MAX_EVERYONE_ANSWERS }),
             (|q| q.answers.truncate(1), Problem::TooFewAnswers { min: MIN_EVERYONE_ANSWERS }),
             (|q| q.correct.clear(), Problem::NoCorrectAnswer),
@@ -910,6 +920,7 @@ mod tests {
             (|q| q.correct.push(CorrectAnswer { answer: 0, share: 50 }), Problem::CorrectTwice),
             (|q| q.correct[0].share = 0, Problem::ShareOutOfRange { max: FULL_SHARE }),
             (|q| q.correct[0].share = FULL_SHARE + 1, Problem::ShareOutOfRange { max: FULL_SHARE }),
+            (|q| (q.mode, q.correct[0].share) = (AnswerMode::FastestFinger, 50), Problem::ShareNotOnEveryone),
             (|q| q.points = MAX_POINTS + 1, Problem::PointsOutOfRange { max: MAX_POINTS }),
             (|q| q.points_end = Some(-MAX_POINTS - 1), Problem::PointsOutOfRange { max: MAX_POINTS }),
             (|q| q.penalty = -1, Problem::PenaltyOutOfRange { max: MAX_POINTS }),

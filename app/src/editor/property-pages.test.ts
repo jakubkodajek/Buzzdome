@@ -81,6 +81,8 @@ describe("the pages for a part of a slide", () => {
       { design: [{ sectionAnswersLook: look("answers") }] },
     ]);
     expect(rowIds([question()], "answer-0")).toEqual(["answer0.text", "answer0.correct", "answer0.share", "answer0.remove", ...look("answers")]);
+    // A fastest finger question's right answer gives all of the points.
+    expect(rowIds([question({ mode: "fastestFinger" })], "answer-0")).toEqual(["answer0.text", "answer0.correct", "answer0.remove", ...look("answers")]);
   });
 
   it("are the question's text and its look", () => {

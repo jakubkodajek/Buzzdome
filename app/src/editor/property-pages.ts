@@ -66,7 +66,7 @@ function propertyPages(slide: Slide, element: ElementId, { slide: rows, style }:
           rows: [
             rows.answerText(slide, answer),
             rows.isCorrect(slide, answer),
-            ...(isCorrect(slide, answer) ? [rows.share(slide, answer)] : []),
+            ...(isCorrect(slide, answer) && slide.mode === "everyone" ? [rows.share(slide, answer)] : []),
             rows.removeAnswer(slide, answer),
           ],
         },

@@ -165,7 +165,8 @@ export function freshId(taken: ReadonlySet<string>, random: () => string, prefix
 }
 
 export function setMode(question: QuestionSlide, mode: AnswerMode): QuestionSlide {
-  if (mode === "fastestFinger") return { ...question, mode };
+  // The quizmaster judges a fastest finger answer without knowing which one it was: a right one gives all of the points.
+  if (mode === "fastestFinger") return { ...question, mode, correct: question.correct.map((c) => fullyCorrect(c.answer)) };
   // Everyone answers with the buttons: an answer per button at most, and a right one.
   const { fewest, most } = answerLimits(mode);
   const count = question.answers.length;
@@ -243,9 +244,9 @@ export function toggleCorrect(question: QuestionSlide, index: number): QuestionS
   return setCorrect(question, index, !isCorrect(question, index));
 }
 
-/** Sets the share of the points a right answer gives, a whole percent from 1 to 100. */
+/** Sets the share of the points a right answer gives, a whole percent from 1 to 100; only on an everyone-answers question. */
 export function setShare(question: QuestionSlide, index: number, share: number): QuestionSlide {
-  if (!isCorrect(question, index)) return question;
+  if (!isCorrect(question, index) || question.mode !== "everyone") return question;
   const percent = clampInt(share, 1, FULL_SHARE);
   return { ...question, correct: question.correct.map((c) => (c.answer === index ? { ...c, share: percent } : c)) };
 }

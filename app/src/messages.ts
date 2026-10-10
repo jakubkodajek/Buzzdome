@@ -120,6 +120,7 @@ const PROBLEM_KEYS: Record<Exclude<Problem["code"], ProblemApart>, StringKey> = 
   correctOutOfRange: "problemCorrectOutOfRange",
   correctTwice: "problemCorrectTwice",
   shareOutOfRange: "problemShareOutOfRange",
+  shareNotOnEveryone: "problemShareNotOnEveryone",
   pointsOutOfRange: "problemPointsOutOfRange",
   penaltyOutOfRange: "problemPenaltyOutOfRange",
   timeLimitTooLong: "problemTimeLimitTooLong",

@@ -2,7 +2,10 @@
 
 /**
  * A right answer of a question and the share of the question's points it
- * gives, so a nearly right answer can give fewer points.
+ * gives, so a nearly right answer can give fewer points. Shares below 100
+ * are for everyone-answers questions: on a fastest finger question the
+ * quizmaster judges what was said, not which answer it was, so a right
+ * one gives all of the points.
  */
 export type CorrectAnswer = { 
 /**
