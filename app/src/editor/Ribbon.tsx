@@ -138,9 +138,20 @@ export function Ribbon({ tab, onTab, actions, onGallery, slide, element, propert
               <BigButton action={actions.removeMedia} />
             </Group>
             {element === "video" && properties.videoOptions.length > 0 && (
-              <Group title="groupPlayback">
-                <Fields rows={properties.videoOptions} />
-              </Group>
+              <>
+                <Group title="groupPlayback">
+                  <Fields rows={properties.videoOptions} />
+                </Group>
+                <Group title="groupTiming">
+                  <BigButton action={actions.trimVideo} />
+                  {properties.videoReplay.length > 0 && <Fields rows={properties.videoReplay} />}
+                </Group>
+                {properties.videoEffect && (
+                  <Group title="groupEffects">
+                    <Fields rows={[properties.videoEffect]} />
+                  </Group>
+                )}
+              </>
             )}
             {element === "sound" && properties.gain && (
               <>

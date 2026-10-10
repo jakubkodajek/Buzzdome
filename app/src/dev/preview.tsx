@@ -8,7 +8,7 @@ import ReactDOM from "react-dom/client";
 import demoQuiz from "../../../samples/demo-quiz.json";
 import builtinThemes from "../bindings/BuiltinThemes.json";
 import { NO_CONTROLS } from "../host/preview";
-import type { Background, GameView, PlayerView, Quiz, SoundClip } from "../types";
+import type { Background, GameView, PlayerView, Quiz, SoundClip, VideoClip } from "../types";
 import "../styles.css";
 
 // The backend fills serde defaults; the raw JSON file leaves them out.
@@ -66,6 +66,24 @@ const SONG: SoundClip = {
   replay: { part: { fromMs: 45_000, toMs: null }, delayMs: 1_000 },
 };
 
+/**
+ * A video for the scenes with one (a file generated locally, see
+ * .gitignore): its part from 0:05 to 0:20 at 150 %, under a mosaic, and
+ * from 0:25 again after the reveal.
+ */
+const VIDEO: VideoClip = {
+  file: "media/clip.webm",
+  autoplay: true,
+  introPauseMs: 0,
+  muted: false,
+  repeat: false,
+  volume: 60,
+  speed: 150,
+  part: { fromMs: 5_000, toMs: 20_000 },
+  effect: "mosaic",
+  replay: { part: { fromMs: 25_000, toMs: null }, delayMs: 0 },
+};
+
 /** A picture behind a slide, with the options a new background gets. */
 const BACKGROUND: Background = { file: "media/landscape.svg", repeat: true, muted: true, sync: false };
 
@@ -88,6 +106,7 @@ function view(partial: Partial<GameView>): GameView {
     leaderboardVisible: false,
     controls: { ...NO_CONTROLS, next: true },
     onHold: false,
+    videoPlays: 0,
     ...partial,
   };
 }
@@ -170,6 +189,36 @@ const SCENES: Record<string, GameView | null> = {
   }),
   billboardPicture: view({ phase: { phase: "billboard" }, slideIndex: 0, slide: { ...quiz.slides[0], picture: "media/landscape.svg" } }),
   background: view({ phase: { phase: "billboard" }, slideIndex: 0, slide: { ...quiz.slides[0], background: BACKGROUND } }),
+  // A question's video in each step, with its effect fading over the answer time.
+  videoReady: view({ slideIndex: 2, slide: { ...quiz.slides[2], video: VIDEO } }),
+  videoRunning: view({
+    slideIndex: 2,
+    slide: { ...quiz.slides[2], video: VIDEO },
+    phase: { phase: "question", step: "running", clock: { limitMs: 20000, elapsedBeforeMs: 0, runningSinceMs: 0, pressesFromMs: 0 } },
+    clock: { limitMs: 20000, remainingMs: 12000, elapsedMs: 8000, running: true, points: 81 },
+  }),
+  videoBlur: view({
+    slideIndex: 2,
+    slide: { ...quiz.slides[2], video: { ...VIDEO, effect: "blur" } },
+    phase: { phase: "question", step: "running", clock: { limitMs: 20000, elapsedBeforeMs: 0, runningSinceMs: 0, pressesFromMs: 0 } },
+    clock: { limitMs: 20000, remainingMs: 10000, elapsedMs: 10000, running: false, points: 81 },
+  }),
+  videoClosed: view({ slideIndex: 2, slide: { ...quiz.slides[2], video: VIDEO }, phase: { phase: "question", step: "closed" }, onHold: true }),
+  videoRevealed: view({ slideIndex: 2, slide: { ...quiz.slides[2], video: VIDEO }, phase: { phase: "question", step: "revealed", winner: null }, onHold: true }),
+  // A video that waits for the quizmaster, before and after Play video.
+  videoWaiting: view({
+    phase: { phase: "billboard" },
+    slideIndex: 0,
+    slide: { ...quiz.slides[0], video: { ...VIDEO, autoplay: false, effect: null } },
+    controls: { ...NO_CONTROLS, next: true, playVideo: true },
+  }),
+  videoPlayed: view({
+    phase: { phase: "billboard" },
+    slideIndex: 0,
+    slide: { ...quiz.slides[0], video: { ...VIDEO, autoplay: false, effect: null } },
+    controls: { ...NO_CONTROLS, next: true, playVideo: true },
+    videoPlays: 1,
+  }),
   brokenBackground: view({ phase: { phase: "billboard" }, slideIndex: 0, slide: { ...quiz.slides[0], background: { ...BACKGROUND, file: "media/missing.png" } } }),
 };
 
@@ -181,12 +230,12 @@ const sceneQuiz: Quiz = {
   slides: quiz.slides.map((slide, i) => (current?.slide && i === current.slideIndex ? current.slide : slide)),
 };
 
-// The quiz the editor opens: the demo quiz, with media on its first question.
+// The quiz the editor opens: the demo quiz, with media on its first two questions.
 const editorQuiz: Quiz = {
   ...quiz,
   theme,
   slides: quiz.slides.map((slide, i) =>
-    i === 1 ? { ...slide, picture: "media/landscape.svg", sound: SONG } : slide,
+    i === 1 ? { ...slide, picture: "media/landscape.svg", sound: SONG } : i === 2 ? { ...slide, video: VIDEO } : slide,
   ),
 };
 

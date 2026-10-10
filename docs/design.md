@@ -92,8 +92,9 @@ two windows cannot disagree with each other or with the score.
   clips, because it stays open for the whole show and the projector window
   may not. Spec SN-5 moves playback into the Rust shell later. The code is in
   `app/src/audio/`: `context.ts` (one shared `AudioContext`), `cues.ts` (game
-  effects), `clip-player.ts` (plays a part of a file at volume × loudness
-  gain), `slide-sound.ts` (when a slide's sound plays, and its replay part
+  effects), `clip-player.ts` (`PartPlayer` plays a part of any media
+  element, looping or stopping at its end; `ClipPlayer` adds a sound file
+  at volume × loudness gain), `slide-sound.ts` (when a slide's sound plays, and its replay part
   after the reveal), `loudness.ts` (ITU-R BS.1770-4 measurement and the gain
   that reaches a target) and `decode.ts`.
   - A gain above 1 goes through a Web Audio `GainNode` (an element's
@@ -103,15 +104,27 @@ two windows cannot disagree with each other or with the score.
   - Files are decoded for measuring with an `OfflineAudioContext` at 48 kHz,
     because `decodeAudioData` resamples to its context's rate (W3C Web Audio
     API) and BS.1770-4 gives the K-weighting filter for 48 kHz.
-  - The editor's Trim window (`TrimDialog.tsx`, waveform maths in
-    `waveform.ts`) and Normalize volume window (`LoudnessDialog.tsx`,
-    `normalize.ts`) only change `part`, `replay` and `gainDb`; files are never
-    rewritten.
+  - The editor's Trim windows (`TrimDialog.tsx` with the waveform maths in
+    `waveform.ts`, and `VideoTrimDialog.tsx`, sharing the part state, keys
+    and controls in `part-editing.tsx`) and Normalize volume window
+    (`LoudnessDialog.tsx`, `normalize.ts`) only change `part`, `replay` and
+    `gainDb`; files are never rewritten.
 - **Background video.** `StageBackground` (`slide-media.tsx`) plays it with
   its options. Sync
   with quiz reads `GameView.onHold` from the core (a player answering, the
   clock paused, the question closed or revealed), so the rule lives in one
   place.
+- **Slide video.** `ShowVideo` (`slide-video.tsx`) plays a slide's video on
+  the projector with a `PartPlayer`: it starts after its intro pause, or
+  each time `GameView.videoPlays` grows. That counter is the core's answer
+  to the journaled `PlayVideo` command, so a Play video given before the
+  projector window opened, or before a restart, still reaches it. Once
+  started it follows `onHold` like a synced background, and after the
+  reveal it plays its replay part. The effect's strength is `timeLeft`
+  (`answer-time.ts`, also the clock gauge's fill), read between the
+  250 ms clock ticks from the time since the last tick, every frame; blur
+  is a CSS filter, the mosaic draws the frame at a few blocks per row on a
+  canvas over the video (`video-effect.ts` holds the maths).
 
 ### 1.2 Quiz files and media
 
@@ -541,7 +554,7 @@ them.
 | Themes: `theme.json` rules, inheritance, built-in packages complete with their files and font licences; gallery, fonts, a broken theme background warns once | `cargo test` (`quiz_core::theme`, shell `themes`), `npm test`, headless Chromium against the preview | pass |
 | Teams: names, pairing, replay; drag, click, paste and CSV import (Windows-1250) | `cargo test` (`game_flow`), `npm test` (`team-names`), headless Chromium against the preview | pass |
 | Loudness measurement | `npm test`: a full-scale 997 Hz sine in one channel measures -3.01 LUFS as BS.1770-4 states; gating, channel sum, part, peak limit | pass |
-| Trim and Normalize volume windows, background video menu and options | headless Chromium against the preview with generated test media (a song and a test-pattern video, not in the repo) | pass |
+| Trim and Normalize volume windows, video trim window, background video menu and options, slide video (intro pause, Play video, speed, volume, part, holding with the show, blur and mosaic, replay) | headless Chromium against the preview with generated test media (a song and a test-pattern video, not in the repo) | pass |
 | Media through the asset protocol, autoplay of video and sound | needs the installed app on each OS | **not tested** |
 | Windows and macOS installers | CI | see the PR's checks |
 | Real receiver: detection, raw reports, learn mode, presses in a show | needs the hardware | **not tested** |

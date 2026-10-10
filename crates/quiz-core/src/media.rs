@@ -190,13 +190,6 @@ pub struct SoundClip {
     pub replay: Option<Replay>,
 }
 
-impl SoundClip {
-    /// The parts of the file this sound plays.
-    pub fn parts(&self) -> impl Iterator<Item = &Span> {
-        std::iter::once(&self.part).chain(self.replay.as_ref().map(|r| &r.part))
-    }
-}
-
 /// The part of a question's sound played again once its answer is revealed,
 /// such as the chorus of the song the players had to name.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -210,19 +203,128 @@ pub struct Replay {
     pub delay_ms: u32,
 }
 
-/// A video shown on a slide in place of a picture.
+/// Slowest playback of a video, in percent of its normal speed.
+pub const MIN_VIDEO_SPEED: u16 = 25;
+/// Fastest playback of a video, in percent of its normal speed.
+pub const MAX_VIDEO_SPEED: u16 = 250;
+/// Longest wait between showing a slide and starting its video.
+pub const MAX_INTRO_PAUSE_MS: u32 = 60_000;
+/// Longest wait between the reveal and a replay part.
+pub const MAX_REPLAY_DELAY_MS: u32 = 60_000;
+
+/// A change to a question's video that is strongest when the question
+/// starts and clears as its answer time runs out, so the players see more
+/// the longer they wait.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+#[serde(rename_all = "camelCase")]
+pub enum VideoEffect {
+    Blur,
+    /// Large square blocks of colour that grow finer.
+    Mosaic,
+}
+
+/// A video shown on a slide in place of a picture. It pauses and goes on
+/// with the show (`Game::on_hold`).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[ts(export)]
 #[serde(rename_all = "camelCase")]
 pub struct VideoClip {
     pub file: String,
-    /// Start playing when the slide is shown.
+    /// Start by itself, `intro_pause_ms` after the slide is shown; otherwise
+    /// the quizmaster starts it from the Director.
     #[serde(default = "yes")]
     pub autoplay: bool,
+    /// Time between showing the slide and starting the video, so the
+    /// quizmaster can read the question first. Up to `MAX_INTRO_PAUSE_MS`.
+    /// Files from before it start the video at once, as they did; the editor
+    /// gives a new video one second.
+    #[serde(default)]
+    pub intro_pause_ms: u32,
     #[serde(default)]
     pub muted: bool,
+    /// Play `part` again from its start until the slide ends.
     #[serde(default)]
     pub repeat: bool,
+    /// Volume in percent, 0 to 100.
+    #[serde(default = "full_volume")]
+    pub volume: u8,
+    /// Playback speed in percent, `MIN_VIDEO_SPEED` to `MAX_VIDEO_SPEED`.
+    #[serde(default = "normal_speed")]
+    pub speed: u16,
+    /// The part of the file that plays.
+    #[serde(default)]
+    pub part: Span,
+    /// Questions only.
+    #[serde(default)]
+    pub effect: Option<VideoEffect>,
+    /// Played once when the answer is revealed; questions only.
+    #[serde(default)]
+    pub replay: Option<Replay>,
+}
+
+impl VideoClip {
+    /// `file` with the options a quiz file that names only the file gets.
+    pub fn new(file: impl Into<String>) -> VideoClip {
+        VideoClip {
+            file: file.into(),
+            autoplay: true,
+            intro_pause_ms: 0,
+            muted: false,
+            repeat: false,
+            volume: full_volume(),
+            speed: normal_speed(),
+            part: Span::default(),
+            effect: None,
+            replay: None,
+        }
+    }
+}
+
+/// What sounds and videos have in common: how loud they play, the part of
+/// the file that plays and the part replayed after the reveal.
+pub trait Playback {
+    /// In percent, 0 to 100.
+    fn volume(&self) -> u8;
+    fn part(&self) -> &Span;
+    fn replay(&self) -> Option<&Replay>;
+    /// The kind of file it plays.
+    fn kind(&self) -> MediaKind;
+
+    /// The parts of the file it plays.
+    fn parts(&self) -> impl Iterator<Item = &Span> {
+        std::iter::once(self.part()).chain(self.replay().map(|r| &r.part))
+    }
+}
+
+impl Playback for SoundClip {
+    fn volume(&self) -> u8 {
+        self.volume
+    }
+    fn part(&self) -> &Span {
+        &self.part
+    }
+    fn replay(&self) -> Option<&Replay> {
+        self.replay.as_ref()
+    }
+    fn kind(&self) -> MediaKind {
+        MediaKind::Audio
+    }
+}
+
+impl Playback for VideoClip {
+    fn volume(&self) -> u8 {
+        self.volume
+    }
+    fn part(&self) -> &Span {
+        &self.part
+    }
+    fn replay(&self) -> Option<&Replay> {
+        self.replay.as_ref()
+    }
+    fn kind(&self) -> MediaKind {
+        MediaKind::Video
+    }
 }
 
 /// A picture or video behind a slide's content, in place of the theme's
@@ -281,6 +383,10 @@ fn full_volume() -> u8 {
 
 fn yes() -> bool {
     true
+}
+
+fn normal_speed() -> u16 {
+    100
 }
 
 #[cfg(test)]

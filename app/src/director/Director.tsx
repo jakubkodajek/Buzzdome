@@ -22,6 +22,7 @@ import {
   ScreenIcon,
   SoundIcon,
   StopIcon,
+  VideoIcon,
 } from "../icons";
 import { keyHint, KEYS, useShortcuts } from "../keyboard";
 import { MediaRootContext } from "../media";
@@ -227,6 +228,7 @@ function CommandPanel(props: { view: GameView | null; projector: ProjectorSettin
             ) : (
               <CommandButton icon={<SoundIcon />} label={t("playSound")} onClick={sound.play} />
             ))}
+          {controls?.playVideo && <CommandButton icon={<VideoIcon />} label={t("playVideo")} onClick={() => dispatch({ type: "playVideo" })} />}
           <CommandButton
             icon={<ListIcon />}
             label={t("leaderboard")}

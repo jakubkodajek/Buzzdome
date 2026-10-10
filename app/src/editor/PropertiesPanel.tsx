@@ -180,7 +180,7 @@ function propertyPages(slide: Slide, element: ElementId, rows: SlideProperties):
   if (element === "question" && slide.type === "question") return [page("text", [{ title: "sectionText", rows: [rows.questionText(slide)] }])];
   if ((element === "title" || element === "text") && slide.type !== "question") return [page("text", [{ title: "sectionText", rows: textRows(slide, rows) }])];
   if (element === "picture") return [page("design", [{ title: "sectionPictureVideo", rows: [rows.picture] }])];
-  if (element === "video") return [page("design", [{ title: "sectionPictureVideo", rows: [rows.video, ...rows.videoOptions] }])];
+  if (element === "video") return [page("design", [{ title: "sectionPictureVideo", rows: videoRows(rows) }])];
   if (element === "sound") return [page("design", [{ title: "sectionSound", rows: soundRows(rows) }])];
 
   // The slide itself.
@@ -204,7 +204,7 @@ function propertyPages(slide: Slide, element: ElementId, rows: SlideProperties):
   // Ranking screens show the ranking, not a picture or video.
   const pictureVideo: Section[] = showsRanking(slide.type)
     ? []
-    : [{ title: "sectionPictureVideo", rows: [rows.picture, rows.video, ...rows.videoOptions] }];
+    : [{ title: "sectionPictureVideo", rows: [rows.picture, ...videoRows(rows)] }];
   pages.push(
     page("design", [
       ...pictureVideo,
@@ -214,6 +214,11 @@ function propertyPages(slide: Slide, element: ElementId, rows: SlideProperties):
     page("advanced", [{ title: "sectionMetadata", rows: [rows.id] }]),
   );
   return pages;
+}
+
+/** The video's rows: the file, how it plays, which part plays, its effect. */
+function videoRows(rows: SlideProperties): PropertyRow[] {
+  return [rows.video, ...rows.videoOptions, rows.videoPart, ...rows.videoReplay, rows.videoEffect].filter((row) => row !== null);
 }
 
 /** The sound's rows: the file, how it plays, which part plays, its loudness. */

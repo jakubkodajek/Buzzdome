@@ -45,6 +45,7 @@ export type { Theme } from "./bindings/Theme";
 export type { ThemeFile } from "./bindings/ThemeFile";
 export type { ValidationError } from "./bindings/ValidationError";
 export type { VideoClip } from "./bindings/VideoClip";
+export type { VideoEffect } from "./bindings/VideoEffect";
 
 export type QuestionSlide = Extract<Slide, { type: "question" }>;
 /** The slides listed by a title. */

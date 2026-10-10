@@ -119,6 +119,9 @@ pub enum Command {
     AdjustScore { buzzer: BuzzerId, delta: i32 },
     #[serde(rename_all = "camelCase")]
     ShowLeaderboard { visible: bool },
+    /// Start the current slide's video from the start of its part, or start
+    /// it again. A video that does not start by itself waits for this.
+    PlayVideo,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -154,6 +157,7 @@ pub struct Controls {
     pub pause_clock: bool,
     pub resume_clock: bool,
     pub close_question: bool,
+    pub play_video: bool,
 }
 
 /// A countdown that can pause. `limit_ms == None` means untimed.
@@ -308,6 +312,9 @@ pub struct Game {
     /// Team names prepared for the show; a team is paired with the buzzer
     /// whose player has its name (`view::TeamView`).
     teams: Vec<String>,
+    /// How many times the quizmaster started the current slide's video
+    /// (`Command::PlayVideo`); the projector starts it whenever this grows.
+    video_plays: u32,
 }
 
 impl Game {
@@ -322,6 +329,7 @@ impl Game {
             deltas: BTreeMap::new(),
             leaderboard_visible: false,
             teams: Vec::new(),
+            video_plays: 0,
         }
     }
 
@@ -452,12 +460,25 @@ impl Game {
             pause_clock: running.is_some_and(Clock::is_running),
             resume_clock: running.is_some_and(|clock| !clock.is_running()),
             close_question: running.is_some(),
+            play_video: self.shows_video(),
         }
     }
 
+    /// True when the screen shows the current slide's video: a slide with a
+    /// video whose screen has room for it (a ranking has none).
+    fn shows_video(&self) -> bool {
+        let screen = matches!(self.phase, Phase::Billboard | Phase::Explanation | Phase::Question(_));
+        screen && self.current_slide().is_some_and(|slide| slide.video.is_some())
+    }
+
+    /// See `video_plays`.
+    pub fn video_plays(&self) -> u32 {
+        self.video_plays
+    }
+
     /// True while the show holds still: a player is answering, the question
-    /// clock is paused, or the question is over. Synced background videos
-    /// pause then (BG-4).
+    /// clock is paused, or the question is over. A slide's video and a synced
+    /// background video (BG-4) pause then.
     pub fn on_hold(&self) -> bool {
         match &self.phase {
             Phase::Question(QuestionStep::Running { clock }) => !clock.is_running(),
@@ -586,6 +607,13 @@ impl Game {
             }
             Command::ShowLeaderboard { visible } => {
                 self.leaderboard_visible = *visible;
+                Ok(vec![])
+            }
+            Command::PlayVideo => {
+                if !self.shows_video() {
+                    return Err(GameError::NotNow);
+                }
+                self.video_plays = self.video_plays.saturating_add(1);
                 Ok(vec![])
             }
         }
@@ -776,6 +804,7 @@ impl Game {
         self.locked_out.clear();
         self.deltas.clear();
         self.leaderboard_visible = false;
+        self.video_plays = 0;
         self.slide = index;
         self.phase = match self.quiz.slides.get(index).map(|s| &s.content) {
             None => Phase::Final { step: 0 },

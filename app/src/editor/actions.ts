@@ -51,6 +51,7 @@ export type ActionId =
   | "changeMedia"
   | "removeMedia"
   | "trimSound"
+  | "trimVideo"
   | "normalizeSound"
   | "normalizeAll"
   | "toggleBackground"

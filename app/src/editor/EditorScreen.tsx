@@ -50,10 +50,11 @@ import { gainChange, LOUDNESS_STATUS_KEYS, measureSound, readLoudnessTarget } fr
 import { PropertiesPanel } from "./PropertiesPanel";
 import { slideProperties, type SlideEditing } from "./properties";
 import { Ribbon, type RibbonTab } from "./Ribbon";
-import { duplicateSlide, freshSlideId, setBackground, setCorrect, setNotes, setPicture, setSound, setSoundOptions, setVideo } from "./slides";
+import { duplicateSlide, freshSlideId, setBackground, setCorrect, setNotes, setPicture, setSound, setSoundOptions, setVideo, setVideoOptions } from "./slides";
 import { TableView } from "./TableView";
 import { Thumbnails } from "./Thumbnails";
 import { TrimDialog } from "./TrimDialog";
+import { VideoTrimDialog } from "./VideoTrimDialog";
 import { useQuizEditor, type QuizEditor } from "./useQuizEditor";
 import { useThemeChoice } from "./useThemeChoice";
 import "./editor.css";
@@ -110,8 +111,8 @@ function Studio({ editor, open, onExit }: { editor: QuizEditor; open: OpenQuiz |
   const [menu, setMenu] = useState<{ x: number; y: number; target: MenuTarget } | null>(null);
   const [gallery, setGallery] = useState<{ x: number; y: number } | null>(null);
   const [dialog, setDialog] = useState<{ id: string; focus: ElementId } | null>(null);
-  /** The slide whose sound is being trimmed. */
-  const [trimOf, setTrimOf] = useState<string | null>(null);
+  /** The slide whose sound or video is being trimmed. */
+  const [trimOf, setTrimOf] = useState<{ id: string; media: "sound" | "video" } | null>(null);
   const [loudness, setLoudness] = useState(false);
   /** The slide whose background video plays in the design area. */
   const [playingBackgroundOf, setPlayingBackgroundOf] = useState<string | null>(null);
@@ -128,7 +129,7 @@ function Studio({ editor, open, onExit }: { editor: QuizEditor; open: OpenQuiz |
   const element: ElementId = slide && hasElement(slide, selection.element) ? selection.element : "slide";
   const media = isMedia(element) ? element : null;
   const dialogSlide = dialog ? slides.find((s) => s.id === dialog.id) : undefined;
-  const trimSlide = trimOf === null ? undefined : slides.find((s) => s.id === trimOf);
+  const trimSlide = trimOf === null ? undefined : slides.find((s) => s.id === trimOf.id);
   const backgroundVideo = slide?.background ? isVideo(slide.background.file) : false;
   const backgroundPlaying = backgroundVideo && playingBackgroundOf === slide?.id;
   const unsaved = open !== null && isUnsaved(open);
@@ -169,7 +170,8 @@ function Studio({ editor, open, onExit }: { editor: QuizEditor; open: OpenQuiz |
     context: contexts[slides.indexOf(s)] ?? NO_CONTEXT,
     update: (change, field) => updateSlide(s.id, change, field),
     chooseMedia: (kinds, apply) => chooseMedia(s.id, kinds, apply),
-    trimSound: () => setTrimOf(s.id),
+    trimSound: () => setTrimOf({ id: s.id, media: "sound" }),
+    trimVideo: () => setTrimOf({ id: s.id, media: "video" }),
     normalizeSound: () => normalizeSound(s.id),
   });
 
@@ -330,7 +332,8 @@ function Studio({ editor, open, onExit }: { editor: QuizEditor; open: OpenQuiz |
       disabled: !media,
       run: () => slide && media && updateSlide(slide.id, (s) => MEDIA[media].set(s, null)),
     },
-    trimSound: { label: t("trimAction"), icon: <TrimIcon />, disabled: !slide?.sound, run: () => slide && setTrimOf(slide.id) },
+    trimSound: { label: t("trimAction"), icon: <TrimIcon />, disabled: !slide?.sound, run: () => slide && setTrimOf({ id: slide.id, media: "sound" }) },
+    trimVideo: { label: t("trimAction"), icon: <TrimIcon />, disabled: !slide?.video, run: () => slide && setTrimOf({ id: slide.id, media: "video" }) },
     normalizeSound: { label: t("normalizeAction"), icon: <LoudnessIcon />, disabled: !slide?.sound, run: () => slide && normalizeSound(slide.id) },
     normalizeAll: { label: t("normalizeAll"), icon: <LoudnessIcon />, disabled: !slides.some((s) => s.sound), run: () => setLoudness(true) },
     toggleBackground: {
@@ -396,6 +399,7 @@ function Studio({ editor, open, onExit }: { editor: QuizEditor; open: OpenQuiz |
     }
     if (isMedia(target.element)) items.push(actions.changeMedia, actions.removeMedia);
     if (target.element === "sound") items.push("separator", actions.trimSound, actions.normalizeSound);
+    if (target.element === "video") items.push("separator", actions.trimVideo);
     if (target.element === "slide") {
       items.push("separator", actions.insertBackground);
       if (backgroundVideo) items.push(actions.toggleBackground);
@@ -540,7 +544,7 @@ function Studio({ editor, open, onExit }: { editor: QuizEditor; open: OpenQuiz |
 
           {menu && <ContextMenu x={menu.x} y={menu.y} items={menuItems(menu.target, menu.x, menu.y)} onClose={() => setMenu(null)} />}
           {gallery && <LayoutGallery x={gallery.x} y={gallery.y} onPick={insertLayout} onClose={() => setGallery(null)} />}
-          {open && trimSlide?.sound && (
+          {open && trimOf?.media === "sound" && trimSlide?.sound && (
             <TrimDialog
               key={trimSlide.id}
               url={mediaUrl(open.mediaRoot, trimSlide.sound.file)}
@@ -548,6 +552,17 @@ function Studio({ editor, open, onExit }: { editor: QuizEditor; open: OpenQuiz |
               sound={trimSlide.sound}
               canReplay={trimSlide.type === "question"}
               onApply={(trim) => updateSlide(trimSlide.id, (s) => setSoundOptions(s, trim))}
+              onClose={() => setTrimOf(null)}
+            />
+          )}
+          {open && trimOf?.media === "video" && trimSlide?.video && (
+            <VideoTrimDialog
+              key={trimSlide.id}
+              url={mediaUrl(open.mediaRoot, trimSlide.video.file)}
+              name={mediaFileName(trimSlide.video.file)}
+              video={trimSlide.video}
+              canReplay={trimSlide.type === "question"}
+              onApply={(trim) => updateSlide(trimSlide.id, (s) => setVideoOptions(s, trim))}
               onClose={() => setTrimOf(null)}
             />
           )}

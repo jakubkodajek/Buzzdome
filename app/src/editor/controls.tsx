@@ -24,10 +24,13 @@ export function Switch({ checked, onChange, disabled = false, label }: { checked
 
 /**
  * A number, whole unless `step` is a fraction. The text may be empty or half
- * typed while focused; the value changes whenever the text is a number.
+ * typed while focused; the value changes whenever the text is a number in
+ * [min, max], and leaving the field brings a number outside to its nearest
+ * limit (so typing 150 into a box from 25 does not stop at 25 after the 1).
  */
 export function NumberBox(props: { value: number; onChange: (value: number) => void; min?: number; max?: number; step?: number; unit?: string; label: string }) {
-  const { value, onChange, min, max, step = 1, unit, label } = props;
+  const { value, onChange, min = -Infinity, max = Infinity, step = 1, unit, label } = props;
+  const clamp = (n: number) => Math.min(max, Math.max(min, n));
   const [text, setText] = useState(String(value));
   const [shown, setShown] = useState(value);
   if (value !== shown) {
@@ -41,20 +44,31 @@ export function NumberBox(props: { value: number; onChange: (value: number) => v
         type="number"
         inputMode={Number.isInteger(step) ? "numeric" : "decimal"}
         step={step}
-        min={min}
-        max={max}
+        min={Number.isFinite(min) ? min : undefined}
+        max={Number.isFinite(max) ? max : undefined}
         aria-label={label}
         value={text}
         onChange={(e) => {
           const next = e.target.value;
           setText(next);
-          if (next.trim() !== "" && Number.isFinite(Number(next))) onChange(Number(next));
+          const typed = typedNumber(next);
+          if (typed !== null && typed === clamp(typed)) onChange(typed);
         }}
-        onBlur={() => setText(String(value))}
+        onBlur={() => {
+          const typed = typedNumber(text);
+          if (typed !== null && clamp(typed) !== value) onChange(clamp(typed));
+          setText(String(value));
+        }}
       />
       {unit && <span className="unit">{unit}</span>}
     </span>
   );
+}
+
+/** The number typed into a field; null for an empty or half-typed one. */
+function typedNumber(text: string): number | null {
+  const number = Number(text);
+  return text.trim() !== "" && Number.isFinite(number) ? number : null;
 }
 
 /**

@@ -37,3 +37,9 @@ __pycache__/
 /docs/index.md
 /docs/solo.md
 /docs/tips-and-tricks.md
+
+# Test media for the browser preview, generated locally (only our own drawings are committed)
+app/src/dev/media/*.mp3
+app/src/dev/media/*.mp4
+app/src/dev/media/*.webm
+app/src/dev/media/*.wav

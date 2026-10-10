@@ -2,7 +2,7 @@ import { FINAL_LAST_STEP } from "../bindings/Constants";
 import type { Controls, GameView, Phase, Slide } from "../types";
 
 /** A preview is not a show: no command applies. */
-export const NO_CONTROLS: Controls = { next: false, judge: false, pauseClock: false, resumeClock: false, closeQuestion: false };
+export const NO_CONTROLS: Controls = { next: false, judge: false, pauseClock: false, resumeClock: false, closeQuestion: false, playVideo: false };
 
 /**
  * The game state a slide is shown in before anyone plays: a question ready
@@ -27,6 +27,7 @@ export function previewView(slide: Slide, slideIndex: number, slideCount: number
     leaderboardVisible: false,
     controls: NO_CONTROLS,
     onHold: false,
+    videoPlays: 0,
   };
 }
 

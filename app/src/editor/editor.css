@@ -1675,6 +1675,55 @@
   width: 100%;
 }
 
+/* The video trim window (VideoTrimDialog.tsx): the video, a slider over it, the parts as bands under the slider. */
+.trim-video {
+  position: relative;
+  display: grid;
+  place-items: center;
+  height: min(320px, 40vh);
+  border: 1px solid var(--line);
+  background: #111;
+}
+
+.trim-video:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.trim-video video {
+  max-width: 100%;
+  max-height: 100%;
+}
+
+.trim-video .trim-status {
+  color: #ddd;
+}
+
+.trim-seek {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.trim-track {
+  flex: 1;
+}
+
+.trim-track input {
+  display: block;
+  width: 100%;
+  margin: 0;
+}
+
+.trim-bands {
+  height: 12px;
+  background-color: var(--line);
+  background-image: var(--other-band), var(--edited-band);
+  background-repeat: no-repeat;
+  background-size: 100% 40%, 100% 100%;
+  background-position: bottom, center;
+}
+
 .studio .time-box {
   width: 92px;
   text-align: right;

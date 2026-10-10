@@ -1,6 +1,6 @@
 use quiz_core::{
     AnswerMode, Button, Command, Cue, Effect, Game, GameError, Light, Phase, Question, QuestionStep, Quiz, Slide,
-    SlideContent, Stamped, MAX_NAME_CHARS, MAX_TEAMS, PRESS_GRACE_MS,
+    SlideContent, Stamped, VideoClip, MAX_NAME_CHARS, MAX_TEAMS, PRESS_GRACE_MS,
 };
 use quiz_core::game::FINAL_LAST_STEP;
 use quiz_core::view::AnswerResults;
@@ -351,6 +351,7 @@ fn assert_controls_match_apply(game: &Game, at_ms: u64) {
         (controls.pause_clock, Command::PauseClock),
         (controls.resume_clock, Command::ResumeClock),
         (controls.close_question, Command::CloseQuestion),
+        (controls.play_video, Command::PlayVideo),
     ];
     for (allowed, command) in offered {
         let taken = game.clone().apply(&Stamped { at_ms, command: command.clone() }).is_ok();
@@ -362,7 +363,7 @@ fn assert_controls_match_apply(game: &Game, at_ms: u64) {
 fn controls_offer_exactly_the_commands_each_step_takes() {
     let mut show = Show::new(vec![
         Slide::new("intro", SlideContent::Billboard { title: "Round 1".into(), text: String::new() }),
-        question("q1", AnswerMode::FastestFinger),
+        with_video(question("q1", AnswerMode::FastestFinger)),
         Slide::new("why", SlideContent::Explanation { text: "Because.".into() }),
         Slide::new("end", SlideContent::EndOfRound { title: "End".into() }),
         final_slide("final"),
@@ -407,6 +408,35 @@ fn controls_offer_exactly_the_commands_each_step_takes() {
     }
 }
 
+fn with_video(mut slide: Slide) -> Slide {
+    slide.video = Some(VideoClip::new("media/clip.mp4"));
+    slide
+}
+
+#[test]
+fn the_quizmaster_starts_a_slide_video_as_often_as_needed_until_the_slide_changes() {
+    let end = with_video(Slide::new("end", SlideContent::EndOfRound { title: "End".into() }));
+    let mut show = Show::new(vec![with_video(question("q1", AnswerMode::Everyone)), billboard("plain"), end]);
+    show.press(0, 1, Button::Big);
+    assert_eq!(show.run(0, Command::PlayVideo), Err(GameError::NotNow), "nothing is shown in the lobby");
+    show.run(0, Command::Next).unwrap();
+    show.run(0, Command::PlayVideo).unwrap();
+    show.run(0, Command::Next).unwrap(); // running
+    show.run(0, Command::PlayVideo).unwrap();
+    assert_eq!(show.game.view(0).video_plays, 2);
+    show.press(1_000, 1, Button::B); // closes the question: everyone answered
+    show.run(0, Command::PlayVideo).unwrap();
+    assert_eq!(Game::replay(show.game.quiz().clone(), &show.journal), show.game);
+
+    show.run(0, Command::Next).unwrap(); // revealed
+    show.run(0, Command::Next).unwrap(); // a slide without a video
+    assert_eq!(show.game.view(0).video_plays, 0);
+    assert_eq!(show.run(0, Command::PlayVideo), Err(GameError::NotNow));
+    // A ranking has no room for a video, whatever the file says.
+    show.run(0, Command::Next).unwrap();
+    assert_eq!(show.run(0, Command::PlayVideo), Err(GameError::NotNow));
+}
+
 #[test]
 fn scores_stop_at_the_limits_instead_of_wrapping() {
     let mut show = Show::new(vec![question("q1", AnswerMode::Everyone)]);
@@ -437,12 +467,13 @@ fn ranking_breaks_ties_on_total_answer_time() {
 
 #[test]
 fn replaying_the_journal_rebuilds_the_same_game() {
-    let mut show = Show::new(vec![question("q1", AnswerMode::Everyone), question("q2", AnswerMode::FastestFinger)]);
+    let mut show = Show::new(vec![with_video(question("q1", AnswerMode::Everyone)), question("q2", AnswerMode::FastestFinger)]);
     for b in 1..=4 {
         show.press(0, b, Button::Big);
     }
     show.run(0, Command::Next).unwrap();
     show.run(100, Command::Next).unwrap();
+    show.run(500, Command::PlayVideo).unwrap();
     show.press(1_000, 1, Button::B);
     show.press(2_000, 2, Button::A);
     let _ = show.run(3_000, Command::JudgeRight); // rejected, not journaled

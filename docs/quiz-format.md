@@ -94,11 +94,19 @@ was moved or deleted.
 | `type` | `billboard`, `question`, `explanation`, `endOfRound`, `final` | required | See below. |
 | `notes` | text | `""` | For the quizmaster only. |
 | `picture` | media path | none | PNG, JPEG, WebP, GIF or SVG. |
-| `video` | object | none | Shown in place of a picture; a slide has one or the other. |
+| `video` | object | none | Shown in place of a picture; a slide has one or the other. Once started it pauses while a player answers, while the clock is paused and once the question is over, and goes on after. |
 | `video.file` | media path | required | MP4 (H.264) or WebM. |
-| `video.autoplay` | yes/no | `true` | Starts when the slide is shown. |
+| `video.autoplay` | yes/no | `true` | Starts by itself `introPauseMs` after the slide is shown; otherwise it waits for the quizmaster's Play video. Either way Play video starts it again from the start of `part`. |
+| `video.introPauseMs` | 0 to 60000 | `0` | Milliseconds between showing the slide and starting the video, so the question can be read first. The editor gives a new video 1000. |
 | `video.muted` | yes/no | `false` | |
-| `video.repeat` | yes/no | `false` | Loops until the slide ends. |
+| `video.repeat` | yes/no | `false` | Plays `part` again from its start until the slide ends. |
+| `video.volume` | 0 to 100 | `100` | Percent. |
+| `video.speed` | 25 to 250 | `100` | Playback speed in percent. |
+| `video.part` | span | whole file | The part of the file that plays. The file itself is not changed. |
+| `video.effect` | `blur`, `mosaic` or `null` | `null` | Questions only: hides the picture at full strength when the question starts and fades out as the clock runs down, gone when the time is up or the answer is revealed. Without a clock it stays at full strength until then. |
+| `video.replay` | object | none | Questions only: once the answer is revealed, the video stops and plays this part once, as `sound.replay`. |
+| `video.replay.part` | span | required | The part to play then. |
+| `video.replay.delayMs` | 0 to 60000 | `0` | Milliseconds between the reveal and the replay. |
 | `sound` | object | none | Played from the Director computer's sound output. |
 | `sound.file` | media path | required | MP3, WAV, OGG or M4A. |
 | `sound.start` | `onSlide`, `withClock`, `onDemand` | `onSlide` | When the slide opens; while the question clock runs (pauses with it); or only when the quizmaster presses Play. |
@@ -190,7 +198,7 @@ quizmaster's "go to the final ranking" goes to the last `final` slide.
 | 1 | First version. |
 | 2 | Adds `explanation` slides and, later within version 2, the quiz `theme` (builds from before that drop it when they save). Version 1 files read as version 2 unchanged. |
 | 3 | `background` becomes an object with video options; sounds get `part`, `gainDb` and `replay`. Version 1 and 2 files read as version 3 unchanged. |
-| 4 | Adds `final` slides. Version 1 to 3 files read as version 4 unchanged. |
+| 4 | Adds `final` slides. Version 1 to 3 files read as version 4 unchanged. Later within version 4, videos get `introPauseMs`, `volume`, `speed`, `part`, `effect` and `replay`; a video without them plays as before. |
 
 Fields may be added within a version as long as older files keep their
 meaning; readers ignore fields they do not know. Anything else (a new slide

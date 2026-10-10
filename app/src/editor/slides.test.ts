@@ -20,6 +20,7 @@ import {
   setSound,
   setSoundOptions,
   setVideo,
+  setVideoOptions,
   withAnswerCount,
 } from "./slides";
 
@@ -144,6 +145,39 @@ describe("slides", () => {
     const billboard = convertSlide(music, "billboard");
     expect(billboard.sound).toMatchObject({ file: "media/song.mp3", replay: null });
     expect(setSoundOptions(billboard, { replay }).sound?.replay).toBeNull();
+  });
+
+  it("keeps a video's options playable: parts, volume, speed and intro pause within limits", () => {
+    const clip = setVideo(question(), "media/clip.mp4");
+    expect(clip.video).toEqual({
+      file: "media/clip.mp4",
+      autoplay: true,
+      introPauseMs: 1_000,
+      muted: false,
+      repeat: false,
+      volume: 100,
+      speed: 100,
+      part: { fromMs: 0, toMs: null },
+      effect: null,
+      replay: null,
+    });
+    const set = setVideoOptions(clip, { part: { fromMs: 5_000.4, toMs: 20_000 }, volume: 140, speed: 999, introPauseMs: 120_000 });
+    expect(set.video).toMatchObject({ part: { fromMs: 5_000, toMs: 20_000 }, volume: 100, speed: 250, introPauseMs: 60_000 });
+    expect(setVideoOptions(set, { speed: 5 }).video?.speed).toBe(25);
+    // An emptied field counts as 0, brought into range.
+    expect(setVideoOptions(set, { speed: Number.NaN, introPauseMs: Number.NaN }).video).toMatchObject({ speed: 25, introPauseMs: 0 });
+    expect(setVideoOptions(set, { part: { fromMs: 9_000, toMs: 3_000 } })).toBe(set);
+    // Replacing the file keeps the options.
+    expect(setVideo(set, "media/other.webm").video).toMatchObject({ file: "media/other.webm", speed: 250 });
+  });
+
+  it("gives only questions a video effect and a video replay part", () => {
+    const replay = { part: { fromMs: 10_000, toMs: null }, delayMs: 500 };
+    const clip = setVideoOptions(setVideo(question(), "media/clip.mp4"), { effect: "mosaic", replay });
+    expect(clip.video).toMatchObject({ effect: "mosaic", replay });
+    const billboard = convertSlide(clip, "billboard");
+    expect(billboard.video).toMatchObject({ file: "media/clip.mp4", effect: null, replay: null });
+    expect(setVideoOptions(billboard, { effect: "blur", replay }).video).toMatchObject({ effect: null, replay: null });
   });
 
   it("keeps background options when the file changes", () => {

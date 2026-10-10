@@ -1,5 +1,5 @@
-// Plays the part of an audio file a quiz asks for (SN-8), at a gain that can
-// go above the file's own level (SN-9).
+// Plays the part of a sound or video file a quiz asks for (SN-8), a sound at
+// a gain that can go above the file's own level (SN-9).
 
 import type { Span } from "../types";
 import { audioContext } from "./context";
@@ -32,61 +32,57 @@ export interface PlayOptions {
 }
 
 /**
- * One audio file, played a part at a time. A gain above 1 (louder than the
- * file) goes through the window's audio context, which needs the file's
- * server to allow it; Tauri's asset protocol does (CORS header).
+ * A sound or video element, played a part at a time: a part plays from its
+ * start (or where it was paused) to its end, once or over and over.
  */
-export class ClipPlayer {
+export class PartPlayer {
   /** Called when the file starts or stops playing. */
   onChange: (() => void) | null = null;
-  private readonly audio = new Audio();
-  private readonly source: MediaElementAudioSourceNode | null = null;
   private span = WHOLE_FILE;
   private loop = false;
+  private ended = false;
   private timer: ReturnType<typeof setInterval> | null = null;
 
-  constructor(url: string, gain = 1) {
-    const audio = this.audio;
-    audio.preload = "auto";
-    if (gain > 1) audio.crossOrigin = "anonymous";
-    audio.src = url;
-    if (gain > 1) {
-      const context = audioContext();
-      this.source = context.createMediaElementSource(audio);
-      this.source.connect(new GainNode(context, { gain })).connect(context.destination);
-    } else {
-      audio.volume = Math.max(0, gain);
-    }
-    audio.addEventListener("play", this.changed);
-    audio.addEventListener("pause", this.changed);
-    audio.addEventListener("ended", this.reachedEnd);
+  constructor(protected readonly media: HTMLMediaElement) {
+    media.addEventListener("play", this.changed);
+    media.addEventListener("pause", this.changed);
+    media.addEventListener("ended", this.reachedEnd);
   }
 
   get playing(): boolean {
-    return !this.audio.paused;
+    return !this.media.paused;
+  }
+
+  /** The part played to its end (and does not loop) since it last started. */
+  get finished(): boolean {
+    return this.ended;
   }
 
   get positionMs(): number {
-    return this.audio.currentTime * 1000;
+    return this.media.currentTime * 1000;
   }
 
   /** Length of the file; NaN until it is known. */
   get durationMs(): number {
-    return this.audio.duration * 1000;
+    return this.media.duration * 1000;
   }
 
   play(span: Span, { loop = false, fromMs }: PlayOptions = {}) {
     const paused = sameSpan(span, this.span) && this.positionMs > span.fromMs && inSpan(span, this.positionMs);
     this.span = span;
     this.loop = loop;
+    this.ended = false;
     if (fromMs !== undefined || !paused) this.seek(fromMs ?? span.fromMs);
-    this.audio.play().catch((e: unknown) => console.error("sound:", e));
+    this.media.play().catch((e: unknown) => {
+      // A pause or a new file before playback starts is no failure.
+      if (!(e instanceof DOMException && e.name === "AbortError")) console.error("media:", e);
+    });
     this.watchEnd();
   }
 
   /** Pauses where it is. */
   pause() {
-    this.audio.pause();
+    this.media.pause();
     this.unwatchEnd();
   }
 
@@ -96,20 +92,17 @@ export class ClipPlayer {
     this.seek(this.span.fromMs);
   }
 
-  /** Stops for good and lets go of the file. */
+  /** Stops for good; the element stays as it is. */
   dispose() {
     this.pause();
-    const audio = this.audio;
-    audio.removeEventListener("play", this.changed);
-    audio.removeEventListener("pause", this.changed);
-    audio.removeEventListener("ended", this.reachedEnd);
-    audio.removeAttribute("src");
-    audio.load();
-    this.source?.disconnect();
+    const media = this.media;
+    media.removeEventListener("play", this.changed);
+    media.removeEventListener("pause", this.changed);
+    media.removeEventListener("ended", this.reachedEnd);
   }
 
   private seek(ms: number) {
-    this.audio.currentTime = Math.max(0, ms) / 1000;
+    this.media.currentTime = Math.max(0, ms) / 1000;
   }
 
   private watchEnd() {
@@ -132,6 +125,39 @@ export class ClipPlayer {
       this.play(this.span, { loop: true, fromMs: this.span.fromMs });
     } else {
       this.stop();
+      this.ended = true;
     }
   };
+}
+
+/**
+ * One audio file, played a part at a time. A gain above 1 (louder than the
+ * file) goes through the window's audio context, which needs the file's
+ * server to allow it; Tauri's asset protocol does (CORS header).
+ */
+export class ClipPlayer extends PartPlayer {
+  private readonly source: MediaElementAudioSourceNode | null = null;
+
+  constructor(url: string, gain = 1) {
+    const audio = new Audio();
+    super(audio);
+    audio.preload = "auto";
+    if (gain > 1) audio.crossOrigin = "anonymous";
+    audio.src = url;
+    if (gain > 1) {
+      const context = audioContext();
+      this.source = context.createMediaElementSource(audio);
+      this.source.connect(new GainNode(context, { gain })).connect(context.destination);
+    } else {
+      audio.volume = Math.max(0, gain);
+    }
+  }
+
+  /** Stops for good and lets go of the file. */
+  override dispose() {
+    super.dispose();
+    this.media.removeAttribute("src");
+    this.media.load();
+    this.source?.disconnect();
+  }
 }

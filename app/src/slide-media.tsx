@@ -2,8 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import { useApp } from "./app-context";
 import { VideoIcon } from "./icons";
 import { isVideo, mediaFileName, themeFileUrl, useMediaUrl } from "./media";
+import { ShowVideo } from "./slide-video";
 import type { BackgroundLayer } from "./theme/background";
-import type { Background, Slide } from "./types";
+import type { Background, ClockView, GameView, Slide } from "./types";
 
 /**
  * Where a slide is drawn: on the projector during the show, as a preview
@@ -12,8 +13,19 @@ import type { Background, Slide } from "./types";
  */
 export type ScreenMode = "show" | "preview" | "thumbnail";
 
-/** The slide's video, or else its picture; nothing if it has neither or the file fails. */
-export function SlideMedia({ slide, className, mode = "show" }: { slide: Slide; className: string; mode?: ScreenMode }) {
+/** The game state a slide's video plays along with in the show. */
+export interface LiveShow {
+  view: GameView;
+  clock: ClockView | null;
+}
+
+/**
+ * The slide's video, or else its picture; nothing if it has neither or the
+ * file fails. In the show (`live`) the video plays along with the show
+ * (`ShowVideo`).
+ */
+export function SlideMedia(props: { slide: Slide; className: string; mode?: ScreenMode; live?: LiveShow }) {
+  const { slide, className, mode = "show", live } = props;
   const toUrl = useMediaUrl();
   const video = slide.video;
   const videoUrl = toUrl(video?.file ?? null);
@@ -21,8 +33,8 @@ export function SlideMedia({ slide, className, mode = "show" }: { slide: Slide; 
   if (video && videoUrl) {
     return (
       <div className={className} data-element="video">
-        {mode === "show" ? (
-          <video key={videoUrl} src={videoUrl} autoPlay={video.autoplay} muted={video.muted} loop={video.repeat} playsInline />
+        {mode === "show" && live ? (
+          <ShowVideo key={`${live.view.slideIndex}:${videoUrl}`} clip={video} url={videoUrl} view={live.view} clock={live.clock} />
         ) : (
           <video key={videoUrl} src={videoUrl} muted controls={mode === "preview"} preload="metadata" playsInline />
         )}

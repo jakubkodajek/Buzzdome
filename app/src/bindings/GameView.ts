@@ -35,4 +35,8 @@ controls: Controls,
 /**
  * See `Game::on_hold`.
  */
-onHold: boolean, };
+onHold: boolean, 
+/**
+ * See `Game::video_plays`.
+ */
+videoPlays: number, };

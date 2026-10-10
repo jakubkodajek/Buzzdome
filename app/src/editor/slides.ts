@@ -9,10 +9,14 @@ import {
   MAX_ANSWERS,
   MAX_EVERYONE_ANSWERS,
   MAX_GAIN_DB,
+  MAX_INTRO_PAUSE_MS,
   MAX_POINTS,
+  MAX_REPLAY_DELAY_MS,
   MAX_TIME_LIMIT_S,
+  MAX_VIDEO_SPEED,
   MIN_EVERYONE_ANSWERS,
   MIN_GAIN_DB,
+  MIN_VIDEO_SPEED,
 } from "../bindings/Constants";
 import { hasTitle, slideTitle } from "../quiz";
 import type { AnswerMode, Background, Quiz, QuestionSlide, Replay, Slide, SlideType, SoundClip, Span, VideoClip } from "../types";
@@ -75,13 +79,16 @@ export function setNotes(slide: Slide, notes: string): Slide {
 /**
  * The slide as another type. Its id, notes and media stay, the question,
  * explanation or title carries over, and the rest starts as on a new slide.
- * Only a question reveals an answer, so only a question keeps its sound's
- * replay part.
+ * Only a question reveals an answer, so only a question keeps the replay
+ * parts of its sound and video; and only a question has the answer time a
+ * video effect follows.
  */
 export function convertSlide(slide: Slide, type: SlideType): Slide {
   if (slide.type === type) return slide;
-  const { id, notes, picture, video, background } = slide;
-  const sound = slide.sound && type !== "question" ? { ...slide.sound, replay: null } : slide.sound;
+  const { id, notes, picture, background } = slide;
+  const question = type === "question";
+  const sound = slide.sound && !question ? { ...slide.sound, replay: null } : slide.sound;
+  const video = slide.video && !question ? { ...slide.video, replay: null, effect: null } : slide.video;
   return setHeadline({ ...newSlide(type, id), notes, picture, video, sound, background }, slideTitle(slide));
 }
 
@@ -172,16 +179,23 @@ export function setScoring(question: QuestionSlide, scoring: Partial<Scoring>): 
   };
 }
 
-/** A whole number in [min, max]; 0 (inside every range used here) for an empty field. */
+/** A whole number in [min, max]; an empty field counts as 0. */
 function clampInt(value: number, min: number, max: number): number {
-  return Number.isFinite(value) ? Math.min(max, Math.max(min, Math.round(value))) : 0;
+  return Math.min(max, Math.max(min, Number.isFinite(value) ? Math.round(value) : 0));
 }
 
-/** Longest wait before a replay part, in ms; the field offers no more. */
-export const MAX_REPLAY_DELAY_MS = 60_000;
-
 /** The options a quiz file gets when it names only the file (crates/quiz-core/src/media.rs). */
-const NEW_VIDEO: Omit<VideoClip, "file"> = { autoplay: true, muted: false, repeat: false };
+const NEW_VIDEO: Omit<VideoClip, "file"> = {
+  autoplay: true,
+  introPauseMs: 1_000,
+  muted: false,
+  repeat: false,
+  volume: 100,
+  speed: 100,
+  part: WHOLE_FILE,
+  effect: null,
+  replay: null,
+};
 const NEW_SOUND: Omit<SoundClip, "file"> = { start: "onSlide", repeat: false, volume: 100, part: WHOLE_FILE, gainDb: 0, replay: null };
 const NEW_BACKGROUND: Omit<Background, "file"> = { repeat: true, muted: true, sync: false };
 
@@ -196,8 +210,16 @@ export function setVideo(slide: Slide, file: string | null): Slide {
   return { ...slide, video: { ...(slide.video ?? NEW_VIDEO), file }, picture: null };
 }
 
+/**
+ * Changes the video's options, kept playable (see `playable`): speed and
+ * intro pause within their limits, an effect on questions only.
+ */
 export function setVideoOptions(slide: Slide, options: Partial<Omit<VideoClip, "file">>): Slide {
-  return slide.video ? { ...slide, video: { ...slide.video, ...options } } : slide;
+  const video = slide.video && playable(slide, { ...slide.video, ...options });
+  if (!video) return slide;
+  const speed = clampInt(video.speed, MIN_VIDEO_SPEED, MAX_VIDEO_SPEED);
+  const introPauseMs = clampInt(video.introPauseMs, 0, MAX_INTRO_PAUSE_MS);
+  return { ...slide, video: { ...video, speed, introPauseMs, effect: slide.type === "question" ? video.effect : null } };
 }
 
 /** Plays a sound (keeping its options when the file is replaced). */
@@ -207,18 +229,27 @@ export function setSound(slide: Slide, file: string | null): Slide {
 }
 
 /**
- * Changes the sound's options, kept playable: volume a whole percentage,
- * loudness gain within its limits to 0.1 dB, and a replay part on questions
- * only. A part that would hold no sound is refused.
+ * Changes the sound's options, kept playable (see `playable`): loudness
+ * gain within its limits to 0.1 dB.
  */
 export function setSoundOptions(slide: Slide, options: Partial<Omit<SoundClip, "file">>): Slide {
-  if (!slide.sound) return slide;
-  const next = { ...slide.sound, ...options };
-  const part = wholeMs(next.part);
-  const replay = slide.type === "question" && next.replay ? { part: wholeMs(next.replay.part), delayMs: clampInt(next.replay.delayMs, 0, MAX_REPLAY_DELAY_MS) } : null;
-  if (isEmptySpan(part) || (replay && isEmptySpan(replay.part))) return slide;
-  const gainDb = Math.round(Math.min(MAX_GAIN_DB, Math.max(MIN_GAIN_DB, Number.isFinite(next.gainDb) ? next.gainDb : 0)) * 10) / 10;
-  return { ...slide, sound: { ...next, volume: clampInt(next.volume, 0, 100), gainDb, part, replay } };
+  const sound = slide.sound && playable(slide, { ...slide.sound, ...options });
+  if (!sound) return slide;
+  const gainDb = Math.round(Math.min(MAX_GAIN_DB, Math.max(MIN_GAIN_DB, Number.isFinite(sound.gainDb) ? sound.gainDb : 0)) * 10) / 10;
+  return { ...slide, sound: { ...sound, gainDb } };
+}
+
+/**
+ * A sound's or video's options as the show takes them (`playback_problems`
+ * in crates/quiz-core/src/model.rs): volume a whole percentage, parts in
+ * whole milliseconds, a replay part on questions only that starts within
+ * its limit. Null when a part would hold nothing.
+ */
+function playable<T extends { volume: number; part: Span; replay: Replay | null }>(slide: Slide, clip: T): T | null {
+  const part = wholeMs(clip.part);
+  const replay = slide.type === "question" && clip.replay ? { part: wholeMs(clip.replay.part), delayMs: clampInt(clip.replay.delayMs, 0, MAX_REPLAY_DELAY_MS) } : null;
+  if (isEmptySpan(part) || (replay && isEmptySpan(replay.part))) return null;
+  return { ...clip, volume: clampInt(clip.volume, 0, 100), part, replay };
 }
 
 /** A replay part as it is first ticked: the part that plays, at once after the reveal. */
@@ -231,7 +262,7 @@ function wholeMs(span: Span): Span {
   return { fromMs: Math.max(0, Math.round(span.fromMs)), toMs: span.toMs === null ? null : Math.max(0, Math.round(span.toMs)) };
 }
 
-/** Holds no sound: ends where or before it starts (`Span::is_empty` in Rust). */
+/** Holds nothing: ends where or before it starts (`Span::is_empty` in Rust). */
 export function isEmptySpan(span: Span): boolean {
   return span.toMs !== null && span.toMs <= span.fromMs;
 }

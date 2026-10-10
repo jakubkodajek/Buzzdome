@@ -1,14 +1,12 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type PointerEvent } from "react";
 import { useApp } from "../app-context";
 import { ClipPlayer, inSpan, linearGain, sameSpan, WHOLE_FILE } from "../audio/clip-player";
 import { decodeAudioFile } from "../audio/decode";
 import { measureLoudness, normalization, type Samples } from "../audio/loudness";
-import { trackTime } from "../format";
-import { isTypingTarget } from "../keyboard";
-import type { Replay, SoundClip, Span } from "../types";
-import { Dialog, NumberBox, TimeBox } from "./controls";
+import type { SoundClip, Span } from "../types";
+import { Dialog } from "./controls";
 import { readLoudnessTarget } from "./normalize";
-import { MAX_REPLAY_DELAY_MS, newReplay } from "./slides";
+import { onPartKeys, PART_COLOR, PART_COLORS, PartTimes, REPLAY_COLOR, ReplayChoice, usePartEditing } from "./part-editing";
 import { panned, waveformPeaks, zoomed, type TimeWindow } from "./waveform";
 
 /** What the dialog changes on the sound. */
@@ -35,14 +33,11 @@ const CLICK_PX = 3;
 const COLORS = {
   background: "#fbfbfb",
   wave: "#4b5563",
-  part: "#2f6fe4",
-  replay: "#1d9a4b",
+  part: PART_COLOR,
+  replay: REPLAY_COLOR,
   cursor: "#f08a00",
   playhead: "#111111",
 };
-
-/** The part colours for the stylesheet, so the Playback and Replay buttons match the waveform. */
-const PART_COLORS = { "--trim-part": COLORS.part, "--trim-replay": COLORS.replay } as CSSProperties;
 
 type Drag = { edge: "from" } | { edge: "to" } | { edge: null; anchorMs: number; startX: number; moved: boolean };
 
@@ -58,9 +53,6 @@ export function TrimDialog({ url, name, sound, canReplay, onApply, onClose }: Tr
   const { t } = useApp();
   const [samples, setSamples] = useState<Samples | null>(null);
   const [failed, setFailed] = useState(false);
-  const [part, setPart] = useState<Span>(sound.part);
-  const [replay, setReplay] = useState<Replay | null>(canReplay ? sound.replay : null);
-  const [editingReplay, setEditingReplay] = useState(false);
   const [cursorMs, setCursorMs] = useState(sound.part.fromMs);
   /** The stretch in view; null shows the whole sound. */
   const [view, setView] = useState<TimeWindow | null>(null);
@@ -74,9 +66,8 @@ export function TrimDialog({ url, name, sound, canReplay, onApply, onClose }: Tr
 
   const durationMs = samples ? ((samples.channels[0]?.length ?? 0) * 1000) / samples.sampleRate : null;
   const shown = useMemo(() => view ?? { fromMs: 0, toMs: durationMs ?? 0 }, [view, durationMs]);
-  const editing = editingReplay && replay ? replay.part : part;
-  const endOf = (span: Span) => span.toMs ?? durationMs ?? span.fromMs;
-  const select = (span: Span) => (editingReplay && replay ? setReplay({ ...replay, part: span }) : setPart(span));
+  const parts = usePartEditing(sound, canReplay, durationMs);
+  const { part, replay, editingReplay, editing, endOf, select } = parts;
 
   useEffect(() => {
     let alive = true;
@@ -200,14 +191,8 @@ export function TrimDialog({ url, name, sound, canReplay, onApply, onClose }: Tr
   const togglePlay = () => (playing ? player.current?.stop() : playSelection());
   /** Where I and O act: the playing position while listening, else the cursor. */
   const markAt = () => Math.round(playing ? (player.current?.positionMs ?? cursorMs) : cursorMs);
-  const setStart = () => {
-    const at = markAt();
-    select({ fromMs: at, toMs: editing.toMs !== null && editing.toMs <= at ? null : editing.toMs });
-  };
-  const setEnd = () => {
-    const at = markAt();
-    if (at > editing.fromMs) select({ fromMs: editing.fromMs, toMs: at });
-  };
+  const setStart = () => parts.setStart(markAt());
+  const setEnd = () => parts.setEnd(markAt());
 
   const onPointerDown = (event: PointerEvent<HTMLCanvasElement>) => {
     if (durationMs === null || width === 0) return;
@@ -241,21 +226,11 @@ export function TrimDialog({ url, name, sound, canReplay, onApply, onClose }: Tr
     }
   };
 
-  const onKeyDown = (event: KeyboardEvent) => {
-    if (isTypingTarget(event.target) || event.ctrlKey || event.metaKey || event.altKey || durationMs === null) return;
-    const run = { " ": togglePlay, i: setStart, o: setEnd }[event.key.toLowerCase()];
-    if (!run) return;
-    event.preventDefault();
-    run();
-  };
-
   const apply = () => {
-    // A part that runs to the end of the file plays to its end whatever the file's length on another computer.
-    const toEnd = (span: Span): Span => (durationMs !== null && span.toMs !== null && span.toMs >= durationMs - 1 ? { ...span, toMs: null } : span);
-    const trimmed = toEnd(part);
+    const trimmed = parts.result();
     let gainDb = sound.gainDb;
-    if (gainDb !== 0 && samples && !sameSpan(trimmed, sound.part)) gainDb = normalization(measureLoudness(samples, trimmed), readLoudnessTarget()).gainDb;
-    onApply({ part: trimmed, replay: replay && { ...replay, part: toEnd(replay.part) }, gainDb });
+    if (gainDb !== 0 && samples && !sameSpan(trimmed.part, sound.part)) gainDb = normalization(measureLoudness(samples, trimmed.part), readLoudnessTarget()).gainDb;
+    onApply({ ...trimmed, gainDb });
     onClose();
   };
 
@@ -277,46 +252,8 @@ export function TrimDialog({ url, name, sound, canReplay, onApply, onClose }: Tr
         </>
       }
     >
-      <div className="trim" style={PART_COLORS} onKeyDown={onKeyDown}>
-        {canReplay && (
-          <div className="trim-replay">
-            <label>
-              <input
-                type="checkbox"
-                checked={replay !== null}
-                onChange={(e) => {
-                  setReplay(e.target.checked ? newReplay(part) : null);
-                  setEditingReplay(e.target.checked);
-                }}
-              />
-              {t("propReplay")}
-            </label>
-            {replay && (
-              <>
-                <span className="segmented" role="group">
-                  <button type="button" className="part" aria-pressed={!editingReplay} onClick={() => setEditingReplay(false)}>
-                    {t("trimPlayback")}
-                  </button>
-                  <button type="button" className="replay" aria-pressed={editingReplay} onClick={() => setEditingReplay(true)}>
-                    {t("trimReplayPart")}
-                  </button>
-                </span>
-                <label>
-                  {t("propReplayDelay")}
-                  <NumberBox
-                    label={t("propReplayDelay")}
-                    value={replay.delayMs / 1000}
-                    min={0}
-                    max={MAX_REPLAY_DELAY_MS / 1000}
-                    step={0.1}
-                    unit="s"
-                    onChange={(s) => setReplay({ ...replay, delayMs: Math.round(Math.min(MAX_REPLAY_DELAY_MS, Math.max(0, s * 1000))) })}
-                  />
-                </label>
-              </>
-            )}
-          </div>
-        )}
+      <div className="trim" style={PART_COLORS} onKeyDown={(e) => ready && onPartKeys(e, { togglePlay, setStart, setEnd })}>
+        {canReplay && <ReplayChoice parts={parts} />}
         <div className="trim-wave">
           <canvas
             ref={canvas}
@@ -342,29 +279,7 @@ export function TrimDialog({ url, name, sound, canReplay, onApply, onClose }: Tr
             onChange={(e) => setView(panned(view, Number(e.target.value) - view.fromMs, durationMs))}
           />
         )}
-        <div className="trim-times">
-          <label>
-            {t("trimStart")}
-            <TimeBox label={t("trimStart")} value={editing.fromMs} max={endOf(editing) - 1} disabled={!ready} onChange={(ms) => select({ fromMs: ms, toMs: editing.toMs })} />
-          </label>
-          <label>
-            {t("trimEnd")}
-            <TimeBox
-              label={t("trimEnd")}
-              value={endOf(editing)}
-              min={editing.fromMs + 1}
-              max={durationMs ?? 0}
-              disabled={!ready}
-              onChange={(ms) => select({ fromMs: editing.fromMs, toMs: ms })}
-            />
-          </label>
-          <span>
-            {t("trimLength")} <span className="tabular">{trackTime(endOf(editing) - editing.fromMs)}</span>
-          </span>
-          <button type="button" disabled={!ready} onClick={() => select(WHOLE_FILE)}>
-            {t("wholeTrack")}
-          </button>
-        </div>
+        <PartTimes parts={parts} durationMs={durationMs} />
         <div className="trim-buttons">
           <button type="button" disabled={!ready} onClick={togglePlay}>
             {playing ? t("stopSound") : t("trimPlaySelection")} <small>{t("keySpace")}</small>

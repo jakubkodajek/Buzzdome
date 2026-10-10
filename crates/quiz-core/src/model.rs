@@ -1,7 +1,10 @@
 //! Quiz file model (schema version 4). This is the contract with quiz authors:
 //! change it only with a schema version bump and a migration.
 
-use crate::media::{check_reference, Background, MediaIssue, MediaKind, SoundClip, VideoClip, MAX_GAIN_DB, MIN_GAIN_DB};
+use crate::media::{
+    check_reference, Background, MediaIssue, MediaKind, Playback, SoundClip, VideoClip, MAX_GAIN_DB, MAX_INTRO_PAUSE_MS, MAX_REPLAY_DELAY_MS,
+    MAX_VIDEO_SPEED, MIN_GAIN_DB, MIN_VIDEO_SPEED,
+};
 use crate::theme::is_theme_id;
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::{BTreeMap, BTreeSet, HashSet};
@@ -259,12 +262,20 @@ pub enum Problem {
     Media { file: String, issue: MediaIssue },
     #[error("a slide shows a picture or a video, not both")]
     PictureAndVideo,
-    #[error("sound volume is a percentage, 0 to 100")]
-    SoundVolume,
-    #[error("a part of the sound ends before it starts")]
-    SoundPartEmpty,
+    #[error("{media:?} volume is a percentage, 0 to 100")]
+    Volume { media: MediaKind },
+    #[error("a part of the {media:?} ends before it starts")]
+    PartEmpty { media: MediaKind },
+    /// `max` in seconds.
+    #[error("the replay part must start at most {max} s after the reveal")]
+    ReplayDelayTooLong { max: u32 },
     #[error("loudness gain must be between {min} and {max} dB")]
     SoundGainOutOfRange { min: i32, max: i32 },
+    #[error("video speed must be between {min} and {max} %")]
+    VideoSpeedOutOfRange { min: u16, max: u16 },
+    /// `max` in seconds.
+    #[error("the video must start at most {max} s after the slide")]
+    IntroPauseTooLong { max: u32 },
     #[error("more than {max} answers")]
     TooManyAnswers { max: usize },
     #[error("an everyone-answers question needs at least {min} answers")]
@@ -364,14 +375,18 @@ impl Quiz {
                 found(Problem::PictureAndVideo);
             }
             if let Some(sound) = &slide.sound {
-                if sound.volume > 100 {
-                    found(Problem::SoundVolume);
-                }
-                if sound.parts().any(|part| part.is_empty()) {
-                    found(Problem::SoundPartEmpty);
-                }
+                playback_problems(sound, &mut found);
                 if !(MIN_GAIN_DB as f32..=MAX_GAIN_DB as f32).contains(&sound.gain_db) {
                     found(Problem::SoundGainOutOfRange { min: MIN_GAIN_DB, max: MAX_GAIN_DB });
+                }
+            }
+            if let Some(video) = &slide.video {
+                playback_problems(video, &mut found);
+                if !(MIN_VIDEO_SPEED..=MAX_VIDEO_SPEED).contains(&video.speed) {
+                    found(Problem::VideoSpeedOutOfRange { min: MIN_VIDEO_SPEED, max: MAX_VIDEO_SPEED });
+                }
+                if video.intro_pause_ms > MAX_INTRO_PAUSE_MS {
+                    found(Problem::IntroPauseTooLong { max: MAX_INTRO_PAUSE_MS / 1000 });
                 }
             }
             if let SlideContent::Question(q) = &slide.content {
@@ -383,6 +398,21 @@ impl Quiz {
         } else {
             Err(errors)
         }
+    }
+}
+
+/// The rules a sound and a video share: a volume in percent, parts that hold
+/// something and a replay part that starts in time.
+fn playback_problems(clip: &impl Playback, found: &mut impl FnMut(Problem)) {
+    let media = clip.kind();
+    if clip.volume() > 100 {
+        found(Problem::Volume { media });
+    }
+    if clip.parts().any(|part| part.is_empty()) {
+        found(Problem::PartEmpty { media });
+    }
+    if clip.replay().is_some_and(|replay| replay.delay_ms > MAX_REPLAY_DELAY_MS) {
+        found(Problem::ReplayDelayTooLong { max: MAX_REPLAY_DELAY_MS / 1000 });
     }
 }
 
@@ -536,7 +566,7 @@ mod tests {
 
         let mut slide = intro();
         slide.picture = Some("media/a.png".into());
-        slide.video = Some(VideoClip { file: "media/clip.mp4".into(), autoplay: true, muted: false, repeat: false });
+        slide.video = Some(VideoClip::new("media/clip.mp4"));
         assert_eq!(problems_of(vec![slide]), [Problem::PictureAndVideo]);
 
         let with_sound = |edit: fn(&mut SoundClip)| {
@@ -546,16 +576,55 @@ mod tests {
             slide.sound = Some(sound);
             problems_of(vec![slide])
         };
-        assert_eq!(with_sound(|s| s.volume = 101), [Problem::SoundVolume]);
-        assert_eq!(with_sound(|s| s.part = Span { from_ms: 500, to_ms: Some(500) }), [Problem::SoundPartEmpty]);
+        let audio = MediaKind::Audio;
+        assert_eq!(with_sound(|s| s.volume = 101), [Problem::Volume { media: audio }]);
+        assert_eq!(with_sound(|s| s.part = Span { from_ms: 500, to_ms: Some(500) }), [Problem::PartEmpty { media: audio }]);
         let empty_replay = |s: &mut SoundClip| s.replay = Some(Replay { part: Span { from_ms: 9_000, to_ms: Some(1_000) }, delay_ms: 0 });
-        assert_eq!(with_sound(empty_replay), [Problem::SoundPartEmpty]);
+        assert_eq!(with_sound(empty_replay), [Problem::PartEmpty { media: audio }]);
+        let late_replay = |s: &mut SoundClip| s.replay = Some(Replay { part: Span::default(), delay_ms: MAX_REPLAY_DELAY_MS + 1 });
+        assert_eq!(with_sound(late_replay), [Problem::ReplayDelayTooLong { max: MAX_REPLAY_DELAY_MS / 1000 }]);
         let gain = Problem::SoundGainOutOfRange { min: MIN_GAIN_DB, max: MAX_GAIN_DB };
         assert_eq!(with_sound(|s| s.gain_db = MAX_GAIN_DB as f32 + 0.1), std::slice::from_ref(&gain));
         assert_eq!(with_sound(|s| s.gain_db = MIN_GAIN_DB as f32 - 0.1), std::slice::from_ref(&gain));
         // The limits themselves, and a part that runs to the end of the file, are fine.
         assert_eq!(with_sound(|s| (s.volume, s.gain_db) = (100, MAX_GAIN_DB as f32)), []);
         assert_eq!(with_sound(|s| (s.gain_db, s.part) = (MIN_GAIN_DB as f32, Span { from_ms: 60_000, to_ms: None })), []);
+
+        let with_video = |edit: fn(&mut VideoClip)| {
+            let mut slide = intro();
+            let mut video = VideoClip::new("media/clip.mp4");
+            edit(&mut video);
+            slide.video = Some(video);
+            problems_of(vec![slide])
+        };
+        let video = MediaKind::Video;
+        assert_eq!(with_video(|v| v.volume = 101), [Problem::Volume { media: video }]);
+        assert_eq!(with_video(|v| v.part = Span { from_ms: 9_000, to_ms: Some(3_000) }), [Problem::PartEmpty { media: video }]);
+        let speed = Problem::VideoSpeedOutOfRange { min: MIN_VIDEO_SPEED, max: MAX_VIDEO_SPEED };
+        assert_eq!(with_video(|v| v.speed = MIN_VIDEO_SPEED - 1), std::slice::from_ref(&speed));
+        assert_eq!(with_video(|v| v.speed = MAX_VIDEO_SPEED + 1), std::slice::from_ref(&speed));
+        assert_eq!(with_video(|v| v.intro_pause_ms = MAX_INTRO_PAUSE_MS + 1), [Problem::IntroPauseTooLong { max: MAX_INTRO_PAUSE_MS / 1000 }]);
+        let late_replay = |v: &mut VideoClip| v.replay = Some(Replay { part: Span::default(), delay_ms: MAX_REPLAY_DELAY_MS + 1 });
+        assert_eq!(with_video(late_replay), [Problem::ReplayDelayTooLong { max: MAX_REPLAY_DELAY_MS / 1000 }]);
+        // The limits themselves are fine.
+        let at_limits = |v: &mut VideoClip| (v.volume, v.speed, v.intro_pause_ms) = (100, MAX_VIDEO_SPEED, MAX_INTRO_PAUSE_MS);
+        assert_eq!(with_video(at_limits), []);
+        assert_eq!(with_video(|v| v.speed = MIN_VIDEO_SPEED), []);
+    }
+
+    #[test]
+    fn a_video_reads_with_the_options_it_had_before_they_were_added() {
+        let old: VideoClip = serde_json::from_str(r#"{"file": "media/clip.mp4", "autoplay": false, "muted": true, "repeat": true}"#).unwrap();
+        let expected = VideoClip { autoplay: false, muted: true, repeat: true, ..VideoClip::new("media/clip.mp4") };
+        assert_eq!(old, expected);
+        assert_eq!((old.intro_pause_ms, old.volume, old.speed, old.part, old.effect, old.replay), (0, 100, 100, Span::default(), None, None));
+        let json = r#"{"file": "media/clip.mp4", "introPauseMs": 2500, "volume": 40, "speed": 50, "part": {"fromMs": 5000, "toMs": 20000},
+                       "effect": "mosaic", "replay": {"part": {"fromMs": 15000}, "delayMs": 500}}"#;
+        let full: VideoClip = serde_json::from_str(json).unwrap();
+        assert_eq!((full.intro_pause_ms, full.volume, full.speed, full.effect), (2_500, 40, 50, Some(crate::media::VideoEffect::Mosaic)));
+        assert_eq!(full.part, Span { from_ms: 5_000, to_ms: Some(20_000) });
+        assert_eq!(full.replay, Some(Replay { part: Span { from_ms: 15_000, to_ms: None }, delay_ms: 500 }));
+        assert_eq!(serde_json::from_str::<VideoClip>(&serde_json::to_string(&full).unwrap()).unwrap(), full);
     }
 
     /// A sound with the options a quiz file gets when it names only the file.

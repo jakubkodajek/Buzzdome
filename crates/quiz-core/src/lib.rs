@@ -12,8 +12,8 @@ pub use game::{
     MAX_NAME_CHARS, MAX_TEAMS, PRESS_GRACE_MS,
 };
 pub use media::{
-    is_safe_reference, portable_name, portable_reference, Background, MediaIssue, MediaKind, Replay, SoundClip, SoundStart, Span, VideoClip,
-    MAX_GAIN_DB, MEDIA_PREFIX, MIN_GAIN_DB,
+    is_safe_reference, portable_name, portable_reference, Background, MediaIssue, MediaKind, Playback, Replay, SoundClip, SoundStart, Span,
+    VideoClip, VideoEffect, MAX_GAIN_DB, MAX_INTRO_PAUSE_MS, MAX_REPLAY_DELAY_MS, MAX_VIDEO_SPEED, MEDIA_PREFIX, MIN_GAIN_DB, MIN_VIDEO_SPEED,
 };
 pub use model::{
     AnswerMode, Problem, Question, Quiz, QuizJsonError, Slide, SlideContent, ValidationError, DEFAULT_POINTS,
@@ -43,6 +43,10 @@ mod ui_constants {
             ("FINAL_LAST_STEP", crate::game::FINAL_LAST_STEP.to_string()),
             ("MIN_GAIN_DB", crate::MIN_GAIN_DB.to_string()),
             ("MAX_GAIN_DB", crate::MAX_GAIN_DB.to_string()),
+            ("MIN_VIDEO_SPEED", crate::MIN_VIDEO_SPEED.to_string()),
+            ("MAX_VIDEO_SPEED", crate::MAX_VIDEO_SPEED.to_string()),
+            ("MAX_INTRO_PAUSE_MS", crate::MAX_INTRO_PAUSE_MS.to_string()),
+            ("MAX_REPLAY_DELAY_MS", crate::MAX_REPLAY_DELAY_MS.to_string()),
             ("DEFAULT_THEME_ID", serde_json::to_string(crate::DEFAULT_THEME_ID).unwrap()),
             ("MAX_TEAMS", crate::MAX_TEAMS.to_string()),
             ("MAX_NAME_CHARS", crate::MAX_NAME_CHARS.to_string()),

@@ -33,6 +33,8 @@ pub struct GameView {
     pub controls: Controls,
     /// See `Game::on_hold`.
     pub on_hold: bool,
+    /// See `Game::video_plays`.
+    pub video_plays: u32,
 }
 
 /// Enabled players by outcome of an everyone-answers question.
@@ -187,6 +189,7 @@ impl Game {
             leaderboard_visible: self.leaderboard_visible(),
             controls: self.controls(),
             on_hold: self.on_hold(),
+            video_plays: self.video_plays(),
             teams: self
                 .teams()
                 .iter()

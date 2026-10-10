@@ -697,6 +697,7 @@
 .slide-media,
 .question-media,
 .explanation-media {
+  position: relative;
   display: flex;
   justify-content: center;
   min-height: 0;
@@ -726,6 +727,14 @@
 
 .explanation-media {
   flex: 1 1 0;
+}
+
+/* A video's mosaic effect, laid over the video's box in blocks (slide-video.tsx). */
+.video-mosaic {
+  position: absolute;
+  border-radius: 18px;
+  image-rendering: pixelated;
+  pointer-events: none;
 }
 
 /* With a picture the answers give up height to it. */

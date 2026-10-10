@@ -8,4 +8,4 @@ export type Controls = { next: boolean,
 /**
  * `JudgeRight` and `JudgeWrong`.
  */
-judge: boolean, pauseClock: boolean, resumeClock: boolean, closeQuestion: boolean, };
+judge: boolean, pauseClock: boolean, resumeClock: boolean, closeQuestion: boolean, playVideo: boolean, };

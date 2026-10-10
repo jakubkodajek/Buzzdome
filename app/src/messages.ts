@@ -80,13 +80,16 @@ export function errorText(t: Translate, error: unknown): string {
   }
 }
 
-const PROBLEM_KEYS: Record<Problem["code"], StringKey> = {
+/** Problems worded with their own parameters, see `problemText`. */
+type ProblemApart = "media" | "volume" | "partEmpty";
+
+const PROBLEM_KEYS: Record<Exclude<Problem["code"], ProblemApart>, StringKey> = {
   duplicateSlideId: "problemDuplicateSlideId",
-  media: "problemMedia",
   pictureAndVideo: "problemPictureAndVideo",
-  soundVolume: "problemSoundVolume",
-  soundPartEmpty: "problemSoundPartEmpty",
+  replayDelayTooLong: "problemReplayDelayTooLong",
   soundGainOutOfRange: "problemSoundGainOutOfRange",
+  videoSpeedOutOfRange: "problemVideoSpeedOutOfRange",
+  introPauseTooLong: "problemIntroPauseTooLong",
   tooManyAnswers: "problemTooManyAnswers",
   tooFewAnswers: "problemTooFewAnswers",
   noCorrectAnswer: "problemNoCorrectAnswer",
@@ -111,8 +114,17 @@ const MEDIA_KIND_KEYS: Record<MediaKind, StringKey> = {
 
 /** A problem that keeps a quiz from being played. */
 export function problemText(t: Translate, problem: Problem): string {
-  if (problem.code === "media") return t("problemMedia", { file: problem.file, issue: mediaIssueText(t, problem.issue) });
-  return t(PROBLEM_KEYS[problem.code], params(problem));
+  switch (problem.code) {
+    case "media":
+      return t("problemMedia", { file: problem.file, issue: mediaIssueText(t, problem.issue) });
+    // Rules a sound and a video share, said of the one that breaks them.
+    case "volume":
+      return t(problem.media === "audio" ? "problemSoundVolume" : "problemVideoVolume");
+    case "partEmpty":
+      return t(problem.media === "audio" ? "problemSoundPartEmpty" : "problemVideoPartEmpty");
+    default:
+      return t(PROBLEM_KEYS[problem.code], params(problem));
+  }
 }
 
 function mediaIssueText(t: Translate, issue: MediaIssue): string {

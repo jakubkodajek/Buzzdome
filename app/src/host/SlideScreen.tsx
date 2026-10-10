@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { timeLeft } from "../answer-time";
 import { ANSWER_LETTERS } from "../answers";
 import { useApp } from "../app-context";
 import { FINAL_LAST_STEP, MAX_EVERYONE_ANSWERS } from "../bindings/Constants";
@@ -34,7 +35,7 @@ export function SlideScreen(props: { view: GameView; context: SlideContext; cloc
           <h1 className="slide-title" data-element="title">
             {placeholder(view.slide.title, t("titlePlaceholder"))}
           </h1>
-          <SlideMedia slide={view.slide} className="slide-media" mode={mode} />
+          <SlideMedia slide={view.slide} className="slide-media" mode={mode} live={{ view, clock }} />
           {(view.slide.text || mode === "preview") && (
             <p className="slide-text" data-element="text">
               {placeholder(view.slide.text, t("textPlaceholder"))}
@@ -50,7 +51,7 @@ export function SlideScreen(props: { view: GameView; context: SlideContext; cloc
           ) : (
             mode !== "show" && <p className="explained-missing">{t("noQuestionToExplain")}</p>
           )}
-          <SlideMedia slide={view.slide} className="explanation-media" mode={mode} />
+          <SlideMedia slide={view.slide} className="explanation-media" mode={mode} live={{ view, clock }} />
           <p className="explanation-text" data-element="text">
             {placeholder(view.slide.text, t("explanationPlaceholder"))}
           </p>
@@ -147,7 +148,6 @@ function QuestionScreen(props: {
   const step = view.phase.phase === "question" ? view.phase.step : "ready";
   const closed = step === "closed" || step === "revealed";
   const remaining = clock?.remainingMs ?? null;
-  const limit = clock?.limitMs ?? null;
   const enabled = view.players.filter((p) => p.enabled);
   const waiting = enabled.filter((p) => !p.answered);
 
@@ -175,7 +175,7 @@ function QuestionScreen(props: {
       <div className="info-panel">
         <ClockGauge
           seconds={step === "ready" ? question.timeLimitS || null : closed ? 0 : remaining === null ? null : Math.ceil(remaining / 1000)}
-          fraction={closed ? 0 : remaining === null || !limit ? 1 : remaining / limit}
+          fraction={timeLeft(view.phase, clock)}
           label={position ? `${position.n}/${position.total}` : ""}
         />
         <div className="info-middle">{middle}</div>
@@ -194,7 +194,7 @@ function QuestionScreen(props: {
       <h1 className="question-text" data-element="question">
         {placeholder(question.text, t("questionPlaceholder"))}
       </h1>
-      {hasMedia && <SlideMedia slide={question} className="question-media" mode={mode} />}
+      {hasMedia && <SlideMedia slide={question} className="question-media" mode={mode} live={{ view, clock }} />}
 
       {question.answers.length > 0 && (
         <div className={question.answers.length > MAX_EVERYONE_ANSWERS ? "answers answers-6" : "answers"}>

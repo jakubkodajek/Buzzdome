@@ -68,7 +68,7 @@ Ordered answers with exact or partial scoring,studio,could,yes,no,§3.4.1.2
 Answers revealed one by one,studio,could,yes,no,§3.2.5.1 Show answers action
 First-letter answer with an A-Z grid,studio,could,yes,no,§3.4.1.3.3
 Multi-field text answer (e.g. artist and title),studio,could,yes,no,§3.4.1.3.2.1
-Video on a question,studio,could,yes,yes,§3.7.5
+Video on a question,studio,could,yes,yes,§3.7.5; intro pause, Play video from the Director, speed, volume, part, blur or mosaic fading with the clock, replay after the reveal
 Text reveal animation word by word,studio,could,yes,no,§3.14.3
 Categories as reusable slide styles,studio,could,yes,no,§3.3
 Steal points on a wrong buzz,scoring,could,yes,no,§3.2.5.1
