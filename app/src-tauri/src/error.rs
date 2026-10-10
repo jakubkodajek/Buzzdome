@@ -120,8 +120,6 @@ pub enum AppError {
     LearnConflict { buzzer: BuzzerId, button: Button },
 
     // Windows and the operating system.
-    #[error("monitor {index} not found")]
-    NoSuchMonitor { index: usize },
     /// The system gave the app no folder for its data (team names, sessions, the media library).
     #[error("the app has no data folder")]
     NoDataFolder,

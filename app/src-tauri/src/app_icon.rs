@@ -4,6 +4,7 @@
 //! the macOS Dock keep the orange icon the installer gave them.
 
 use crate::app_file::AppFile;
+use crate::app_log;
 use crate::error::CmdResult;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -63,7 +64,7 @@ impl AppIcon {
     pub fn load(path: PathBuf) -> AppIcon {
         let (file, saved) = AppFile::load::<IconFile>(path);
         if let Some(lost) = file.lost() {
-            eprintln!("app icon not read: {} (kept as {:?})", lost.detail, lost.kept_as);
+            app_log::note(&format!("app icon not read: {} (kept as {:?})", lost.detail, lost.kept_as));
         }
         AppIcon { file, color: Mutex::new(saved.color) }
     }
@@ -77,14 +78,14 @@ impl AppIcon {
 pub fn apply(app: &AppHandle, window: &WebviewWindow) {
     match app.state::<AppIcon>().color().image() {
         Ok(image) => set_icon(window, image),
-        Err(e) => eprintln!("app icon not set on {}: {e}", window.label()),
+        Err(e) => app_log::note(&format!("app icon not set on {}: {e}", window.label())),
     }
 }
 
 /// Gives `window` the icon `image`, or logs why it keeps the one it has.
 fn set_icon(window: &WebviewWindow, image: Image<'static>) {
     if let Err(e) = window.set_icon(image) {
-        eprintln!("app icon not set on {}: {e}", window.label());
+        app_log::note(&format!("app icon not set on {}: {e}", window.label()));
     }
 }
 

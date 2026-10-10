@@ -1,8 +1,11 @@
 //! Desktop shell: owns the live game, journals every accepted command before
-//! the windows see it, drives the buzzer lights and the projector window.
+//! the windows see it and drives the buzzer lights. `app_windows` keeps the
+//! Director and projector windows.
 
 mod app_file;
 mod app_icon;
+mod app_log;
+mod app_windows;
 mod editor;
 mod error;
 mod fonts;
@@ -22,17 +25,13 @@ use error::CmdResult;
 pub use error::AppError;
 use hardware::Hardware;
 use quiz_core::{Command, Effect, Game, GameView, Quiz, Stamped};
-use serde::Serialize;
-use ts_rs::TS;
 use session::{Resumed, Session, SessionMeta, SessionSummary};
+use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{mpsc, LazyLock, Mutex, MutexGuard};
-use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder, WindowEvent};
+use tauri::{AppHandle, Emitter, Manager};
 
 const DEMO_QUIZ: &str = include_str!("../../../samples/demo-quiz.json");
-const HOST_LABEL: &str = "host";
-/// The quizmaster's window (`tauri.conf.json`).
-const DIRECTOR_LABEL: &str = "director";
 
 struct Inner {
     game: Option<Game>,
@@ -93,17 +92,35 @@ async fn read_show<T: Send + 'static>(app: AppHandle, read: impl FnOnce(&Inner) 
     off_ui(move || Ok(read(&lock_show(&app)))).await
 }
 
+/// A folder of the app's data, which a roaming profile on Windows takes
+/// along to the user's other computers: settings, sessions, the media library.
 pub(crate) fn app_data(app: &AppHandle, folder: &str) -> CmdResult<PathBuf> {
     Ok(app.path().app_data_dir()?.join(folder))
+}
+
+/// A folder of the app's data for this computer only (Local, not Roaming,
+/// on Windows; elsewhere the same as `app_data`): unpacked quizzes and
+/// editor drafts, which can be large.
+pub(crate) fn app_local_data(app: &AppHandle, folder: &str) -> CmdResult<PathBuf> {
+    Ok(app.path().app_local_data_dir()?.join(folder))
+}
+
+/// `folder` where earlier versions kept it (`app_data`), while it is still
+/// there and that is not where it is kept now (`app_local_data`).
+pub(crate) fn roaming_leftover(app: &AppHandle, folder: &str) -> Option<PathBuf> {
+    let old = app_data(app, folder).ok()?;
+    (old != app_local_data(app, folder).ok()? && old.exists()).then_some(old)
 }
 
 fn sessions_root(app: &AppHandle) -> CmdResult<PathBuf> {
     app_data(app, "sessions")
 }
 
+const QUIZZES_FOLDER: &str = "quizzes";
+
 /// Unpacked quiz files (quiz-file packages).
 fn quizzes_cache(app: &AppHandle) -> CmdResult<PathBuf> {
-    app_data(app, "quizzes")
+    app_local_data(app, QUIZZES_FOLDER)
 }
 
 /// Held while a quiz is unpacked into `quizzes_cache` or old ones are
@@ -197,7 +214,7 @@ fn send_effects(app: &AppHandle, inner: &mut Inner, effects: Vec<Effect>) {
         match effect {
             Effect::Lights { lights } => {
                 if let Err(e) = inner.driver.set_lights(&lights) {
-                    eprintln!("buzzer lights: {e}");
+                    app_log::note(&format!("buzzer lights: {e}"));
                 }
             }
             Effect::Sound { cue } => {
@@ -244,7 +261,13 @@ fn start_show(app: &AppHandle, quiz: Quiz, source_path: Option<String>, media_ro
         let _cache = QUIZZES_CACHE.lock().unwrap();
         let keep: Vec<&Path> = media_root.iter().map(PathBuf::as_path).collect();
         if let Err(e) = quiz_file::prune(&cache, &keep) {
-            eprintln!("cleaning unpacked quizzes: {e}");
+            app_log::note(&format!("cleaning unpacked quizzes: {e}"));
+        }
+        // Where earlier versions unpacked (Windows): their show is not the latest either.
+        if let Some(old) = roaming_leftover(app, QUIZZES_FOLDER) {
+            if let Err(e) = fs::remove_dir_all(&old) {
+                app_log::note(&format!("removing {}: {e}", old.display()));
+            }
         }
     }
     named
@@ -419,104 +442,20 @@ pub(crate) fn press_from_hardware(app: &AppHandle, command: Command, at_ms: u64)
     inner.game.is_some() && matches!(execute_at(app, &mut inner, command, at_ms), Ok(true))
 }
 
-#[derive(Serialize, TS)]
-#[ts(export)]
-#[serde(rename_all = "camelCase")]
-struct MonitorInfo {
-    index: usize,
-    /// None when the system gives no name; the UI numbers the monitor then.
-    name: Option<String>,
-    width: u32,
-    height: u32,
-}
-
-// The window commands are async: Tauri runs them off the main thread, which
-// creating a window from a synchronous command would deadlock on Windows
-// (WebView2; see the `WebviewWindowBuilder::new` docs).
-
-#[tauri::command]
-async fn list_monitors(app: AppHandle) -> CmdResult<Vec<MonitorInfo>> {
-    let monitors = app.available_monitors()?;
-    Ok(monitors
-        .iter()
-        .enumerate()
-        .map(|(index, m)| MonitorInfo {
-            index,
-            name: m.name().cloned(),
-            width: m.size().width,
-            height: m.size().height,
-        })
-        .collect())
-}
-
-/// Opens (or moves) the projector window, full screen on the chosen monitor.
-#[tauri::command]
-async fn open_host_window(app: AppHandle, monitor: Option<usize>, fullscreen: bool) -> CmdResult<()> {
-    let window = match app.get_webview_window(HOST_LABEL) {
-        Some(window) => window,
-        None => {
-            let window = WebviewWindowBuilder::new(&app, HOST_LABEL, WebviewUrl::App("index.html".into()))
-                .title("Buzzdome")
-                .inner_size(1280.0, 720.0)
-                .build()?;
-            app_icon::apply(&app, &window);
-            window
-        }
-    };
-    window.set_fullscreen(false)?;
-    if let Some(index) = monitor {
-        let monitors = window.available_monitors()?;
-        let target = monitors.get(index).ok_or(AppError::NoSuchMonitor { index })?;
-        window.set_position(*target.position())?;
-    }
-    window.set_fullscreen(fullscreen)?;
-    window.set_focus()?;
-    let _ = app.emit("host-window", true);
-    Ok(())
-}
-
-#[tauri::command]
-fn host_window_open(app: AppHandle) -> bool {
-    app.get_webview_window(HOST_LABEL).is_some()
-}
-
-#[tauri::command]
-async fn close_host_window(app: AppHandle) -> CmdResult<()> {
-    match app.get_webview_window(HOST_LABEL) {
-        Some(window) => Ok(window.close()?),
-        None => Ok(()),
-    }
-}
-
-/// Passes on a problem the projector met, such as a background that does
-/// not load, worded for the Director to show: the projector has nowhere to.
-#[tauri::command]
-fn report_host_problem(app: AppHandle, message: String) {
-    let _ = app.emit("host-problem", message);
-}
-
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         // First, so a second start ends before it touches the show: it brings
         // the running app's Director forward instead (Z2).
-        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-            if let Some(director) = app.get_webview_window(DIRECTOR_LABEL) {
-                let _ = director.unminimize();
-                let _ = director.show();
-                let _ = director.set_focus();
-            }
-        }))
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| app_windows::show_director(app)))
         .plugin(tauri_plugin_dialog::init())
-        // However the projector closes (also from its title bar), the Director hears of it.
-        .on_window_event(|window, event| {
-            if window.label() == HOST_LABEL && matches!(event, WindowEvent::Destroyed) {
-                let _ = window.app_handle().emit("host-window", false);
-            }
-        })
+        .plugin(app_windows::navigation_guard())
+        .on_window_event(app_windows::on_window_event)
         .manage(editor::EditorLock::default())
         .manage(AppState(Mutex::new(Inner::new())))
         .setup(|app| {
+            app_log::start(app.path().app_log_dir()?);
+            editor::move_roaming_drafts(app.handle());
             // One queue for the receiver's events and the quizmaster's commands (A7).
             let (queue, events) = mpsc::channel();
             let hardware = Hardware::start(app.handle(), queue.clone(), *SHOW_CLOCK);
@@ -555,11 +494,12 @@ pub fn run() {
             resume_last_session,
             end_show,
             dispatch,
-            list_monitors,
-            open_host_window,
-            close_host_window,
-            host_window_open,
-            report_host_problem,
+            app_windows::list_monitors,
+            app_windows::open_host_window,
+            app_windows::close_host_window,
+            app_windows::host_window_open,
+            app_windows::report_host_problem,
+            app_windows::quit_app,
             themes::list_themes,
             fonts::installed_fonts,
             teams::prepared_teams,
@@ -599,8 +539,9 @@ pub fn run() {
             hardware::receiver_export_log,
             hardware::receiver_udev_rule,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(app_windows::on_run_event);
 }
 
 #[cfg(test)]

@@ -7,6 +7,7 @@ import { clearMocks, mockIPC, mockWindows } from "@tauri-apps/api/mocks";
 import React from "react";
 import ReactDOM from "react-dom/client";
 import demoQuiz from "../../../samples/demo-quiz.json";
+import { installBrowserGuard } from "../browser-guard";
 import { setBodyText } from "../editor/slides";
 import { answerShares, NO_CONTROLS } from "../host/preview";
 import { MAX_BOARD_COLUMNS, MAX_BOARD_ROWS, MAX_PLAYER_VOLUME } from "../bindings/Constants";
@@ -504,9 +505,12 @@ mockIPC(
         return sceneQuiz;
       case "list_monitors":
         return [
-          { index: 0, name: "Built-in Display", width: 2560, height: 1600 },
-          { index: 1, name: "Projector", width: 1920, height: 1080 },
+          { id: "Built-in Display@0,0", name: "Built-in Display", width: 2560, height: 1600, director: true },
+          { id: "Projector@2560,0", name: "Projector", width: 1920, height: 1080, director: false },
         ];
+      case "quit_app":
+        called.push({ cmd });
+        return null;
       case "host_window_open":
         return false;
       case "report_host_problem":
@@ -585,6 +589,9 @@ mockIPC(
 
 // The real app loads media through Tauri's asset protocol; here Vite serves them.
 (window as unknown as { __TAURI_INTERNALS__: { convertFileSrc: (path: string) => string } }).__TAURI_INTERNALS__.convertFileSrc = (path) => path;
+
+// As `main.tsx` does, so the preview acts as the app does.
+installBrowserGuard(window);
 
 const { default: App } = await import("../App");
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(

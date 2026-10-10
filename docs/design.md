@@ -17,6 +17,8 @@ How the app is built, with the buzzer link in most detail. Requirements are in
 │  ├── lib.rs       AppState { game, session, teams, .. } │
 │  │                execute_at(): apply → journal → emit  │
 │  ├── session.rs   append-only journal per show          │
+│  ├── app_windows.rs  the two windows, closing, pages    │
+│  ├── app_log.rs   log file, panics                      │
 │  ├── editor.rs    the editor's crash-safe draft         │
 │  ├── teams.rs     team names kept between shows         │
 │  ├── media_player.rs  media library, sound board        │
@@ -96,6 +98,7 @@ two windows cannot disagree with each other or with the score.
 | `receiver-status`, `receiver-raw`, `receiver-press`, `receiver-learn` | see `hardware.rs` | receiver setup and diagnostics |
 | `host-window` | bool | the projector window opened or closed (also from its title bar) |
 | `host-problem` | string | the projector met a problem, worded for the Director to show |
+| `close-requested` | none | the quizmaster closed the Director or quit during a show (the Director asks, then `quit_app`) |
 | `show-not-saved` | `AppError` or null | the running show's journal refused a write, or works again |
 | `teams-changed` | string list | the prepared team names changed, or a show started or ended |
 | `media-library`, `sound-board` | `MediaLibrary`, `SoundBoard` | the media player's library or pads changed |
@@ -121,6 +124,27 @@ two windows cannot disagree with each other or with the score.
   say), the change is not made, and the Director shows why in a banner until
   a write works again (`show-not-saved`, `show_not_saved`). A due command
   that failed is tried again a second later.
+- **Windows.** `app_windows.rs` keeps both windows through a show. Closing
+  the Director (or quitting, Cmd+Q) during a show asks first
+  (`close-requested`), and the app ends with the Director, so a full-screen
+  projector is never left alone; starting the app again brings the Director
+  forward, or builds it again if it is gone. The projector opens on the
+  monitor chosen in Settings while it is connected, else on one the
+  Director is not on, and full screen over the Director only when chosen
+  there. The monitors are listed when it opens, so one plugged in late
+  counts; a monitor is known by its name and position (`MonitorInfo.id`).
+  M and Esc close the projector from itself.
+- **Pages.** The windows stay on the app's own pages: a navigation guard
+  (`app_windows::navigation_guard`) refuses every other URL, and
+  `browser-guard.ts` takes the web view's own keys (reload, back, find,
+  print), its context menu outside text fields, and a drop that no drop
+  zone takes. A part that fails to render shows the error in its place
+  (`ErrorBoundary`): a Director tab offers to try again, and a projector
+  slide leaves the stage as it is and tells the Director.
+- **Log.** `app_log.rs` writes `buzzdome.log` in the app's log folder
+  (section 3): the start, a panic with its backtrace, and problems that
+  have no window to show them. Each line carries the show clock's time, as
+  the journal does. A full log is moved to `buzzdome.old.log`.
 - **React side.** `app-context.tsx` gives each window its language, `t` and
   error reporting (`useReport`, `useRun`, `useDispatch`). `hooks.ts` wraps events and
   loads (`useBackendEvent`, `useGameView`, `useClock`, `useQuiz`,
@@ -181,7 +205,7 @@ two windows cannot disagree with each other or with the score.
 
 Format: [`quiz-format.md`](quiz-format.md). `crates/quiz-file` opens a `.quiz`
 file (or a plain `quiz.json` with `media/` next to it) by unpacking it into
-`<app data>/quizzes/<hash>/`, where the hash covers every file name and byte.
+`<local data>/quizzes/<hash>/` (section 3), where the hash covers every file name and byte.
 Unpacking writes into a temporary folder, syncs each file, checks the quiz
 (`Quiz::validate` plus "every media file is there") and only then renames the
 folder into place, so a half-unpacked quiz is never used. Opening the same
@@ -244,7 +268,7 @@ canvas with notes under it, the properties panel, and a status bar with a
 table view toggle. It edits a quiz; it never touches a running show.
 
 - **Draft.** `editor.rs` keeps the quiz being edited unpacked in
-  `<app data>/editor/draft-*/` and `draft.json` points at the current
+  `<local data>/editor/draft-*/` and `draft.json` points at the current
   folder, so a crash or a closed window loses nothing. A new or opened quiz
   gets its own folder and the pointer switches only once the folder is
   complete. Saving packs the draft into a `.quiz` file with `quiz-file`.
@@ -809,7 +833,9 @@ conflict detection. None of this proves the real receiver's format: see
 | HID access | no driver, no admin rights | may ask for Input Monitoring permission | udev rule (shown in the app) for `hidraw` access |
 | Package | NSIS `.exe` | universal `.dmg`, ad-hoc signed | `.deb`, `.AppImage` |
 | First start of an unsigned build | SmartScreen: "More info", "Run anyway" | Privacy & Security: "Open Anyway" | none |
-| App data (journal, `receiver.json`) | `%APPDATA%\cz.kodajek.quizshow` | `~/Library/Application Support/cz.kodajek.quizshow` | `~/.local/share/cz.kodajek.quizshow` |
+| App data (journal, `receiver.json`, settings) | `%APPDATA%\cz.kodajek.quizshow` | `~/Library/Application Support/cz.kodajek.quizshow` | `~/.local/share/cz.kodajek.quizshow` |
+| This computer's data (unpacked quizzes, editor drafts) | `%LOCALAPPDATA%\cz.kodajek.quizshow` | as app data | as app data |
+| Log (`buzzdome.log`) | `%LOCALAPPDATA%\cz.kodajek.quizshow\logs` | `~/Library/Logs/cz.kodajek.quizshow` | `~/.local/share/cz.kodajek.quizshow/logs` |
 
 ## 4. Build and release
 

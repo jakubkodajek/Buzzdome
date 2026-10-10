@@ -14,7 +14,7 @@
 
 use crate::app_file::AppFile;
 use crate::error::{AppError, CmdResult};
-use crate::now_ms;
+use crate::{app_log, now_ms};
 use quiz_core::{
     is_safe_reference, BoardChange, MediaKind, MediaPlayer, NowPlaying, PlayerCommand, SoundBoard, MAX_DROPPED_MB, MAX_PLAYER_VOLUME, MEDIA_PREFIX,
 };
@@ -104,7 +104,7 @@ impl MediaState {
         let (player_file, settings) = AppFile::load::<PlayerSettings>(root.join(PLAYER_FILE));
         for (what, file) in [("sound board", &board_file), ("player volume", &player_file)] {
             if let Some(lost) = file.lost() {
-                eprintln!("{what} not read: {} (kept as {:?})", lost.detail, lost.kept_as);
+                app_log::note(&format!("{what} not read: {} (kept as {:?})", lost.detail, lost.kept_as));
             }
         }
         let board = board.normalized(&files);

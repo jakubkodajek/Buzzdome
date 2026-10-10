@@ -52,11 +52,14 @@ export const api = {
   endShow: () => invoke<void>("end_show"),
   dispatch: (command: Command) => invoke<void>("dispatch", { command }),
   listMonitors: () => invoke<MonitorInfo[]>("list_monitors"),
-  openHostWindow: (monitor: number | null, fullscreen: boolean) =>
+  /** Opens the projector on the monitor with this `MonitorInfo.id`, or on one the Director is not on (null). */
+  openHostWindow: (monitor: string | null, fullscreen: boolean) =>
     invoke<void>("open_host_window", { monitor, fullscreen }),
   closeHostWindow: () => invoke<void>("close_host_window"),
   hostWindowOpen: () => invoke<boolean>("host_window_open"),
   reportHostProblem: (message: string) => invoke<void>("report_host_problem", { message }),
+  /** Ends the app; the running show stays saved for resuming. */
+  quitApp: () => invoke<void>("quit_app"),
   /** Every installed theme with all its values, the default theme among them. */
   listThemes: () => invoke<Theme[]>("list_themes"),
   /** The family names of the installed fonts, sorted; empty when they cannot be read. */
@@ -139,6 +142,8 @@ export interface BackendEvents {
   "host-window": boolean;
   /** A problem the projector met, worded for the Director to show. */
   "host-problem": string;
+  /** The Director was asked to close during a show: the quizmaster confirms it (`quitApp`). */
+  "close-requested": null;
   /** The prepared team names changed, or a show started or ended. */
   "teams-changed": string[];
   /** Files came into the media library or left it. */

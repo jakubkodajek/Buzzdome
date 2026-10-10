@@ -3,7 +3,7 @@
 
 import { useEffect, type ReactNode } from "react";
 import { useLatest } from "../hooks";
-import { isFieldTarget } from "../keyboard";
+import { isFieldTarget, keyCombo } from "../keyboard";
 
 export interface Action {
   label: string;
@@ -67,19 +67,6 @@ export type ActionId =
   | "testRunHere";
 
 export type Actions = Record<ActionId, Action>;
-
-/**
- * A key press written as in `Action.keys`: modifiers in the order Ctrl, Alt,
- * Shift, then the key. Ctrl stands for Cmd on macOS too.
- */
-export function keyCombo(event: Pick<KeyboardEvent, "key" | "ctrlKey" | "metaKey" | "altKey" | "shiftKey">): string {
-  const parts: string[] = [];
-  if (event.ctrlKey || event.metaKey) parts.push("Ctrl");
-  if (event.altKey) parts.push("Alt");
-  if (event.shiftKey) parts.push("Shift");
-  parts.push(event.key.length === 1 ? event.key.toUpperCase() : event.key);
-  return parts.join("+");
-}
 
 const KEY_SYMBOLS: Record<string, string> = { ArrowUp: "↑", ArrowDown: "↓", ArrowLeft: "←", ArrowRight: "→" };
 
