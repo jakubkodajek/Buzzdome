@@ -21,6 +21,7 @@ env:
   # WebKitWebDriver, a virtual display, and xdotool for the system's file picker.
   E2E_DEPS: webkit2gtk-driver xvfb xdotool
   TAURI_DRIVER_VERSION: "2.1.0"
+  MSEDGEDRIVER_TOOL_REV: 8c4b34f51b45f5cf08013366d703de464ab871d1
 
 jobs:
   linux:
@@ -105,6 +106,21 @@ jobs:
       - name: Install tauri-driver
         run: cargo install tauri-driver --locked --version "$env:TAURI_DRIVER_VERSION"
 
+      # The runner's own msedgedriver matches its Edge, not the WebView2
+      # runtime the app runs in, and with it no session started ("DevToolsActivePort
+      # file doesn't exist"). This tool (the one Tauri's
+      # WebDriver CI guide uses) fetches the driver of the installed WebView2.
+      - name: Install the msedgedriver that matches WebView2
+        run: |
+          cargo install --locked --git https://github.com/chippers/msedgedriver-tool --rev "$env:MSEDGEDRIVER_TOOL_REV"
+          $dir = New-Item -ItemType Directory -Force (Join-Path $env:RUNNER_TEMP "msedgedriver")
+          Push-Location $dir
+          msedgedriver-tool
+          Pop-Location
+          Write-Output "runner's driver: $(& (Join-Path $env:EDGEWEBDRIVER 'msedgedriver.exe') --version)"
+          Write-Output "WebView2's driver: $(& (Join-Path $dir 'msedgedriver.exe') --version)"
+          "NATIVE_DRIVER=$(Join-Path $dir 'msedgedriver.exe')" >> $env:GITHUB_ENV
+
       - name: Install UI dependencies
         working-directory: app
         run: npm ci
@@ -114,14 +130,12 @@ jobs:
         run: npm run tauri build -- --debug --no-bundle
 
       # The tests use this machine's real app data folders, which is why they
-      # run only on CI (app/e2e/harness.ts). The runner's msedgedriver
-      # matches its Edge, whose engine WebView2 shares.
+      # run only on CI (app/e2e/harness.ts).
       - name: Run the E2E tests
         working-directory: app
         env:
           RUNS: ${{ inputs.runs }}
         run: |
-          $env:NATIVE_DRIVER = Join-Path $env:EDGEWEBDRIVER "msedgedriver.exe"
           for ($run = 1; $run -le [int]$env:RUNS; $run++) {
             Write-Output "::group::run $run of $env:RUNS"
             npm run e2e
