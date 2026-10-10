@@ -25,6 +25,8 @@
     "allow-report-host-problem",
     "allow-quit-app",
     "allow-close-declined",
+    "allow-log-problem",
+    "allow-set-menu-words",
     "allow-list-themes",
     "allow-installed-fonts",
     "allow-prepared-teams",

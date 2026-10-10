@@ -17,6 +17,7 @@ import type {
   MediaKind,
   MediaLibrary,
   MediaNow,
+  MenuWords,
   MonitorInfo,
   Picker,
   PlayerCommand,
@@ -66,6 +67,10 @@ export const api = {
   quitApp: () => invoke<void>("quit_app"),
   /** The quizmaster chose not to close the app during a show: the next close asks again. */
   closeDeclined: () => invoke<void>("close_declined"),
+  /** Notes in the app's log a problem this window has nowhere to show. */
+  logProblem: (message: string) => invoke<void>("log_problem", { message }),
+  /** Words the macOS app menu in the UI's language; other systems have none. */
+  setMenuWords: (words: MenuWords) => invoke<void>("set_menu_words", { words }),
   /** Every installed theme with all its values, the default theme among them. */
   listThemes: () => invoke<Theme[]>("list_themes"),
   /** The family names of the installed fonts, sorted; empty when they cannot be read. */

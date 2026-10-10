@@ -7,7 +7,7 @@
 
 use crate::error::CmdResult;
 use crate::{app_icon, app_log, AppState};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::sync::{Mutex, TryLockError};
 use std::time::{Duration, Instant};
 use tauri::menu::{Menu, MenuEvent};
@@ -25,6 +25,10 @@ const CLOSE_REQUESTED_EVENT: &str = "close-requested";
 /// whose page failed or hangs never gives one, so a request made after that
 /// closes the app without asking (G3).
 const CLOSE_ANSWER_WAIT: Duration = Duration::from_secs(10);
+/// How long an unanswered close request lasts. A later close asks again, so
+/// a request whose answer was lost (its dialog failed to open) does not let
+/// an accidental close go through without asking an hour later.
+const CLOSE_REQUEST_LASTS: Duration = Duration::from_secs(60);
 /// The app menu's Quit on macOS, which asks during a show (G21).
 const QUIT_MENU_ID: &str = "quit";
 
@@ -134,9 +138,18 @@ pub async fn close_host_window(app: AppHandle) -> CmdResult<()> {
 
 /// Passes on a problem the projector met, such as a background that does
 /// not load, worded for the Director to show: the projector has nowhere to.
+/// It goes in the log too, to look into after the show.
 #[tauri::command]
 pub fn report_host_problem(app: AppHandle, message: String) {
+    app_log::note(&format!("the projector: {message}"));
     let _ = app.emit("host-problem", message);
+}
+
+/// Notes in the log a problem a window has nowhere to show, such as the
+/// Director's close dialog not opening once its screen failed.
+#[tauri::command]
+pub fn log_problem(window: Window, message: String) {
+    app_log::note(&format!("the {} window: {message}", window.label()));
 }
 
 /// Ends the app, once the quizmaster confirmed it during a show. Every
@@ -156,6 +169,12 @@ pub fn close_declined(request: State<CloseRequest>) {
     *request.0.lock().unwrap() = None;
 }
 
+/// A show began or ended: a close request left unanswered was about the
+/// one before, so the next close asks again.
+pub fn forget_close_request(app: &AppHandle) {
+    *app.state::<CloseRequest>().0.lock().unwrap() = None;
+}
+
 /// What a request to close the app during a show does, given when the
 /// Director was `asked` and has not answered yet.
 #[derive(Debug, PartialEq)]
@@ -164,15 +183,15 @@ enum CloseAnswer {
     Ask,
     /// The Director is asking already: no second dialog.
     Wait,
-    /// The Director did not answer in time: close.
+    /// The Director did not answer a recent request in time: close.
     Close,
 }
 
 fn close_answer(asked: &mut Option<Instant>, now: Instant) -> CloseAnswer {
-    match *asked {
-        Some(at) if now.saturating_duration_since(at) >= CLOSE_ANSWER_WAIT => CloseAnswer::Close,
-        Some(_) => CloseAnswer::Wait,
-        None => {
+    match asked.map(|at| now.saturating_duration_since(at)) {
+        Some(waited) if waited < CLOSE_ANSWER_WAIT => CloseAnswer::Wait,
+        Some(waited) if waited < CLOSE_REQUEST_LASTS => CloseAnswer::Close,
+        _ => {
             *asked = Some(now);
             CloseAnswer::Ask
         }
@@ -181,7 +200,7 @@ fn close_answer(asked: &mut Option<Instant>, now: Instant) -> CloseAnswer {
 
 /// Whether the app may close now. During a show it waits for the Director
 /// to confirm it (`close-requested`, then `quit_app` or `close_declined`),
-/// asking once, unless an earlier request went unanswered (`close_answer`).
+/// asking once, unless a recent request went unanswered (`close_answer`).
 fn may_close(app: &AppHandle) -> bool {
     if !show_may_run(app) || app.get_webview_window(DIRECTOR_LABEL).is_none() {
         return true;
@@ -231,22 +250,54 @@ pub fn on_window_event(window: &Window, event: &WindowEvent) {
     }
 }
 
+/// The words of the macOS app menu that the system does not word itself,
+/// in the UI's language (`set_menu_words`).
+#[derive(Debug, Clone, Deserialize, TS)]
+#[ts(export)]
+#[serde(rename_all = "camelCase")]
+pub struct MenuWords {
+    /// The app's Quit, with the app's name.
+    pub quit: String,
+    pub file: String,
+    pub edit: String,
+    pub view: String,
+    pub window: String,
+}
+
 /// The macOS app menu, as Tauri's default one but with a Quit of the app's
 /// own: the system's Quit ends the app at once, with no event to wait on,
 /// so Cmd+Q would end a show without asking (G21). Quit from the Dock still
-/// does; the show stays saved and can be resumed.
+/// does; the show stays saved and can be resumed. Worded in English until
+/// the Director words it.
 #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 pub fn app_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
+    let name = &app.package_info().name;
+    let words = MenuWords { quit: format!("Quit {name}"), file: "File".into(), edit: "Edit".into(), view: "View".into(), window: "Window".into() };
+    worded_menu(app, &words)
+}
+
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+fn worded_menu<R: Runtime>(app: &AppHandle<R>, words: &MenuWords) -> tauri::Result<Menu<R>> {
     use tauri::menu::{AboutMetadata, MenuBuilder, MenuItemBuilder, SubmenuBuilder};
     let name = &app.package_info().name;
     let about = AboutMetadata { name: Some(name.clone()), version: Some(app.package_info().version.to_string()), ..Default::default() };
-    let quit = MenuItemBuilder::with_id(QUIT_MENU_ID, format!("Quit {name}")).accelerator("CmdOrCtrl+Q").build(app)?;
+    let quit = MenuItemBuilder::with_id(QUIT_MENU_ID, &words.quit).accelerator("CmdOrCtrl+Q").build(app)?;
     let app_menu = SubmenuBuilder::new(app, name).about(Some(about)).separator().services().separator().hide().hide_others().separator().item(&quit).build()?;
-    let file = SubmenuBuilder::new(app, "File").close_window().build()?;
-    let edit = SubmenuBuilder::new(app, "Edit").undo().redo().separator().cut().copy().paste().select_all().build()?;
-    let view = SubmenuBuilder::new(app, "View").fullscreen().build()?;
-    let window = SubmenuBuilder::new(app, "Window").minimize().maximize().separator().close_window().build()?;
+    let file = SubmenuBuilder::new(app, &words.file).close_window().build()?;
+    let edit = SubmenuBuilder::new(app, &words.edit).undo().redo().separator().cut().copy().paste().select_all().build()?;
+    let view = SubmenuBuilder::new(app, &words.view).fullscreen().build()?;
+    let window = SubmenuBuilder::new(app, &words.window).minimize().maximize().separator().close_window().build()?;
     MenuBuilder::new(app).items(&[&app_menu, &file, &edit, &view, &window]).build()
+}
+
+/// Words the macOS app menu in the UI's language; other systems have no app menu.
+#[tauri::command]
+pub fn set_menu_words(app: AppHandle, words: MenuWords) -> CmdResult<()> {
+    #[cfg(target_os = "macos")]
+    app.set_menu(worded_menu(&app, &words)?)?;
+    #[cfg(not(target_os = "macos"))]
+    let _ = (app, words);
+    Ok(())
 }
 
 /// The app menu's Quit closes the app as the Director's close button does.
@@ -365,9 +416,14 @@ mod tests {
         assert_eq!(close_answer(&mut asked, start + Duration::from_secs(3)), CloseAnswer::Wait);
         // A Director that never answers does not keep the app open.
         assert_eq!(close_answer(&mut asked, start + CLOSE_ANSWER_WAIT), CloseAnswer::Close);
-        // Once the quizmaster declined (`close_declined`), the next close asks again.
+        // A request whose answer was lost does not let a much later close through.
+        let later = start + CLOSE_REQUEST_LASTS;
+        assert_eq!(close_answer(&mut asked, later), CloseAnswer::Ask);
+        assert_eq!(asked, Some(later));
+        assert_eq!(close_answer(&mut asked, later + Duration::from_secs(3)), CloseAnswer::Wait);
+        // Once the quizmaster declined (`close_declined`), or a show began or ended, the next close asks again.
         asked = None;
-        assert_eq!(close_answer(&mut asked, start + Duration::from_secs(60)), CloseAnswer::Ask);
+        assert_eq!(close_answer(&mut asked, later + Duration::from_secs(5)), CloseAnswer::Ask);
     }
 
     #[test]

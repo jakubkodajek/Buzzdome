@@ -6,11 +6,18 @@ import { Director } from "./director/Director";
 import { ErrorBoundary, RenderFailed } from "./error-boundary";
 import { useBackendEvent } from "./hooks";
 import { HostScreen, reportToDirector } from "./host/HostScreen";
-import { translator, useLang, type Translate } from "./i18n";
-import { KEYS } from "./keyboard";
+import { translator, useLang, type Lang, type Translate } from "./i18n";
+import { useProjectorCloseKeys } from "./keyboard";
 
 // Both windows load the same bundle; the window label picks the screen.
 const isHost = getCurrentWindow().label === "host";
+
+/** A problem met above the window's screen, which has nowhere to show it: it goes in the app's log. */
+const logProblem = (error: unknown) => {
+  console.error(error);
+  const message = error instanceof Error ? error.message : typeof error === "string" ? error : JSON.stringify(error);
+  api.logProblem(message).catch(() => undefined);
+};
 
 /**
  * The window's screen. Should it fail to render, the projector goes black
@@ -26,7 +33,7 @@ export default function App() {
       </ErrorBoundary>
     );
   }
-  return <DirectorWindow t={t} />;
+  return <DirectorWindow lang={lang} t={t} />;
 }
 
 /**
@@ -34,19 +41,25 @@ export default function App() {
  * failed to render (G3): the close request is answered here, above the
  * screen's boundary, and the fallback can close the app itself.
  */
-function DirectorWindow({ t }: { t: Translate }) {
+function DirectorWindow({ lang, t }: { lang: Lang; t: Translate }) {
   // Closing this window during a show asks first; the app ends with it (A10).
   useBackendEvent("close-requested", () => {
-    // A dialog that does not open leaves the request unanswered, so the next close goes through.
+    // A dialog that does not open leaves the request unanswered, so a close in the next minute goes through.
     confirmAction(t, t("quitDuringShow"))
       .then((quit) => (quit ? api.quitApp() : api.closeDeclined()))
-      .catch((error: unknown) => console.error(error));
+      .catch(logProblem);
   });
+  // The macOS app menu in the UI's language.
+  useEffect(() => {
+    const words = translator(lang);
+    const menu = { quit: words("menuQuit", { name: words("appTitle") }), file: words("menuFile"), edit: words("menuEdit"), view: words("menuView"), window: words("menuWindow") };
+    api.setMenuWords(menu).catch(logProblem);
+  }, [lang]);
   return (
     <ErrorBoundary
       fallback={(message, retry) => (
         <RenderFailed t={t} text={t("windowFailed", { message })} retry={retry}>
-          <button onClick={() => void api.quitApp()}>{t("closeAppKeepShow")}</button>
+          <button onClick={() => api.quitApp().catch(logProblem)}>{t("closeAppKeepShow")}</button>
         </RenderFailed>
       )}
     >
@@ -55,15 +68,13 @@ function DirectorWindow({ t }: { t: Translate }) {
   );
 }
 
+/** Closes the projector whose screen failed. */
+const closeFailedHost = () => {
+  api.closeHostWindow().catch(logProblem);
+};
+
 /** The projector after its screen failed to render: black, and M or Esc still closes it (G24). */
 function HostFailed() {
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (event.ctrlKey || event.metaKey || event.altKey) return;
-      if (event.key === "Escape" || event.key.toLowerCase() === KEYS.projector) void api.closeHostWindow();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  useProjectorCloseKeys(closeFailedHost);
   return <div className="host-failed" />;
 }

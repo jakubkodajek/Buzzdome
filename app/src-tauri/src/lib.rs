@@ -82,7 +82,9 @@ struct AppState(Mutex<Inner>);
 /// The show state. The app's locks are taken in one order: the editor's
 /// (`editor::lock`), then this one, then the learn lock (`hardware`). So
 /// code holding the learn lock never waits for this one, which a journal
-/// write can hold for a while (G16).
+/// write can hold for a while (G16). The close request
+/// (`app_windows::CloseRequest`) is taken under this one when a show begins
+/// or ends, and holds no other lock.
 fn lock_show(app: &AppHandle) -> MutexGuard<'_, Inner> {
     app.state::<AppState>().inner().0.lock().unwrap()
 }
@@ -162,9 +164,11 @@ fn emit_state(app: &AppHandle, game: Option<&Game>) {
     let _ = app.emit("game-state", view);
 }
 
-/// Tells the windows that a different show (or none) is loaded, so they
-/// reload the quiz.
-fn emit_show_changed(app: &AppHandle, inner: &Inner) {
+/// A different show (or none) is loaded: the windows hear of it and reload
+/// the quiz, and a close request left unanswered, which was about the show
+/// before, is forgotten.
+fn show_changed(app: &AppHandle, inner: &Inner) {
+    app_windows::forget_close_request(app);
     let _ = app.emit("show-changed", ());
     // A show has its own team names, and the prepared ones are back after it.
     let _ = app.emit("teams-changed", teams::current(inner));
@@ -305,7 +309,7 @@ fn begin_show(app: &AppHandle, inner: &mut Inner, game: Game, session: Option<Se
     if let Ok(effects) = &named {
         send_effects(app, inner, effects.clone());
     }
-    emit_show_changed(app, inner);
+    show_changed(app, inner);
     named.map(drop)
 }
 
@@ -443,7 +447,7 @@ async fn resume_last_session(app: AppHandle) -> CmdResult<Vec<AppError>> {
         inner.media_root = show.media_root;
         replace_show(&mut inner, Some(show.game), Some(show.session));
         send_effects(&app, &mut inner, show.effects);
-        emit_show_changed(&app, &inner);
+        show_changed(&app, &inner);
         Ok(show.warnings)
     })
     .await
@@ -460,7 +464,7 @@ async fn end_show(app: AppHandle) -> CmdResult<()> {
         }
         replace_show(inner, None, None);
         inner.media_root = None;
-        emit_show_changed(app, inner);
+        show_changed(app, inner);
         Ok(())
     })
     .await
@@ -571,6 +575,8 @@ pub fn run() {
             app_windows::report_host_problem,
             app_windows::quit_app,
             app_windows::close_declined,
+            app_windows::log_problem,
+            app_windows::set_menu_words,
             themes::list_themes,
             fonts::installed_fonts,
             teams::prepared_teams,

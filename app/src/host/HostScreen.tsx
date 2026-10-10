@@ -4,7 +4,7 @@ import { AppProvider, useApp, useRun } from "../app-context";
 import { ErrorBoundary } from "../error-boundary";
 import { useBackendEvent, useClock, useGameView, useMediaRoot, useQuiz } from "../hooks";
 import { CheckIcon, CrossIcon } from "../icons";
-import { useShortcuts } from "../keyboard";
+import { useProjectorCloseKeys, useShortcuts } from "../keyboard";
 import { MediaRootContext } from "../media";
 import { slideContext } from "../quiz";
 import { ThemeContext, ThemesProvider, useResolvedTheme } from "../theme/context";
@@ -36,17 +36,9 @@ function HostLayout() {
   const clock = useClock(view);
   const mediaRoot = useMediaRoot();
   const theme = useResolvedTheme(quiz?.theme ?? null);
-  // M closes the projector from itself too, as does Esc: full screen over
-  // the Director, it is the window that has the keys (A13).
   const close = useCallback(() => run(api.closeHostWindow()), [run]);
-  useShortcuts(view, close);
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") close();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [close]);
+  useShortcuts(view);
+  useProjectorCloseKeys(close);
   const verdict = useVerdict();
 
   return (
@@ -56,7 +48,7 @@ function HostLayout() {
           {view && (
             <>
               {/* A slide that fails to render leaves the stage as it is and tells the Director; the next slide tries afresh (A12). */}
-              <ErrorBoundary key={view.slideIndex} fallback={() => null} onError={(message) => reportToDirector(t("slideFailed", { message }))}>
+              <ErrorBoundary key={view.slideIndex} fallback={() => null} onError={(message) => reportToDirector(t("slideNotShown", { message }))}>
                 <SlideScreen view={view} context={slideContext(quiz, view.slideIndex)} clock={clock} />
               </ErrorBoundary>
               {verdict && <div className={`verdict verdict-${verdict}`}>{verdict === "correct" ? <CheckIcon /> : <CrossIcon />}</div>}

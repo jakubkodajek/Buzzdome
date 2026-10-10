@@ -128,6 +128,8 @@ two windows cannot disagree with each other or with the score.
   they must not wait for it. The app's locks are taken in one order: the
   editor's, the show state, then learn mode's; so nothing holding learn
   mode's lock, as the Receiver tab's commands do, waits for a journal write.
+  The close request's lock is taken under the show state when a show begins
+  or ends (an unanswered request is forgotten then), and holds no other.
   Those that write `receiver.json` run off the windows' thread too: it is in
   the app's data folder with the journal, so a disk that does not answer
   holds both.
@@ -150,10 +152,15 @@ two windows cannot disagree with each other or with the score.
   The question is asked above the Director's screen (`App.tsx`), so it
   comes even when the screen failed to render, and once: a second close
   while it is open adds no dialog. A Director that does not answer within
-  10 s (its page hangs) does not keep the app open: the next close goes
-  through. On macOS the app menu has a Quit of its own (`app_menu`), as
-  the system's ends the app at once: Cmd+Q asks like the close button, and
+  10 s (its page hangs) does not keep the app open: a close in the next
+  minute goes through. A later close, or one after a show began or ended,
+  asks again, so a request whose answer was lost does not let an
+  accidental close through. On macOS the app menu has a Quit of its own
+  (`app_menu`, worded in the UI's language by `set_menu_words`), as the
+  system's ends the app at once: Cmd+Q asks like the close button, and
   only Quit from the Dock ends a show without asking (it stays saved).
+  Problems a window has nowhere to show (the close dialog not opening)
+  go in the log (`log_problem`), as do the projector's.
   Starting the app again brings the Director forward, or builds it again
   if it is gone. The projector opens on the
   monitor chosen in Settings while it is connected, else on one the
