@@ -665,6 +665,13 @@ fn a_journal_begun_under_rules_version_1_replays_its_restart_by_go_to() {
     // Today's rules refuse that jump, so the Next would close the question instead.
     let today = Game::replay(show.game.quiz().clone(), &journal, RULES_VERSION);
     assert_eq!(step(&today), QuestionStep::Closed);
+    // Resumed, the show goes on under version 1, so the jump and the Next do as they did then.
+    let mut resumed = Game::replay(show.game.quiz().clone(), &show.journal, 1);
+    assert!(resumed.controls().go_to, "version 1 jumps out of a question in play");
+    for stamped in &journal[show.journal.len()..] {
+        resumed.apply(stamped).unwrap();
+    }
+    assert_eq!(resumed, replayed);
 }
 
 #[test]
@@ -979,6 +986,12 @@ fn a_journal_begun_under_rules_version_2_replays_switching_a_player_off_as_then(
     assert_eq!(step(&replayed), QuestionStep::Closed);
     let today = Game::replay(show.game.quiz().clone(), &journal, RULES_VERSION);
     assert_eq!(step(&today), QuestionStep::Revealed { winner: None }, "today the switch closes it");
+    // Resumed, the show goes on under version 2, so the switch and the Next do as they did then.
+    let mut resumed = Game::replay(show.game.quiz().clone(), &show.journal, 2);
+    for stamped in &journal[show.journal.len()..] {
+        resumed.apply(stamped).unwrap();
+    }
+    assert_eq!(resumed, replayed);
 }
 
 #[test]
