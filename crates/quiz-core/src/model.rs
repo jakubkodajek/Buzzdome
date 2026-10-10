@@ -7,9 +7,11 @@ use crate::media::{
     MAX_INTRO_PAUSE_MS, MAX_REPLAY_DELAY_MS, MAX_VIDEO_SPEED, MIN_GAIN_DB, MIN_VIDEO_SPEED,
 };
 use crate::style::SlideStyle;
+use crate::text::file_key;
 use crate::theme::is_theme_id;
 use serde::{Deserialize, Deserializer, Serialize};
-use std::collections::{BTreeMap, BTreeSet, HashSet};
+use std::collections::hash_map::Entry;
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use ts_rs::TS;
 
 /// 1: first version. 2: adds explanation slides. 3: backgrounds become
@@ -61,11 +63,13 @@ pub struct Quiz {
     pub categories: Vec<Category>,
 }
 
-/// A `theme` that is not a theme id (see `is_theme_id`) can name no
-/// installed theme, so it reads as none: the default look it would show
-/// anyway. That also keeps an unbounded value out of the quiz.
+/// A `theme` that is not a theme id (see `is_theme_id`), a text or not,
+/// can name no installed theme, so it reads as none: the default look it
+/// would show anyway (`ReadQuiz::dropped` says so). That also keeps an
+/// unbounded value out of the quiz.
 fn theme_id_or_none<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Option<String>, D::Error> {
-    Ok(Option::<String>::deserialize(deserializer)?.filter(|id| is_theme_id(id)))
+    let value = Option::<serde_json::Value>::deserialize(deserializer)?;
+    Ok(value.as_ref().and_then(serde_json::Value::as_str).filter(|id| is_theme_id(id)).map(str::to_owned))
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
@@ -522,6 +526,10 @@ pub enum Problem {
     /// Only in `ReadQuiz::dropped`, as `StyleUnread` for a category's style.
     #[error("the style value {path} of category {name} cannot be read")]
     CategoryStyleUnread { name: String, path: String },
+    /// Only in `ReadQuiz::dropped`: the quiz's `theme` is no theme id, so
+    /// the quiz reads with the default look.
+    #[error("the quiz's theme cannot be read")]
+    ThemeUnread,
     /// On a slide whose category the quiz does not have; in
     /// `ReadQuiz::dropped`, the slide read without it.
     #[error("the slide's category is not in the quiz")]
@@ -538,6 +546,11 @@ pub enum Problem {
     CategoryNameTaken { name: String },
     #[error("media file {file} of category {name}: {issue}")]
     CategoryMedia { name: String, file: String, issue: MediaIssue },
+    /// Two media files whose names differ only in case or in how their
+    /// accents are encoded (`file_key`): one file on Windows and macOS, so
+    /// one would take the other's place.
+    #[error("media file {file} has the name of {other} to Windows and macOS")]
+    MediaNameClash { file: String, other: String },
     #[error("more than {max} answers")]
     TooManyAnswers { max: usize },
     #[error("an everyone-answers question needs at least {min} answers")]
@@ -670,6 +683,9 @@ impl Quiz {
         // The slides read in the file's order, one for each.
         let written = value.get("slides").and_then(Value::as_array).map_or(&[][..], Vec::as_slice);
         let mut dropped = Vec::new();
+        if quiz.theme.is_none() && value.get("theme").is_some_and(|theme| !theme.is_null()) {
+            dropped.push(ValidationError { slide_id: None, problem: Problem::ThemeUnread });
+        }
         let written_categories = value.get("categories").and_then(Value::as_array).map_or(&[][..], Vec::as_slice);
         for (category, written) in quiz.categories.iter().zip(written_categories) {
             for path in category.style.left_out(written.get("style").unwrap_or(&Value::Null)) {
@@ -769,6 +785,18 @@ impl Quiz {
                 q.problems(&mut found);
             }
         }
+        let mut by_key: HashMap<String, &str> = HashMap::new();
+        for file in self.media_files() {
+            match by_key.entry(file_key(file)) {
+                Entry::Occupied(other) => {
+                    let problem = Problem::MediaNameClash { file: file.to_string(), other: other.get().to_string() };
+                    errors.push(ValidationError { slide_id: None, problem });
+                }
+                Entry::Vacant(free) => {
+                    free.insert(file);
+                }
+            }
+        }
         if errors.is_empty() {
             Ok(())
         } else {
@@ -802,6 +830,7 @@ mod tests {
     use super::*;
     use crate::game::Button;
     use crate::media::{Replay, Span};
+    use serde_json::json;
 
     fn question(points: i32, points_end: Option<i32>, time_limit_s: u32) -> Question {
         Question {
@@ -928,11 +957,15 @@ mod tests {
     }
 
     #[test]
-    fn a_theme_that_is_not_a_theme_id_reads_as_none() {
+    fn a_theme_that_is_not_a_theme_id_reads_as_none_and_says_so() {
         let long = format!("cz.{}", "a".repeat(crate::theme::MAX_THEME_ID_LEN));
-        for theme in ["Autumn", "../themes", long.as_str()] {
-            let json = serde_json::json!({ "schemaVersion": 3, "title": "x", "theme": theme }).to_string();
-            assert_eq!(Quiz::from_json(&json).unwrap().theme, None, "{theme}");
+        let unread = vec![ValidationError { slide_id: None, problem: Problem::ThemeUnread }];
+        for theme in [json!("Autumn"), json!("../themes"), json!(long), json!(7), json!({ "id": "cz.example.x" })] {
+            let read = Quiz::read_json(&json!({ "schemaVersion": 3, "title": "x", "theme": theme }).to_string()).unwrap();
+            assert_eq!((read.quiz.theme, read.dropped), (None, unread.clone()), "{theme}");
+        }
+        for fine in [json!({ "schemaVersion": 3, "title": "x", "theme": null }), json!({ "schemaVersion": 3, "title": "x" })] {
+            assert_eq!(Quiz::read_json(&fine.to_string()).unwrap().dropped, []);
         }
     }
 
@@ -993,6 +1026,22 @@ mod tests {
             (q.points, q.points_end, q.penalty, q.time_limit_s) = (MAX_POINTS, Some(-MAX_POINTS), MAX_POINTS, MAX_TIME_LIMIT_S)
         });
         assert_eq!(problems_of(vec![at_limits]), []);
+    }
+
+    #[test]
+    fn media_names_one_file_on_windows_and_macos_are_a_problem() {
+        let billboard = |id: &str, picture: &str| {
+            let mut slide = Slide::new(id, SlideContent::Billboard { title: "x".into(), text: String::new() });
+            slide.picture = Some(picture.into());
+            slide
+        };
+        let decomposed = "media/Ku\u{30a}n\u{30c}.png";
+        let slides = vec![billboard("a", "media/kůň.png"), billboard("b", decomposed), billboard("c", "media/flag.png")];
+        let clash = Problem::MediaNameClash { file: "media/kůň.png".into(), other: decomposed.into() };
+        assert_eq!(problems_of(slides), [clash]);
+        // One name used twice is one file.
+        assert_eq!(problems_of(vec![billboard("a", "media/flag.png"), billboard("b", "media/flag.png")]), []);
+        assert!(Problem::MediaNameClash { file: String::new(), other: String::new() }.keeps_from_playing());
     }
 
     #[test]

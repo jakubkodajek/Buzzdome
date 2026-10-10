@@ -9,9 +9,11 @@ import type { TeamView } from "./TeamView";
 
 export type GameView = { quizTitle: string, slideIndex: number, slideCount: number, phase: Phase, slide: Slide | null, 
 /**
- * Title of the next slide, for the quizmaster.
+ * The slide `Next` goes to once the current one is done
+ * (`Game::following`), for the quizmaster: past the last slide for the
+ * final ranking, none once the show is over.
  */
-nextSlideTitle: string | null, clock: ClockView | null, players: Array<PlayerView>, 
+nextSlide: number | null, clock: ClockView | null, players: Array<PlayerView>, 
 /**
  * The team names prepared for the show, in order, with their buzzers.
  */

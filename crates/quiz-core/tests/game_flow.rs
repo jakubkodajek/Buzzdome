@@ -770,7 +770,7 @@ fn a_final_slide_shows_the_ranking_where_it_stands_and_the_show_ends_with_the_la
     assert_eq!(show.game.phase(), &Phase::Final { step: 0 });
     // The final slide is on screen, so its sound and background play.
     assert_eq!(show.game.current_slide().map(|s| s.id.as_str()), Some("final"));
-    assert_eq!(show.game.view(0).next_slide_title.as_deref(), Some("thanks"));
+    assert_eq!(show.game.view(0).next_slide, Some(2));
     for expected in 1..=4 {
         show.run(0, Command::Next).unwrap();
         assert_eq!(show.game.phase(), &Phase::Final { step: expected });
@@ -780,7 +780,7 @@ fn a_final_slide_shows_the_ranking_where_it_stands_and_the_show_ends_with_the_la
     // No second ranking after the last slide: the quiz has its own.
     assert!(!show.game.controls().next);
     assert_eq!(show.run(0, Command::Next), Err(GameError::NotNow));
-    assert_eq!(show.game.view(0).next_slide_title, None);
+    assert_eq!(show.game.view(0).next_slide, None);
 
     show.run(0, Command::GoToFinal).unwrap();
     assert_eq!(show.game.current_slide().map(|s| s.id.as_str()), Some("final"));
@@ -1023,4 +1023,21 @@ fn a_jump_past_the_last_slide_and_a_second_player_on_one_buzzer_are_refused() {
     show.run(0, Command::AddPlayer { buzzer: 1, name: "Ann".into() }).unwrap();
     assert_eq!(show.run(0, Command::AddPlayer { buzzer: 1, name: "Bob".into() }), Err(GameError::DuplicateBuzzer(1)));
     assert_eq!(show.game.players().map(|p| p.name.as_str()).collect::<Vec<_>>(), ["Ann"]);
+}
+
+#[test]
+fn a_name_is_the_same_however_its_accents_are_encoded() {
+    let mut show = Show::new(vec![question("q1", AnswerMode::Everyone)]);
+    show.press(0, 1, Button::Big);
+    show.press(0, 2, Button::Big);
+    // As pasted from a macOS file name: "e" and an accent rather than "é".
+    let decomposed = "Z\u{30c}lut\u{30c}ouc\u{30c}ky\u{301}";
+    show.run(0, Command::SetTeams { names: names(&["Žluťoučký", decomposed, "Kůň"]) }).unwrap();
+    assert_eq!(show.game.teams(), ["Žluťoučký", "Kůň"]);
+    show.run(0, Command::PairTeam { buzzer: 1, name: decomposed.into() }).unwrap();
+    assert_eq!(teams(&show.game), [("Žluťoučký".to_string(), Some(1)), ("Kůň".to_string(), None)]);
+    assert_eq!(show.game.players().next().unwrap().name, "Žluťoučký", "kept composed");
+    show.run(0, Command::RenamePlayer { buzzer: 2, name: "žluťoučký".into() }).unwrap();
+    let players: Vec<&str> = show.game.players().map(|p| p.name.as_str()).collect();
+    assert_eq!(players, ["", "žluťoučký"], "the name moved to the other buzzer");
 }

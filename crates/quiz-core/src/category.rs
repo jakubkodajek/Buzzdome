@@ -6,6 +6,7 @@
 use crate::media::{check_reference, Background, BACKGROUND_KINDS};
 use crate::model::Problem;
 use crate::style::SlideStyle;
+use crate::text::name_key;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use ts_rs::TS;
@@ -47,11 +48,6 @@ impl Category {
     pub(crate) fn media_mut(&mut self) -> Option<&mut String> {
         self.background.as_mut().map(|background| &mut background.file)
     }
-}
-
-/// The name as categories are told apart: without the spaces around it, regardless of case.
-pub(crate) fn name_key(name: &str) -> String {
-    name.trim().to_lowercase()
 }
 
 /// The category of `categories` with this name (see `name_key`).

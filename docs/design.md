@@ -41,9 +41,12 @@ and a crashed show is rebuilt by replaying the journal.
 ### 1.1 Between Rust and the UI
 
 The game core is the only place that knows the rules. Everything a window
-shows is either the `GameView` the core builds or a value the core computes
-(the points a correct answer earns now, whether an answer is right), so the
-two windows cannot disagree with each other or with the score.
+shows of the show is either the `GameView` the core builds or a value the
+core computes (the points a correct answer earns now, whether an answer is
+right), so the two windows cannot disagree with each other or with the
+score. What follows from the quiz alone, such as a question's number, is
+worked out from the quiz in `quiz.ts` (1.3, Rendering), as the editor
+draws slides without a show.
 
 - **Types.** Every type that crosses the boundary is defined once in Rust and
   exported to TypeScript by ts-rs (`#[derive(TS)] #[ts(export)]`) into
@@ -284,7 +287,13 @@ Only safe names inside `media/` are ever read or written, checked or not.
 A `.quiz` entry with a name that is not portable is stored under the
 closest portable one (`quiz_core::portable_reference`, numbered if taken)
 and the quiz's references are renamed with it (the draft then counts as
-unsaved); a plain `quiz.json` reads
+unsaved). So is an entry whose name is one file with an entry before it on
+Windows and macOS (`quiz_core::file_key`: the names differ only in letter
+case, or in how accents are encoded, which macOS ignores too), which would
+take its place there; a show refuses such a quiz (`MediaNameClash`), as it
+does a name it would have to rename. Media added in the editor, and media
+an export copies beside a sheet, take no name that is one file with a name
+in the folder, also on Linux. A plain `quiz.json` reads
 only safe names from the disk (no device names on Windows), nor any
 through a link that leads out of its folder, and the show path keeps such
 a file refused.
@@ -303,7 +312,8 @@ the quiz. A font name cannot hold quotes, so the UI can put it in a style
 sheet as it is.
 
 Reading a quiz (`Quiz::read_json`) also says what it left out
-(`ReadQuiz::dropped`): style values that did not read
+(`ReadQuiz::dropped`): a `theme` that is no theme id (`ThemeUnread`; the
+quiz then has the default look), style values that did not read
 (`SlideStyle::left_out`, by comparing the file's `style` with the style
 read) and what a slide's type cannot play (`drop_unplayable`), each as the
 `Problem` it would be. Opening a file in the editor writes the draft
@@ -472,7 +482,11 @@ table view toggle. It edits a quiz; it never touches a running show.
   (`app/src/host/`). The editor and thumbnails feed it `previewView`, a
   `GameView` built from the slide alone. What a slide shows from the rest of
   the quiz comes in a `SlideContext` (`quiz.ts`): its question number and,
-  for an explanation slide, the question it explains. `MediaRootContext` sits above
+  for an explanation slide, the question it explains. It follows from the
+  quiz alone, not from the show, so `quiz.ts` is its one place, for the
+  editor, which draws slides without a show, and for the show's windows
+  alike; so is the line a slide is listed by (`slideTitle`), which the
+  Director shows for the next slide (`GameView.next_slide`). `MediaRootContext` sits above
   every screen that resolves media, so the editor, the Director and their
   sound hooks agree on the folder.
 - **Spreadsheets.** File › Import and Export (spec QZ-8, columns in
@@ -635,7 +649,7 @@ packages users will install are read the same way.
 
 - **Team names.** The game keeps the team names prepared for the show
   (`Game::teams`), set as a whole by `SetTeams`: `team_names` trims them,
-  drops blanks and repeats (ignoring case), cuts them to `MAX_NAME_CHARS`
+  drops blanks and repeats, cuts them to `MAX_NAME_CHARS`
   and refuses more than `MAX_TEAMS` as soon as it sees one more, so a wrong
   file of thousands of lines does not hold the show state. Being commands,
   they are journaled and come back after a crash like everything else.
@@ -657,6 +671,11 @@ packages users will install are read the same way.
   it) is left as it is: its `AppFile` refuses to write it until the app
   starts again, so a passing lock never costs the saved names, learned
   buttons or sound board.
+- **Names.** Player and team names are kept with their accents encoded
+  as single characters (NFC). They and category names are compared
+  ignoring case and that encoding (`text::name_key`), so "é" typed and
+  "é" pasted from a macOS file name, which encodes it as "e" and an
+  accent, are the same name.
 - **Pairing.** A team is paired with the buzzer whose player has its name,
   so the player's name is the only record; `GameView.teams` (`TeamView`)
   derives the pairs. `PairTeam` gives a buzzer a name and takes it from any

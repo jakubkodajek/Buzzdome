@@ -422,13 +422,40 @@ fn first_language<'a>(cell: &'a str, place: &Place, notes: &mut Notes) -> &'a st
     }
 }
 
+/// Whether `text` is in brackets, which marks an answer cell correct.
+fn bracketed(text: &str) -> bool {
+    text.len() >= 2 && text.starts_with('[') && text.ends_with(']')
+}
+
+/// Whether an answer that is not correct would read as correct in its cell:
+/// it is in brackets after the `'`s it starts with. Such an answer gets one
+/// more `'` before it (`answer_cell`), which the import takes off (`answer`).
+fn reads_as_correct(text: &str) -> bool {
+    bracketed(text.trim_start_matches('\''))
+}
+
+/// The cell of an answer for export: correct answers in brackets.
+fn answer_cell(text: &str, correct: bool) -> String {
+    // The import trims every cell.
+    let text = text.trim();
+    if correct {
+        format!("[{text}]")
+    } else if reads_as_correct(text) {
+        format!("'{text}")
+    } else {
+        text.to_string()
+    }
+}
+
 /// An answer cell's text and whether brackets mark it correct; none when empty.
 fn answer(cell: &str, place: &Place, notes: &mut Notes) -> Option<(String, bool)> {
-    let bracketed = |text: &str| text.len() >= 2 && text.starts_with('[') && text.ends_with(']');
     if cell.is_empty() {
         return None;
     }
     let text = first_language(cell, place, notes);
+    if let Some(text) = text.strip_prefix('\'').filter(|rest| reads_as_correct(rest)) {
+        return Some((text.to_string(), false));
+    }
     // `[Paris||Parijs]` marks the answer as `[Paris]||[Parijs]` does.
     let correct = bracketed(cell) || bracketed(text);
     let text = if correct { text.strip_prefix('[').unwrap_or(text) } else { text };
@@ -924,7 +951,7 @@ fn export_row(slide: &Slide, categories: &[Category], file_name: &impl Fn(&str) 
             set(Field::Text, format!("{{{QUESTION}, {mode}}}{}", question.text));
             for (i, answer) in question.answers.iter().enumerate().take(MAX_ANSWERS) {
                 // The sheet has no share of the points: a partly correct answer is marked as correct.
-                set(Field::Answer(i), if question.is_correct(i) { format!("[{answer}]") } else { answer.clone() });
+                set(Field::Answer(i), answer_cell(answer, question.is_correct(i)));
             }
             set(Field::AnswerTime, question.time_limit_s.to_string());
             set(Field::PointsStart, question.points.to_string());
@@ -1515,6 +1542,26 @@ mod tests {
         let imported = import_tables(&[Table { name: String::new(), first_row: 1, rows }], &[], 3).unwrap();
         let back = &imported.slides[0].1;
         assert_eq!((question(back), &back.notes), (question(&quiz.slides[0]), &quiz.slides[0].notes));
+    }
+
+    #[test]
+    fn a_wrong_answer_in_brackets_exports_with_a_quote_and_imports_wrong() {
+        let quiz = Quiz::new("Quiz", vec![Slide::new("q", SlideContent::Question(Question {
+            text: "Which is spelled as in the original?".into(),
+            mode: AnswerMode::Everyone,
+            answers: vec!["[Paris]".into(), "[sic]".into(), "'[sic]".into(), "[=x]".into()],
+            correct: vec![CorrectAnswer::full(0)],
+            time_limit_s: 20,
+            points: 10,
+            points_end: None,
+            penalty: 0,
+        }))]);
+        let rows = export_table(&quiz, |reference| Some(reference.to_string()));
+        let cells: Vec<&str> = (0..4).map(|i| rows[1][Field::Answer(i).index()].as_str()).collect();
+        assert_eq!(cells, ["[[Paris]]", "'[sic]", "''[sic]", "'[=x]"]);
+
+        let imported = import_tables(&[Table { name: String::new(), first_row: 1, rows }], &[], 3).unwrap();
+        assert_eq!(question(&imported.slides[0].1), question(&quiz.slides[0]));
     }
 
     #[test]

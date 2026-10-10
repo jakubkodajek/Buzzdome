@@ -1,7 +1,7 @@
 //! What the windows render: a read-only snapshot of the game at one moment.
 
 use crate::game::{same_name, BuzzerId, Button, Controls, Game, Phase, QuestionStep, Response};
-use crate::model::{AnswerMode, Slide, SlideContent};
+use crate::model::{AnswerMode, Slide};
 use serde::Serialize;
 use std::collections::BTreeMap;
 use ts_rs::TS;
@@ -15,8 +15,10 @@ pub struct GameView {
     pub slide_count: usize,
     pub phase: Phase,
     pub slide: Option<Slide>,
-    /// Title of the next slide, for the quizmaster.
-    pub next_slide_title: Option<String>,
+    /// The slide `Next` goes to once the current one is done
+    /// (`Game::following`), for the quizmaster: past the last slide for the
+    /// final ranking, none once the show is over.
+    pub next_slide: Option<usize>,
     pub clock: Option<ClockView>,
     pub players: Vec<PlayerView>,
     /// The team names prepared for the show, in order, with their buzzers.
@@ -100,14 +102,6 @@ pub struct PlayerView {
     pub delta: Option<i32>,
 }
 
-pub fn slide_title(slide: &Slide) -> String {
-    match &slide.content {
-        SlideContent::Billboard { title, .. } | SlideContent::EndOfRound { title } | SlideContent::Final { title } => title.clone(),
-        SlideContent::Question(q) => q.text.clone(),
-        SlideContent::Explanation { text } => text.clone(),
-    }
-}
-
 impl Game {
     /// The question clock at `now`, with the points a correct answer earns then.
     /// The app sends it on every tick while the clock runs, so no window has to
@@ -178,7 +172,7 @@ impl Game {
             slide_count: self.quiz().slides.len(),
             phase: self.phase().clone(),
             slide: self.current_slide().cloned(),
-            next_slide_title: self.following().and_then(|i| self.quiz().slides.get(i)).map(slide_title),
+            next_slide: self.following(),
             clock: self.clock_view(now),
             enabled_count: enabled.len(),
             answered_count: enabled.iter().filter(|p| p.answered).count(),

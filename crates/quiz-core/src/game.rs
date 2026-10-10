@@ -5,6 +5,7 @@
 //! clock inside this module: each command carries its own `at_ms`.
 
 use crate::model::{AnswerMode, Question, Quiz, Slide, SlideContent};
+use crate::text::{composed, name_key};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 use std::cmp::Reverse;
@@ -23,8 +24,9 @@ pub type BuzzerId = u16;
 /// takes the name from another buzzer (R17). 2: a question in play restarts
 /// with `RestartQuestion`, which takes its score changes back, and refuses
 /// `GoTo` and `GoToFinal` (A3). 3: only the time of right answers breaks
-/// ties, and switching a player on or off in a running question closes it
-/// when nobody is left to answer.
+/// ties, switching a player on or off in a running question closes it when
+/// nobody is left to answer, and names are the same however their accents
+/// are encoded.
 pub const RULES_VERSION: u32 = 3;
 
 /// Steps of the final score reveal: drum roll, 3rd, 2nd, 1st, full ranking.
@@ -131,7 +133,7 @@ pub enum Command {
     #[serde(rename_all = "camelCase")]
     RenamePlayer { buzzer: BuzzerId, name: String },
     /// Replaces the team names prepared for the show, in order. Empty names
-    /// and repeats (ignoring case) are left out.
+    /// and repeats (`same_name`) are left out.
     SetTeams { names: Vec<String> },
     /// Gives a buzzer a team name; a player who had that name loses it.
     #[serde(rename_all = "camelCase")]
@@ -326,9 +328,10 @@ impl Player {
     }
 }
 
-/// A name as typed, without surrounding spaces and at most `MAX_NAME_CHARS` long.
+/// A name as typed, without surrounding spaces, composed (`text::composed`)
+/// and at most `MAX_NAME_CHARS` long.
 fn clean_name(name: &str) -> String {
-    name.trim().chars().take(MAX_NAME_CHARS).collect::<String>().trim_end().to_string()
+    composed(name.trim()).chars().take(MAX_NAME_CHARS).collect::<String>().trim_end().to_string()
 }
 
 /// The team names to prepare from `names` as given: trimmed and cut to
@@ -339,7 +342,7 @@ pub fn team_names<'a>(names: impl IntoIterator<Item = &'a str>) -> Result<Vec<St
     let mut seen = HashSet::new();
     let mut teams = Vec::new();
     for name in names.into_iter().map(clean_name) {
-        if name.is_empty() || !seen.insert(name.to_lowercase()) {
+        if name.is_empty() || !seen.insert(name_key(&name)) {
             continue;
         }
         if teams.len() == MAX_TEAMS {
@@ -350,10 +353,10 @@ pub fn team_names<'a>(names: impl IntoIterator<Item = &'a str>) -> Result<Vec<St
     Ok(teams)
 }
 
-/// Two names are the same team when they differ only in case; an empty
-/// name is nobody's.
+/// Two names are the same team when they differ only in case or in how
+/// their accents are encoded (`text::name_key`); an empty name is nobody's.
 pub fn same_name(a: &str, b: &str) -> bool {
-    !a.is_empty() && a.to_lowercase() == b.to_lowercase()
+    !a.is_empty() && name_key(a) == name_key(b)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

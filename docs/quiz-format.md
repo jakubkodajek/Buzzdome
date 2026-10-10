@@ -346,6 +346,8 @@ imports as it was, except that every right answer comes back with all of
 the points (the sheet has no column for a share). A cell a spreadsheet program would run as a formula
 (starting with `=`, `@`, a tab, or `+` or `-` not followed by just a
 number) gets a leading `'`, so it opens as text; the import takes it off.
+So does a wrong answer that is itself in brackets (after any `'`s it
+starts with), so it does not come back as a right one.
 
 **What is left out.** The reference's other columns (`P2`-`P6`,
 `A7`, `A8`, the bonus and evaluation columns, `STYLE`, `TRANSITION`...),

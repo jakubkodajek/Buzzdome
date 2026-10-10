@@ -16,12 +16,13 @@ pub use sheet::{
 };
 
 use quiz_core::{
-    is_safe_reference, portable_name, portable_reference, MediaIssue, Problem, Quiz, QuizJsonError, ReadQuiz, SheetError, ValidationError,
-    MEDIA_PREFIX,
+    file_key, is_safe_reference, portable_name, portable_reference, MediaIssue, Problem, Quiz, QuizJsonError, ReadQuiz, SheetError,
+    ValidationError, MEDIA_PREFIX,
 };
 use serde::Serialize;
 use sha2::{Digest, Sha256};
-use std::collections::{BTreeMap, HashSet};
+use std::collections::hash_map::Entry;
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fs::{self, File};
 use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
@@ -413,27 +414,52 @@ pub fn import_media(root: &Path, source: MediaSource) -> Result<String> {
 
 /// Copies `source` to `folder/name` and returns the name. A file with that
 /// name and the same contents is reused; a different one keeps its place
-/// and the copy gets a number added (see `numbered`). A copy that fails
-/// leaves nothing behind: it is written under a name no media file has
-/// (`.part`) and renamed when complete.
+/// and the copy gets a number added (see `numbered`). A name is taken by
+/// a file whose name is one file with it on Windows and macOS
+/// (`quiz_core::file_key`), so a folder made on Linux opens on them. A copy
+/// that fails leaves nothing behind: it is written under a name no media
+/// file has (`.part`) and renamed when complete.
 fn place_file(folder: &Path, name: &str, source: MediaSource) -> Result<String> {
+    let existing = names_by_key(folder, name)?;
     for n in 1.. {
         let name = numbered(name, n);
-        let path = folder.join(&name);
-        if !path.exists() {
-            let partial = format!("{name}.part");
-            let copied = source.write_to(folder, &partial).and_then(|_| fs::rename(folder.join(&partial), &path).context(FileAction::Move, &path));
-            if copied.is_err() {
-                let _ = fs::remove_file(folder.join(&partial));
+        match existing.get(&file_key(&name)) {
+            None => {
+                let path = folder.join(&name);
+                let partial = format!("{name}.part");
+                let copied = source.write_to(folder, &partial).and_then(|_| fs::rename(folder.join(&partial), &path).context(FileAction::Move, &path));
+                if copied.is_err() {
+                    let _ = fs::remove_file(folder.join(&partial));
+                }
+                copied?;
+                return Ok(name);
             }
-            copied?;
-            return Ok(name);
-        }
-        if source.same_as(&path)? {
-            return Ok(name);
+            Some(found) if source.same_as(&folder.join(found))? => return Ok(found.clone()),
+            Some(_) => {}
         }
     }
     unreachable!("the loop returns")
+}
+
+/// The files beside `folder/name`, as names under `folder` like `name`,
+/// by `file_key`; none when that folder does not exist yet.
+fn names_by_key(folder: &Path, name: &str) -> Result<HashMap<String, String>> {
+    let within = name.rfind('/').map_or("", |slash| &name[..=slash]);
+    let dir = folder.join(within);
+    let entries = match fs::read_dir(&dir) {
+        Ok(entries) => entries,
+        Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(HashMap::new()),
+        Err(e) => return Err(e).context(FileAction::Read, &dir),
+    };
+    let mut names = HashMap::new();
+    for entry in entries {
+        let entry = entry.context(FileAction::Read, &dir)?;
+        if let Some(file) = entry.file_name().to_str() {
+            let found = format!("{within}{file}");
+            names.insert(file_key(&found), found);
+        }
+    }
+    Ok(names)
 }
 
 /// The `n`th name to try for a file: `name` itself, then with `-n` before its
@@ -452,19 +478,36 @@ fn numbered(name: &str, n: u32) -> String {
     }
 }
 
-/// Portable names for the media references among `names` that are not safe
-/// but can be made so (see `quiz_core::portable_reference`), old name to new.
-/// A new name takes none of `names` nor another new one, ignoring letter case
-/// as Windows and macOS disks do.
+/// New names for the media references among `names`, old name to new: for
+/// those that are not safe but can be made so (see
+/// `quiz_core::portable_reference`), and for safe ones that are one file
+/// with a name before them on Windows and macOS (`quiz_core::file_key`),
+/// which would take its place there. A new name is one file with none of
+/// `names` nor another new one.
 fn renames<'a>(names: impl Iterator<Item = &'a str> + Clone) -> BTreeMap<String, String> {
-    let mut taken: HashSet<String> = names.clone().map(str::to_lowercase).collect();
+    let mut taken: HashSet<String> = names.clone().map(file_key).collect();
+    // The safe names kept as they are, by `file_key`.
+    let mut kept: HashMap<String, &str> = HashMap::new();
     let mut renamed = BTreeMap::new();
     for name in names {
-        if is_safe_reference(name) || renamed.contains_key(name) {
+        if renamed.contains_key(name) {
             continue;
         }
-        let Some(portable) = portable_reference(name) else { continue };
-        let new = (1..).map(|n| numbered(&portable, n)).find(|new| taken.insert(new.to_lowercase())).expect("a free name");
+        let wanted = if is_safe_reference(name) {
+            match kept.entry(file_key(name)) {
+                Entry::Vacant(free) => {
+                    free.insert(name);
+                    continue;
+                }
+                // The same name again is the same file.
+                Entry::Occupied(first) if *first.get() == name => continue,
+                Entry::Occupied(_) => name.to_string(),
+            }
+        } else {
+            let Some(portable) = portable_reference(name) else { continue };
+            portable
+        };
+        let new = (1..).map(|n| numbered(&wanted, n)).find(|new| taken.insert(file_key(new))).expect("a free name");
         renamed.insert(name.to_string(), new);
     }
     renamed
@@ -635,7 +678,10 @@ fn unpack_zip(path: &Path, dest: &Path) -> Result<Unpacked> {
             continue;
         }
         let name = entry_name(&entry.name()?);
-        let stored = if name == QUIZ_JSON || is_safe_reference(&name) { Some(name.as_str()) } else { renamed.get(&name).map(String::as_str) };
+        let stored = match renamed.get(&name) {
+            Some(new) => Some(new.as_str()),
+            None => (name == QUIZ_JSON || is_safe_reference(&name)).then_some(name.as_str()),
+        };
         let Some(stored) = stored else { continue };
         budget -= write_file(dest, stored, &mut entry, path, budget, &mut hasher)?;
     }
@@ -1078,10 +1124,37 @@ mod tests {
     }
 
     #[test]
+    fn media_one_file_on_windows_and_macos_are_kept_apart_for_editing_and_refused_by_a_show() {
+        let mut quiz = quiz_with_picture("media/Flag.png");
+        let mut second = quiz.slides[0].clone();
+        second.id = "second".into();
+        second.picture = Some("media/flag.png".into());
+        quiz.slides.push(second);
+        let json = serde_json::to_vec(&quiz).unwrap();
+        let file = zip_of("case-clash", &[(QUIZ_JSON, &json), ("media/Flag.png", b"upper"), ("media/flag.png", b"lower")]);
+
+        let err = open(&file, &temp("case-clash-cache")).unwrap_err();
+        let clash = Problem::MediaNameClash { file: "media/flag.png".into(), other: "media/Flag.png".into() };
+        assert!(matches!(err, QuizFileError::Invalid(ref p) if p.iter().any(|e| e.problem == clash)), "{err}");
+
+        let draft = temp("case-clash-draft").join("draft");
+        let Opened { quiz: opened, changed, .. } = open_into(&file, &draft).unwrap();
+        assert!(changed);
+        let pictures: Vec<_> = opened.slides.iter().map(|s| s.picture.as_deref().unwrap()).collect();
+        assert_eq!(pictures, ["media/Flag.png", "media/flag-2.png"]);
+        assert_eq!(fs::read(draft.join("media/Flag.png")).unwrap(), b"upper");
+        assert_eq!(fs::read(draft.join("media/flag-2.png")).unwrap(), b"lower");
+        assert_eq!(problems(&opened, &draft), []);
+    }
+
+    #[test]
     fn renaming_ignores_letter_case_and_numbers_before_the_extension() {
         let renamed = renames(["media/A_.png", "media/a?.png", "media/a*.png", "media/x/../y.png"].into_iter());
         let expected = [("media/a*.png", "media/a_-3.png"), ("media/a?.png", "media/a_-2.png")];
         assert_eq!(renamed, expected.map(|(old, new)| (old.to_string(), new.to_string())).into());
+        // A safe name that is one file with one before it is renamed; the same name twice is one file.
+        let renamed = renames(["media/Flag.png", "media/flag.png", "media/flag.png", "media/flag-2.png", "quiz.json"].into_iter());
+        assert_eq!(renamed, [("media/flag.png".to_string(), "media/flag-3.png".to_string())].into());
         assert_eq!(numbered("media/round.1/a.b.png", 2), "media/round.1/a.b-2.png");
         assert_eq!(numbered("media/round.1/noext", 3), "media/round.1/noext-3");
         assert_eq!(numbered("media/.hidden", 2), "media/.hidden-2");
@@ -1162,6 +1235,19 @@ mod tests {
         assert_eq!(dropped("long.wav", &long), "media/long.wav");
         assert_eq!(dropped("long.wav", &other), "media/long-2.wav");
         assert_eq!(fs::read(root.join("media/long-2.wav")).unwrap()[199_999], 8);
+    }
+
+    #[test]
+    fn an_imported_name_one_file_with_another_on_windows_and_macos_is_numbered_or_reused() {
+        let root = temp("import-case");
+        let dropped = |name: &str, bytes: &[u8]| import_media(&root, MediaSource::Bytes { name, bytes }).unwrap();
+        assert_eq!(dropped("Flag.png", b"one"), "media/Flag.png");
+        // On Linux these are other files; on Windows and macOS the same one.
+        assert_eq!(dropped("flag.png", b"two"), "media/flag-2.png");
+        assert_eq!(dropped("FLAG.png", b"one"), "media/Flag.png");
+        assert_eq!(dropped("Ku\u{30a}n\u{30c}.png", b"horse"), "media/Ku\u{30a}n\u{30c}.png");
+        assert_eq!(dropped("kůň.png", b"other"), "media/kůň-2.png");
+        assert_eq!(fs::read(root.join("media/flag-2.png")).unwrap(), b"two");
     }
 
     #[test]
