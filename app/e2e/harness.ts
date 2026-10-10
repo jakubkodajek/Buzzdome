@@ -3,11 +3,25 @@
 // settings, drafts), so tests never share a show, and a test can kill the
 // app and start it again on the same folder to check a resume.
 //
-// Needs `tauri-driver` on PATH with the platform's WebDriver (WebKitWebDriver
-// on PATH on Linux; msedgedriver named by NATIVE_DRIVER on Windows), and an
-// app built with `npm run tauri build -- --debug --no-bundle` (or
-// BUZZDOME_APP naming one). On Linux the tests run under a virtual display
-// (`xvfb-run -a npm run e2e`) and drive the system's file picker with xdotool.
+// The harness only ever stops processes it started, never a Buzzdome
+// someone has open.
+//
+// Linux: the app's data folders follow the XDG variables, so each test's
+// folder is all the app sees; safe on any machine. Needs `tauri-driver` and
+// WebKitWebDriver on PATH, a virtual display (`xvfb-run -a npm run e2e`)
+// and xdotool for the system's file picker.
+//
+// Windows: the app finds its folders through the OS, not the environment, so
+// tests use the real app data folders (design.md, section 3) and wipe them
+// between tests. They therefore run only on a throwaway CI machine
+// (GITHUB_ACTIONS), never on the event laptop. Needs `tauri-driver` on PATH
+// and the msedgedriver matching WebView2 named by NATIVE_DRIVER. The file
+// picker test is Linux only.
+//
+// macOS has no WebDriver for its web view, so no E2E there.
+//
+// Both need an app built with `npm run tauri build -- --debug --no-bundle`
+// (or BUZZDOME_APP naming one).
 
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
@@ -23,7 +37,10 @@ import { Session, WebDriverError, type ElementRef } from "./webdriver";
 /** The app's own words for a string key, in the UI's default language. */
 export const t = translator("cs");
 
-const APP = process.env.BUZZDOME_APP ?? fileURLToPath(new URL(`../../target/debug/buzzdome${process.platform === "win32" ? ".exe" : ""}`, import.meta.url));
+const WINDOWS = process.platform === "win32";
+const APP = process.env.BUZZDOME_APP ?? fileURLToPath(new URL(`../../target/debug/buzzdome${WINDOWS ? ".exe" : ""}`, import.meta.url));
+/** Where the app keeps its data on Windows (tauri.conf.json `identifier`, design.md section 3). */
+const WINDOWS_DATA = WINDOWS ? [join(process.env.APPDATA ?? "", "cz.kodajek.quizshow"), join(process.env.LOCALAPPDATA ?? "", "cz.kodajek.quizshow")] : [];
 
 /** How long a step may take to show before a test fails. */
 const STEP_TIMEOUT_MS = 10_000;
@@ -101,6 +118,8 @@ const PAGE_SETUP = `
 export class App {
   /** The app a test drives now, for keeping what it showed when the test fails (setup.ts). */
   static running: App | null = null;
+  /** The data folders apps were started on. */
+  private static readonly launched = new Set<string>();
   private session: Session | null = null;
   private constructor(
     private readonly driver: ChildProcess,
@@ -110,25 +129,37 @@ export class App {
 
   /** Starts the app on `data` (a fresh folder unless given) and waits for the Director. */
   static async launch(data = dataFolder()): Promise<App> {
+    if (WINDOWS && process.env.GITHUB_ACTIONS !== "true") throw new Error("on Windows the E2E tests use the real app data, so they run only on CI machines (harness.ts header)");
+    if (!WINDOWS && process.platform !== "linux") throw new Error("the E2E tests run on Linux and, on CI, Windows (harness.ts header)");
+    // A test's first launch starts from empty app data; a later one on the same folder resumes from it.
+    if (!App.launched.has(data)) wipeWindowsData();
+    App.launched.add(data);
     const [port, nativePort] = [await freePort(), await freePort()];
-    // The app keeps its data where the OS says (design.md, section 3); point every such folder at `data`.
-    const env = {
+    // On Linux the app keeps its data where the XDG variables say (design.md, section 3); point every such folder at `data`.
+    const env = WINDOWS ? process.env : {
       ...process.env,
       HOME: data,
       XDG_DATA_HOME: join(data, "share"),
       XDG_CONFIG_HOME: join(data, "config"),
       XDG_CACHE_HOME: join(data, "cache"),
-      APPDATA: join(data, "roaming"),
-      LOCALAPPDATA: join(data, "local"),
+      // No session bus: the single-instance check would otherwise hand the
+      // launch over to a Buzzdome the user has open, and the test would
+      // drive that one.
+      DBUS_SESSION_BUS_ADDRESS: `unix:path=${join(data, "no-bus")}`,
     };
-    // On Windows the platform's driver (msedgedriver) is named by NATIVE_DRIVER; on Linux WebKitWebDriver is on PATH.
-    const native = process.env.NATIVE_DRIVER ? ["--native-driver", process.env.NATIVE_DRIVER] : [];
+    const native = WINDOWS && process.env.NATIVE_DRIVER ? ["--native-driver", process.env.NATIVE_DRIVER] : [];
     const driver = spawn("tauri-driver", ["--port", String(port), "--native-port", String(nativePort), ...native], { env, stdio: ["ignore", "inherit", "inherit"] });
     const app = new App(driver, `http://127.0.0.1:${port}`, data);
-    await waitFor("tauri-driver", () => fetch(`${app.base}/status`).then((r) => r.ok), 20_000);
-    app.session = await Session.start(app.base, { browserName: "wry", "tauri:options": { application: APP } });
-    await app.inWindow("director", () => app.$("button"));
     App.running = app;
+    try {
+      await waitFor("tauri-driver", () => fetch(`${app.base}/status`).then((r) => r.ok), 20_000);
+      app.session = await Session.start(app.base, { browserName: "wry", "tauri:options": { application: APP } });
+      await app.inWindow("director", () => app.$("button"));
+    } catch (error) {
+      // Nothing of a launch that failed half-way stays running.
+      await app.crash();
+      throw error;
+    }
     return app;
   }
 
@@ -340,24 +371,31 @@ export class App {
   /**
    * Answers the system file picker the app opened with `path`, as a person
    * typing it would: the picker is the desktop's own window, so this goes
-   * through the X server (`xdotool`), on Linux only.
+   * through the X server (`xdotool`).
    */
   async pickFile(path: string): Promise<void> {
-    if (process.platform !== "linux") throw new Error("the file picker is driven on Linux only");
     const xdotool = (...args: string[]) => spawnSync("xdotool", args, { encoding: "utf8" });
-    const picker = await waitFor("the file picker", async () => {
-      const found = xdotool("search", "--onlyvisible", "--name", "^(Open|Save|Otevřít|Uložit)( File| soubor)?$");
-      return found.stdout.trim().split("\n").filter(Boolean).pop() ?? null;
-    });
-    xdotool("windowfocus", "--sync", picker);
-    // Ctrl+L opens the location field, which takes a whole path.
-    xdotool("key", "--clearmodifiers", "ctrl+l");
-    await sleep(300);
-    xdotool("key", "--clearmodifiers", "ctrl+a");
-    xdotool("type", "--delay", "5", path);
-    await sleep(300);
-    xdotool("key", "Return");
-    await waitFor("the file picker to close", async () => xdotool("search", "--onlyvisible", "--name", "^(Open|Save|Otevřít|Uložit)( File| soubor)?$").stdout.trim() === "");
+    const PICKER = "^(Open|Save|Otevřít|Uložit)( File| soubor)?$";
+    const open = () => xdotool("search", "--onlyvisible", "--name", PICKER).stdout.trim().split("\n").filter(Boolean).pop() ?? null;
+    const picker = await waitFor("the file picker", async () => open());
+    // Ctrl+L opens the location field, which takes a whole path. The field
+    // appears a moment later, and nothing outside the picker shows when; so
+    // each try gives it longer, and a try counts once the picker has closed.
+    for (const settle of [300, 1_000, 3_000]) {
+      xdotool("windowfocus", "--sync", picker);
+      xdotool("key", "--clearmodifiers", "ctrl+l");
+      await sleep(settle);
+      xdotool("key", "--clearmodifiers", "ctrl+a");
+      xdotool("type", "--clearmodifiers", "--delay", "5", path);
+      xdotool("key", "--clearmodifiers", "Return");
+      try {
+        await waitFor("the file picker to close", async () => open() === null, 5_000);
+        return;
+      } catch {
+        // The path went elsewhere: try again, waiting longer for the field.
+      }
+    }
+    throw new Error(`the file picker did not take ${path}`);
   }
 
   /** Ends the app as the quizmaster would. */
@@ -371,15 +409,25 @@ export class App {
     await this.stopDriver();
   }
 
+  /** The folders the app keeps its data in: its sessions, settings and drafts. */
+  get storage(): string[] {
+    return WINDOWS ? WINDOWS_DATA : [this.data];
+  }
+
   /** Kills the app at once, as a crash or a power cut would; its data stays. */
   async crash(): Promise<void> {
-    killApp(this.data);
+    if (WINDOWS) killWindowsTree(this.driver.pid, "buzzdome.exe");
+    else killApp(this.data);
     this.session = null;
     await this.stopDriver();
   }
 
   private async stopDriver(): Promise<void> {
-    if (this.driver.exitCode === null) {
+    // On Windows the driver's children (msedgedriver, the app and its web
+    // view) go with it; killing the driver alone would leave them running.
+    if (WINDOWS) killWindowsTree(this.driver.pid);
+    // A child killed by a signal keeps `exitCode` null.
+    if (this.driver.exitCode === null && this.driver.signalCode === null) {
       const exited = new Promise((done) => this.driver.once("exit", done));
       this.driver.kill();
       await exited;
@@ -388,24 +436,24 @@ export class App {
     // session ends, and write their caches meanwhile; the next launch or
     // `forget` must not race them.
     const until = Date.now() + 15_000;
-    while (appRunning(this.data) && Date.now() < until) await sleep(200);
-    if (appRunning(this.data)) killApp(this.data);
+    while (!WINDOWS && appRunning(this.data) && Date.now() < until) await sleep(200);
+    if (!WINDOWS && appRunning(this.data)) killApp(this.data);
   }
 
   /** Removes the app's data folder; for after the last restart. */
   forget(): void {
     // The web view may still be writing its cache for a moment after the app ended.
     rmSync(this.data, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+    wipeWindowsData();
   }
 }
 
 /**
- * The app's processes: on Linux every process started with this data folder,
- * which includes the web view's own processes (they outlive a killed app and
- * keep writing its caches); on Windows the app by name.
+ * The app's processes: every process started with this data folder, which
+ * includes the web view's own processes (they outlive a killed app and keep
+ * writing its caches), and never a Buzzdome the tests did not start.
  */
 function appProcesses(data: string): number[] {
-  if (process.platform !== "linux") return [];
   const mark = `XDG_DATA_HOME=${join(data, "share")}\0`;
   const found: number[] = [];
   for (const entry of readdirSync("/proc")) {
@@ -421,20 +469,43 @@ function appProcesses(data: string): number[] {
 }
 
 function appRunning(data: string): boolean {
-  if (process.platform === "win32") return spawnSync("tasklist", ["/FI", "IMAGENAME eq buzzdome.exe", "/NH"], { encoding: "utf8" }).stdout.includes("buzzdome.exe");
-  if (process.platform === "linux") return appProcesses(data).length > 0;
-  return spawnSync("pgrep", ["-x", "buzzdome"]).status === 0;
+  return appProcesses(data).length > 0;
 }
 
 function killApp(data: string): void {
-  if (process.platform === "win32") spawnSync("taskkill", ["/F", "/IM", "buzzdome.exe"]);
-  else if (process.platform === "linux") {
-    for (const pid of appProcesses(data)) {
-      try {
-        process.kill(pid, "SIGKILL");
-      } catch {
-        // Gone already.
+  for (const pid of appProcesses(data)) {
+    try {
+      process.kill(pid, "SIGKILL");
+    } catch {
+      // Gone already.
+    }
+  }
+}
+
+/** Empties the real app data on Windows, which only a CI machine's tests use (see the header). */
+function wipeWindowsData(): void {
+  for (const folder of WINDOWS_DATA) rmSync(folder, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+}
+
+/**
+ * Kills, on Windows, the processes started under `root` (the driver this
+ * harness spawned) with all their children; with `name`, only the ones of
+ * that name. Never a process from outside that tree.
+ */
+function killWindowsTree(root: number | undefined, name?: string): void {
+  if (root === undefined) return;
+  const listing = spawnSync("powershell", ["-NoProfile", "-Command", "Get-CimInstance Win32_Process | Select-Object ProcessId,ParentProcessId,Name | ConvertTo-Json -Compress"], { encoding: "utf8" });
+  const processes = JSON.parse(listing.stdout || "[]") as { ProcessId: number; ParentProcessId: number; Name: string }[];
+  const tree = new Set([root]);
+  for (let grew = true; grew; ) {
+    grew = false;
+    for (const p of processes) {
+      if (!tree.has(p.ProcessId) && tree.has(p.ParentProcessId)) {
+        tree.add(p.ProcessId);
+        grew = true;
       }
     }
-  } else spawnSync("pkill", ["-KILL", "-x", "buzzdome"]);
+  }
+  const targets = name ? processes.filter((p) => tree.has(p.ProcessId) && p.Name.toLowerCase() === name).map((p) => p.ProcessId) : [root];
+  for (const pid of targets) spawnSync("taskkill", ["/F", "/T", "/PID", String(pid)]);
 }

@@ -1,5 +1,6 @@
-# The Rust release the app is built with, the same as RUST_TOOLCHAIN in
-# .github/workflows/build.yml: raise both together.
+# The Rust release the app is built with, here only: CI reads it
+# (.github/actions/rust). A new release can add lints, so raise it on
+# purpose, with the fixes it asks for.
 [toolchain]
 channel = "1.97.0"
 components = ["clippy"]

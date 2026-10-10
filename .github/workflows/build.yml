@@ -12,14 +12,6 @@ on:
 permissions:
   contents: read
 
-env:
-  # The Rust release CI builds with, so a lint added by a new release cannot
-  # turn CI red unasked; raise it on purpose, with the fixes it asks for,
-  # together with rust-toolchain.toml.
-  RUST_TOOLCHAIN: "1.97.0"
-  # hidapi (buzzer receiver) needs libudev on Linux; the rest is Tauri's WebKitGTK stack.
-  LINUX_DEPS: libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libudev-dev
-
 jobs:
   check:
     runs-on: ubuntu-22.04
@@ -28,8 +20,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Install system libraries
-        run: sudo apt-get update && sudo apt-get install -y $LINUX_DEPS
+      - uses: ./.github/actions/linux-deps
 
       - uses: actions/setup-node@v4
         with:
@@ -37,9 +28,8 @@ jobs:
           cache: npm
           cache-dependency-path: app/package-lock.json
 
-      - uses: dtolnay/rust-toolchain@master
+      - uses: ./.github/actions/rust
         with:
-          toolchain: ${{ env.RUST_TOOLCHAIN }}
           components: clippy
 
       - uses: Swatinem/rust-cache@v2
@@ -94,9 +84,7 @@ jobs:
           cache: npm
           cache-dependency-path: app/package-lock.json
 
-      - uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - uses: ./.github/actions/rust
 
       - uses: Swatinem/rust-cache@v2
         with:
@@ -119,7 +107,8 @@ jobs:
     uses: ./.github/workflows/e2e.yml
 
   installers:
-    needs: [check, windows-tests, e2e]
+    # Not after e2e: a flaky E2E run must not hold back an installer before an event.
+    needs: [check, windows-tests]
     if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
     strategy:
       fail-fast: false
@@ -151,9 +140,8 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Install system libraries
+      - uses: ./.github/actions/linux-deps
         if: matrix.name == 'linux'
-        run: sudo apt-get update && sudo apt-get install -y $LINUX_DEPS
 
       - uses: actions/setup-node@v4
         with:
@@ -161,9 +149,8 @@ jobs:
           cache: npm
           cache-dependency-path: app/package-lock.json
 
-      - uses: dtolnay/rust-toolchain@master
+      - uses: ./.github/actions/rust
         with:
-          toolchain: ${{ env.RUST_TOOLCHAIN }}
           targets: ${{ matrix.rust-targets }}
 
       - uses: Swatinem/rust-cache@v2
