@@ -11,6 +11,6 @@ media: number,
 missing: Array<string>, 
 /**
  * Media the quiz names outside its media folder (an absolute path, a
- * `..`), never read: their cells stay empty (A19).
+ * `..`), never read: their cells stay empty.
  */
 refused: Array<string>, };

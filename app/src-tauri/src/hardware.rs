@@ -17,7 +17,7 @@ use buzzers::learned::{self, LearnedMapping, Recorder};
 use buzzers::protocol::{format_hex, Protocol};
 use buzzers::receiver::{self, RawReport, ReceiverConfig, ReceiverEvent, ReceiverHandle, ReceiverStatus};
 use buzzers::Press;
-use quiz_core::{BuzzerId, Button, Command};
+use quiz_core::{BuzzerId, Button};
 use quiz_file::FileAction;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
@@ -143,7 +143,9 @@ impl Hardware {
     }
 
     /// Writes `settings` to disk and only then uses them, so the app never
-    /// works with settings that a restart would lose.
+    /// works with settings that a restart would lose. Only off the windows'
+    /// thread (`off_ui`): the file is in the app's data folder with the
+    /// show's journal, so a disk that does not answer holds both (J23).
     fn store_settings(&self, settings: ReceiverSettings) -> CmdResult<()> {
         self.settings_file.store(&settings)?;
         *self.settings.lock().unwrap() = settings;
@@ -233,8 +235,7 @@ pub fn handle_event(app: &AppHandle, event: ReceiverEvent) {
         ReceiverEvent::Press { press, at_ms } => {
             // While learning, presses only teach; they must not play.
             let learning = hw.learn.lock().unwrap().is_some();
-            let command = Command::Press { buzzer: press.buzzer, button: press.button };
-            let used = !learning && crate::press_from_hardware(app, command, at_ms);
+            let used = !learning && crate::play_press(app, press, at_ms);
             let _ = app.emit("receiver-press", PressEvent { press, used });
         }
     }
@@ -265,17 +266,21 @@ pub fn receiver_devices(hw: tauri::State<Hardware>) -> CmdResult<Vec<DeviceInfo>
 
 /// Uses this receiver from now on (also after restarts), or none.
 #[tauri::command]
-pub fn receiver_select(hw: tauri::State<Hardware>, device: Option<DeviceInfo>) -> CmdResult<()> {
-    let selector = device.as_ref().map(DeviceSelector::for_device);
-    hw.store_settings(ReceiverSettings { receiver: selector.clone(), ..hw.settings() })?;
-    hw.handle.as_ref().ok_or(AppError::UsbUnavailable)?.select(selector);
-    Ok(())
+pub async fn receiver_select(app: AppHandle, device: Option<DeviceInfo>) -> CmdResult<()> {
+    off_ui(move || {
+        let hw = app.state::<Hardware>();
+        let selector = device.as_ref().map(DeviceSelector::for_device);
+        hw.store_settings(ReceiverSettings { receiver: selector.clone(), ..hw.settings() })?;
+        hw.handle.as_ref().ok_or(AppError::UsbUnavailable)?.select(selector);
+        Ok(())
+    })
+    .await
 }
 
 /// Async, as it takes the show state, which a journal write can hold (`off_ui`).
 #[tauri::command]
 pub async fn receiver_learn_start(app: AppHandle, buzzer: BuzzerId, button: Button) -> CmdResult<()> {
-    crate::off_ui(move || {
+    off_ui(move || {
         let hw = app.state::<Hardware>();
         if hw.connected_device().is_none() {
             return Err(AppError::ReceiverNotConnected);
@@ -299,29 +304,37 @@ pub fn receiver_learn_cancel(app: AppHandle, hw: tauri::State<Hardware>) {
 /// Saves the recorded presses as the signature of the button being learned,
 /// and returns that button.
 #[tauri::command]
-pub fn receiver_learn_finish(app: AppHandle, hw: tauri::State<Hardware>) -> CmdResult<Press> {
-    let device = hw.connected_device().ok_or(AppError::ReceiverNotConnected)?;
-    let recorder = hw.learn.lock().unwrap().clone().ok_or(AppError::LearnNotStarted)?;
-    let mut settings = hw.settings();
-    // Too few presses or a clash with another button: learn mode stays on to fix it.
-    recorder.save_into(&mut settings.learned, &device)?;
-    let stored = hw.store_settings(settings);
-    // Stored or not, learn mode ends, so presses play again.
-    hw.end_learning(&app);
-    stored?;
-    if let Some(handle) = hw.handle.as_ref() {
-        handle.reload_protocol();
-    }
-    Ok(Press { buzzer: recorder.buzzer, button: recorder.button })
+pub async fn receiver_learn_finish(app: AppHandle) -> CmdResult<Press> {
+    off_ui(move || {
+        let hw = app.state::<Hardware>();
+        let device = hw.connected_device().ok_or(AppError::ReceiverNotConnected)?;
+        let recorder = hw.learn.lock().unwrap().clone().ok_or(AppError::LearnNotStarted)?;
+        let mut settings = hw.settings();
+        // Too few presses or a clash with another button: learn mode stays on to fix it.
+        recorder.save_into(&mut settings.learned, &device)?;
+        let stored = hw.store_settings(settings);
+        // Stored or not, learn mode ends, so presses play again.
+        hw.end_learning(&app);
+        stored?;
+        if let Some(handle) = hw.handle.as_ref() {
+            handle.reload_protocol();
+        }
+        Ok(Press { buzzer: recorder.buzzer, button: recorder.button })
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn receiver_forget_learned(hw: tauri::State<Hardware>) -> CmdResult<()> {
-    hw.store_settings(ReceiverSettings { learned: Vec::new(), ..hw.settings() })?;
-    if let Some(handle) = hw.handle.as_ref() {
-        handle.reload_protocol();
-    }
-    Ok(())
+pub async fn receiver_forget_learned(app: AppHandle) -> CmdResult<()> {
+    off_ui(move || {
+        let hw = app.state::<Hardware>();
+        hw.store_settings(ReceiverSettings { learned: Vec::new(), ..hw.settings() })?;
+        if let Some(handle) = hw.handle.as_ref() {
+            handle.reload_protocol();
+        }
+        Ok(())
+    })
+    .await
 }
 
 /// Writes the recent raw reports to a text file the quizmaster picks, e.g.

@@ -142,7 +142,7 @@ impl Game {
                     .map(|r| r.button.answer_index().zip(question).is_some_and(|(i, q)| q.is_correct(i))),
                 answer_ms: self.responses().get(&p.buzzer).map(|r| r.elapsed_ms),
                 locked_out: self.locked_out().contains(&p.buzzer),
-                delta: self.deltas().get(&p.buzzer).copied(),
+                delta: self.delta(p.buzzer),
             })
             .collect();
         players.sort_by_key(|p| (p.rank.unwrap_or(usize::MAX), p.buzzer));
