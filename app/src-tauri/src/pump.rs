@@ -1,38 +1,68 @@
 //! The order in which the show thread handles what happens (architecture
-//! review N2): every receiver event already received comes before a
-//! time-driven command, so "time is up" never beats a press that arrived in
-//! time, however far behind the thread has fallen.
+//! review N2): every event received by a moment comes before the
+//! time-driven commands of that moment, so "time is up" never beats a press
+//! that arrived in time, however far behind the thread has fallen. And a
+//! burst of events never holds time up (A8): the thread takes the events
+//! received up to the moment it reads the clock, then ticks at that moment,
+//! and leaves the later ones for the next round.
 
 use std::sync::mpsc::{Receiver, RecvTimeoutError, TryRecvError};
 use std::time::Duration;
 
-/// Waits up to `wait` for an event, handles it and every event received
-/// since, then runs `tick` (time up, clock updates). Returns false once the
-/// sender is gone; `tick` still runs.
-pub fn pump_once<E>(events: &Receiver<E>, wait: Duration, mut handle: impl FnMut(E), tick: impl FnOnce()) -> bool {
-    let connected = match events.recv_timeout(wait) {
-        Ok(event) => {
-            handle(event);
-            loop {
-                match events.try_recv() {
-                    Ok(event) => handle(event),
-                    Err(TryRecvError::Empty) => break true,
-                    Err(TryRecvError::Disconnected) => break false,
-                }
+/// An event with the moment it happened on the show clock. One with no
+/// moment of its own (a receiver status) says 0, so it never waits.
+pub trait Timed {
+    fn at_ms(&self) -> u64;
+}
+
+/// The show thread's queue of events.
+pub struct Pump<E> {
+    events: Receiver<E>,
+    /// An event received after the clock was read, kept for the next round.
+    held: Option<E>,
+}
+
+impl<E: Timed> Pump<E> {
+    pub fn new(events: Receiver<E>) -> Pump<E> {
+        Pump { events, held: None }
+    }
+
+    /// Waits up to `wait` for an event (not when one is held), reads the
+    /// clock, handles every event received that happened by then, in the
+    /// order received, then runs `tick` with the same moment (time up, clock
+    /// updates). Returns false once the senders are gone; `tick` still runs.
+    pub fn once(&mut self, wait: Duration, clock: impl FnOnce() -> u64, mut handle: impl FnMut(E), tick: impl FnOnce(u64)) -> bool {
+        let mut connected = true;
+        if self.held.is_none() {
+            match self.events.recv_timeout(wait) {
+                Ok(event) => self.held = Some(event),
+                Err(RecvTimeoutError::Timeout) => {}
+                Err(RecvTimeoutError::Disconnected) => connected = false,
             }
         }
-        Err(RecvTimeoutError::Timeout) => true,
-        Err(RecvTimeoutError::Disconnected) => false,
-    };
-    tick();
-    connected
+        let now = clock();
+        while let Some(event) = self.held.take() {
+            if event.at_ms() > now {
+                self.held = Some(event);
+                break;
+            }
+            handle(event);
+            match self.events.try_recv() {
+                Ok(event) => self.held = Some(event),
+                Err(TryRecvError::Empty) => {}
+                Err(TryRecvError::Disconnected) => connected = false,
+            }
+        }
+        tick(now);
+        connected
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use quiz_core::{AnswerMode, Button, Command, CorrectAnswer, Game, Phase, Question, QuestionStep, Quiz, Slide, SlideContent, Stamped};
-    use std::cell::RefCell;
+    use std::cell::{Cell, RefCell};
     use std::sync::mpsc;
 
     fn everyone_question() -> Quiz {
@@ -47,6 +77,22 @@ mod tests {
             penalty: 0,
         };
         Quiz::new("T", vec![Slide::new("q", SlideContent::Question(question))])
+    }
+
+    impl Timed for Stamped {
+        fn at_ms(&self) -> u64 {
+            self.at_ms
+        }
+    }
+
+    /// An event that only has a moment.
+    #[derive(Debug, PartialEq)]
+    struct At(u64);
+
+    impl Timed for At {
+        fn at_ms(&self) -> u64 {
+            self.0
+        }
     }
 
     #[test]
@@ -64,18 +110,17 @@ mod tests {
         for buzzer in 1..=30 {
             send.send(Stamped { at_ms: 10_000 + u64::from(buzzer) * 30, command: Command::Press { buzzer, button: Button::B } }).unwrap();
         }
-        let late = 13_000;
         let game = RefCell::new(game);
-        pump_once(
-            &events,
+        Pump::new(events).once(
             Duration::ZERO,
+            || 13_000,
             |stamped| {
                 game.borrow_mut().apply(&stamped).unwrap();
             },
-            || {
-                let due = game.borrow().due_command(late);
+            |now| {
+                let due = game.borrow().due_command(now);
                 if let Some(command) = due {
-                    game.borrow_mut().apply(&Stamped { at_ms: late, command }).unwrap();
+                    game.borrow_mut().apply(&Stamped { at_ms: now, command }).unwrap();
                 }
             },
         );
@@ -85,18 +130,45 @@ mod tests {
     }
 
     #[test]
-    fn every_queued_event_comes_before_the_tick() {
+    fn every_event_received_by_the_moment_comes_before_its_tick() {
         let (send, events) = mpsc::channel();
-        for n in 0..5 {
-            send.send(n).unwrap();
+        for n in [0, 3, 1, 10] {
+            send.send(At(n)).unwrap();
         }
         let order = RefCell::new(Vec::new());
-        let connected = pump_once(&events, Duration::from_millis(10), |n| order.borrow_mut().push(n.to_string()), || order.borrow_mut().push("tick".to_string()));
+        let mut pump = Pump::new(events);
+        let connected = pump.once(Duration::from_millis(10), || 10, |At(n)| order.borrow_mut().push(n.to_string()), |now| order.borrow_mut().push(format!("tick {now}")));
         assert!(connected);
-        assert_eq!(order.into_inner(), ["0", "1", "2", "3", "4", "tick"]);
+        // In the order received, not re-ordered by their moments.
+        assert_eq!(order.into_inner(), ["0", "3", "1", "10", "tick 10"]);
         drop(send);
         let mut ticked = false;
-        assert!(!pump_once(&events, Duration::from_millis(10), |_: i32| {}, || ticked = true));
+        assert!(!pump.once(Duration::from_millis(10), || 20, |_| {}, |_| ticked = true));
         assert!(ticked);
+    }
+
+    #[test]
+    fn a_burst_that_keeps_coming_does_not_hold_time_up() {
+        // Every event takes 10 ms to handle (a journal write), and meanwhile the next one comes in.
+        let (send, events) = mpsc::channel();
+        send.send(At(1_000)).unwrap();
+        let clock = Cell::new(1_000);
+        let order = RefCell::new(Vec::new());
+        let mut pump = Pump::new(events);
+        for _ in 0..3 {
+            pump.once(
+                Duration::ZERO,
+                || clock.get(),
+                |At(n)| {
+                    order.borrow_mut().push(n.to_string());
+                    clock.set(clock.get() + 10);
+                    send.send(At(clock.get())).unwrap();
+                },
+                |now| order.borrow_mut().push(format!("tick {now}")),
+            );
+        }
+        assert_eq!(order.into_inner(), ["1000", "tick 1000", "1010", "tick 1010", "1020", "tick 1020"]);
+        // The event that came in last waits for the next round; none is lost.
+        assert_eq!(pump.held, Some(At(1_030)));
     }
 }

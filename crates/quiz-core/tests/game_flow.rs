@@ -484,6 +484,55 @@ fn controls_offer_exactly_the_commands_each_step_takes() {
     }
 }
 
+/// Checks that `ignores` says of every press, of known buzzers and a new one,
+/// exactly whether applying it leaves the show as it is.
+fn assert_ignores_match_apply(game: &Game, at_ms: u64) {
+    for buzzer in 1..=4 {
+        for button in [Button::A, Button::B, Button::C, Button::D, Button::Big] {
+            let stamped = Stamped { at_ms, command: Command::Press { buzzer, button } };
+            let mut applied = game.clone();
+            applied.apply(&stamped).unwrap();
+            assert_eq!(game.ignores(&stamped), applied == *game, "{stamped:?} in {:?}", game.phase());
+        }
+    }
+}
+
+#[test]
+fn a_press_is_ignored_exactly_when_it_changes_nothing() {
+    // Fastest finger: before the clock, running, paused, buzzed, locked out, revealed.
+    let mut show = Show::new(vec![question("q1", AnswerMode::FastestFinger), question("q2", AnswerMode::Everyone)]);
+    for buzzer in 1..=3 {
+        show.press(0, buzzer, Button::Big);
+    }
+    show.run(0, Command::SetPlayerEnabled { buzzer: 3, enabled: false }).unwrap();
+    let buzz = |buzzer| Command::Press { buzzer, button: Button::Big };
+    let script = [
+        (0, Command::Next),            // q1 ready
+        (1_000, Command::Next),        // running
+        (2_000, Command::PauseClock),  // paused
+        (3_000, Command::ResumeClock), // running
+        (4_000, buzz(1)),              // buzzed
+        (5_000, Command::JudgeWrong),  // running again, 1 locked out
+        (6_000, buzz(2)),              // buzzed
+        (7_000, Command::JudgeRight),  // revealed
+        (8_000, Command::Next),        // q2 ready
+        (9_000, Command::Next),        // running
+        (10_000, Command::Press { buzzer: 1, button: Button::B }), // 1 answered
+    ];
+    assert_ignores_match_apply(&show.game, 0);
+    for (at_ms, command) in script {
+        show.run(at_ms, command).unwrap();
+        assert_ignores_match_apply(&show.game, at_ms);
+    }
+    // Before the question started, after time up and once it is closed.
+    assert_ignores_match_apply(&show.game, 8_500);
+    assert_ignores_match_apply(&show.game, 19_000 + PRESS_GRACE_MS);
+    show.run(20_000, Command::CloseQuestion).unwrap();
+    assert_ignores_match_apply(&show.game, 20_000);
+    assert!(show.game.ignores(&Stamped { at_ms: 20_000, command: buzz(1) }));
+    assert!(!show.game.ignores(&Stamped { at_ms: 20_000, command: Command::Next }), "only presses are ignored");
+}
+
 fn with_video(mut slide: Slide) -> Slide {
     slide.video = Some(VideoClip::new("media/clip.mp4"));
     slide

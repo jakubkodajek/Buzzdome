@@ -6,6 +6,7 @@
 //! and are written between reads. When the cable is unplugged the read fails,
 //! the device is dropped and the thread retries until it is back.
 
+use crate::clock::ShowClock;
 use crate::edge::EdgeFilter;
 use crate::hid::{DeviceInfo, DeviceSelector, HidBackend, HidDevice};
 use crate::protocol::{Protocol, ProtocolKind, ProtocolResolver};
@@ -16,7 +17,7 @@ use ts_rs::TS;
 use std::sync::mpsc::{self, Receiver as ChannelRx, RecvTimeoutError, Sender, TryRecvError};
 use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
 #[ts(export)]
@@ -63,8 +64,9 @@ pub enum ReceiverEvent {
     /// Sent for every report before the presses decoded from it.
     Raw(RawReport),
     /// A press edge, in the order the receiver delivered it, with the time
-    /// its report arrived (ms since the Unix epoch). The game scores the
-    /// press by that time, however long the app takes to apply it.
+    /// its report arrived on the show clock (`ReceiverConfig::clock`). The
+    /// game scores the press by that time, however long the app takes to
+    /// apply it.
     Press { press: Press, at_ms: u64 },
 }
 
@@ -76,11 +78,13 @@ pub struct ReceiverConfig {
     pub read_timeout_ms: i32,
     /// See [`EdgeFilter`].
     pub repeat_gap_ms: u64,
+    /// What reports are stamped with: the app's show clock.
+    pub clock: ShowClock,
 }
 
 impl Default for ReceiverConfig {
     fn default() -> Self {
-        ReceiverConfig { retry: Duration::from_secs(2), read_timeout_ms: 20, repeat_gap_ms: 150 }
+        ReceiverConfig { retry: Duration::from_secs(2), read_timeout_ms: 20, repeat_gap_ms: 150, clock: ShowClock::start() }
     }
 }
 
@@ -142,10 +146,12 @@ impl BuzzerDriver for HardwareDriver {
     }
 }
 
-pub fn spawn(
+/// Starts the receiver thread. Its events go to `events`, as `E`: the app
+/// sends them into the queue of its show thread with everything else.
+pub fn spawn<E: From<ReceiverEvent> + Send + 'static>(
     backend: Arc<dyn HidBackend>,
     resolver: Arc<ProtocolResolver>,
-    events: Sender<ReceiverEvent>,
+    events: Sender<E>,
     config: ReceiverConfig,
 ) -> (ReceiverHandle, JoinHandle<()>) {
     let (tx, rx) = mpsc::channel();
@@ -175,10 +181,10 @@ struct Connection {
     protocol: Box<dyn Protocol>,
 }
 
-struct Worker {
+struct Worker<E> {
     backend: Arc<dyn HidBackend>,
     resolver: Arc<ProtocolResolver>,
-    events: Sender<ReceiverEvent>,
+    events: Sender<E>,
     config: ReceiverConfig,
     status: Arc<Mutex<ReceiverStatus>>,
     selector: Option<DeviceSelector>,
@@ -187,11 +193,7 @@ struct Worker {
     edge: EdgeFilter,
 }
 
-fn now_ms() -> u64 {
-    SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| d.as_millis() as u64)
-}
-
-impl Worker {
+impl<E: From<ReceiverEvent>> Worker<E> {
     fn run(mut self, rx: ChannelRx<Control>) {
         let mut buf = [0u8; 256];
         loop {
@@ -283,12 +285,12 @@ impl Worker {
 
     fn report(&mut self, bytes: &[u8]) {
         let Some(conn) = self.conn.as_mut() else { return };
-        let at_ms = now_ms();
+        let at_ms = self.config.clock.now_ms();
         let decoded = conn.protocol.decode(bytes);
         let presses = self.edge.filter(decoded.clone(), at_ms);
-        let _ = self.events.send(ReceiverEvent::Raw(RawReport { at_ms, bytes: bytes.to_vec(), decoded }));
+        let _ = self.events.send(ReceiverEvent::Raw(RawReport { at_ms, bytes: bytes.to_vec(), decoded }).into());
         for press in presses {
-            let _ = self.events.send(ReceiverEvent::Press { press, at_ms });
+            let _ = self.events.send(ReceiverEvent::Press { press, at_ms }.into());
         }
     }
 
@@ -315,7 +317,7 @@ impl Worker {
         let mut current = self.status.lock().unwrap();
         if *current != status {
             *current = status.clone();
-            let _ = self.events.send(ReceiverEvent::Status(status));
+            let _ = self.events.send(ReceiverEvent::Status(status).into());
         }
     }
 }

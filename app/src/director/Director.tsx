@@ -1,5 +1,5 @@
 import { ask, open } from "@tauri-apps/plugin-dialog";
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useRef, useState, type ReactNode } from "react";
 import { api } from "../api";
 import { AppProvider, useApp, useDispatch, useRun } from "../app-context";
 import { playerLevel } from "../audio/clip-player";
@@ -8,7 +8,7 @@ import { useSlideSound, type SlideSound } from "../audio/slide-sound";
 import { clockSeconds } from "../format";
 import { EditorScreen } from "../editor/EditorScreen";
 import { errorText } from "../messages";
-import { useBackendEvent, useClock, useGameView, useLastSession, useLearnProgress, useMediaRoot, usePlayerVolume, useQuiz } from "../hooks";
+import { useBackendEvent, useClock, useGameView, useLastSession, useLearnProgress, useMediaRoot, usePlayerVolume, useQuiz, useShowNotSaved } from "../hooks";
 import {
   BackIcon,
   CheckIcon,
@@ -47,27 +47,34 @@ type Tab = "questions" | "teams" | "responses" | "buzzers" | "media" | "receiver
 /** The show controls, the quiz editor, or the show controls for a test run of the edited quiz. */
 type Screen = "show" | "editor" | "testRun";
 
+/** How long a message stays on screen. */
+const TOAST_MS = 4000;
+/** The most messages on screen at once; an older one makes way. */
+const MAX_TOASTS = 3;
+
 /** The quizmaster's window. */
 export function Director() {
-  const [error, setError] = useState<string | null>(null);
-  const notify = useCallback((message: string) => setError(message), []);
-
-  useEffect(() => {
-    if (!error) return;
-    const timer = setTimeout(() => setError(null), 4000);
-    return () => clearTimeout(timer);
-  }, [error]);
+  const [toasts, setToasts] = useState<{ id: number; message: string }[]>([]);
+  const lastId = useRef(0);
+  // Each message stays its own time, so a second one does not hide the first.
+  const notify = useCallback((message: string) => {
+    const id = ++lastId.current;
+    setToasts((shown) => [...shown.filter((toast) => toast.message !== message), { id, message }].slice(-MAX_TOASTS));
+    setTimeout(() => setToasts((shown) => shown.filter((toast) => toast.id !== id)), TOAST_MS);
+  }, []);
 
   return (
     <AppProvider notify={notify}>
       <ThemesProvider>
         <DirectorScreens />
       </ThemesProvider>
-      {error && (
-        <div className="toast" role="alert">
-          {error}
-        </div>
-      )}
+      <div className="toasts">
+        {toasts.map((toast) => (
+          <div key={toast.id} className="toast" role="alert">
+            {toast.message}
+          </div>
+        ))}
+      </div>
     </AppProvider>
   );
 }
@@ -119,21 +126,34 @@ function DirectorLayout({ testRun, onEditor }: { testRun: boolean; onEditor: () 
     <div className="director">
       <CommandPanel view={view} projector={projector} sound={sound} testRun={testRun} onEditor={onEditor} />
       <div className="workspace">
-        <nav className="tabs">
+        <nav className="tabs" role="tablist">
           {tabs.map(([id, label]) => (
-            <button key={id} className={tab === id ? "tab active" : "tab"} onClick={() => setTab(id)}>
+            <button key={id} role="tab" aria-selected={tab === id} className={tab === id ? "tab active" : "tab"} onClick={() => setTab(id)}>
               {label}
             </button>
           ))}
         </nav>
+        <NotSavedBanner />
         <LearnBanner />
-        <div className="tab-body">
+        <div className="tab-body" role="tabpanel">
           <ThemeContext value={theme}>
             <TabBody tab={tab} view={view} quiz={quiz} projector={projector} player={player} sound={sound} />
           </ThemeContext>
         </div>
         <StatusBar view={view} quiz={quiz} testRun={testRun} />
       </div>
+    </div>
+  );
+}
+
+/** Shown while the show's journal refuses writes, when nothing in the show changes. */
+function NotSavedBanner() {
+  const { t } = useApp();
+  const problem = useShowNotSaved();
+  if (!problem) return null;
+  return (
+    <div className="not-saved-banner" role="alert">
+      {t("notSavedBanner", { problem: errorText(t, problem) })}
     </div>
   );
 }

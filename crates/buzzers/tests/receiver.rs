@@ -121,7 +121,7 @@ impl Protocol for TestProtocol {
 }
 
 fn config() -> ReceiverConfig {
-    ReceiverConfig { retry: Duration::from_millis(30), read_timeout_ms: 5, repeat_gap_ms: 150 }
+    ReceiverConfig { retry: Duration::from_millis(30), read_timeout_ms: 5, repeat_gap_ms: 150, ..ReceiverConfig::default() }
 }
 
 fn selector() -> DeviceSelector {

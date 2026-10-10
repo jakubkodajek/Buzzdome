@@ -62,9 +62,11 @@ on `PATH` first (macOS dev machine).
 Layout: `crates/quiz-core` (model, game state machine, scoring, view),
 `crates/quiz-file` (`.quiz` files: ZIP with media, unpack cache, save;
 `sheet.rs` spreadsheet import and CSV export),
-`crates/buzzers` (driver trait, USB-HID receiver thread, protocols, learn mode),
-`app/src-tauri` (Tauri shell, session journal, `editor.rs` draft, `hardware.rs` receiver setup,
+`crates/buzzers` (driver trait, USB-HID receiver thread, protocols, learn mode, `clock.rs` show clock),
+`app/src-tauri` (Tauri shell, session journal, `show_thread.rs` and `pump.rs` the show thread and its
+event order, `editor.rs` draft, `sheet_reader.rs` spreadsheet reader process, `hardware.rs` receiver setup,
 `teams.rs` prepared team names, `media_player.rs` media library, player, volume and sound board,
+`themes.rs` built-in themes, `fonts.rs` installed fonts, `app_file.rs` settings files,
 `app_icon.rs` the windows' icon colour),
 `app/src` (React UI: `director/`, `host/`, `editor/`), `samples/demo-quiz.json`.
 Show sessions are journaled under the OS app-data dir in `sessions/<start ms>/`.

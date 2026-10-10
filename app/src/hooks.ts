@@ -2,7 +2,7 @@ import { listen } from "@tauri-apps/api/event";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { api, type BackendEvents } from "./api";
 import { MAX_PLAYER_VOLUME } from "./bindings/Constants";
-import type { ClockView, GameView, IconColor, LearnProgress, MediaLibrary, NowPlaying, Quiz, SessionSummary, SettingsLost, SoundBoard } from "./types";
+import type { AppError, ClockView, GameView, IconColor, LearnProgress, MediaLibrary, NowPlaying, Quiz, SessionSummary, SettingsLost, SoundBoard } from "./types";
 
 /** A ref that always holds the latest `value`, for callbacks that outlive a render. */
 export function useLatest<T>(value: T): { readonly current: T } {
@@ -87,6 +87,11 @@ export function useGameView(): GameView | null {
 /** Whether the projector window is open, however it was opened or closed. */
 export function useHostWindowOpen(): boolean {
   return usePushedValue("host-window", api.hostWindowOpen) ?? false;
+}
+
+/** Why the running show cannot be saved, while that lasts; null when it can. */
+export function useShowNotSaved(): AppError | null {
+  return usePushedValue("show-not-saved", api.showNotSaved);
 }
 
 /** Whether a buzzer button is being learned; presses do not play meanwhile. */

@@ -198,6 +198,13 @@
   font-weight: 600;
 }
 
+.not-saved-banner {
+  padding: 6px 12px;
+  font-weight: 600;
+  color: #fff;
+  background: var(--bad);
+}
+
 .tab-body {
   flex: 1;
   min-height: 0;
@@ -668,17 +675,25 @@
 .director .key-c { border-color: var(--answer-2); }
 .director .key-d { border-color: var(--answer-3); }
 
-.toast {
+.toasts {
   position: fixed;
   right: 16px;
   bottom: 36px;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.toast {
   max-width: 420px;
   padding: 10px 14px;
   color: #fff;
   background: var(--bad);
   border-radius: 4px;
   white-space: pre-line;
-  z-index: 30;
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
 }
 

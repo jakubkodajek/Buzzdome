@@ -11,30 +11,28 @@ mod media_player;
 mod pump;
 mod session;
 pub mod sheet_reader;
+mod show_thread;
 mod teams;
 mod themes;
 
+use buzzers::clock::ShowClock;
 use buzzers::receiver::HardwareDriver;
 use buzzers::{BuzzerDriver, VirtualDriver};
 use error::CmdResult;
 pub use error::AppError;
-use hardware::{Hardware, ReceiverEvents};
+use hardware::Hardware;
 use quiz_core::{Command, Effect, Game, GameView, Quiz, Stamped};
 use serde::Serialize;
 use ts_rs::TS;
 use session::{Resumed, Session, SessionMeta, SessionSummary};
 use std::path::{Path, PathBuf};
-use std::sync::{Mutex, MutexGuard};
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
-use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder, WindowEvent};
+use std::sync::{mpsc, LazyLock, Mutex, MutexGuard};
+use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder, WindowEvent};
 
 const DEMO_QUIZ: &str = include_str!("../../../samples/demo-quiz.json");
 const HOST_LABEL: &str = "host";
 /// The quizmaster's window (`tauri.conf.json`).
 const DIRECTOR_LABEL: &str = "director";
-const TICK: Duration = Duration::from_millis(50);
-/// How often the windows get the running clock (seconds and points on screen).
-const CLOCK_EVENT_EVERY: Duration = Duration::from_millis(250);
 
 struct Inner {
     game: Option<Game>,
@@ -47,12 +45,52 @@ struct Inner {
     /// Where the prepared names are kept, and why they were not read, if
     /// so (for the Teams tab). Known once the app has started.
     teams_file: Option<app_file::AppFile>,
+    /// Why the running show's last journal write failed, if it did; none
+    /// once one works again. The Director shows it (A9).
+    save_problem: Option<AppError>,
+}
+
+impl Inner {
+    /// No show, the on-screen buzzers and no team names: the app as it starts.
+    fn new() -> Inner {
+        Inner {
+            game: None,
+            session: None,
+            media_root: None,
+            driver: Box::new(VirtualDriver),
+            teams: Vec::new(),
+            teams_file: None,
+            save_problem: None,
+        }
+    }
 }
 
 struct AppState(Mutex<Inner>);
 
+/// The show state. Code that holds it must not wait for the learn lock
+/// (`lock_for_new_show`).
+fn lock_show(app: &AppHandle) -> MutexGuard<'_, Inner> {
+    app.state::<AppState>().inner().0.lock().unwrap()
+}
+
+/// The clock every command and press is stamped with, shared with the
+/// receiver thread (A6, `Stamped::at_ms`).
+static SHOW_CLOCK: LazyLock<ShowClock> = LazyLock::new(ShowClock::start);
+
 fn now_ms() -> u64 {
-    SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| d.as_millis() as u64)
+    SHOW_CLOCK.now_ms()
+}
+
+/// Runs `work` on a thread that may wait, never the windows' thread: Tauri
+/// runs synchronous commands there, so one that waits for the show state,
+/// which a journal write holds, would freeze both windows (A7).
+async fn off_ui<T: Send + 'static>(work: impl FnOnce() -> CmdResult<T> + Send + 'static) -> CmdResult<T> {
+    tauri::async_runtime::spawn_blocking(work).await?
+}
+
+/// Reads the show state off the windows' thread (`off_ui`).
+async fn read_show<T: Send + 'static>(app: AppHandle, read: impl FnOnce(&Inner) -> T + Send + 'static) -> CmdResult<T> {
+    off_ui(move || Ok(read(&lock_show(&app)))).await
 }
 
 pub(crate) fn app_data(app: &AppHandle, folder: &str) -> CmdResult<PathBuf> {
@@ -67,6 +105,10 @@ fn sessions_root(app: &AppHandle) -> CmdResult<PathBuf> {
 fn quizzes_cache(app: &AppHandle) -> CmdResult<PathBuf> {
     app_data(app, "quizzes")
 }
+
+/// Held while a quiz is unpacked into `quizzes_cache` or old ones are
+/// deleted from it, so neither runs during the other.
+static QUIZZES_CACHE: Mutex<()> = Mutex::new(());
 
 /// Lets the windows load files from `root` (and nothing else of the disk).
 fn serve_media(app: &AppHandle, inner: &mut Inner, root: Option<PathBuf>) -> CmdResult<()> {
@@ -91,30 +133,45 @@ fn emit_show_changed(app: &AppHandle, inner: &Inner) {
     emit_state(app, inner.game.as_ref());
 }
 
-/// Locks `mutex` and says when the caller asked for it, read from `clock`
-/// before waiting: a command happened when it was given, not when it got the
-/// show state, which a burst of journaled buzzer presses can hold for a
-/// while (S7).
-fn timed_lock<T>(mutex: &Mutex<T>, clock: impl FnOnce() -> u64) -> (MutexGuard<'_, T>, u64) {
-    let at_ms = clock();
-    (mutex.lock().unwrap(), at_ms)
-}
-
 /// Applies a command that happened at `at_ms` on a copy, journals it, then
-/// commits. The show never shows a state that is not on disk.
-fn execute_at(app: &AppHandle, inner: &mut Inner, command: Command, at_ms: u64) -> CmdResult<()> {
-    let effects = apply_journaled(inner, command, at_ms)?;
+/// commits. The show never shows a state that is not on disk. Gives false
+/// for a press that changes nothing, which is neither journaled nor shown.
+fn execute_at(app: &AppHandle, inner: &mut Inner, command: Command, at_ms: u64) -> CmdResult<bool> {
+    let Some(effects) = apply_journaled(inner, command, at_ms)? else {
+        return Ok(false);
+    };
     deliver(app, inner, effects);
-    Ok(())
+    Ok(true)
 }
 
 /// Applies `command` to a copy of the running show and journals it; only
-/// then does the copy replace the show (S1). The effects are for `deliver`.
-fn apply_journaled(inner: &mut Inner, command: Command, at_ms: u64) -> CmdResult<Vec<Effect>> {
+/// then does the copy replace the show (S1). Gives the effects, for
+/// `deliver`, or none for a press that changes nothing (`Game::ignores`):
+/// a burst of those costs no journal write (A8). Keeps whether the journal
+/// write failed, for the Director (A9).
+fn apply_journaled(inner: &mut Inner, command: Command, at_ms: u64) -> CmdResult<Option<Vec<Effect>>> {
     let game = inner.game.as_ref().ok_or(AppError::NoShow)?;
-    let (next, effects) = apply_and_journal(game, inner.session.as_mut(), &Stamped { at_ms, command })?;
+    let stamped = Stamped { at_ms, command };
+    if game.ignores(&stamped) {
+        return Ok(None);
+    }
+    let applied = apply_and_journal(game, inner.session.as_mut(), &stamped);
+    match &applied {
+        Ok(_) if inner.session.is_some() => inner.save_problem = None,
+        Err(e) if e.is_not_saved() => inner.save_problem = Some(e.clone()),
+        _ => {}
+    }
+    let (next, effects) = applied?;
     inner.game = Some(next);
-    Ok(effects)
+    Ok(Some(effects))
+}
+
+/// Makes `game` the running show, or none, journaled in `session` (none in
+/// a test run). A new journal has no failed write yet.
+fn replace_show(inner: &mut Inner, game: Option<Game>, session: Option<Session>) {
+    inner.game = game;
+    inner.session = session;
+    inner.save_problem = None;
 }
 
 /// Applies `stamped` to a copy of `game` and journals it in `session` (none
@@ -155,9 +212,9 @@ fn send_effects(app: &AppHandle, inner: &mut Inner, effects: Vec<Effect>) {
 /// taken before this one and kept until this one is held, so learn mode
 /// cannot start in between; no code may wait for the learn lock while
 /// holding this one.
-fn lock_for_new_show<'a>(app: &AppHandle, state: &'a AppState) -> CmdResult<MutexGuard<'a, Inner>> {
+fn lock_for_new_show(app: &AppHandle) -> CmdResult<MutexGuard<'_, Inner>> {
     let _learning = hardware::end_learning(app);
-    let inner = state.0.lock().unwrap();
+    let inner = lock_show(app);
     if inner.game.is_some() {
         return Err(AppError::ShowRunning);
     }
@@ -165,29 +222,30 @@ fn lock_for_new_show<'a>(app: &AppHandle, state: &'a AppState) -> CmdResult<Mute
 }
 
 /// Starts a show of `quiz`, whose media (if any) are in `media_root`.
-fn start_show(
-    app: &AppHandle,
-    inner: &mut Inner,
-    quiz: Quiz,
-    source_path: Option<String>,
-    media_root: Option<PathBuf>,
-) -> CmdResult<()> {
+fn start_show(app: &AppHandle, quiz: Quiz, source_path: Option<String>, media_root: Option<PathBuf>) -> CmdResult<()> {
     quiz_file::check_playable(&quiz, media_root.as_deref().unwrap_or(Path::new("")))?;
-    let meta = SessionMeta {
-        quiz_title: quiz.title.clone(),
-        source_path,
-        started_ms: now_ms(),
-        media_root: media_root.as_ref().map(|root| root.to_string_lossy().into_owned()),
-        rules_version: quiz_core::RULES_VERSION,
+    let named = {
+        let mut inner = lock_for_new_show(app)?;
+        let meta = SessionMeta {
+            quiz_title: quiz.title.clone(),
+            source_path,
+            started_ms: now_ms(),
+            media_root: media_root.as_ref().map(|root| root.to_string_lossy().into_owned()),
+            rules_version: quiz_core::RULES_VERSION,
+        };
+        let session = Session::create(&sessions_root(app)?, &quiz, &meta).map_err(|e| AppError::ShowNotSaved { detail: e.to_string() })?;
+        serve_media(app, &mut inner, media_root.clone())?;
+        begin_show(app, &mut inner, Game::new(quiz), Some(session))
     };
-    let session = Session::create(&sessions_root(app)?, &quiz, &meta).map_err(|e| AppError::ShowNotSaved { detail: e.to_string() })?;
-    serve_media(app, inner, media_root)?;
-    let named = begin_show(app, inner, Game::new(quiz), Some(session));
     // Only the latest show can be resumed, so other unpacked quizzes can go,
-    // also when the show runs without the names its journal refused.
-    let keep: Vec<&Path> = inner.media_root.iter().map(PathBuf::as_path).collect();
-    if let Err(e) = quiz_file::prune(&quizzes_cache(app)?, &keep) {
-        eprintln!("cleaning unpacked quizzes: {e}");
+    // also when the show runs without the names its journal refused. Not
+    // while holding the show state: deleting a big quiz takes a while.
+    if let Ok(cache) = quizzes_cache(app) {
+        let _cache = QUIZZES_CACHE.lock().unwrap();
+        let keep: Vec<&Path> = media_root.iter().map(PathBuf::as_path).collect();
+        if let Err(e) = quiz_file::prune(&cache, &keep) {
+            eprintln!("cleaning unpacked quizzes: {e}");
+        }
     }
     named
 }
@@ -207,59 +265,75 @@ fn begin_show(app: &AppHandle, inner: &mut Inner, game: Game, session: Option<Se
 /// Whether a show (or a test run) is running. Not to be called while
 /// holding the show state.
 fn show_running(app: &AppHandle) -> bool {
-    app.state::<AppState>().0.lock().unwrap().game.is_some()
+    lock_show(app).game.is_some()
 }
 
+// The commands that read or start the show are async, so Tauri runs them
+// off the windows' thread, and they take the show state on a thread that
+// may wait (`off_ui`, A7). Those that change a running show run on the show
+// thread (`show_thread::run`).
+
 #[tauri::command]
-fn get_view(state: State<AppState>) -> Option<GameView> {
-    let inner = state.0.lock().unwrap();
-    inner.game.as_ref().map(|g| g.view(now_ms()))
+async fn get_view(app: AppHandle) -> CmdResult<Option<GameView>> {
+    read_show(app, |inner| inner.game.as_ref().map(|g| g.view(now_ms()))).await
 }
 
 /// The whole quiz, for the Director's slide list and previews.
 #[tauri::command]
-fn get_quiz(state: State<AppState>) -> Option<Quiz> {
-    let inner = state.0.lock().unwrap();
-    inner.game.as_ref().map(|g| g.quiz().clone())
+async fn get_quiz(app: AppHandle) -> CmdResult<Option<Quiz>> {
+    read_show(app, |inner| inner.game.as_ref().map(|g| g.quiz().clone())).await
 }
 
 /// Folder of the running quiz's media, ending with a path separator, so the
 /// windows can append a media reference to it.
 #[tauri::command]
-fn media_root(state: State<AppState>) -> Option<String> {
-    let inner = state.0.lock().unwrap();
-    inner.media_root.as_ref().map(|root| root.join("").to_string_lossy().into_owned())
+async fn media_root(app: AppHandle) -> CmdResult<Option<String>> {
+    read_show(app, |inner| inner.media_root.as_ref().map(|root| root.join("").to_string_lossy().into_owned())).await
+}
+
+/// Why the running show's journal cannot be written, if so; also sent with
+/// `show-not-saved` whenever it changes (A9).
+#[tauri::command]
+async fn show_not_saved(app: AppHandle) -> CmdResult<Option<AppError>> {
+    read_show(app, |inner| inner.save_problem.clone()).await
 }
 
 /// Opens a quiz file (`.quiz` or a plain quiz JSON) and starts a show with it.
 #[tauri::command]
-async fn start_show_from_file(app: AppHandle, state: State<'_, AppState>, path: String) -> CmdResult<()> {
-    // Unpacking big media takes a moment: it runs off the UI thread and
-    // before the show is locked.
-    let package = quiz_file::open(Path::new(&path), &quizzes_cache(&app)?)?;
-    start_show(&app, &mut *lock_for_new_show(&app, &state)?, package.quiz, Some(path), Some(package.root))
+async fn start_show_from_file(app: AppHandle, path: String) -> CmdResult<()> {
+    off_ui(move || {
+        // Unpacking big media takes a moment: it runs before the show is locked.
+        let package = {
+            let _cache = QUIZZES_CACHE.lock().unwrap();
+            quiz_file::open(Path::new(&path), &quizzes_cache(&app)?)?
+        };
+        start_show(&app, package.quiz, Some(path), Some(package.root))
+    })
+    .await
 }
 
 /// Plays the editor's quiz without a journal, so the last real show stays
 /// the one that can be resumed.
 #[tauri::command]
-fn editor_test_run(app: AppHandle, state: State<AppState>, quiz: Quiz) -> CmdResult<()> {
-    let root = editor::draft_root(&app)?;
-    quiz_file::check_playable(&quiz, &root)?;
-    let mut inner = lock_for_new_show(&app, &state)?;
-    serve_media(&app, &mut inner, Some(root))?;
-    begin_show(&app, &mut inner, Game::new(quiz), None)
+async fn editor_test_run(app: AppHandle, quiz: Quiz) -> CmdResult<()> {
+    off_ui(move || {
+        let root = editor::draft_root(&app)?;
+        quiz_file::check_playable(&quiz, &root)?;
+        let mut inner = lock_for_new_show(&app)?;
+        serve_media(&app, &mut inner, Some(root))?;
+        begin_show(&app, &mut inner, Game::new(quiz), None)
+    })
+    .await
 }
 
 #[tauri::command]
-fn start_demo_show(app: AppHandle, state: State<AppState>) -> CmdResult<()> {
-    let quiz = Quiz::from_json(DEMO_QUIZ)?;
-    start_show(&app, &mut *lock_for_new_show(&app, &state)?, quiz, None, None)
+async fn start_demo_show(app: AppHandle) -> CmdResult<()> {
+    off_ui(move || start_show(&app, Quiz::from_json(DEMO_QUIZ)?, None, None)).await
 }
 
 #[tauri::command]
-fn last_session(app: AppHandle) -> CmdResult<Option<SessionSummary>> {
-    Ok(Session::latest_summary(&sessions_root(&app)?)?)
+async fn last_session(app: AppHandle) -> CmdResult<Option<SessionSummary>> {
+    off_ui(move || Ok(Session::latest_summary(&sessions_root(&app)?)?)).await
 }
 
 /// What the quizmaster is told about a resumed show that runs: its media
@@ -300,53 +374,49 @@ fn resume_show(root: &Path, at_ms: u64) -> CmdResult<ResumedShow> {
 /// Resumes the last show. Returns warnings for the quizmaster when the show
 /// runs but not quite as before (`resume_warnings`).
 #[tauri::command]
-fn resume_last_session(app: AppHandle, state: State<AppState>) -> CmdResult<Vec<AppError>> {
-    // Locked first: the running show's journal must not be reopened.
-    let mut inner = lock_for_new_show(&app, &state)?;
-    let show = resume_show(&sessions_root(&app)?, now_ms())?;
-    serve_media(&app, &mut inner, show.media_root)?;
-    inner.game = Some(show.game);
-    inner.session = Some(show.session);
-    send_effects(&app, &mut inner, show.effects);
-    emit_show_changed(&app, &inner);
-    Ok(show.warnings)
+async fn resume_last_session(app: AppHandle) -> CmdResult<Vec<AppError>> {
+    off_ui(move || {
+        // Locked first: the running show's journal must not be reopened.
+        let mut inner = lock_for_new_show(&app)?;
+        let show = resume_show(&sessions_root(&app)?, now_ms())?;
+        serve_media(&app, &mut inner, show.media_root)?;
+        replace_show(&mut inner, Some(show.game), Some(show.session));
+        send_effects(&app, &mut inner, show.effects);
+        emit_show_changed(&app, &inner);
+        Ok(show.warnings)
+    })
+    .await
 }
 
 /// Closes the running show. Its journal stays on disk, so it can be resumed.
 #[tauri::command]
-fn end_show(app: AppHandle, state: State<AppState>) {
-    let mut inner = state.0.lock().unwrap();
-    inner.game = None;
-    inner.session = None;
-    inner.media_root = None;
-    emit_show_changed(&app, &inner);
+async fn end_show(app: AppHandle) -> CmdResult<()> {
+    off_ui(move || {
+        let mut inner = lock_show(&app);
+        replace_show(&mut inner, None, None);
+        inner.media_root = None;
+        emit_show_changed(&app, &inner);
+        Ok(())
+    })
+    .await
 }
 
 #[tauri::command]
-fn dispatch(app: AppHandle, state: State<AppState>, command: Command) -> CmdResult<()> {
-    let (mut inner, at_ms) = timed_lock(&state.0, now_ms);
-    match command {
+async fn dispatch(app: AppHandle, command: Command) -> CmdResult<()> {
+    show_thread::run(&app, move |app, inner, at_ms| match command {
         // The names a show is given are the prepared ones, also kept on disk.
-        Command::SetTeams { names } => teams::set(&app, &mut inner, names, at_ms),
-        command => execute_at(&app, &mut inner, command, at_ms),
-    }
+        Command::SetTeams { names } => teams::set(app, inner, names, at_ms),
+        command => execute_at(app, inner, command, at_ms).map(drop),
+    })
+    .await
 }
 
 /// Feeds a press the receiver got at `at_ms` into the running show, if any.
-/// Returns whether the show took it.
+/// Returns whether the show took it. Why one failed is the Director's to
+/// show (`save_problem`).
 pub(crate) fn press_from_hardware(app: &AppHandle, command: Command, at_ms: u64) -> bool {
-    let state = app.state::<AppState>();
-    let mut inner = state.0.lock().unwrap();
-    if inner.game.is_none() {
-        return false;
-    }
-    match execute_at(app, &mut inner, command, at_ms) {
-        Ok(()) => true,
-        Err(e) => {
-            eprintln!("buzzer press: {e}");
-            false
-        }
-    }
+    let mut inner = lock_show(app);
+    inner.game.is_some() && matches!(execute_at(app, &mut inner, command, at_ms), Ok(true))
 }
 
 #[derive(Serialize, TS)]
@@ -425,51 +495,6 @@ fn report_host_problem(app: AppHandle, message: String) {
     let _ = app.emit("host-problem", message);
 }
 
-/// The one thread that turns the receiver's events and the passing of time
-/// into show commands: every event received so far is handled before a
-/// time-driven command such as "time is up" (`pump::pump_once`). Without a
-/// receiver it only keeps time.
-fn spawn_show_pump(app: AppHandle, mut events: Option<ReceiverEvents>) {
-    std::thread::Builder::new()
-        .name("show-pump".into())
-        .spawn(move || {
-            let mut last_clock_event = Instant::now();
-            loop {
-                let connected = match &events {
-                    Some(rx) => pump::pump_once(rx, TICK, |event| hardware::handle_event(&app, event), || tick(&app, &mut last_clock_event)),
-                    None => {
-                        std::thread::sleep(TICK);
-                        tick(&app, &mut last_clock_event);
-                        true
-                    }
-                };
-                if !connected {
-                    events = None;
-                }
-            }
-        })
-        .expect("spawn show pump");
-}
-
-/// Issues a time-driven command that is due, such as "time is up", or else
-/// sends the running clock to the windows now and then.
-fn tick(app: &AppHandle, last_clock_event: &mut Instant) {
-    let state = app.state::<AppState>();
-    let mut inner = state.0.lock().unwrap();
-    let now = now_ms();
-    if let Some(command) = inner.game.as_ref().and_then(|g| g.due_command(now)) {
-        if let Err(e) = execute_at(app, &mut inner, command, now) {
-            eprintln!("ticker: {e}");
-        }
-    } else if last_clock_event.elapsed() >= CLOCK_EVENT_EVERY {
-        *last_clock_event = Instant::now();
-        let clock = inner.game.as_ref().and_then(|g| g.clock_view(now)).filter(|c| c.running);
-        if let Some(clock) = clock {
-            let _ = app.emit("clock-tick", clock);
-        }
-    }
-}
-
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -490,30 +515,23 @@ pub fn run() {
             }
         })
         .manage(editor::EditorLock::default())
-        .manage(AppState(Mutex::new(Inner {
-            game: None,
-            session: None,
-            media_root: None,
-            driver: Box::new(VirtualDriver),
-            teams: Vec::new(),
-            teams_file: None,
-        })))
+        .manage(AppState(Mutex::new(Inner::new())))
         .setup(|app| {
-            let (hardware, events) = Hardware::start(app.handle());
+            // One queue for the receiver's events and the quizmaster's commands (A7).
+            let (queue, events) = mpsc::channel();
+            let hardware = Hardware::start(app.handle(), queue.clone(), *SHOW_CLOCK);
             if let Some(handle) = hardware.handle() {
-                app.state::<AppState>().0.lock().unwrap().driver = Box::new(HardwareDriver(handle));
+                lock_show(app.handle()).driver = Box::new(HardwareDriver(handle));
             }
-            // The event pump reads `Hardware` from the app, so it starts after `manage`.
             app.manage(hardware);
-            spawn_show_pump(app.handle().clone(), events);
+            show_thread::start(app.handle(), queue, events);
             // The windows load theme pictures and fonts from the built-in packages.
             let packages = app.path().resource_dir()?.join(themes::RESOURCE_FOLDER);
             app.asset_protocol_scope().allow_directory(&packages, true)?;
             let builtin = themes::builtin_themes(|id| packages.join(id).join("").to_string_lossy().into_owned())?;
             app.manage(themes::Themes(builtin));
             if let Ok(path) = teams::teams_path(app.handle()) {
-                let state = app.state::<AppState>();
-                let mut inner = state.0.lock().unwrap();
+                let mut inner = lock_show(app.handle());
                 let (teams, file) = teams::load(path);
                 (inner.teams, inner.teams_file) = (teams, Some(file));
             }
@@ -530,6 +548,7 @@ pub fn run() {
             get_view,
             get_quiz,
             media_root,
+            show_not_saved,
             start_show_from_file,
             start_demo_show,
             last_session,
@@ -587,7 +606,6 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::{mpsc, Arc};
 
     #[test]
     fn the_demo_quiz_is_current_and_plays() {
@@ -596,10 +614,9 @@ mod tests {
         assert_eq!(quiz.validate(), Ok(()));
     }
 
-    /// Runs a show of the demo quiz journaled under `root` as the app runs
-    /// it, a command a second, then stops without closing anything, as a
-    /// crash does. Gives the show as the windows last saw it.
-    fn run_show_and_crash(root: &Path, commands: Vec<Command>) -> Game {
+    /// The app's state with a show of the demo quiz journaled under `root`,
+    /// given `commands` a second apart.
+    fn journaled_show(root: &Path, commands: Vec<Command>) -> Inner {
         let quiz = Quiz::from_json(DEMO_QUIZ).unwrap();
         let meta = SessionMeta {
             quiz_title: quiz.title.clone(),
@@ -609,18 +626,21 @@ mod tests {
             rules_version: quiz_core::RULES_VERSION,
         };
         let session = Session::create(root, &quiz, &meta).unwrap();
-        let mut inner = Inner {
-            game: Some(Game::new(quiz)),
-            session: Some(session),
-            media_root: None,
-            driver: Box::new(VirtualDriver),
-            teams: Vec::new(),
-            teams_file: None,
-        };
+        let mut inner = Inner { game: Some(Game::new(quiz)), session: Some(session), ..Inner::new() };
         for (n, command) in commands.into_iter().enumerate() {
             apply_journaled(&mut inner, command, 1_000 * (n as u64 + 1)).unwrap();
         }
-        inner.game.unwrap()
+        inner
+    }
+
+    /// Runs a show as `journaled_show` does, then stops without closing
+    /// anything, as a crash does. Gives the show as the windows last saw it.
+    fn run_show_and_crash(root: &Path, commands: Vec<Command>) -> Game {
+        journaled_show(root, commands).game.unwrap()
+    }
+
+    fn journal_len(root: &Path) -> usize {
+        Session::resume_latest(root).unwrap().unwrap().journal.len()
     }
 
     fn sessions_dir(name: &str) -> PathBuf {
@@ -674,6 +694,46 @@ mod tests {
     }
 
     #[test]
+    fn only_presses_that_change_the_show_are_journaled() {
+        let root = sessions_dir("ignored");
+        let mut inner = journaled_show(&root, up_to_the_first_question());
+        let before = journal_len(&root);
+        // Buzzer 1 has answered: pressing again changes nothing.
+        let again = Command::Press { buzzer: 1, button: quiz_core::Button::B };
+        assert_eq!(apply_journaled(&mut inner, again, 7_000), Ok(None));
+        assert_eq!(journal_len(&root), before);
+        // A buzzer the show does not know yet registers.
+        let new = Command::Press { buzzer: 9, button: quiz_core::Button::B };
+        assert!(apply_journaled(&mut inner, new, 7_100).unwrap().is_some());
+        assert_eq!(journal_len(&root), before + 1);
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn a_failed_journal_write_is_kept_for_the_director_until_one_works() {
+        let root = sessions_dir("not-saved");
+        let mut inner = journaled_show(&root, vec![Command::Press { buzzer: 1, button: quiz_core::Button::Big }]);
+        let name = |n: u16| Command::AddPlayer { buzzer: n, name: format!("Team {n}") };
+        assert_eq!(inner.save_problem, None);
+        inner.session.as_mut().unwrap().break_for_test();
+        assert_eq!(apply_journaled(&mut inner, name(2), 2_000), Err(AppError::JournalBroken));
+        assert_eq!(inner.save_problem, Some(AppError::JournalBroken));
+        // A command the show refuses says nothing of the disk.
+        assert_eq!(apply_journaled(&mut inner, Command::JudgeRight, 3_000), Err(AppError::NotNow));
+        assert_eq!(inner.save_problem, Some(AppError::JournalBroken));
+        inner.session.as_mut().unwrap().repair_for_test();
+        assert!(apply_journaled(&mut inner, name(2), 4_000).is_ok());
+        assert_eq!(inner.save_problem, None);
+
+        // Another show starts with a journal that has not failed.
+        inner.session.as_mut().unwrap().break_for_test();
+        assert!(apply_journaled(&mut inner, name(3), 5_000).is_err());
+        replace_show(&mut inner, None, None);
+        assert_eq!(inner.save_problem, None);
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
     fn a_resumed_show_warns_of_missing_media_and_of_other_rules_both() {
         let mut quiz = Quiz::from_json(DEMO_QUIZ).unwrap();
         let question = quiz.slides.iter_mut().find(|slide| matches!(slide.content, quiz_core::SlideContent::Question(_))).unwrap();
@@ -684,30 +744,5 @@ mod tests {
         assert!(matches!(warnings[..], [AppError::QuizInvalid { .. }, AppError::RulesChanged]), "{warnings:?}");
         assert_eq!(resume_warnings(&quiz, None, false), []);
         std::fs::remove_dir_all(&empty).unwrap();
-    }
-
-    #[test]
-    fn a_command_is_timed_before_it_waits_for_the_show_state() {
-        let shared = Arc::new(Mutex::new(()));
-        let held = shared.lock().unwrap();
-        let (timed, was_timed) = mpsc::channel();
-        let waiter = {
-            let shared = Arc::clone(&shared);
-            std::thread::spawn(move || {
-                // The "time" read is whether someone else still held the state then.
-                let (_inner, held_then) = timed_lock(&shared, || {
-                    let held_then = u64::from(shared.try_lock().is_err());
-                    timed.send(()).unwrap();
-                    held_then
-                });
-                held_then
-            })
-        };
-        // The state is let go only once the time is read, so the answer does not depend on timing;
-        // a clock read after locking would never come while it is held.
-        let read_while_held = was_timed.recv_timeout(Duration::from_secs(5));
-        drop(held);
-        assert!(read_while_held.is_ok(), "the time was read only after waiting for the state");
-        assert_eq!(waiter.join().unwrap(), 1);
     }
 }
