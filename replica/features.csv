@@ -90,8 +90,8 @@ Waiting room where the host admits players,settings,could,yes,no,§4.2.3
 Entry codes checked when joining,settings,could,yes,no,§5.2.6 tickets; useful for paid fundraisers
 Branding of the player page (logo and colour),player,could,yes,no,§5.2.5
 Personal jingles for players,player,could,yes,no,§4.4
-Sound pad for the quizmaster,director,could,yes,no,§5.2.4.4
-Media player in the Director (show a picture or video full screen),director,could,yes,no,§5.7.7
+Sound pad for the quizmaster,director,could,yes,yes,§5.2.4.4; clone: sound board of 3x4 to 8x8 pads in the Media player tab (SN-7)
+Media player in the Director (show a picture or video full screen),director,could,yes,yes,§5.7.7; clone: library kept per computer with search; pictures and videos over the projector stage (SN-7)
 Edit a question during the show,director,could,yes,no,§5.7.1 Edit question
 Per-question history of every answer,director,could,yes,no,§5.7.3 Analyzer view
 Slide routing based on a vote,studio,could,yes,no,§3.14.2

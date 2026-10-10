@@ -19,6 +19,7 @@ How the app is built, with the buzzer link in most detail. Requirements are in
 │  ├── session.rs   append-only journal per show          │
 │  ├── editor.rs    the editor's crash-safe draft         │
 │  ├── teams.rs     team names kept between shows         │
+│  ├── media_player.rs  media library, sound board        │
 │  ├── themes.rs    built-in themes, list_themes          │
 │  ├── app_file.rs  small JSON files in app data          │
 │  └── hardware.rs  receiver setup, learn mode, raw log   │
@@ -327,6 +328,38 @@ packages users will install are read the same way.
 - **Projector.** The registration grid shows a paired team's name under its
   number.
 
+### 1.6 Media player and sound board
+
+- **Library.** The shell (`media_player.rs`) keeps the media player's
+  files in `<app data>/library/media/`, copied in with
+  `quiz_file::import_media` like the editor's media (same name and bytes
+  reused, another file numbered; written as `.part` and renamed, so a
+  failed copy leaves nothing). A file dropped into the window has no path
+  in a web view, so `media_add_dropped` takes its bytes as a raw IPC body
+  with its name in a header; the Director refuses drops over 256 MB, which
+  Add copies from their path instead. The list is the folder's media files,
+  read again after every change. Copies are made holding only the import
+  lock, so the board and player answer while a big video comes in.
+- **Board.** `quiz_core::SoundBoard` holds every place of the 8 × 8 grid
+  and shows the first `rows` × `columns`, so pads keep their places when the
+  grid changes size; `BoardChange` is every edit, checked there (a shown
+  pad, a library file). Until the quizmaster changes it (`arranged`), the
+  board takes new files by itself and holds each once. A file that leaves
+  the library leaves its pads. It is saved as `library/soundboard.json`
+  (`app_file.rs`, atomically); a broken file is kept aside.
+- **Playing.** `quiz_core::MediaPlayer` keeps what plays (`NowPlaying`:
+  the file, where it stood and since when it plays) and what a click on a
+  pad does. It is no show state, so it is not journaled; `media-playing`
+  tells the windows. The Director plays sounds (`useMediaPlayer`, a
+  `ClipPlayer` per start); the projector shows a picture or video over the
+  stage (`MediaOverlay`) and seeks a video to where the player stands, so
+  a projector opened mid-file joins in. The Director reads each file's
+  length from its metadata, one file at a time (`media-durations.ts`), and
+  sends `ended` when a sound or video reaches its end, so a video ends
+  even with the projector closed; `ended` names the start (`id`), so the
+  end of an earlier file stops nothing. The slide's sound and video pads
+  play through the show (`useSlideSound`, `PlayVideo`).
+
 ## 2. Buzzer link
 
 ### 2.1 Layers
@@ -573,6 +606,7 @@ them.
 | Quiz files: save, open, reuse, unsafe entries, size limit, missing media | `cargo test -p quiz-file` | pass |
 | Themes: `theme.json` rules, inheritance, built-in packages complete with their files and font licences; gallery, fonts, a broken theme background warns once | `cargo test` (`quiz_core::theme`, shell `themes`), `npm test`, headless Chromium against the preview | pass |
 | Teams: names, pairing, replay, names kept between shows; drag, click, paste and CSV import (Windows-1250), preparing names before a show | `cargo test` (`game_flow`, shell `teams`, `app_file`), `npm test` (`team-names`), headless Chromium against the preview | pass |
+| Media player and sound board: library list and order, board rules (filling, placing, swapping, resizing, mending a stored board), playing, pausing, pad clicks, ends; Director tab (search, pads lit and counting down, menus, drag and drop, layout) and the projector's picture and video | `cargo test` (`quiz_core::sound_board`, `media_player`, shell `media_player`, `quiz-file` imports), `npm test` (`media-player`), headless Chromium against the preview with generated sounds | pass |
 | Loudness measurement | `npm test`: a full-scale 997 Hz sine in one channel measures -3.01 LUFS as BS.1770-4 states; gating, channel sum, part, peak limit | pass |
 | Trim and Normalize volume windows, video trim window, background video menu and options, slide video (intro pause, Play video, speed, volume, part, holding with the show, blur and mosaic, replay) | headless Chromium against the preview with generated test media (a song and a test-pattern video, not in the repo) | pass |
 | Media through the asset protocol, autoplay of video and sound | needs the installed app on each OS | **not tested** |

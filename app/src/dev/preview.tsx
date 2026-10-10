@@ -2,13 +2,15 @@
 // checked in a normal browser. Open /preview.html?window=host&scene=running
 // (add &theme=builtin.neon for another look).
 
+import { emit } from "@tauri-apps/api/event";
 import { clearMocks, mockIPC, mockWindows } from "@tauri-apps/api/mocks";
 import React from "react";
 import ReactDOM from "react-dom/client";
 import demoQuiz from "../../../samples/demo-quiz.json";
 import builtinThemes from "../bindings/BuiltinThemes.json";
 import { NO_CONTROLS } from "../host/preview";
-import type { Background, GameView, PlayerView, Quiz, SoundClip, VideoClip } from "../types";
+import { MAX_BOARD_COLUMNS, MAX_BOARD_ROWS } from "../bindings/Constants";
+import type { Background, BoardChange, GameView, MediaLibrary, NowPlaying, Pad, PlayerCommand, PlayerView, Quiz, SoundBoard, SoundClip, VideoClip } from "../types";
 import "../styles.css";
 
 // The backend fills serde defaults; the raw JSON file leaves them out.
@@ -31,6 +33,8 @@ const quiz = {
 const params = new URLSearchParams(location.search);
 const windowLabel = params.get("window") === "host" ? "host" : "director";
 const scene = params.get("scene") ?? "running";
+/** What the media player plays at first: `picture` or `video` (for the projector's overlay). */
+const playing = params.get("media");
 /** A theme id to draw the screens in; the default when missing. */
 const theme = params.get("theme");
 
@@ -250,60 +254,193 @@ const called: unknown[] = [];
 /** The team names prepared before a show (the running show's in a show scene). */
 const PREPARED_TEAMS = ["Kvízožrouti", "Pivní rytíři", "U Tří Lvů"];
 
-mockIPC((cmd, payload) => {
-  switch (cmd) {
-    case "dispatch":
-      dispatched.push((payload as { command: unknown }).command);
-      return null;
-    case "add_teams":
-    case "remove_team":
-      called.push({ cmd, ...(payload as object) });
-      return null;
-    case "prepared_teams":
-      return current ? current.teams.map((team) => team.name) : PREPARED_TEAMS;
-    case "get_view":
-      return current;
-    case "get_quiz":
-      return sceneQuiz;
-    case "list_monitors":
-      return [
-        { index: 0, name: "Built-in Display", width: 2560, height: 1600 },
-        { index: 1, name: "Projector", width: 1920, height: 1080 },
-      ];
-    case "host_window_open":
-      return false;
-    case "list_themes":
-      // Their files are served by Vite from src-tauri/themes.
-      return builtinThemes;
-    case "media_root":
-      // Served by Vite from this folder (see the convertFileSrc mock below).
-      return "/src/dev/";
-    case "last_session":
-      return { meta: { quizTitle: quiz.title, sourcePath: null, startedMs: Date.now() - 3_600_000 }, commandCount: 57 };
-    case "plugin:event|listen":
-      return 1;
-    case "editor_load":
-      return { quiz: editorQuiz, sourcePath: "C:\\Kvizy\\hospodsky-kviz.quiz", unsaved: false, mediaRoot: "/src/dev/", problems: [] };
-    case "editor_update":
-      return [];
-    case "receiver_info":
-      return {
-        status: { kind: "error", problem: "cannotOpen", detail: "access denied" },
-        initError: null,
-        settingsError: null,
-        learnedButtons: 0,
-        learn: { active: false, buzzer: null, button: null, samples: 0, canSave: false },
-        recent: [],
-        platform: "linux",
-      };
-    case "receiver_devices":
-      return [];
-    case "receiver_udev_rule":
-      return 'SUBSYSTEM=="hidraw", ATTRS{idVendor}=="VVVV", MODE="0660", TAG+="uaccess"';
-    default:
-      return null;
+// The media player's library (files generated locally, see .gitignore) and a board a quizmaster arranged.
+const LIBRARY: MediaLibrary = {
+  root: "/src/dev/",
+  files: [
+    { reference: "media/applause.wav", kind: "audio" },
+    { reference: "media/clip.webm", kind: "video" },
+    { reference: "media/jingle.wav", kind: "audio" },
+    { reference: "media/landscape.svg", kind: "image" },
+  ],
+};
+const filePad = (reference: string, label = "", color: Pad["color"] = null): Pad => ({ source: { type: "file", reference }, label, color });
+let board: SoundBoard = {
+  rows: 3,
+  columns: 4,
+  click: "stop",
+  arranged: true,
+  pads: Array.from({ length: MAX_BOARD_ROWS * MAX_BOARD_COLUMNS }, (_, place): Pad => {
+    const pads: Record<number, Pad> = {
+      0: filePad("media/jingle.wav"),
+      1: filePad("media/applause.wav", "Potlesk", "green"),
+      2: filePad("media/clip.webm"),
+      3: filePad("media/landscape.svg"),
+      [MAX_BOARD_COLUMNS]: { source: { type: "slideSound" }, label: "", color: null },
+      [MAX_BOARD_COLUMNS + 1]: { source: { type: "slideVideo" }, label: "", color: null },
+    };
+    return pads[place] ?? { source: null, label: "", color: null };
+  }),
+};
+let nowPlaying: NowPlaying | null =
+  playing === "picture" ? { id: 1, reference: "media/landscape.svg", kind: "image", positionMs: 0, sinceMs: Date.now() }
+  : playing === "video" ? { id: 1, reference: "media/clip.webm", kind: "video", positionMs: 3_000, sinceMs: Date.now() }
+  : null;
+
+/** A rough stand-in for the backend's media player (`quiz_core::MediaPlayer`), enough to click through the tab. */
+function control(command: PlayerCommand) {
+  const at = Date.now();
+  const start = (reference: string) => {
+    const kind = LIBRARY.files.find((file) => file.reference === reference)?.kind ?? "audio";
+    nowPlaying = { id: (nowPlaying?.id ?? 0) + 1, reference, kind, positionMs: 0, sinceMs: at };
+  };
+  const position = (now: NowPlaying) => now.positionMs + (now.sinceMs === null ? 0 : at - now.sinceMs);
+  switch (command.type) {
+    case "play":
+      if (nowPlaying?.reference === command.reference && nowPlaying.sinceMs === null) nowPlaying = { ...nowPlaying, sinceMs: at };
+      else start(command.reference);
+      break;
+    case "pad": {
+      const source = board.pads[command.pad].source;
+      if (source?.type !== "file") break;
+      if (nowPlaying?.reference !== source.reference) start(source.reference);
+      else if (nowPlaying.sinceMs === null) nowPlaying = { ...nowPlaying, sinceMs: at };
+      else if (board.click === "stop") nowPlaying = null;
+      else if (board.click === "restart") start(source.reference);
+      else nowPlaying = { ...nowPlaying, positionMs: position(nowPlaying), sinceMs: null };
+      break;
+    }
+    case "pause":
+      if (nowPlaying) nowPlaying = { ...nowPlaying, positionMs: position(nowPlaying), sinceMs: null };
+      break;
+    case "resume":
+      if (nowPlaying?.sinceMs === null) nowPlaying = { ...nowPlaying, sinceMs: at };
+      break;
+    case "rewind":
+      if (nowPlaying) nowPlaying = { ...nowPlaying, positionMs: 0, sinceMs: nowPlaying.sinceMs === null ? null : at };
+      break;
+    case "stop":
+      nowPlaying = null;
+      break;
+    case "ended":
+      if (nowPlaying?.id === command.id) nowPlaying = null;
+      break;
   }
-});
+  void emit("media-playing", nowPlaying);
+}
+
+/** The same for the board's changes the preview checks. */
+function changeBoard(change: BoardChange) {
+  const pads = [...board.pads];
+  switch (change.type) {
+    case "resize":
+      board = { ...board, rows: change.rows, columns: change.columns };
+      break;
+    case "setClick":
+      board = { ...board, click: change.click };
+      break;
+    case "swap":
+      [pads[change.a], pads[change.b]] = [pads[change.b], pads[change.a]];
+      board = { ...board, pads, arranged: true };
+      break;
+    case "setLabel":
+      pads[change.pad] = { ...pads[change.pad], label: change.label };
+      board = { ...board, pads, arranged: true };
+      break;
+    case "setColor":
+      pads[change.pad] = { ...pads[change.pad], color: change.color };
+      board = { ...board, pads, arranged: true };
+      break;
+    case "setSource":
+      pads[change.pad] = { ...pads[change.pad], source: change.source };
+      board = { ...board, pads, arranged: true };
+      break;
+    case "place":
+      pads[change.pad] = { ...pads[change.pad], source: { type: "file", reference: change.references[0] } };
+      board = { ...board, pads, arranged: true };
+      break;
+    case "clearPad":
+      pads[change.pad] = { source: null, label: "", color: null };
+      board = { ...board, pads, arranged: true };
+      break;
+    default:
+      break;
+  }
+  void emit("sound-board", board);
+}
+
+mockIPC(
+  (cmd, payload) => {
+    switch (cmd) {
+      case "dispatch":
+        dispatched.push((payload as { command: unknown }).command);
+        return null;
+      case "add_teams":
+      case "remove_team":
+      case "media_add":
+      case "media_remove":
+        called.push({ cmd, ...(payload as object) });
+        return null;
+      case "media_library":
+        return LIBRARY;
+      case "sound_board":
+        return board;
+      case "sound_board_change":
+        called.push({ cmd, ...(payload as object) });
+        changeBoard((payload as { change: BoardChange }).change);
+        return null;
+      case "media_now":
+        return nowPlaying;
+      case "media_control":
+        called.push({ cmd, ...(payload as object) });
+        control((payload as { command: PlayerCommand }).command);
+        return null;
+      case "prepared_teams":
+        return current ? current.teams.map((team) => team.name) : PREPARED_TEAMS;
+      case "get_view":
+        return current;
+      case "get_quiz":
+        return sceneQuiz;
+      case "list_monitors":
+        return [
+          { index: 0, name: "Built-in Display", width: 2560, height: 1600 },
+          { index: 1, name: "Projector", width: 1920, height: 1080 },
+        ];
+      case "host_window_open":
+        return false;
+      case "list_themes":
+        // Their files are served by Vite from src-tauri/themes.
+        return builtinThemes;
+      case "media_root":
+        // Served by Vite from this folder (see the convertFileSrc mock below).
+        return "/src/dev/";
+      case "last_session":
+        return { meta: { quizTitle: quiz.title, sourcePath: null, startedMs: Date.now() - 3_600_000 }, commandCount: 57 };
+      case "editor_load":
+        return { quiz: editorQuiz, sourcePath: "C:\\Kvizy\\hospodsky-kviz.quiz", unsaved: false, mediaRoot: "/src/dev/", problems: [] };
+      case "editor_update":
+        return [];
+      case "receiver_info":
+        return {
+          status: { kind: "error", problem: "cannotOpen", detail: "access denied" },
+          initError: null,
+          settingsError: null,
+          learnedButtons: 0,
+          learn: { active: false, buzzer: null, button: null, samples: 0, canSave: false },
+          recent: [],
+          platform: "linux",
+        };
+      case "receiver_devices":
+        return [];
+      case "receiver_udev_rule":
+        return 'SUBSYSTEM=="hidraw", ATTRS{idVendor}=="VVVV", MODE="0660", TAG+="uaccess"';
+      default:
+        return null;
+    }
+  },
+  // Events the mock emits (the media player's) reach the windows' listeners.
+  { shouldMockEvents: true },
+);
 
 // The real app loads media through Tauri's asset protocol; here Vite serves them.
 (window as unknown as { __TAURI_INTERNALS__: { convertFileSrc: (path: string) => string } }).__TAURI_INTERNALS__.convertFileSrc = (path) => path;

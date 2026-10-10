@@ -3,8 +3,7 @@ import { useEffect, useReducer, useRef, useState } from "react";
 import { api } from "../api";
 import { useApp, useDispatch, useReport } from "../app-context";
 import { useLatest } from "../hooks";
-import type { StringKey } from "../i18n";
-import { MEDIA_EXTENSIONS, type MediaKind } from "../media";
+import { mediaFileFilter, type MediaKind } from "../media";
 import type { Quiz, ValidationError } from "../types";
 import { DraftQueue } from "./draft-queue";
 import { editorReducer, isUnsaved, LOADING, type EditorState } from "./editor-state";
@@ -12,12 +11,6 @@ import type { Edit } from "./history";
 import { readRecentFiles, rememberRecentFile } from "./recent";
 
 const QUIZ_EXTENSION = "quiz";
-
-const MEDIA_FILTER: Record<MediaKind, StringKey> = {
-  image: "mediaPicture",
-  audio: "mediaSound",
-  video: "mediaVideo",
-};
 
 interface DraftWrite {
   quiz: Quiz;
@@ -172,12 +165,7 @@ export function useQuizEditor(onTestRun: () => void): QuizEditor {
       }),
     pickMedia: async (kinds) => {
       try {
-        const extensions = kinds.flatMap((kind) => MEDIA_EXTENSIONS[kind]);
-        const path = await openDialog({
-          multiple: false,
-          // Upper case too: some systems match file names case-sensitively.
-          filters: [{ name: kinds.map((kind) => t(MEDIA_FILTER[kind])).join(", "), extensions: [...extensions, ...extensions.map((e) => e.toUpperCase())] }],
-        });
+        const path = await openDialog({ multiple: false, filters: [mediaFileFilter(t, kinds)] });
         return typeof path === "string" ? await draftQueue.run(() => api.editorAddMedia(path)) : null;
       } catch (error) {
         report.current(error);

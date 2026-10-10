@@ -3,4 +3,4 @@
 /**
  * What was being done to a file when the disk failed.
  */
-export type FileAction = "read" | "write" | "createFolder" | "move";
+export type FileAction = "read" | "write" | "createFolder" | "move" | "delete";

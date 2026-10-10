@@ -4,7 +4,7 @@
 //! message, which the UI shows as it is.
 
 use buzzers::learned::LearnError;
-use quiz_core::{BuzzerId, Button, GameError, QuizJsonError, ValidationError, MAX_TEAMS};
+use quiz_core::{BoardError, BuzzerId, Button, GameError, QuizJsonError, ValidationError, MAX_TEAMS};
 use quiz_file::{FileAction, QuizFileError};
 use serde::Serialize;
 use std::path::Path;
@@ -58,6 +58,14 @@ pub enum AppError {
     #[error("no quiz is open in the editor")]
     NoDraft,
 
+    // The media player.
+    #[error("{name} is not a picture, sound or video")]
+    NotAMediaFile { name: String },
+    #[error("{reference} is not in the media library")]
+    NotInLibrary { reference: String },
+    #[error("there is no pad {pad} on the sound board")]
+    NoSuchPad { pad: usize },
+
     // The buzzer receiver.
     #[error("USB-HID is not available")]
     UsbUnavailable,
@@ -104,6 +112,15 @@ impl From<GameError> for AppError {
             GameError::NoSuchSlide(slide) => AppError::NoSuchSlide { slide },
             GameError::DuplicateBuzzer(buzzer) => AppError::DuplicateBuzzer { buzzer },
             GameError::TooManyTeams => AppError::TooManyTeams { max: MAX_TEAMS },
+        }
+    }
+}
+
+impl From<BoardError> for AppError {
+    fn from(e: BoardError) -> AppError {
+        match e {
+            BoardError::NoSuchPad(pad) => AppError::NoSuchPad { pad },
+            BoardError::NotInLibrary(reference) => AppError::NotInLibrary { reference },
         }
     }
 }

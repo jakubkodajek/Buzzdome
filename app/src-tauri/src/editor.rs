@@ -179,7 +179,7 @@ pub async fn editor_save(app: AppHandle, lock: State<'_, EditorLock>, quiz: Quiz
 pub async fn editor_add_media(app: AppHandle, lock: State<'_, EditorLock>, path: String) -> CmdResult<String> {
     let _one_at_a_time = lock.0.lock().unwrap();
     let (root, _) = current(&app)?;
-    Ok(quiz_file::import_media(&root, Path::new(&path))?)
+    Ok(quiz_file::import_media(&root, quiz_file::MediaSource::File(Path::new(&path)))?)
 }
 
 /// Discards the draft.

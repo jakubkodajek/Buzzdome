@@ -2469,6 +2469,7 @@ name = "quiz-show"
 version = "0.1.0"
 dependencies = [
  "buzzers",
+ "percent-encoding",
  "quiz-core",
  "quiz-file",
  "serde",

@@ -17,6 +17,8 @@ pub enum MediaKind {
 }
 
 impl MediaKind {
+    const ALL: [MediaKind; 3] = [MediaKind::Image, MediaKind::Audio, MediaKind::Video];
+
     /// File types every supported web view can show (lower case).
     pub fn extensions(self) -> &'static [&'static str] {
         match self {
@@ -24,6 +26,12 @@ impl MediaKind {
             MediaKind::Audio => &["mp3", "wav", "ogg", "m4a"],
             MediaKind::Video => &["mp4", "webm"],
         }
+    }
+
+    /// The kind of the file `path` by its extension; none for other files.
+    pub fn of(path: &str) -> Option<MediaKind> {
+        let extension = extension(path);
+        MediaKind::ALL.into_iter().find(|kind| kind.extensions().contains(&extension.as_str()))
     }
 }
 
@@ -392,6 +400,15 @@ fn normal_speed() -> u16 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_file_is_a_picture_a_sound_or_a_video_by_its_extension() {
+        assert_eq!(MediaKind::of("media/Flag.PNG"), Some(MediaKind::Image));
+        assert_eq!(MediaKind::of("Potlesk.mp3"), Some(MediaKind::Audio));
+        assert_eq!(MediaKind::of("media/a.b/intro.webm"), Some(MediaKind::Video));
+        assert_eq!(MediaKind::of("notes.txt"), None);
+        assert_eq!(MediaKind::of("media/mp3"), None);
+    }
 
     const IMAGE: &[MediaKind] = &[MediaKind::Image];
 

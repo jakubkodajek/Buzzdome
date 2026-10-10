@@ -9,6 +9,7 @@ import { StageBackground } from "../slide-media";
 import { resolveBackground } from "../theme/background";
 import { ThemeContext, ThemesProvider, useResolvedTheme } from "../theme/context";
 import { screenOf } from "../theme/themes";
+import { MediaOverlay } from "./MediaOverlay";
 import { Leaderboard, ranked, SlideScreen } from "./SlideScreen";
 import { Stage } from "./Stage";
 import "./host.css";
@@ -52,6 +53,7 @@ function HostLayout() {
               )}
             </>
           )}
+          <MediaOverlay />
         </Stage>
       </ThemeContext>
     </MediaRootContext>

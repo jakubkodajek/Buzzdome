@@ -5,6 +5,7 @@
 import { buttonLabel } from "./answers";
 import { MEDIA_EXTENSIONS } from "./bindings/MediaExtensions";
 import type { StringKey, Translate } from "./i18n";
+import { mediaFileName } from "./media";
 import type { AppError, FileAction, MediaIssue, MediaKind, Problem, ProtocolKind, ReceiverProblem } from "./types";
 
 type Params = Record<string, string | number>;
@@ -17,7 +18,7 @@ function params(fields: object): Params {
 }
 
 /** Codes worded with their own parameters, see `errorText`. */
-type WordedApart = "file" | "noSuchSlide" | "noSuchMonitor" | "learnConflict" | "quizInvalid";
+type WordedApart = "file" | "noSuchSlide" | "noSuchMonitor" | "noSuchPad" | "notInLibrary" | "learnConflict" | "quizInvalid";
 
 const ERROR_KEYS: Record<Exclude<AppError["code"], WordedApart>, StringKey> = {
   noShow: "noShow",
@@ -36,6 +37,7 @@ const ERROR_KEYS: Record<Exclude<AppError["code"], WordedApart>, StringKey> = {
   tooLarge: "errTooLarge",
   tooManyFiles: "errTooManyFiles",
   noDraft: "errNoDraft",
+  notAMediaFile: "errNotAMediaFile",
   usbUnavailable: "errUsbUnavailable",
   usbListFailed: "errUsbListFailed",
   receiverNotConnected: "errReceiverNotConnected",
@@ -50,6 +52,7 @@ const FILE_ACTION_KEYS: Record<FileAction, StringKey> = {
   write: "errFileWrite",
   createFolder: "errFileCreateFolder",
   move: "errFileMove",
+  delete: "errFileDelete",
 };
 
 function isAppError(value: unknown): value is AppError {
@@ -69,6 +72,10 @@ export function errorText(t: Translate, error: unknown): string {
       return t("errNoSuchSlide", { slide: error.slide + 1 });
     case "noSuchMonitor":
       return t("errNoSuchMonitor", { n: error.index + 1 });
+    case "noSuchPad":
+      return t("errNoSuchPad", { pad: error.pad + 1 });
+    case "notInLibrary":
+      return t("errNotInLibrary", { reference: mediaFileName(error.reference) });
     case "learnConflict":
       return t("errLearnConflict", { buzzer: error.buzzer, button: buttonLabel(error.button) });
     case "quizInvalid": {

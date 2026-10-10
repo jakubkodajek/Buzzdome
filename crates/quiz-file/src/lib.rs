@@ -43,6 +43,7 @@ pub enum FileAction {
     Write,
     CreateFolder,
     Move,
+    Delete,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -273,21 +274,64 @@ pub fn sync_dir(dir: &Path) -> Result<()> {
     Ok(())
 }
 
+/// A media file to copy in: one on disk, or the bytes of one dropped into a
+/// window, which tells its name but not its path.
+#[derive(Debug, Clone, Copy)]
+pub enum MediaSource<'a> {
+    File(&'a Path),
+    Bytes { name: &'a str, bytes: &'a [u8] },
+}
+
+impl MediaSource<'_> {
+    fn name(&self) -> String {
+        match self {
+            MediaSource::File(path) => path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default(),
+            MediaSource::Bytes { name, .. } => name.to_string(),
+        }
+    }
+
+    /// Whether the file at `path` holds the same bytes.
+    fn same_as(&self, path: &Path) -> Result<bool> {
+        match self {
+            MediaSource::File(source) => same_contents(path, source).context(FileAction::Read, source),
+            MediaSource::Bytes { bytes, .. } => same_bytes(path, bytes).context(FileAction::Read, path),
+        }
+    }
+
+    fn write_to(&self, root: &Path, reference: &str) -> Result<u64> {
+        match *self {
+            MediaSource::File(source) => {
+                let mut file = File::open(source).context(FileAction::Read, source)?;
+                write_file(root, reference, &mut file, source, MAX_UNPACKED_BYTES, &mut Sha256::new())
+            }
+            MediaSource::Bytes { mut bytes, .. } => {
+                let dest = root.join(reference);
+                write_file(root, reference, &mut bytes, &dest, MAX_UNPACKED_BYTES, &mut Sha256::new())
+            }
+        }
+    }
+}
+
 /// Copies a media file into the package folder `root` and returns its
 /// reference (`media/<name>`). A file with the same name and contents is
-/// reused; a different one with the same name gets a number added.
-pub fn import_media(root: &Path, source: &Path) -> Result<String> {
-    let original = portable_name(&source.file_name().map(|n| n.to_string_lossy()).unwrap_or_default());
-    let first = format!("{MEDIA_PREFIX}{original}");
+/// reused; a different one with the same name gets a number added. A copy
+/// that fails leaves nothing behind: it is written under a name no media
+/// file has (`.part`) and renamed when complete.
+pub fn import_media(root: &Path, source: MediaSource) -> Result<String> {
+    let first = format!("{MEDIA_PREFIX}{}", portable_name(&source.name()));
     for n in 1.. {
         let reference = numbered(&first, n);
         let path = root.join(&reference);
         if !path.exists() {
-            let mut file = File::open(source).context(FileAction::Read, source)?;
-            write_file(root, &reference, &mut file, source, MAX_UNPACKED_BYTES, &mut Sha256::new())?;
+            let partial = format!("{reference}.part");
+            let copied = source.write_to(root, &partial).and_then(|_| fs::rename(root.join(&partial), &path).context(FileAction::Move, &path));
+            if copied.is_err() {
+                let _ = fs::remove_file(root.join(&partial));
+            }
+            copied?;
             return Ok(reference);
         }
-        if same_contents(&path, source).context(FileAction::Read, source)? {
+        if source.same_as(&path)? {
             return Ok(reference);
         }
     }
@@ -326,6 +370,23 @@ fn renames<'a>(names: impl Iterator<Item = &'a str> + Clone) -> BTreeMap<String,
         renamed.insert(name.to_string(), new);
     }
     renamed
+}
+
+/// Compares a file with `bytes` without reading the file whole into memory.
+fn same_bytes(path: &Path, bytes: &[u8]) -> io::Result<bool> {
+    if fs::metadata(path)?.len() != bytes.len() as u64 {
+        return Ok(false);
+    }
+    let mut file = File::open(path)?;
+    let mut read = vec![0; 1 << 16];
+    for expected in bytes.chunks(read.len()) {
+        let part = &mut read[..expected.len()];
+        file.read_exact(part)?;
+        if part != expected {
+            return Ok(false);
+        }
+    }
+    Ok(true)
 }
 
 /// Compares two files without reading either whole into memory.
@@ -841,15 +902,45 @@ mod tests {
             "import-src",
             &[("a/Flag.png", b"one"), ("b/Flag.png", b"two"), ("c/we:ird?.jpg", b"x"), ("d/CON.png", b"x")],
         );
-        assert_eq!(import_media(&root, &sources.join("a/Flag.png")).unwrap(), "media/Flag.png");
+        let import = |path: &str| import_media(&root, MediaSource::File(&sources.join(path))).unwrap();
+        assert_eq!(import("a/Flag.png"), "media/Flag.png");
         // Same name, same contents: reused. Same name, other contents: numbered.
-        assert_eq!(import_media(&root, &sources.join("a/Flag.png")).unwrap(), "media/Flag.png");
-        assert_eq!(import_media(&root, &sources.join("b/Flag.png")).unwrap(), "media/Flag-2.png");
+        assert_eq!(import("a/Flag.png"), "media/Flag.png");
+        assert_eq!(import("b/Flag.png"), "media/Flag-2.png");
         assert_eq!(fs::read(root.join("media/Flag-2.png")).unwrap(), b"two");
-        let weird = import_media(&root, &sources.join("c/we:ird?.jpg")).unwrap();
+        let weird = import("c/we:ird?.jpg");
         assert_eq!(weird, "media/we_ird_.jpg");
         assert!(is_safe_reference(&weird));
-        assert_eq!(import_media(&root, &sources.join("d/CON.png")).unwrap(), "media/_CON.png");
+        assert_eq!(import("d/CON.png"), "media/_CON.png");
+    }
+
+    #[test]
+    fn a_media_copy_that_fails_leaves_no_file() {
+        let root = temp("import-failed");
+        // A folder opens like a file on some systems and fails on the first read.
+        let folder = temp("import-failed-src").join("Song.mp3");
+        fs::create_dir_all(&folder).unwrap();
+        assert!(import_media(&root, MediaSource::File(&folder)).is_err());
+        let left: Vec<_> = fs::read_dir(root.join("media")).map(|dir| dir.flatten().map(|entry| entry.file_name()).collect()).unwrap_or_default();
+        assert!(left.is_empty(), "left behind: {left:?}");
+    }
+
+    #[test]
+    fn imports_a_dropped_file_from_its_bytes_like_one_on_disk() {
+        let root = temp("import-bytes");
+        let dropped = |name: &str, bytes: &[u8]| import_media(&root, MediaSource::Bytes { name, bytes }).unwrap();
+        assert_eq!(dropped("Potlesk.mp3", b"one"), "media/Potlesk.mp3");
+        assert_eq!(dropped("Potlesk.mp3", b"one"), "media/Potlesk.mp3");
+        assert_eq!(dropped("Potlesk.mp3", b"ONE"), "media/Potlesk-2.mp3");
+        assert_eq!(dropped("a/b?.mp3", b"x"), "media/a_b_.mp3");
+        // Longer than one read buffer, differing only at the end.
+        let long = vec![7u8; 200_000];
+        let mut other = long.clone();
+        other[199_999] = 8;
+        assert_eq!(dropped("long.wav", &long), "media/long.wav");
+        assert_eq!(dropped("long.wav", &long), "media/long.wav");
+        assert_eq!(dropped("long.wav", &other), "media/long-2.wav");
+        assert_eq!(fs::read(root.join("media/long-2.wav")).unwrap()[199_999], 8);
     }
 
     #[test]

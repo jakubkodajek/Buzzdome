@@ -378,3 +378,30 @@ export function PaletteIcon(props: IconProps) {
     </LineIcon>
   );
 }
+
+export function AddIcon(props: IconProps) {
+  return (
+    <LineIcon {...props}>
+      <path d="M12 5v14M5 12h14" />
+    </LineIcon>
+  );
+}
+
+export function RewindIcon(props: IconProps) {
+  return (
+    <LineIcon {...props}>
+      <path d="M6 6v12M18 6l-8 6 8 6z" />
+    </LineIcon>
+  );
+}
+
+export function GridIcon(props: IconProps) {
+  return (
+    <LineIcon {...props}>
+      <rect x="3.5" y="3.5" width="7" height="7" rx="1" />
+      <rect x="13.5" y="3.5" width="7" height="7" rx="1" />
+      <rect x="3.5" y="13.5" width="7" height="7" rx="1" />
+      <rect x="13.5" y="13.5" width="7" height="7" rx="1" />
+    </LineIcon>
+  );
+}

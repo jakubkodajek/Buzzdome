@@ -1,7 +1,7 @@
 import { listen } from "@tauri-apps/api/event";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { api, type BackendEvents } from "./api";
-import type { ClockView, GameView, LearnProgress, Quiz, SessionSummary } from "./types";
+import type { ClockView, GameView, LearnProgress, MediaLibrary, NowPlaying, Quiz, SessionSummary, SoundBoard } from "./types";
 
 /** A ref that always holds the latest `value`, for callbacks that outlive a render. */
 export function useLatest<T>(value: T): { readonly current: T } {
@@ -96,6 +96,21 @@ export function useLearnProgress(): LearnProgress | null {
 /** The team names prepared for shows, kept between them; empty until loaded. */
 export function usePreparedTeams(): string[] {
   return usePushedValue("teams-changed", api.preparedTeams) ?? [];
+}
+
+/** The media player's library; null until loaded. */
+export function useMediaLibrary(): MediaLibrary | null {
+  return usePushedValue("media-library", api.mediaLibrary);
+}
+
+/** The sound board's pads; null until loaded. */
+export function useSoundBoard(): SoundBoard | null {
+  return usePushedValue("sound-board", api.soundBoard);
+}
+
+/** What the media player plays, if anything. */
+export function useNowPlaying(): NowPlaying | null {
+  return usePushedValue("media-playing", api.mediaNow);
 }
 
 /** The clock of the current question: from the game state, then from ticks. */

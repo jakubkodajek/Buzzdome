@@ -5,6 +5,7 @@ mod app_file;
 mod editor;
 mod error;
 mod hardware;
+mod media_player;
 mod pump;
 mod session;
 mod teams;
@@ -422,6 +423,9 @@ pub fn run() {
             let builtin = themes::builtin_themes(|id| packages.join(id).join("").to_string_lossy().into_owned())?;
             app.manage(themes::Themes(builtin));
             app.state::<AppState>().0.lock().unwrap().teams = teams::teams_path(app.handle()).map(|path| teams::load(&path)).unwrap_or_default();
+            let library = media_player::MediaState::open(app_data(app.handle(), media_player::LIBRARY_FOLDER)?);
+            app.asset_protocol_scope().allow_directory(library.root(), true)?;
+            app.manage(library);
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -442,6 +446,14 @@ pub fn run() {
             teams::prepared_teams,
             teams::add_teams,
             teams::remove_team,
+            media_player::media_library,
+            media_player::media_add,
+            media_player::media_add_dropped,
+            media_player::media_remove,
+            media_player::sound_board,
+            media_player::sound_board_change,
+            media_player::media_now,
+            media_player::media_control,
             editor::editor_load,
             editor::editor_new,
             editor::editor_open,

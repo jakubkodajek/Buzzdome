@@ -882,3 +882,337 @@
   margin: 0;
   font-size: 11px;
 }
+
+/* Media player: a toolbar, the library list with its search, and the sound board */
+
+.media-player {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.media-player .tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+.media-player svg {
+  width: 15px;
+  height: 15px;
+  vertical-align: -3px;
+}
+
+.media-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--line);
+  background: var(--chrome);
+}
+
+.media-toolbar .toolbar-gap {
+  width: 10px;
+}
+
+.media-toolbar .toggle.on {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.media-now {
+  overflow: hidden;
+  max-width: 260px;
+  margin-left: 8px;
+  color: var(--accent);
+  font-weight: 600;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.media-body {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+}
+
+.media-list {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  padding: 8px;
+  gap: 6px;
+}
+
+.media-list.dropping {
+  outline: 2px dashed var(--accent);
+  outline-offset: -4px;
+}
+
+.director .media-search {
+  width: 100%;
+}
+
+.media-files {
+  flex: 0 1 auto;
+  overflow-y: auto;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--line);
+}
+
+.media-files li {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+  cursor: default;
+}
+
+.media-files li:nth-child(even) {
+  background: #f8f8f8;
+}
+
+.media-files li.selected {
+  background: var(--accent-soft);
+}
+
+.media-files li.playing,
+.media-files li.paused {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.library-name {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.library-length {
+  color: var(--muted);
+}
+
+.media-empty {
+  margin: 6px 2px;
+}
+
+.media-divider {
+  cursor: col-resize;
+  background: var(--line);
+}
+
+.media-divider:hover {
+  background: var(--accent);
+}
+
+.sound-board {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  padding: 8px;
+  gap: 8px;
+  background: #202124;
+}
+
+.board-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.board-header button {
+  white-space: nowrap;
+}
+
+.board-header .muted {
+  color: #a8a8a8;
+}
+
+.board-hint {
+  overflow: hidden;
+  font-size: 12px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.board-grid {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  gap: 8px;
+}
+
+/* A pad: its colour from --pad (set by a pad-<colour> class), glowing while it plays */
+
+.director button.pad {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-height: 0;
+  padding: 8px;
+  border: 2px solid color-mix(in srgb, var(--pad) 70%, #000);
+  border-radius: 8px;
+  color: #fff;
+  text-align: left;
+  background: color-mix(in srgb, var(--pad) 35%, #1a1a1a);
+  transition: box-shadow 0.15s, background 0.15s;
+}
+
+.director button.pad:not(.playing):hover:not(:disabled) {
+  border-color: var(--pad);
+  background: color-mix(in srgb, var(--pad) 50%, #1a1a1a);
+}
+
+.director button.pad.playing {
+  border-color: #fff;
+  background: var(--pad);
+  box-shadow: 0 0 18px 2px var(--pad), inset 0 0 12px rgba(255, 255, 255, 0.45);
+}
+
+.director button.pad.paused {
+  background: color-mix(in srgb, var(--pad) 70%, #1a1a1a);
+}
+
+.director button.pad.empty,
+.director button.pad.empty:hover:not(:disabled) {
+  border-style: dashed;
+  background: transparent;
+}
+
+.director button.pad.unready {
+  opacity: 0.5;
+}
+
+.director button.pad.target {
+  outline: 3px solid #fff;
+  outline-offset: -3px;
+}
+
+.pad-label {
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  font-weight: 600;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+}
+
+.pad-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  opacity: 0.9;
+}
+
+.pad-time {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.pad-progress {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.director .pad-red { --pad: #d93a3a; }
+.director .pad-orange { --pad: #e8812a; }
+.director .pad-yellow { --pad: #d6b61e; }
+.director .pad-green { --pad: #3ca84a; }
+.director .pad-teal { --pad: #1f9e99; }
+.director .pad-blue { --pad: #2f74d0; }
+.director .pad-purple { --pad: #8a4fd0; }
+.director .pad-pink { --pad: #d24f9b; }
+
+/* The pad colour and grid size pickers */
+
+.pad-colors,
+.grid-size {
+  position: fixed;
+  z-index: 50;
+  padding: 8px;
+  border: 1px solid #b9b9b9;
+  border-radius: 4px;
+  background: #fff;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.25);
+}
+
+.pad-colors {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pad-color-auto[aria-checked="true"] {
+  border-color: var(--accent);
+}
+
+.pad-swatches {
+  display: grid;
+  grid-template-columns: repeat(4, 28px);
+  gap: 6px;
+}
+
+.director button.pad-swatch {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 50%;
+  background: var(--pad);
+}
+
+.director button.pad-swatch[aria-checked="true"],
+.director button.pad-swatch:hover {
+  border-color: #1b1b1b;
+  background: var(--pad);
+}
+
+.grid-size-cells {
+  display: grid;
+  gap: 3px;
+}
+
+.director .grid-size-cells button {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border-radius: 2px;
+  background: #f2f2f2;
+}
+
+.director .grid-size-cells button.on {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.grid-size-label {
+  margin-top: 6px;
+  text-align: center;
+}
+
+/* The editor's menus (editor/controls.tsx) keep their flat rows in the Director */
+
+.director .context-menu button {
+  border: 1px solid transparent;
+  border-radius: 0;
+  background: transparent;
+}
+
+.director .context-menu button:hover:not(:disabled) {
+  border-color: #9cc3ec;
+  background: #dcebfb;
+}

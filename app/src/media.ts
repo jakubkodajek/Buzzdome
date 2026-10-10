@@ -1,6 +1,7 @@
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { createContext, useCallback, useContext } from "react";
 import { MEDIA_EXTENSIONS } from "./bindings/MediaExtensions";
+import type { StringKey, Translate } from "./i18n";
 import type { ThemeFile } from "./types";
 
 export { MEDIA_EXTENSIONS };
@@ -32,6 +33,19 @@ export function themeFileUrl(file: ThemeFile): string {
 export function useMediaUrl(): (reference: string | null) => string | null {
   const root = useContext(MediaRootContext);
   return useCallback((reference) => (root && reference ? mediaUrl(root, reference) : null), [root]);
+}
+
+const MEDIA_FILTER_NAMES: Record<MediaKind, StringKey> = {
+  image: "mediaPicture",
+  audio: "mediaSound",
+  video: "mediaVideo",
+};
+
+/** A file dialog's filter for media files of `kinds`. */
+export function mediaFileFilter(t: Translate, kinds: MediaKind[]): { name: string; extensions: string[] } {
+  const extensions = kinds.flatMap((kind) => MEDIA_EXTENSIONS[kind]);
+  // Upper case too: some systems match file names case-sensitively.
+  return { name: kinds.map((kind) => t(MEDIA_FILTER_NAMES[kind])).join(", "), extensions: [...extensions, ...extensions.map((e) => e.toUpperCase())] };
 }
 
 /** The file name of a media reference, as the quizmaster knows it. */

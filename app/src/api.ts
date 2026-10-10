@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
   AppError,
+  BoardChange,
   Button,
   BuzzerId,
   ClockView,
@@ -10,7 +11,10 @@ import type {
   EditorDraft,
   GameView,
   LearnProgress,
+  MediaLibrary,
   MonitorInfo,
+  NowPlaying,
+  PlayerCommand,
   Press,
   PressEvent,
   Quiz,
@@ -18,9 +22,13 @@ import type {
   ReceiverInfo,
   ReceiverStatus,
   SessionSummary,
+  SoundBoard,
   Theme,
   ValidationError,
 } from "./types";
+
+/** The header that names a file dropped into the window (`media_add_dropped`). */
+const DROPPED_NAME_HEADER = "file-name";
 
 /** The backend commands (`#[tauri::command]` in app/src-tauri). */
 export const api = {
@@ -46,6 +54,20 @@ export const api = {
   preparedTeams: () => invoke<string[]>("prepared_teams"),
   addTeams: (names: string[]) => invoke<void>("add_teams", { names }),
   removeTeam: (name: string) => invoke<void>("remove_team", { name }),
+  /** The media player's library of files, kept on this computer. */
+  mediaLibrary: () => invoke<MediaLibrary>("media_library"),
+  /** Copies files into the library; returns their references in order. */
+  mediaAdd: (paths: string[]) => invoke<string[]>("media_add", { paths }),
+  /** Copies a file dropped into the window into the library; returns its reference. */
+  mediaAddDropped: async (file: File) =>
+    invoke<string>("media_add_dropped", new Uint8Array(await file.arrayBuffer()), { headers: { [DROPPED_NAME_HEADER]: encodeURIComponent(file.name) } }),
+  /** Removes a file from the library and deletes its copy. */
+  mediaRemove: (reference: string) => invoke<void>("media_remove", { reference }),
+  soundBoard: () => invoke<SoundBoard>("sound_board"),
+  soundBoardChange: (change: BoardChange) => invoke<void>("sound_board_change", { change }),
+  /** What the media player plays, if anything. */
+  mediaNow: () => invoke<NowPlaying | null>("media_now"),
+  mediaControl: (command: PlayerCommand) => invoke<void>("media_control", { command }),
   receiverInfo: () => invoke<ReceiverInfo>("receiver_info"),
   receiverDevices: () => invoke<DeviceInfo[]>("receiver_devices"),
   receiverSelect: (device: DeviceInfo | null) => invoke<void>("receiver_select", { device }),
@@ -87,4 +109,9 @@ export interface BackendEvents {
   "host-window": boolean;
   /** The prepared team names changed, or a show started or ended. */
   "teams-changed": string[];
+  /** Files came into the media library or left it. */
+  "media-library": MediaLibrary;
+  "sound-board": SoundBoard;
+  /** The media player started, paused or stopped something. */
+  "media-playing": NowPlaying | null;
 }

@@ -32,13 +32,15 @@ import { ThemeContext, ThemesProvider, useResolvedTheme } from "../theme/context
 import type { GameView, Quiz } from "../types";
 import { QuestionsTab } from "./QuestionsTab";
 import { ReceiverTab } from "./ReceiverTab";
+import { MediaPlayerTab } from "./MediaPlayerTab";
 import { ResponsesTab } from "./ResponsesTab";
 import { SettingsTab, useProjectorSettings, type ProjectorSettings } from "./SettingsTab";
 import { TeamsTab } from "./TeamsTab";
+import { useMediaPlayer, type MediaPlayer } from "./useMediaPlayer";
 import { VirtualBuzzers } from "./VirtualBuzzers";
 import "./director.css";
 
-type Tab = "questions" | "teams" | "responses" | "buzzers" | "receiver" | "settings";
+type Tab = "questions" | "teams" | "responses" | "buzzers" | "media" | "receiver" | "settings";
 
 /** The show controls, the quiz editor, or the show controls for a test run of the edited quiz. */
 type Screen = "show" | "editor" | "testRun";
@@ -95,12 +97,15 @@ function DirectorLayout({ testRun, onEditor }: { testRun: boolean; onEditor: () 
   // Sounds play here: this window is open for the whole show, the projector may not be.
   useBackendEvent("sound-cue", playCue);
   const sound = useSlideSound(view);
+  // Here too, so what plays goes on and ends whichever tab is open.
+  const player = useMediaPlayer();
 
   const tabs: [Tab, string][] = [
     ["questions", t("tabQuestions")],
     ["teams", t("tabTeams")],
     ["responses", t("tabResponses")],
     ["buzzers", t("tabBuzzers")],
+    ["media", t("tabMedia")],
     ["receiver", t("tabReceiver")],
     ["settings", t("tabSettings")],
   ];
@@ -119,7 +124,7 @@ function DirectorLayout({ testRun, onEditor }: { testRun: boolean; onEditor: () 
         <LearnBanner />
         <div className="tab-body">
           <ThemeContext value={theme}>
-            <TabBody tab={tab} view={view} quiz={quiz} projector={projector} />
+            <TabBody tab={tab} view={view} quiz={quiz} projector={projector} player={player} sound={sound} />
           </ThemeContext>
         </div>
         <StatusBar view={view} quiz={quiz} testRun={testRun} />
@@ -142,13 +147,23 @@ function LearnBanner() {
   );
 }
 
-function TabBody({ tab, view, quiz, projector }: { tab: Tab; view: GameView | null; quiz: Quiz | null; projector: ProjectorSettings }) {
+interface TabBodyProps {
+  tab: Tab;
+  view: GameView | null;
+  quiz: Quiz | null;
+  projector: ProjectorSettings;
+  player: MediaPlayer;
+  sound: SlideSound;
+}
+
+function TabBody({ tab, view, quiz, projector, player, sound }: TabBodyProps) {
   const { t } = useApp();
   // Setup tabs work without a show; the others need one.
   if (tab === "settings") return <SettingsTab projector={projector} />;
   if (tab === "receiver") return <ReceiverTab />;
-  // Team names can be prepared before a show.
+  // Team names can be prepared before a show, and the media player plays without one.
   if (tab === "teams") return <TeamsTab view={view} />;
+  if (tab === "media") return <MediaPlayerTab player={player} sound={sound} view={view} />;
   if (!view) return <p className="empty">{t("welcome")}</p>;
   switch (tab) {
     case "questions":
