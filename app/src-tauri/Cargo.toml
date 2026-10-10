@@ -29,9 +29,18 @@ serde_json.workspace = true
 thiserror.workspace = true
 ts-rs.workspace = true
 
-# Read how much memory the sheet reader process holds (sheet_reader.rs).
+# Read how much memory the sheet reader process holds, and on Windows cap it
+# (sheet_reader.rs).
 [target.'cfg(target_os = "macos")'.dependencies]
 libc = "0.2"
 
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_ProcessStatus"] }
+windows-sys = { version = "0.61", features = [
+  "Win32_Foundation",
+  "Win32_Security",
+  "Win32_System_IO",
+  "Win32_System_JobObjects",
+  "Win32_System_ProcessStatus",
+  "Win32_System_SystemServices",
+  "Win32_System_Threading",
+] }

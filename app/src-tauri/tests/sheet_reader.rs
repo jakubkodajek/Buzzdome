@@ -34,6 +34,6 @@ fn a_reader_holding_more_memory_than_allowed_is_stopped_and_the_sheet_refused() 
     assert_eq!(read_tables_with(app, &csv, LIMITS).unwrap()[0].rows.len(), quiz_file::MAX_SHEET_ROWS);
     // Any process holds more than a byte.
     let refused = read_tables_with(app, &csv, Limits { memory: 1, ..LIMITS }).unwrap_err();
-    assert!(matches!(refused, AppError::SpreadsheetTooLarge { .. }), "{refused:?}");
+    assert_eq!(refused, AppError::SpreadsheetTooComplex { max_mb: 0 });
     std::fs::remove_dir_all(&dir).unwrap();
 }

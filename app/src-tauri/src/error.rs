@@ -69,6 +69,11 @@ pub enum AppError {
     #[error("the spreadsheet is larger than {max_mb} MB, holds more than {max_text_mb} MB of text or has more than {max_rows} rows or {max_columns} columns")]
     #[serde(rename_all = "camelCase")]
     SpreadsheetTooLarge { max_mb: u64, max_text_mb: usize, max_rows: usize, max_columns: usize },
+    /// The sheet reader process (`sheet_reader.rs`) needed more memory than
+    /// it may have: a file small enough whose cells the parser spreads out.
+    #[error("reading the spreadsheet needs more than {max_mb} MB of memory")]
+    #[serde(rename_all = "camelCase")]
+    SpreadsheetTooComplex { max_mb: u64 },
     /// The sheet reader process (`sheet_reader.rs`) stopped, overran or could not start.
     #[error("the spreadsheet reader failed")]
     SpreadsheetReaderFailed,
