@@ -2,8 +2,8 @@
 //! change it only with a schema version bump and a migration.
 
 use crate::media::{
-    check_reference, Background, MediaIssue, MediaKind, Playback, SoundClip, VideoClip, MAX_GAIN_DB, MAX_INTRO_PAUSE_MS, MAX_REPLAY_DELAY_MS,
-    MAX_VIDEO_SPEED, MIN_GAIN_DB, MIN_VIDEO_SPEED,
+    check_reference, Background, MediaIssue, MediaKind, Playback, SoundClip, SoundStart, VideoClip, MAX_GAIN_DB, MAX_INTRO_PAUSE_MS,
+    MAX_REPLAY_DELAY_MS, MAX_VIDEO_SPEED, MIN_GAIN_DB, MIN_VIDEO_SPEED,
 };
 use crate::theme::is_theme_id;
 use serde::{Deserialize, Deserializer, Serialize};
@@ -276,6 +276,14 @@ pub enum Problem {
     /// `max` in seconds.
     #[error("the video must start at most {max} s after the slide")]
     IntroPauseTooLong { max: u32 },
+    #[error("only a question reveals an answer to replay a part of its {media:?} after")]
+    ReplayNotOnQuestion { media: MediaKind },
+    #[error("only a question has a clock for its sound to play with")]
+    WithClockNotOnQuestion,
+    #[error("only a question has an answer time for a video effect to fade over")]
+    EffectNotOnQuestion,
+    #[error("a final slide shows the ranking, not a picture or a video")]
+    MediaOnFinal,
     #[error("more than {max} answers")]
     TooManyAnswers { max: usize },
     #[error("an everyone-answers question needs at least {min} answers")]
@@ -374,14 +382,25 @@ impl Quiz {
             if slide.picture.is_some() && slide.video.is_some() {
                 found(Problem::PictureAndVideo);
             }
+            // An end of round's picture or video is not shown either, but files from before final slides may have one.
+            if matches!(slide.content, SlideContent::Final { .. }) && (slide.picture.is_some() || slide.video.is_some()) {
+                found(Problem::MediaOnFinal);
+            }
+            let question = matches!(slide.content, SlideContent::Question(_));
             if let Some(sound) = &slide.sound {
-                playback_problems(sound, &mut found);
+                playback_problems(sound, question, &mut found);
                 if !(MIN_GAIN_DB as f32..=MAX_GAIN_DB as f32).contains(&sound.gain_db) {
                     found(Problem::SoundGainOutOfRange { min: MIN_GAIN_DB, max: MAX_GAIN_DB });
                 }
+                if sound.start == SoundStart::WithClock && !question {
+                    found(Problem::WithClockNotOnQuestion);
+                }
             }
             if let Some(video) = &slide.video {
-                playback_problems(video, &mut found);
+                playback_problems(video, question, &mut found);
+                if video.effect.is_some() && !question {
+                    found(Problem::EffectNotOnQuestion);
+                }
                 if !(MIN_VIDEO_SPEED..=MAX_VIDEO_SPEED).contains(&video.speed) {
                     found(Problem::VideoSpeedOutOfRange { min: MIN_VIDEO_SPEED, max: MAX_VIDEO_SPEED });
                 }
@@ -402,8 +421,8 @@ impl Quiz {
 }
 
 /// The rules a sound and a video share: a volume in percent, parts that hold
-/// something and a replay part that starts in time.
-fn playback_problems(clip: &impl Playback, found: &mut impl FnMut(Problem)) {
+/// something, and a replay part that starts in time, on a `question` only.
+fn playback_problems(clip: &impl Playback, question: bool, found: &mut impl FnMut(Problem)) {
     let media = clip.kind();
     if clip.volume() > 100 {
         found(Problem::Volume { media });
@@ -411,8 +430,13 @@ fn playback_problems(clip: &impl Playback, found: &mut impl FnMut(Problem)) {
     if clip.parts().any(|part| part.is_empty()) {
         found(Problem::PartEmpty { media });
     }
-    if clip.replay().is_some_and(|replay| replay.delay_ms > MAX_REPLAY_DELAY_MS) {
-        found(Problem::ReplayDelayTooLong { max: MAX_REPLAY_DELAY_MS / 1000 });
+    if let Some(replay) = clip.replay() {
+        if !question {
+            found(Problem::ReplayNotOnQuestion { media });
+        }
+        if replay.delay_ms > MAX_REPLAY_DELAY_MS {
+            found(Problem::ReplayDelayTooLong { max: MAX_REPLAY_DELAY_MS / 1000 });
+        }
     }
 }
 
@@ -569,8 +593,10 @@ mod tests {
         slide.video = Some(VideoClip::new("media/clip.mp4"));
         assert_eq!(problems_of(vec![slide]), [Problem::PictureAndVideo]);
 
+        // A question, which may use every option.
+        let quiz_question = || Slide::new("q", SlideContent::Question(question(10, None, 20)));
         let with_sound = |edit: fn(&mut SoundClip)| {
-            let mut slide = intro();
+            let mut slide = quiz_question();
             let mut sound = sound("media/a.mp3");
             edit(&mut sound);
             slide.sound = Some(sound);
@@ -591,7 +617,7 @@ mod tests {
         assert_eq!(with_sound(|s| (s.gain_db, s.part) = (MIN_GAIN_DB as f32, Span { from_ms: 60_000, to_ms: None })), []);
 
         let with_video = |edit: fn(&mut VideoClip)| {
-            let mut slide = intro();
+            let mut slide = quiz_question();
             let mut video = VideoClip::new("media/clip.mp4");
             edit(&mut video);
             slide.video = Some(video);
@@ -610,6 +636,47 @@ mod tests {
         let at_limits = |v: &mut VideoClip| (v.volume, v.speed, v.intro_pause_ms) = (100, MAX_VIDEO_SPEED, MAX_INTRO_PAUSE_MS);
         assert_eq!(with_video(at_limits), []);
         assert_eq!(with_video(|v| v.speed = MIN_VIDEO_SPEED), []);
+    }
+
+    #[test]
+    fn options_that_need_a_question_are_problems_on_other_slides() {
+        let replay = Some(Replay { part: Span::default(), delay_ms: 0 });
+        let mut sound = sound("media/a.mp3");
+        (sound.start, sound.replay) = (SoundStart::WithClock, replay);
+        let video = VideoClip { effect: Some(crate::media::VideoEffect::Blur), replay, ..VideoClip::new("media/clip.mp4") };
+        let with_options = |content: SlideContent| {
+            let mut slide = Slide::new("s", content);
+            (slide.sound, slide.video) = (Some(sound.clone()), Some(video.clone()));
+            problems_of(vec![slide])
+        };
+        assert_eq!(with_options(SlideContent::Question(question(10, None, 20))), []);
+        let elsewhere = [
+            Problem::ReplayNotOnQuestion { media: MediaKind::Audio },
+            Problem::WithClockNotOnQuestion,
+            Problem::ReplayNotOnQuestion { media: MediaKind::Video },
+            Problem::EffectNotOnQuestion,
+        ];
+        assert_eq!(with_options(SlideContent::Billboard { title: "x".into(), text: String::new() }), elsewhere);
+        assert_eq!(with_options(SlideContent::Explanation { text: String::new() }), elsewhere);
+    }
+
+    #[test]
+    fn a_final_slide_shows_no_picture_or_video_but_plays_its_sound() {
+        let with_media = |content: SlideContent, picture: bool| {
+            let mut slide = Slide::new("s", content);
+            if picture {
+                slide.picture = Some("media/a.png".into());
+            } else {
+                slide.video = Some(VideoClip::new("media/clip.mp4"));
+            }
+            slide.sound = Some(sound("media/a.mp3"));
+            problems_of(vec![slide])
+        };
+        let final_slide = || SlideContent::Final { title: String::new() };
+        assert_eq!(with_media(final_slide(), true), [Problem::MediaOnFinal]);
+        assert_eq!(with_media(final_slide(), false), [Problem::MediaOnFinal]);
+        // Older files may carry one on an end of round, where it is not shown.
+        assert_eq!(with_media(SlideContent::EndOfRound { title: String::new() }, true), []);
     }
 
     #[test]

@@ -18,7 +18,7 @@ import {
   MIN_GAIN_DB,
   MIN_VIDEO_SPEED,
 } from "../bindings/Constants";
-import { hasTitle, slideTitle } from "../quiz";
+import { hasTitle, showsRanking, slideTitle } from "../quiz";
 import type { AnswerMode, Background, Quiz, QuestionSlide, Replay, Slide, SlideType, SoundClip, Span, VideoClip } from "../types";
 
 /** Answers a new everyone-answers question starts with: one per buzzer button. */
@@ -80,16 +80,18 @@ export function setNotes(slide: Slide, notes: string): Slide {
  * The slide as another type. Its id, notes and media stay, the question,
  * explanation or title carries over, and the rest starts as on a new slide.
  * Only a question reveals an answer, so only a question keeps the replay
- * parts of its sound and video; and only a question has the answer time a
- * video effect follows.
+ * parts of its sound and video; only a question has the clock a sound can
+ * play with (elsewhere it plays when the slide opens) and the answer time a
+ * video effect follows. A ranking shows no picture or video, so they go.
  */
 export function convertSlide(slide: Slide, type: SlideType): Slide {
   if (slide.type === type) return slide;
-  const { id, notes, picture, background } = slide;
+  const { id, notes, background } = slide;
   const question = type === "question";
-  const sound = slide.sound && !question ? { ...slide.sound, replay: null } : slide.sound;
+  const sound = slide.sound && !question ? { ...slide.sound, start: slide.sound.start === "withClock" ? "onSlide" : slide.sound.start, replay: null } : slide.sound;
   const video = slide.video && !question ? { ...slide.video, replay: null, effect: null } : slide.video;
-  return setHeadline({ ...newSlide(type, id), notes, picture, video, sound, background }, slideTitle(slide));
+  const media = showsRanking(type) ? { picture: null, video: null } : { picture: slide.picture, video };
+  return setHeadline({ ...newSlide(type, id), notes, ...media, sound, background }, slideTitle(slide));
 }
 
 /** An id no slide of `quiz` has yet. */

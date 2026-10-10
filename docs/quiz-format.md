@@ -109,7 +109,7 @@ was moved or deleted.
 | `video.replay.delayMs` | 0 to 60000 | `0` | Milliseconds between the reveal and the replay. |
 | `sound` | object | none | Played from the Director computer's sound output. |
 | `sound.file` | media path | required | MP3, WAV, OGG or M4A. |
-| `sound.start` | `onSlide`, `withClock`, `onDemand` | `onSlide` | When the slide opens; while the question clock runs (pauses with it); or only when the quizmaster presses Play. |
+| `sound.start` | `onSlide`, `withClock`, `onDemand` | `onSlide` | When the slide opens; while the question clock runs (pauses with it; questions only); or only when the quizmaster presses Play. |
 | `sound.repeat` | yes/no | `false` | Plays `part` again from its start until the slide ends. |
 | `sound.volume` | 0 to 100 | `100` | Percent. |
 | `sound.part` | span | whole file | The part of the file that plays. The file itself is not changed. |
@@ -162,6 +162,9 @@ shown. Players do not answer; the next step goes to the next slide.
 
 ### `endOfRound`
 
+The leaderboard takes the place of a picture or video, so the slide's own
+are not shown.
+
 | Field | Type | Default | Meaning |
 | --- | --- | --- | --- |
 | `title` | text | required | Shown above the leaderboard. |
@@ -172,7 +175,7 @@ The final ranking: a drum roll, then third, second and first place one by
 one, then the whole ranking, one quizmaster step each. Its `sound` plays as
 on any slide (when the slide opens, or on demand from the Director), so it
 carries the winners' music, and its `background` replaces the theme's
-`final` screen. A quiz without a `final` slide shows the ranking after its
+`final` screen. It has no `picture` or `video`. A quiz without a `final` slide shows the ranking after its
 last slide; with one, the show ends after its last slide, and the
 quizmaster's "go to the final ranking" goes to the last `final` slide.
 

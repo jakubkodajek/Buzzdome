@@ -81,7 +81,7 @@ export function errorText(t: Translate, error: unknown): string {
 }
 
 /** Problems worded with their own parameters, see `problemText`. */
-type ProblemApart = "media" | "volume" | "partEmpty";
+type ProblemApart = "media" | "volume" | "partEmpty" | "replayNotOnQuestion";
 
 const PROBLEM_KEYS: Record<Exclude<Problem["code"], ProblemApart>, StringKey> = {
   duplicateSlideId: "problemDuplicateSlideId",
@@ -90,6 +90,9 @@ const PROBLEM_KEYS: Record<Exclude<Problem["code"], ProblemApart>, StringKey> = 
   soundGainOutOfRange: "problemSoundGainOutOfRange",
   videoSpeedOutOfRange: "problemVideoSpeedOutOfRange",
   introPauseTooLong: "problemIntroPauseTooLong",
+  withClockNotOnQuestion: "problemWithClockNotOnQuestion",
+  effectNotOnQuestion: "problemEffectNotOnQuestion",
+  mediaOnFinal: "problemMediaOnFinal",
   tooManyAnswers: "problemTooManyAnswers",
   tooFewAnswers: "problemTooFewAnswers",
   noCorrectAnswer: "problemNoCorrectAnswer",
@@ -122,6 +125,8 @@ export function problemText(t: Translate, problem: Problem): string {
       return t(problem.media === "audio" ? "problemSoundVolume" : "problemVideoVolume");
     case "partEmpty":
       return t(problem.media === "audio" ? "problemSoundPartEmpty" : "problemVideoPartEmpty");
+    case "replayNotOnQuestion":
+      return t(problem.media === "audio" ? "problemSoundReplayNotOnQuestion" : "problemVideoReplayNotOnQuestion");
     default:
       return t(PROBLEM_KEYS[problem.code], params(problem));
   }

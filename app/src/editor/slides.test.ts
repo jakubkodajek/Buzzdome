@@ -198,6 +198,22 @@ describe("slides", () => {
     expect(convertSlide(q, "question")).toBe(q);
   });
 
+  it("plays a sound that went with the clock when the slide opens once the slide has no clock", () => {
+    const timed = setSoundOptions(setSound(question(), "media/tick.mp3"), { start: "withClock" });
+    expect(convertSlide(timed, "billboard").sound?.start).toBe("onSlide");
+    const onDemand = setSoundOptions(timed, { start: "onDemand" });
+    expect(convertSlide(onDemand, "explanation").sound?.start).toBe("onDemand");
+  });
+
+  it("drops the picture or video of a slide that becomes a ranking, and keeps its sound", () => {
+    const pictured = setSound({ ...question(), picture: "media/a.png" }, "media/song.mp3");
+    const filmed = setVideo(question(), "media/clip.mp4");
+    for (const type of ["final", "endOfRound"] as const) {
+      expect(convertSlide(pictured, type)).toMatchObject({ picture: null, video: null, sound: { file: "media/song.mp3" } });
+      expect(convertSlide(filmed, type)).toMatchObject({ picture: null, video: null });
+    }
+  });
+
   it("sets each slide's texts where that slide has them", () => {
     expect(setHeadline(question(), "Who?")).toMatchObject({ text: "Who?" });
     expect(setHeadline(newSlide("explanation", "e"), "Because")).toMatchObject({ text: "Because" });
