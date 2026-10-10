@@ -600,8 +600,9 @@ mockIPC(
           { slideId: third.id, problem: { code: "mediaOnRanking" } },
         ];
         // A recent file, else the file picked (see `dialogAnswer`).
-        const recent = (payload as { recent: number | null }).recent;
-        const path = recent === null ? dialogAnswer() : (RECENT_FILES[recent] ?? null);
+        const recent = (payload as { recent: string | null }).recent;
+        if (recent !== null && !RECENT_FILES.includes(recent)) return Promise.reject({ code: "notRecent" });
+        const path = recent ?? dialogAnswer();
         if (!path) return null;
         return { id: `draft-${++drafts}`, quiz: editorQuiz, sourcePath: path, unsaved: true, mediaRoot: "/src/dev/", problems: [], dropped };
       }

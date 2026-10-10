@@ -20,7 +20,8 @@ use ts_rs::TS;
 pub struct Picker {
     /// Names the files offered, such as "Quiz files".
     pub filter: String,
-    /// The name a save picker offers, without the extension it adds.
+    /// The name a save picker offers, without the extension it adds. Only a
+    /// plain file name is offered (`plain_name`).
     #[ts(optional)]
     pub file_name: Option<String>,
 }
@@ -46,7 +47,7 @@ pub async fn pick_save(window: Window, picker: Picker, extension: &'static str, 
         if let Some(folder) = folder {
             dialog = dialog.set_directory(folder);
         }
-        let stem = start.as_deref().and_then(Path::file_stem).map(PathBuf::from).or(picker.file_name.map(PathBuf::from));
+        let stem = start.as_deref().and_then(Path::file_stem).map(PathBuf::from).or(picker.file_name.as_deref().and_then(plain_name));
         if let Some(stem) = stem {
             dialog = dialog.set_file_name(with_extension(stem, extension).to_string_lossy());
         }
@@ -66,6 +67,17 @@ fn dialog(window: &Window, picker: &Picker, extensions: &[&str]) -> FileDialogBu
 /// The path of a picked file; none for a URL, which only mobile pickers give.
 fn local(picked: FilePath) -> Option<PathBuf> {
     picked.into_path().ok()
+}
+
+/// `offered`, a name the page words, as a plain file name: only its last
+/// part, as any system splits a path, without the colon that names a drive
+/// or a stream on Windows, and without control characters. None when
+/// nothing of a name is left.
+fn plain_name(offered: &str) -> Option<PathBuf> {
+    let last = offered.rsplit(['/', '\\']).next().unwrap_or_default();
+    let name: String = last.chars().filter(|&c| c != ':' && !c.is_control()).collect();
+    let name = name.trim();
+    (!name.is_empty() && name != "." && name != "..").then(|| PathBuf::from(name))
 }
 
 /// `path`, ending in `.extension` (in any case) as a save picker may not.
@@ -91,5 +103,20 @@ mod tests {
         // A quiz is never saved over a plain JSON quiz.
         assert_eq!(with_extension("/q/round.json".into(), "quiz"), PathBuf::from("/q/round.json.quiz"));
         assert_eq!(with_extension("v1.2".into(), "csv"), PathBuf::from("v1.2.csv"));
+    }
+
+    #[test]
+    fn a_save_picker_offers_only_a_plain_file_name() {
+        let plain = |offered| plain_name(offered).map(|name| name.to_string_lossy().into_owned());
+        assert_eq!(plain("Round 1").as_deref(), Some("Round 1"));
+        assert_eq!(plain("../../etc/passwd").as_deref(), Some("passwd"));
+        assert_eq!(plain("C:\\Windows\\win.ini").as_deref(), Some("win.ini"));
+        assert_eq!(plain("\\\\server\\share\\quiz").as_deref(), Some("quiz"));
+        assert_eq!(plain("C:quiz").as_deref(), Some("Cquiz"));
+        assert_eq!(plain("quiz:stream").as_deref(), Some("quizstream"));
+        assert_eq!(plain(" Pub\u{0}\nquiz ").as_deref(), Some("Pubquiz"));
+        for nothing in ["", "/", "a/", "..", ".", " : ", "\u{7}"] {
+            assert_eq!(plain(nothing), None, "{nothing:?}");
+        }
     }
 }

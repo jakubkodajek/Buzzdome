@@ -14,9 +14,8 @@ function deferred<T>() {
 }
 
 const PICKER = { filter: "Quiz files" };
-/** The recent files the backend lists, opened by their place. */
-const RECENT = ["big", "other"];
-const [BIG, OTHER] = [0, 1];
+/** Recent files the backend lists. */
+const [BIG, OTHER] = ["big", "other"];
 
 /** A stand-in for the backend: one current draft (or none), and a record of every call. */
 function fakeApi(start = "draft-1") {
@@ -25,7 +24,7 @@ function fakeApi(start = "draft-1") {
   const draftApi = {
     editorLoad: vi.fn(async () => (current === null ? null : draft(current))),
     editorNew: vi.fn(async () => draft((current = "draft-new"))),
-    editorOpen: vi.fn(async (recent: number | null) => draft((current = `draft-${recent === null ? "picked" : RECENT[recent]}`))),
+    editorOpen: vi.fn(async (recent: string | null) => draft((current = `draft-${recent ?? "picked"}`))),
     editorClose: vi.fn(async () => {
       current = null;
     }),

@@ -237,14 +237,15 @@ pub async fn editor_new(app: AppHandle, title: String) -> CmdResult<EditorDraft>
     .await
 }
 
-/// Opens a quiz file in place of the draft: the `recent` file at that place
-/// in the list (`RecentFiles`), or one the quizmaster picks (none when they
-/// cancel). Refused during a show, whose journal must not wait for the disk
-/// while a large file unpacks.
+/// Opens a quiz file in place of the draft: the `recent` file, which has to
+/// be in the list (`RecentFiles`), or one the quizmaster picks (none when
+/// they cancel). A recent file that is no longer there leaves the list.
+/// Refused during a show, whose journal must not wait for the disk while a
+/// large file unpacks.
 #[tauri::command]
-pub async fn editor_open(app: AppHandle, window: Window, recent: Option<usize>, picker: Picker) -> CmdResult<Option<EditorDraft>> {
+pub async fn editor_open(app: AppHandle, window: Window, recent: Option<String>, picker: Picker) -> CmdResult<Option<EditorDraft>> {
     let path = match recent {
-        Some(index) => app.state::<RecentFiles>().get(index)?,
+        Some(recent) => app.state::<RecentFiles>().get(&recent)?,
         None => match dialogs::pick_file(window, picker, quiz_file::OPEN_EXTENSIONS.to_vec()).await? {
             Some(path) => path,
             None => return Ok(None),
@@ -255,9 +256,13 @@ pub async fn editor_open(app: AppHandle, window: Window, recent: Option<usize>, 
             return Err(AppError::ShowRunning);
         }
         let (folder, root) = new_draft_folder(dir)?;
-        let opened = quiz_file::open_into(&path, &root)?;
-        // A quiz that opening changed has to be saved to keep the change.
         let source_path = path.to_string_lossy().into_owned();
+        let opened = quiz_file::open_into(&path, &root).inspect_err(|_| {
+            if path.metadata().is_err_and(|e| e.kind() == std::io::ErrorKind::NotFound) {
+                app.state::<RecentFiles>().forget(&source_path);
+            }
+        })?;
+        // A quiz that opening changed has to be saved to keep the change.
         let pointer = Pointer { folder, source_path: Some(source_path.clone()), unsaved: opened.changed, dropped: opened.dropped };
         switch_to(app, dir, &pointer)?;
         app.state::<RecentFiles>().remember(&source_path);

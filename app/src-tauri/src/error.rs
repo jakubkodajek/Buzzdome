@@ -40,7 +40,8 @@ pub enum AppError {
     #[error("the show's journal could not be repaired after a failed write")]
     JournalBroken,
     /// The projector window gave a command its keys do not stand for, which
-    /// only the Director may give (`PROJECTOR_COMMANDS`).
+    /// only the Director may give (`may_give`); or a window the app does not
+    /// know gave one.
     #[error("the projector cannot give this command")]
     NotFromProjector,
     /// The show thread stopped (a bug), so the show takes no more commands;
@@ -98,7 +99,7 @@ pub enum AppError {
     QuizInvalid { problems: Vec<ValidationError> },
     #[error("no quiz is open in the editor")]
     NoDraft,
-    /// The recent file the editor was asked to open is no longer in the list.
+    /// The recent file the editor was asked to open is not in the list.
     #[error("the file is no longer in the recent files")]
     NotRecent,
     /// The editor opened another quiz since the command was given.

@@ -1,8 +1,9 @@
 //! The quiz files the editor opened or saved lately, for its FILE menu.
-//! Kept here, not in the page: the page opens one by its place in the list,
-//! so it can open only files the quizmaster once picked or saved to, and
-//! never name a path of its own (a share on another computer, say, which
-//! Windows would sign in to).
+//! Kept here, not in the page: the page opens one by its path, which has to
+//! be in the list, so it can open only files the quizmaster once picked or
+//! saved to, and never name a path of its own (a share on another computer,
+//! say, which Windows would sign in to). A path, not a place in the list: a
+//! page showing an older list would open another file.
 
 use crate::app_file::AppFile;
 use crate::app_log;
@@ -38,18 +39,33 @@ impl RecentFiles {
         self.paths.lock().unwrap().clone()
     }
 
-    /// The file at `index` in the list.
-    pub fn get(&self, index: usize) -> CmdResult<PathBuf> {
-        self.paths.lock().unwrap().get(index).map(PathBuf::from).ok_or(AppError::NotRecent)
+    /// The file `path`, if the list has it.
+    pub fn get(&self, path: &str) -> CmdResult<PathBuf> {
+        let listed = self.paths.lock().unwrap().iter().any(|kept| kept == path);
+        listed.then(|| PathBuf::from(path)).ok_or(AppError::NotRecent)
     }
 
-    /// Puts `path` first in the list and keeps the list on disk. Called by
-    /// the editor's commands, one at a time and off the windows' thread; a
-    /// list that cannot be written is only noted in the log.
+    /// Puts `path` first in the list and keeps the list on disk.
     pub fn remember(&self, path: &str) {
+        self.change(|paths| *paths = put_first(paths, path));
+    }
+
+    /// Takes `path` off the list, as a file that is no longer there.
+    pub fn forget(&self, path: &str) {
+        self.change(|paths| paths.retain(|kept| kept != path));
+    }
+
+    /// Changes the list by `change` and keeps it on disk if it changed.
+    /// Called by the editor's commands, one at a time and off the windows'
+    /// thread; a list that cannot be written is only noted in the log.
+    fn change(&self, change: impl FnOnce(&mut Vec<String>)) {
         let paths = {
             let mut paths = self.paths.lock().unwrap();
-            *paths = put_first(&paths, path);
+            let before = paths.clone();
+            change(&mut paths);
+            if *paths == before {
+                return;
+            }
             paths.clone()
         };
         if let Err(e) = self.file.store(&Saved { paths }) {
@@ -91,17 +107,22 @@ mod tests {
     }
 
     #[test]
-    fn the_list_outlives_the_app_and_a_file_is_opened_by_its_place() {
+    fn the_list_outlives_the_app_and_opens_only_the_files_it_has() {
         let dir = folder("kept");
         let path = dir.join(RECENT_FILES);
         let recent = RecentFiles::load(path.clone());
-        assert_eq!(recent.get(0).unwrap_err(), AppError::NotRecent);
+        assert_eq!(recent.get("/q/a.quiz").unwrap_err(), AppError::NotRecent);
         recent.remember("/q/a.quiz");
         recent.remember("/q/b.quiz");
-        let again = RecentFiles::load(path);
+        let again = RecentFiles::load(path.clone());
         assert_eq!(again.paths(), ["/q/b.quiz", "/q/a.quiz"]);
-        assert_eq!(again.get(1).unwrap(), PathBuf::from("/q/a.quiz"));
-        assert_eq!(again.get(2).unwrap_err(), AppError::NotRecent);
+        assert_eq!(again.get("/q/a.quiz").unwrap(), PathBuf::from("/q/a.quiz"));
+        assert_eq!(again.get("//server/q/a.quiz").unwrap_err(), AppError::NotRecent);
+
+        again.forget("/q/a.quiz");
+        again.forget("/q/never.quiz");
+        assert_eq!(RecentFiles::load(path).paths(), ["/q/b.quiz"]);
+        assert_eq!(again.get("/q/a.quiz").unwrap_err(), AppError::NotRecent);
         std::fs::remove_dir_all(&dir).unwrap();
     }
 }

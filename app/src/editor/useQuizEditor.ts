@@ -27,12 +27,12 @@ export interface QuizEditor {
   // failed, not refused while another one was under way).
   newQuiz: () => Promise<boolean>;
   /**
-   * Opens the file at `recent` in `recentFiles`, or a file the user picks.
+   * Opens `recent`, a file in `recentFiles`, or a file the user picks.
    * Resolves to the draft opened (a file from an older version may break
    * newer rules, or have what this version leaves out), or false when
    * nothing was opened.
    */
-  openQuiz: (recent?: number) => Promise<EditorDraft | false>;
+  openQuiz: (recent?: string) => Promise<EditorDraft | false>;
   /** Quiz files opened or saved lately, newest first. */
   recentFiles: string[];
   save: () => Promise<boolean>;
@@ -63,7 +63,7 @@ export function useQuizEditor(onTestRun: () => void): QuizEditor {
   const status = useSyncExternalStore(drafts.subscribe, drafts.getStatus);
   const report = useLatest(useReport());
   const dispatchCommand = useDispatch();
-  // Kept by the backend, which opens a recent file by its place in the list.
+  // Kept by the backend, which opens only a recent file in its list.
   const [recentFiles, setRecentFiles] = useState<string[]>([]);
   const readRecentFiles = useCallback(
     () => api.editorRecentFiles().then(setRecentFiles, (error: unknown) => report.current(error)),
@@ -180,10 +180,10 @@ export function useQuizEditor(onTestRun: () => void): QuizEditor {
     openQuiz: (recent) =>
       attempt("open", async (draftApi) => {
         if (!(await mayDiscard())) return false;
-        const draft = await draftApi.editorOpen(recent ?? null, quizPicker(t));
+        // The list changes when a file opens, and when a recent one is gone.
+        const draft = await draftApi.editorOpen(recent ?? null, quizPicker(t)).finally(() => void readRecentFiles());
         if (!draft) return false;
         load(draft);
-        void readRecentFiles();
         return draft;
       }),
     recentFiles,

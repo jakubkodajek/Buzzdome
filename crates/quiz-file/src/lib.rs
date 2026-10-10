@@ -25,7 +25,8 @@ use std::collections::hash_map::Entry;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fs::{self, File};
 use std::io::{self, Read, Write};
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 use ts_rs::TS;
 use zip::write::SimpleFileOptions;
@@ -351,10 +352,13 @@ pub fn write_atomic(dest: &Path, contents: &[u8]) -> Result<()> {
 }
 
 /// Writes `dest` through a temporary file next to it, renamed over `dest`
-/// only once `write` has finished.
+/// only once `write` has finished. Each write has a temporary file of its
+/// own, so two writes of one file at once cannot write into each other's:
+/// the last renamed wins, whole.
 fn replace_file(dest: &Path, write: impl FnOnce(&Path) -> Result<()>) -> Result<()> {
+    static WRITES: AtomicU64 = AtomicU64::new(0);
     let name = dest.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
-    let temp = dest.with_file_name(format!(".{name}.saving"));
+    let temp = dest.with_file_name(format!(".{name}.{}-{}.saving", std::process::id(), WRITES.fetch_add(1, Ordering::Relaxed)));
     let written = write(&temp).and_then(|()| fs::rename(&temp, dest).context(FileAction::Write, dest));
     if written.is_err() {
         let _ = fs::remove_file(&temp);
@@ -723,7 +727,6 @@ fn copy_json(path: &Path, dest: &Path) -> Result<Unpacked> {
     let json = read_json(path)?;
     let quiz = Quiz::from_json(&json)?;
     let source_root = path.parent().unwrap_or(Path::new("."));
-    let real_root = fs::canonicalize(source_root).context(FileAction::Read, source_root)?;
     let mut hasher = Sha256::new();
     let mut budget = MAX_UNPACKED_BYTES;
     budget -= write_file(dest, QUIZ_JSON, &mut json.as_bytes(), path, budget, &mut hasher)?;
@@ -736,12 +739,38 @@ fn copy_json(path: &Path, dest: &Path) -> Result<Unpacked> {
             continue;
         }
         let source = source_root.join(reference);
-        let inside = fs::canonicalize(&source).is_ok_and(|real| real.starts_with(&real_root));
+        let inside = leads_inside(&source, source_root).unwrap_or(false);
         // `problems` reports one not read as missing.
         let Some(mut media) = inside.then(|| File::open(&source).ok()).flatten() else { continue };
         budget -= write_file(dest, reference, &mut media, &source, budget, &mut hasher)?;
     }
     Ok(Unpacked { hash: finish(hasher), renames: Renames::default() })
+}
+
+/// Whether `path` is `folder`, or a file or folder in it, once links are
+/// followed: neither `..` nor a link or junction leads out. Canonical paths
+/// are compared where the system gives them. Windows gives none on a volume
+/// without a drive letter (`canonicalize` fails there), so then `path` has
+/// to be `folder` and plain names, none of them a link: a link inside the
+/// folder that would stay in it is refused too. Fails when `path` is not
+/// there.
+pub fn leads_inside(path: &Path, folder: &Path) -> io::Result<bool> {
+    fs::metadata(path)?;
+    Ok(match (fs::canonicalize(path), fs::canonicalize(folder)) {
+        (Ok(real), Ok(real_folder)) => real.starts_with(real_folder),
+        _ => path.strip_prefix(folder).is_ok_and(|names| no_links_along(folder, names)),
+    })
+}
+
+/// Whether each of `names`, joined one by one onto `folder`, is a plain name
+/// of a file or folder that is there and is not a link or junction (which
+/// Rust counts as a link on Windows).
+fn no_links_along(folder: &Path, names: &Path) -> bool {
+    let mut path = folder.to_path_buf();
+    names.components().all(|name| {
+        path.push(name);
+        matches!(name, Component::Normal(_)) && fs::symlink_metadata(&path).is_ok_and(|found| !found.file_type().is_symlink())
+    })
 }
 
 /// Writes one file of a package from `contents` (read from the file
@@ -968,12 +997,24 @@ mod tests {
 
     #[test]
     fn a_failed_save_names_the_file_not_its_temporary_copy() {
-        let folder = temp("save-blocked");
-        let dest = folder.join("test.quiz");
-        // A folder where the temporary file would go makes creating it fail.
-        fs::create_dir_all(folder.join(".test.quiz.saving")).unwrap();
+        // The temporary file cannot be created in a folder that is not there.
+        let dest = temp("save-blocked").join("gone").join("test.quiz");
         let err = write_atomic(&dest, b"x").unwrap_err();
         assert!(matches!(err, QuizFileError::Io { action: FileAction::Write, ref path, .. } if *path == dest), "{err}");
+    }
+
+    #[test]
+    fn a_write_begun_during_another_of_the_same_file_has_a_temporary_file_of_its_own() {
+        let folder = temp("save-overlapping");
+        let dest = folder.join("receiver.json");
+        replace_file(&dest, |temp| {
+            fs::write(temp, b"first").context(FileAction::Write, temp)?;
+            write_atomic(&dest, b"second")
+        })
+        .unwrap();
+        assert_eq!(fs::read(&dest).unwrap(), b"first", "the last renamed wins, whole");
+        let names: Vec<String> = fs::read_dir(&folder).unwrap().map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned()).collect();
+        assert_eq!(names, ["receiver.json"], "no temporary file is left");
     }
 
     #[test]
@@ -1066,6 +1107,38 @@ mod tests {
         assert!(!draft.join("media/linked.png").exists());
         // A link that stays inside the folder is read as the file it names.
         assert_eq!(fs::read(draft.join("media/alias.png")).unwrap(), b"png bytes");
+
+        // Where the system names no canonical path, no link is followed at all.
+        assert!(no_links_along(&folder, Path::new("media/inside.png")));
+        for through_a_link in ["media/up/secret.png", "media/alias.png", "media/../media/inside.png", "media/gone.png"] {
+            assert!(!no_links_along(&folder, Path::new(through_a_link)), "{through_a_link}");
+        }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn a_plain_json_quiz_cannot_reach_outside_its_folder_through_a_junction() {
+        let outer = temp("json-junction");
+        fs::write(outer.join("secret.png"), b"secret").unwrap();
+        let folder = outer.join("quiz");
+        fs::create_dir_all(folder.join("media")).unwrap();
+        fs::write(folder.join("media/inside.png"), b"png bytes").unwrap();
+        // A junction needs no rights to make, unlike a link.
+        let made = std::process::Command::new("cmd").arg("/C").arg("mklink").arg("/J").arg(folder.join("media").join("up")).arg(&outer).output().unwrap();
+        assert!(made.status.success(), "{}", String::from_utf8_lossy(&made.stdout));
+        let mut quiz = quiz_with_picture("media/up/secret.png");
+        let mut slide = quiz.slides[0].clone();
+        slide.id = "inside".into();
+        slide.picture = Some("media/inside.png".into());
+        quiz.slides.push(slide);
+        fs::write(folder.join("quiz.json"), serde_json::to_vec(&quiz).unwrap()).unwrap();
+
+        let draft = temp("json-junction-draft").join("draft");
+        open_into(&folder.join("quiz.json"), &draft).unwrap();
+        assert!(!draft.join("media/up/secret.png").exists());
+        assert_eq!(fs::read(draft.join("media/inside.png")).unwrap(), b"png bytes");
+        assert!(!no_links_along(&folder, Path::new("media/up/secret.png")), "a junction counts as a link");
+        assert!(no_links_along(&folder, Path::new("media/inside.png")));
     }
 
     /// A quiz file made before the answer and points limits: an

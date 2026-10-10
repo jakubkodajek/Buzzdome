@@ -361,8 +361,9 @@ fn read_journal(path: &Path) -> Result<(Vec<Stamped>, u64), ResumeError> {
 }
 
 /// Whether `line` is a journal line as some version of the app writes it:
-/// an object with a time and a command, whatever the command. The app never
-/// writes a NUL.
+/// an object with a time and a command, whatever the command. Every version
+/// writes its lines so and every later one must keep to it, or a newer
+/// app's last line would be cut off as torn. The app never writes a NUL.
 fn is_journal_line(line: &[u8]) -> bool {
     !line.contains(&0)
         && serde_json::from_slice::<serde_json::Map<String, serde_json::Value>>(line).is_ok_and(|line| line.contains_key("atMs") && line.contains_key("command"))

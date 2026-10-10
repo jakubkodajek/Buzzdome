@@ -157,11 +157,11 @@ fn media_folders(app: &AppHandle) -> CmdResult<[PathBuf; 2]> {
 }
 
 /// Whether the media folder `root` is outside the `folders` the windows may
-/// load from (`media_folders`). One that is gone is missing, not refused.
+/// load from (`media_folders`), with links followed (`leads_inside`). One
+/// that is gone is missing, not refused.
 fn refused(root: &Path, folders: &[PathBuf]) -> bool {
-    // Canonical, so neither `..` nor a link leads out of a folder.
-    let Ok(root) = root.canonicalize() else { return false };
-    !folders.iter().filter_map(|folder| folder.canonicalize().ok()).any(|folder| root.starts_with(folder))
+    let inside: std::io::Result<Vec<bool>> = folders.iter().map(|folder| quiz_file::leads_inside(root, folder)).collect();
+    inside.is_ok_and(|inside| !inside.contains(&true))
 }
 
 fn emit_state(app: &AppHandle, game: Option<&Game>) {
@@ -479,10 +479,25 @@ async fn end_show(app: AppHandle) -> CmdResult<()> {
 /// bindings). Scores, names and jumps are the Director's alone.
 const PROJECTOR_COMMANDS: [&str; 7] = ["press", "next", "judgeRight", "judgeWrong", "pauseClock", "resumeClock", "showLeaderboard"];
 
-/// Whether the window labelled `window` may give `command`.
+/// The buzzers the projector's keys press, 1 to 9 and 0 for 10, always
+/// with the big button (`commandForKey`).
+const KEY_BUZZERS: std::ops::RangeInclusive<quiz_core::BuzzerId> = 1..=10;
+
+/// Whether the window labelled `window` may give `command`: the Director
+/// any, the projector only what its keys stand for, and a window the app
+/// does not know none.
 fn may_give(window: &str, command: &Command) -> bool {
-    let tag = || serde_json::to_value(command).ok()?.get("type")?.as_str().map(str::to_owned);
-    window != app_windows::HOST_LABEL || tag().is_some_and(|tag| PROJECTOR_COMMANDS.contains(&tag.as_str()))
+    match window {
+        app_windows::DIRECTOR_LABEL => true,
+        app_windows::HOST_LABEL => match command {
+            Command::Press { buzzer, button } => *button == quiz_core::Button::Big && KEY_BUZZERS.contains(buzzer),
+            command => {
+                let tag = || serde_json::to_value(command).ok()?.get("type")?.as_str().map(str::to_owned);
+                tag().is_some_and(|tag| PROJECTOR_COMMANDS.contains(&tag.as_str()))
+            }
+        },
+        _ => false,
+    }
 }
 
 #[tauri::command]
@@ -869,8 +884,12 @@ mod tests {
         for command in &directors {
             assert!(!may_give(app_windows::HOST_LABEL, command), "{command:?}");
         }
+        for (buzzer, button) in [(11, quiz_core::Button::Big), (0, quiz_core::Button::Big), (3, quiz_core::Button::A)] {
+            assert!(!may_give(app_windows::HOST_LABEL, &Command::Press { buzzer, button }), "a press no key gives: {buzzer} {button:?}");
+        }
         for command in keys.iter().chain(&directors) {
             assert!(may_give(app_windows::DIRECTOR_LABEL, command), "{command:?}");
+            assert!(!may_give("editor", command), "a window the app does not know: {command:?}");
         }
     }
 

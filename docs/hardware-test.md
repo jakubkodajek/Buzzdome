@@ -102,7 +102,9 @@ installer, then on the Mac, that nothing it should allow is blocked:
    Expected: both play.
 
 A step that fails here and not in a dev build is the policy blocking it:
-note the step and attach `buzzdome.log`.
+note the step and attach `buzzdome.log`, where each window notes what the
+policy blocked ("the content security policy blocked …", at most five a
+minute).
 
 ## 8. Send back
 

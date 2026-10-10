@@ -9,6 +9,7 @@ export type Picker = {
  */
 filter: string, 
 /**
- * The name a save picker offers, without the extension it adds.
+ * The name a save picker offers, without the extension it adds. Only a
+ * plain file name is offered (`plain_name`).
  */
 fileName?: string, };

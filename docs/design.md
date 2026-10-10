@@ -137,7 +137,10 @@ draws slides without a show.
   or ends (an unanswered request is forgotten then), and holds no other.
   Those that write `receiver.json` run off the windows' thread too: it is in
   the app's data folder with the journal, so a disk that does not answer
-  holds both.
+  holds both. They change it one at a time (`SettingsChange`, whose lock is
+  never taken under the show state), so two quick clicks cannot lose either
+  change; and every atomic write has a temporary file of its own
+  (`quiz_file::write_atomic`).
 - **Saving problems.** When the journal refuses a write (the disk is full,
   say), the change is not made, and the Director shows why in a banner until
   a write works again (`show-not-saved`, `show_not_saved`). A due command
@@ -194,17 +197,21 @@ draws slides without a show.
   lists the app's commands so Tauri checks them, and a test in
   `app_windows.rs` keeps the three lists in step). The projector can read
   the show and its media, but not open, save or pick files, and `dispatch`
-  takes from it only what its keys stand for (`PROJECTOR_COMMANDS` in
-  `lib.rs`, written to `bindings/ProjectorCommands.ts`; a test in
-  `keyboard.test.ts` checks that every command a key gives is in it).
+  takes from it only what its keys stand for (`may_give` in `lib.rs`: the
+  `PROJECTOR_COMMANDS`, written to `bindings/ProjectorCommands.ts`, where a
+  test in `keyboard.test.ts` checks that every command a key gives is in
+  it, and presses of the big button of buzzers 1 to 10 only); a window the
+  app does not know may give none.
   A content security policy (`tauri.conf.json`) lets the pages load only
   the app's own scripts and styles and media through the asset protocol.
   Tauri sets it only on the pages a release build serves, not on the dev
   server's, so the release smoke check in `docs/hardware-test.md` runs
-  under it. Files the quizmaster opens, saves, imports or exports are
-  picked by the backend (`dialogs.rs`, worded by the UI's `Picker`), never
-  named by a page: the editor's recent files are kept by the backend
-  (`recent_files.rs`) and the page opens one by its place in the list. The
+  under it; what it blocks goes in the log (`csp-report.ts`). Files the
+  quizmaster opens, saves, imports or exports are picked by the backend
+  (`dialogs.rs`, worded by the UI's `Picker`, whose offered name is cut to
+  a plain file name), never named by a page: the editor's recent files are
+  kept by the backend (`recent_files.rs`), and the page opens one by its
+  path, which has to be in that list. The
   pages confirm through the dialog plugin's `ask`
   (`confirm.ts`, with Yes and No in the UI's language); ESLint refuses `alert`, `confirm`, `prompt` and the
   plugin's file pickers.
@@ -922,9 +929,13 @@ never share one. The journal is read as bytes (a byte order mark and CRLF
 line ends, which an editor may add, are taken as they come). Each line is
 synced before the next is written, so only the last line can be one the app
 never accepted: one without its newline, which was being written when the
-app stopped, or a whole one that is not JSON at all or holds a NUL, which a
-power cut leaves when the disk kept the newline but not the bytes before
-it. Resume cuts such a line off, after keeping the journal as it was in
+app stopped, or a whole one that is no journal line at all, which a power
+cut leaves when the disk kept the newline but not the bytes before it. A
+journal line, as every version of the app writes it and every later one
+must keep writing it, is a JSON object with `atMs` and `command`, and
+never holds a NUL (`is_journal_line`); so a last line that is that, but
+whose command this version does not know, was accepted by a newer app and
+is not cut. Resume cuts a torn line off, after keeping the journal as it was in
 `torn/journal-<n>.jsonl` (a copy per cut; when the copy fails, as on a full
 disk, the log says so and the show resumes all the same). Any other line
 that does not read as a command (one from a newer app, or one the disk
