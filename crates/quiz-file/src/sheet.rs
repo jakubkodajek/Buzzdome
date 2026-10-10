@@ -58,7 +58,7 @@ pub struct SheetExport {
     /// Media the quiz names that are not in it: their cells stay empty.
     pub missing: Vec<String>,
     /// Media the quiz names outside its media folder (an absolute path, a
-    /// `..`), never read: their cells stay empty (A19).
+    /// `..`), never read: their cells stay empty.
     pub refused: Vec<String>,
 }
 

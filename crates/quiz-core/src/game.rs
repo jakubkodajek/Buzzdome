@@ -187,8 +187,8 @@ pub struct Controls {
     /// `GoTo` and `GoToFinal`: not while a question is in play.
     pub go_to: bool,
     /// `RestartQuestion`: while a question is in play, the way to leave it
-    /// without scoring it (G14), and once it closed, until its answer is
-    /// shown, the way to take its scores back and ask it again (J20).
+    /// without scoring it, and once it closed, until its answer is shown,
+    /// the way to take its scores back and ask it again.
     pub restart_question: bool,
 }
 
