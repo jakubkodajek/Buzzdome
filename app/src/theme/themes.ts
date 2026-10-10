@@ -86,12 +86,15 @@ const LIGHT_TEXT = "#ffffff";
 const DARK_TEXT = "#1a1a1a";
 
 /**
- * White text when it is readable on `background`, dark text otherwise.
- * Readable means a contrast of at least 3:1, the WCAG minimum for large
- * text, which all text on a stage is (WCAG 2.2, 1.4.3).
+ * White text when it is readable on every one of `backgrounds` (one
+ * colour, or a gradient's ends), else whichever of white and dark text
+ * reads better on the worst of them. Readable means a contrast of at least
+ * 3:1, the WCAG minimum for large text, which all text on a stage is
+ * (WCAG 2.2, 1.4.3).
  */
-export function readableText(background: string): string {
-  return contrast(LIGHT_TEXT, background) >= 3 ? LIGHT_TEXT : DARK_TEXT;
+export function readableText(...backgrounds: string[]): string {
+  const worst = (text: string) => Math.min(...backgrounds.map((background) => contrast(text, background)));
+  return worst(LIGHT_TEXT) >= 3 || worst(LIGHT_TEXT) >= worst(DARK_TEXT) ? LIGHT_TEXT : DARK_TEXT;
 }
 
 /** WCAG 2.2 contrast ratio of two colours, 1 to 21; alpha is ignored. */

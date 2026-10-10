@@ -18,6 +18,12 @@ describe("themes", () => {
     }
   });
 
+  it("picks text readable on both ends of a gradient where one text is", () => {
+    expect(readableText("#0B1F4A", "#7A1E1E")).toBe("#ffffff");
+    expect(readableText("#FFFFFF", "#FFE066")).toBe("#1a1a1a");
+    expect(readableText("#1E3C72", "#FFFFFF")).toBe("#1a1a1a");
+  });
+
   it("picks the quiz's theme, and the default one for a theme that is not installed", () => {
     expect(pickTheme(THEMES, "builtin.neon")?.id).toBe("builtin.neon");
     expect(pickTheme(THEMES, null)?.id).toBe(DEFAULT_THEME_ID);

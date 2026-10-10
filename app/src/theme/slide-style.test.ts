@@ -58,4 +58,15 @@ describe("slide styles as CSS", () => {
     // A title has no fill to make transparent.
     expect(textStyleCss({ transparency: 30 }, "title")).toEqual({});
   });
+
+  it("keeps text readable on a fill of its own without a colour of its own", () => {
+    const fill = (from: string, to: string) => ({ from, to, kind: "vertical" }) as const;
+    expect(textStyleCss({ fill: fill("#FFFFFF", "#FFF4C2") }, "answer").color).toBe("#1a1a1a");
+    expect(textStyleCss({ fill: fill("#0B1F4A", "#1E3C72") }, "question").color).toBe("#ffffff");
+    // A gradient from light to dark: the text that reads better on its worse end.
+    expect(textStyleCss({ fill: fill("#FFFFFF", "#1E3C72") }, "text").color).toBe("#1a1a1a");
+    // A colour of its own stays, and a fill that mostly shows through leaves the theme's.
+    expect(textStyleCss({ fill: fill("#FFFFFF", "#FFFFFF"), color: "#FF0000" }, "answer").color).toBe("rgba(255, 0, 0, 1)");
+    expect(textStyleCss({ fill: fill("#FFFFFF", "#FFFFFF"), transparency: 60 }, "answer").color).toBeUndefined();
+  });
 });

@@ -373,7 +373,9 @@ packages users will install are read the same way.
   keeps its look. A title and a question share the headline's style.
   Text on a filled area (bars, answers, rows) gets white or dark
   text from `readableText`, which keeps at least the 3:1 contrast WCAG 2.2
-  asks for large text (SC 1.4.3); a test checks every built-in colour.
+  asks for large text (SC 1.4.3); a test checks every built-in colour. A
+  slide's own fill without a text colour of its own gets the same, judged
+  on the worse end of the gradient, unless the fill mostly shows through.
 - **Fonts.** A theme font is a file. `registerFonts` (`theme/fonts.ts`) adds
   each file to `document.fonts` once (CSS Font Loading API), under a family
   named after the file, for every weight from 1 to 1000, so a variable font
