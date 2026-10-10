@@ -364,6 +364,14 @@
   background: var(--pressed);
 }
 
+.theme-missing {
+  align-self: center;
+  max-width: 200px;
+  margin: 0 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .theme-thumbnail {
   position: relative;
   width: 96px;

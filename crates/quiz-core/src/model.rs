@@ -2,7 +2,8 @@
 //! change it only with a schema version bump and a migration.
 
 use crate::media::{check_reference, Background, MediaIssue, MediaKind, SoundClip, VideoClip, MAX_GAIN_DB, MIN_GAIN_DB};
-use serde::{Deserialize, Serialize};
+use crate::theme::is_theme_id;
+use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use ts_rs::TS;
 
@@ -38,10 +39,17 @@ pub struct Quiz {
     pub title: String,
     /// Id of the look the screens use (spec section 5.2); the app's default
     /// when missing or not installed.
-    #[serde(default)]
+    #[serde(default, deserialize_with = "theme_id_or_none")]
     pub theme: Option<String>,
     #[serde(default)]
     pub slides: Vec<Slide>,
+}
+
+/// A `theme` that is not a theme id (see `is_theme_id`) can name no
+/// installed theme, so it reads as none: the default look it would show
+/// anyway. That also keeps an unbounded value out of the quiz.
+fn theme_id_or_none<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Option<String>, D::Error> {
+    Ok(Option::<String>::deserialize(deserializer)?.filter(|id| is_theme_id(id)))
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
@@ -423,6 +431,15 @@ mod tests {
         assert_eq!(quiz.theme.as_deref(), Some("cz.example.gone"));
         assert!(quiz.validate().is_ok());
         assert_eq!(Quiz::from_json(&serde_json::to_string(&quiz).unwrap()).unwrap(), quiz);
+    }
+
+    #[test]
+    fn a_theme_that_is_not_a_theme_id_reads_as_none() {
+        let long = format!("cz.{}", "a".repeat(crate::theme::MAX_THEME_ID_LEN));
+        for theme in ["Autumn", "../themes", long.as_str()] {
+            let json = serde_json::json!({ "schemaVersion": 3, "title": "x", "theme": theme }).to_string();
+            assert_eq!(Quiz::from_json(&json).unwrap().theme, None, "{theme}");
+        }
     }
 
     #[test]

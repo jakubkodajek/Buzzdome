@@ -34,7 +34,7 @@ import {
 } from "../icons";
 import { isVideo, mediaFileName, MediaRootContext, mediaUrl, type MediaKind } from "../media";
 import { NO_CONTEXT, slideContexts } from "../quiz";
-import { ThemeContext, useResolvedTheme } from "../theme/context";
+import { ThemeContext } from "../theme/context";
 import type { Slide, ValidationError } from "../types";
 import { tooltip, useActionKeys, type Action, type Actions } from "./actions";
 import { Backstage, type BackstagePage } from "./Backstage";
@@ -55,6 +55,7 @@ import { TableView } from "./TableView";
 import { Thumbnails } from "./Thumbnails";
 import { TrimDialog } from "./TrimDialog";
 import { useQuizEditor, type QuizEditor } from "./useQuizEditor";
+import { useThemeChoice } from "./useThemeChoice";
 import "./editor.css";
 
 type MediaElement = "picture" | "video" | "sound";
@@ -114,12 +115,11 @@ function Studio({ editor, open, onExit }: { editor: QuizEditor; open: OpenQuiz |
   const [loudness, setLoudness] = useState(false);
   /** The slide whose background video plays in the design area. */
   const [playingBackgroundOf, setPlayingBackgroundOf] = useState<string | null>(null);
-  /** The theme pointed at in the ribbon, shown on the slide until the pointer leaves. */
-  const [previewTheme, setPreviewTheme] = useState<string | null>(null);
 
   const quiz = open?.history.present ?? null;
-  const theme = useResolvedTheme(quiz?.theme ?? null);
-  const slideTheme = useResolvedTheme(previewTheme ?? quiz?.theme ?? null);
+  const { theme, canvasTheme, choice: themeChoice } = useThemeChoice(quiz?.theme ?? null, (id) =>
+    editor.edit({ type: "setTheme", theme: id }),
+  );
   const slides = quiz?.slides ?? [];
   const contexts = useMemo(() => (quiz ? slideContexts(quiz) : []), [quiz]);
   const found = selection.id === null ? -1 : slides.findIndex((s) => s.id === selection.id);
@@ -465,9 +465,7 @@ function Studio({ editor, open, onExit }: { editor: QuizEditor; open: OpenQuiz |
                   slide={slide}
                   element={element}
                   properties={properties}
-                  theme={theme?.id ?? null}
-                  onTheme={(id) => editor.edit({ type: "setTheme", theme: id })}
-                  onPreviewTheme={setPreviewTheme}
+                  themeChoice={themeChoice}
                 />
                 <div className={panel && slide ? "studio-main with-panel" : "studio-main"}>
                   {view === "graphical" ? (
@@ -488,7 +486,7 @@ function Studio({ editor, open, onExit }: { editor: QuizEditor; open: OpenQuiz |
                       />
                       <div className="studio-center">
                         {slide ? (
-                          <ThemeContext value={slideTheme}>
+                          <ThemeContext value={canvasTheme}>
                             <DesignArea
                               quiz={quiz}
                               index={index}

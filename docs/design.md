@@ -265,6 +265,10 @@ packages users will install are read the same way.
   sample question (`ThemeGallery.tsx`). The theme under the pointer or focus
   is shown on the slide canvas only, the thumbnails keep the quiz's; a click
   is a `setTheme` edit, so it is undone like any other change.
+  `useThemeChoice.ts` holds both themes and the gallery's choice. A quiz
+  whose theme is not installed is drawn in the default one and the gallery
+  says so; it never stops a show. A `theme` value that is not a theme id
+  reads as none.
 - **Preview.** A test of the shell writes the built-in themes as
   `list_themes` returns them to `app/src/bindings/BuiltinThemes.json`, with
   folders that Vite serves; the browser preview and the UI tests use it.

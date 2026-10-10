@@ -6,6 +6,7 @@ import { tooltip, type Action, type Actions } from "./actions";
 import type { ElementId } from "./elements";
 import type { PropertyRow, SlideProperties } from "./properties";
 import { ThemeGallery } from "./ThemeGallery";
+import type { ThemeChoice } from "./useThemeChoice";
 
 export type RibbonTab = "home" | "insert" | "design" | "question" | "view" | "show" | "media";
 
@@ -35,15 +36,11 @@ interface RibbonProps {
   element: ElementId;
   /** The selected slide's properties; null without a slide. */
   properties: SlideProperties | null;
-  /** Id of the theme the quiz is drawn in; null until the themes are loaded. */
-  theme: string | null;
-  onTheme: (id: string) => void;
-  /** Shows a theme on the slide while it is pointed at; null ends that. */
-  onPreviewTheme: (id: string | null) => void;
+  themeChoice: ThemeChoice;
 }
 
 /** The tabbed command area at the top, as in an office suite. */
-export function Ribbon({ tab, onTab, actions, onGallery, slide, element, properties, theme, onTheme, onPreviewTheme }: RibbonProps) {
+export function Ribbon({ tab, onTab, actions, onGallery, slide, element, properties, themeChoice }: RibbonProps) {
   const { t } = useApp();
   const mediaTab = MEDIA_TAB[element];
   const shown = tab === "media" && !mediaTab ? "home" : tab;
@@ -107,7 +104,7 @@ export function Ribbon({ tab, onTab, actions, onGallery, slide, element, propert
         )}
         {shown === "design" && (
           <Group title="groupThemes">
-            <ThemeGallery current={theme} onPick={onTheme} onPreview={onPreviewTheme} />
+            <ThemeGallery choice={themeChoice} />
           </Group>
         )}
         {shown === "question" && <QuestionTab slide={slide} properties={properties} />}

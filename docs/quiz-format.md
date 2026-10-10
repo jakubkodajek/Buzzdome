@@ -81,7 +81,7 @@ was moved or deleted.
 | --- | --- | --- |
 | `schemaVersion` | number | `3`. Version 1 and 2 files open unchanged; a file with a higher version is refused with a message. |
 | `title` | text | Shown on the welcome screen and in the Director. |
-| `theme` | text or `null` | Id of the look of the screens (`builtin.classic`, `builtin.studio`, `builtin.night`, `builtin.showtime`, `builtin.neon`, later installed themes, spec 5.2). Missing, `null` or not installed: the default look, so a quiz never fails to open or play over it. |
+| `theme` | text or `null` | Id of the look of the screens (`builtin.classic`, `builtin.studio`, `builtin.night`, `builtin.showtime`, `builtin.neon`, later installed themes, spec 5.2). Missing, `null` or not installed: the default look, so a quiz never fails to open or play over it. A value that is not a theme id (dot-separated parts of lower-case letters, digits, `-` and `_`, at least two parts, at most 100 bytes) reads as missing. |
 | `slides` | list | The show in order. |
 
 ### Every slide
