@@ -137,8 +137,10 @@ two windows cannot disagree with each other or with the score.
 - **Pages.** The windows stay on the app's own pages: a navigation guard
   (`app_windows::navigation_guard`) refuses every other URL, and
   `browser-guard.ts` takes the web view's own keys (reload, back, find,
-  print), its context menu outside text fields, and a drop that no drop
-  zone takes. A part that fails to render shows the error in its place
+  print; Option+arrows still move by words in a text field), its context
+  menu outside text fields, and a drop that no drop zone takes. It listens
+  as events come down to their target, so a part that stops one on its
+  way back up, as a popup menu does, cannot skip it. A part that fails to render shows the error in its place
   (`ErrorBoundary`): a Director tab offers to try again, and a projector
   slide leaves the stage as it is and tells the Director.
 - **What a page may do.** Each window gets only the commands it needs
