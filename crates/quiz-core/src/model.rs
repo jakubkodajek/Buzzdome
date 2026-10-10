@@ -266,7 +266,8 @@ pub enum SlideType {
 }
 
 /// What a slide of a type can play.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
 #[serde(rename_all = "camelCase")]
 pub struct Plays {
     /// A picture or a video.

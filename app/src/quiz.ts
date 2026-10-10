@@ -1,6 +1,6 @@
 import { SLIDE_PLAYS } from "./bindings/Constants";
 import type { StringKey } from "./i18n";
-import type { QuestionSlide, Quiz, Slide, SlideType, TitledSlide } from "./types";
+import type { Plays, QuestionSlide, Quiz, Slide, SlideType, TitledSlide } from "./types";
 
 /** How each kind of slide is named in the UI. */
 export const SLIDE_TYPE_LABEL: Record<SlideType, StringKey> = {
@@ -25,7 +25,7 @@ export function hasTitle(slide: Slide): slide is TitledSlide {
  * picture or video (a ranking shows the ranking instead), and a clock and
  * a reveal (only a question).
  */
-export function plays(type: SlideType): { pictureAndVideo: boolean; clockAndReveal: boolean } {
+export function plays(type: SlideType): Plays {
   return SLIDE_PLAYS[type];
 }
 

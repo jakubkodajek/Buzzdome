@@ -42,6 +42,7 @@ export type { Phase } from "./bindings/Phase";
 export type { Place } from "./bindings/Place";
 export type { PlayerCommand } from "./bindings/PlayerCommand";
 export type { PlayerView } from "./bindings/PlayerView";
+export type { Plays } from "./bindings/Plays";
 export type { TeamView } from "./bindings/TeamView";
 export type { Press } from "./bindings/Press";
 export type { PressEvent } from "./bindings/PressEvent";
