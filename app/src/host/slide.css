@@ -127,11 +127,22 @@
   opacity: 0.85;
 }
 
+.explained-answers {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  margin-top: 22px;
+}
+
 .explained-answer {
   min-width: 760px;
   max-width: 1300px;
   height: 130px;
-  margin-top: 22px;
+}
+
+.explained-answers.several .explained-answer {
+  height: 100px;
 }
 
 .explained-missing {
@@ -487,6 +498,19 @@
 .answer.is-dim {
   opacity: 0.3;
   filter: grayscale(0.6);
+}
+
+.answer-share {
+  position: absolute;
+  right: 92px;
+  top: -18px;
+  padding: 2px 18px;
+  border-radius: 999px;
+  font-size: 34px;
+  font-weight: 800;
+  color: var(--theme-correct-text);
+  background: var(--theme-correct);
+  border: 4px solid #fff;
 }
 
 .answer-check {

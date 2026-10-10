@@ -15,7 +15,7 @@ describe("spreadsheets", () => {
     expect({ ...template, slides: [] }).toEqual(quiz);
     expect(template.slides.map((slide) => slide.type)).toEqual(["billboard", "question", "question", "explanation", "endOfRound"]);
     expect(new Set(template.slides.map((slide) => slide.id)).size).toBe(template.slides.length);
-    expect(template.slides[1]).toMatchObject({ mode: "everyone", answers: ["Paris", "Lyon", "Marseille", "Nice"], correct: 0 });
-    expect(template.slides[2]).toMatchObject({ mode: "fastestFinger", answers: [], correct: null });
+    expect(template.slides[1]).toMatchObject({ mode: "everyone", answers: ["Paris", "Lyon", "Marseille", "Nice"], correct: [{ answer: 0, share: 100 }] });
+    expect(template.slides[2]).toMatchObject({ mode: "fastestFinger", answers: [], correct: [] });
   });
 });

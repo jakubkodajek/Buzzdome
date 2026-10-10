@@ -24,6 +24,15 @@ export function showsRanking(type: SlideType): boolean {
   return type === "endOfRound" || type === "final";
 }
 
+/** The share of the points answer `index` gives, in percent (`FULL_SHARE` for a fully right one); null for a wrong answer. */
+export function shareOf(question: Pick<QuestionSlide, "correct">, index: number): number | null {
+  return question.correct.find((c) => c.answer === index)?.share ?? null;
+}
+
+export function isCorrect(question: Pick<QuestionSlide, "correct">, index: number): boolean {
+  return shareOf(question, index) !== null;
+}
+
 /** Position of a question among the questions, e.g. 3 of 12. */
 export interface QuestionPosition {
   n: number;

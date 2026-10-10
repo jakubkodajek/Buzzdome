@@ -12,6 +12,7 @@ export type { Button } from "./bindings/Button";
 export type { ClockView } from "./bindings/ClockView";
 export type { Color } from "./bindings/Color";
 export type { ColorKey } from "./bindings/ColorKey";
+export type { CorrectAnswer } from "./bindings/CorrectAnswer";
 export type { Command } from "./bindings/Command";
 export type { Controls } from "./bindings/Controls";
 export type { Cue } from "./bindings/Cue";

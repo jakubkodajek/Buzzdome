@@ -1,10 +1,10 @@
 // The editable properties of a slide, each a labelled control with a
 // description. The properties panel and the ribbon lay out the same rows.
 
-import { ANSWER_LETTERS } from "../answers";
 import {
   DEFAULT_POINTS,
   DEFAULT_TIME_LIMIT_S,
+  FULL_SHARE,
   MAX_GAIN_DB,
   MAX_INTRO_PAUSE_MS,
   MAX_POINTS,
@@ -18,9 +18,9 @@ import { sameSpan, WHOLE_FILE } from "../audio/clip-player";
 import { trackTime } from "../format";
 import type { StringKey, Translate } from "../i18n";
 import { isVideo, mediaKindOf, type MediaKind } from "../media";
-import { SLIDE_TYPE_LABEL, type SlideContext } from "../quiz";
+import { isCorrect, shareOf, SLIDE_TYPE_LABEL, type SlideContext } from "../quiz";
 import type { QuestionSlide, Replay, Slide, SlideType, SoundClip, SoundStart, Span, TitledSlide, VideoClip, VideoEffect } from "../types";
-import { MediaPicker } from "./controls";
+import { AnswerToggles, MediaPicker } from "./controls";
 import type { PropertyRow } from "./property-rows";
 import { rowBuilders } from "./row-builders";
 import {
@@ -36,15 +36,18 @@ import {
   setBackgroundOptions,
   setBodyText,
   setCorrect,
+  setCorrectAnswers,
   setHeadline,
   setMode,
   setNotes,
   setPicture,
   setScoring,
+  setShare,
   setSound,
   setSoundOptions,
   setVideo,
   setVideoOptions,
+  toggleCorrect,
   withAnswerCount,
 } from "./slides";
 
@@ -207,12 +210,20 @@ export function slideProperties(t: Translate, { slide, context, update, chooseMe
       });
     },
     correctAnswer: (q: QuestionSlide) => {
-      const none: [number, string][] = q.mode === "fastestFinger" ? [[-1, t("noCorrectAnswer")]] : [];
-      return choiceRow("correctAnswer", "propCorrectAnswer", "descCorrectAnswer", {
-        value: q.correct ?? -1,
-        options: [...none, ...q.answers.map((_, i): [number, string] => [i, ANSWER_LETTERS[i]])],
-        disabled: q.answers.length === 0,
-        set: (i) => question((s) => setCorrect(s, i < 0 ? null : i)),
+      const answers = q.correct.map((c) => c.answer);
+      const set = (right: number[]) => question((s) => setCorrectAnswers(s, right));
+      const control = (
+        <AnswerToggles
+          label={t("propCorrectAnswer")}
+          count={q.answers.length}
+          value={answers}
+          keepOne={q.mode === "everyone"}
+          none={t("noCorrectAnswer")}
+          onChange={set}
+        />
+      );
+      return row("correctAnswer", "propCorrectAnswer", "descCorrectAnswer", control, {
+        value: { kind: "answers", value: answers, initial: q.answers.length > 0 ? [0] : [], set },
       });
     },
 
@@ -306,9 +317,20 @@ export function slideProperties(t: Translate, { slide, context, update, chooseMe
       ),
     isCorrect: (q: QuestionSlide, i: number) =>
       flagRow(`answer${i}.correct`, "propIsCorrect", "descIsCorrect", {
-        value: q.correct === i,
-        disabled: q.correct === i && q.mode === "everyone",
-        set: (on) => question((s) => setCorrect(s, on ? i : null)),
+        value: isCorrect(q, i),
+        disabled: toggleCorrect(q, i) === q,
+        set: (on) => question((s) => setCorrect(s, i, on)),
+      }),
+    /** The share of the points a right answer gives. */
+    share: (q: QuestionSlide, i: number) =>
+      numberRow(`answer${i}.share`, "propShare", "descShare", {
+        value: shareOf(q, i) ?? FULL_SHARE,
+        initial: FULL_SHARE,
+        min: 1,
+        max: FULL_SHARE,
+        unit: "%",
+        slider: true,
+        set: (v) => question((s) => setShare(s, i, v), `answer${i}.share`),
       }),
     removeAnswer: (q: QuestionSlide, i: number) =>
       row(

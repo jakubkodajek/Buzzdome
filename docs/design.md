@@ -221,7 +221,7 @@ table view toggle. It edits a quiz; it never touches a running show.
   edits and the click rules, tested in `selection.test.ts`.
 - **Slide changes.** `slides.ts` holds every change to a slide as a pure
   function that keeps the slide playable (an everyone-answers question
-  always has 2 to 4 answers and a correct one, a fastest finger question at
+  always has 2 to 4 answers and at least one right one, a fastest finger question at
   most 6, and so on; `answerLimits` reads the core's `ANSWER_LIMITS`). Nothing in the
   UI edits a slide object by hand. Tested in `slides.test.ts`.
 - **Actions.** `actions.ts` defines an `Action` (label, icon, keys,

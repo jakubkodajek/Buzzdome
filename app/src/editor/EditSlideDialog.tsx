@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { ANSWER_LETTERS } from "../answers";
 import { useApp } from "../app-context";
-import { hasTitle, SLIDE_TYPE_LABEL } from "../quiz";
+import { hasTitle, isCorrect, SLIDE_TYPE_LABEL } from "../quiz";
 import type { QuestionSlide, Slide } from "../types";
 import { Dialog } from "./controls";
 import type { ElementId } from "./elements";
-import { answerLimits, removeAnswer, setAnswerAt, setCorrect } from "./slides";
+import { answerLimits, removeAnswer, setAnswerAt, toggleCorrect } from "./slides";
 
 const FORM_ID = "edit-slide";
 
@@ -110,15 +110,16 @@ function QuestionFields({ question, onChange }: { question: QuestionSlide; onCha
         {letters.map((letter, i) => {
           // Rows past the answers are greyed; the first of them takes a new answer.
           const used = i < count;
+          const toggled = toggleCorrect(question, i);
           return (
             <div key={letter} className={used ? "answer-row" : "answer-row unused"}>
               <span className={`answer-letter answer-${i}`}>{letter}</span>
               <label className="answer-correct">
                 <input
                   type="checkbox"
-                  checked={question.correct === i}
-                  disabled={!used || (question.correct === i && question.mode === "everyone")}
-                  onChange={(e) => onChange(setCorrect(question, e.target.checked ? i : null))}
+                  checked={isCorrect(question, i)}
+                  disabled={!used || toggled === question}
+                  onChange={() => onChange(toggled)}
                 />
                 {t("correctAnswer")}
               </label>

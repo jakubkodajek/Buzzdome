@@ -3,7 +3,7 @@
 
 import type { StringKey } from "../i18n";
 import type { AnswerMode, Slide, SlideType } from "../types";
-import { answerLimits, newSlide } from "./slides";
+import { answerLimits, fullyCorrect, newSlide } from "./slides";
 
 export interface SlideLayout {
   type: SlideType;
@@ -63,5 +63,5 @@ export function slideFromLayout(layout: SlideLayout, id: string): Slide {
   const slide = newSlide(layout.type, id);
   if (slide.type !== "question" || layout.answers === undefined) return slide;
   const answers = Array<string>(layout.answers).fill("");
-  return { ...slide, mode: layoutMode(layout.answers), answers, correct: layout.answers === 0 ? null : 0 };
+  return { ...slide, mode: layoutMode(layout.answers), answers, correct: layout.answers === 0 ? [] : [fullyCorrect(0)] };
 }

@@ -8,7 +8,7 @@ use crate::media::{
     Background, MediaKind, Replay, SoundClip, SoundStart, Span, VideoClip, VideoEffect, MAX_GAIN_DB, MAX_INTRO_PAUSE_MS, MAX_REPLAY_DELAY_MS,
     MAX_VIDEO_SPEED, MIN_GAIN_DB, MIN_VIDEO_SPEED, NEW_VIDEO_INTRO_PAUSE_MS,
 };
-use crate::model::{AnswerMode, Question, Quiz, Slide, SlideContent, DEFAULT_POINTS, DEFAULT_TIME_LIMIT_S, MAX_ANSWERS, MAX_POINTS, MAX_TIME_LIMIT_S};
+use crate::model::{AnswerMode, CorrectAnswer, Question, Quiz, Slide, SlideContent, DEFAULT_POINTS, DEFAULT_TIME_LIMIT_S, MAX_ANSWERS, MAX_POINTS, MAX_TIME_LIMIT_S};
 use serde::Serialize;
 use std::ops::RangeInclusive;
 use ts_rs::TS;
@@ -63,8 +63,6 @@ pub enum ImportIssue {
     /// Everyone answers (`EA`) with an answer count the A-D buttons cannot
     /// offer: imported as a fastest finger question.
     NotEveryone { answers: usize },
-    /// More than one answer in brackets: the first is the correct one.
-    SeveralCorrect,
     /// Answers on a slide that is no question: left out.
     AnswersLeftOut,
     /// A picture and a video: the picture is left out, as a slide shows one.
@@ -485,16 +483,13 @@ fn question(
     shuffler: &mut Shuffler,
     notes: &mut Notes,
 ) -> Question {
-    let marked: Vec<usize> = answers.iter().enumerate().filter(|(_, (_, correct))| *correct).map(|(i, _)| i).collect();
-    if marked.len() > 1 {
-        notes.add(ImportIssue::SeveralCorrect, place);
-    }
+    // Every answer in brackets is correct.
+    let mut correct: Vec<usize> = answers.iter().enumerate().filter(|(_, (_, correct))| *correct).map(|(i, _)| i).collect();
     let mut texts: Vec<String> = answers.into_iter().map(|(text, _)| text).collect();
     // Unmarked, the correct answer is A1 and the answers are shuffled.
-    let mut correct = marked.first().copied().or((!texts.is_empty()).then_some(0));
-    if marked.is_empty() && texts.len() > 1 {
+    if correct.is_empty() && !texts.is_empty() {
         let order = shuffler.order(texts.len());
-        correct = order.iter().position(|&i| i == 0);
+        correct = order.iter().position(|&i| i == 0).into_iter().collect();
         texts = order.iter().map(|&i| texts[i].clone()).collect();
     }
     let everyone = AnswerMode::Everyone.answer_limits();
@@ -512,7 +507,7 @@ fn question(
         text,
         mode,
         answers: texts,
-        correct,
+        correct: correct.into_iter().map(CorrectAnswer::full).collect(),
         time_limit_s: DEFAULT_TIME_LIMIT_S,
         points: DEFAULT_POINTS,
         points_end: None,
@@ -914,7 +909,8 @@ fn export_row(slide: &Slide, file_name: &impl Fn(&str) -> Option<String>) -> Vec
             };
             set(Field::Text, format!("{{{QUESTION}, {mode}}}{}", question.text));
             for (i, answer) in question.answers.iter().enumerate().take(MAX_ANSWERS) {
-                set(Field::Answer(i), if question.correct == Some(i) { format!("[{answer}]") } else { answer.clone() });
+                // The sheet has no share of the points: a partly correct answer is marked as correct.
+                set(Field::Answer(i), if question.is_correct(i) { format!("[{answer}]") } else { answer.clone() });
             }
             set(Field::AnswerTime, question.time_limit_s.to_string());
             set(Field::PointsStart, question.points.to_string());
@@ -1093,6 +1089,11 @@ mod tests {
         }
     }
 
+    /// The indexes of a question's correct answers.
+    fn correct(question: &Question) -> Vec<usize> {
+        question.correct.iter().map(|c| c.answer).collect()
+    }
+
     fn at(row: u32) -> Place {
         Place { sheet: String::new(), row }
     }
@@ -1112,18 +1113,21 @@ mod tests {
         assert_eq!(capital.mode, AnswerMode::Everyone);
         assert_eq!(capital.answers.len(), 4);
         // A1 is correct and the answers are shuffled; the correct one follows Paris.
-        assert_eq!(capital.answers[capital.correct.unwrap()], "Paris");
+        assert_eq!(correct(capital).iter().map(|&i| capital.answers[i].as_str()).collect::<Vec<_>>(), ["Paris"]);
         assert_eq!((found[0].notes.as_str(), found[0].picture.as_deref()), ("Easy one", Some("france.png")));
         assert_eq!(found[0].sound, Some(SoundClip::new("anthem.mp3")));
         assert_eq!((capital.time_limit_s, capital.points, capital.points_end, capital.penalty), (DEFAULT_TIME_LIMIT_S, DEFAULT_POINTS, None, 0));
 
         // No answers: an open question, answered aloud.
         let song = question(found[1]);
-        assert_eq!((song.mode, song.answers.len(), song.correct), (AnswerMode::FastestFinger, 0, None));
+        assert_eq!((song.mode, song.answers.len(), correct(song)), (AnswerMode::FastestFinger, 0, vec![]));
         // A marked answer keeps the order.
         assert_eq!(question(found[2]).answers, ["Carrot", "Apple", "Leek"]);
-        assert_eq!(question(found[2]).correct, Some(1));
+        assert_eq!(correct(question(found[2])), [1]);
         assert_eq!(imported.slides.iter().map(|(place, _)| place.row).collect::<Vec<_>>(), [2, 4, 5]);
+        // Every answer in brackets is correct, in its place.
+        let several = slides(&import(&[&["Q", "A1", "A2", "A3"], &["Which are fruits?", "[Apple]", "Leek", "[Pear]"]]))[0].clone();
+        assert_eq!((question(&several).answers.as_slice(), correct(question(&several))), (&["Apple".to_string(), "Leek".into(), "Pear".into()][..], vec![0, 2]));
         assert_eq!(found.iter().map(|slide| slide.id.as_str()).collect::<Vec<_>>(), ["import-1", "import-2", "import-3"]);
         assert!(imported.notes.0.is_empty());
     }
@@ -1135,7 +1139,7 @@ mod tests {
         for seed in 0..200 {
             let imported = import_tables(&[table("", rows)], seed).unwrap();
             let question = question(&imported.slides[0].1);
-            assert_eq!(question.answers[question.correct.unwrap()], "right");
+            assert_eq!(correct(question).iter().map(|&i| question.answers[i].as_str()).collect::<Vec<_>>(), ["right"]);
             orders.insert(question.answers.clone());
         }
         assert_eq!(orders.len(), 24, "every order of four answers comes up");
@@ -1165,7 +1169,7 @@ mod tests {
         let contents: Vec<&SlideContent> = found.iter().map(|slide| &slide.content).collect();
         assert_eq!(contents[0], &SlideContent::Billboard { title: "Round 1".into(), text: "Ten questions about films".into() });
         let ff = question(found[1]);
-        assert_eq!((ff.mode, ff.answers.as_slice(), ff.correct), (AnswerMode::FastestFinger, &["Ridley Scott".to_string()][..], Some(0)));
+        assert_eq!((ff.mode, ff.answers.as_slice(), correct(ff)), (AnswerMode::FastestFinger, &["Ridley Scott".to_string()][..], vec![0]));
         assert_eq!(question(found[2]).mode, AnswerMode::FastestFinger, "five answers do not fit A-D");
         assert_eq!(question(found[3]).points, 0);
         assert_eq!(contents[4], &SlideContent::Billboard { title: "How much do you bet?".into(), text: String::new() });
@@ -1199,7 +1203,7 @@ mod tests {
         let imported = import(&[&["Q", "A1", "A2"], &["Capital?||Hoofdstad?", "[Paris||Parijs]", "Lyon || Lyon"]]);
         let question = question(slides(&imported)[0]);
         assert_eq!((question.text.as_str(), question.answers.as_slice()), ("Capital?", &["Paris".to_string(), "Lyon".to_string()][..]));
-        assert_eq!(question.correct, Some(0));
+        assert_eq!(correct(question), [0]);
         assert_eq!(imported.notes.0, [ImportNote { issue: ImportIssue::SecondLanguage, places: vec![at(2)] }]);
     }
 
@@ -1380,13 +1384,13 @@ mod tests {
             text: "Capital of France?".into(),
             mode: AnswerMode::Everyone,
             answers: vec!["Lyon".into(), "Paris".into(), "Nice".into()],
-            correct: Some(1),
+            correct: vec![CorrectAnswer::full(1)],
             time_limit_s: 30,
             points: 100,
             points_end: Some(20),
             penalty: 5,
         };
-        let open = Question { text: "Name the song".into(), mode: AnswerMode::FastestFinger, answers: vec![], correct: None, ..everyone.clone() };
+        let open = Question { text: "Name the song".into(), mode: AnswerMode::FastestFinger, answers: vec![], correct: vec![], ..everyone.clone() };
         let mut asked = Slide::new("q1", SlideContent::Question(everyone));
         asked.notes = "Easy one\nRead slowly".into();
         asked.picture = Some("media/france.png".into());
@@ -1463,7 +1467,7 @@ mod tests {
             text: "=1+1".into(),
             mode: AnswerMode::FastestFinger,
             answers: vec!["=HYPERLINK(\"x\")".into(), "+420 777".into(), "-5".into(), "@home".into(), "'kept".into(), "'=x".into()],
-            correct: Some(2),
+            correct: vec![CorrectAnswer::full(2)],
             time_limit_s: 20,
             points: 10,
             points_end: None,

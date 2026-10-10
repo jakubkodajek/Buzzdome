@@ -515,6 +515,13 @@ mod tests {
     use std::sync::{mpsc, Arc};
 
     #[test]
+    fn the_demo_quiz_is_current_and_plays() {
+        let quiz = Quiz::from_json(DEMO_QUIZ).unwrap();
+        assert_eq!(serde_json::from_str::<serde_json::Value>(DEMO_QUIZ).unwrap()["schemaVersion"], quiz_core::SCHEMA_VERSION);
+        assert_eq!(quiz.validate(), Ok(()));
+    }
+
+    #[test]
     fn a_command_is_timed_before_it_waits_for_the_show_state() {
         let shared = Arc::new(Mutex::new(()));
         let held = shared.lock().unwrap();

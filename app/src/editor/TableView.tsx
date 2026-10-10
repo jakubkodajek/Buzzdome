@@ -2,7 +2,7 @@ import { useState, type MouseEvent, type ReactNode } from "react";
 import { ANSWER_LETTERS } from "../answers";
 import { useApp } from "../app-context";
 import type { StringKey } from "../i18n";
-import { slideTitle } from "../quiz";
+import { isCorrect, slideTitle } from "../quiz";
 import type { Quiz, Slide } from "../types";
 import type { Action } from "./actions";
 import { ContextMenu } from "./controls";
@@ -117,7 +117,7 @@ function SlideRow(props: { index: number; selected: boolean; editing: SlideEditi
           // The answers, then a cell to type a new one into if the mode allows one.
           const editable = q !== null && (i < q.answers.length || (i === q.answers.length && addAnswer(q) !== q));
           return (
-            <td key={letter} className={editable ? (i === q.correct ? "correct" : "") : "na"}>
+            <td key={letter} className={editable ? (isCorrect(q, i) ? "correct" : "") : "na"}>
               {editable && (
                 <input
                   aria-label={t("elementAnswer", { letter })}

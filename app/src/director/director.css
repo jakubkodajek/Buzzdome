@@ -470,6 +470,12 @@
   font-weight: 600;
 }
 
+.preview-answer .share {
+  flex: none;
+  color: var(--good);
+  font-size: 12px;
+}
+
 .preview-answer .count {
   margin-left: auto;
   color: var(--good);

@@ -1,5 +1,5 @@
 use quiz_core::{
-    AnswerMode, Button, Command, Cue, Effect, Game, GameError, Light, Phase, Question, QuestionStep, Quiz, Slide,
+    AnswerMode, Button, Command, CorrectAnswer, Cue, Effect, Game, GameError, Light, Phase, Question, QuestionStep, Quiz, Slide,
     SlideContent, Stamped, VideoClip, team_names, MAX_NAME_CHARS, MAX_TEAMS, PRESS_GRACE_MS,
 };
 use quiz_core::game::FINAL_LAST_STEP;
@@ -12,7 +12,7 @@ fn question(id: &str, mode: AnswerMode) -> Slide {
             text: format!("{id}?"),
             mode,
             answers: vec!["A".into(), "B".into(), "C".into(), "D".into()],
-            correct: Some(1),
+            correct: vec![CorrectAnswer::full(1)],
             time_limit_s: 10,
             points: 100,
             points_end: Some(50),
@@ -181,6 +181,31 @@ fn everyone_answers_scores_by_speed_and_closes_when_all_answered() {
 
     show.run(10_000, Command::Next).unwrap();
     assert_eq!(show.game.phase(), &Phase::Final { step: 0 });
+}
+
+#[test]
+fn several_correct_answers_each_score_their_share() {
+    let mut slide = question("q1", AnswerMode::Everyone);
+    if let SlideContent::Question(q) = &mut slide.content {
+        q.correct = vec![CorrectAnswer::full(1), CorrectAnswer { answer: 3, share: 50 }];
+        q.points_end = None;
+    }
+    let mut show = Show::new(vec![slide]);
+    for b in 1..=3 {
+        show.press(0, b, Button::Big);
+    }
+    show.run(1_000, Command::Next).unwrap();
+    show.run(2_000, Command::Next).unwrap();
+    show.press(3_000, 1, Button::B); // fully right: 100
+    show.press(3_000, 2, Button::D); // half right: 50
+    show.press(3_000, 3, Button::A); // wrong: -20
+    assert_eq!((show.score(1), show.score(2), show.score(3)), (100, 50, -20));
+    let view = show.game.view(3_000);
+    assert_eq!(view.results, Some(AnswerResults { right: 2, wrong: 1, none: 0 }));
+    let effects = show.run(4_000, Command::Next).unwrap();
+    assert!(effects.contains(&Effect::Lights {
+        lights: vec![(1, Light::Correct), (2, Light::Correct), (3, Light::Wrong)]
+    }));
 }
 
 #[test]

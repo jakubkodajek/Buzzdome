@@ -2,11 +2,11 @@ import type { CSSProperties, ReactNode } from "react";
 import { timeLeft } from "../answer-time";
 import { ANSWER_LETTERS } from "../answers";
 import { useApp } from "../app-context";
-import { FINAL_LAST_STEP, MAX_EVERYONE_ANSWERS } from "../bindings/Constants";
+import { FINAL_LAST_STEP, FULL_SHARE, MAX_EVERYONE_ANSWERS } from "../bindings/Constants";
 import { scoreDigits, signed } from "../format";
 import { playerName } from "../i18n";
 import { CheckIcon, CrossIcon, PeopleIcon, QuestionIcon, TrophyIcon } from "../icons";
-import type { QuestionPosition, SlideContext } from "../quiz";
+import { shareOf, type QuestionPosition, type SlideContext } from "../quiz";
 import { SlideMedia, type ScreenMode } from "../slide-media";
 import { styleOf, textStyleCss, type StyledText } from "../theme/slide-style";
 import type { AnswerResults, ClockView, GameView, PlayerView, QuestionSlide, Slide } from "../types";
@@ -124,22 +124,36 @@ function Welcome({ view }: { view: GameView }) {
   );
 }
 
-/** The question an explanation slide explains, with its correct answer. */
+/** The question an explanation slide explains, with its right answers. */
 function ExplainedHeader({ explained, n }: { explained: QuestionSlide; n: number }) {
   const { t } = useApp();
-  const correct = explained.correct;
+  const correct = explained.correct.filter((c) => c.answer < explained.answers.length);
   return (
     <header className="explained">
       <span className="explained-number">{t("questionNumber", { n })}</span>
       <h2 className="explained-question">{explained.text}</h2>
-      {correct !== null && correct < explained.answers.length && (
-        <div className={`answer answer-${correct} is-correct explained-answer`}>
-          <span className="letter">{ANSWER_LETTERS[correct]}</span>
-          <span className="answer-text">{explained.answers[correct]}</span>
-          <CheckIcon className="answer-check" />
+      {correct.length > 0 && (
+        <div className={correct.length > 1 ? "explained-answers several" : "explained-answers"}>
+          {correct.map(({ answer, share }) => (
+            <div key={answer} className={`answer answer-${answer} is-correct explained-answer`}>
+              <span className="letter">{ANSWER_LETTERS[answer]}</span>
+              <span className="answer-text">{explained.answers[answer]}</span>
+              <CorrectMark share={share} />
+            </div>
+          ))}
         </div>
       )}
     </header>
+  );
+}
+
+/** The mark on a right answer: a tick, and the share of the points when it gives only part of them. */
+function CorrectMark({ share }: { share: number }) {
+  return (
+    <>
+      {share < FULL_SHARE && <span className="answer-share digits">{share} %</span>}
+      <CheckIcon className="answer-check" />
+    </>
   );
 }
 
@@ -209,7 +223,8 @@ function QuestionScreen(props: {
         <div className={question.answers.length > MAX_EVERYONE_ANSWERS ? "answers answers-6" : "answers"}>
           {question.answers.map((answer, i) => {
             const revealed = step === "revealed";
-            const isCorrect = i === question.correct;
+            const share = shareOf(question, i);
+            const isCorrect = share !== null;
             return (
               <div
                 key={i}
@@ -220,7 +235,7 @@ function QuestionScreen(props: {
                 <span className="letter">{ANSWER_LETTERS[i]}</span>
                 <span className="answer-text">{placeholder(answer, t("answerPlaceholder", { letter: ANSWER_LETTERS[i] }))}</span>
                 {closed && view.answerCounts && <span className="answer-count">{view.answerCounts[i]}</span>}
-                {(revealed || mode !== "show") && isCorrect && <CheckIcon className="answer-check" />}
+                {(revealed || mode !== "show") && isCorrect && <CorrectMark share={share} />}
               </div>
             );
           })}

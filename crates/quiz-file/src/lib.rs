@@ -658,7 +658,7 @@ fn remove_dir(path: &Path) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use quiz_core::{AnswerMode, Question, Slide, SlideContent, MAX_EVERYONE_ANSWERS, MAX_POINTS};
+    use quiz_core::{AnswerMode, CorrectAnswer, Question, Slide, SlideContent, MAX_EVERYONE_ANSWERS, MAX_POINTS};
 
     /// The problem `check` reports when the quiz's flag picture is missing.
     fn flag_missing() -> Vec<ValidationError> {
@@ -881,7 +881,7 @@ mod tests {
             text: "?".into(),
             mode: AnswerMode::Everyone,
             answers: vec!["a".into(); MAX_EVERYONE_ANSWERS + 1],
-            correct: Some(0),
+            correct: vec![CorrectAnswer::full(0)],
             time_limit_s: 20,
             points: MAX_POINTS * 2,
             points_end: None,

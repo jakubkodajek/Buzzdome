@@ -11,9 +11,9 @@ describe("layouts", () => {
       if (slide.mode === "everyone") {
         expect(slide.answers.length).toBeGreaterThanOrEqual(MIN_EVERYONE_ANSWERS);
         expect(slide.answers.length).toBeLessThanOrEqual(MAX_EVERYONE_ANSWERS);
-        expect(slide.correct).toBe(0);
+        expect(slide.correct).toEqual([{ answer: 0, share: 100 }]);
       } else {
-        expect(slide.correct).toBe(slide.answers.length === 0 ? null : 0);
+        expect(slide.correct).toEqual(slide.answers.length === 0 ? [] : [{ answer: 0, share: 100 }]);
       }
     }
   });

@@ -31,7 +31,7 @@ pub fn pump_once<E>(events: &Receiver<E>, wait: Duration, mut handle: impl FnMut
 #[cfg(test)]
 mod tests {
     use super::*;
-    use quiz_core::{AnswerMode, Button, Command, Game, Phase, Question, QuestionStep, Quiz, Slide, SlideContent, Stamped};
+    use quiz_core::{AnswerMode, Button, Command, CorrectAnswer, Game, Phase, Question, QuestionStep, Quiz, Slide, SlideContent, Stamped};
     use std::cell::RefCell;
     use std::sync::mpsc;
 
@@ -40,7 +40,7 @@ mod tests {
             text: "Q?".into(),
             mode: AnswerMode::Everyone,
             answers: vec!["A".into(), "B".into(), "C".into(), "D".into()],
-            correct: Some(1),
+            correct: vec![CorrectAnswer::full(1)],
             time_limit_s: 10,
             points: 100,
             points_end: None,

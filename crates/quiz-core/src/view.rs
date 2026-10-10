@@ -120,7 +120,7 @@ impl Game {
     pub fn view(&self, now: u64) -> GameView {
         let ranking = self.ranking();
         let rank_of = |buzzer: BuzzerId| ranking.iter().position(|p| p.buzzer == buzzer).map(|i| i + 1);
-        let correct = self.question().and_then(|q| q.correct);
+        let question = self.question();
         let mut players: Vec<PlayerView> = self
             .players()
             .map(|p| PlayerView {
@@ -135,7 +135,7 @@ impl Game {
                 answer_correct: self
                     .responses()
                     .get(&p.buzzer)
-                    .map(|r| r.button.answer_index().is_some_and(|i| Some(i) == correct)),
+                    .map(|r| r.button.answer_index().zip(question).is_some_and(|(i, q)| q.is_correct(i))),
                 answer_ms: self.responses().get(&p.buzzer).map(|r| r.elapsed_ms),
                 locked_out: self.locked_out().contains(&p.buzzer),
                 delta: self.deltas().get(&p.buzzer).copied(),

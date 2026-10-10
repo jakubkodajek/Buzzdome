@@ -16,6 +16,8 @@ export type RowValue =
   | { kind: "number"; value: number; initial?: number; min: number; max: number; step: number; set: (value: number) => void }
   | { kind: "flag"; value: boolean; initial?: boolean; set: (value: boolean) => void }
   | { kind: "choice"; value: string | number; initial?: string | number; options: (string | number)[]; set: (value: string | number) => void }
+  /** The numbers of a question's right answers, in order. */
+  | { kind: "answers"; value: number[]; initial?: number[]; set: (answers: number[]) => void }
   | { kind: "media"; value: string | null; initial?: null; accepts: (file: string) => boolean; set: (file: string | null) => void }
   /** Null: the theme's colour (or, where there is none, no colour). */
   | { kind: "color"; value: Color | null; initial?: Color | null; set: (color: Color | null) => void }
@@ -62,7 +64,7 @@ export function commonRows(perSlide: PropertyRow[][]): { shown: Set<string>; mix
   return { shown, mixed };
 }
 
-/** Whether two values of one kind of row are the same: a gradient or a font by what it holds. */
+/** Whether two values of one kind of row are the same: a gradient, a font or a list by what it holds. */
 export function sameValue(a: RowValue["value"], b: RowValue["value"]): boolean {
   if (typeof a !== "object" || typeof b !== "object" || a === null || b === null) return a === b;
   const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
@@ -146,8 +148,8 @@ export function copiedValue(row: PropertyRow): CopiedValue | null {
  * What pasting `copied` into `row` does, or null when it cannot: a number
  * goes into any number (brought within its limits and onto its steps), a
  * switch into any switch, a file into a row that takes its kind, a colour,
- * a gradient or a font into any of its kind, a choice only into the same
- * property.
+ * a gradient or a font into any of its kind, a choice or right answers
+ * only into the same property.
  */
 export function pasteAction(row: PropertyRow, copied: CopiedValue): (() => void) | null {
   const target = row.value;
@@ -160,6 +162,8 @@ export function pasteAction(row: PropertyRow, copied: CopiedValue): (() => void)
       return typeof value === "boolean" ? () => target.set(value) : null;
     case "choice":
       return copied.id === row.id && (typeof value === "string" || typeof value === "number") && target.options.includes(value) ? () => target.set(value) : null;
+    case "answers":
+      return copied.id === row.id && Array.isArray(value) ? () => target.set(value) : null;
     case "media":
       return value === null || (typeof value === "string" && target.accepts(value)) ? () => target.set(value) : null;
     case "color":
@@ -167,7 +171,7 @@ export function pasteAction(row: PropertyRow, copied: CopiedValue): (() => void)
     case "gradient":
       return value === null || isGradient(value) ? () => target.set(value) : null;
     case "font":
-      return typeof value === "object" && value !== null && !isGradient(value) ? () => target.set(value) : null;
+      return typeof value === "object" && value !== null && !Array.isArray(value) && !isGradient(value) ? () => target.set(value) : null;
   }
 }
 
@@ -196,6 +200,7 @@ export function pasteText(row: PropertyRow, text: string): (() => void) | null {
       return typed("gradient", readGradient(trimmed) ?? undefined);
     case "media":
     case "font":
+    case "answers":
       return null;
   }
 }
@@ -218,6 +223,9 @@ export function resetValue(row: PropertyRow): void {
       value.set(value.initial);
       break;
     case "choice":
+      value.set(value.initial);
+      break;
+    case "answers":
       value.set(value.initial);
       break;
     case "media":

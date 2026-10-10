@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ANSWER_LETTERS } from "../answers";
+import { FULL_SHARE } from "../bindings/Constants";
 import { useApp, useDispatch } from "../app-context";
 import { SlideThumbnail } from "../host/SlideThumbnail";
 import type { StringKey } from "../i18n";
 import { NextIcon, TrophyIcon } from "../icons";
 import { mediaFileName } from "../media";
 import { readPreference, writePreference } from "../preferences";
-import { SLIDE_TYPE_LABEL, slideContexts, slideTitle, type SlideContext } from "../quiz";
+import { shareOf, SLIDE_TYPE_LABEL, slideContexts, slideTitle, type SlideContext } from "../quiz";
 import { SlideMedia } from "../slide-media";
 import type { GameView, Quiz, Slide } from "../types";
 
@@ -146,13 +147,17 @@ function SlidePreview({ slide, context, counts }: { slide: Slide; context: Slide
               {slide.penalty > 0 && ` · −${slide.penalty}`}
             </p>
             <div className="preview-answers">
-              {slide.answers.map((answer, i) => (
-                <div key={i} className={i === slide.correct ? "preview-answer correct" : "preview-answer"}>
-                  <span className={`dot dot-${i}`}>{ANSWER_LETTERS[i]}</span>
-                  <span className="answer-label">{answer}</span>
-                  {counts && <span className="count">{counts[i]}</span>}
-                </div>
-              ))}
+              {slide.answers.map((answer, i) => {
+                const share = shareOf(slide, i);
+                return (
+                  <div key={i} className={share !== null ? "preview-answer correct" : "preview-answer"}>
+                    <span className={`dot dot-${i}`}>{ANSWER_LETTERS[i]}</span>
+                    <span className="answer-label">{answer}</span>
+                    {share !== null && share < FULL_SHARE && <span className="share">{share} %</span>}
+                    {counts && <span className="count">{counts[i]}</span>}
+                  </div>
+                );
+              })}
             </div>
           </>
         )}
@@ -162,12 +167,14 @@ function SlidePreview({ slide, context, counts }: { slide: Slide; context: Slide
             <p className="muted center">
               {explained ? `${t("questionNumber", { n: explained.position.n })}: ${explained.question.text}` : t("noQuestionToExplain")}
             </p>
-            {explained && explained.question.correct !== null && (
+            {explained && explained.question.correct.length > 0 && (
               <div className="preview-answers">
-                <div className="preview-answer correct">
-                  <span className={`dot dot-${explained.question.correct}`}>{ANSWER_LETTERS[explained.question.correct]}</span>
-                  <span className="answer-label">{explained.question.answers[explained.question.correct]}</span>
-                </div>
+                {explained.question.correct.map(({ answer }) => (
+                  <div key={answer} className="preview-answer correct">
+                    <span className={`dot dot-${answer}`}>{ANSWER_LETTERS[answer]}</span>
+                    <span className="answer-label">{explained.question.answers[answer]}</span>
+                  </div>
+                ))}
               </div>
             )}
             <p className="center pre-line">{slide.text}</p>

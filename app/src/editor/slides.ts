@@ -7,6 +7,7 @@ import {
   ANSWER_LIMITS,
   DEFAULT_POINTS,
   DEFAULT_TIME_LIMIT_S,
+  FULL_SHARE,
   MAX_EVERYONE_ANSWERS,
   MAX_GAIN_DB,
   MAX_INTRO_PAUSE_MS,
@@ -18,10 +19,11 @@ import {
   MIN_VIDEO_SPEED,
   NEW_VIDEO_INTRO_PAUSE_MS,
 } from "../bindings/Constants";
-import { hasTitle, showsRanking, slideTitle } from "../quiz";
+import { hasTitle, isCorrect, showsRanking, slideTitle } from "../quiz";
 import type {
   AnswerMode,
   Background,
+  CorrectAnswer,
   Gradient,
   Quiz,
   QuestionSlide,
@@ -37,6 +39,9 @@ import type {
 
 /** Answers a new everyone-answers question starts with: one per buzzer button. */
 const DEFAULT_ANSWERS = MAX_EVERYONE_ANSWERS;
+
+/** Answer `answer` as giving all of the points. */
+export const fullyCorrect = (answer: number): CorrectAnswer => ({ answer, share: FULL_SHARE });
 
 /** Fewest and most answers a question can have in `mode` (`AnswerMode::answer_limits` in quiz-core). */
 export function answerLimits(mode: AnswerMode): { fewest: number; most: number } {
@@ -57,7 +62,7 @@ export function newSlide(type: SlideType, id: string): Slide {
         text: "",
         mode: "everyone",
         answers: Array<string>(DEFAULT_ANSWERS).fill(""),
-        correct: 0,
+        correct: [fullyCorrect(0)],
         timeLimitS: DEFAULT_TIME_LIMIT_S,
         points: DEFAULT_POINTS,
         pointsEnd: null,
@@ -135,8 +140,7 @@ export function setMode(question: QuestionSlide, mode: AnswerMode): QuestionSlid
   const count = question.answers.length;
   const answers =
     count < fewest ? [...question.answers, ...Array<string>(DEFAULT_ANSWERS - count).fill("")] : question.answers.slice(0, most);
-  const correct = question.correct !== null && question.correct < answers.length ? question.correct : 0;
-  return { ...question, mode, answers, correct };
+  return withCorrect({ ...question, mode, answers }, question.correct.filter((c) => c.answer < answers.length));
 }
 
 export function setAnswer(question: QuestionSlide, index: number, text: string): QuestionSlide {
@@ -171,20 +175,53 @@ export function withAnswerCount(question: QuestionSlide, count: number): Questio
   }
 }
 
-/** Removes an answer; the right answer stays the same one (or falls back to the first). */
+/** Removes an answer; the right answers stay the same ones (or, with none left, the first is right). */
 export function removeAnswer(question: QuestionSlide, index: number): QuestionSlide {
   if (question.answers.length <= answerLimits(question.mode).fewest || index < 0 || index >= question.answers.length) return question;
   const answers = question.answers.filter((_, i) => i !== index);
-  let correct = question.correct;
-  if (correct === index) correct = question.mode === "everyone" ? 0 : null;
-  else if (correct !== null && correct > index) correct -= 1;
-  return { ...question, answers, correct };
+  const correct = question.correct.filter((c) => c.answer !== index).map((c) => (c.answer > index ? { ...c, answer: c.answer - 1 } : c));
+  return withCorrect({ ...question, answers }, correct);
 }
 
-/** Sets the right answer; a fastest-finger question may have none (`null`). */
-export function setCorrect(question: QuestionSlide, index: number | null): QuestionSlide {
-  if (index === null ? question.mode === "everyone" : index < 0 || index >= question.answers.length) return question;
-  return { ...question, correct: index };
+/**
+ * Makes answer `index` right (with all of the points) or wrong. A question
+ * may have several right answers; an everyone-answers question keeps at
+ * least one, a fastest-finger question may have none.
+ */
+export function setCorrect(question: QuestionSlide, index: number, on: boolean): QuestionSlide {
+  if (index < 0 || index >= question.answers.length || on === isCorrect(question, index)) return question;
+  const answers = question.correct.map((c) => c.answer);
+  return setCorrectAnswers(question, on ? [...answers, index] : answers.filter((answer) => answer !== index));
+}
+
+/**
+ * Makes the answers numbered `answers` the right ones (those past the last
+ * answer left out); those right already keep their share, the others give
+ * all of the points. An everyone-answers question left without one stays
+ * as it was.
+ */
+export function setCorrectAnswers(question: QuestionSlide, answers: number[]): QuestionSlide {
+  const right = [...new Set(answers)].filter((answer) => Number.isInteger(answer) && answer >= 0 && answer < question.answers.length);
+  if (right.length === 0 && question.mode === "everyone") return question;
+  const correct = right.sort((a, b) => a - b).map((answer) => question.correct.find((c) => c.answer === answer) ?? fullyCorrect(answer));
+  return { ...question, correct };
+}
+
+/** Makes a right answer wrong or a wrong one right; the same question where `setCorrect` refuses. */
+export function toggleCorrect(question: QuestionSlide, index: number): QuestionSlide {
+  return setCorrect(question, index, !isCorrect(question, index));
+}
+
+/** Sets the share of the points a right answer gives, a whole percent from 1 to 100. */
+export function setShare(question: QuestionSlide, index: number, share: number): QuestionSlide {
+  if (!isCorrect(question, index)) return question;
+  const percent = clampInt(share, 1, FULL_SHARE);
+  return { ...question, correct: question.correct.map((c) => (c.answer === index ? { ...c, share: percent } : c)) };
+}
+
+/** `question` with `correct` as its right answers; an everyone-answers question left without one gets the first. */
+function withCorrect(question: QuestionSlide, correct: CorrectAnswer[]): QuestionSlide {
+  return { ...question, correct: correct.length === 0 && question.mode === "everyone" ? [fullyCorrect(0)] : correct };
 }
 
 type Scoring = Pick<QuestionSlide, "timeLimitS" | "points" | "pointsEnd" | "penalty">;

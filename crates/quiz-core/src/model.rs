@@ -1,4 +1,4 @@
-//! Quiz file model (schema version 4). This is the contract with quiz authors:
+//! Quiz file model (schema version 5). This is the contract with quiz authors:
 //! change it only with a schema version bump and a migration.
 
 use crate::media::{
@@ -16,8 +16,10 @@ use ts_rs::TS;
 /// replay part; later within 3, fastest finger questions may have 6
 /// answers instead of 4 (builds before refuse more). 4: adds final slides;
 /// later within 4, video options and slide styles (builds before drop them
-/// when they save). Older files read unchanged.
-pub const SCHEMA_VERSION: u32 = 4;
+/// when they save). 5: a question may have several correct answers, each
+/// with its share of the points (`correct` becomes a list). Older files
+/// read unchanged (`migrate`).
+pub const SCHEMA_VERSION: u32 = 5;
 
 /// Most answers a question can show (A-F, as many as the reference app's
 /// keypads have). A fastest finger question is answered aloud, so it may use
@@ -37,6 +39,8 @@ pub const DEFAULT_POINTS: i32 = 10;
 pub const MAX_POINTS: i32 = 100_000;
 /// Longest time limit of a question, in seconds.
 pub const MAX_TIME_LIMIT_S: u32 = 3_600;
+/// The share of a question's points a fully correct answer gives, in percent.
+pub const FULL_SHARE: u8 = 100;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[ts(export)]
@@ -252,9 +256,10 @@ pub struct Question {
     /// Empty for a fastest-finger question answered verbally.
     #[serde(default)]
     pub answers: Vec<String>,
-    /// Index into `answers`. Required for everyone-answers questions.
+    /// The right answers, each once. Required for everyone-answers
+    /// questions; a fastest finger question shows them at the reveal.
     #[serde(default)]
-    pub correct: Option<usize>,
+    pub correct: Vec<CorrectAnswer>,
     /// Seconds to answer; 0 means untimed (the quizmaster ends the question).
     #[serde(default = "default_time_limit")]
     pub time_limit_s: u32,
@@ -268,6 +273,30 @@ pub struct Question {
     /// Points taken for a wrong answer (a positive number).
     #[serde(default)]
     pub penalty: i32,
+}
+
+/// A right answer of a question and the share of the question's points it
+/// gives, so a nearly right answer can give fewer points.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+#[serde(rename_all = "camelCase")]
+pub struct CorrectAnswer {
+    /// Index into `answers`, from 0.
+    pub answer: usize,
+    /// Percent of the question's points, 1 to 100.
+    #[serde(default = "full_share")]
+    pub share: u8,
+}
+
+impl CorrectAnswer {
+    /// `answer`, giving all of the points.
+    pub fn full(answer: usize) -> CorrectAnswer {
+        CorrectAnswer { answer, share: FULL_SHARE }
+    }
+}
+
+fn full_share() -> u8 {
+    FULL_SHARE
 }
 
 fn default_time_limit() -> u32 {
@@ -298,6 +327,29 @@ impl Question {
         (start + delta) as i32
     }
 
+    /// The share of the points `answer` gives; none for a wrong answer.
+    pub fn share_of(&self, answer: usize) -> Option<u8> {
+        self.correct.iter().find(|c| c.answer == answer).map(|c| c.share)
+    }
+
+    pub fn is_correct(&self, answer: usize) -> bool {
+        self.share_of(answer).is_some()
+    }
+
+    /// What `answer` (none: a button that is no answer) given after
+    /// `elapsed_ms` on the clock scores: its share of the points, or the
+    /// penalty for a wrong one.
+    pub fn points_for(&self, answer: Option<usize>, elapsed_ms: u64) -> i32 {
+        let Some(share) = answer.and_then(|a| self.share_of(a)) else {
+            return -self.penalty;
+        };
+        let (points, share) = (i64::from(self.points_at(elapsed_ms)), i64::from(share));
+        // Round to the nearest point, symmetric for negative points.
+        let scaled = (points * share * 2 + i64::from(FULL_SHARE) * points.signum()) / (i64::from(FULL_SHARE) * 2);
+        // A share of at most 100 % keeps it within the points, so within i32.
+        scaled as i32
+    }
+
     /// Adds the problems of this question to `found`.
     fn problems(&self, found: &mut impl FnMut(Problem)) {
         let AnswerLimits { fewest, most } = self.mode.answer_limits();
@@ -307,11 +359,18 @@ impl Question {
         if self.answers.len() < fewest {
             found(Problem::TooFewAnswers { min: fewest });
         }
-        if self.mode == AnswerMode::Everyone && self.correct.is_none() {
+        if self.mode == AnswerMode::Everyone && self.correct.is_empty() {
             found(Problem::NoCorrectAnswer);
         }
-        if self.correct.is_some_and(|c| c >= self.answers.len()) {
+        if self.correct.iter().any(|c| c.answer >= self.answers.len()) {
             found(Problem::CorrectOutOfRange);
+        }
+        let mut seen = HashSet::new();
+        if !self.correct.iter().all(|c| seen.insert(c.answer)) {
+            found(Problem::CorrectTwice);
+        }
+        if self.correct.iter().any(|c| !(1..=FULL_SHARE).contains(&c.share)) {
+            found(Problem::ShareOutOfRange { max: FULL_SHARE });
         }
         let points = -MAX_POINTS..=MAX_POINTS;
         if !points.contains(&self.points) || self.points_end.is_some_and(|end| !points.contains(&end)) {
@@ -366,8 +425,12 @@ pub enum Problem {
     TooFewAnswers { min: usize },
     #[error("an everyone-answers question needs a correct answer")]
     NoCorrectAnswer,
-    #[error("the correct answer points past the answer list")]
+    #[error("a correct answer points past the answer list")]
     CorrectOutOfRange,
+    #[error("an answer is listed as correct twice")]
+    CorrectTwice,
+    #[error("a correct answer's share of the points must be between 1 and {max} %")]
+    ShareOutOfRange { max: u8 },
     #[error("points must be between -{max} and {max}")]
     PointsOutOfRange { max: i32 },
     #[error("penalty must be between 0 and {max}")]
@@ -405,6 +468,26 @@ pub enum QuizJsonError {
     Syntax(String),
 }
 
+/// Brings the JSON of an older schema `version` to the current one, so the
+/// quiz reads unchanged: up to version 4 a question's `correct` is one
+/// index or null.
+fn migrate(quiz: &mut serde_json::Value, version: u64) {
+    use serde_json::{json, Value};
+    if version >= 5 {
+        return;
+    }
+    let questions = quiz.get_mut("slides").and_then(Value::as_array_mut).into_iter().flatten().filter(|s| s["type"] == "question");
+    for slide in questions {
+        if let Some(fields) = slide.as_object_mut() {
+            let correct = match fields.get("correct") {
+                Some(Value::Number(index)) => json!([{ "answer": index, "share": FULL_SHARE }]),
+                _ => json!([]),
+            };
+            fields.insert("correct".into(), correct);
+        }
+    }
+}
+
 impl Quiz {
     /// A quiz of the current schema version in the default look.
     pub fn new(title: impl Into<String>, slides: Vec<Slide>) -> Quiz {
@@ -412,10 +495,15 @@ impl Quiz {
     }
 
     pub fn from_json(json: &str) -> Result<Quiz, QuizJsonError> {
-        let mut quiz: Quiz = serde_json::from_str(json).map_err(|e| QuizJsonError::Syntax(e.to_string()))?;
-        if quiz.schema_version > SCHEMA_VERSION {
-            return Err(QuizJsonError::NewerSchema { found: quiz.schema_version, supported: SCHEMA_VERSION });
+        let syntax = |e: serde_json::Error| QuizJsonError::Syntax(e.to_string());
+        let mut value: serde_json::Value = serde_json::from_str(json).map_err(syntax)?;
+        let version = value.get("schemaVersion").and_then(serde_json::Value::as_u64).unwrap_or(0);
+        if version > u64::from(SCHEMA_VERSION) {
+            let found = u32::try_from(version).unwrap_or(u32::MAX);
+            return Err(QuizJsonError::NewerSchema { found, supported: SCHEMA_VERSION });
         }
+        migrate(&mut value, version);
+        let mut quiz: Quiz = serde_json::from_value(value).map_err(syntax)?;
         // Every older version reads as the current one, so it is saved as such.
         quiz.schema_version = SCHEMA_VERSION;
         for slide in &mut quiz.slides {
@@ -528,12 +616,49 @@ mod tests {
             text: "?".into(),
             mode: AnswerMode::Everyone,
             answers: vec!["a".into(), "b".into()],
-            correct: Some(0),
+            correct: vec![CorrectAnswer::full(0)],
             time_limit_s,
             points,
             points_end,
             penalty: 0,
         }
+    }
+
+    #[test]
+    fn a_correct_answer_scores_its_share_of_the_points_and_a_wrong_one_the_penalty() {
+        let mut q = question(100, Some(50), 10);
+        q.answers.push("c".into());
+        q.correct = vec![CorrectAnswer::full(0), CorrectAnswer { answer: 2, share: 25 }];
+        q.penalty = 30;
+        assert_eq!((q.points_for(Some(0), 0), q.points_for(Some(2), 0), q.points_for(Some(2), 10_000)), (100, 25, 13));
+        assert_eq!((q.points_for(Some(1), 0), q.points_for(None, 0)), (-30, -30));
+        q.points = -7;
+        q.points_end = None;
+        assert_eq!(q.points_for(Some(2), 0), -2, "rounded away from zero like positive points");
+        assert!(q.is_correct(2) && !q.is_correct(1));
+    }
+
+    #[test]
+    fn version_4_questions_read_with_their_one_correct_answer() {
+        let json = r#"{"schemaVersion": 4, "title": "x", "slides": [
+            {"id": "a", "type": "question", "mode": "everyone", "text": "?", "answers": ["a", "b"], "correct": 1},
+            {"id": "b", "type": "question", "mode": "fastestFinger", "text": "?", "correct": null},
+            {"id": "c", "type": "question", "mode": "fastestFinger", "text": "?"},
+            {"id": "d", "type": "billboard", "title": "", "correct": 3}
+        ]}"#;
+        let quiz = Quiz::from_json(json).unwrap();
+        let correct = |i: usize| match &quiz.slides[i].content {
+            SlideContent::Question(q) => q.correct.clone(),
+            _ => unreachable!(),
+        };
+        assert_eq!((correct(0), correct(1), correct(2)), (vec![CorrectAnswer::full(1)], vec![], vec![]));
+        assert_eq!(quiz.schema_version, SCHEMA_VERSION);
+        // A version 5 share left out is the whole of the points.
+        let json = r#"{"schemaVersion": 5, "title": "x", "slides": [
+            {"id": "a", "type": "question", "mode": "everyone", "text": "?", "answers": ["a", "b"], "correct": [{"answer": 0}, {"answer": 1, "share": 40}]}
+        ]}"#;
+        let SlideContent::Question(q) = &Quiz::from_json(json).unwrap().slides[0].content else { unreachable!() };
+        assert_eq!(q.correct, [CorrectAnswer::full(0), CorrectAnswer { answer: 1, share: 40 }]);
     }
 
     #[test]
@@ -634,11 +759,14 @@ mod tests {
 
     #[test]
     fn each_question_rule_names_its_problem() {
-        let cases: [(Edit, Problem); 9] = [
+        let cases: [(Edit, Problem); 12] = [
             (|q| q.answers = vec!["a".into(); MAX_EVERYONE_ANSWERS + 1], Problem::TooManyAnswers { max: MAX_EVERYONE_ANSWERS }),
             (|q| q.answers.truncate(1), Problem::TooFewAnswers { min: MIN_EVERYONE_ANSWERS }),
-            (|q| q.correct = None, Problem::NoCorrectAnswer),
-            (|q| q.correct = Some(2), Problem::CorrectOutOfRange),
+            (|q| q.correct.clear(), Problem::NoCorrectAnswer),
+            (|q| q.correct = vec![CorrectAnswer::full(2)], Problem::CorrectOutOfRange),
+            (|q| q.correct.push(CorrectAnswer { answer: 0, share: 50 }), Problem::CorrectTwice),
+            (|q| q.correct[0].share = 0, Problem::ShareOutOfRange { max: FULL_SHARE }),
+            (|q| q.correct[0].share = FULL_SHARE + 1, Problem::ShareOutOfRange { max: FULL_SHARE }),
             (|q| q.points = MAX_POINTS + 1, Problem::PointsOutOfRange { max: MAX_POINTS }),
             (|q| q.points_end = Some(-MAX_POINTS - 1), Problem::PointsOutOfRange { max: MAX_POINTS }),
             (|q| q.penalty = -1, Problem::PenaltyOutOfRange { max: MAX_POINTS }),

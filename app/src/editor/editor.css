@@ -1327,7 +1327,24 @@
   margin-right: auto;
 }
 
-.studio .font-toggle {
+.answer-toggles {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+
+.answer-toggles-none {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.studio .answer-toggle {
+  font-weight: bold;
+}
+
+.studio .font-toggle,
+.studio .answer-toggle {
   width: 26px;
   height: 24px;
   padding: 0;
@@ -1349,7 +1366,8 @@
   text-decoration: underline;
 }
 
-.studio .font-toggle.on {
+.studio .font-toggle.on,
+.studio .answer-toggle.on {
   border-color: var(--accent);
   color: #fff;
   background: var(--accent);
@@ -1409,7 +1427,8 @@
 .studio .properties-panel.dark .swatch,
 .studio .properties-panel.dark .gradient-preview,
 .studio .properties-panel.dark .font-name,
-.studio .properties-panel.dark .font-toggle:not(.on) {
+.studio .properties-panel.dark .font-toggle:not(.on),
+.studio .properties-panel.dark .answer-toggle:not(.on) {
   border-color: #4a4a4a;
   color: var(--text);
   background-color: #2a2a2a;
@@ -1859,6 +1878,10 @@
 
 .slide-table td.correct {
   background: #e4f5e8;
+}
+
+.slide-table .answer-toggles {
+  flex-wrap: nowrap;
 }
 
 .falling-cell {

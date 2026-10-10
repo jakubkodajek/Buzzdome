@@ -1,6 +1,7 @@
 // Small form controls of the editor, in the look of a desktop app.
 
 import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { ANSWER_LETTERS } from "../answers";
 import { useApp } from "../app-context";
 import { parseTrackTime, trackTime } from "../format";
 import { mediaFileName } from "../media";
@@ -28,6 +29,39 @@ export function Switch({ checked, onChange, disabled = false, label }: { checked
     >
       <span className="switch-knob" />
     </button>
+  );
+}
+
+/**
+ * A button per answer (A, B, C…), pressed for the right ones in `value`.
+ * With `keepOne`, the last pressed button cannot be let go; `none` is said
+ * while none is pressed. Mixed, none shows pressed and a click makes that
+ * answer the only right one.
+ */
+export function AnswerToggles(props: { label: string; count: number; value: number[]; keepOne: boolean; none: string; onChange: (answers: number[]) => void }) {
+  const { label, count, value, keepOne, none, onChange } = props;
+  const mixed = useContext(MixedContext);
+  const pressed = mixed ? [] : value;
+  return (
+    <span className="answer-toggles" role="group" aria-label={label}>
+      {ANSWER_LETTERS.slice(0, count).map((letter, i) => {
+        const on = pressed.includes(i);
+        return (
+          <button
+            key={letter}
+            type="button"
+            className={on ? "answer-toggle on" : "answer-toggle"}
+            aria-pressed={on}
+            aria-label={`${label}: ${letter}`}
+            disabled={on && keepOne && pressed.length === 1}
+            onClick={() => onChange(on ? pressed.filter((answer) => answer !== i) : [...pressed, i])}
+          >
+            {letter}
+          </button>
+        );
+      })}
+      {!mixed && pressed.length === 0 && <span className="answer-toggles-none">{none}</span>}
+    </span>
   );
 }
 

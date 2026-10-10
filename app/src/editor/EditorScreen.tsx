@@ -5,7 +5,6 @@ import {
   ArrowUpIcon,
   BackgroundIcon,
   BackIcon,
-  CheckIcon,
   CopyIcon,
   CutIcon,
   EditIcon,
@@ -30,7 +29,7 @@ import {
   VideoIcon,
 } from "../icons";
 import { isVideo, MediaRootContext, type MediaKind } from "../media";
-import { NO_CONTEXT, showsRanking, slideContexts } from "../quiz";
+import { isCorrect, NO_CONTEXT, showsRanking, slideContexts } from "../quiz";
 import { ThemeContext } from "../theme/context";
 import { useLatest } from "../hooks";
 import type { Slide, ValidationError } from "../types";
@@ -65,11 +64,11 @@ import { Ribbon, type RibbonTab } from "./Ribbon";
 import {
   freshSlideId,
   setBackground,
-  setCorrect,
   setNotes,
   setPicture,
   setSound,
   setVideo,
+  toggleCorrect,
   withFreshIds,
 } from "./slides";
 import { TableView } from "./TableView";
@@ -437,10 +436,10 @@ function Studio({ editor, open, onExit }: { editor: QuizEditor; open: OpenQuiz |
     const items: (Action | "separator")[] = [actions.edit];
     if (answer !== null && slide?.type === "question") {
       items.push({
-        label: t("markCorrect"),
-        icon: <CheckIcon />,
-        disabled: slide.correct === answer,
-        run: () => updateSlide(slide.id, (s) => (s.type === "question" ? setCorrect(s, answer) : s)),
+        label: t("correctAnswer"),
+        checked: isCorrect(slide, answer),
+        disabled: toggleCorrect(slide, answer) === slide,
+        run: () => updateSlide(slide.id, (s) => (s.type === "question" ? toggleCorrect(s, answer) : s)),
       });
     }
     if (isMedia(target.element)) items.push(actions.changeMedia, actions.removeMedia);

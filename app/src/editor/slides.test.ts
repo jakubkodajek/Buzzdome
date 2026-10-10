@@ -5,6 +5,7 @@ import {
   addAnswer,
   convertSlide,
   freshSlideId,
+  fullyCorrect,
   newSlide,
   removeAnswer,
   setAnswerAt,
@@ -12,57 +13,67 @@ import {
   setBackgroundOptions,
   setBodyText,
   setCorrect,
+  setCorrectAnswers,
   setHeadline,
   setMode,
   setNotes,
   setPicture,
   setScoring,
+  setShare,
   setSlideFill,
   setSound,
   setSoundOptions,
   setVideo,
   setVideoOptions,
   setTextStyle,
+  toggleCorrect,
   withAnswerCount,
   withFreshIds,
 } from "./slides";
 
 const question = (patch: Partial<QuestionSlide> = {}): QuestionSlide => ({ ...(newSlide("question", "q") as QuestionSlide), ...patch });
+/** Answers `answers` as right with all of the points. */
+const right = (...answers: number[]) => answers.map(fullyCorrect);
+/** The numbers of the question's right answers. */
+const rightOf = (q: QuestionSlide) => q.correct.map((c) => c.answer);
 
 describe("slides", () => {
   it("starts a question that can be played: four answers, the first one right", () => {
     const q = question();
     expect(q.answers).toEqual(["", "", "", ""]);
-    expect(q.correct).toBe(0);
+    expect(q.correct).toEqual([{ answer: 0, share: 100 }]);
     expect([q.timeLimitS, q.points, q.penalty]).toEqual([20, 10, 0]);
   });
 
   it("gives everyone-answers questions answers and a right one", () => {
-    const verbal = question({ mode: "fastestFinger", answers: [], correct: null });
+    const verbal = question({ mode: "fastestFinger", answers: [], correct: [] });
     const everyone = setMode(verbal, "everyone");
     expect(everyone.answers).toHaveLength(4);
-    expect(everyone.correct).toBe(0);
+    expect(rightOf(everyone)).toEqual([0]);
     // Answers already there are kept.
-    const kept = setMode(question({ mode: "fastestFinger", answers: ["a", "b", "c"], correct: 2 }), "everyone");
-    expect([kept.answers, kept.correct]).toEqual([["a", "b", "c"], 2]);
-    // Answers past the buttons go; a right one among them falls back to the first.
-    const six = question({ mode: "fastestFinger", answers: ["a", "b", "c", "d", "e", "f"], correct: 4 });
-    expect(setMode(six, "everyone")).toMatchObject({ answers: ["a", "b", "c", "d"], correct: 0 });
+    const kept = setMode(question({ mode: "fastestFinger", answers: ["a", "b", "c"], correct: right(2) }), "everyone");
+    expect([kept.answers, rightOf(kept)]).toEqual([["a", "b", "c"], [2]]);
+    // Answers past the buttons go; right ones among them go too, and with none left the first is right.
+    const six = question({ mode: "fastestFinger", answers: ["a", "b", "c", "d", "e", "f"], correct: right(1, 4) });
+    expect(rightOf(setMode(six, "everyone"))).toEqual([1]);
+    expect(setMode({ ...six, correct: right(4) }, "everyone")).toMatchObject({ answers: ["a", "b", "c", "d"], correct: right(0) });
   });
 
-  it("keeps the right answer when another answer is removed", () => {
-    const q = question({ answers: ["a", "b", "c", "d"], correct: 2 });
-    expect(removeAnswer(q, 0)).toMatchObject({ answers: ["b", "c", "d"], correct: 1 });
-    expect(removeAnswer(q, 3)).toMatchObject({ answers: ["a", "b", "c"], correct: 2 });
-    // Removing the right answer falls back to the first (everyone) or none (fastest finger).
-    expect(removeAnswer(q, 2).correct).toBe(0);
-    expect(removeAnswer({ ...q, mode: "fastestFinger" }, 2).correct).toBeNull();
+  it("keeps the right answers when another answer is removed", () => {
+    const q = question({ answers: ["a", "b", "c", "d"], correct: [{ answer: 1, share: 50 }, fullyCorrect(2)] });
+    expect(removeAnswer(q, 0)).toMatchObject({ answers: ["b", "c", "d"], correct: [{ answer: 0, share: 50 }, fullyCorrect(1)] });
+    expect(removeAnswer(q, 3)).toMatchObject({ answers: ["a", "b", "c"], correct: q.correct });
+    expect(removeAnswer(q, 1).correct).toEqual(right(1));
+    // Removing the last right answer falls back to the first (everyone) or none (fastest finger).
+    const one = question({ answers: ["a", "b", "c", "d"], correct: right(2) });
+    expect(removeAnswer(one, 2).correct).toEqual(right(0));
+    expect(removeAnswer({ ...one, mode: "fastestFinger" }, 2).correct).toEqual([]);
   });
 
   it("never goes below two answers for everyone, or above the maximum", () => {
-    const two = question({ answers: ["a", "b"], correct: 1 });
+    const two = question({ answers: ["a", "b"], correct: right(1) });
     expect(removeAnswer(two, 0)).toBe(two);
-    const verbal = question({ mode: "fastestFinger", answers: ["a"], correct: null });
+    const verbal = question({ mode: "fastestFinger", answers: ["a"], correct: [] });
     expect(removeAnswer(verbal, 0).answers).toEqual([]);
     let full = question();
     for (let i = 0; i < 10; i++) full = addAnswer(full);
@@ -74,7 +85,7 @@ describe("slides", () => {
   });
 
   it("adds an answer typed into the row after the last one, and only there", () => {
-    const q = question({ answers: ["a", "b"], correct: 1 });
+    const q = question({ answers: ["a", "b"], correct: right(1) });
     expect(setAnswerAt(q, 1, "B").answers).toEqual(["a", "B"]);
     expect(setAnswerAt(q, 2, "c").answers).toEqual(["a", "b", "c"]);
     expect(setAnswerAt(q, 3, "d")).toBe(q);
@@ -84,19 +95,48 @@ describe("slides", () => {
   });
 
   it("sets the number of answers as far as the mode allows", () => {
-    const q = question({ answers: ["a", "b", "c", "d"], correct: 3 });
+    const q = question({ answers: ["a", "b", "c", "d"], correct: right(3) });
     expect(withAnswerCount(question({ answers: ["a", "b"] }), 4).answers).toEqual(["a", "b", "", ""]);
     expect(withAnswerCount(q, MAX_ANSWERS + 2)).toBe(q);
-    expect(withAnswerCount(q, 2)).toMatchObject({ answers: ["a", "b"], correct: 0 });
+    expect(withAnswerCount(q, 2)).toMatchObject({ answers: ["a", "b"], correct: right(0) });
     expect(withAnswerCount(q, 0).answers).toHaveLength(2);
     expect(withAnswerCount(q, 4)).toBe(q);
-    expect(withAnswerCount({ ...q, mode: "fastestFinger" }, 0)).toMatchObject({ answers: [], correct: null });
+    expect(withAnswerCount({ ...q, mode: "fastestFinger" }, 0)).toMatchObject({ answers: [], correct: [] });
+  });
+
+  it("marks several answers right, in order, each with all of the points", () => {
+    const q = setCorrect(setCorrect(question(), 3, true), 2, true);
+    expect(q.correct).toEqual(right(0, 2, 3));
+    expect(setCorrect(q, 0, false).correct).toEqual(right(2, 3));
+    // Already so, or no such answer: the same question.
+    expect(setCorrect(q, 2, true)).toBe(q);
+    expect(setCorrect(q, 1, false)).toBe(q);
+    expect(setCorrect(q, 7, true)).toBe(q);
+    expect(toggleCorrect(q, 1).correct).toEqual(right(0, 1, 2, 3));
+    expect(toggleCorrect(q, 3).correct).toEqual(right(0, 2));
   });
 
   it("only allows no right answer for fastest finger", () => {
-    expect(setCorrect(question(), null).correct).toBe(0);
-    expect(setCorrect(question({ mode: "fastestFinger" }), null).correct).toBeNull();
-    expect(setCorrect(question(), 7).correct).toBe(0);
+    const q = question();
+    expect(setCorrect(q, 0, false)).toBe(q);
+    expect(toggleCorrect(q, 0)).toBe(q);
+    expect(setCorrectAnswers(q, [])).toBe(q);
+    expect(setCorrect({ ...q, mode: "fastestFinger" }, 0, false).correct).toEqual([]);
+  });
+
+  it("sets the right answers at once, keeping the shares of those that stay right", () => {
+    const q = question({ correct: [{ answer: 1, share: 50 }] });
+    expect(setCorrectAnswers(q, [3, 1, 3, 9, -1, 0.5]).correct).toEqual([{ answer: 1, share: 50 }, fullyCorrect(3)]);
+    expect(setCorrectAnswers(q, [9]).correct).toEqual(q.correct);
+  });
+
+  it("keeps a right answer's share a whole percent from 1 to 100", () => {
+    const q = question({ correct: right(0, 1) });
+    expect(setShare(q, 1, 49.6).correct).toEqual([fullyCorrect(0), { answer: 1, share: 50 }]);
+    expect(setShare(q, 1, 0).correct[1].share).toBe(1);
+    expect(setShare(q, 1, 250).correct[1].share).toBe(100);
+    // A wrong answer has no share to set.
+    expect(setShare(q, 2, 50)).toBe(q);
   });
 
   it("keeps the clock and points whole and in range", () => {
@@ -197,7 +237,7 @@ describe("slides", () => {
     const billboard = convertSlide(q, "billboard");
     expect(billboard).toMatchObject({ id: "q", type: "billboard", title: "Who?", text: "", notes: "n", picture: "media/a.png" });
     const back = convertSlide(billboard, "question");
-    expect(back).toMatchObject({ type: "question", text: "Who?", answers: ["", "", "", ""], correct: 0 });
+    expect(back).toMatchObject({ type: "question", text: "Who?", answers: ["", "", "", ""], correct: right(0) });
     expect(convertSlide(q, "question")).toBe(q);
   });
 

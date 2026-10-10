@@ -35,7 +35,7 @@ const quiz = {
   slides: demoQuiz.slides.map((slide) => ({
     notes: "",
     answers: [],
-    correct: null,
+    correct: [],
     pointsEnd: null,
     penalty: 0,
     picture: null,
@@ -294,7 +294,7 @@ const SHEET_IMPORT: SheetImport = {
       text: "Kdo natočil Vetřelce?",
       mode: "everyone",
       answers: ["James Cameron", "Ridley Scott", "David Fincher"],
-      correct: 1,
+      correct: [{ answer: 1, share: 100 }],
       timeLimitS: 20,
       points: 10,
       pointsEnd: null,

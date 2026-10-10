@@ -138,6 +138,19 @@ describe("copying and pasting a value", () => {
     expect(effect.setTo).toEqual(["blur"]);
   });
 
+  it("pastes right answers only into the same property, compared and reset by the answers they name", () => {
+    const right = row("correctAnswer", { kind: "answers", value: [0, 2], initial: [0] });
+    expect(paste(right, { id: "answer1.correct", kind: "flag", value: true })).toBe(false);
+    expect(paste(right, { id: "correctAnswer", kind: "answers", value: [1] })).toBe(true);
+    expect(pasteText(right, "[1]")).toBeNull();
+    expect(commonRows([[right], [row("correctAnswer", { kind: "answers", value: [0, 2] })]]).mixed).toEqual(new Set());
+    expect(commonRows([[right], [row("correctAnswer", { kind: "answers", value: [0] })]]).mixed).toEqual(new Set(["correctAnswer"]));
+    expect(canReset(right)).toBe(true);
+    resetValue(right);
+    expect(right.setTo).toEqual([[1], [0]]);
+    expect(canReset(row("correctAnswer", { kind: "answers", value: [0], initial: [0] }))).toBe(false);
+  });
+
   it("refuses a value of another kind and a row without one", () => {
     const loop = row("loop", { kind: "flag", value: false });
     expect(paste(loop, { id: "speed", kind: "number", value: 1 })).toBe(false);

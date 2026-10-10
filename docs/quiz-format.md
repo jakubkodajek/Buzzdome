@@ -51,7 +51,7 @@ was moved or deleted.
 
 ```json
 {
-  "schemaVersion": 4,
+  "schemaVersion": 5,
   "title": "Pub quiz, March",
   "theme": "builtin.night",
   "slides": [
@@ -60,9 +60,10 @@ was moved or deleted.
       "background": { "file": "media/stage.mp4", "repeat": true, "muted": true, "sync": false } },
     { "id": "q1", "type": "question", "mode": "everyone",
       "text": "Which city is the capital of Moravia-Silesia?",
-      "answers": ["Opava", "Ostrava", "Frýdek-Místek", "Karviná"], "correct": 1,
+      "answers": ["Opava", "Ostrava", "Frýdek-Místek", "Karviná"],
+      "correct": [{ "answer": 0, "share": 50 }, { "answer": 1, "share": 100 }],
       "timeLimitS": 20, "points": 100, "pointsEnd": 50, "penalty": 0,
-      "notes": "Ostrava has been the regional capital since 2000." },
+      "notes": "Ostrava has been the regional capital since 2000; Opava, the historic capital of Silesia, earns half." },
     { "id": "q1-why", "type": "explanation",
       "text": "The region was created in 2000 with Ostrava as its seat." },
     { "id": "q2", "type": "question", "mode": "fastestFinger",
@@ -81,7 +82,7 @@ was moved or deleted.
 
 | Field | Type | Meaning |
 | --- | --- | --- |
-| `schemaVersion` | number | `4`. Version 1 to 3 files open unchanged; a file with a higher version is refused with a message. |
+| `schemaVersion` | number | `5`. Version 1 to 4 files open with the same meaning (see Versioning); a file with a higher version is refused with a message. |
 | `title` | text | Shown on the welcome screen and in the Director. |
 | `theme` | text or `null` | Id of the look of the screens (`builtin.classic`, `builtin.studio`, `builtin.night`, `builtin.showtime`, `builtin.neon`, later installed themes, spec 5.2). Missing, `null` or not installed: the default look, so a quiz never fails to open or play over it. A value that is not a theme id (dot-separated parts of lower-case letters, digits, `-` and `_`, at least two parts, at most 100 bytes) reads as missing. |
 | `slides` | list | The show in order. |
@@ -186,9 +187,9 @@ right) or `radial` (middle out); `from` and `to` alike make a plain colour.
 | `text` | text | required | The question. |
 | `mode` | `everyone`, `fastestFinger` | required | Everyone answers with A-D; or the first to buzz answers and the quizmaster judges. |
 | `answers` | list of text | `[]` | 2 to 4 for `everyone` (one per answer button A-D). Up to 6 (A-F) for `fastestFinger`, which the player answers aloud; it may be empty. |
-| `correct` | number | none | Index into `answers`, from 0. Required for `everyone`. |
+| `correct` | list of objects | `[]` | The right answers, each once: `answer` is an index into `answers` from 0, `share` the percent of the points it gives, 1 to 100 (default `100`). At least one for `everyone`; a `fastestFinger` question may have none, and then the quizmaster judges. |
 | `timeLimitS` | number | `20` | Seconds, at most 3600; `0` means no clock (the quizmaster ends the question). |
-| `points` | number | `10` | Points for a correct answer at the start of the clock, -100000 to 100000. |
+| `points` | number | `10` | Points for a right answer with a `share` of 100 at the start of the clock, -100000 to 100000. Another share gives that percent of them, rounded half away from zero. |
 | `pointsEnd` | number | none | Points when the clock runs out, same range; points fall evenly from `points` to this. |
 | `penalty` | number | `0` | Points taken for a wrong answer, 0 to 100000. |
 
@@ -196,7 +197,7 @@ right) or `radial` (middle out); `from` and `to` alike make a plain colour.
 
 Explains the answer of a question. It explains the nearest question before
 it in the same round (an `endOfRound` or `final` slide ends the search), and the screen
-shows that question with its correct answer above `text`. With no question
+shows that question with its right answers above `text`. With no question
 before it in its round, only `text` and the slide's picture or video are
 shown. Players do not answer; the next step goes to the next slide.
 
@@ -249,7 +250,7 @@ billboard with the sheet's name opens. Each row with a value is a slide.
 | Column | Value |
 | --- | --- |
 | `Q` | The text, after an optional prefix that gives the slide type (below). |
-| `A1`-`A6` | Answers. `[Paris]` marks the correct one; with none marked, `A1` is correct and the answers are shuffled. |
+| `A1`-`A6` | Answers. `[Paris]` marks a right one, and every answer in brackets is right; with none marked, `A1` is right and the answers are shuffled. |
 | `P1` | The slide's picture. |
 | `NOTES` | Notes for the quizmaster. |
 | `SOUND`, `VIDEO` | The slide's sound and video. |
@@ -296,8 +297,9 @@ separated by `;`: `intro.mp4{start-at=00:00:05;loop=false}`. Times are
 
 Export writes only the settings that differ from these defaults, every
 media file next to the CSV file under its own name (numbered when another
-file has it), and the correct answer in brackets, so an exported quiz
-imports as it was. A cell a spreadsheet program would run as a formula
+file has it), and the right answers in brackets, so an exported quiz
+imports as it was, except that every right answer comes back with all of
+the points (the sheet has no column for a share). A cell a spreadsheet program would run as a formula
 (starting with `=`, `@`, a tab, or `+` or `-` not followed by just a
 number) gets a leading `'`, so it opens as text; the import takes it off.
 
@@ -327,6 +329,7 @@ the rows it came up in.
 | 2 | Adds `explanation` slides and, later within version 2, the quiz `theme` (builds from before that drop it when they save). Version 1 files read as version 2 unchanged. |
 | 3 | `background` becomes an object with video options; sounds get `part`, `gainDb` and `replay`. Version 1 and 2 files read as version 3 unchanged. Later within version 3, a `fastestFinger` question may have up to 6 answers instead of 4; earlier builds list such a question as a problem. |
 | 4 | Adds `final` slides. Version 1 to 3 files read as version 4 unchanged. Later within version 4, videos get `introPauseMs`, `volume`, `speed`, `part`, `effect` and `replay`; a video without them plays as before. Later still, slides get `style`; builds before it show the theme's look and drop the style when they save. |
+| 5 | A question's `correct` becomes a list of right answers, each with a `share` of the points. A version 1 to 4 question with `correct: n` reads as `[{ "answer": n, "share": 100 }]`, and one without as `[]`. |
 
 Fields may be added within a version as long as older files keep their
 meaning; readers ignore fields they do not know. Anything else (a new slide

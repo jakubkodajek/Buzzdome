@@ -3,7 +3,7 @@
 
 import type { Lang, Translate } from "../i18n";
 import type { ListSeparator, QuestionSlide, Quiz, Slide } from "../types";
-import { newSlide, setBodyText, setHeadline, setNotes } from "./slides";
+import { fullyCorrect, newSlide, setBodyText, setHeadline, setNotes } from "./slides";
 
 /** File types questions are imported from: workbooks and CSV files. */
 export const SHEET_EXTENSIONS = ["xlsx", "xlsm", "xls", "ods", "csv"];
@@ -25,9 +25,9 @@ export function templateQuiz(t: Translate, quiz: Quiz): Quiz {
     ...(newSlide("question", "t-question") as QuestionSlide),
     text: t("templateQuestion"),
     answers: [t("templateAnswer1"), t("templateAnswer2"), t("templateAnswer3"), t("templateAnswer4")],
-    correct: 0,
+    correct: [fullyCorrect(0)],
   };
-  const open: QuestionSlide = { ...question, id: "t-open", text: t("templateOpen"), mode: "fastestFinger", answers: [], correct: null };
+  const open: QuestionSlide = { ...question, id: "t-open", text: t("templateOpen"), mode: "fastestFinger", answers: [], correct: [] };
   const slides: Slide[] = [
     setBodyText(setHeadline(newSlide("billboard", "t-round"), t("templateRound")), t("templateRoundText")),
     setNotes(question, t("templateQuestionNotes")),

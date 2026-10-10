@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 4,
+  "schemaVersion": 5,
   "title": "Ukázkový kvíz",
   "slides": [
     {
@@ -14,7 +14,7 @@
       "mode": "everyone",
       "text": "Které město je hlavním městem Moravskoslezského kraje?",
       "answers": ["Opava", "Ostrava", "Frýdek-Místek", "Karviná"],
-      "correct": 1,
+      "correct": [{ "answer": 1, "share": 100 }],
       "timeLimitS": 20,
       "points": 100,
       "pointsEnd": 50,
@@ -26,7 +26,7 @@
       "mode": "everyone",
       "text": "Která řeka protéká Českými Budějovicemi?",
       "answers": ["Ohře", "Sázava", "Vltava", "Morava"],
-      "correct": 2,
+      "correct": [{ "answer": 2, "share": 100 }],
       "timeLimitS": 15,
       "points": 100,
       "pointsEnd": 50
@@ -37,7 +37,7 @@
       "mode": "everyone",
       "text": "Jak se jmenuje nejvyšší hora Česka?",
       "answers": ["Praděd", "Lysá hora", "Sněžka", "Ještěd"],
-      "correct": 2,
+      "correct": [{ "answer": 2, "share": 100 }],
       "timeLimitS": 15,
       "points": 100,
       "penalty": 20
@@ -74,7 +74,7 @@
       "mode": "fastestFinger",
       "text": "Jak se jmenuje autor knihy Válka s mloky?",
       "answers": ["Karel Čapek", "Jaroslav Hašek", "Bohumil Hrabal", "Franz Kafka", "Milan Kundera", "Josef Čapek"],
-      "correct": 0,
+      "correct": [{ "answer": 0, "share": 100 }],
       "timeLimitS": 30,
       "points": 150,
       "penalty": 30,

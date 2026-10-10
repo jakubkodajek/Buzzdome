@@ -3,7 +3,7 @@
 // the ribbon, which marks the same values as Mixed.
 
 import type { StringKey, Translate } from "../i18n";
-import { showsRanking } from "../quiz";
+import { isCorrect, showsRanking } from "../quiz";
 import type { Slide } from "../types";
 import { answerIndex, type ElementId } from "./elements";
 import { slideProperties, type SlideEditing, type SlideProperties } from "./properties";
@@ -60,7 +60,17 @@ function propertyPages(slide: Slide, element: ElementId, { slide: rows, style }:
 
   if (answer !== null && slide.type === "question") {
     return [
-      page("text", [{ title: "sectionAnswer", rows: [rows.answerText(slide, answer), rows.isCorrect(slide, answer), rows.removeAnswer(slide, answer)] }]),
+      page("text", [
+        {
+          title: "sectionAnswer",
+          rows: [
+            rows.answerText(slide, answer),
+            rows.isCorrect(slide, answer),
+            ...(isCorrect(slide, answer) ? [rows.share(slide, answer)] : []),
+            rows.removeAnswer(slide, answer),
+          ],
+        },
+      ]),
       ...lookPage,
     ];
   }

@@ -716,8 +716,7 @@ impl Game {
             if !player.enabled {
                 continue;
             }
-            let is_correct = response.button.answer_index() == q.correct;
-            let delta = if is_correct { q.points_at(response.elapsed_ms) } else { -q.penalty };
+            let delta = q.points_for(response.button.answer_index(), response.elapsed_ms);
             player.add_score(delta);
             player.total_answer_ms += response.elapsed_ms;
             self.deltas.insert(buzzer, delta);
@@ -809,7 +808,7 @@ impl Game {
         let lights = self
             .enabled_buzzers()
             .map(|b| {
-                let right = self.responses.get(&b).is_some_and(|r| r.button.answer_index() == q.correct);
+                let right = self.responses.get(&b).and_then(|r| r.button.answer_index()).is_some_and(|i| q.is_correct(i));
                 (b, if right { Light::Correct } else { Light::Wrong })
             })
             .collect();
