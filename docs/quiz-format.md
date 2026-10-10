@@ -236,7 +236,8 @@ export writes a quiz back in them. `quiz_core::sheet` turns rows into
 slides and back, `quiz-file` reads and writes the files.
 
 **Files.** Import reads `.xlsx`, `.xlsm`, `.xls`, `.ods` (every visible
-sheet) and `.csv`. A CSV file is UTF-8 or UTF-16 with a byte order mark,
+sheet) and `.csv`, up to 50 MB (unpacked), 10,000 rows over all sheets and
+200 columns. A CSV file is UTF-8 or UTF-16 with a byte order mark,
 else UTF-8, else Windows-1250; its separator is whichever of `;`, tab and
 `,` the headings row uses most. Export writes UTF-8 with a byte order mark
 and CRLF line ends, separated by `;` when the app is in Czech and `,` in

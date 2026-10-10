@@ -188,9 +188,11 @@ pub async fn editor_add_media(app: AppHandle, lock: State<'_, EditorLock>, path:
 pub async fn editor_import_sheet(app: AppHandle, lock: State<'_, EditorLock>, path: String) -> CmdResult<SheetImport> {
     let _one_at_a_time = lock.0.lock().unwrap();
     let (root, _) = current(&app)?;
-    // Shuffles the answers whose correct one the sheet does not mark.
+    let path = Path::new(&path);
+    let tables = crate::sheet_reader::read_tables(path)?;
+    // Shuffles the answers of a question with none marked right.
     let seed = SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| d.as_nanos() as u64);
-    Ok(quiz_file::import_sheet(Path::new(&path), &root, seed)?)
+    Ok(quiz_file::import_sheet(path, &tables, &root, seed)?)
 }
 
 /// The character between the cells of a CSV file. Excel splits a CSV file

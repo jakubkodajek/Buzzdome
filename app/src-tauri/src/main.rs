@@ -2,5 +2,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
+    quiz_show_lib::sheet_reader::serve_if_asked();
     quiz_show_lib::run()
 }

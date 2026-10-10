@@ -62,9 +62,12 @@ pub enum AppError {
     NoDraft,
     #[error("the spreadsheet cannot be read: {detail}")]
     NotASpreadsheet { detail: String },
-    #[error("the spreadsheet is larger than {max_mb} MB or has more than {max_rows} rows")]
+    #[error("the spreadsheet is larger than {max_mb} MB or has more than {max_rows} rows or {max_columns} columns")]
     #[serde(rename_all = "camelCase")]
-    SpreadsheetTooLarge { max_mb: u64, max_rows: usize },
+    SpreadsheetTooLarge { max_mb: u64, max_rows: usize, max_columns: usize },
+    /// The sheet reader process (`sheet_reader.rs`) stopped, overran or could not start.
+    #[error("the spreadsheet reader failed")]
+    SpreadsheetReaderFailed,
     #[error("no sheet has a Q column")]
     NoQuestionColumn,
 
@@ -158,7 +161,11 @@ impl From<QuizFileError> for AppError {
             QuizFileError::Invalid(problems) => AppError::QuizInvalid { problems },
             QuizFileError::Spreadsheet(detail) => AppError::NotASpreadsheet { detail },
             QuizFileError::SpreadsheetTooLarge => {
-                AppError::SpreadsheetTooLarge { max_mb: quiz_file::MAX_SHEET_BYTES >> 20, max_rows: quiz_file::MAX_SHEET_ROWS }
+                AppError::SpreadsheetTooLarge {
+                    max_mb: quiz_file::MAX_SHEET_BYTES >> 20,
+                    max_rows: quiz_file::MAX_SHEET_ROWS,
+                    max_columns: quiz_file::MAX_SHEET_COLUMNS,
+                }
             }
             QuizFileError::Sheet(SheetError::NoQuestionColumn) => AppError::NoQuestionColumn,
         }

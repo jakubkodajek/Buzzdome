@@ -5,13 +5,13 @@
 //! media next to it, under their own names.
 
 use crate::{place_file, write_atomic, Context, FileAction, MediaSource, QuizFileError, Result};
-use calamine::{open_workbook_auto, Data, Reader, SheetType, SheetVisible};
+use calamine::{open_workbook_auto, Data, DataRef, Reader, SheetType, SheetVisible, Sheets, XlsxError};
 use quiz_core::{export_table, import_tables, ImportIssue, ImportNote, Quiz, Slide, Table};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::fs;
-use std::io::Read;
+use std::io::{BufReader, Read};
 use std::path::{Component, Path, PathBuf};
 use ts_rs::TS;
 
@@ -23,6 +23,8 @@ const UTF8_BOM: &[u8] = b"\xef\xbb\xbf";
 pub const MAX_SHEET_BYTES: u64 = 50 << 20;
 /// The most rows an import reads, over all sheets.
 pub const MAX_SHEET_ROWS: usize = 10_000;
+/// The most columns a sheet may span: far more than the template has.
+pub const MAX_SHEET_COLUMNS: usize = 200;
 
 /// The slides of a spreadsheet, ready for the editor to insert, and what
 /// the import could not take over as the sheet has it.
@@ -44,15 +46,15 @@ pub struct SheetExport {
     pub missing: Vec<String>,
 }
 
-/// Reads the spreadsheet at `path` into slides and copies the media they
-/// use into the package folder `root`. Answers whose correct one is not
-/// marked are shuffled with `seed`. A media file is looked for where its
-/// cell says, relative to the spreadsheet, and else next to it by its name,
-/// so a sheet made on another computer works with its media beside it.
-/// A file taken from outside the sheet's folder gets a note; a network or
-/// device path is never read.
-pub fn import_sheet(path: &Path, root: &Path, seed: u64) -> Result<SheetImport> {
-    let imported = import_tables(&read_tables(path)?, seed)?;
+/// Makes slides of the `tables` read from the spreadsheet at `path` (see
+/// `read_tables`) and copies the media they use into the package folder
+/// `root`. Answers with none marked right are shuffled with `seed`. A media
+/// file is looked for where its cell says, relative to the spreadsheet, and
+/// else next to it by its name, so a sheet made on another computer works
+/// with its media beside it. A file taken from outside the sheet's folder
+/// gets a note; a network or device path is never read.
+pub fn import_sheet(path: &Path, tables: &[Table], root: &Path, seed: u64) -> Result<SheetImport> {
+    let imported = import_tables(tables, seed)?;
     let folder = path.parent().unwrap_or(Path::new(""));
     let mut notes = imported.notes;
     // The reference each file got and whether it came from outside the sheet's folder, or why it got none.
@@ -125,8 +127,38 @@ fn find_media(folder: &Path, file: &str) -> Found {
     }
 }
 
+/// What reading a spreadsheet gave, as the app's sheet reader process
+/// reports it. The app reads spreadsheets in a process of its own, so a
+/// file that breaks a parser cannot end a running show.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SheetRead {
+    Tables(Vec<Table>),
+    TooLarge,
+    Unreadable(String),
+}
+
+impl SheetRead {
+    /// Reads the spreadsheet at `path` (see `read_tables`).
+    pub fn of(path: &Path) -> SheetRead {
+        match read_tables(path) {
+            Ok(tables) => SheetRead::Tables(tables),
+            Err(QuizFileError::SpreadsheetTooLarge) => SheetRead::TooLarge,
+            Err(QuizFileError::Spreadsheet(reason)) => SheetRead::Unreadable(reason),
+            Err(other) => SheetRead::Unreadable(other.to_string()),
+        }
+    }
+
+    pub fn into_result(self) -> Result<Vec<Table>> {
+        match self {
+            SheetRead::Tables(tables) => Ok(tables),
+            SheetRead::TooLarge => Err(QuizFileError::SpreadsheetTooLarge),
+            SheetRead::Unreadable(reason) => Err(QuizFileError::Spreadsheet(reason)),
+        }
+    }
+}
+
 /// The tables of a workbook's visible worksheets, or of a CSV file, within
-/// `MAX_SHEET_BYTES` and `MAX_SHEET_ROWS`.
+/// `MAX_SHEET_BYTES`, `MAX_SHEET_ROWS` and `MAX_SHEET_COLUMNS`.
 pub fn read_tables(path: &Path) -> Result<Vec<Table>> {
     read_tables_within(path, MAX_SHEET_BYTES, MAX_SHEET_ROWS)
 }
@@ -136,11 +168,81 @@ fn read_tables_within(path: &Path, max_bytes: u64, max_rows: usize) -> Result<Ve
     if size > max_bytes || unpacked_size(path, max_bytes)? > max_bytes {
         return Err(QuizFileError::SpreadsheetTooLarge);
     }
-    let tables = read_tables_unchecked(path)?;
-    if tables.iter().map(|table| table.rows.len()).sum::<usize>() > max_rows {
-        return Err(QuizFileError::SpreadsheetTooLarge);
+    let extension = path.extension().map(|extension| extension.to_string_lossy().to_ascii_lowercase());
+    if extension.as_deref() == Some("csv") {
+        let bytes = fs::read(path).context(FileAction::Read, path)?;
+        return Ok(vec![csv_table(&bytes, max_rows)?]);
+    }
+    let mut workbook = open_workbook_auto(path).map_err(unreadable)?;
+    let sheets = workbook.sheets_metadata().to_vec();
+    let mut tables: Vec<Table> = Vec::new();
+    for sheet in sheets.into_iter().filter(|sheet| sheet.typ == SheetType::WorkSheet && sheet.visible == SheetVisible::Visible) {
+        let rows_left = max_rows - tables.iter().map(|table| table.rows.len()).sum::<usize>();
+        tables.push(sheet_table(&mut workbook, sheet.name, rows_left)?);
     }
     Ok(tables)
+}
+
+fn unreadable(e: impl std::fmt::Display) -> QuizFileError {
+    QuizFileError::Spreadsheet(e.to_string())
+}
+
+/// A worksheet as a table of at most `max_rows` rows. An Excel sheet is
+/// read cell by cell, so a cell far off is refused before the sheet takes
+/// memory for the cells in between; the parser reads an `.xls` or `.ods`
+/// sheet whole.
+fn sheet_table(workbook: &mut Sheets<BufReader<fs::File>>, name: String, max_rows: usize) -> Result<Table> {
+    let text = |value: &DataRef| cell_text(&Data::from(value.clone()));
+    match workbook {
+        Sheets::Xlsx(book) => match book.worksheet_cells_reader(&name) {
+            Ok(mut cells) => {
+                let cells = std::iter::from_fn(|| cells.next_cell().transpose());
+                table(name, cells.map(|cell| cell.map(|cell| (cell.get_position(), text(cell.get_value()))).map_err(unreadable)), max_rows)
+            }
+            Err(XlsxError::NotAWorksheet(_)) => Ok(Table { name, first_row: 1, rows: Vec::new() }),
+            Err(e) => Err(unreadable(e)),
+        },
+        Sheets::Xlsb(book) => {
+            let mut cells = book.worksheet_cells_reader(&name).map_err(unreadable)?;
+            let cells = std::iter::from_fn(|| cells.next_cell().transpose());
+            table(name, cells.map(|cell| cell.map(|cell| (cell.get_position(), text(cell.get_value()))).map_err(unreadable)), max_rows)
+        }
+        whole => {
+            let range = whole.worksheet_range(&name).map_err(unreadable)?;
+            let (top, left) = range.start().unwrap_or((0, 0));
+            let cells = range.used_cells().map(|(row, column, value)| Ok(((top + row as u32, left + column as u32), cell_text(value))));
+            table(name, cells, max_rows)
+        }
+    }
+}
+
+/// A sheet's table from its cells and their (row, column), in any order.
+/// Its rows run from the first row with a value to the last, and cells keep
+/// their columns, so a note can name a column by its letters. Refused as
+/// soon as the cells with a value span more than `max_rows` rows or
+/// `MAX_SHEET_COLUMNS` columns.
+fn table(name: String, cells: impl Iterator<Item = Result<((u32, u32), String)>>, max_rows: usize) -> Result<Table> {
+    let mut filled = Vec::new();
+    let (mut top, mut bottom, mut right) = (u32::MAX, 0, 0);
+    for cell in cells {
+        let ((row, column), text) = cell?;
+        if text.is_empty() {
+            continue;
+        }
+        (top, bottom, right) = (top.min(row), bottom.max(row), right.max(column));
+        if (bottom - top) as usize >= max_rows || right as usize >= MAX_SHEET_COLUMNS {
+            return Err(QuizFileError::SpreadsheetTooLarge);
+        }
+        filled.push((row, column, text));
+    }
+    if filled.is_empty() {
+        return Ok(Table { name, first_row: 1, rows: Vec::new() });
+    }
+    let mut rows = vec![vec![String::new(); right as usize + 1]; (bottom - top) as usize + 1];
+    for (row, column, text) in filled {
+        rows[(row - top) as usize][column as usize] = text;
+    }
+    Ok(Table { name, first_row: top.saturating_add(1), rows })
 }
 
 /// What a workbook that is a ZIP archive (xlsx, xlsm, ods) unpacks to,
@@ -160,27 +262,6 @@ fn unpacked_size(path: &Path, max: u64) -> Result<u64> {
     Ok(total)
 }
 
-fn read_tables_unchecked(path: &Path) -> Result<Vec<Table>> {
-    let extension = path.extension().map(|extension| extension.to_string_lossy().to_ascii_lowercase());
-    if extension.as_deref() == Some("csv") {
-        let bytes = fs::read(path).context(FileAction::Read, path)?;
-        return Ok(vec![csv_table(&bytes)?]);
-    }
-    let unreadable = |e: calamine::Error| QuizFileError::Spreadsheet(e.to_string());
-    let mut workbook = open_workbook_auto(path).map_err(unreadable)?;
-    let sheets = workbook.sheets_metadata().to_vec();
-    let mut tables = Vec::new();
-    for sheet in sheets.into_iter().filter(|sheet| sheet.typ == SheetType::WorkSheet && sheet.visible == SheetVisible::Visible) {
-        let range = workbook.worksheet_range(&sheet.name).map_err(unreadable)?;
-        let (first_row, first_column) = range.start().unwrap_or((0, 0));
-        // Cells keep their columns, so a note can name a column by its letters.
-        let lead = std::iter::repeat_n(String::new(), first_column as usize);
-        let rows = range.rows().map(|row| lead.clone().chain(row.iter().map(cell_text)).collect()).collect();
-        tables.push(Table { name: sheet.name, first_row: first_row + 1, rows });
-    }
-    Ok(tables)
-}
-
 /// A cell as text: a number as Excel shows it without formatting (`30`, `1.5`).
 fn cell_text(cell: &Data) -> String {
     match cell {
@@ -194,14 +275,18 @@ fn cell_text(cell: &Data) -> String {
 /// list separator unless told otherwise, so both are recognised: UTF-8
 /// (with or without a byte order mark) or UTF-16 with one, else Windows-1250
 /// (Central European); semicolons, commas or tabs, by the headings row.
-fn csv_table(bytes: &[u8]) -> Result<Table> {
+/// Refused at the first record past `max_rows` or `MAX_SHEET_COLUMNS`.
+fn csv_table(bytes: &[u8], max_rows: usize) -> Result<Table> {
     let text = decode(bytes);
     let mut reader = csv::ReaderBuilder::new().has_headers(false).flexible(true).delimiter(separator(&text)).from_reader(text.as_bytes());
-    let rows = reader
-        .records()
-        .map(|record| record.map(|record| record.iter().map(|cell| cell.replace("\r\n", "\n")).collect()))
-        .collect::<std::result::Result<_, _>>()
-        .map_err(|e| QuizFileError::Spreadsheet(e.to_string()))?;
+    let mut rows: Vec<Vec<String>> = Vec::new();
+    for record in reader.records() {
+        let record = record.map_err(unreadable)?;
+        if rows.len() == max_rows || record.len() > MAX_SHEET_COLUMNS {
+            return Err(QuizFileError::SpreadsheetTooLarge);
+        }
+        rows.push(record.iter().map(|cell| cell.replace("\r\n", "\n")).collect());
+    }
     Ok(Table { name: String::new(), first_row: 1, rows })
 }
 
@@ -276,14 +361,14 @@ mod tests {
     #[test]
     fn csv_files_are_read_in_the_encodings_and_separators_excel_writes() {
         let semicolons = b"Q;A1;A2\r\n\"P\xf8\xedli\x9a; \"\"\x9elu\x9dou\xe8k\xfd\"\"\";[ano];ne\r\n";
-        let table = csv_table(semicolons).unwrap();
+        let table = csv_table(semicolons, MAX_SHEET_ROWS).unwrap();
         assert_eq!(table.rows, [vec!["Q", "A1", "A2"], vec!["Příliš; \"žluťoučký\"", "[ano]", "ne"]]);
 
         let utf8 = "\u{feff}Q,NOTES\r\n\"Two\r\nlines\",ok\r\n".as_bytes();
-        assert_eq!(csv_table(utf8).unwrap().rows[1], ["Two\nlines", "ok"]);
+        assert_eq!(csv_table(utf8, MAX_SHEET_ROWS).unwrap().rows[1], ["Two\nlines", "ok"]);
 
         let utf16: Vec<u8> = [0xff, 0xfe].into_iter().chain("Q\tA1\nŽ\tx\n".encode_utf16().flat_map(u16::to_le_bytes)).collect();
-        assert_eq!(csv_table(&utf16).unwrap().rows[1], ["Ž", "x"]);
+        assert_eq!(csv_table(&utf16, MAX_SHEET_ROWS).unwrap().rows[1], ["Ž", "x"]);
         assert_eq!((separator("Q"), separator("\"a;b\",c")), (b',', b','));
     }
 
@@ -305,6 +390,44 @@ mod tests {
         assert!(size < 10_000, "{size}");
         assert!(read_tables_within(&xlsx, 10_000, 10).is_err_and(|e| matches!(e, QuizFileError::SpreadsheetTooLarge)));
         assert_eq!(read_tables_within(&xlsx, 100_000, 10).unwrap()[0].rows.len(), 2);
+
+        // Too many columns.
+        fs::write(&csv, format!("Q{}\n", ";x".repeat(MAX_SHEET_COLUMNS))).unwrap();
+        assert!(matches!(read_tables(&csv), Err(QuizFileError::SpreadsheetTooLarge)));
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn a_far_off_cell_is_refused_before_the_cells_in_between_take_memory() {
+        let dir = temp_dir("far");
+        let text = |cell: &str, row: u32| format!(r#"<row r="{row}"><c r="{cell}" t="inlineStr"><is><t>x</t></is></c></row>"#);
+        let path = dir.join("quiz.xlsx");
+        // Spread over every row and column Excel has, these two cells would be 17 billion.
+        workbook(&path, &[("Sheet1", false, &(text("A1", 1) + &text("XFD1048576", 1_048_576)))]);
+        assert!(matches!(read_tables(&path), Err(QuizFileError::SpreadsheetTooLarge)));
+        workbook(&path, &[("Sheet1", false, &(text("A1", 1) + &text("A10001", 10_001)))]);
+        assert!(matches!(read_tables(&path), Err(QuizFileError::SpreadsheetTooLarge)));
+        // The rows are counted over all sheets as they are read.
+        let rows = |n: u32| (1..=n).map(|row| text(&format!("A{row}"), row)).collect::<String>();
+        workbook(&path, &[("One", false, &rows(6)), ("Two", false, &rows(6))]);
+        assert!(matches!(read_tables_within(&path, MAX_SHEET_BYTES, 10), Err(QuizFileError::SpreadsheetTooLarge)));
+        assert_eq!(read_tables_within(&path, MAX_SHEET_BYTES, 12).unwrap().len(), 2);
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn the_reader_process_reports_tables_or_why_there_are_none() {
+        let dir = temp_dir("report");
+        let csv = dir.join("quiz.csv");
+        fs::write(&csv, "Q\nOne?\n").unwrap();
+        let read = SheetRead::of(&csv);
+        let sent: SheetRead = serde_json::from_str(&serde_json::to_string(&read).unwrap()).unwrap();
+        assert_eq!(sent.into_result().unwrap()[0].rows, [vec!["Q"], vec!["One?"]]);
+        fs::write(dir.join("notes.xlsx"), b"not a zip").unwrap();
+        let SheetRead::Unreadable(reason) = SheetRead::of(&dir.join("notes.xlsx")) else { panic!("read") };
+        assert!(!reason.starts_with("the spreadsheet cannot be read"), "{reason}");
+        assert!(matches!(SheetRead::TooLarge.into_result(), Err(QuizFileError::SpreadsheetTooLarge)));
+        assert!(matches!(SheetRead::of(&dir.join("gone.csv")), SheetRead::Unreadable(_)));
         fs::remove_dir_all(&dir).unwrap();
     }
 
@@ -321,7 +444,7 @@ mod tests {
                    Again?;pictures/flag.png;C:\\Users\\Ann\\anthem.mp3;stage.jpg\n";
         fs::write(sheets.join("quiz.csv"), csv).unwrap();
 
-        let imported = import_sheet(&sheets.join("quiz.csv"), &root, 1).unwrap();
+        let imported = import_sheet(&sheets.join("quiz.csv"), &read_tables(&sheets.join("quiz.csv")).unwrap(), &root, 1).unwrap();
         assert_eq!(imported.slides.len(), 2);
         for slide in &imported.slides {
             assert_eq!(slide.picture.as_deref(), Some("media/flag.png"));
@@ -351,7 +474,7 @@ mod tests {
         let csv = format!("Q;P1\nUp?;../private.png\nFull?;{full}\nShare?;{share}\nNear?;\\\\server\\share\\near.png\nNt?;\\??\\UNC\\server\\near.png\n");
         fs::write(sheets.join("quiz.csv"), csv).unwrap();
 
-        let imported = import_sheet(&sheets.join("quiz.csv"), &root, 1).unwrap();
+        let imported = import_sheet(&sheets.join("quiz.csv"), &read_tables(&sheets.join("quiz.csv")).unwrap(), &root, 1).unwrap();
         let pictures: Vec<Option<&str>> = imported.slides.iter().map(|slide| slide.picture.as_deref()).collect();
         assert_eq!(pictures, [Some("media/private.png"), Some("media/private.png"), None, Some("media/near.png"), Some("media/near.png")]);
         let note = |issue, row| ImportNote { issue, places: vec![Place { sheet: String::new(), row }] };
@@ -398,7 +521,7 @@ mod tests {
         assert_eq!(fs::read(out.join("waves.mp4")).unwrap(), b"mine");
 
         let draft = dir.join("draft-2");
-        let back = import_sheet(&out.join("quiz.csv"), &draft, 1).unwrap();
+        let back = import_sheet(&out.join("quiz.csv"), &read_tables(&out.join("quiz.csv")).unwrap(), &draft, 1).unwrap();
         assert!(back.notes.is_empty(), "{:?}", back.notes);
         assert_eq!(back.slides[1].picture.as_deref(), Some("media/flag-2.png"));
         assert_eq!(back.slides[0].background, Some(Background::new("media/waves-2.mp4")));
@@ -468,7 +591,8 @@ mod tests {
         fs::write(dir.join("notes.xlsx"), b"not a zip").unwrap();
         assert!(matches!(read_tables(&dir.join("notes.xlsx")), Err(QuizFileError::Spreadsheet(_))));
         fs::write(dir.join("songs.csv"), "Title,Artist\nSong,Band\n").unwrap();
-        assert!(matches!(import_sheet(&dir.join("songs.csv"), &dir, 1), Err(QuizFileError::Sheet(_))));
+        let songs = dir.join("songs.csv");
+        assert!(matches!(import_sheet(&songs, &read_tables(&songs).unwrap(), &dir, 1), Err(QuizFileError::Sheet(_))));
         fs::remove_dir_all(&dir).unwrap();
     }
 }

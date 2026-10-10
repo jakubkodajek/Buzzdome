@@ -9,12 +9,14 @@ mod hardware;
 mod media_player;
 mod pump;
 mod session;
+pub mod sheet_reader;
 mod teams;
 mod themes;
 
 use buzzers::receiver::HardwareDriver;
 use buzzers::{BuzzerDriver, VirtualDriver};
-use error::{AppError, CmdResult};
+use error::CmdResult;
+pub use error::AppError;
 use hardware::{Hardware, ReceiverEvents};
 use quiz_core::{Command, Effect, Game, GameView, Quiz, Stamped};
 use serde::Serialize;

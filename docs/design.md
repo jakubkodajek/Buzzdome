@@ -281,7 +281,13 @@ table view toggle. It edits a quiz; it never touches a running show.
 - **Spreadsheets.** File › Import and Export (spec QZ-8, columns in
   quiz-format.md). `quiz_file::read_tables` reads a workbook (calamine,
   visible worksheets) or a CSV file (encoding and separator detected) into
-  `Table`s; `quiz_core::import_tables` turns them into slides and notes
+  `Table`s, within 50 MB, 10,000 rows and 200 columns; Excel sheets are
+  read cell by cell, so a far-off cell is refused before it takes memory.
+  It runs in a process of its own, the app started again with
+  `--read-sheet` (`sheet_reader.rs`), which reports the tables as JSON
+  (`SheetRead`): a damaged or crafted file that makes the parser panic or
+  use up memory ends the reader, never a running show, and a reader that
+  takes over a minute is stopped. `quiz_core::import_tables` turns them into slides and notes
   (pure; a seed from the shell shuffles unmarked answers); `import_sheet`
   then finds each media file, copies it in with `import_media` and drops a
   missing one with a note. The editor gives the slides fresh ids

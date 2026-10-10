@@ -9,13 +9,13 @@ use crate::media::{
     MAX_VIDEO_SPEED, MIN_GAIN_DB, MIN_VIDEO_SPEED, NEW_VIDEO_INTRO_PAUSE_MS,
 };
 use crate::model::{AnswerMode, CorrectAnswer, Question, Quiz, Slide, SlideContent, DEFAULT_POINTS, DEFAULT_TIME_LIMIT_S, MAX_ANSWERS, MAX_POINTS, MAX_TIME_LIMIT_S};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::ops::RangeInclusive;
 use ts_rs::TS;
 
 /// One sheet of a workbook, or a CSV file: rows of cells, the first holding
-/// the column headings.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+/// the column headings. Serialized for the app's sheet reader process.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Table {
     /// The sheet's name; empty for a CSV file.
     pub name: String,
