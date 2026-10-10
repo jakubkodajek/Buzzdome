@@ -214,45 +214,38 @@ pub fn end_learning(app: &AppHandle) {
 }
 
 /// Moves receiver events into the game and out to the windows.
-pub fn spawn_event_pump(app: AppHandle, rx: ReceiverEvents) {
-    std::thread::Builder::new()
-        .name("buzzer-events".into())
-        .spawn(move || {
-            for event in rx {
-                let hw = app.state::<Hardware>();
-                match event {
-                    ReceiverEvent::Status(status) => {
-                        // Nothing more can be learned without the receiver.
-                        if !matches!(status, ReceiverStatus::Connected { .. }) {
-                            hw.end_learning(&app);
-                        }
-                        let _ = app.emit("receiver-status", status);
-                    }
-                    ReceiverEvent::Raw(report) => {
-                        let sampled = hw.learn.lock().unwrap().as_mut().is_some_and(|r| r.feed(&report.bytes, report.at_ms));
-                        {
-                            let mut log = hw.raw_log.lock().unwrap();
-                            if log.len() == RAW_LOG_LEN {
-                                log.pop_front();
-                            }
-                            log.push_back(report.clone());
-                        }
-                        let _ = app.emit("receiver-raw", report);
-                        if sampled {
-                            let _ = app.emit("receiver-learn", hw.learn_progress());
-                        }
-                    }
-                    ReceiverEvent::Press { press, at_ms } => {
-                        // While learning, presses only teach; they must not play.
-                        let learning = hw.learn.lock().unwrap().is_some();
-                        let command = Command::Press { buzzer: press.buzzer, button: press.button };
-                        let used = !learning && crate::press_from_hardware(&app, command, at_ms);
-                        let _ = app.emit("receiver-press", PressEvent { press, used });
-                    }
-                }
+pub fn handle_event(app: &AppHandle, event: ReceiverEvent) {
+    let hw = app.state::<Hardware>();
+    match event {
+        ReceiverEvent::Status(status) => {
+            // Nothing more can be learned without the receiver.
+            if !matches!(status, ReceiverStatus::Connected { .. }) {
+                hw.end_learning(app);
             }
-        })
-        .expect("spawn buzzer event thread");
+            let _ = app.emit("receiver-status", status);
+        }
+        ReceiverEvent::Raw(report) => {
+            let sampled = hw.learn.lock().unwrap().as_mut().is_some_and(|r| r.feed(&report.bytes, report.at_ms));
+            {
+                let mut log = hw.raw_log.lock().unwrap();
+                if log.len() == RAW_LOG_LEN {
+                    log.pop_front();
+                }
+                log.push_back(report.clone());
+            }
+            let _ = app.emit("receiver-raw", report);
+            if sampled {
+                let _ = app.emit("receiver-learn", hw.learn_progress());
+            }
+        }
+        ReceiverEvent::Press { press, at_ms } => {
+            // While learning, presses only teach; they must not play.
+            let learning = hw.learn.lock().unwrap().is_some();
+            let command = Command::Press { buzzer: press.buzzer, button: press.button };
+            let used = !learning && crate::press_from_hardware(app, command, at_ms);
+            let _ = app.emit("receiver-press", PressEvent { press, used });
+        }
+    }
 }
 
 #[tauri::command]

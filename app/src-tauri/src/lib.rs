@@ -4,12 +4,13 @@
 mod editor;
 mod error;
 mod hardware;
+mod pump;
 mod session;
 
 use buzzers::receiver::HardwareDriver;
 use buzzers::{BuzzerDriver, VirtualDriver};
 use error::{AppError, CmdResult};
-use hardware::Hardware;
+use hardware::{Hardware, ReceiverEvents};
 use quiz_core::{Command, Effect, Game, GameView, Quiz, Stamped};
 use serde::Serialize;
 use ts_rs::TS;
@@ -325,29 +326,49 @@ async fn close_host_window(app: AppHandle) -> CmdResult<()> {
     }
 }
 
-/// Issues time-driven commands such as "time is up", and sends the running
-/// clock to the windows.
-fn spawn_ticker(app: AppHandle) {
-    std::thread::spawn(move || {
-        let mut last_clock_event = Instant::now();
-        loop {
-            std::thread::sleep(TICK);
-            let state = app.state::<AppState>();
-            let mut inner = state.0.lock().unwrap();
-            let now = now_ms();
-            if let Some(command) = inner.game.as_ref().and_then(|g| g.due_command(now)) {
-                if let Err(e) = execute(&app, &mut inner, command) {
-                    eprintln!("ticker: {e}");
-                }
-            } else if last_clock_event.elapsed() >= CLOCK_EVENT_EVERY {
-                last_clock_event = Instant::now();
-                let clock = inner.game.as_ref().and_then(|g| g.clock_view(now)).filter(|c| c.running);
-                if let Some(clock) = clock {
-                    let _ = app.emit("clock-tick", clock);
+/// The one thread that turns the receiver's events and the passing of time
+/// into show commands: every event received so far is handled before a
+/// time-driven command such as "time is up" (`pump::pump_once`). Without a
+/// receiver it only keeps time.
+fn spawn_show_pump(app: AppHandle, mut events: Option<ReceiverEvents>) {
+    std::thread::Builder::new()
+        .name("show-pump".into())
+        .spawn(move || {
+            let mut last_clock_event = Instant::now();
+            loop {
+                let connected = match &events {
+                    Some(rx) => pump::pump_once(rx, TICK, |event| hardware::handle_event(&app, event), || tick(&app, &mut last_clock_event)),
+                    None => {
+                        std::thread::sleep(TICK);
+                        tick(&app, &mut last_clock_event);
+                        true
+                    }
+                };
+                if !connected {
+                    events = None;
                 }
             }
+        })
+        .expect("spawn show pump");
+}
+
+/// Issues a time-driven command that is due, such as "time is up", or else
+/// sends the running clock to the windows now and then.
+fn tick(app: &AppHandle, last_clock_event: &mut Instant) {
+    let state = app.state::<AppState>();
+    let mut inner = state.0.lock().unwrap();
+    let now = now_ms();
+    if let Some(command) = inner.game.as_ref().and_then(|g| g.due_command(now)) {
+        if let Err(e) = execute(app, &mut inner, command) {
+            eprintln!("ticker: {e}");
         }
-    });
+    } else if last_clock_event.elapsed() >= CLOCK_EVENT_EVERY {
+        *last_clock_event = Instant::now();
+        let clock = inner.game.as_ref().and_then(|g| g.clock_view(now)).filter(|c| c.running);
+        if let Some(clock) = clock {
+            let _ = app.emit("clock-tick", clock);
+        }
+    }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -374,10 +395,7 @@ pub fn run() {
             }
             // The event pump reads `Hardware` from the app, so it starts after `manage`.
             app.manage(hardware);
-            if let Some(events) = events {
-                hardware::spawn_event_pump(app.handle().clone(), events);
-            }
-            spawn_ticker(app.handle().clone());
+            spawn_show_pump(app.handle().clone(), events);
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

@@ -71,9 +71,10 @@ two windows cannot disagree with each other or with the score.
 | `receiver-status`, `receiver-raw`, `receiver-press`, `receiver-learn` | see `hardware.rs` | receiver setup and diagnostics |
 | `host-window` | bool | the projector window opened or closed (also from its title bar) |
 
-- **Clock.** A ticker thread in the shell applies due timer commands (time
-  up) and otherwise sends `clock-tick` with the core's `ClockView`. The UI
-  never measures time itself; the gauge animates between ticks with CSS.
+- **Clock.** The show pump thread in the shell (`spawn_show_pump`) applies
+  due timer commands (time up) and otherwise sends `clock-tick` with the
+  core's `ClockView`. The UI never measures time itself; the gauge animates
+  between ticks with CSS.
 - **React side.** `app-context.tsx` gives each window its language, `t` and
   error reporting (`useReport`, `useRun`, `useDispatch`). `hooks.ts` wraps events and
   loads (`useBackendEvent`, `useGameView`, `useClock`, `useQuiz`,
@@ -229,8 +230,8 @@ USB HID device ──► HidBackend / HidDevice      crates/buzzers/src/hid.rs
                 ──► EdgeFilter                  edge.rs
                     held button = one press
                 ──► ReceiverEvent channel
-                ──► event pump (app)            app/src-tauri/src/hardware.rs
-                    learn mode, raw log, UI events
+                ──► show pump (app)             app/src-tauri/src/lib.rs, pump.rs, hardware.rs
+                    learn mode, raw log, UI events, time up
                 ──► execute(Command::Press)     app/src-tauri/src/lib.rs
                     journal, then game state, then lights
 ```
@@ -324,8 +325,8 @@ pattern, learn mode will show conflicts and the vendor protocol is needed.
 
 ### 2.6 From press to screen
 
-The event pump thread in `hardware.rs` receives `Press` events in receiver
-order and calls `execute_at(Command::Press { buzzer, button }, at_ms)` for
+The show pump thread receives `Press` events in receiver order and
+(`hardware::handle_event`) calls `execute_at(Command::Press { buzzer, button }, at_ms)` for
 each, one at a time, under the app state lock. `at_ms` is when the receiver
 thread read the report, not when the press is applied, so waiting for the
 lock or for earlier presses' fsync costs a team no points. `execute_at`
@@ -336,9 +337,12 @@ fails, the press is rejected and the screen does not change.
 
 Because a press can be applied a moment after it was received, the core
 judges it by its `at_ms`: it counts only if it was received while the
-question clock ran (or stood paused) and before time up. The ticker closes a
-question `PRESS_GRACE_MS` (250 ms) after time up, so presses received in
-time but still on their way are counted, and later ones are refused.
+question clock ran (or stood paused) and before time up. The same thread
+closes a question `PRESS_GRACE_MS` (250 ms) after time up, and only after it
+has handled every event already received (`pump::pump_once`), so a press
+that came in on time counts however far behind the thread is; the grace
+covers presses the receiver thread has read but not yet passed on. Later
+presses are refused.
 
 Fastest-finger order is therefore the receiver's order. When the vendor
 protocol provides press times, `Command::Press` gets an optional
