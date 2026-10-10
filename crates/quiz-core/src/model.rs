@@ -96,16 +96,17 @@ impl Slide {
         Slide { id: id.into(), notes: String::new(), picture: None, video: None, sound: None, background: None, style: SlideStyle::default(), content }
     }
 
-    /// Drops what the slide's type cannot play (`SlideType::plays`). Files
-    /// saved before `validate` refused these still have them (the editor's
-    /// `convertSlide` kept them when a slide changed type, and drops them
-    /// the same way now). A sound that waited for the clock plays when the
-    /// slide opens.
-    fn drop_unplayable(&mut self) {
+    /// Drops what the slide's type cannot play (`SlideType::plays`) and
+    /// tells `dropped` the problem each drop fixed. Files saved before
+    /// `validate` refused these still have them (the editor's `convertSlide`
+    /// kept them when a slide changed type, and drops them the same way
+    /// now). A sound that waited for the clock plays when the slide opens.
+    fn drop_unplayable(&mut self, dropped: &mut impl FnMut(Problem)) {
         let plays = self.content.slide_type().plays();
-        if !plays.picture_and_video {
+        if !plays.picture_and_video && (self.picture.is_some() || self.video.is_some()) {
             self.picture = None;
             self.video = None;
+            dropped(Problem::MediaOnRanking);
         }
         if plays.clock_and_reveal {
             return;
@@ -113,12 +114,19 @@ impl Slide {
         if let Some(sound) = &mut self.sound {
             if sound.start == SoundStart::WithClock {
                 sound.start = SoundStart::OnSlide;
+                dropped(Problem::WithClockNotOnQuestion);
             }
-            sound.replay = None;
+            if sound.replay.take().is_some() {
+                dropped(Problem::ReplayNotOnQuestion { media: MediaKind::Audio });
+            }
         }
         if let Some(video) = &mut self.video {
-            video.effect = None;
-            video.replay = None;
+            if video.effect.take().is_some() {
+                dropped(Problem::EffectNotOnQuestion);
+            }
+            if video.replay.take().is_some() {
+                dropped(Problem::ReplayNotOnQuestion { media: MediaKind::Video });
+            }
         }
     }
 
@@ -431,9 +439,10 @@ impl Question {
     }
 }
 
-/// A problem that keeps a quiz from being played. The UI words it in the
-/// quizmaster's language; `Display` is for logs.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS, thiserror::Error)]
+/// A problem that keeps a quiz from being played, or that reading a file
+/// fixed by leaving something out (`ReadQuiz::dropped`). The UI words it in
+/// the quizmaster's language; `Display` is for logs.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS, thiserror::Error)]
 #[ts(export)]
 #[serde(tag = "code", rename_all = "camelCase")]
 pub enum Problem {
@@ -465,6 +474,10 @@ pub enum Problem {
     EffectNotOnQuestion,
     #[error("an end of round or final slide shows the ranking, not a picture or a video")]
     MediaOnRanking,
+    /// Only in `ReadQuiz::dropped`: a slide's style is always valid once read.
+    /// `path` names the value as the file has it, such as `style.headline.color`.
+    #[error("the style value {path} cannot be read")]
+    StyleUnread { path: String },
     #[error("more than {max} answers")]
     TooManyAnswers { max: usize },
     #[error("an everyone-answers question needs at least {min} answers")]
@@ -487,7 +500,7 @@ pub enum Problem {
 }
 
 /// A problem and where it is.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[ts(export)]
 #[serde(rename_all = "camelCase")]
 pub struct ValidationError {
@@ -503,6 +516,17 @@ impl std::fmt::Display for ValidationError {
             None => write!(f, "{}", self.problem),
         }
     }
+}
+
+/// A quiz as read from its JSON.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ReadQuiz {
+    pub quiz: Quiz,
+    /// What the file has that the quiz cannot keep, each as the problem it
+    /// would be: a style value that does not read, or what a slide's type
+    /// cannot play. The quiz reads without it, so the next save leaves it
+    /// out; the editor tells the author.
+    pub dropped: Vec<ValidationError>,
 }
 
 /// Why a quiz's JSON cannot be read.
@@ -540,22 +564,37 @@ impl Quiz {
         Quiz { schema_version: SCHEMA_VERSION, title: title.into(), theme: None, slides }
     }
 
+    /// Reads a quiz, leaving out what it cannot keep (see `ReadQuiz::dropped`).
     pub fn from_json(json: &str) -> Result<Quiz, QuizJsonError> {
+        Ok(Quiz::read_json(json)?.quiz)
+    }
+
+    /// Reads a quiz and says what reading left out.
+    pub fn read_json(json: &str) -> Result<ReadQuiz, QuizJsonError> {
+        use serde_json::Value;
         let syntax = |e: serde_json::Error| QuizJsonError::Syntax(e.to_string());
-        let mut value: serde_json::Value = serde_json::from_str(json).map_err(syntax)?;
-        let version = value.get("schemaVersion").and_then(serde_json::Value::as_u64).unwrap_or(0);
+        let mut value: Value = serde_json::from_str(json).map_err(syntax)?;
+        let version = value.get("schemaVersion").and_then(Value::as_u64).unwrap_or(0);
         if version > u64::from(SCHEMA_VERSION) {
             let found = u32::try_from(version).unwrap_or(u32::MAX);
             return Err(QuizJsonError::NewerSchema { found, supported: SCHEMA_VERSION });
         }
         migrate(&mut value, version);
-        let mut quiz: Quiz = serde_json::from_value(value).map_err(syntax)?;
+        let mut quiz = Quiz::deserialize(&value).map_err(syntax)?;
         // Every older version reads as the current one, so it is saved as such.
         quiz.schema_version = SCHEMA_VERSION;
-        for slide in &mut quiz.slides {
-            slide.drop_unplayable();
+        // The slides read in the file's order, one for each.
+        let written = value.get("slides").and_then(Value::as_array).map_or(&[][..], Vec::as_slice);
+        let mut dropped = Vec::new();
+        for (slide, written) in quiz.slides.iter_mut().zip(written) {
+            let id = slide.id.clone();
+            let mut found = |problem: Problem| dropped.push(ValidationError { slide_id: Some(id.clone()), problem });
+            for path in slide.style.left_out(written.get("style").unwrap_or(&Value::Null)) {
+                found(Problem::StyleUnread { path });
+            }
+            slide.drop_unplayable(&mut found);
         }
-        Ok(quiz)
+        Ok(ReadQuiz { quiz, dropped })
     }
 
     /// Index of the slide that shows the final ranking: the last final slide.
@@ -1033,6 +1072,20 @@ mod tests {
     }
 
     #[test]
+    fn says_which_style_values_a_hand_edited_file_read_without() {
+        let json = r##"{"schemaVersion": 5, "title": "x", "slides": [
+            {"id": "a", "type": "billboard", "title": "", "style": {"fill": {"from": "#000000", "to": "#ffffff", "kind": "vertical"}}},
+            {"id": "b", "type": "billboard", "title": "", "style": {"headline": {"color": "red", "bold": true}}}
+        ]}"##;
+        let ReadQuiz { quiz, dropped } = Quiz::read_json(json).unwrap();
+        assert_eq!(quiz.slides[1].style.headline.bold, Some(true));
+        let path = "style.headline.color".to_owned();
+        assert_eq!(dropped, [ValidationError { slide_id: Some("b".into()), problem: Problem::StyleUnread { path } }]);
+        // What reading left out is not in the file it saves, so that reads whole.
+        assert_eq!(Quiz::read_json(&serde_json::to_string(&quiz).unwrap()).unwrap().dropped, []);
+    }
+
+    #[test]
     fn renames_media_wherever_a_slide_uses_it() {
         let mut quiz = Quiz::from_json(
             r#"{"schemaVersion": 3, "title": "x", "slides": [{"id": "a", "type": "billboard", "title": "",
@@ -1053,7 +1106,7 @@ mod tests {
     #[test]
     fn reads_what_a_slide_type_cannot_play_from_older_files_without_it() {
         // As our editor saved a question turned into another slide before `validate` refused these.
-        let quiz = Quiz::from_json(
+        let ReadQuiz { quiz, dropped } = Quiz::read_json(
             r#"{"schemaVersion": 4, "title": "x", "slides": [
                 {"id": "f", "type": "final", "picture": "media/a.png", "sound": {"file": "media/win.mp3", "start": "withClock", "replay": {}}},
                 {"id": "v", "type": "final", "video": {"file": "media/a.mp4"}},
@@ -1066,6 +1119,22 @@ mod tests {
         )
         .unwrap();
         assert_eq!(quiz.validate(), Ok(()));
+        // Each drop is the problem it fixed, so the editor can tell the author.
+        let on = |id: &str, problem| ValidationError { slide_id: Some(id.into()), problem };
+        let (audio, video) = (MediaKind::Audio, MediaKind::Video);
+        assert_eq!(
+            dropped,
+            [
+                on("f", Problem::MediaOnRanking),
+                on("f", Problem::WithClockNotOnQuestion),
+                on("f", Problem::ReplayNotOnQuestion { media: audio }),
+                on("v", Problem::MediaOnRanking),
+                on("e", Problem::MediaOnRanking),
+                on("b", Problem::ReplayNotOnQuestion { media: audio }),
+                on("b", Problem::EffectNotOnQuestion),
+                on("b", Problem::ReplayNotOnQuestion { media: video }),
+            ]
+        );
         let [final_slide, final_video, end_of_round, billboard, question] = &quiz.slides[..] else { panic!("five slides") };
         assert_eq!((&final_slide.picture, &final_video.video, &end_of_round.picture), (&None, &None, &None));
         let sound = final_slide.sound.as_ref().unwrap();

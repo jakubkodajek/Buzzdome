@@ -13,6 +13,8 @@ export interface OpenQuiz {
   mediaRoot: string;
   /** What keeps the quiz from being played, as the backend last checked. */
   problems: ValidationError[];
+  /** What the file has that the quiz cannot keep, so saving leaves it out (`ReadQuiz::dropped`). */
+  dropped: ValidationError[];
 }
 
 export type EditorState = { status: "loading" } | { status: "empty" } | ({ status: "open" } & OpenQuiz);
@@ -38,12 +40,14 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
       sourcePath: draft.sourcePath,
       mediaRoot: draft.mediaRoot,
       problems: draft.problems,
+      dropped: draft.dropped,
     };
   }
   if (state.status !== "open") return state;
   switch (action.type) {
     case "saved":
-      return { ...state, saved: action.quiz, sourcePath: action.path };
+      // The file no longer has what opening left out.
+      return { ...state, saved: action.quiz, sourcePath: action.path, dropped: [] };
     case "checked":
       // A check of a quiz that has changed since is already out of date.
       return action.quiz === state.history.present ? { ...state, problems: action.problems } : state;
@@ -60,4 +64,9 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
  */
 export function isUnsaved(open: OpenQuiz): boolean {
   return open.history.present !== open.saved;
+}
+
+/** File › Info has something to tell: problems to fix, or what opening the file left out. */
+export function needsInfo(quiz: Pick<OpenQuiz, "problems" | "dropped">): boolean {
+  return quiz.problems.length > 0 || quiz.dropped.length > 0;
 }

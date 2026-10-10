@@ -215,6 +215,41 @@ impl SlideStyle {
     pub fn is_empty(&self) -> bool {
         self == &SlideStyle::default()
     }
+
+    /// What `written`, this style as a file has it, holds that the style
+    /// read without (a value of the wrong type or out of range, or a name
+    /// it does not know), each by its path in the file: `style.fill`,
+    /// `style.headline.color`. Nulls and empty texts are nothing left out.
+    pub fn left_out(&self, written: &serde_json::Value) -> Vec<String> {
+        let read = serde_json::to_value(self).expect("a style serializes: strings, numbers and flags");
+        let mut paths = Vec::new();
+        left_out(written, &read, "style".to_owned(), &mut paths);
+        paths
+    }
+}
+
+/// Adds to `paths` what of `written` (at `path`) is not in `read`, looking
+/// into what both have as objects.
+fn left_out(written: &serde_json::Value, read: &serde_json::Value, path: String, paths: &mut Vec<String>) {
+    use serde_json::Value;
+    match (written, read) {
+        (Value::Object(written), Value::Object(read)) => {
+            for (key, value) in written {
+                left_out(value, read.get(key).unwrap_or(&Value::Null), format!("{path}.{key}"), paths);
+            }
+        }
+        _ if written != read && !is_blank(written) => paths.push(path),
+        _ => {}
+    }
+}
+
+/// Whether `value` holds nothing: null, or an object of nothing.
+fn is_blank(value: &serde_json::Value) -> bool {
+    match value {
+        serde_json::Value::Null => true,
+        serde_json::Value::Object(fields) => fields.values().all(is_blank),
+        _ => false,
+    }
 }
 
 /// An optional value as `#[serde(with)]` module: one that does not read
@@ -293,7 +328,7 @@ mod tests {
 
     #[test]
     fn a_wrong_value_reads_as_the_themes_and_leaves_the_rest() {
-        let style: SlideStyle = serde_json::from_value(serde_json::json!({
+        let written = serde_json::json!({
             "fill": { "from": "#102030", "to": "blue", "kind": "vertical" },
             "headline": {
                 "color": "#fff",
@@ -306,12 +341,36 @@ mod tests {
             },
             "text": 7,
             "answers": { "italic": true, "fill": { "from": "#000000", "to": "#ffffff", "kind": "conic" } }
-        }))
-        .unwrap();
+        });
+        let style: SlideStyle = serde_json::from_value(written.clone()).unwrap();
         assert_eq!(style.fill, None);
         assert_eq!(style.headline, TextStyle { shadow_color: Some(color("#00000080")), ..TextStyle::default() });
         assert!(style.text.is_empty());
         assert_eq!(style.answers, TextStyle { italic: Some(true), ..TextStyle::default() });
+
+        // What it read without is named, so the author can be told.
+        let mut left_out = style.left_out(&written);
+        left_out.sort();
+        let expected = ["answers.fill", "fill", "headline.align", "headline.bold", "headline.color", "headline.font", "headline.size"];
+        let expected: Vec<String> = expected.iter().chain(&["headline.transparency", "text"]).map(|path| format!("style.{path}")).collect();
+        assert_eq!(left_out, expected);
+    }
+
+    #[test]
+    fn nothing_is_left_out_of_a_style_that_reads_whole() {
+        let written = serde_json::json!({
+            "fill": { "from": "#102030", "to": "#405060", "kind": "radial" },
+            "headline": { "color": "#FFFFFF", "bold": false, "font": null },
+            "text": {},
+            "answers": { "size": null }
+        });
+        let style: SlideStyle = serde_json::from_value(written.clone()).unwrap();
+        assert_eq!(style.left_out(&written), Vec::<String>::new());
+        assert_eq!(SlideStyle::default().left_out(&serde_json::Value::Null), Vec::<String>::new());
+        // A name it does not know, or a style that is not one at all, is left out too.
+        let typo = serde_json::json!({ "headline": { "colour": "#FFFFFF" } });
+        assert_eq!(serde_json::from_value::<SlideStyle>(typo.clone()).unwrap().left_out(&typo), ["style.headline"]);
+        assert_eq!(SlideStyle::default().left_out(&serde_json::json!("dark")), ["style"]);
     }
 
     #[test]

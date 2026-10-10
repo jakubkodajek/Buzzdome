@@ -32,13 +32,13 @@ import { isVideo, MediaRootContext, type MediaKind } from "../media";
 import { isCorrect, NO_CONTEXT, plays, slideContexts } from "../quiz";
 import { ThemeContext } from "../theme/context";
 import { useLatest } from "../hooks";
-import type { Slide, ValidationError } from "../types";
+import type { EditorDraft, Slide } from "../types";
 import { tooltip, useActionKeys, type Action, type Actions } from "./actions";
 import { Backstage, type BackstagePage } from "./Backstage";
 import { ContextMenu } from "./controls";
 import { DesignArea, NotesBox } from "./DesignArea";
 import { EditSlideDialog } from "./EditSlideDialog";
-import { isUnsaved, type OpenQuiz } from "./editor-state";
+import { isUnsaved, needsInfo, type OpenQuiz } from "./editor-state";
 import { answerIndex, hasElement, type ElementId } from "./elements";
 import { LayoutGallery } from "./LayoutGallery";
 import { DEFAULT_LAYOUT, slideFromLayout, type SlideLayout } from "./layouts";
@@ -204,10 +204,10 @@ function Studio({ editor, open, onExit }: { editor: QuizEditor; open: OpenQuiz |
     setDialog(null);
     setBackstage(null);
   };
-  /** A file with problems opens on the list of them. */
-  const opened = (problems: ValidationError[] | false) => {
-    loaded(problems !== false);
-    if (problems && problems.length > 0) setBackstage("info");
+  /** A file with problems, or with what this version leaves out, opens on the list of them. */
+  const opened = (draft: EditorDraft | false) => {
+    loaded(draft !== false);
+    if (draft && needsInfo(draft)) setBackstage("info");
   };
   const openEdit = (part: ElementId) => {
     if (!slide) return;

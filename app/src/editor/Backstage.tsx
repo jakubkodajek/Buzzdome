@@ -2,6 +2,7 @@ import { useApp } from "../app-context";
 import { BackIcon } from "../icons";
 import { problemText } from "../messages";
 import { questionCount } from "../quiz";
+import type { Quiz, ValidationError } from "../types";
 import type { Action, Actions } from "./actions";
 import type { OpenQuiz } from "./editor-state";
 
@@ -80,7 +81,6 @@ function pageFor(page: BackstagePage, props: BackstageProps, open: OpenQuiz) {
 function InfoPage({ open, unsaved, onTitle, onShowSlide }: BackstageProps & { open: OpenQuiz }) {
   const { t } = useApp();
   const quiz = open.history.present;
-  const slideNumber = new Map(quiz.slides.map((slide, i) => [slide.id, i + 1]));
   return (
     <>
       <h1>{t("info")}</h1>
@@ -103,26 +103,42 @@ function InfoPage({ open, unsaved, onTitle, onShowSlide }: BackstageProps & { op
       {open.problems.length === 0 ? (
         <p className="good-text">{t("noProblems")}</p>
       ) : (
-        <ul className="problem-list">
-          {open.problems.map((problem, i) => {
-            const id = problem.slideId;
-            const n = id === null ? undefined : slideNumber.get(id);
-            return (
-              <li key={i}>
-                {id !== null && n !== undefined ? (
-                  <button type="button" className="link" onClick={() => onShowSlide(id)}>
-                    {t("slide", { n, total: quiz.slides.length })}
-                  </button>
-                ) : (
-                  <b>{t("wholeQuiz")}</b>
-                )}
-                <span>{problemText(t, problem.problem)}</span>
-              </li>
-            );
-          })}
-        </ul>
+        <ProblemList problems={open.problems} quiz={quiz} onShowSlide={onShowSlide} />
+      )}
+      {open.dropped.length > 0 && (
+        <>
+          <h2>{t("leftOut", { n: open.dropped.length })}</h2>
+          <p>{t("leftOutHint")}</p>
+          <ProblemList problems={open.dropped} quiz={quiz} onShowSlide={onShowSlide} />
+        </>
       )}
     </>
+  );
+}
+
+/** Problems with the slide each is on, which shows that slide. */
+function ProblemList({ problems, quiz, onShowSlide }: { problems: ValidationError[]; quiz: Quiz; onShowSlide: (id: string) => void }) {
+  const { t } = useApp();
+  const slideNumber = new Map(quiz.slides.map((slide, i) => [slide.id, i + 1]));
+  return (
+    <ul className="problem-list">
+      {problems.map((problem, i) => {
+        const id = problem.slideId;
+        const n = id === null ? undefined : slideNumber.get(id);
+        return (
+          <li key={i}>
+            {id !== null && n !== undefined ? (
+              <button type="button" className="link" onClick={() => onShowSlide(id)}>
+                {t("slide", { n, total: quiz.slides.length })}
+              </button>
+            ) : (
+              <b>{t("wholeQuiz")}</b>
+            )}
+            <span>{problemText(t, problem.problem)}</span>
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 

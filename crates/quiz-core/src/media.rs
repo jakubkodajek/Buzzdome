@@ -7,7 +7,7 @@ use ts_rs::TS;
 /// Prefix of every media reference, the folder inside a quiz file.
 pub const MEDIA_PREFIX: &str = "media/";
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[ts(export)]
 #[serde(rename_all = "camelCase")]
 pub enum MediaKind {
@@ -104,7 +104,7 @@ pub fn portable_reference(reference: &str) -> Option<String> {
 }
 
 /// What is wrong with a media reference.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS, thiserror::Error)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS, thiserror::Error)]
 #[ts(export)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum MediaIssue {

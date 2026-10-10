@@ -4,7 +4,7 @@ import { api } from "../api";
 import { useApp, useDispatch, useReport } from "../app-context";
 import { useLatest } from "../hooks";
 import { mediaFileFilter, type MediaKind } from "../media";
-import type { Quiz, SheetExport, SheetImport, ValidationError } from "../types";
+import type { EditorDraft, Quiz, SheetExport, SheetImport, ValidationError } from "../types";
 import { DraftQueue } from "./draft-queue";
 import { editorReducer, isUnsaved, LOADING, type EditorState } from "./editor-state";
 import type { Edit } from "./history";
@@ -39,11 +39,11 @@ export interface QuizEditor {
   // File operations resolve to whether they happened (not cancelled, not failed).
   newQuiz: () => Promise<boolean>;
   /**
-   * Opens `path`, or a file the user picks. Resolves to what keeps the
-   * opened quiz from being played (a file from an older version may break
-   * newer rules), or false when nothing was opened.
+   * Opens `path`, or a file the user picks. Resolves to the draft opened (a
+   * file from an older version may break newer rules, or have what this
+   * version leaves out), or false when nothing was opened.
    */
-  openQuiz: (path?: string) => Promise<ValidationError[] | false>;
+  openQuiz: (path?: string) => Promise<EditorDraft | false>;
   /** Quiz files opened or saved lately, newest first. */
   recentFiles: string[];
   save: () => Promise<boolean>;
@@ -152,7 +152,7 @@ export function useQuizEditor(onTestRun: () => void): QuizEditor {
         const draft = await draftQueue.run(() => api.editorOpen(path));
         load(draft);
         setRecentFiles(rememberRecentFile(path));
-        return draft.problems;
+        return draft;
       }),
     recentFiles,
     save: () => {

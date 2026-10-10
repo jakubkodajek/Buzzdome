@@ -12,7 +12,7 @@ mod sheet;
 pub use sheet::{export_sheet, import_sheet, read_tables, SheetExport, SheetImport, SheetRead, MAX_SHEET_BYTES, MAX_SHEET_COLUMNS, MAX_SHEET_ROWS};
 
 use quiz_core::{
-    is_safe_reference, portable_name, portable_reference, MediaIssue, Problem, Quiz, QuizJsonError, SheetError, ValidationError,
+    is_safe_reference, portable_name, portable_reference, MediaIssue, Problem, Quiz, QuizJsonError, ReadQuiz, SheetError, ValidationError,
     MEDIA_PREFIX,
 };
 use serde::Serialize;
@@ -143,8 +143,11 @@ fn place_package(cache: &Path, hash: &str, incoming: &Path) -> Result<PathBuf> {
 #[derive(Debug)]
 pub struct Opened {
     pub quiz: Quiz,
-    /// Opening changed the quiz (renamed media), so it differs from the file.
+    /// Opening changed the quiz (renamed media, or left something out), so
+    /// it differs from the file.
     pub changed: bool,
+    /// What the file has that the quiz cannot keep (`ReadQuiz::dropped`).
+    pub dropped: Vec<ValidationError>,
 }
 
 /// Opens a quiz file into `dest`, which must not exist, replacing nothing
@@ -157,14 +160,15 @@ pub fn open_into(path: &Path, dest: &Path) -> Result<Opened> {
     let parent = dest.parent().unwrap_or(Path::new("."));
     let incoming = incoming_dir(parent)?;
     let result = unpack(path, &incoming).and_then(|unpacked| {
-        let mut quiz = read_quiz_json(&incoming)?;
-        let changed = !unpacked.renamed.is_empty();
+        let ReadQuiz { mut quiz, dropped } = read_quiz(&incoming)?;
+        quiz.rename_media(&unpacked.renamed);
+        // The draft holds the quiz as the editor has it.
+        let changed = !unpacked.renamed.is_empty() || !dropped.is_empty();
         if changed {
-            quiz.rename_media(&unpacked.renamed);
             write_quiz_json(&incoming, &quiz)?;
         }
         fs::rename(&incoming, dest).context(FileAction::Move, dest)?;
-        Ok(Opened { quiz, changed })
+        Ok(Opened { quiz, changed, dropped })
     });
     if result.is_err() {
         remove_dir(&incoming);
@@ -220,12 +224,17 @@ pub fn read_checked(root: &Path) -> Result<Quiz> {
 /// Reads `quiz.json` from the package folder `root` without checking the
 /// quiz: a draft may be unfinished.
 pub fn read_quiz_json(root: &Path) -> Result<Quiz> {
+    Ok(read_quiz(root)?.quiz)
+}
+
+/// `read_quiz_json`, with what reading left out.
+fn read_quiz(root: &Path) -> Result<ReadQuiz> {
     let path = root.join(QUIZ_JSON);
     let json = fs::read_to_string(&path).map_err(|e| match e.kind() {
         io::ErrorKind::NotFound => QuizFileError::MissingQuizJson,
         _ => QuizFileError::Io { action: FileAction::Read, path, source: e },
     })?;
-    Ok(Quiz::from_json(&json)?)
+    Ok(Quiz::read_json(&json)?)
 }
 
 /// Checks the quiz and that every media file it uses exists under `root`.
@@ -867,8 +876,8 @@ mod tests {
 
         // The editor opens it to be fixed, without the file outside.
         let draft = temp("json-escape-draft").join("draft");
-        let Opened { quiz: opened, changed } = open_into(&folder.join("quiz.json"), &draft).unwrap();
-        assert_eq!((&opened, changed), (&quiz, false));
+        let Opened { quiz: opened, changed, dropped } = open_into(&folder.join("quiz.json"), &draft).unwrap();
+        assert_eq!((&opened, changed, dropped), (&quiz, false, vec![]));
         assert!(!draft.join("media").exists());
         let problem = Problem::Media { file: "media/../../secret.png".into(), issue: MediaIssue::BadName };
         assert_eq!(problems(&opened, &draft), [ValidationError { slide_id: Some("intro".into()), problem }]);
@@ -897,13 +906,29 @@ mod tests {
         assert!(matches!(open(&file, &temp("old-rules-cache")), Err(QuizFileError::Invalid(_))));
 
         let draft = temp("old-rules-draft").join("draft");
-        let Opened { quiz: opened, changed } = open_into(&file, &draft).unwrap();
-        assert_eq!((&opened, changed), (&quiz, false));
+        let Opened { quiz: opened, changed, dropped } = open_into(&file, &draft).unwrap();
+        assert_eq!((&opened, changed, dropped), (&quiz, false, vec![]));
         let found: Vec<Problem> = problems(&opened, &draft).into_iter().map(|e| e.problem).collect();
         assert_eq!(
             found,
             [Problem::TooManyAnswers { max: MAX_EVERYONE_ANSWERS }, Problem::PointsOutOfRange { max: MAX_POINTS }]
         );
+    }
+
+    #[test]
+    fn the_editor_says_what_opening_left_out_and_keeps_the_draft_without_it() {
+        let mut quiz = quiz_with_picture("media/flag.png");
+        quiz.slides.push(Slide::new("end", SlideContent::EndOfRound { title: "Round 1".into() }));
+        let mut written = serde_json::to_value(&quiz).unwrap();
+        written["slides"][1]["picture"] = "media/flag.png".into();
+        let file = zip_of("left-out", &[(QUIZ_JSON, written.to_string().as_bytes()), ("media/flag.png", b"png")]);
+
+        let draft = temp("left-out-draft").join("draft");
+        let Opened { quiz: opened, changed, dropped } = open_into(&file, &draft).unwrap();
+        assert_eq!((&opened, changed), (&quiz, true));
+        assert_eq!(dropped, [ValidationError { slide_id: Some("end".into()), problem: Problem::MediaOnRanking }]);
+        assert_eq!(read_quiz_json(&draft).unwrap(), opened);
+        assert_eq!(read_quiz(&draft).unwrap().dropped, []);
     }
 
     #[test]
@@ -924,7 +949,7 @@ mod tests {
         assert!(matches!(err, QuizFileError::Invalid(ref p) if p.iter().any(|e| e.problem == bad_name)), "{err}");
 
         let draft = temp("old-names-draft").join("draft");
-        let Opened { quiz: opened, changed } = open_into(&file, &draft).unwrap();
+        let Opened { quiz: opened, changed, .. } = open_into(&file, &draft).unwrap();
         assert!(changed);
         // The new name takes no name already used.
         let pictures: Vec<_> = opened.slides.iter().map(|s| s.picture.as_deref().unwrap()).collect();

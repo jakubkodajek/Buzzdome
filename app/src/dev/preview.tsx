@@ -481,7 +481,17 @@ mockIPC(
       case "last_session":
         return { meta: { quizTitle: quiz.title, sourcePath: null, startedMs: Date.now() - 3_600_000 }, commandCount: 57 };
       case "editor_load":
-        return { quiz: editorQuiz, sourcePath: "C:\\Kvizy\\hospodsky-kviz.quiz", unsaved: false, mediaRoot: "/src/dev/", problems: [] };
+        return { quiz: editorQuiz, sourcePath: "C:\\Kvizy\\hospodsky-kviz.quiz", unsaved: false, mediaRoot: "/src/dev/", problems: [], dropped: [] };
+      case "editor_open": {
+        // As a file from an older version opens: what this one leaves out is listed.
+        const [first, , third] = editorQuiz.slides;
+        const dropped = [
+          { slideId: first.id, problem: { code: "styleUnread", path: "style.headline.color" } },
+          { slideId: third.id, problem: { code: "mediaOnRanking" } },
+        ];
+        const path = (payload as { path: string }).path;
+        return { quiz: editorQuiz, sourcePath: path, unsaved: true, mediaRoot: "/src/dev/", problems: [], dropped };
+      }
       case "editor_update":
         return [];
       // Dialogs answer what a check sets in `window.dialogAnswer`; cancelled otherwise.

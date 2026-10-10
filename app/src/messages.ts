@@ -106,6 +106,7 @@ const PROBLEM_KEYS: Record<Exclude<Problem["code"], ProblemApart>, StringKey> = 
   withClockNotOnQuestion: "problemWithClockNotOnQuestion",
   effectNotOnQuestion: "problemEffectNotOnQuestion",
   mediaOnRanking: "problemMediaOnRanking",
+  styleUnread: "problemStyleUnread",
   tooManyAnswers: "problemTooManyAnswers",
   tooFewAnswers: "problemTooFewAnswers",
   noCorrectAnswer: "problemNoCorrectAnswer",
@@ -130,7 +131,7 @@ const MEDIA_KIND_KEYS: Record<MediaKind, StringKey> = {
   video: "mediaKindVideo",
 };
 
-/** A problem that keeps a quiz from being played. */
+/** A problem that keeps a quiz from being played, or that opening its file left out. */
 export function problemText(t: Translate, problem: Problem): string {
   switch (problem.code) {
     case "media":

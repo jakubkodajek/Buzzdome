@@ -172,6 +172,15 @@ so a wrong value reads as missing (the theme's look) instead of refusing
 the quiz. A font name cannot hold quotes, so the UI can put it in a style
 sheet as it is.
 
+Reading a quiz (`Quiz::read_json`) also says what it left out
+(`ReadQuiz::dropped`): style values that did not read
+(`SlideStyle::left_out`, by comparing the file's `style` with the style
+read) and what a slide's type cannot play (`drop_unplayable`), each as the
+`Problem` it would be. Opening a file in the editor writes the draft
+without them and marks it unsaved; `draft.json` keeps the list until the
+draft is saved, and File › Info shows it, so a save never removes
+something without the author having been told.
+
 The session's `meta.json` records that folder (`mediaRoot`), so a resumed
 show finds its media even if the original file was moved. When a show
 starts, every other unpacked quiz is deleted, because only the latest show can

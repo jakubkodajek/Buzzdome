@@ -17,4 +17,9 @@ unsaved: boolean,
 /**
  * Folder of the draft's media, ending with a path separator.
  */
-mediaRoot: string, problems: Array<ValidationError>, };
+mediaRoot: string, problems: Array<ValidationError>, 
+/**
+ * What the file has that the quiz cannot keep (`quiz_core::ReadQuiz`),
+ * so saving leaves it out.
+ */
+dropped: Array<ValidationError>, };

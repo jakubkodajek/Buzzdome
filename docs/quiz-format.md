@@ -143,7 +143,9 @@ starts.
 Every field is optional and falls back to the theme's look. A field with a
 value that does not fit the rules below (a colour that is not hex, a size
 out of range, an unknown kind) reads as missing, so a style never keeps a
-quiz from opening or playing. Writers leave out what is not set, and a
+quiz from opening or playing. As saving leaves such a value out (and a
+field the reader does not know), the editor lists each one under File ›
+Info when it opens the file. Writers leave out what is not set, and a
 slide with nothing set has no `style`.
 
 | Field | Type | Meaning |
@@ -340,11 +342,13 @@ Readers keep a quiz in the current version, so saving an older file writes
 the current one.
 
 Builds of the editor within version 4 kept a few fields when a slide changed
-type that its new type cannot play: a `picture` or `video` on a `final`
-slide, and `sound.start: withClock`, `sound.replay`, `video.replay` and
-`video.effect` on a slide that is not a question. Readers drop them, and a
-sound that waited for the clock plays when the slide opens, so such a file
-opens and plays; saving writes it without them.
+type that its new type cannot play: a `picture` or `video` on a `final` or
+`endOfRound` slide, and `sound.start: withClock`, `sound.replay`,
+`video.replay` and `video.effect` on a slide that is not a question. Readers
+drop them, and a sound that waited for the clock plays when the slide opens,
+so such a file opens and plays; saving writes it without them. The editor
+lists what it dropped under File › Info and shows the quiz as unsaved until
+it is saved.
 
 These limits were added within version 2, before that rule was kept, so a
 version 1 or 2 file may break them. The editor opens such a file and lists

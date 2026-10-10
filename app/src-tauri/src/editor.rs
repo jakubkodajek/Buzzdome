@@ -35,6 +35,9 @@ struct Pointer {
     folder: String,
     source_path: Option<String>,
     unsaved: bool,
+    /// What opening the file left out, until the draft is saved over it.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    dropped: Vec<ValidationError>,
 }
 
 /// The draft as the editor loads it.
@@ -50,6 +53,9 @@ pub struct EditorDraft {
     /// Folder of the draft's media, ending with a path separator.
     pub media_root: String,
     pub problems: Vec<ValidationError>,
+    /// What the file has that the quiz cannot keep (`quiz_core::ReadQuiz`),
+    /// so saving leaves it out.
+    pub dropped: Vec<ValidationError>,
 }
 
 fn editor_dir(app: &AppHandle) -> CmdResult<PathBuf> {
@@ -65,7 +71,7 @@ fn read_pointer(dir: &Path) -> Option<Pointer> {
 }
 
 fn write_pointer(dir: &Path, pointer: &Pointer) -> CmdResult<()> {
-    let json = serde_json::to_string_pretty(pointer).expect("a pointer serializes: strings and a flag");
+    let json = serde_json::to_string_pretty(pointer).expect("a pointer serializes: strings, a flag and problems");
     Ok(quiz_file::write_atomic(&dir.join(POINTER_FILE), json.as_bytes())?)
 }
 
@@ -105,6 +111,7 @@ fn describe(app: &AppHandle, root: &Path, pointer: Pointer, quiz: Quiz) -> CmdRe
         source_path: pointer.source_path,
         unsaved: pointer.unsaved,
         media_root: root.join("").to_string_lossy().into_owned(),
+        dropped: pointer.dropped,
     })
 }
 
@@ -127,7 +134,7 @@ pub async fn editor_new(app: AppHandle, lock: State<'_, EditorLock>, title: Stri
     let quiz = Quiz::new(title, Vec::new());
     fs::create_dir_all(&root).map_err(|e| AppError::file(FileAction::CreateFolder, &root, e))?;
     quiz_file::write_quiz_json(&root, &quiz)?;
-    let pointer = Pointer { folder, source_path: None, unsaved: false };
+    let pointer = Pointer { folder, source_path: None, unsaved: false, dropped: Vec::new() };
     switch_to(&dir, &pointer)?;
     describe(&app, &root, pointer, quiz)
 }
@@ -141,7 +148,7 @@ pub async fn editor_open(app: AppHandle, lock: State<'_, EditorLock>, path: Stri
     let root = dir.join(&folder);
     let opened = quiz_file::open_into(Path::new(&path), &root)?;
     // A quiz that opening changed has to be saved to keep the change.
-    let pointer = Pointer { folder, source_path: Some(path), unsaved: opened.changed };
+    let pointer = Pointer { folder, source_path: Some(path), unsaved: opened.changed, dropped: opened.dropped };
     switch_to(&dir, &pointer)?;
     describe(&app, &root, pointer, opened.quiz)
 }
@@ -171,7 +178,7 @@ pub async fn editor_save(app: AppHandle, lock: State<'_, EditorLock>, quiz: Quiz
     let (root, pointer) = current(&app)?;
     quiz_file::write_quiz_json(&root, &quiz)?;
     quiz_file::save(&quiz, &root, Path::new(&path))?;
-    write_pointer(&editor_dir(&app)?, &Pointer { source_path: Some(path), unsaved: false, ..pointer })
+    write_pointer(&editor_dir(&app)?, &Pointer { source_path: Some(path), unsaved: false, dropped: Vec::new(), ..pointer })
 }
 
 /// Copies a picture, sound or video into the draft and returns its reference.
