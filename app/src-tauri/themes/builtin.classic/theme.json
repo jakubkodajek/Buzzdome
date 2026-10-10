@@ -28,6 +28,8 @@
     "heading": "fonts/Inter.woff2",
     "body": "fonts/Inter.woff2"
   },
+  "corners": "round",
+  "headings": "asWritten",
   "buzzerColors": {
     "ready": "#00ff00",
     "first": "#0000ff"

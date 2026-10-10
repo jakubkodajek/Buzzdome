@@ -4,7 +4,7 @@
 
 use crate::media::{extension, is_portable_path, MediaKind};
 use crate::style::is_hex_color;
-use serde::de::IgnoredAny;
+use serde::de::{DeserializeOwned, IgnoredAny};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashSet};
 use ts_rs::TS;
@@ -152,6 +152,27 @@ theme_section! {
     }
 }
 
+/// The corners of the stage's boxes, bars and badges (TH-4).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum Corners {
+    Round,
+    Square,
+}
+
+/// How the stage writes the text in the heading font: titles, names and
+/// big numbers (TH-4).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum HeadingCase {
+    /// As the quiz writes it.
+    AsWritten,
+    /// In capitals.
+    Uppercase,
+}
+
 impl ScreenKey {
     /// The screen whose background this one takes when the theme has none
     /// for it (TH-5); none for `Default`, where every path ends.
@@ -197,6 +218,8 @@ pub struct Theme {
     pub name: LocalizedText,
     pub colors: ThemeColors,
     pub fonts: ThemeFonts,
+    pub corners: Corners,
+    pub headings: HeadingCase,
     pub backgrounds: ThemeBackgrounds,
     pub buzzer_colors: BuzzerColors,
 }
@@ -215,6 +238,8 @@ pub struct ThemeManifest {
     pub colors: BTreeMap<ColorKey, String>,
     /// Font file paths.
     pub fonts: BTreeMap<FontKey, String>,
+    pub corners: Option<Corners>,
+    pub headings: Option<HeadingCase>,
     /// Picture or video file paths.
     pub backgrounds: BTreeMap<ScreenKey, String>,
     pub buzzer_colors: BTreeMap<BuzzerColorKey, String>,
@@ -272,6 +297,10 @@ struct RawManifest {
     #[serde(default)]
     fonts: BTreeMap<String, String>,
     #[serde(default)]
+    corners: Option<String>,
+    #[serde(default)]
+    headings: Option<String>,
+    #[serde(default)]
     backgrounds: BTreeMap<String, String>,
     #[serde(default)]
     buzzer_colors: BTreeMap<String, String>,
@@ -282,8 +311,9 @@ struct RawManifest {
 
 impl ThemeManifest {
     /// Reads and checks `theme.json`: a known format (TH-1), an id in reverse
-    /// domain style, colours as `#rrggbb` or `#rrggbbaa` (TH-4), and file
-    /// paths that stay inside the package and have a usable type (TH-3).
+    /// domain style, colours as `#rrggbb` or `#rrggbbaa` and corners and
+    /// headings as one of their values (TH-4), and file paths that stay
+    /// inside the package and have a usable type (TH-3).
     /// Keys the app does not know are returned, not refused (TH-5).
     pub fn from_json(json: &str) -> Result<(ThemeManifest, Vec<UnknownKey>), ThemeError> {
         #[derive(Deserialize)]
@@ -308,6 +338,8 @@ impl ThemeManifest {
             parent: raw.parent.map(|parent| theme_id("parent", parent)).transpose()?,
             colors: section("colors", raw.colors, ColorKey::parse, is_hex_color, &mut unknown)?,
             fonts: section("fonts", raw.fonts, FontKey::parse, |path| check_file(path, &[FONT_EXTENSIONS]), &mut unknown)?,
+            corners: choice("corners", raw.corners)?,
+            headings: choice("headings", raw.headings)?,
             backgrounds: section(
                 "backgrounds",
                 raw.backgrounds,
@@ -355,6 +387,15 @@ fn label(field: &str, text: String) -> Result<String, ThemeError> {
         return Err(bad(field, &text));
     }
     Ok(text)
+}
+
+/// One of a key's named values, such as `"square"` for `corners`; none for
+/// a key left out or set to `"default"` (TH-2).
+fn choice<T: DeserializeOwned>(field: &str, value: Option<String>) -> Result<Option<T>, ThemeError> {
+    match value {
+        Some(value) if value != INHERIT => serde_json::from_value(serde_json::Value::String(value.clone())).map(Some).map_err(|_| bad(field, &value)),
+        _ => Ok(None),
+    }
 }
 
 /// A file path inside the package (TH-3) with one of the extensions in `types`.
@@ -486,6 +527,8 @@ fn resolve(own: &ThemeSource, chain: &[&ThemeSource]) -> Result<Theme, ThemeErro
             .map_err(|key| incomplete(&format!("colors.{}", key.name())))?,
         fonts: ThemeFonts::try_from_fn(|key| chain.iter().find_map(|theme| theme.manifest.fonts.get(&key).map(|path| file(theme, path))))
             .map_err(|key| incomplete(&format!("fonts.{}", key.name())))?,
+        corners: chain.iter().find_map(|theme| theme.manifest.corners).ok_or_else(|| incomplete("corners"))?,
+        headings: chain.iter().find_map(|theme| theme.manifest.headings).ok_or_else(|| incomplete("headings"))?,
         backgrounds: ThemeBackgrounds::try_from_fn(|screen| {
             chain.iter().find_map(|theme| screen.fallback_path().find_map(|key| theme.manifest.backgrounds.get(&key).map(|path| file(theme, path))))
         })
@@ -509,6 +552,8 @@ mod tests {
             "name": { "cs": "Klasický", "en": "Classic" },
             "colors": colors,
             "fonts": { "heading": "fonts/Heading.woff2", "body": "fonts/Body.woff2" },
+            "corners": "round",
+            "headings": "asWritten",
             "backgrounds": { "default": "backgrounds/main.svg", "leaderboard": "backgrounds/scores.png" },
             "buzzerColors": { "ready": "#00ff00", "first": "#0000ff" }
         })
@@ -544,7 +589,7 @@ mod tests {
             "name": { "cs": "Podzim", "en": "Autumn" }, "author": "Name <email>", "parent": "builtin.classic",
             "backgrounds": { "default": "backgrounds/main.jpg", "welcome": "backgrounds/welcome.mp4" },
             "colors": { "text": "#ffffff", "panel": "#101830cc", "wrong": "default" },
-            "fonts": { "heading": "fonts/Heading.woff2" },
+            "fonts": { "heading": "fonts/Heading.woff2" }, "corners": "square", "headings": "uppercase",
             "buzzerColors": { "ready": "#00ff00" }
         }"##;
         let (theme, unknown) = ThemeManifest::from_json(json).unwrap();
@@ -555,6 +600,7 @@ mod tests {
         // "default" takes the value from the parent.
         assert!(!theme.colors.contains_key(&ColorKey::Wrong));
         assert_eq!(theme.backgrounds.get(&ScreenKey::Welcome).map(String::as_str), Some("backgrounds/welcome.mp4"));
+        assert_eq!((theme.corners, theme.headings), (Some(Corners::Square), Some(HeadingCase::Uppercase)));
     }
 
     #[test]
@@ -584,7 +630,7 @@ mod tests {
 
     #[test]
     fn refuses_values_that_break_the_rules() {
-        let cases: [(&str, serde_json::Value); 12] = [
+        let cases: [(&str, serde_json::Value); 14] = [
             ("/id", "Autumn".into()),
             ("/id", "single".into()),
             ("/id", "cz..double".into()),
@@ -594,6 +640,8 @@ mod tests {
             ("/colors/text", "#fff".into()),
             ("/fonts/body", "../fonts/Body.woff2".into()),
             ("/fonts/body", "fonts/Body.png".into()),
+            ("/corners", "oval".into()),
+            ("/headings", "Uppercase".into()),
             ("/backgrounds/default", "/etc/main.png".into()),
             ("/backgrounds/default", "backgrounds\\main.png".into()),
             ("/backgrounds/default", "C:/main.png".into()),
@@ -639,6 +687,21 @@ mod tests {
     }
 
     #[test]
+    fn corners_and_headings_come_from_the_parent_unless_a_theme_sets_them() {
+        let sources = [
+            source(root_json()),
+            child("test.trail", Some(DEFAULT_THEME_ID), serde_json::json!({ "corners": "square", "headings": "uppercase" })),
+            child("test.trail-soft", Some("test.trail"), serde_json::json!({ "corners": "round", "headings": "default" })),
+        ];
+        let trail = resolved(&sources, "test.trail");
+        assert_eq!((trail.corners, trail.headings), (Corners::Square, HeadingCase::Uppercase));
+        let soft = resolved(&sources, "test.trail-soft");
+        assert_eq!((soft.corners, soft.headings), (Corners::Round, HeadingCase::Uppercase));
+        let classic = resolved(&sources, DEFAULT_THEME_ID);
+        assert_eq!((classic.corners, classic.headings), (Corners::Round, HeadingCase::AsWritten));
+    }
+
+    #[test]
     fn a_missing_parent_or_a_loop_ends_at_the_default_theme() {
         let sources = [
             source(root_json()),
@@ -680,6 +743,9 @@ mod tests {
         let mut json = root_json();
         json["colors"].as_object_mut().unwrap().remove("answerF");
         assert_eq!(resolve_themes(&[source(json)], &[]), Err(ThemeError::Incomplete("colors.answerF".into())));
+        let mut json = root_json();
+        json.as_object_mut().unwrap().remove("headings");
+        assert_eq!(resolve_themes(&[source(json)], &[]), Err(ThemeError::Incomplete("headings".into())));
         let twice = [source(root_json()), source(root_json())];
         assert_eq!(resolve_themes(&twice, &[]), Err(ThemeError::DuplicateId(DEFAULT_THEME_ID.into())));
     }

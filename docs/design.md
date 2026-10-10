@@ -357,8 +357,9 @@ table view toggle. It edits a quiz; it never touches a running show.
 
 ### 1.4 Themes
 
-A theme is the look of the stage: colours, two fonts and a background per
-screen (spec 5.2). The quiz stores only its id (`Quiz.theme`). Themes are
+A theme is the look of the stage: colours, two fonts, round or square
+corners, titles as written or in capitals, and a background per screen
+(spec 5.2). The quiz stores only its id (`Quiz.theme`). Themes are
 data in the package layout of spec 5.2, so the built-in ones and the theme
 packages users will install are read the same way.
 
@@ -371,8 +372,8 @@ packages users will install are read the same way.
   they name is in the package.
 - **Resolving.** `quiz_core::theme` reads `theme.json`
   (`ThemeManifest::from_json`): it refuses a file over 64 KB, an unknown
-  `format` (TH-1), colours that are not `#rrggbb` or `#rrggbbaa` (TH-4) and
-  file paths that leave the package or have the wrong type (TH-3), drops
+  `format` (TH-1), colours that are not `#rrggbb` or `#rrggbbaa`, corners
+  and headings that are none of their values (TH-4) and file paths that leave the package or have the wrong type (TH-3), drops
   keys set to `"default"` (TH-2) and returns unknown keys, at the top level
   or in a section, for a warning instead of failing on them (TH-5). `resolve_themes` fills in every value from the parents, ending at
   `builtin.classic`, which must set them all; a missing parent or a loop
@@ -388,7 +389,9 @@ packages users will install are read the same way.
   `ThemeFonts`, `ThemeBackgrounds`, `BuzzerColors`) are written once, in a
   macro that makes both the key enum and the filled-in struct. Colour keys:
   `text`, `shadow`, `glow`, `panel`, `bar`, `barEdge`, `tile`, `accent`,
-  `answerA`..`answerF`, `correct`, `wrong`.
+  `answerA`..`answerF`, `correct`, `wrong`. `corners` (`Corners`) and
+  `headings` (`HeadingCase`) are single keys at the top level, inherited
+  the same way.
 - **In the windows.** `list_themes` returns the resolved themes, read once at
   start. `ThemesProvider` (`theme/context.tsx`) loads them once per window
   and `useResolvedTheme(id)` picks the quiz's (`pickTheme`: the default
@@ -421,7 +424,10 @@ packages users will install are read the same way.
   fill as `--answer-fill` under the theme's sheen, so a revealed or dimmed
   answer keeps its look. `slide.css` reads each variable with the theme's
   value as the fallback, so a font, a shadow or a corner is written once,
-  in CSS; a test checks that the texts the editor offers bold and with a
+  in CSS. Every rounded corner in `slide.css` and `timer.css` is multiplied
+  by `--theme-roundness` (1, or 0 for square corners), and the text in the
+  heading font takes `--theme-heading-case` as its `text-transform`; a test
+  checks that the texts the editor offers bold and with a
   shadow are the ones `slide.css` draws so. A title and a question share
   the headline's style.
   Text on a filled area (bars, answers, rows) gets white or dark
@@ -434,14 +440,19 @@ packages users will install are read the same way.
   named after the file, for every weight from 1 to 1000, so a variable font
   gets its real weights; the stage's font stack ends with system fonts for
   letters the file lacks. The built-in fonts (Inter, Nunito, Oswald, Exo 2,
-  Montserrat, Outfit, Baloo 2, Caveat, Cinzel) are variable WOFF2 files cut
-  to Latin (Basic, Latin-1, Extended-A and B, so Czech) and common
-  punctuation, 38 to 100 kB each; the newer five were cut from the Google
-  Fonts TTFs with fontTools' `pyftsubset`. All are under the SIL Open Font
+  Montserrat, Outfit, Baloo 2, Caveat, Cinzel, Fira Sans Condensed) are
+  WOFF2 files cut to Latin (Basic, Latin-1, Extended-A and B, so Czech) and
+  common punctuation, 38 to 100 kB each; the newer six were cut from the
+  Google Fonts TTFs with fontTools' `pyftsubset`. All but Fira Sans
+  Condensed (SemiBold, a static font) are variable fonts. All are under the SIL Open Font
   License 1.1, which allows bundling as long as the licence goes with the
   font: each package has it as `fonts/OFL.txt`, and it ships with the
   installers. A cut font is a Modified Version under the licence, which may
   not keep a Reserved Font Name, so the built-in fonts are ones without one.
+  Bakchus follows the Bakchus Aktivity website (orange `#F26522`, black and
+  white, square corners, Fira Sans Condensed titles in capitals); the
+  site's body font, Raleway, has a Reserved Font Name, so Bakchus takes its
+  parent Daylight's Montserrat for body text.
 - **Choosing.** The editor's Design tab shows each installed theme on a
   sample question (`ThemeGallery.tsx`); when the ribbon is too narrow for
   all of them, the row pages with arrows at its ends (`GalleryStrip.tsx`)

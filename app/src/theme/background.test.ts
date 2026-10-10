@@ -1,10 +1,9 @@
 import { describe, expect, it } from "vitest";
-import BUILTIN_THEMES from "../bindings/BuiltinThemes.json";
+import { BUILTIN_THEMES } from "../dev/builtin-themes";
 import { newSlide, setBackground, setSlideFill } from "../editor/slides";
-import type { Theme } from "../types";
 import { resolveBackground } from "./background";
 
-const theme: Theme = BUILTIN_THEMES[0];
+const theme = BUILTIN_THEMES[0];
 
 describe("resolveBackground", () => {
   it("puts the slide's own background before the theme's", () => {
@@ -27,7 +26,7 @@ describe("resolveBackground", () => {
   });
 
   it("puts the built-in default under another theme, once", () => {
-    const other: Theme = BUILTIN_THEMES[1];
+    const other = BUILTIN_THEMES[1];
     expect(resolveBackground(null, other, "question", theme)).toEqual([
       { level: "theme", file: other.backgrounds.question },
       { level: "theme", file: theme.backgrounds.question },
