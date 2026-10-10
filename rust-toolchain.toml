@@ -1,0 +1,5 @@
+# The Rust release the app is built with, the same as RUST_TOOLCHAIN in
+# .github/workflows/build.yml: raise both together.
+[toolchain]
+channel = "1.97.0"
+components = ["clippy"]

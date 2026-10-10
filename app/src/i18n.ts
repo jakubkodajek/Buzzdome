@@ -689,6 +689,7 @@ const strings = {
     errShowNotRead: "Poslední show nejde načíst: {detail}",
     errJournalBroken: "Show se po chybě zápisu přestala ukládat na disk, změna se neprovedla. Ukončete show a pokračujte v ní tlačítkem {resume}.",
     errShowStopped: "Show přestala reagovat. Restartujte aplikaci a pokračujte v poslední show.",
+    errNotFromProjector: "Tento příkaz z projektoru nejde dát.",
     errShowBusy: "Show ještě ukládá předchozí krok, protože disk neodpovídá. Tento krok se neprovedl, zkuste ho znovu.",
     errSaveHangs:
       "Ukládání show na disk nedoběhlo, disk neodpovídá. Krok, který se ukládá, se provede, až zápis doběhne, proto ho nezadávejte znovu. Další příkazy se zatím odmítnou; stisky se započítají, až zápis doběhne.",
@@ -714,6 +715,7 @@ const strings = {
     themeNotInstalled: "Motiv {id} není nainstalovaný, kvíz se zobrazuje ve výchozím.",
     hostProblem: "Projektor: {message}",
     errNoDraft: "V editoru není otevřený žádný kvíz.",
+    errNotRecent: "Soubor už v seznamu nedávných souborů není.",
     errDraftChanged: "V editoru se mezitím otevřel jiný kvíz.",
     errDraftNotRead: "Rozpracovaný kvíz z minula nejde přečíst: {detail}",
     errNotAMediaFile: "{name} není obrázek, zvuk ani video, které aplikace umí přehrát.",
@@ -1487,6 +1489,7 @@ const strings = {
     errShowNotRead: "The last show cannot be read: {detail}",
     errJournalBroken: "The show stopped saving to disk after a failed write, so the change was not made. End the show and resume it with {resume}.",
     errShowStopped: "The show stopped responding. Restart the app and resume the last show.",
+    errNotFromProjector: "The projector cannot give this command.",
     errShowBusy: "The show is still saving an earlier step, as the disk does not answer. This step was not made; try it again.",
     errSaveHangs:
       "Saving the show to disk does not finish, as the disk does not answer. The step being saved is made once the write finishes, so do not give it again. Other commands are refused meanwhile; presses count once the write finishes.",
@@ -1512,6 +1515,7 @@ const strings = {
     themeNotInstalled: "The theme {id} is not installed; the quiz shows in the default one.",
     hostProblem: "Projector: {message}",
     errNoDraft: "No quiz is open in the editor.",
+    errNotRecent: "The file is no longer in the recent files.",
     errDraftChanged: "Another quiz was opened in the editor meanwhile.",
     errDraftNotRead: "The quiz left in the editor last time cannot be read: {detail}",
     errNotAMediaFile: "{name} is not a picture, sound or video the app can play.",

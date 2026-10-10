@@ -14,6 +14,9 @@ function deferred<T>() {
 }
 
 const PICKER = { filter: "Quiz files" };
+/** The recent files the backend lists, opened by their place. */
+const RECENT = ["big", "other"];
+const [BIG, OTHER] = [0, 1];
 
 /** A stand-in for the backend: one current draft (or none), and a record of every call. */
 function fakeApi(start = "draft-1") {
@@ -22,7 +25,7 @@ function fakeApi(start = "draft-1") {
   const draftApi = {
     editorLoad: vi.fn(async () => (current === null ? null : draft(current))),
     editorNew: vi.fn(async () => draft((current = "draft-new"))),
-    editorOpen: vi.fn(async (path: string | null) => draft((current = `draft-${path}`))),
+    editorOpen: vi.fn(async (recent: number | null) => draft((current = `draft-${recent === null ? "picked" : RECENT[recent]}`))),
     editorClose: vi.fn(async () => {
       current = null;
     }),
@@ -56,7 +59,7 @@ describe("DraftSession", () => {
     const session = new DraftSession(draftApi);
     const opening = deferred<EditorDraft>();
     draftApi.editorOpen.mockImplementationOnce(() => opening.promise);
-    const open = session.exclusive("open", (api) => api.editorOpen("big", PICKER));
+    const open = session.exclusive("open", (api) => api.editorOpen(BIG, PICKER));
     expect(session.getStatus().busy).toBe("open");
     expect(await session.exclusive("save", (api) => api.editorSave("draft-1", quiz("Old"), false, PICKER))).toBe(BUSY);
     opening.resolve(draft("draft-big"));
@@ -118,7 +121,7 @@ describe("DraftSession", () => {
     await session.exclusive("open", async () => false);
     expect(session.getStatus().notWritten).toBe(FULL_DISK);
     await session.exclusive("open", async (api) => {
-      const opened = await api.editorOpen("other", PICKER);
+      const opened = await api.editorOpen(OTHER, PICKER);
       session.replaced(opened?.id ?? null);
       return opened;
     });
@@ -164,7 +167,7 @@ describe("DraftSession", () => {
     session.write("draft-1", quiz("Old"), true, () => undefined);
     await vi.advanceTimersByTimeAsync(0);
     await session.exclusive("open", async (api) => {
-      const opened = await api.editorOpen("other", PICKER);
+      const opened = await api.editorOpen(OTHER, PICKER);
       session.replaced(opened?.id ?? null);
     });
     expect((await session.load())?.quiz.title).toBe("draft-other");
@@ -187,7 +190,7 @@ describe("DraftSession", () => {
     const opening = deferred<EditorDraft>();
     draftApi.editorOpen.mockImplementationOnce(() => opening.promise);
     const open = session.exclusive("open", async (api) => {
-      const opened = await api.editorOpen("big", PICKER);
+      const opened = await api.editorOpen(BIG, PICKER);
       session.replaced(opened?.id ?? null);
     });
     await vi.advanceTimersByTimeAsync(1000);

@@ -16,6 +16,7 @@
 
 use crate::dialogs::{self, Picker};
 use crate::error::{AppError, CmdResult};
+use crate::recent_files::RecentFiles;
 use crate::{app_local_data, app_log, lock_show, media_player, off_ui, roaming_leftover, show_running};
 use quiz_core::{Category, MediaKind, Quiz, ValidationError};
 use quiz_file::{FileAction, SheetExport, SheetImport};
@@ -236,16 +237,15 @@ pub async fn editor_new(app: AppHandle, title: String) -> CmdResult<EditorDraft>
     .await
 }
 
-/// Opens a quiz file in place of the draft: `path`, a recent file, or one
-/// the quizmaster picks (none when they cancel). A path a window names is
-/// only read, within `quiz_file::open_into`'s limits. Refused during a
-/// show, whose journal must not wait for the disk while a large file
-/// unpacks (A20).
+/// Opens a quiz file in place of the draft: the `recent` file at that place
+/// in the list (`RecentFiles`), or one the quizmaster picks (none when they
+/// cancel). Refused during a show, whose journal must not wait for the disk
+/// while a large file unpacks (A20).
 #[tauri::command]
-pub async fn editor_open(app: AppHandle, window: Window, path: Option<String>, picker: Picker) -> CmdResult<Option<EditorDraft>> {
-    let path = match path {
-        Some(path) => PathBuf::from(path),
-        None => match dialogs::pick_file(window, picker, vec![quiz_file::EXTENSION, "json"]).await? {
+pub async fn editor_open(app: AppHandle, window: Window, recent: Option<usize>, picker: Picker) -> CmdResult<Option<EditorDraft>> {
+    let path = match recent {
+        Some(index) => app.state::<RecentFiles>().get(index)?,
+        None => match dialogs::pick_file(window, picker, quiz_file::OPEN_EXTENSIONS.to_vec()).await? {
             Some(path) => path,
             None => return Ok(None),
         },
@@ -257,9 +257,10 @@ pub async fn editor_open(app: AppHandle, window: Window, path: Option<String>, p
         let (folder, root) = new_draft_folder(dir)?;
         let opened = quiz_file::open_into(&path, &root)?;
         // A quiz that opening changed has to be saved to keep the change.
-        let source_path = Some(path.to_string_lossy().into_owned());
-        let pointer = Pointer { folder, source_path, unsaved: opened.changed, dropped: opened.dropped };
+        let source_path = path.to_string_lossy().into_owned();
+        let pointer = Pointer { folder, source_path: Some(source_path.clone()), unsaved: opened.changed, dropped: opened.dropped };
         switch_to(app, dir, &pointer)?;
+        app.state::<RecentFiles>().remember(&source_path);
         Ok(Some(describe(&root, pointer, opened.quiz)))
     })
     .await
@@ -293,11 +294,12 @@ pub async fn editor_save(app: AppHandle, window: Window, draft: String, quiz: Qu
             None => return Ok(None),
         },
     };
-    on_draft(app, draft, move |_, dir, root, pointer| {
+    on_draft(app, draft, move |app, dir, root, pointer| {
         quiz_file::write_quiz_json(&root, &quiz)?;
         quiz_file::save(&quiz, &root, &path)?;
         let saved = path.to_string_lossy().into_owned();
         write_pointer(dir, &Pointer { source_path: Some(saved.clone()), unsaved: false, dropped: Vec::new(), ..pointer })?;
+        app.state::<RecentFiles>().remember(&saved);
         Ok(Some(saved))
     })
     .await

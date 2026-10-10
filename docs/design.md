@@ -177,12 +177,19 @@ two windows cannot disagree with each other or with the score.
   (`capabilities/director.json`, `capabilities/projector.json`; `build.rs`
   lists the app's commands so Tauri checks them, and a test in
   `app_windows.rs` keeps the three lists in step). The projector can read
-  the show and its media and dispatch, but not open, save or pick files.
+  the show and its media, but not open, save or pick files, and `dispatch`
+  takes from it only what its keys stand for (`PROJECTOR_COMMANDS` in
+  `lib.rs`, written to `bindings/ProjectorCommands.ts`; a test in
+  `keyboard.test.ts` checks that every command a key gives is in it).
   A content security policy (`tauri.conf.json`) lets the pages load only
   the app's own scripts and styles and media through the asset protocol.
-  Files the quizmaster opens, saves, imports or exports are picked by the
-  backend (`dialogs.rs`, worded by the UI's `Picker`), never named by a
-  page, and the pages confirm through the dialog plugin's `ask`
+  Tauri sets it only on the pages a release build serves, not on the dev
+  server's, so the release smoke check in `docs/hardware-test.md` runs
+  under it. Files the quizmaster opens, saves, imports or exports are
+  picked by the backend (`dialogs.rs`, worded by the UI's `Picker`), never
+  named by a page: the editor's recent files are kept by the backend
+  (`recent_files.rs`) and the page opens one by its place in the list. The
+  pages confirm through the dialog plugin's `ask`
   (`confirm.ts`, with Yes and No in the UI's language); ESLint refuses `alert`, `confirm`, `prompt` and the
   plugin's file pickers.
 - **Log.** `app_log.rs` writes `buzzdome.log` in the app's log folder
@@ -268,8 +275,12 @@ A `.quiz` entry with a name that is not portable is stored under the
 closest portable one (`quiz_core::portable_reference`, numbered if taken)
 and the quiz's references are renamed with it (the draft then counts as
 unsaved); a plain `quiz.json` reads
-only safe names from the disk (no device names on Windows), and the show
-path keeps such a file refused.
+only safe names from the disk (no device names on Windows), nor any
+through a link that leads out of its folder, and the show path keeps such
+a file refused.
+A `.quiz` file of more than 10,000 entries (`MAX_ENTRIES`) is refused. Its
+ZIP64 end records are checked before the archive is opened (`zip_end.rs`),
+as opening reads every entry header the record it takes counts.
 A `quiz.json` over 16 MB (`MAX_QUIZ_JSON_BYTES`) is refused before it is
 parsed, whether read from a package, from the disk or about to be saved, so
 a small packed file cannot unpack into a huge quiz.
@@ -302,10 +313,11 @@ replay a step off is kept: a journal begun before version 2 replays its
 jumps out of a question in play, as the app then restarted a question
 after a crash with a `GoTo` to it (`Game::replay`).
 
-The windows load media through Tauri's asset protocol. Its scope starts
-empty and the shell allows exactly the current quiz folder, the editor's
-draft folder, the built-in theme packages and the media player's library
-(`<app data>/library`, spec SN-7) (`asset_protocol_scope().allow_directory`),
+The windows load media through Tauri's asset protocol. Its scope is empty
+in `tauri.conf.json`; at startup the shell allows the folder of unpacked
+quizzes, the editor's drafts folder, the built-in theme packages and the
+media player's library (`<app data>/library`, spec SN-7)
+(`asset_protocol_scope().allow_directory`), and nothing changes it later,
 so a page cannot read anything else on the disk. A quiz folder is allowed
 only inside the app's own folders (the unpacked quizzes and the editor's
 drafts): a session whose `meta.json` names another folder resumes without

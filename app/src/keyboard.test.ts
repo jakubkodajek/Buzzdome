@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { NO_CONTROLS, previewView } from "./host/preview";
 import { translator } from "./i18n";
+import { PROJECTOR_COMMANDS } from "./bindings/ProjectorCommands";
 import { commandForKey, isFieldTarget, isHeldButtonPress, isTypingTarget, keyHint, KEYS } from "./keyboard";
 import type { Controls, GameView } from "./types";
 
@@ -27,6 +28,15 @@ describe("commandForKey", () => {
     expect(commandForKey("p", viewWith({ pauseClock: true }))).toEqual({ type: "pauseClock" });
     expect(commandForKey("p", viewWith({ resumeClock: true }))).toEqual({ type: "resumeClock" });
     expect(commandForKey("p", viewWith({ next: true }))).toBeNull();
+  });
+
+  it("gives only commands the projector may give, as its keys are the same", () => {
+    const keys = [..."abcdefghijklmnopqrstuvwxyz0123456789", " ", "ArrowRight", "PageDown", "Enter", "Escape", "Backspace"];
+    const all: Controls = { next: true, judge: true, pauseClock: true, resumeClock: true, closeQuestion: true, playVideo: true, goTo: true, restartQuestion: true };
+    const views = [viewWith(all), viewWith({ ...all, pauseClock: false }, true)];
+    const given = new Set(views.flatMap((view) => keys.map((key) => commandForKey(key, view)?.type).filter((type) => type !== undefined)));
+    expect([...given].filter((type) => !PROJECTOR_COMMANDS.includes(type))).toEqual([]);
+    expect(given.size).toBe(PROJECTOR_COMMANDS.length);
   });
 
   it("toggles the leaderboard", () => {

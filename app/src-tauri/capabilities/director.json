@@ -46,6 +46,7 @@
     "allow-editor-load",
     "allow-editor-new",
     "allow-editor-open",
+    "allow-editor-recent-files",
     "allow-editor-update",
     "allow-editor-save",
     "allow-editor-add-media",

@@ -477,6 +477,9 @@ function changeBoard(change: BoardChange) {
 /** What a dialog answers, a check sets as `window.dialogAnswer` (a file picked, or "Yes"); cancelled otherwise. */
 const dialogAnswer = () => (window as unknown as { dialogAnswer?: string }).dialogAnswer ?? null;
 
+/** The quiz files the editor opened lately, as the backend keeps them. */
+const RECENT_FILES = ["C:\\Kvizy\\hospodsky-kviz.quiz", "C:\\Kvizy\\firemni-vecirek.quiz"];
+
 mockIPC(
   (cmd, payload) => {
     switch (cmd) {
@@ -569,6 +572,8 @@ mockIPC(
         return { id: "draft-1", quiz: editorQuiz, sourcePath: "C:\\Kvizy\\hospodsky-kviz.quiz", unsaved: false, mediaRoot: "/src/dev/", problems: [], dropped: [] };
       case "editor_new":
         return { id: `draft-${++drafts}`, quiz: { ...editorQuiz, title: (payload as { title: string }).title, slides: [] }, sourcePath: null, unsaved: false, mediaRoot: "/src/dev/", problems: [], dropped: [] };
+      case "editor_recent_files":
+        return RECENT_FILES;
       case "editor_close":
         called.push({ cmd });
         return null;
@@ -580,7 +585,8 @@ mockIPC(
           { slideId: third.id, problem: { code: "mediaOnRanking" } },
         ];
         // A recent file, else the file picked (see `dialogAnswer`).
-        const path = (payload as { path: string | null }).path ?? dialogAnswer();
+        const recent = (payload as { recent: number | null }).recent;
+        const path = recent === null ? dialogAnswer() : (RECENT_FILES[recent] ?? null);
         if (!path) return null;
         return { id: `draft-${++drafts}`, quiz: editorQuiz, sourcePath: path, unsaved: true, mediaRoot: "/src/dev/", problems: [], dropped };
       }
