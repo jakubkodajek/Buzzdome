@@ -455,6 +455,8 @@
 .answer-1 { --answer: var(--theme-answer-1); --answer-text: var(--theme-answer-1-text); }
 .answer-2 { --answer: var(--theme-answer-2); --answer-text: var(--theme-answer-2-text); }
 .answer-3 { --answer: var(--theme-answer-3); --answer-text: var(--theme-answer-3-text); }
+.answer-4 { --answer: var(--theme-answer-4); --answer-text: var(--theme-answer-4-text); }
+.answer-5 { --answer: var(--theme-answer-5); --answer-text: var(--theme-answer-5-text); }
 
 .answer-count {
   position: absolute;
@@ -719,6 +721,16 @@
   flex: 0 0 auto;
   grid-auto-rows: 120px;
   gap: 24px 46px;
+}
+
+/* Five or six answers: three rows in the same space. */
+.answers.answers-6 {
+  grid-auto-rows: 120px;
+  gap: 24px 40px;
+}
+
+.question-screen.has-media .answers.answers-6 {
+  grid-auto-rows: 96px;
 }
 
 .question-screen.has-media .question-text {

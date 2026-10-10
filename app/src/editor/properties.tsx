@@ -3,7 +3,7 @@
 
 import type { ReactNode } from "react";
 import { ANSWER_LETTERS } from "../answers";
-import { MAX_ANSWERS, MAX_GAIN_DB, MAX_POINTS, MAX_TIME_LIMIT_S, MIN_EVERYONE_ANSWERS, MIN_GAIN_DB } from "../bindings/Constants";
+import { MAX_GAIN_DB, MAX_POINTS, MAX_TIME_LIMIT_S, MIN_GAIN_DB } from "../bindings/Constants";
 import { sameSpan, WHOLE_FILE } from "../audio/clip-player";
 import { trackTime } from "../format";
 import type { StringKey, Translate } from "../i18n";
@@ -13,6 +13,7 @@ import { SLIDE_TYPE_LABEL, type SlideContext } from "../quiz";
 import type { QuestionSlide, Slide, SlideType, SoundStart, Span } from "../types";
 import { MediaPicker, NumberBox, Select, Switch } from "./controls";
 import {
+  answerLimits,
   convertSlide,
   MAX_REPLAY_DELAY_MS,
   newReplay,
@@ -118,8 +119,9 @@ export function slideProperties(t: Translate, { slide, context, update, chooseMe
         />,
       ),
     answerCount: (q: QuestionSlide) => {
-      const fewest = q.mode === "everyone" ? MIN_EVERYONE_ANSWERS : 0;
-      const counts = Array.from({ length: MAX_ANSWERS - fewest + 1 }, (_, i) => fewest + i);
+      const { fewest, most } = answerLimits(q.mode);
+      // A file from an older version may have more; it is offered until changed.
+      const counts = Array.from({ length: Math.max(most, q.answers.length) - fewest + 1 }, (_, i) => fewest + i);
       return row(
         "propAnswerCount",
         "descAnswerCount",

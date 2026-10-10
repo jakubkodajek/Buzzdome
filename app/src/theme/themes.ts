@@ -35,10 +35,14 @@ export interface ThemeColors {
   tile: string;
   /** Scores and counters. */
   accent: string;
+  /** Answers A-D, the buzzer's answer buttons. */
   answerA: string;
   answerB: string;
   answerC: string;
   answerD: string;
+  /** Answers E and F, read out in fastest finger questions. */
+  answerE: string;
+  answerF: string;
   correct: string;
   wrong: string;
 }
@@ -115,6 +119,8 @@ const CLASSIC = {
     answerB: "#ec6f12",
     answerC: "#3fa31c",
     answerD: "#f2cd0c",
+    answerE: "#8a47e6",
+    answerF: "#df3f73",
     correct: "#25b864",
     wrong: "#e23d2b",
   },
@@ -258,7 +264,7 @@ export function screenOf(view: GameView): ScreenKey {
   }
 }
 
-const ANSWER_KEYS = ["answerA", "answerB", "answerC", "answerD"] as const;
+const ANSWER_KEYS = ["answerA", "answerB", "answerC", "answerD", "answerE", "answerF"] as const;
 
 /**
  * The theme as CSS custom properties for a stage (slide.css). Text colours on

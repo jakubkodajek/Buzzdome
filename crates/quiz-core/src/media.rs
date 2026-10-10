@@ -67,6 +67,21 @@ pub fn portable_name(name: &str) -> String {
     }
 }
 
+/// The safe reference closest to `reference`, for a media name that files
+/// made before the portable-name rule may use: each part made portable (see
+/// `portable_name`); a safe reference stays as it is. `None` when the name is
+/// not plainly inside the media folder (a backslash, or a part of only dots
+/// and spaces, which some systems read as `.` or `..`): no renaming makes it
+/// safe to read.
+pub fn portable_reference(reference: &str) -> Option<String> {
+    let name = reference.strip_prefix(MEDIA_PREFIX)?;
+    let parts: Vec<&str> = name.split('/').collect();
+    if name.contains('\\') || parts.iter().any(|part| part.trim_end_matches(['.', ' ']).is_empty()) {
+        return None;
+    }
+    Some(format!("{MEDIA_PREFIX}{}", parts.into_iter().map(portable_name).collect::<Vec<_>>().join("/")))
+}
+
 /// What is wrong with a media reference.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, TS, thiserror::Error)]
 #[ts(export)]
@@ -300,6 +315,20 @@ mod tests {
         assert_eq!(portable_name("Flag.png"), "Flag.png");
         assert_eq!(portable_name("we:ird?.jpg"), "we_ird_.jpg");
         assert_eq!(portable_name("CON.png"), "_CON.png");
+    }
+
+    #[test]
+    fn old_media_names_get_the_closest_safe_reference() {
+        assert_eq!(portable_reference("media/round 1/flag.png").as_deref(), Some("media/round 1/flag.png"));
+        assert_eq!(portable_reference("media/what?.png").as_deref(), Some("media/what_.png"));
+        assert_eq!(portable_reference("media/CON.png").as_deref(), Some("media/_CON.png"));
+        assert_eq!(portable_reference("media/round 1./a*b.mp3").as_deref(), Some("media/round 1/a_b.mp3"));
+        for name in ["media/what?.png", "media/x.", "media/nul .png", "media/C:flag.png", "media/a\tb.png"] {
+            assert!(is_safe_reference(&portable_reference(name).unwrap()), "{name}");
+        }
+        for outside in ["flag.png", "media/../quiz.json", "media/./a.png", "media//a.png", "media/", "media/.. /a.png", "media/a\\..\\b.png"] {
+            assert_eq!(portable_reference(outside), None, "{outside}");
+        }
     }
 
     #[test]

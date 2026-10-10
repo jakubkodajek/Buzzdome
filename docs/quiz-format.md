@@ -25,14 +25,19 @@ Rules for readers and writers (implemented in `crates/quiz-file`):
   trailing dot or space (which also rules out `.` and `..`), and names
   Windows reserves (`CON`, `PRN`, `AUX`, `NUL`, `COM0`-`COM9`,
   `LPT0`-`LPT9`, with any extension). The editor renames imported files to
-  fit.
+  fit, and so it does when it opens a `.quiz` file an older version wrote
+  with such names (see Versioning).
 - ZIP entry names written with backslashes (some Windows tools do that) are
   read with `/` in their place.
 - Entries outside `quiz.json` and `media/` (for example the `__MACOSX/`
   folder some ZIP tools add) are ignored.
-- A file is refused if it unpacks to more than 4 GB or has more than 10,000
-  entries, if `quiz.json` is missing or invalid, or if a slide refers to a
-  media file that is not in the archive.
+- A file does not open at all if it unpacks to more than 4 GB or has more
+  than 10,000 entries, if `quiz.json` is missing or is not JSON of this
+  format, or if its `schemaVersion` is newer than the app's.
+- The show also refuses a file that breaks any other rule in this
+  document, for example a slide referring to a media file that is not in
+  the archive. The editor opens such a file all the same and lists what to
+  fix before the quiz can be played.
 - Writers store media uncompressed (they are compressed already), save
   only the media the quiz uses, and refuse to write a file that readers
   would refuse for its size or number of entries.
@@ -126,7 +131,7 @@ starts.
 | --- | --- | --- | --- |
 | `text` | text | required | The question. |
 | `mode` | `everyone`, `fastestFinger` | required | Everyone answers with A-D; or the first to buzz answers and the quizmaster judges. |
-| `answers` | list of text | `[]` | 2 to 4 for `everyone` (one per answer button A-D), at most 4 for `fastestFinger`, where it may be empty (verbal answer). |
+| `answers` | list of text | `[]` | 2 to 4 for `everyone` (one per answer button A-D). Up to 6 (A-F) for `fastestFinger`, which the player answers aloud; it may be empty. |
 | `correct` | number | none | Index into `answers`, from 0. Required for `everyone`. |
 | `timeLimitS` | number | `20` | Seconds, at most 3600; `0` means no clock (the quizmaster ends the question). |
 | `points` | number | `10` | Points for a correct answer at the start of the clock, -100000 to 100000. |
@@ -167,11 +172,22 @@ shown. Players do not answer; the next step goes to the next slide.
 | Version | Change |
 | --- | --- |
 | 1 | First version. |
-| 2 | Adds `explanation` slides and the quiz `theme`. Version 1 files read as version 2 unchanged. |
+| 2 | Adds `explanation` slides and, later within version 2, the quiz `theme` (builds from before that drop it when they save). Version 1 files read as version 2 unchanged. |
 | 3 | `background` becomes an object with video options; sounds get `part`, `gainDb` and `replay`. Version 1 and 2 files read as version 3 unchanged. |
 
 Fields may be added within a version as long as older files keep their
 meaning; readers ignore fields they do not know. Anything else (a new slide
-type, a changed meaning) needs the next `schemaVersion` and a migration that
-opens older files unchanged. Readers keep a quiz in the current version, so
-saving an older file writes the current one.
+type, a changed meaning, a rule that refuses files that used to play) needs
+the next `schemaVersion` and a migration that opens older files unchanged.
+Readers keep a quiz in the current version, so saving an older file writes
+the current one.
+
+These limits were added within version 2, before that rule was kept, so a
+version 1 or 2 file may break them. The editor opens such a file and lists
+each problem; the show plays it once it is fixed and saved.
+
+| Limit | An older file that breaks it |
+| --- | --- |
+| Media names work on every system (the name rules above). | In a `.quiz` file, the editor gives each such file the closest name that fits (`what?.png` becomes `what_.png`, with `-2` added if that name is taken) and points the slides to it; the quiz shows as unsaved until it is saved. A plain `quiz.json` is left as written and the names are listed. |
+| An `everyone` question has at most 4 answers, one per answer button. | Listed; remove answers or make it `fastestFinger`, which allows 6. |
+| `points`, `pointsEnd` and `penalty` within 100000, `timeLimitS` at most 3600. | Listed; the editor keeps new values within range. |

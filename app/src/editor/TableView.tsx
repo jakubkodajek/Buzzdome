@@ -7,7 +7,7 @@ import type { Quiz, Slide } from "../types";
 import type { Action } from "./actions";
 import { ContextMenu } from "./controls";
 import { slideProperties, type SlideEditing } from "./properties";
-import { setAnswerAt, setHeadline, setNotes } from "./slides";
+import { addAnswer, setAnswerAt, setHeadline, setNotes } from "./slides";
 
 type ColumnId = "answers" | "correct" | "time" | "points" | "pointsEnd" | "penalty" | "notes";
 
@@ -113,20 +113,24 @@ function SlideRow(props: { index: number; selected: boolean; editing: SlideEditi
         />
       </td>
       {shown("answers") &&
-        ANSWER_LETTERS.map((letter, i) => (
-          <td key={letter} className={q && i <= q.answers.length ? (i === q.correct ? "correct" : "") : "na"}>
-            {q && i <= q.answers.length && (
-              <input
-                aria-label={t("elementAnswer", { letter })}
-                value={q.answers[i] ?? ""}
-                onChange={(e) => {
-                  const text = e.target.value;
-                  update((s) => (s.type === "question" ? setAnswerAt(s, i, text) : s), `answer${i}`);
-                }}
-              />
-            )}
-          </td>
-        ))}
+        ANSWER_LETTERS.map((letter, i) => {
+          // The answers, then a cell to type a new one into if the mode allows one.
+          const editable = q !== null && (i < q.answers.length || (i === q.answers.length && addAnswer(q) !== q));
+          return (
+            <td key={letter} className={editable ? (i === q.correct ? "correct" : "") : "na"}>
+              {editable && (
+                <input
+                  aria-label={t("elementAnswer", { letter })}
+                  value={q.answers[i] ?? ""}
+                  onChange={(e) => {
+                    const text = e.target.value;
+                    update((s) => (s.type === "question" ? setAnswerAt(s, i, text) : s), `answer${i}`);
+                  }}
+                />
+              )}
+            </td>
+          );
+        })}
       {cell("correct", q && rows.correctAnswer(q).control)}
       {cell("time", q && rows.answerTime(q).control)}
       {cell("points", q && rows.pointsStart(q).control)}

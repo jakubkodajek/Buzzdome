@@ -35,7 +35,7 @@ import {
 import { isVideo, mediaFileName, MediaRootContext, mediaUrl, type MediaKind } from "../media";
 import { NO_CONTEXT, slideContexts } from "../quiz";
 import { ThemeContext, useResolvedTheme } from "../theme/context";
-import type { Slide } from "../types";
+import type { Slide, ValidationError } from "../types";
 import { tooltip, useActionKeys, type Action, type Actions } from "./actions";
 import { Backstage, type BackstagePage } from "./Backstage";
 import { ContextMenu } from "./controls";
@@ -190,6 +190,11 @@ function Studio({ editor, open, onExit }: { editor: QuizEditor; open: OpenQuiz |
     setSelection(FIRST);
     setDialog(null);
     setBackstage(null);
+  };
+  /** A file with problems opens on the list of them. */
+  const opened = (problems: ValidationError[] | false) => {
+    loaded(problems !== false);
+    if (problems && problems.length > 0) setBackstage("info");
   };
   const openEdit = (part: ElementId) => {
     if (!slide) return;
@@ -441,7 +446,7 @@ function Studio({ editor, open, onExit }: { editor: QuizEditor; open: OpenQuiz |
               onClose={open ? () => setBackstage(null) : null}
               actions={actions}
               recentFiles={editor.recentFiles}
-              onOpenFile={(path) => void editor.openQuiz(path).then(loaded)}
+              onOpenFile={(path) => void editor.openQuiz(path).then(opened)}
               onTitle={(text) => editor.edit({ type: "setTitle", title: text }, "title")}
               onShowSlide={(id) => {
                 setSelection({ id, index: 0, element: "slide" });

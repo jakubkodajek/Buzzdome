@@ -5,7 +5,7 @@ import { SLIDE_TYPE_LABEL } from "../quiz";
 import type { QuestionSlide, Slide } from "../types";
 import { Dialog } from "./controls";
 import type { ElementId } from "./elements";
-import { removeAnswer, setAnswerAt, setCorrect } from "./slides";
+import { answerLimits, removeAnswer, setAnswerAt, setCorrect } from "./slides";
 
 const FORM_ID = "edit-slide";
 
@@ -97,6 +97,8 @@ export function EditSlideDialog(props: { slide: Slide; focus: ElementId; onApply
 function QuestionFields({ question, onChange }: { question: QuestionSlide; onChange: (question: QuestionSlide) => void }) {
   const { t } = useApp();
   const count = question.answers.length;
+  // A row per answer the mode allows (or the file has).
+  const letters = ANSWER_LETTERS.slice(0, Math.max(answerLimits(question.mode).most, count));
   return (
     <>
       <label className="field">
@@ -105,7 +107,7 @@ function QuestionFields({ question, onChange }: { question: QuestionSlide; onCha
       </label>
       <fieldset className="answer-rows">
         <legend>{t("answersField")}</legend>
-        {ANSWER_LETTERS.map((letter, i) => {
+        {letters.map((letter, i) => {
           // Rows past the answers are greyed; the first of them takes a new answer.
           const used = i < count;
           return (

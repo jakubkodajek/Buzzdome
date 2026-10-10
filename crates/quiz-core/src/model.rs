@@ -3,7 +3,7 @@
 
 use crate::media::{check_reference, Background, MediaIssue, MediaKind, SoundClip, VideoClip, MAX_GAIN_DB, MIN_GAIN_DB};
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeSet, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 use ts_rs::TS;
 
 /// 1: first version. 2: adds explanation slides. 3: backgrounds become
@@ -11,8 +11,13 @@ use ts_rs::TS;
 /// replay part. Older files read unchanged.
 pub const SCHEMA_VERSION: u32 = 3;
 
-/// Most answers a question can have: one per answer button of a buzzer (A-D).
-pub const MAX_ANSWERS: usize = 4;
+/// Most answers a question can show (A-F, as many as the reference app's
+/// keypads have). A fastest finger question is answered aloud, so it may use
+/// them all.
+pub const MAX_ANSWERS: usize = 6;
+/// Most answers an everyone-answers question can have: one per answer button
+/// of a buzzer (A-D).
+pub const MAX_EVERYONE_ANSWERS: usize = 4;
 /// Fewest answers an everyone-answers question can have.
 pub const MIN_EVERYONE_ANSWERS: usize = 2;
 /// Seconds to answer when a quiz file leaves `timeLimitS` out.
@@ -88,6 +93,18 @@ impl Slide {
             media.push((background.file.as_str(), BACKGROUND));
         }
         media
+    }
+
+    /// The same media references as `media`, to change in place.
+    fn media_mut(&mut self) -> impl Iterator<Item = &mut String> {
+        [
+            self.picture.as_mut(),
+            self.video.as_mut().map(|video| &mut video.file),
+            self.sound.as_mut().map(|sound| &mut sound.file),
+            self.background.as_mut().map(|background| &mut background.file),
+        ]
+        .into_iter()
+        .flatten()
     }
 }
 
@@ -183,8 +200,12 @@ impl Question {
 
     /// Adds the problems of this question to `found`.
     fn problems(&self, found: &mut impl FnMut(Problem)) {
-        if self.answers.len() > MAX_ANSWERS {
-            found(Problem::TooManyAnswers { max: MAX_ANSWERS });
+        let max = match self.mode {
+            AnswerMode::Everyone => MAX_EVERYONE_ANSWERS,
+            AnswerMode::FastestFinger => MAX_ANSWERS,
+        };
+        if self.answers.len() > max {
+            found(Problem::TooManyAnswers { max });
         }
         if self.mode == AnswerMode::Everyone {
             if self.answers.len() < MIN_EVERYONE_ANSWERS {
@@ -292,6 +313,16 @@ impl Quiz {
     /// Every media file the quiz uses, each once.
     pub fn media_files(&self) -> BTreeSet<&str> {
         self.slides.iter().flat_map(|s| s.media()).map(|(file, _)| file).collect()
+    }
+
+    /// Points the media references in `renamed` (old reference to new one)
+    /// to their new names.
+    pub fn rename_media(&mut self, renamed: &BTreeMap<String, String>) {
+        for file in self.slides.iter_mut().flat_map(Slide::media_mut) {
+            if let Some(new) = renamed.get(file.as_str()) {
+                file.clone_from(new);
+            }
+        }
     }
 
     pub fn validate(&self) -> Result<(), Vec<ValidationError>> {
@@ -429,7 +460,7 @@ mod tests {
     #[test]
     fn each_question_rule_names_its_problem() {
         let cases: [(Edit, Problem); 9] = [
-            (|q| q.answers = vec!["a".into(); MAX_ANSWERS + 1], Problem::TooManyAnswers { max: MAX_ANSWERS }),
+            (|q| q.answers = vec!["a".into(); MAX_EVERYONE_ANSWERS + 1], Problem::TooManyAnswers { max: MAX_EVERYONE_ANSWERS }),
             (|q| q.answers.truncate(1), Problem::TooFewAnswers { min: MIN_EVERYONE_ANSWERS }),
             (|q| q.correct = None, Problem::NoCorrectAnswer),
             (|q| q.correct = Some(2), Problem::CorrectOutOfRange),
@@ -517,10 +548,40 @@ mod tests {
     }
 
     #[test]
-    fn a_question_has_at_most_one_answer_per_button() {
+    fn an_everyone_answers_question_has_at_most_one_answer_per_button() {
         // Every answer must be one a buzzer button can choose.
         let buttons = [Button::A, Button::B, Button::C, Button::D, Button::Big];
-        assert!((0..MAX_ANSWERS).all(|i| buttons.iter().any(|b| b.answer_index() == Some(i))));
+        assert!((0..MAX_EVERYONE_ANSWERS).all(|i| buttons.iter().any(|b| b.answer_index() == Some(i))));
+    }
+
+    #[test]
+    fn a_fastest_finger_question_may_show_every_answer_letter() {
+        let fastest = |count: usize| {
+            let mut q = question(10, None, 10);
+            q.mode = AnswerMode::FastestFinger;
+            q.answers = vec!["a".into(); count];
+            Slide::new("a", SlideContent::Question(q))
+        };
+        assert_eq!(problems_of(vec![fastest(MAX_ANSWERS)]), vec![]);
+        assert_eq!(problems_of(vec![fastest(MAX_ANSWERS + 1)]), vec![Problem::TooManyAnswers { max: MAX_ANSWERS }]);
+    }
+
+    #[test]
+    fn renames_media_wherever_a_slide_uses_it() {
+        let mut quiz = Quiz::from_json(
+            r#"{"schemaVersion": 3, "title": "x", "slides": [{"id": "a", "type": "billboard", "title": "",
+                "picture": "media/a?.png", "video": {"file": "media/a?.mp4"}, "sound": {"file": "media/a?.mp3"},
+                "background": {"file": "media/kept.png"}}]}"#,
+        )
+        .unwrap();
+        // `media_mut` lists the same references as `media`.
+        let slide = &mut quiz.slides[0];
+        let listed: Vec<String> = slide.media().into_iter().map(|(file, _)| file.to_string()).collect();
+        assert_eq!(slide.media_mut().map(|file| file.clone()).collect::<Vec<_>>(), listed);
+
+        let renamed = ["png", "mp4", "mp3"].map(|ext| (format!("media/a?.{ext}"), format!("media/a_.{ext}")));
+        quiz.rename_media(&renamed.into_iter().collect());
+        assert_eq!(quiz.media_files().into_iter().collect::<Vec<_>>(), ["media/a_.mp3", "media/a_.mp4", "media/a_.png", "media/kept.png"]);
     }
 
     #[test]

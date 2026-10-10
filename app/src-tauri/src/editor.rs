@@ -139,10 +139,11 @@ pub async fn editor_open(app: AppHandle, lock: State<'_, EditorLock>, path: Stri
     let dir = editor_dir(&app)?;
     let folder = new_folder(&dir);
     let root = dir.join(&folder);
-    let quiz = quiz_file::open_into(Path::new(&path), &root)?;
-    let pointer = Pointer { folder, source_path: Some(path), unsaved: false };
+    let opened = quiz_file::open_into(Path::new(&path), &root)?;
+    // A quiz that opening changed has to be saved to keep the change.
+    let pointer = Pointer { folder, source_path: Some(path), unsaved: opened.changed };
     switch_to(&dir, &pointer)?;
-    describe(&app, &root, pointer, quiz)
+    describe(&app, &root, pointer, opened.quiz)
 }
 
 /// Stores the edited quiz in the draft and returns what keeps it from being

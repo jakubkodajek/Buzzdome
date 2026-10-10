@@ -565,7 +565,9 @@
 .design-area[data-selected="answer-0"] [data-element="answer-0"],
 .design-area[data-selected="answer-1"] [data-element="answer-1"],
 .design-area[data-selected="answer-2"] [data-element="answer-2"],
-.design-area[data-selected="answer-3"] [data-element="answer-3"] {
+.design-area[data-selected="answer-3"] [data-element="answer-3"],
+.design-area[data-selected="answer-4"] [data-element="answer-4"],
+.design-area[data-selected="answer-5"] [data-element="answer-5"] {
   outline: 6px dashed #fff;
   outline-offset: 8px;
 }
@@ -1033,6 +1035,8 @@
 .answer-letter.answer-1 { background: var(--answer-1); }
 .answer-letter.answer-2 { background: var(--answer-2); }
 .answer-letter.answer-3 { background: var(--answer-3); color: #2b2400; }
+.answer-letter.answer-4 { background: var(--answer-4); }
+.answer-letter.answer-5 { background: var(--answer-5); }
 
 .answer-correct {
   display: flex;
@@ -1184,6 +1188,8 @@
 .sketch-answer-1 { background: var(--answer-1); }
 .sketch-answer-2 { background: var(--answer-2); }
 .sketch-answer-3 { background: var(--answer-3); }
+.sketch-answer-4 { background: var(--answer-4); }
+.sketch-answer-5 { background: var(--answer-5); }
 
 .sketch:not(.has-answers) .sketch-media {
   grid-column: 1 / -1;

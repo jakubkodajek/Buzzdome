@@ -7,6 +7,7 @@ import {
   DEFAULT_POINTS,
   DEFAULT_TIME_LIMIT_S,
   MAX_ANSWERS,
+  MAX_EVERYONE_ANSWERS,
   MAX_GAIN_DB,
   MAX_POINTS,
   MAX_TIME_LIMIT_S,
@@ -17,7 +18,17 @@ import { slideTitle } from "../quiz";
 import type { AnswerMode, Background, Quiz, QuestionSlide, Replay, Slide, SlideType, SoundClip, Span, VideoClip } from "../types";
 
 /** Answers a new everyone-answers question starts with: one per buzzer button. */
-const DEFAULT_ANSWERS = MAX_ANSWERS;
+const DEFAULT_ANSWERS = MAX_EVERYONE_ANSWERS;
+
+/**
+ * Fewest and most answers a question can have in `mode`
+ * (`Question::problems` in crates/quiz-core/src/model.rs): everyone answers
+ * with a button, so 2 to 4; a fastest finger question is answered aloud, so
+ * none to all six letters.
+ */
+export function answerLimits(mode: AnswerMode): { fewest: number; most: number } {
+  return mode === "everyone" ? { fewest: MIN_EVERYONE_ANSWERS, most: MAX_EVERYONE_ANSWERS } : { fewest: 0, most: MAX_ANSWERS };
+}
 
 /** A new, empty slide. */
 export function newSlide(type: SlideType, id: string): Slide {
@@ -89,12 +100,13 @@ export function duplicateSlide(slide: Slide, id: string): Slide {
 
 export function setMode(question: QuestionSlide, mode: AnswerMode): QuestionSlide {
   if (mode === "fastestFinger") return { ...question, mode };
-  // Everyone answers with the buttons, so there must be answers and a right one.
+  // Everyone answers with the buttons: an answer per button at most, and a right one.
+  const { fewest, most } = answerLimits(mode);
+  const count = question.answers.length;
   const answers =
-    question.answers.length >= MIN_EVERYONE_ANSWERS
-      ? question.answers
-      : [...question.answers, ...Array<string>(DEFAULT_ANSWERS - question.answers.length).fill("")];
-  return { ...question, mode, answers, correct: question.correct ?? 0 };
+    count < fewest ? [...question.answers, ...Array<string>(DEFAULT_ANSWERS - count).fill("")] : question.answers.slice(0, most);
+  const correct = question.correct !== null && question.correct < answers.length ? question.correct : 0;
+  return { ...question, mode, answers, correct };
 }
 
 export function setAnswer(question: QuestionSlide, index: number, text: string): QuestionSlide {
@@ -102,7 +114,7 @@ export function setAnswer(question: QuestionSlide, index: number, text: string):
 }
 
 export function addAnswer(question: QuestionSlide): QuestionSlide {
-  if (question.answers.length >= MAX_ANSWERS) return question;
+  if (question.answers.length >= answerLimits(question.mode).most) return question;
   return { ...question, answers: [...question.answers, ""] };
 }
 
@@ -131,8 +143,7 @@ export function withAnswerCount(question: QuestionSlide, count: number): Questio
 
 /** Removes an answer; the right answer stays the same one (or falls back to the first). */
 export function removeAnswer(question: QuestionSlide, index: number): QuestionSlide {
-  const fewest = question.mode === "everyone" ? MIN_EVERYONE_ANSWERS : 0;
-  if (question.answers.length <= fewest || index < 0 || index >= question.answers.length) return question;
+  if (question.answers.length <= answerLimits(question.mode).fewest || index < 0 || index >= question.answers.length) return question;
   const answers = question.answers.filter((_, i) => i !== index);
   let correct = question.correct;
   if (correct === index) correct = question.mode === "everyone" ? 0 : null;

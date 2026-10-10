@@ -44,8 +44,12 @@ export interface QuizEditor {
   redo: () => void;
   // File operations resolve to whether they happened (not cancelled, not failed).
   newQuiz: () => Promise<boolean>;
-  /** Opens `path`, or a file the user picks. */
-  openQuiz: (path?: string) => Promise<boolean>;
+  /**
+   * Opens `path`, or a file the user picks. Resolves to what keeps the
+   * opened quiz from being played (a file from an older version may break
+   * newer rules), or false when nothing was opened.
+   */
+  openQuiz: (path?: string) => Promise<ValidationError[] | false>;
   /** Quiz files opened or saved lately, newest first. */
   recentFiles: string[];
   save: () => Promise<boolean>;
@@ -97,11 +101,11 @@ export function useQuizEditor(onTestRun: () => void): QuizEditor {
     });
   }, [present, unsaved, report]);
 
-  /** Runs a file operation; a failure is shown, not thrown. */
-  const attempt = (operation: () => Promise<boolean>): Promise<boolean> =>
+  /** Runs a file operation; a failure is shown, not thrown, and gives false. */
+  const attempt = <T>(operation: () => Promise<T | false>): Promise<T | false> =>
     operation().catch((error: unknown) => {
       report.current(error);
-      return false;
+      return false as const;
     });
 
   const load = (draft: Awaited<ReturnType<typeof api.editorLoad>>) => {
@@ -147,9 +151,10 @@ export function useQuizEditor(onTestRun: () => void): QuizEditor {
         if (!(await mayDiscard())) return false;
         const path = given ?? (await openDialog({ multiple: false, filters: [{ name: t("quizFiles"), extensions: [QUIZ_EXTENSION, "json"] }] }));
         if (typeof path !== "string") return false;
-        load(await draftQueue.run(() => api.editorOpen(path)));
+        const draft = await draftQueue.run(() => api.editorOpen(path));
+        load(draft);
         setRecentFiles(rememberRecentFile(path));
-        return true;
+        return draft.problems;
       }),
     recentFiles,
     save: () => {

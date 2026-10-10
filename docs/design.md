@@ -114,6 +114,17 @@ Unpacking writes into a temporary folder, syncs each file, checks the quiz
 folder into place, so a half-unpacked quiz is never used. Opening the same
 file again reuses the folder.
 
+The editor opens a file with `open_into`, which unpacks the same way but
+does not check the quiz: a file an older version wrote may break rules added
+since (quiz-format.md, Versioning), and the author fixes it in the editor.
+Only safe names inside `media/` are ever read or written, checked or not.
+A `.quiz` entry with a name that is not portable is stored under the
+closest portable one (`quiz_core::portable_reference`, numbered if taken)
+and the quiz's references are renamed with it (the draft then counts as
+unsaved); a plain `quiz.json` reads
+only safe names from the disk (no device names on Windows), and the show
+path keeps such a file refused.
+
 The session's `meta.json` records that folder (`mediaRoot`), so a resumed
 show finds its media even if the original file was moved. When a show
 starts, every other unpacked quiz is deleted, because only the latest show can
@@ -143,7 +154,8 @@ table view toggle. It edits a quiz; it never touches a running show.
   writes run in order, and writes still waiting collapse into the latest.
   The backend answers each write with the quiz's problems
   (`quiz_file::problems`: the core's checks plus missing media), shown on
-  the thumbnails, in the status bar and on the File page.
+  the thumbnails, in the status bar and on the File page. A file that opens
+  with problems opens on that list.
 - **State.** `history.ts` is a pure undo history of `Edit`s (set title,
   set theme, insert, update, remove, move a slide). Typing into one field of one slide
   merges into one undo step through a merge key (`<slide id>:<field>`).
@@ -154,7 +166,8 @@ table view toggle. It edits a quiz; it never touches a running show.
   which the canvas, the panel and the context menu share.
 - **Slide changes.** `slides.ts` holds every change to a slide as a pure
   function that keeps the slide playable (an everyone-answers question
-  always has 2 to 4 answers and a correct one, and so on). Nothing in the
+  always has 2 to 4 answers and a correct one, a fastest finger question at
+  most 6, and so on; `answerLimits` mirrors the core's rule). Nothing in the
   UI edits a slide object by hand. Tested in `slides.test.ts`.
 - **Actions.** `actions.ts` defines an `Action` (label, icon, keys,
   disabled, checked, run). `EditorScreen.tsx` builds the one record of all
@@ -190,7 +203,7 @@ else lives in the UI, because only the UI draws.
   `resolveTheme` fills in the rest (TH-2). An id that is not installed, a
   missing parent or a parent loop ends at the default theme, so a look can
   never stop a quiz from opening or playing. Colour keys: `text`, `shadow`,
-  `glow`, `panel`, `bar`, `barEdge`, `tile`, `accent`, `answerA`..`answerD`,
+  `glow`, `panel`, `bar`, `barEdge`, `tile`, `accent`, `answerA`..`answerF`,
   `correct`, `wrong`. Theme packages (planned) will be read by Rust and
   handed to the UI in the same form.
 - **Drawing.** `ThemeContext` (`theme/context.ts`) carries the resolved

@@ -3,11 +3,14 @@
 
 import type { StringKey } from "../i18n";
 import type { AnswerMode, Slide, SlideType } from "../types";
-import { newSlide } from "./slides";
+import { answerLimits, newSlide } from "./slides";
 
 export interface SlideLayout {
   type: SlideType;
-  /** Answers of a question (0: answered aloud, fastest finger). */
+  /**
+   * Answers of a question. Everyone answers a question with an answer per
+   * button; one with none or more is fastest finger, answered aloud.
+   */
   answers?: number;
   /** Asks for a picture or a video once the slide is inserted. */
   media?: "picture" | "video";
@@ -44,12 +47,20 @@ export const LAYOUT_GROUPS: LayoutGroup[] = [
   },
   { title: "layouts2", layouts: withAndWithoutPicture(2) },
   { title: "layouts3", layouts: withAndWithoutPicture(3) },
+  { title: "layouts5", layouts: withAndWithoutPicture(5) },
+  { title: "layouts6", layouts: withAndWithoutPicture(6) },
 ];
+
+/** The answer mode of a question laid out with `answers` answers. */
+export function layoutMode(answers: number): AnswerMode {
+  const { fewest, most } = answerLimits("everyone");
+  return answers >= fewest && answers <= most ? "everyone" : "fastestFinger";
+}
 
 /** A new slide laid out as `layout` (its media still to be chosen). */
 export function slideFromLayout(layout: SlideLayout, id: string): Slide {
   const slide = newSlide(layout.type, id);
   if (slide.type !== "question" || layout.answers === undefined) return slide;
-  const mode: AnswerMode = layout.answers === 0 ? "fastestFinger" : "everyone";
-  return { ...slide, mode, answers: Array<string>(layout.answers).fill(""), correct: layout.answers === 0 ? null : 0 };
+  const answers = Array<string>(layout.answers).fill("");
+  return { ...slide, mode: layoutMode(layout.answers), answers, correct: layout.answers === 0 ? null : 0 };
 }

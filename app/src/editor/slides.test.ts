@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MAX_ANSWERS } from "../bindings/Constants";
+import { MAX_ANSWERS, MAX_EVERYONE_ANSWERS } from "../bindings/Constants";
 import type { QuestionSlide, Quiz } from "../types";
 import {
   addAnswer,
@@ -41,6 +41,9 @@ describe("slides", () => {
     // Answers already there are kept.
     const kept = setMode(question({ mode: "fastestFinger", answers: ["a", "b", "c"], correct: 2 }), "everyone");
     expect([kept.answers, kept.correct]).toEqual([["a", "b", "c"], 2]);
+    // Answers past the buttons go; a right one among them falls back to the first.
+    const six = question({ mode: "fastestFinger", answers: ["a", "b", "c", "d", "e", "f"], correct: 4 });
+    expect(setMode(six, "everyone")).toMatchObject({ answers: ["a", "b", "c", "d"], correct: 0 });
   });
 
   it("keeps the right answer when another answer is removed", () => {
@@ -59,7 +62,11 @@ describe("slides", () => {
     expect(removeAnswer(verbal, 0).answers).toEqual([]);
     let full = question();
     for (let i = 0; i < 10; i++) full = addAnswer(full);
-    expect(full.answers).toHaveLength(MAX_ANSWERS);
+    expect(full.answers).toHaveLength(MAX_EVERYONE_ANSWERS);
+    // Fastest finger is answered aloud, so it may show every answer letter.
+    let aloud = question({ mode: "fastestFinger" });
+    for (let i = 0; i < 10; i++) aloud = addAnswer(aloud);
+    expect(aloud.answers).toHaveLength(MAX_ANSWERS);
   });
 
   it("adds an answer typed into the row after the last one, and only there", () => {
@@ -68,7 +75,8 @@ describe("slides", () => {
     expect(setAnswerAt(q, 2, "c").answers).toEqual(["a", "b", "c"]);
     expect(setAnswerAt(q, 3, "d")).toBe(q);
     const full = question({ answers: ["a", "b", "c", "d"] });
-    expect(setAnswerAt(full, MAX_ANSWERS, "e")).toBe(full);
+    expect(setAnswerAt(full, MAX_EVERYONE_ANSWERS, "e")).toBe(full);
+    expect(setAnswerAt({ ...full, mode: "fastestFinger" }, MAX_EVERYONE_ANSWERS, "e").answers).toHaveLength(MAX_EVERYONE_ANSWERS + 1);
   });
 
   it("sets the number of answers as far as the mode allows", () => {

@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { ANSWER_LETTERS } from "../answers";
 import { useApp } from "../app-context";
-import { FINAL_LAST_STEP } from "../bindings/Constants";
+import { FINAL_LAST_STEP, MAX_EVERYONE_ANSWERS } from "../bindings/Constants";
 import { scoreDigits, signed } from "../format";
 import { playerName } from "../i18n";
 import { CheckIcon, CrossIcon, PeopleIcon, QuestionIcon, TrophyIcon } from "../icons";
@@ -186,7 +186,7 @@ function QuestionScreen(props: {
       {hasMedia && <SlideMedia slide={question} className="question-media" mode={mode} />}
 
       {question.answers.length > 0 && (
-        <div className="answers">
+        <div className={question.answers.length > MAX_EVERYONE_ANSWERS ? "answers answers-6" : "answers"}>
           {question.answers.map((answer, i) => {
             const revealed = step === "revealed";
             const isCorrect = i === question.correct;

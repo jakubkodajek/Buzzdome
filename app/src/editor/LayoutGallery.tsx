@@ -3,7 +3,7 @@ import { useApp } from "../app-context";
 import type { Translate } from "../i18n";
 import { SLIDE_TYPE_LABEL } from "../quiz";
 import { Popup } from "./controls";
-import { LAYOUT_GROUPS, type SlideLayout } from "./layouts";
+import { LAYOUT_GROUPS, layoutMode, type SlideLayout } from "./layouts";
 
 /** The slide layouts to insert, each drawn as a small sketch of the slide. */
 export function LayoutGallery({ x, y, onPick, onClose }: { x: number; y: number; onPick: (layout: SlideLayout) => void; onClose: () => void }) {
@@ -81,7 +81,7 @@ function layoutLabel(t: Translate, layout: SlideLayout): string {
   const base =
     layout.type === "question"
       ? layout.answers
-        ? t("layoutAnswers", { range: `A–${ANSWER_LETTERS[layout.answers - 1]}` })
+        ? t(layoutMode(layout.answers) === "everyone" ? "layoutAnswers" : "layoutAnswersAloud", { range: `A–${ANSWER_LETTERS[layout.answers - 1]}` })
         : t("layoutSpoken")
       : t(SLIDE_TYPE_LABEL[layout.type]);
   if (layout.media === "picture") return t("layoutWithPicture", { layout: base });

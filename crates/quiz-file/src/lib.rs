@@ -7,9 +7,13 @@
 //! working (and resumes after a crash) even if the original file is moved,
 //! and opening the same file twice reuses the same folder.
 
-use quiz_core::{is_safe_reference, portable_name, MediaIssue, Problem, Quiz, QuizJsonError, ValidationError, MEDIA_PREFIX};
+use quiz_core::{
+    is_safe_reference, portable_name, portable_reference, MediaIssue, Problem, Quiz, QuizJsonError, ValidationError,
+    MEDIA_PREFIX,
+};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
+use std::collections::{BTreeMap, HashSet};
 use std::fs::{self, File};
 use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
@@ -83,8 +87,11 @@ pub struct Package {
 /// hash and must not be changed afterwards; opening the same file reuses it.
 pub fn open(path: &Path, cache: &Path) -> Result<Package> {
     let incoming = incoming_dir(cache)?;
-    let result = unpack(path, &incoming).and_then(|(quiz, hash)| {
-        let root = cache.join(hash);
+    let result = unpack(path, &incoming).and_then(|unpacked| {
+        // The show plays the file as it is: a media name it would have to
+        // rename is a problem to fix in the editor.
+        let quiz = read_checked(&incoming)?;
+        let root = cache.join(unpacked.hash);
         if read_checked(&root).is_ok() {
             // The same content was opened before.
             remove_dir(&incoming);
@@ -101,15 +108,32 @@ pub fn open(path: &Path, cache: &Path) -> Result<Package> {
     result
 }
 
+/// A quiz opened for editing.
+#[derive(Debug)]
+pub struct Opened {
+    pub quiz: Quiz,
+    /// Opening changed the quiz (renamed media), so it differs from the file.
+    pub changed: bool,
+}
+
 /// Opens a quiz file into `dest`, which must not exist, replacing nothing
-/// until the file has been unpacked and checked. For a package that will be
-/// edited (the editor's draft).
-pub fn open_into(path: &Path, dest: &Path) -> Result<Quiz> {
+/// until the file has been unpacked. For a package that will be edited (the
+/// editor's draft), so the quiz is not checked: a file an older version made
+/// may break rules added since, and `problems` tells the author what to fix.
+/// Media in a `.quiz` file whose names are not portable (see
+/// `quiz_core::portable_reference`) get the closest portable name.
+pub fn open_into(path: &Path, dest: &Path) -> Result<Opened> {
     let parent = dest.parent().unwrap_or(Path::new("."));
     let incoming = incoming_dir(parent)?;
-    let result = unpack(path, &incoming).and_then(|(quiz, _)| {
+    let result = unpack(path, &incoming).and_then(|unpacked| {
+        let mut quiz = read_quiz_json(&incoming)?;
+        let changed = !unpacked.renamed.is_empty();
+        if changed {
+            quiz.rename_media(&unpacked.renamed);
+            write_quiz_json(&incoming, &quiz)?;
+        }
         fs::rename(&incoming, dest).context(FileAction::Move, dest)?;
-        Ok(quiz)
+        Ok(Opened { quiz, changed })
     });
     if result.is_err() {
         remove_dir(&incoming);
@@ -117,10 +141,21 @@ pub fn open_into(path: &Path, dest: &Path) -> Result<Quiz> {
     result
 }
 
-/// Unpacks into `dest` and checks the result; returns the quiz and the content hash.
-fn unpack(path: &Path, dest: &Path) -> Result<(Quiz, String)> {
-    let hash = if is_zip(path)? { unpack_zip(path, dest)? } else { copy_json(path, dest)? };
-    Ok((read_checked(dest)?, hash))
+/// What unpacking wrote.
+struct Unpacked {
+    /// Hash of the names and contents of the files written.
+    hash: String,
+    /// Media stored under another name than the quiz uses (see `renames`).
+    renamed: BTreeMap<String, String>,
+}
+
+/// Unpacks a quiz file into `dest` without checking the quiz.
+fn unpack(path: &Path, dest: &Path) -> Result<Unpacked> {
+    if is_zip(path)? {
+        unpack_zip(path, dest)
+    } else {
+        copy_json(path, dest)
+    }
 }
 
 fn incoming_dir(parent: &Path) -> Result<PathBuf> {
@@ -227,14 +262,9 @@ fn sync_dir(dir: &Path) -> Result<()> {
 /// reused; a different one with the same name gets a number added.
 pub fn import_media(root: &Path, source: &Path) -> Result<String> {
     let original = portable_name(&source.file_name().map(|n| n.to_string_lossy()).unwrap_or_default());
-    let (stem, extension) = match original.rsplit_once('.') {
-        Some((stem, ext)) if !stem.is_empty() => (stem, format!(".{ext}")),
-        _ => (original.as_str(), String::new()),
-    };
+    let first = format!("{MEDIA_PREFIX}{original}");
     for n in 1.. {
-        // A number before the extension keeps the name portable.
-        let name = if n == 1 { original.clone() } else { format!("{stem}-{n}{extension}") };
-        let reference = format!("{MEDIA_PREFIX}{name}");
+        let reference = numbered(&first, n);
         let path = root.join(&reference);
         if !path.exists() {
             let mut file = File::open(source).context(FileAction::Read, source)?;
@@ -246,6 +276,40 @@ pub fn import_media(root: &Path, source: &Path) -> Result<String> {
         }
     }
     unreachable!("the loop returns")
+}
+
+/// The `n`th name to try for a file: `name` itself, then with `-n` before its
+/// extension, which keeps a portable name portable.
+fn numbered(name: &str, n: u32) -> String {
+    if n == 1 {
+        return name.to_string();
+    }
+    let file_name = name.rfind('/').map_or(0, |slash| slash + 1);
+    match name[file_name..].rfind('.') {
+        Some(dot) if dot > 0 => {
+            let (stem, extension) = name.split_at(file_name + dot);
+            format!("{stem}-{n}{extension}")
+        }
+        _ => format!("{name}-{n}"),
+    }
+}
+
+/// Portable names for the media references among `names` that are not safe
+/// but can be made so (see `quiz_core::portable_reference`), old name to new.
+/// A new name takes none of `names` nor another new one, ignoring letter case
+/// as Windows and macOS disks do.
+fn renames<'a>(names: impl Iterator<Item = &'a str> + Clone) -> BTreeMap<String, String> {
+    let mut taken: HashSet<String> = names.clone().map(str::to_lowercase).collect();
+    let mut renamed = BTreeMap::new();
+    for name in names {
+        if is_safe_reference(name) || renamed.contains_key(name) {
+            continue;
+        }
+        let Some(portable) = portable_reference(name) else { continue };
+        let new = (1..).map(|n| numbered(&portable, n)).find(|new| taken.insert(new.to_lowercase())).expect("a free name");
+        renamed.insert(name.to_string(), new);
+    }
+    renamed
 }
 
 /// Compares two files without reading either whole into memory.
@@ -374,14 +438,17 @@ fn is_zip(path: &Path) -> Result<bool> {
     }
 }
 
-/// Unpacks `quiz.json` and `media/` into `dest` and returns the content hash.
-/// Other entries (folders, links, files some ZIP tools add) are skipped.
-fn unpack_zip(path: &Path, dest: &Path) -> Result<String> {
+/// Unpacks `quiz.json` and `media/` into `dest`, media under a portable name
+/// (see `renames`). Other entries (folders, links, files some ZIP tools add,
+/// names that would leave the media folder) are skipped.
+fn unpack_zip(path: &Path, dest: &Path) -> Result<Unpacked> {
     let file = File::open(path).context(FileAction::Read, path)?;
     let mut archive = ZipArchive::new(file)?;
     if archive.len() > MAX_ENTRIES {
         return Err(QuizFileError::TooManyFiles);
     }
+    let names = archive.file_names().map(|name| name.map(|name| entry_name(&name))).collect::<std::result::Result<Vec<_>, _>>()?;
+    let renamed = renames(names.iter().map(String::as_str));
     let mut hasher = Sha256::new();
     let mut budget = MAX_UNPACKED_BYTES;
     for i in 0..archive.len() {
@@ -389,36 +456,44 @@ fn unpack_zip(path: &Path, dest: &Path) -> Result<String> {
         if entry.is_dir() || entry.is_symlink() {
             continue;
         }
-        let name = entry.name()?.replace('\\', "/");
-        if name != QUIZ_JSON && !(name.starts_with(MEDIA_PREFIX) && is_safe_reference(&name)) {
-            continue;
-        }
-        let copied = write_file(dest, &name, &mut entry, path, budget, &mut hasher)?;
-        budget -= copied;
+        let name = entry_name(&entry.name()?);
+        let stored = if name == QUIZ_JSON || is_safe_reference(&name) { Some(name.as_str()) } else { renamed.get(&name).map(String::as_str) };
+        let Some(stored) = stored else { continue };
+        budget -= write_file(dest, stored, &mut entry, path, budget, &mut hasher)?;
     }
-    Ok(finish(hasher))
+    Ok(Unpacked { hash: finish(hasher), renamed })
+}
+
+/// A ZIP entry's name with `/` between folders, as some ZIP tools on Windows
+/// write `\`.
+fn entry_name(raw: &str) -> String {
+    raw.replace('\\', "/")
 }
 
 /// Copies a plain quiz JSON file and the media it uses (next to it) into
-/// `dest` and returns the content hash.
-fn copy_json(path: &Path, dest: &Path) -> Result<String> {
+/// `dest`. Media names are not renamed: the author wrote them by hand, and
+/// `problems` lists the bad ones.
+fn copy_json(path: &Path, dest: &Path) -> Result<Unpacked> {
     let json = fs::read_to_string(path).context(FileAction::Read, path)?;
     let quiz = Quiz::from_json(&json)?;
     let source_root = path.parent().unwrap_or(Path::new("."));
-    // Check before copying, so a bad reference cannot point outside the folder.
-    quiz.validate().map_err(QuizFileError::Invalid)?;
     let mut hasher = Sha256::new();
     let mut budget = MAX_UNPACKED_BYTES;
     budget -= write_file(dest, QUIZ_JSON, &mut json.as_bytes(), path, budget, &mut hasher)?;
     for reference in quiz.media_files() {
+        // Only safe names are read: nothing outside the folder, and no
+        // device a name like `CON` opens on Windows.
+        if !is_safe_reference(reference) {
+            continue;
+        }
         let source = source_root.join(reference);
         let Ok(mut media) = File::open(&source) else {
-            // Reported as missing by the check after unpacking.
+            // `problems` reports it as missing.
             continue;
         };
         budget -= write_file(dest, reference, &mut media, &source, budget, &mut hasher)?;
     }
-    Ok(finish(hasher))
+    Ok(Unpacked { hash: finish(hasher), renamed: BTreeMap::new() })
 }
 
 /// Writes one file of a package from `contents` (read from the file
@@ -471,7 +546,7 @@ fn remove_dir(path: &Path) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use quiz_core::{Slide, SlideContent};
+    use quiz_core::{AnswerMode, Question, Slide, SlideContent, MAX_EVERYONE_ANSWERS, MAX_POINTS};
 
     /// The problem `check` reports when the quiz's flag picture is missing.
     fn flag_missing() -> Vec<ValidationError> {
@@ -608,10 +683,92 @@ mod tests {
 
     #[test]
     fn a_plain_json_quiz_cannot_reach_outside_its_folder() {
+        let outer = temp("json-escape");
+        fs::write(outer.join("secret.png"), b"secret").unwrap();
+        let folder = outer.join("quiz");
+        fs::create_dir_all(&folder).unwrap();
         let quiz = quiz_with_picture("media/../../secret.png");
-        let folder = temp("json-escape");
         fs::write(folder.join("quiz.json"), serde_json::to_vec(&quiz).unwrap()).unwrap();
         assert!(matches!(open(&folder.join("quiz.json"), &temp("json-escape-cache")), Err(QuizFileError::Invalid(_))));
+
+        // The editor opens it to be fixed, without the file outside.
+        let draft = temp("json-escape-draft").join("draft");
+        let Opened { quiz: opened, changed } = open_into(&folder.join("quiz.json"), &draft).unwrap();
+        assert_eq!((&opened, changed), (&quiz, false));
+        assert!(!draft.join("media").exists());
+        let problem = Problem::Media { file: "media/../../secret.png".into(), issue: MediaIssue::BadName };
+        assert_eq!(problems(&opened, &draft), [ValidationError { slide_id: Some("intro".into()), problem }]);
+    }
+
+    /// A quiz file made before the answer and points limits: an
+    /// everyone-answers question with five answers and too many points.
+    fn quiz_breaking_newer_rules() -> Quiz {
+        let question = Question {
+            text: "?".into(),
+            mode: AnswerMode::Everyone,
+            answers: vec!["a".into(); MAX_EVERYONE_ANSWERS + 1],
+            correct: Some(0),
+            time_limit_s: 20,
+            points: MAX_POINTS * 2,
+            points_end: None,
+            penalty: 0,
+        };
+        Quiz::new("Old", vec![Slide::new("q", SlideContent::Question(question))])
+    }
+
+    #[test]
+    fn the_editor_opens_a_quiz_the_show_refuses_and_lists_what_to_fix() {
+        let quiz = quiz_breaking_newer_rules();
+        let file = zip_of("old-rules", &[(QUIZ_JSON, &serde_json::to_vec(&quiz).unwrap())]);
+        assert!(matches!(open(&file, &temp("old-rules-cache")), Err(QuizFileError::Invalid(_))));
+
+        let draft = temp("old-rules-draft").join("draft");
+        let Opened { quiz: opened, changed } = open_into(&file, &draft).unwrap();
+        assert_eq!((&opened, changed), (&quiz, false));
+        let found: Vec<Problem> = problems(&opened, &draft).into_iter().map(|e| e.problem).collect();
+        assert_eq!(
+            found,
+            [Problem::TooManyAnswers { max: MAX_EVERYONE_ANSWERS }, Problem::PointsOutOfRange { max: MAX_POINTS }]
+        );
+    }
+
+    #[test]
+    fn the_editor_gives_media_names_older_versions_allowed_portable_names() {
+        let mut quiz = quiz_with_picture("media/what?.png");
+        let mut second = quiz.slides[0].clone();
+        second.id = "second".into();
+        second.picture = Some("media/what_.png".into());
+        quiz.slides.push(second);
+        let json = serde_json::to_vec(&quiz).unwrap();
+        let file = zip_of(
+            "old-names",
+            &[(QUIZ_JSON, &json), ("media/what?.png", b"question"), ("media/what_.png", b"underscore"), ("media/../x.png", b"x")],
+        );
+        // The show plays files as they are.
+        let err = open(&file, &temp("old-names-cache")).unwrap_err();
+        let bad_name = Problem::Media { file: "media/what?.png".into(), issue: MediaIssue::BadName };
+        assert!(matches!(err, QuizFileError::Invalid(ref p) if p.iter().any(|e| e.problem == bad_name)), "{err}");
+
+        let draft = temp("old-names-draft").join("draft");
+        let Opened { quiz: opened, changed } = open_into(&file, &draft).unwrap();
+        assert!(changed);
+        // The new name takes no name already used.
+        let pictures: Vec<_> = opened.slides.iter().map(|s| s.picture.as_deref().unwrap()).collect();
+        assert_eq!(pictures, ["media/what_-2.png", "media/what_.png"]);
+        assert_eq!(fs::read(draft.join("media/what_-2.png")).unwrap(), b"question");
+        assert_eq!(fs::read(draft.join("media/what_.png")).unwrap(), b"underscore");
+        assert_eq!(read_quiz_json(&draft).unwrap(), opened);
+        assert_eq!(problems(&opened, &draft), []);
+    }
+
+    #[test]
+    fn renaming_ignores_letter_case_and_numbers_before_the_extension() {
+        let renamed = renames(["media/A_.png", "media/a?.png", "media/a*.png", "media/x/../y.png"].into_iter());
+        let expected = [("media/a*.png", "media/a_-3.png"), ("media/a?.png", "media/a_-2.png")];
+        assert_eq!(renamed, expected.map(|(old, new)| (old.to_string(), new.to_string())).into());
+        assert_eq!(numbered("media/round.1/a.b.png", 2), "media/round.1/a.b-2.png");
+        assert_eq!(numbered("media/round.1/noext", 3), "media/round.1/noext-3");
+        assert_eq!(numbered("media/.hidden", 2), "media/.hidden-2");
     }
 
     #[test]
@@ -649,7 +806,7 @@ mod tests {
         save(&quiz_with_picture("media/flag.png"), &media, &file).unwrap();
 
         let draft = temp("draft").join("draft");
-        let mut quiz = open_into(&file, &draft).unwrap();
+        let mut quiz = open_into(&file, &draft).unwrap().quiz;
         quiz.title = "Edited".into();
         write_quiz_json(&draft, &quiz).unwrap();
         assert_eq!(read_checked(&draft).unwrap().title, "Edited");

@@ -11,12 +11,13 @@ pub use game::{
     PRESS_GRACE_MS,
 };
 pub use media::{
-    is_safe_reference, portable_name, Background, MediaIssue, MediaKind, Replay, SoundClip, SoundStart, Span, VideoClip,
+    is_safe_reference, portable_name, portable_reference, Background, MediaIssue, MediaKind, Replay, SoundClip, SoundStart, Span, VideoClip,
     MAX_GAIN_DB, MEDIA_PREFIX, MIN_GAIN_DB,
 };
 pub use model::{
     AnswerMode, Problem, Question, Quiz, QuizJsonError, Slide, SlideContent, ValidationError, DEFAULT_POINTS,
-    DEFAULT_TIME_LIMIT_S, MAX_ANSWERS, MAX_POINTS, MAX_TIME_LIMIT_S, MIN_EVERYONE_ANSWERS, SCHEMA_VERSION,
+    DEFAULT_TIME_LIMIT_S, MAX_ANSWERS, MAX_EVERYONE_ANSWERS, MAX_POINTS, MAX_TIME_LIMIT_S, MIN_EVERYONE_ANSWERS,
+    SCHEMA_VERSION,
 };
 pub use view::GameView;
 
@@ -29,6 +30,7 @@ mod ui_constants {
         let Ok(dir) = std::env::var("TS_RS_EXPORT_DIR") else { return };
         let constants = [
             ("MAX_ANSWERS", crate::MAX_ANSWERS.to_string()),
+            ("MAX_EVERYONE_ANSWERS", crate::MAX_EVERYONE_ANSWERS.to_string()),
             ("MIN_EVERYONE_ANSWERS", crate::MIN_EVERYONE_ANSWERS.to_string()),
             ("DEFAULT_TIME_LIMIT_S", crate::DEFAULT_TIME_LIMIT_S.to_string()),
             ("DEFAULT_POINTS", crate::DEFAULT_POINTS.to_string()),

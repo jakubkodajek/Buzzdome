@@ -73,6 +73,8 @@
       "type": "question",
       "mode": "fastestFinger",
       "text": "Jak se jmenuje autor knihy Válka s mloky?",
+      "answers": ["Karel Čapek", "Jaroslav Hašek", "Bohumil Hrabal", "Franz Kafka", "Milan Kundera", "Josef Čapek"],
+      "correct": 0,
       "timeLimitS": 30,
       "points": 150,
       "penalty": 30,

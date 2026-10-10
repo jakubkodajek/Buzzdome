@@ -135,6 +135,13 @@ const SCENES: Record<string, GameView | null> = {
     slide: quiz.slides[7],
     players: players([{}, {}, { delta: 129 }]),
   }),
+  sixAnswers: view({
+    phase: { phase: "question", step: "revealed", winner: 3 },
+    slideIndex: 8,
+    slide: quiz.slides[8],
+    players: players([{}, {}, { delta: 150 }]),
+  }),
+  sixAnswersPicture: view({ slideIndex: 8, slide: { ...quiz.slides[8], picture: "media/landscape.svg" } }),
   explanation: view({ phase: { phase: "explanation" }, slideIndex: 4, slide: quiz.slides[4] }),
   leaderboard: view({ phase: { phase: "endOfRound" }, slideIndex: 5, slide: quiz.slides[5] }),
   overlay: view({ leaderboardVisible: true }),
