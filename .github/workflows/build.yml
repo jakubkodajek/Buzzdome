@@ -14,7 +14,8 @@ permissions:
 
 env:
   # The Rust release CI builds with, so a lint added by a new release cannot
-  # turn CI red unasked; raise it on purpose, with the fixes it asks for.
+  # turn CI red unasked; raise it on purpose, with the fixes it asks for,
+  # together with rust-toolchain.toml.
   RUST_TOOLCHAIN: "1.97.0"
   # hidapi (buzzer receiver) needs libudev on Linux; the rest is Tauri's WebKitGTK stack.
   LINUX_DEPS: libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libudev-dev

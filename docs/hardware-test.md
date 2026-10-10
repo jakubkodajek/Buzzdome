@@ -2,7 +2,7 @@
 
 A checklist for the first test with the real receiver and buzzers. It checks
 specification section 4 and collects what is needed to write the vendor
-protocol. Do it on the event laptop (Windows) first, then on a Mac. Takes
+protocol, then smoke-tests the installed build. Do it on the event laptop (Windows) first, then on a Mac. Takes
 about 30 minutes with four buzzers.
 
 ## What to have
@@ -83,13 +83,35 @@ about 30 minutes with four buzzers.
 2. Mid-question, force-quit the app. Start it again and resume the show:
    scores and the question state are as before.
 
-## 7. Send back
+## 7. Release smoke check
+
+The pages run under the app's content security policy only in an installed
+build (`tauri dev` serves them without it), so check once on the Windows
+installer, then on the Mac, that nothing it should allow is blocked:
+
+1. Start a show with a quiz that has a picture, a sound and a video, under
+   a built-in theme with its own fonts and background (Bakchus, say).
+   Expected on the projector: the theme's fonts and background, the
+   picture, the sound and the video, which plays to its end.
+2. In the editor, select a slide with a sound and choose **Normalize
+   volume**. Expected: it measures and reports the gain, with no error.
+3. Choose something that asks first (ending the show, removing a file from
+   the media library). Expected: the question appears with Yes and No in
+   the app's language.
+4. In the **Media player** tab, add a sound and a video and play each.
+   Expected: both play.
+
+A step that fails here and not in a dev build is the policy blocking it:
+note the step and attach `buzzdome.log`.
+
+## 8. Send back
 
 Attach to the project thread:
 
 - the model (215 or 303S) and the photos;
 - the VID:PID, usage and interface of the receiver row;
 - the exported log files from steps 3 and 4;
+- the result of the release smoke check (step 7);
 - what failed, with the exact message.
 
 With the log and the vendor SDK, the vendor protocol can be written so that

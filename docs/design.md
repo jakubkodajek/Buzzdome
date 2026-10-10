@@ -302,10 +302,11 @@ replay a step off is kept: a journal begun before version 2 replays its
 jumps out of a question in play, as the app then restarted a question
 after a crash with a `GoTo` to it (`Game::replay`).
 
-The windows load media through Tauri's asset protocol. Its scope starts
-empty and the shell allows exactly the current quiz folder, the editor's
-draft folder, the built-in theme packages and the media player's library
-(`<app data>/library`, spec SN-7) (`asset_protocol_scope().allow_directory`),
+The windows load media through Tauri's asset protocol. Its scope is empty
+in `tauri.conf.json`; at startup the shell allows the folder of unpacked
+quizzes, the editor's drafts folder, the built-in theme packages and the
+media player's library (`<app data>/library`, spec SN-7)
+(`asset_protocol_scope().allow_directory`), and nothing changes it later,
 so a page cannot read anything else on the disk. A quiz folder is allowed
 only inside the app's own folders (the unpacked quizzes and the editor's
 drafts): a session whose `meta.json` names another folder resumes without
