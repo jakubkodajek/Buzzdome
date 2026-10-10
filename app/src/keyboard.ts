@@ -82,13 +82,13 @@ export function isHeldButtonPress(event: Pick<KeyboardEvent, "key" | "repeat" | 
 export function useShortcuts(view: GameView | null, onToggleProjector?: () => void) {
   const dispatch = useDispatch();
   useEffect(() => {
+    // Before anything else sees it, so no control on the way can let it through (G13).
+    const onKeyFirst = (event: KeyboardEvent) => {
+      if (isHeldButtonPress(event)) event.preventDefault();
+    };
     const onKey = (event: KeyboardEvent) => {
       // A key a control already took (Space on a focused team chip) is not the show's.
       if (event.defaultPrevented || isTypingTarget(event.target) || event.metaKey || event.ctrlKey || event.altKey) return;
-      if (isHeldButtonPress(event)) {
-        event.preventDefault();
-        return;
-      }
       if (event.key.toLowerCase() === KEYS.projector && onToggleProjector) {
         event.preventDefault();
         if (!event.repeat) onToggleProjector();
@@ -106,9 +106,11 @@ export function useShortcuts(view: GameView | null, onToggleProjector?: () => vo
     const onPointerUp = (event: PointerEvent) => {
       if (view && event.target instanceof HTMLInputElement && event.target.type === "range") event.target.blur();
     };
+    window.addEventListener("keydown", onKeyFirst, true);
     window.addEventListener("keydown", onKey);
     window.addEventListener("pointerup", onPointerUp);
     return () => {
+      window.removeEventListener("keydown", onKeyFirst, true);
       window.removeEventListener("keydown", onKey);
       window.removeEventListener("pointerup", onPointerUp);
     };

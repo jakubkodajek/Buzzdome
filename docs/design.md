@@ -125,16 +125,22 @@ two windows cannot disagree with each other or with the score.
   they must not wait for it. The app's locks are taken in one order: the
   editor's, the show state, then learn mode's; so nothing holding learn
   mode's lock, as the Receiver tab's commands do, waits for a journal write.
+  Those that write `receiver.json` run off the windows' thread too: it is in
+  the app's data folder with the journal, so a disk that does not answer
+  holds both.
 - **Saving problems.** When the journal refuses a write (the disk is full,
   say), the change is not made, and the Director shows why in a banner until
   a write works again (`show-not-saved`, `show_not_saved`). A due command
   that failed is tried again a second later. A write that does not finish
-  (the disk does not answer) holds the show thread up: after 3 s
-  (`STUCK_AFTER`) a watchdog shows that in the banner (`saveHangs`), and a
-  command the thread has not begun by then is given up (`showBusy`) and
-  never made, so the quizmaster can give it again without it happening
-  twice. Presses wait in the queue and count by their time once the write
-  finishes.
+  (the disk does not answer) holds the show thread up: once one thing has
+  held it for 3 s (`STUCK_AFTER`), a watchdog shows that in the banner
+  (`saveHangs`), and a command the thread has not begun is given up
+  (`showBusy`) and never made, so the quizmaster can give it again without
+  it happening twice. A command behind a burst of quick writes is only
+  waited for. The step being saved is made once the write finishes, which
+  the banner says, so it is not given twice. Presses, from the buzzers,
+  keys and on-screen buzzers alike, are never given up: they wait in the
+  queue and count by their time once the write finishes.
 - **Windows.** `app_windows.rs` keeps both windows through a show. Closing
   the Director during a show asks first (`close-requested`), and the app
   ends with the Director, so a full-screen projector is never left alone.
@@ -820,9 +826,11 @@ fails, the press is rejected and the screen does not change. A new show's
 session folder, and the journal's entry in it, are synced to disk when the
 show starts, so a power cut cannot lose the journal itself. Commands from
 the windows (`dispatch`: keyboard and on-screen buzzers, the quizmaster's
-buttons) are timed the same way: `show_thread::run` reads the time before
-the command joins the show queue, so a keyboard press made during a burst
-of buzzer presses counts as on time.
+buttons) are timed the same way: the time is read before the press or
+command joins the show queue (`show_thread::press`, `show_thread::run`),
+so a keyboard press made during a burst of buzzer presses counts as on
+time. A press or command stamped before the running show began, while it
+started, was meant for no show or the one before, and does not reach it.
 
 Resuming (`resume_show`) reads the latest session folder: the one with the
 highest number, as a folder is named by its show's start in milliseconds,
@@ -888,8 +896,8 @@ While learn mode is active, presses are shown in the Receiver tab but not
 sent to the game. So that it can never mute the buzzers in a show, learn
 mode cannot start while a show runs (`showRunning`), ends when a show
 starts, when the receiver disconnects and when the Receiver tab closes, and
-the Director shows a banner while it is on. The learn lock is taken before
-the show state's both when a show starts and when learning starts, so
+the Director shows a banner while it is on. The show state is taken before
+the learn lock both when a show starts and when learning starts, so
 neither can slip in between the other's check and its start.
 
 ### 2.7 Lights
