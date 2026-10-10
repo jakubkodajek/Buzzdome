@@ -341,7 +341,7 @@ impl Show {
     }
 
     /// While a question is on screen, every point a player won or lost in it
-    /// is in its score changes (`Game::deltas`), which a restart takes back.
+    /// is in its score changes (`Game::delta`), which a restart takes back.
     fn check_scores(&self, game: &Game, stamped: &Stamped) {
         let Some(baselines) = &self.baseline else { return };
         if !matches!(game.phase(), Phase::Question(_)) {
@@ -349,7 +349,7 @@ impl Show {
         }
         for player in game.players() {
             let baseline = baselines.get(&player.buzzer).copied().unwrap_or(0);
-            let delta = i64::from(game.deltas().get(&player.buzzer).copied().unwrap_or(0));
+            let delta = i64::from(game.delta(player.buzzer).unwrap_or(0));
             assert_eq!(
                 i64::from(player.score),
                 baseline + delta,
