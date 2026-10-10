@@ -224,6 +224,19 @@ fn a_buzz_received_while_another_team_answers_does_not_count() {
 }
 
 #[test]
+fn the_first_buzz_applied_wins_though_a_later_one_was_received_earlier() {
+    let mut show = Show::new(vec![question("q1", AnswerMode::FastestFinger)]);
+    show.press(0, 1, Button::Big);
+    show.press(0, 2, Button::Big);
+    show.run(0, Command::Next).unwrap();
+    show.run(0, Command::Next).unwrap();
+    // A keyboard press received at 1 000 that waited while a buzzer press received at 1 010 was applied.
+    show.press(1_010, 1, Button::Big);
+    show.press(1_000, 2, Button::Big);
+    assert!(matches!(step(&show.game), QuestionStep::Buzzed { buzzer: 1, .. }));
+}
+
+#[test]
 fn a_press_made_while_the_clock_was_paused_counts_however_late_it_is_applied() {
     let mut show = Show::new(vec![question("q1", AnswerMode::Everyone), question("q2", AnswerMode::FastestFinger)]);
     show.press(0, 1, Button::Big);

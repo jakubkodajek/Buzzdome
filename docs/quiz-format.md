@@ -223,9 +223,14 @@ row with text or answers is a question (everyone answers when it has 2 to
 4 answers) and a row with only media a billboard.
 
 **Media.** A cell names a file, relative to the sheet or as a full path;
-a file not found there is looked for by its name next to the sheet. It is
-copied into the quiz (`{L}`, the reference's mark for a linked file, is
-read and the file copied all the same). Settings follow in braces,
+a file not found there is looked for by its name next to the sheet. A file
+taken from outside the sheet's folder (a full path, or one with `..`) is
+listed in the import's notes. A network or device path
+(`\\server\share\…`, `\\?\…`, `\\.\…`, `\??\…`) is never read, as
+Windows would contact the server just to look; only its name is looked for
+next to the sheet. The file is copied into the quiz (`{L}`, the
+reference's mark for a linked file, is read and the file copied all the
+same). Settings follow in braces,
 separated by `;`: `intro.mp4{start-at=00:00:05;loop=false}`. Times are
 `hh:mm:ss`, `mm:ss` or seconds, with a fraction; flags are `true`/`false`,
 `yes`/`no` or `1`/`0`.
@@ -283,6 +288,13 @@ type, a changed meaning, a rule that refuses files that used to play) needs
 the next `schemaVersion` and a migration that opens older files unchanged.
 Readers keep a quiz in the current version, so saving an older file writes
 the current one.
+
+Builds of the editor within version 4 kept a few fields when a slide changed
+type that its new type cannot play: a `picture` or `video` on a `final`
+slide, and `sound.start: withClock`, `sound.replay`, `video.replay` and
+`video.effect` on a slide that is not a question. Readers drop them, and a
+sound that waited for the clock plays when the slide opens, so such a file
+opens and plays; saving writes it without them.
 
 These limits were added within version 2, before that rule was kept, so a
 version 1 or 2 file may break them. The editor opens such a file and lists

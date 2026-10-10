@@ -192,6 +192,8 @@ const IMPORT_ISSUE_KEYS: Record<ImportIssue["code"], StringKey> = {
   badSetting: "importBadSetting",
   settingNotUsed: "importSettingNotUsed",
   fileNotFound: "importFileNotFound",
+  fileOutsideSheetFolder: "importFileOutsideSheetFolder",
+  networkPath: "importNetworkPath",
 };
 
 /** Something a spreadsheet import could not take over as the sheet has it. */

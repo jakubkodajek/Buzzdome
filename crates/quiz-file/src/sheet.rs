@@ -11,7 +11,7 @@ use serde::Serialize;
 use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 use ts_rs::TS;
 
 const UTF8_BOM: &[u8] = b"\xef\xbb\xbf";
@@ -41,44 +41,80 @@ pub struct SheetExport {
 /// marked are shuffled with `seed`. A media file is looked for where its
 /// cell says, relative to the spreadsheet, and else next to it by its name,
 /// so a sheet made on another computer works with its media beside it.
+/// A file taken from outside the sheet's folder gets a note; a network or
+/// device path is never read.
 pub fn import_sheet(path: &Path, root: &Path, seed: u64) -> Result<SheetImport> {
     let imported = import_tables(&read_tables(path)?, seed)?;
     let folder = path.parent().unwrap_or(Path::new(""));
     let mut notes = imported.notes;
-    // The reference each file got; none for one that is not there.
-    let mut copied: BTreeMap<String, Option<String>> = BTreeMap::new();
+    // The reference each file got and whether it came from outside the sheet's folder, or why it got none.
+    let mut copied: BTreeMap<String, std::result::Result<(String, bool), ImportIssue>> = BTreeMap::new();
     let mut slides = Vec::new();
     for (place, mut slide) in imported.slides {
         let files: Vec<String> = slide.media().into_iter().map(|(file, _)| file.to_string()).collect();
         for file in files {
             if !copied.contains_key(&file) {
+                let import = |source: &Path| crate::import_media(root, MediaSource::File(source));
                 let reference = match find_media(folder, &file) {
-                    Some(source) => Some(crate::import_media(root, MediaSource::File(&source))?),
-                    None => None,
+                    Found::Beside(source) => Ok((import(&source)?, false)),
+                    Found::Outside(source) => Ok((import(&source)?, true)),
+                    Found::NetworkPath => Err(ImportIssue::NetworkPath { file: file.clone() }),
+                    Found::Missing => Err(ImportIssue::FileNotFound { file: file.clone() }),
                 };
                 copied.insert(file.clone(), reference);
             }
-            if copied[&file].is_none() {
-                notes.add(ImportIssue::FileNotFound { file: file.clone() }, &place);
-                slide.remove_media(&file);
+            match &copied[&file] {
+                Err(issue) => {
+                    notes.add(issue.clone(), &place);
+                    slide.remove_media(&file);
+                }
+                Ok((_, true)) => notes.add(ImportIssue::FileOutsideSheetFolder { file: file.clone() }, &place),
+                Ok((_, false)) => {}
             }
         }
         slides.push(slide);
     }
-    let renamed: BTreeMap<String, String> = copied.into_iter().filter_map(|(file, reference)| Some((file, reference?))).collect();
+    let renamed: BTreeMap<String, String> = copied.into_iter().filter_map(|(file, reference)| Some((file, reference.ok()?.0))).collect();
     for slide in &mut slides {
         slide.rename_media(&renamed);
     }
     Ok(SheetImport { slides, notes: notes.into_vec() })
 }
 
-/// The file a media cell names: where it says, then by its name next to the sheet.
-fn find_media(folder: &Path, file: &str) -> Option<PathBuf> {
+/// Where the file a media cell names was found.
+enum Found {
+    /// In the sheet's folder or one below it.
+    Beside(PathBuf),
+    /// Where a full path, or a path out of the sheet's folder, says.
+    Outside(PathBuf),
+    /// Named by a network or device path and not next to the sheet.
+    NetworkPath,
+    Missing,
+}
+
+/// The file a media cell names: where it says, then by its name next to the
+/// sheet. A network or device path (`\\server\share`, `\\?\`, `\\.\`,
+/// `\??\`, or with forward slashes) is not looked at, as Windows would
+/// contact the server, and sign in to it, just to see whether the file is
+/// there.
+fn find_media(folder: &Path, file: &str) -> Found {
+    let mut start = file.chars();
+    let network = matches!((start.next(), start.next()), (Some('\\' | '/'), Some('\\' | '/' | '?')));
     // A sheet made on Windows may name subfolders with backslashes.
     let portable = if cfg!(windows) { file.to_string() } else { file.replace('\\', "/") };
+    let said = folder.join(&portable);
+    if !network && said.is_file() {
+        let inside = Path::new(&portable).components().all(|part| matches!(part, Component::Normal(_) | Component::CurDir));
+        return if inside { Found::Beside(said) } else { Found::Outside(said) };
+    }
     // A path from another computer, in either system's form, may still name a file next to the sheet.
-    let name = file.rsplit(['/', '\\']).next().unwrap_or(file);
-    [folder.join(&portable), folder.join(name)].into_iter().find(|path| path.is_file())
+    let name = Path::new(file.rsplit(['/', '\\']).next().unwrap_or(file));
+    let plain_name = matches!(name.components().collect::<Vec<_>>()[..], [Component::Normal(_)]);
+    match folder.join(name) {
+        beside if plain_name && beside.is_file() => Found::Beside(beside),
+        _ if network => Found::NetworkPath,
+        _ => Found::Missing,
+    }
 }
 
 /// The tables of a workbook's visible worksheets, or of a CSV file.
@@ -234,6 +270,35 @@ mod tests {
         assert_eq!(
             imported.notes,
             [ImportNote { issue: ImportIssue::FileNotFound { file: "stage.jpg".into() }, places: vec![Place { sheet: String::new(), row: 3 }] }]
+        );
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn an_import_notes_files_from_outside_the_sheets_folder_and_never_reads_a_network_path() {
+        let dir = temp_dir("outside");
+        let (sheets, root) = (dir.join("sheets"), dir.join("draft"));
+        fs::create_dir_all(&sheets).unwrap();
+        fs::create_dir_all(&root).unwrap();
+        fs::write(dir.join("private.png"), b"private").unwrap();
+        fs::write(sheets.join("near.png"), b"near").unwrap();
+        let full = dir.join("private.png").display().to_string();
+        // On Linux this names the same file, so the file not being taken shows it was not read.
+        let share = format!("//{}", full.trim_start_matches('/'));
+        let csv = format!("Q;P1\nUp?;../private.png\nFull?;{full}\nShare?;{share}\nNear?;\\\\server\\share\\near.png\nNt?;\\??\\UNC\\server\\near.png\n");
+        fs::write(sheets.join("quiz.csv"), csv).unwrap();
+
+        let imported = import_sheet(&sheets.join("quiz.csv"), &root, 1).unwrap();
+        let pictures: Vec<Option<&str>> = imported.slides.iter().map(|slide| slide.picture.as_deref()).collect();
+        assert_eq!(pictures, [Some("media/private.png"), Some("media/private.png"), None, Some("media/near.png"), Some("media/near.png")]);
+        let note = |issue, row| ImportNote { issue, places: vec![Place { sheet: String::new(), row }] };
+        assert_eq!(
+            imported.notes,
+            [
+                note(ImportIssue::FileOutsideSheetFolder { file: "../private.png".into() }, 2),
+                note(ImportIssue::FileOutsideSheetFolder { file: full }, 3),
+                note(ImportIssue::NetworkPath { file: share }, 4),
+            ]
         );
         fs::remove_dir_all(&dir).unwrap();
     }

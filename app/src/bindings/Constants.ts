@@ -13,6 +13,7 @@ export const MAX_GAIN_DB = 20;
 export const MIN_VIDEO_SPEED = 25;
 export const MAX_VIDEO_SPEED = 250;
 export const MAX_INTRO_PAUSE_MS = 60000;
+export const NEW_VIDEO_INTRO_PAUSE_MS = 1000;
 export const MAX_REPLAY_DELAY_MS = 60000;
 export const DEFAULT_THEME_ID = "builtin.classic";
 export const MAX_TEAMS = 200;

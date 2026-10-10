@@ -6,7 +6,7 @@
 
 use crate::media::{
     Background, MediaKind, Replay, SoundClip, SoundStart, Span, VideoClip, VideoEffect, MAX_GAIN_DB, MAX_INTRO_PAUSE_MS, MAX_REPLAY_DELAY_MS,
-    MAX_VIDEO_SPEED, MIN_GAIN_DB, MIN_VIDEO_SPEED,
+    MAX_VIDEO_SPEED, MIN_GAIN_DB, MIN_VIDEO_SPEED, NEW_VIDEO_INTRO_PAUSE_MS,
 };
 use crate::model::{
     AnswerMode, Question, Quiz, Slide, SlideContent, DEFAULT_POINTS, DEFAULT_TIME_LIMIT_S, MAX_ANSWERS, MAX_EVERYONE_ANSWERS, MAX_POINTS,
@@ -89,6 +89,13 @@ pub enum ImportIssue {
     SettingNotUsed { column: String, setting: String },
     /// A media file that is not there: left out.
     FileNotFound { file: String },
+    /// A media file named by a full path, or a path out of the sheet's
+    /// folder: copied in all the same, but it may be a file nobody meant
+    /// to put in the quiz.
+    FileOutsideSheetFolder { file: String },
+    /// A media file on a network share or device path (`\\server\share\…`),
+    /// which is not read, and not next to the sheet by its name: left out.
+    NetworkPath { file: String },
 }
 
 /// An issue and the rows it came up in.
@@ -258,10 +265,9 @@ const SETTINGS: [&str; 16] = [
     REPLAY_DELAY,
 ];
 
-/// A video from a sheet: the reference's default intro pause of one
-/// second, as the editor gives a new video.
+/// A video from a sheet: the intro pause of a video an author adds.
 fn sheet_video(file: impl Into<String>) -> VideoClip {
-    VideoClip { intro_pause_ms: 1_000, ..VideoClip::new(file) }
+    VideoClip { intro_pause_ms: NEW_VIDEO_INTRO_PAUSE_MS, ..VideoClip::new(file) }
 }
 
 /// Reads the slides of `tables`, in order. With more than one sheet of
@@ -1150,7 +1156,7 @@ mod tests {
         let slide = slides(&imported)[0];
         assert_eq!(slide.content, SlideContent::Billboard { title: String::new(), text: String::new() });
         assert_eq!(slide.video, Some(sheet_video("intro.mp4")));
-        assert_eq!(slide.video.as_ref().unwrap().intro_pause_ms, 1_000, "the reference's default intro pause");
+        assert_eq!(slide.video.as_ref().unwrap().intro_pause_ms, NEW_VIDEO_INTRO_PAUSE_MS);
     }
 
     #[test]

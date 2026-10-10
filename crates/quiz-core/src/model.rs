@@ -84,6 +84,33 @@ impl Slide {
         Slide { id: id.into(), notes: String::new(), picture: None, video: None, sound: None, background: None, content }
     }
 
+    /// Drops what the slide's type cannot play: only a question has a clock
+    /// to start a sound with and reveals an answer to replay a part after,
+    /// or to end a video effect on, and the final ranking shows no picture
+    /// or video. Files saved before `validate` refused these still have
+    /// them (the editor's `convertSlide` kept them when a slide changed
+    /// type, and drops them the same way now). A sound that waited for the
+    /// clock plays when the slide opens.
+    fn drop_unplayable(&mut self) {
+        if matches!(self.content, SlideContent::Final { .. }) {
+            self.picture = None;
+            self.video = None;
+        }
+        if matches!(self.content, SlideContent::Question(_)) {
+            return;
+        }
+        if let Some(sound) = &mut self.sound {
+            if sound.start == SoundStart::WithClock {
+                sound.start = SoundStart::OnSlide;
+            }
+            sound.replay = None;
+        }
+        if let Some(video) = &mut self.video {
+            video.effect = None;
+            video.replay = None;
+        }
+    }
+
     /// The media files this slide uses, with the kinds each may be.
     pub fn media(&self) -> Vec<(&str, &'static [MediaKind])> {
         const IMAGE: &[MediaKind] = &[MediaKind::Image];
@@ -368,6 +395,9 @@ impl Quiz {
         }
         // Every older version reads as the current one, so it is saved as such.
         quiz.schema_version = SCHEMA_VERSION;
+        for slide in &mut quiz.slides {
+            slide.drop_unplayable();
+        }
         Ok(quiz)
     }
 
@@ -805,6 +835,33 @@ mod tests {
         let renamed = ["png", "mp4", "mp3"].map(|ext| (format!("media/a?.{ext}"), format!("media/a_.{ext}")));
         quiz.rename_media(&renamed.into_iter().collect());
         assert_eq!(quiz.media_files().into_iter().collect::<Vec<_>>(), ["media/a_.mp3", "media/a_.mp4", "media/a_.png", "media/kept.png"]);
+    }
+
+    #[test]
+    fn reads_what_a_slide_type_cannot_play_from_older_files_without_it() {
+        // As our editor saved a question turned into another slide before `validate` refused these.
+        let quiz = Quiz::from_json(
+            r#"{"schemaVersion": 4, "title": "x", "slides": [
+                {"id": "f", "type": "final", "picture": "media/a.png", "sound": {"file": "media/win.mp3", "start": "withClock", "replay": {}}},
+                {"id": "v", "type": "final", "video": {"file": "media/a.mp4"}},
+                {"id": "b", "type": "billboard", "title": "", "video": {"file": "media/a.mp4", "effect": "mosaic", "replay": {}},
+                 "sound": {"file": "media/a.mp3", "start": "onDemand", "replay": {}}},
+                {"id": "q", "type": "question", "mode": "fastestFinger", "text": "?", "video": {"file": "media/a.mp4", "effect": "blur", "replay": {}},
+                 "sound": {"file": "media/a.mp3", "start": "withClock", "replay": {}}}
+            ]}"#,
+        )
+        .unwrap();
+        assert_eq!(quiz.validate(), Ok(()));
+        let [final_slide, final_video, billboard, question] = &quiz.slides[..] else { panic!("four slides") };
+        assert_eq!((&final_slide.picture, &final_video.video), (&None, &None));
+        let sound = final_slide.sound.as_ref().unwrap();
+        assert_eq!((sound.start, sound.replay), (SoundStart::OnSlide, None));
+        let (video, sound) = (billboard.video.as_ref().unwrap(), billboard.sound.as_ref().unwrap());
+        assert_eq!((video.effect, video.replay, sound.start, sound.replay), (None, None, SoundStart::OnDemand, None));
+        // A question keeps all of it.
+        let (video, sound) = (question.video.as_ref().unwrap(), question.sound.as_ref().unwrap());
+        assert!(video.effect.is_some() && video.replay.is_some() && sound.replay.is_some());
+        assert_eq!(sound.start, SoundStart::WithClock);
     }
 
     #[test]

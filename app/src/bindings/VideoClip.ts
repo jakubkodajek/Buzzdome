@@ -16,8 +16,8 @@ autoplay: boolean,
 /**
  * Time between showing the slide and starting the video, so the
  * quizmaster can read the question first. Up to `MAX_INTRO_PAUSE_MS`.
- * Files from before it start the video at once, as they did; the editor
- * gives a new video one second.
+ * Files from before it start the video at once, as they did; a video an
+ * author adds gets `NEW_VIDEO_INTRO_PAUSE_MS`.
  */
 introPauseMs: number, muted: boolean, 
 /**

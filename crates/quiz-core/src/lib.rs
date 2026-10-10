@@ -17,6 +17,7 @@ pub use game::{
 pub use media::{
     is_safe_reference, portable_name, portable_reference, Background, MediaIssue, MediaKind, Playback, Replay, SoundClip, SoundStart, Span,
     VideoClip, VideoEffect, MAX_GAIN_DB, MAX_INTRO_PAUSE_MS, MAX_REPLAY_DELAY_MS, MAX_VIDEO_SPEED, MEDIA_PREFIX, MIN_GAIN_DB, MIN_VIDEO_SPEED,
+    NEW_VIDEO_INTRO_PAUSE_MS,
 };
 pub use media_player::{MediaPlayer, NowPlaying, PlayerCommand};
 pub use model::{
@@ -53,6 +54,7 @@ mod ui_constants {
             ("MIN_VIDEO_SPEED", crate::MIN_VIDEO_SPEED.to_string()),
             ("MAX_VIDEO_SPEED", crate::MAX_VIDEO_SPEED.to_string()),
             ("MAX_INTRO_PAUSE_MS", crate::MAX_INTRO_PAUSE_MS.to_string()),
+            ("NEW_VIDEO_INTRO_PAUSE_MS", crate::NEW_VIDEO_INTRO_PAUSE_MS.to_string()),
             ("MAX_REPLAY_DELAY_MS", crate::MAX_REPLAY_DELAY_MS.to_string()),
             ("DEFAULT_THEME_ID", serde_json::to_string(crate::DEFAULT_THEME_ID).unwrap()),
             ("MAX_TEAMS", crate::MAX_TEAMS.to_string()),

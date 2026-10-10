@@ -665,6 +665,8 @@ impl Game {
         }
         match mode {
             AnswerMode::Everyone => self.record_answer(buzzer, button, clock.elapsed_ms(now)),
+            // The first press applied wins. Presses come in the receiver's order and the
+            // PC clock never re-ranks them (BZ-5), not even against a keyboard press.
             AnswerMode::FastestFinger => {
                 if self.locked_out.contains(&buzzer) {
                     return vec![];

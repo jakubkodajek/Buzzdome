@@ -17,6 +17,7 @@ import {
   MIN_EVERYONE_ANSWERS,
   MIN_GAIN_DB,
   MIN_VIDEO_SPEED,
+  NEW_VIDEO_INTRO_PAUSE_MS,
 } from "../bindings/Constants";
 import { hasTitle, showsRanking, slideTitle } from "../quiz";
 import type { AnswerMode, Background, Quiz, QuestionSlide, Replay, Slide, SlideType, SoundClip, Span, VideoClip } from "../types";
@@ -199,12 +200,12 @@ function clampInt(value: number, min: number, max: number): number {
 /**
  * The options a new video, sound and background get in the editor, and the
  * defaults the properties' Reset goes back to. A quiz file that names only
- * the file gets the same, but a video there starts without an intro pause
- * (crates/quiz-core/src/media.rs).
+ * the file gets the same, except that its video starts without an intro
+ * pause (`VideoClip::new` in crates/quiz-core/src/media.rs).
  */
 export const NEW_VIDEO: Omit<VideoClip, "file"> = {
   autoplay: true,
-  introPauseMs: 1_000,
+  introPauseMs: NEW_VIDEO_INTRO_PAUSE_MS,
   muted: false,
   repeat: false,
   volume: 100,

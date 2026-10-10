@@ -535,7 +535,13 @@ presses are refused.
 Fastest-finger order is therefore the receiver's order. When the vendor
 protocol provides press times, `Command::Press` gets an optional
 `pressed_at` from the receiver and the game ranks presses that arrive close
-together by that time; the PC clock is never used for ranking.
+together by that time; the PC clock is never used for ranking. A keyboard
+or on-screen buzzer press competes with the buzzers by the order the
+presses are applied in, so one received a moment before a buzzer press but
+applied after it loses (`at_ms` only decides whether a press is on time).
+Ranking across sources by `at_ms` would mean holding every buzz open for a
+while and re-ordering presses on the PC, which BZ-5 rules out; keyboard and
+on-screen buzzers are for shows without the hardware and for testing.
 
 While learn mode is active, presses are shown in the Receiver tab but not
 sent to the game. So that it can never mute the buzzers in a show, learn

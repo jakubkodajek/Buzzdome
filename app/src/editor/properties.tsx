@@ -141,10 +141,10 @@ export function slideProperties(t: Translate, { slide, context, update, chooseMe
   const textArea = (label: StringKey, value: string, onChange: (text: string) => void) => (
     <textarea rows={3} aria-label={t(label)} value={value} onChange={(e) => onChange(e.target.value)} />
   );
-  // Only a question has a clock (a file may still say so of another slide).
+  // Only a question has a clock.
   const soundStarts: [SoundStart, string][] = [
     ["onSlide", t("soundOnSlide")],
-    ...(slide.type === "question" || slide.sound?.start === "withClock" ? [["withClock", t("soundWithClock")] as [SoundStart, string]] : []),
+    ...(slide.type === "question" ? [["withClock", t("soundWithClock")] as [SoundStart, string]] : []),
     ["onDemand", t("soundOnDemand")],
   ];
   const spanText = (span: Span) =>

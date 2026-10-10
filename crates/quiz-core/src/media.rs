@@ -224,6 +224,10 @@ pub const MIN_VIDEO_SPEED: u16 = 25;
 pub const MAX_VIDEO_SPEED: u16 = 250;
 /// Longest wait between showing a slide and starting its video.
 pub const MAX_INTRO_PAUSE_MS: u32 = 60_000;
+/// The wait before a video an author adds (in the editor or from a
+/// spreadsheet) starts, so the quizmaster can read the question first; the
+/// reference's default. A file that does not say starts its video at once.
+pub const NEW_VIDEO_INTRO_PAUSE_MS: u32 = 1_000;
 /// Longest wait between the reveal and a replay part.
 pub const MAX_REPLAY_DELAY_MS: u32 = 60_000;
 
@@ -252,8 +256,8 @@ pub struct VideoClip {
     pub autoplay: bool,
     /// Time between showing the slide and starting the video, so the
     /// quizmaster can read the question first. Up to `MAX_INTRO_PAUSE_MS`.
-    /// Files from before it start the video at once, as they did; the editor
-    /// gives a new video one second.
+    /// Files from before it start the video at once, as they did; a video an
+    /// author adds gets `NEW_VIDEO_INTRO_PAUSE_MS`.
     #[serde(default)]
     pub intro_pause_ms: u32,
     #[serde(default)]
