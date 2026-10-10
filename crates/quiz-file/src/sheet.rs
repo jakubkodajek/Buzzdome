@@ -76,7 +76,8 @@ pub fn import_sheet(path: &Path, root: &Path, seed: u64) -> Result<SheetImport> 
 fn find_media(folder: &Path, file: &str) -> Option<PathBuf> {
     // A sheet made on Windows may name subfolders with backslashes.
     let portable = if cfg!(windows) { file.to_string() } else { file.replace('\\', "/") };
-    let name = portable.rsplit('/').next().unwrap_or(&portable);
+    // A path from another computer, in either system's form, may still name a file next to the sheet.
+    let name = file.rsplit(['/', '\\']).next().unwrap_or(file);
     [folder.join(&portable), folder.join(name)].into_iter().find(|path| path.is_file())
 }
 
