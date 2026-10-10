@@ -5,7 +5,7 @@ import { newSlide } from "../editor/slides";
 import { previewView } from "../host/preview";
 import type { Phase, Theme } from "../types";
 import { fontFamily } from "./fonts";
-import { contrast, pickTheme, readableText, screenOf, themeStyle, withAlpha } from "./themes";
+import { contrast, isThemeMissing, pickTheme, readableText, screenOf, themeStyle, withAlpha } from "./themes";
 
 const THEMES: readonly Theme[] = BUILTIN_THEMES;
 const classic = THEMES.find((theme) => theme.id === DEFAULT_THEME_ID)!;
@@ -28,6 +28,8 @@ describe("themes", () => {
     expect(pickTheme(THEMES, "builtin.neon")?.id).toBe("builtin.neon");
     expect(pickTheme(THEMES, null)?.id).toBe(DEFAULT_THEME_ID);
     expect(pickTheme(THEMES, "cz.example.gone")?.id).toBe(DEFAULT_THEME_ID);
+    expect([isThemeMissing(THEMES, "cz.example.gone"), isThemeMissing(THEMES, "builtin.neon"), isThemeMissing(THEMES, null)]).toEqual([true, false, false]);
+    expect(isThemeMissing([], "cz.example.gone"), "not before the themes are loaded").toBe(false);
     // Before the themes are loaded there is none.
     expect(pickTheme([], "builtin.neon")).toBeNull();
   });

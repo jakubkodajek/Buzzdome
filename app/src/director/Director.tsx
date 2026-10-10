@@ -29,7 +29,8 @@ import { keyHint, KEYS, useShortcuts } from "../keyboard";
 import { MediaRootContext } from "../media";
 import { phaseLabel } from "../phase";
 import { slideContext } from "../quiz";
-import { ThemeContext, ThemesProvider, useResolvedTheme } from "../theme/context";
+import { ThemeContext, ThemesProvider, useResolvedTheme, useThemes } from "../theme/context";
+import { isThemeMissing } from "../theme/themes";
 import type { GameView, Quiz } from "../types";
 import { QuestionsTab } from "./QuestionsTab";
 import { ReceiverTab } from "./ReceiverTab";
@@ -72,7 +73,9 @@ export function Director() {
 }
 
 function DirectorScreens() {
+  const { t, notify } = useApp();
   const [screen, setScreen] = useState<Screen>("show");
+  useBackendEvent("host-problem", (message) => notify(t("hostProblem", { message })));
   // Provided above the show controls: their hooks (the slide sound) resolve media too.
   const mediaRoot = useMediaRoot();
   if (screen === "editor") return <EditorScreen onTestRun={() => setScreen("testRun")} onExit={() => setScreen("show")} />;
@@ -274,6 +277,7 @@ function CommandPanel(props: { view: GameView | null; projector: ProjectorSettin
 function StatusBar({ view, quiz, testRun }: { view: GameView | null; quiz: Quiz | null; testRun: boolean }) {
   const { t } = useApp();
   const clock = useClock(view);
+  const themes = useThemes();
   if (!view) return <footer className="status-bar">{t("noShow")}</footer>;
   const position = slideContext(quiz, view.slideIndex).position;
   return (
@@ -288,6 +292,7 @@ function StatusBar({ view, quiz, testRun }: { view: GameView | null; quiz: Quiz 
       <span className="status-phase">{phaseLabel(t, view)}</span>
       {clock && <span className="status-clock">{clock.remainingMs === null ? t("untimed") : clockSeconds(clock.remainingMs)}</span>}
       <span className="spacer" />
+      {quiz?.theme && isThemeMissing(themes, quiz.theme) && <span className="status-warning">{t("themeNotInstalled", { id: quiz.theme })}</span>}
       {testRun && <span className="status-test-run">{t("testRunActive")}</span>}
       <span>{t("registered", { n: view.players.length })}</span>
     </footer>

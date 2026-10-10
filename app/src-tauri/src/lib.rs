@@ -380,6 +380,13 @@ async fn close_host_window(app: AppHandle) -> CmdResult<()> {
     }
 }
 
+/// Passes on a problem the projector met, such as a background that does
+/// not load, worded for the Director to show: the projector has nowhere to.
+#[tauri::command]
+fn report_host_problem(app: AppHandle, message: String) {
+    let _ = app.emit("host-problem", message);
+}
+
 /// The one thread that turns the receiver's events and the passing of time
 /// into show commands: every event received so far is handled before a
 /// time-driven command such as "time is up" (`pump::pump_once`). Without a
@@ -486,6 +493,7 @@ pub fn run() {
             open_host_window,
             close_host_window,
             host_window_open,
+            report_host_problem,
             themes::list_themes,
             fonts::installed_fonts,
             teams::prepared_teams,

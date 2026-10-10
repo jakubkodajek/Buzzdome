@@ -54,6 +54,7 @@ export const api = {
     invoke<void>("open_host_window", { monitor, fullscreen }),
   closeHostWindow: () => invoke<void>("close_host_window"),
   hostWindowOpen: () => invoke<boolean>("host_window_open"),
+  reportHostProblem: (message: string) => invoke<void>("report_host_problem", { message }),
   /** Every installed theme with all its values, the default theme among them. */
   listThemes: () => invoke<Theme[]>("list_themes"),
   /** The family names of the installed fonts, sorted; empty when they cannot be read. */
@@ -130,6 +131,8 @@ export interface BackendEvents {
   "receiver-learn": LearnProgress;
   /** The projector window opened (true) or closed (false). */
   "host-window": boolean;
+  /** A problem the projector met, worded for the Director to show. */
+  "host-problem": string;
   /** The prepared team names changed, or a show started or ended. */
   "teams-changed": string[];
   /** Files came into the media library or left it. */

@@ -17,6 +17,16 @@ export function pickTheme(themes: readonly Theme[], id: string | null): Theme | 
   return themes.find((theme) => theme.id === id) ?? themes.find((theme) => theme.id === DEFAULT_THEME_ID) ?? null;
 }
 
+/**
+ * Whether the theme `id` (null: the default) is not among the loaded
+ * `themes`, so the quiz shows in the default one (`pickTheme`). False
+ * before the themes are loaded.
+ */
+export function isThemeMissing(themes: readonly Theme[], id: string | null): boolean {
+  const wanted = id ?? DEFAULT_THEME_ID;
+  return themes.length > 0 && !themes.some((theme) => theme.id === wanted);
+}
+
 /** The screen a game state shows, for its background. */
 export function screenOf(view: GameView): ScreenKey {
   switch (view.phase.phase) {

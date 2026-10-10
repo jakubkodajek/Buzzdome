@@ -499,6 +499,10 @@ mockIPC(
         ];
       case "host_window_open":
         return false;
+      case "report_host_problem":
+        called.push({ cmd, ...(payload as object) });
+        void emit("host-problem", (payload as { message: string }).message);
+        return null;
       case "list_themes":
         // Their files are served by Vite from src-tauri/themes.
         return builtinThemes;

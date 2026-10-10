@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { api } from "../api";
 import { AppProvider } from "../app-context";
 import { useBackendEvent, useClock, useGameView, useMediaRoot, useQuiz } from "../hooks";
 import { CheckIcon, CrossIcon } from "../icons";
@@ -12,13 +13,13 @@ import { Leaderboard, ranked, SlideScreen } from "./SlideScreen";
 import { Stage, StageOverlay } from "./Stage";
 import "./host.css";
 
-// The projector has nowhere to show errors; the Director reports them.
-const logError = (message: string) => console.error(message);
+// The projector has nowhere to show errors; the Director shows them.
+const reportToDirector = (message: string) => void api.reportHostProblem(message).catch(() => console.error(message));
 
 /** The projector. Renders the game state; owns nothing. */
 export function HostScreen() {
   return (
-    <AppProvider notify={logError}>
+    <AppProvider notify={reportToDirector}>
       <ThemesProvider>
         <HostLayout />
       </ThemesProvider>

@@ -229,7 +229,8 @@
   font-variant-numeric: tabular-nums;
 }
 
-.status-test-run {
+.status-test-run,
+.status-warning {
   padding: 0 10px;
   border-radius: 9px;
   color: #2b1b00;

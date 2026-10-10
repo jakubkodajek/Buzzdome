@@ -395,7 +395,9 @@ packages users will install are read the same way.
   (`slide-media.tsx`) draws the theme's picture or video, the gradient, and
   over them the first more specific level that loads; one that fails gives way to the next
   and is reported once per media folder (BG-9), so the Director warns about
-  a broken file. A theme's video loops silently. Every stage (projector,
+  a broken file. The projector has nowhere to show a warning: it passes its
+  own to the Director (`report_host_problem`, event `host-problem`), which
+  shows it as "Projector: …". A theme's video loops silently. Every stage (projector,
   editor canvas, thumbnails) goes through `Stage`, and an overlay over it
   (the leaderboard) through `StageOverlay`, so none places a background
   itself. `slide.css` takes colours and fonts only from those
@@ -430,7 +432,8 @@ packages users will install are read the same way.
   is a `setTheme` edit, so it is undone like any other change.
   `useThemeChoice.ts` holds both themes and the gallery's choice. A quiz
   whose theme is not installed is drawn in the default one and the gallery
-  says so; it never stops a show. A `theme` value that is not a theme id
+  and the Director's status bar say so (`isThemeMissing`); it never stops a
+  show. A `theme` value that is not a theme id
   reads as none.
 - **Preview.** A test of the shell writes the built-in themes as
   `list_themes` returns them to `app/src/bindings/BuiltinThemes.json`, with

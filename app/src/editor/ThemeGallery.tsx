@@ -4,6 +4,7 @@ import { useLatest } from "../hooks";
 import { SlideThumbnail } from "../host/SlideThumbnail";
 import { NO_CONTEXT } from "../quiz";
 import { ThemeContext, useThemes } from "../theme/context";
+import { isThemeMissing } from "../theme/themes";
 import { DEFAULT_LAYOUT, slideFromLayout } from "./layouts";
 import type { ThemeChoice } from "./useThemeChoice";
 
@@ -21,7 +22,7 @@ export function ThemeGallery({ choice }: { choice: ThemeChoice }) {
   const preview = useLatest(choice.preview);
   // The gallery can go away under the pointer (another tab), and so must its preview.
   useEffect(() => () => preview.current(null), [preview]);
-  const missing = themes.length > 0 && !themes.some((theme) => theme.id === choice.current);
+  const missing = isThemeMissing(themes, choice.current);
   return (
     <div className="theme-gallery">
       {themes.map((theme) => (
