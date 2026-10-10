@@ -50,7 +50,16 @@ export function useSheetActions(editor: QuizEditor, quiz: Quiz | null, insertImp
         void editor.exportSheet(quiz, quiz.title || t("untitledQuiz")).then((report) => {
           if (!report) return;
           const missing = report.missing.map(mediaFileName).join(", ");
-          notify([t("sheetExported", { n: quiz.slides.length, media: report.media }), missing && t("sheetExportMissing", { files: missing })].filter(Boolean).join(" "));
+          const refused = report.refused.join(", ");
+          notify(
+            [
+              t("sheetExported", { n: quiz.slides.length, media: report.media }),
+              missing && t("sheetExportMissing", { files: missing }),
+              refused && t("sheetExportRefused", { files: refused }),
+            ]
+              .filter(Boolean)
+              .join(" "),
+          );
         }),
     },
     windowOpen: importNotes !== null,

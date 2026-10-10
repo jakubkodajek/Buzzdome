@@ -14,7 +14,8 @@
 
 use crate::app_file::AppFile;
 use crate::error::{AppError, CmdResult};
-use crate::{app_log, now_ms};
+use crate::dialogs::{self, Picker};
+use crate::{app_log, now_ms, off_ui};
 use quiz_core::{
     is_safe_reference, BoardChange, MediaKind, MediaPlayer, NowPlaying, PlayerCommand, SoundBoard, MAX_DROPPED_MB, MAX_PLAYER_VOLUME, MEDIA_PREFIX,
 };
@@ -26,7 +27,7 @@ use std::sync::Mutex;
 use std::thread;
 use std::time::Duration;
 use tauri::ipc::{InvokeBody, Request};
-use tauri::{AppHandle, Emitter, Manager, State};
+use tauri::{AppHandle, Emitter, Manager, State, Window};
 use ts_rs::TS;
 
 /// The library's folder in the app's data folder: its files in `media/`, the board beside them.
@@ -174,10 +175,26 @@ fn media_files(root: &Path) -> Vec<String> {
 
 /// Copies `source`, named `name`, into the library at `root`.
 fn import(root: &Path, name: &str, source: MediaSource) -> CmdResult<String> {
-    if MediaKind::of(name).is_none() {
-        return Err(AppError::NotAMediaFile { name: name.to_string() });
-    }
+    of_kind(name, &MediaKind::ALL)?;
     Ok(quiz_file::import_media(root, source)?)
+}
+
+/// Refuses the file `name` unless it is one of `kinds`, by its extension.
+pub(crate) fn of_kind(name: &str, kinds: &[MediaKind]) -> CmdResult<()> {
+    match MediaKind::of(name) {
+        Some(kind) if kinds.contains(&kind) => Ok(()),
+        _ => Err(AppError::NotAMediaFile { name: name.to_string() }),
+    }
+}
+
+/// The extensions of the media files of `kinds`, for a picker.
+pub(crate) fn extensions(kinds: &[MediaKind]) -> Vec<&'static str> {
+    kinds.iter().flat_map(|kind| kind.extensions().iter().copied()).collect()
+}
+
+/// The name of the file `path`, as it is copied in.
+pub(crate) fn file_name(path: &Path) -> String {
+    path.file_name().map(|name| name.to_string_lossy().into_owned()).unwrap_or_default()
 }
 
 #[tauri::command]
@@ -185,24 +202,32 @@ pub fn media_library(state: State<MediaState>) -> MediaLibrary {
     state.view(&state.library.lock().unwrap())
 }
 
-/// Copies files into the library and returns their references in order.
-/// Each file that can be copied is; the first failure is reported after.
+/// Copies the files the quizmaster picks into the library and returns their
+/// references in order (none when they cancel). Each file that can be
+/// copied is; the first failure is reported after.
 #[tauri::command]
-pub async fn media_add(app: AppHandle, state: State<'_, MediaState>, paths: Vec<String>) -> CmdResult<Vec<String>> {
-    let _one_at_a_time = state.imports.lock().unwrap();
-    let mut added = Vec::new();
-    let mut failed = None;
-    for path in paths.iter().map(Path::new) {
-        let name = path.file_name().map(|name| name.to_string_lossy().into_owned()).unwrap_or_default();
-        match import(&state.root, &name, MediaSource::File(path)) {
-            Ok(reference) => added.push(reference),
-            Err(e) => {
-                failed.get_or_insert(e);
+pub async fn media_add(app: AppHandle, window: Window, picker: Picker) -> CmdResult<Vec<String>> {
+    let paths = dialogs::pick_files(window, picker, extensions(&MediaKind::ALL)).await?;
+    if paths.is_empty() {
+        return Ok(Vec::new());
+    }
+    off_ui(move || {
+        let state = app.state::<MediaState>();
+        let _one_at_a_time = state.imports.lock().unwrap();
+        let mut added = Vec::new();
+        let mut failed = None;
+        for path in &paths {
+            match import(&state.root, &file_name(path), MediaSource::File(path)) {
+                Ok(reference) => added.push(reference),
+                Err(e) => {
+                    failed.get_or_insert(e);
+                }
             }
         }
-    }
-    state.files_changed(&app, &mut state.library.lock().unwrap())?;
-    failed.map_or(Ok(added), Err)
+        state.files_changed(&app, &mut state.library.lock().unwrap())?;
+        failed.map_or(Ok(added), Err)
+    })
+    .await
 }
 
 /// Copies a file dropped into the window, sent as its bytes with its name

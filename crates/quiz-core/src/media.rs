@@ -17,7 +17,7 @@ pub enum MediaKind {
 }
 
 impl MediaKind {
-    const ALL: [MediaKind; 3] = [MediaKind::Image, MediaKind::Audio, MediaKind::Video];
+    pub const ALL: [MediaKind; 3] = [MediaKind::Image, MediaKind::Audio, MediaKind::Video];
 
     /// File types every supported web view can show (lower case).
     pub fn extensions(self) -> &'static [&'static str] {

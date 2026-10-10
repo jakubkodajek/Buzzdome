@@ -6,7 +6,7 @@
 
 use crate::{place_file, write_atomic, Context, FileAction, MediaSource, QuizFileError, Result};
 use calamine::{open_workbook_auto, Data, DataRef, Reader, SheetType, SheetVisible, Sheets, XlsxError};
-use quiz_core::{export_table, import_tables, Category, ImportIssue, ImportNote, Quiz, Slide, Table};
+use quiz_core::{export_table, import_tables, is_safe_reference, Category, ImportIssue, ImportNote, Quiz, Slide, Table};
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::collections::BTreeMap;
@@ -16,6 +16,11 @@ use std::path::{Component, Path, PathBuf};
 use ts_rs::TS;
 
 const UTF8_BOM: &[u8] = b"\xef\xbb\xbf";
+
+/// Spreadsheet files questions are imported from.
+pub const SHEET_EXTENSIONS: [&str; 5] = ["xlsx", "xlsm", "xls", "ods", "csv"];
+/// The file a quiz is exported to.
+pub const CSV_EXTENSION: &str = "csv";
 
 /// The largest spreadsheet file read, and the most its parts may unpack to
 /// (a workbook is a ZIP archive): a sheet of questions is far smaller, and
@@ -52,6 +57,9 @@ pub struct SheetExport {
     pub media: usize,
     /// Media the quiz names that are not in it: their cells stay empty.
     pub missing: Vec<String>,
+    /// Media the quiz names outside its media folder (an absolute path, a
+    /// `..`), never read: their cells stay empty (A19).
+    pub refused: Vec<String>,
 }
 
 /// Makes slides of the `tables` read from the spreadsheet at `path` (see
@@ -377,8 +385,13 @@ fn separator(text: &str) -> u8 {
 pub fn export_sheet(quiz: &Quiz, root: &Path, dest: &Path, separator: u8) -> Result<SheetExport> {
     let folder = dest.parent().unwrap_or(Path::new(""));
     let mut names = BTreeMap::new();
-    let mut missing = Vec::new();
+    let (mut missing, mut refused) = (Vec::new(), Vec::new());
     for reference in quiz.media_files() {
+        // A quiz file can name any path; only its own media are copied out.
+        if !is_safe_reference(reference) {
+            refused.push(reference.to_string());
+            continue;
+        }
         let source = root.join(reference);
         if !source.is_file() {
             missing.push(reference.to_string());
@@ -395,7 +408,7 @@ pub fn export_sheet(quiz: &Quiz, root: &Path, dest: &Path, separator: u8) -> Res
     }
     let bytes = writer.into_inner().map_err(|e| QuizFileError::Spreadsheet(e.to_string()))?;
     write_atomic(dest, &bytes)?;
-    Ok(SheetExport { media: names.len(), missing })
+    Ok(SheetExport { media: names.len(), missing, refused })
 }
 
 #[cfg(test)]
@@ -620,7 +633,7 @@ mod tests {
         let quiz = Quiz::new("Quiz", vec![first, second]);
 
         let report = export_sheet(&quiz, &root, &out.join("quiz.csv"), b';').unwrap();
-        assert_eq!(report, SheetExport { media: 3, missing: vec!["media/gone.mp3".into()] });
+        assert_eq!(report, SheetExport { media: 3, missing: vec!["media/gone.mp3".into()], refused: Vec::new() });
         let bytes = fs::read(out.join("quiz.csv")).unwrap();
         assert!(bytes.starts_with(UTF8_BOM));
         let text = String::from_utf8(bytes[UTF8_BOM.len()..].to_vec()).unwrap();
@@ -635,6 +648,34 @@ mod tests {
         assert_eq!(back.slides[1].picture.as_deref(), Some("media/flag-2.png"));
         assert_eq!(back.slides[0].background, Some(Background::new("media/waves-2.mp4")));
         assert_eq!(fs::read(draft.join("media/waves-2.mp4")).unwrap(), b"mp4");
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn an_export_copies_no_file_from_outside_the_quiz() {
+        let dir = temp_dir("export-outside");
+        let (root, out) = (dir.join("draft"), dir.join("out"));
+        fs::create_dir_all(root.join("media")).unwrap();
+        fs::create_dir_all(&out).unwrap();
+        fs::write(dir.join("id_ed25519"), b"secret").unwrap();
+        let outside = [
+            "media/../../id_ed25519".to_string(),
+            "../id_ed25519".to_string(),
+            dir.join("id_ed25519").to_string_lossy().into_owned(),
+        ];
+        let slides = outside.iter().enumerate().map(|(i, file)| {
+            let mut slide = Slide::new(format!("s{i}"), SlideContent::Billboard { title: "Round".into(), text: String::new() });
+            slide.picture = Some(file.clone());
+            slide
+        });
+        let quiz = Quiz::new("Quiz", slides.collect());
+
+        let report = export_sheet(&quiz, &root, &out.join("quiz.csv"), b';').unwrap();
+        let mut refused = outside.to_vec();
+        refused.sort();
+        assert_eq!(report, SheetExport { media: 0, missing: Vec::new(), refused });
+        let written: Vec<_> = fs::read_dir(&out).unwrap().map(|e| e.unwrap().file_name()).collect();
+        assert_eq!(written, ["quiz.csv"]);
         fs::remove_dir_all(&dir).unwrap();
     }
 

@@ -8,7 +8,14 @@ on:
   push:
   workflow_dispatch:
 
+# The jobs only read the repository; installers go up as run artifacts.
+permissions:
+  contents: read
+
 env:
+  # The Rust release CI builds with, so a lint added by a new release cannot
+  # turn CI red unasked; raise it on purpose, with the fixes it asks for.
+  RUST_TOOLCHAIN: "1.97.0"
   # hidapi (buzzer receiver) needs libudev on Linux; the rest is Tauri's WebKitGTK stack.
   LINUX_DEPS: libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libudev-dev
 
@@ -17,6 +24,8 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Install system libraries
         run: sudo apt-get update && sudo apt-get install -y $LINUX_DEPS
@@ -27,8 +36,9 @@ jobs:
           cache: npm
           cache-dependency-path: app/package-lock.json
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@master
         with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
           components: clippy
 
       - uses: Swatinem/rust-cache@v2
@@ -74,6 +84,8 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-node@v4
         with:
@@ -81,7 +93,9 @@ jobs:
           cache: npm
           cache-dependency-path: app/package-lock.json
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
 
       - uses: Swatinem/rust-cache@v2
         with:
@@ -129,6 +143,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Install system libraries
         if: matrix.name == 'linux'
@@ -140,8 +156,9 @@ jobs:
           cache: npm
           cache-dependency-path: app/package-lock.json
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@master
         with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
           targets: ${{ matrix.rust-targets }}
 
       - uses: Swatinem/rust-cache@v2

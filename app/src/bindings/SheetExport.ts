@@ -8,4 +8,9 @@ media: number,
 /**
  * Media the quiz names that are not in it: their cells stay empty.
  */
-missing: Array<string>, };
+missing: Array<string>, 
+/**
+ * Media the quiz names outside its media folder (an absolute path, a
+ * `..`), never read: their cells stay empty (A19).
+ */
+refused: Array<string>, };

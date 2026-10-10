@@ -1,4 +1,3 @@
-import { ask } from "@tauri-apps/plugin-dialog";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ANSWER_LETTERS } from "../answers";
 import { FULL_SHARE } from "../bindings/Constants";
@@ -11,6 +10,7 @@ import { readPreference, writePreference } from "../preferences";
 import { shareOf, SLIDE_TYPE_LABEL, slideContexts, slideTitle, type SlideContext } from "../quiz";
 import { SlideMedia } from "../slide-media";
 import type { GameView, Quiz, Slide } from "../types";
+import { confirmAction } from "../confirm";
 
 type Layout = "horizontal" | "vertical";
 
@@ -48,7 +48,7 @@ export function QuestionsTab({ view, quiz }: { view: GameView; quiz: Quiz | null
   const preview = quiz.slides[shown];
   // Jumps only with the buttons, never mid-question, and the final asks first (A3).
   const jumps = view.controls.goTo;
-  const goToFinal = () => run(ask(t("goToFinalConfirm"), { kind: "warning" }).then((yes) => yes && dispatch({ type: "goToFinal" })));
+  const goToFinal = () => run(confirmAction(t("goToFinalConfirm")).then((yes) => yes && dispatch({ type: "goToFinal" })));
 
   return (
     <div className="questions-tab">

@@ -9,7 +9,9 @@ use buzzers::clock::ShowClock;
 use buzzers::hid::{udev_rule, DeviceInfo, DeviceSelector, HidBackend};
 use buzzers::hidapi_backend::HidapiBackend;
 use crate::app_file::{AppFile, SettingsLost};
+use crate::dialogs::{self, Picker};
 use crate::error::{AppError, CmdResult};
+use crate::off_ui;
 use crate::show_thread::ShowEvent;
 use buzzers::learned::{self, LearnedMapping, Recorder};
 use buzzers::protocol::{format_hex, Protocol};
@@ -23,7 +25,7 @@ use std::collections::VecDeque;
 use std::path::Path;
 use std::sync::mpsc::Sender;
 use std::sync::{Arc, Mutex, MutexGuard};
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Emitter, Manager, Window};
 
 const SETTINGS_FILE: &str = "receiver.json";
 const RAW_LOG_LEN: usize = 2000;
@@ -323,10 +325,16 @@ pub fn receiver_forget_learned(hw: tauri::State<Hardware>) -> CmdResult<()> {
     Ok(())
 }
 
-/// Writes the recent raw reports to a text file, e.g. to attach to a bug
-/// report or to work out the receiver's protocol.
+/// Writes the recent raw reports to a text file the quizmaster picks, e.g.
+/// to attach to a bug report or to work out the receiver's protocol; false
+/// when they cancel.
 #[tauri::command]
-pub fn receiver_export_log(hw: tauri::State<Hardware>, path: String) -> CmdResult<()> {
+pub async fn receiver_export_log(app: AppHandle, window: Window, picker: Picker) -> CmdResult<bool> {
+    let Some(path) = dialogs::pick_save(window, picker, "txt", None).await? else { return Ok(false) };
+    off_ui(move || write_log(&app.state::<Hardware>(), &path).map(|()| true)).await
+}
+
+fn write_log(hw: &Hardware, path: &Path) -> CmdResult<()> {
     let status = hw.handle.as_ref().map(ReceiverHandle::status);
     let mut out = format!(
         "# Receiver log, app {} on {}\n# status: {}\n# unix-ms\tbytes (hex)\tdecoded\n",
@@ -338,7 +346,7 @@ pub fn receiver_export_log(hw: tauri::State<Hardware>, path: String) -> CmdResul
         let decoded: Vec<String> = r.decoded.iter().map(|p| format!("{}{:?}", p.buzzer, p.button)).collect();
         out.push_str(&format!("{}\t{}\t{}\n", r.at_ms, format_hex(&r.bytes), decoded.join(",")));
     }
-    std::fs::write(&path, out).map_err(|e| AppError::file(FileAction::Write, Path::new(&path), e))
+    std::fs::write(path, out).map_err(|e| AppError::file(FileAction::Write, path, e))
 }
 
 #[tauri::command]

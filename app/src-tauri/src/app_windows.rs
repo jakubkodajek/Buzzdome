@@ -247,6 +247,36 @@ mod tests {
         assert!(!is_app_url(&url("http://localhost:5173/"), Some(&dev)));
     }
 
+    /// The text between `start` and the next `end` after it.
+    fn between<'a>(text: &'a str, start: &str, end: &str) -> &'a str {
+        let from = text.find(start).expect(start) + start.len();
+        &text[from..from + text[from..].find(end).expect(end)]
+    }
+
+    /// The app's commands (`allow-…`) a capability file grants.
+    fn granted(capability: &str) -> Vec<String> {
+        let capability: serde_json::Value = serde_json::from_str(capability).unwrap();
+        let permissions = capability["permissions"].as_array().unwrap().iter().map(|p| p.as_str().unwrap());
+        permissions.filter_map(|p| p.strip_prefix("allow-")).map(|c| c.replace('-', "_")).collect()
+    }
+
+    #[test]
+    fn the_windows_get_exactly_the_commands_there_are() {
+        let registered: Vec<&str> =
+            between(include_str!("lib.rs"), "generate_handler![", "]").split(',').map(str::trim).filter(|c| !c.is_empty()).map(|c| c.rsplit("::").next().unwrap()).collect();
+        let declared: Vec<&str> = between(include_str!("../build.rs"), "COMMANDS: &[&str] = &[", "];").split(',').map(|c| c.trim().trim_matches('"')).filter(|c| !c.is_empty()).collect();
+        assert_eq!(declared, registered, "build.rs lists the commands generate_handler! registers");
+        assert_eq!(granted(include_str!("../capabilities/director.json")), registered, "the Director may call every command");
+        let projector = granted(include_str!("../capabilities/projector.json"));
+        assert!(projector.iter().all(|c| registered.contains(&c.as_str())), "{projector:?}");
+        for command in ["dispatch", "get_view", "close_host_window"] {
+            assert!(projector.iter().any(|c| c == command), "the projector shows the show and its keys step it (A13): {command}");
+        }
+        for command in ["editor_save", "editor_open", "start_show_from_file", "receiver_select", "quit_app"] {
+            assert!(!projector.iter().any(|c| c == command), "the projector opens no file and changes no setting: {command}");
+        }
+    }
+
     #[test]
     fn the_projector_opens_where_chosen_else_away_from_the_director() {
         let ids: Vec<String> = ["laptop@0,0", "projector@1920,0"].map(String::from).to_vec();

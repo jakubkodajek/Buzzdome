@@ -12,6 +12,17 @@ export default tseslint.config(
     rules: {
       // A missing dependency is a stale-state bug in a live show, not a style issue.
       "react-hooks/exhaustive-deps": "error",
+      // The web view's own dialogs block it and may not show at all; use confirmAction (confirm.ts).
+      "no-restricted-globals": ["error", "alert", "confirm", "prompt"],
+      // The backend picks files (A21), and confirm.ts asks.
+      "no-restricted-imports": [
+        "error",
+        { paths: [{ name: "@tauri-apps/plugin-dialog", message: "Ask with confirmAction (confirm.ts); the backend opens file pickers (dialogs.rs)." }] },
+      ],
     },
+  },
+  {
+    files: ["src/confirm.ts"],
+    rules: { "no-restricted-imports": "off" },
   },
 );

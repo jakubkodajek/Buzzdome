@@ -1,16 +1,16 @@
-import { ask, open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
 import { useCallback, useEffect, useReducer, useRef, useState, useSyncExternalStore } from "react";
 import { api } from "../api";
 import { useApp, useDispatch, useReport } from "../app-context";
 import { useLatest } from "../hooks";
-import { mediaFileFilter, type MediaKind } from "../media";
-import { QUIZ_EXTENSION, quizOpenFilter } from "../quiz";
+import { mediaPicker, type MediaKind } from "../media";
+import { quizPicker } from "../quiz";
 import type { EditorDraft, Quiz, SheetExport, SheetImport } from "../types";
 import { BUSY, DraftSession, replacesDraft, type DraftApi, type DraftOperation, type DraftStatus } from "./draft-session";
 import { editorReducer, isUnsaved, LOADING, type EditorState } from "./editor-state";
 import type { Edit } from "./history";
 import { readRecentFiles, rememberRecentFile } from "./recent";
-import { CSV_EXTENSION, listSeparator, SHEET_EXTENSIONS } from "./sheet";
+import { listSeparator } from "./sheet";
+import { confirmAction } from "../confirm";
 
 // One draft for the whole app, so one session, outliving the editor screen:
 // whatever it wrote is on disk before the screen opens again and loads it.
@@ -118,24 +118,19 @@ export function useQuizEditor(onTestRun: () => void): QuizEditor {
 
   /** Whether unsaved changes may be thrown away (asks if there are any). */
   const mayDiscard = async () =>
-    !open || !unsaved || (await ask(t("discardChanges", { title: open.history.present.title || t("untitledQuiz") }), { kind: "warning" }));
+    !open || !unsaved || (await confirmAction(t("discardChanges", { title: open.history.present.title || t("untitledQuiz") })));
 
-  const saveTo = async (draftApi: DraftApi, draft: string, quiz: Quiz, path: string) => {
-    await draftApi.editorSave(draft, quiz, path);
-    dispatch({ type: "saved", quiz, path });
-    setRecentFiles(rememberRecentFile(path));
-    return true;
-  };
-
-  const saveAs = () =>
+  /** Saves over the quiz file the draft came from, unless `saveAs`, else where the quizmaster picks. */
+  const save = (saveAs: boolean) =>
     attempt("save", async (draftApi) => {
       if (!open) return false;
       const quiz = open.history.present;
-      const path = await saveDialog({
-        defaultPath: open.sourcePath ? withExtension(open.sourcePath) : `${fileStem(quiz.title || t("untitledQuiz"))}.${QUIZ_EXTENSION}`,
-        filters: [{ name: t("quizFiles"), extensions: [QUIZ_EXTENSION] }],
-      });
-      return path ? saveTo(draftApi, open.draftId, quiz, withExtension(path)) : false;
+      const picker = quizPicker(t, fileStem(quiz.title || t("untitledQuiz")));
+      const path = await draftApi.editorSave(open.draftId, quiz, saveAs, picker);
+      if (path === null) return false;
+      dispatch({ type: "saved", quiz, path });
+      setRecentFiles(rememberRecentFile(path));
+      return true;
     });
 
   // Edits given while another draft takes the open one's place would be lost with it.
@@ -162,20 +157,15 @@ export function useQuizEditor(onTestRun: () => void): QuizEditor {
     openQuiz: (given) =>
       attempt("open", async (draftApi) => {
         if (!(await mayDiscard())) return false;
-        const path = given ?? (await openDialog({ multiple: false, filters: [quizOpenFilter(t)] }));
-        if (typeof path !== "string") return false;
-        const draft = await draftApi.editorOpen(path);
+        const draft = await draftApi.editorOpen(given ?? null, quizPicker(t));
+        if (!draft) return false;
         load(draft);
-        setRecentFiles(rememberRecentFile(path));
+        if (draft.sourcePath) setRecentFiles(rememberRecentFile(draft.sourcePath));
         return draft;
       }),
     recentFiles,
-    save: () => {
-      // A plain JSON quiz is saved as a new quiz file, never over the JSON.
-      const path = open?.sourcePath;
-      return open && path && hasExtension(path) ? attempt("save", (draftApi) => saveTo(draftApi, open.draftId, open.history.present, path)) : saveAs();
-    },
-    saveAs,
+    save: () => save(false),
+    saveAs: () => save(true),
     closeQuiz: () =>
       attempt("close", async (draftApi) => {
         if (!(await mayDiscard())) return false;
@@ -189,7 +179,7 @@ export function useQuizEditor(onTestRun: () => void): QuizEditor {
     },
     discardUnreadable: () =>
       attempt("close", async (draftApi) => {
-        if (!(await ask(t("discardUnreadableDraft"), { kind: "warning" }))) return false;
+        if (!(await confirmAction(t("discardUnreadableDraft")))) return false;
         await draftApi.editorClose();
         load(null);
         return true;
@@ -197,24 +187,20 @@ export function useQuizEditor(onTestRun: () => void): QuizEditor {
     pickMedia: async (kinds) => {
       const picked = await attempt("media", async (draftApi) => {
         if (!open) return false;
-        const path = await openDialog({ multiple: false, filters: [mediaFileFilter(t, kinds)] });
-        return typeof path === "string" ? await draftApi.editorAddMedia(open.draftId, path) : false;
+        return (await draftApi.editorAddMedia(open.draftId, kinds, mediaPicker(t, kinds))) ?? false;
       });
       return picked === false ? null : picked;
     },
     importSheet: () =>
       attempt("import", async (draftApi) => {
         if (!open) return false;
-        const path = await openDialog({ multiple: false, filters: [{ name: t("sheetFiles"), extensions: SHEET_EXTENSIONS }] });
-        return typeof path === "string" ? await draftApi.editorImportSheet(open.draftId, path) : false;
+        return (await draftApi.editorImportSheet(open.draftId, { filter: t("sheetFiles") })) ?? false;
       }),
     exportSheet: (quiz, name) =>
       attempt("export", async (draftApi) => {
         if (!open) return false;
-        const path = await saveDialog({ defaultPath: `${fileStem(name)}.${CSV_EXTENSION}`, filters: [{ name: t("csvFile"), extensions: [CSV_EXTENSION] }] });
-        if (!path) return false;
-        const csv = path.toLowerCase().endsWith(`.${CSV_EXTENSION}`) ? path : `${path}.${CSV_EXTENSION}`;
-        return await draftApi.editorExportSheet(open.draftId, quiz, csv, listSeparator(lang));
+        const picker = { filter: t("csvFile"), fileName: fileStem(name) };
+        return (await draftApi.editorExportSheet(open.draftId, quiz, listSeparator(lang), picker)) ?? false;
       }),
     testRun: (from) =>
       attempt("testRun", async (draftApi) => {
@@ -244,16 +230,7 @@ export function openDraftId(editor: QuizEditor): string | null {
   return editor.state.status === "open" ? editor.state.draftId : null;
 }
 
-function hasExtension(path: string): boolean {
-  return path.toLowerCase().endsWith(`.${QUIZ_EXTENSION}`);
-}
-
-/** `path` with the quiz file extension (a plain JSON quiz's name gets it in place of `.json`). */
-function withExtension(path: string): string {
-  return hasExtension(path) ? path : `${path.replace(/\.json$/i, "")}.${QUIZ_EXTENSION}`;
-}
-
-/** A quiz title as a file name. */
+/** A quiz title as a file name, for the backend to add the extension to. */
 function fileStem(title: string): string {
   const stem = title.replace(/[\\/:*?"<>|\p{Cc}]/gu, "_").trim();
   return stem.replace(/^\.+|\.+$/g, "") || "quiz";

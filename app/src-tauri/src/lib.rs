@@ -6,6 +6,7 @@ mod app_file;
 mod app_icon;
 mod app_log;
 mod app_windows;
+mod dialogs;
 mod editor;
 mod error;
 mod fonts;
@@ -21,6 +22,7 @@ mod themes;
 use buzzers::clock::ShowClock;
 use buzzers::receiver::HardwareDriver;
 use buzzers::{BuzzerDriver, VirtualDriver};
+use dialogs::Picker;
 use error::CmdResult;
 pub use error::AppError;
 use hardware::Hardware;
@@ -29,7 +31,7 @@ use session::{Resumed, Session, SessionMeta, SessionSummary};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{mpsc, LazyLock, Mutex, MutexGuard};
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Emitter, Manager, Window};
 
 const DEMO_QUIZ: &str = include_str!("../../../samples/demo-quiz.json");
 
@@ -127,13 +129,19 @@ fn quizzes_cache(app: &AppHandle) -> CmdResult<PathBuf> {
 /// deleted from it, so neither runs during the other.
 static QUIZZES_CACHE: Mutex<()> = Mutex::new(());
 
-/// Lets the windows load files from `root` (and nothing else of the disk).
-fn serve_media(app: &AppHandle, inner: &mut Inner, root: Option<PathBuf>) -> CmdResult<()> {
-    if let Some(root) = &root {
-        app.asset_protocol_scope().allow_directory(root, true)?;
-    }
-    inner.media_root = root;
-    Ok(())
+/// The folders a show's media can be in, unpacked quizzes and editor
+/// drafts: the windows may load files from these, allowed once at start
+/// (A21), and from no other folder of the disk.
+fn media_folders(app: &AppHandle) -> CmdResult<[PathBuf; 2]> {
+    Ok([quizzes_cache(app)?, editor::editor_dir(app)?])
+}
+
+/// Whether the media folder `root` is outside the `folders` the windows may
+/// load from (`media_folders`). One that is gone is missing, not refused.
+fn refused(root: &Path, folders: &[PathBuf]) -> bool {
+    // Canonical, so neither `..` nor a link leads out of a folder.
+    let Ok(root) = root.canonicalize() else { return false };
+    !folders.iter().filter_map(|folder| folder.canonicalize().ok()).any(|folder| root.starts_with(folder))
 }
 
 fn emit_state(app: &AppHandle, game: Option<&Game>) {
@@ -251,7 +259,7 @@ fn start_show(app: &AppHandle, quiz: Quiz, source_path: Option<String>, media_ro
             rules_version: quiz_core::RULES_VERSION,
         };
         let session = Session::create(&sessions_root(app)?, &quiz, &meta).map_err(|e| AppError::ShowNotSaved { detail: e.to_string() })?;
-        serve_media(app, &mut inner, media_root.clone())?;
+        inner.media_root = media_root.clone();
         begin_show(app, &mut inner, Game::new(quiz), Some(session))
     };
     // Only the latest show can be resumed, so other unpacked quizzes can go,
@@ -321,16 +329,19 @@ async fn show_not_saved(app: AppHandle) -> CmdResult<Option<AppError>> {
     read_show(app, |inner| inner.save_problem.clone()).await
 }
 
-/// Opens a quiz file (`.quiz` or a plain quiz JSON) and starts a show with it.
+/// Opens a quiz file the quizmaster picks (`.quiz` or a plain quiz JSON)
+/// and starts a show with it; false when they cancel.
 #[tauri::command]
-async fn start_show_from_file(app: AppHandle, path: String) -> CmdResult<()> {
+async fn start_show_from_file(app: AppHandle, window: Window, picker: Picker) -> CmdResult<bool> {
+    let Some(path) = dialogs::pick_file(window, picker, vec![quiz_file::EXTENSION, "json"]).await? else { return Ok(false) };
     off_ui(move || {
         // Unpacking big media takes a moment: it runs before the show is locked.
         let package = {
             let _cache = QUIZZES_CACHE.lock().unwrap();
-            quiz_file::open(Path::new(&path), &quizzes_cache(&app)?)?
+            quiz_file::open(&path, &quizzes_cache(&app)?)?
         };
-        start_show(&app, package.quiz, Some(path), Some(package.root))
+        start_show(&app, package.quiz, Some(path.to_string_lossy().into_owned()), Some(package.root))?;
+        Ok(true)
     })
     .await
 }
@@ -345,7 +356,7 @@ async fn editor_test_run(app: AppHandle, draft: String, quiz: Quiz) -> CmdResult
         let root = editor::draft_root(&app, &draft)?;
         quiz_file::check_playable(&quiz, &root)?;
         let mut inner = lock_for_new_show(&app)?;
-        serve_media(&app, &mut inner, Some(root))?;
+        inner.media_root = Some(root);
         begin_show(&app, &mut inner, Game::new(quiz), None)
     })
     .await
@@ -362,10 +373,12 @@ async fn last_session(app: AppHandle) -> CmdResult<Option<SessionSummary>> {
 }
 
 /// What the quizmaster is told about a resumed show that runs: its media
-/// are missing (deleted, say), and it began under other rules.
-fn resume_warnings(quiz: &Quiz, media_root: Option<&Path>, rules_changed: bool) -> Vec<AppError> {
+/// are missing (deleted, say) or in a folder the windows may not load from
+/// (`refused`), and it began under other rules.
+fn resume_warnings(quiz: &Quiz, media_root: Option<&Path>, refused: Option<&Path>, rules_changed: bool) -> Vec<AppError> {
     let missing = media_root.and_then(|root| quiz_file::check_playable(quiz, root).err()).map(AppError::from);
-    missing.into_iter().chain(rules_changed.then_some(AppError::RulesChanged)).collect()
+    let refused = refused.map(|folder| AppError::MediaFolderRefused { folder: folder.display().to_string() });
+    missing.into_iter().chain(refused).chain(rules_changed.then_some(AppError::RulesChanged)).collect()
 }
 
 /// The last show, rebuilt from its journal and ready to run.
@@ -382,12 +395,18 @@ struct ResumedShow {
 
 /// Rebuilds the latest show under `root` from its journal. A show that
 /// stopped mid-question has the question restarted, journaled at `at_ms`,
-/// before anything is shown: no window sees the stopped question (A2).
-fn resume_show(root: &Path, at_ms: u64) -> CmdResult<ResumedShow> {
+/// before anything is shown: no window sees the stopped question (A2). Its
+/// media are served only from the `media_folders`.
+fn resume_show(root: &Path, at_ms: u64, media_folders: &[PathBuf]) -> CmdResult<ResumedShow> {
     let Resumed { mut session, quiz, journal, meta } = Session::resume_latest(root)?.ok_or(AppError::NoShowToResume)?;
-    let media_root = meta.media_root.as_deref().map(PathBuf::from);
+    // A journal edited by hand, or one where an earlier version unpacked,
+    // may name another folder.
+    let (media_root, refused) = match meta.media_root.as_deref().map(PathBuf::from) {
+        Some(named) if refused(&named, media_folders) => (None, Some(named)),
+        named => (named, None),
+    };
     // The show must go on: without its media it still runs, and the Director says why.
-    let warnings = resume_warnings(&quiz, media_root.as_deref(), meta.rules_changed());
+    let warnings = resume_warnings(&quiz, media_root.as_deref(), refused.as_deref(), meta.rules_changed());
     let mut game = Game::replay(quiz, &journal);
     let mut effects = Vec::new();
     if let Some(command) = game.recovery_command() {
@@ -403,8 +422,8 @@ async fn resume_last_session(app: AppHandle) -> CmdResult<Vec<AppError>> {
     off_ui(move || {
         // Locked first: the running show's journal must not be reopened.
         let mut inner = lock_for_new_show(&app)?;
-        let show = resume_show(&sessions_root(&app)?, now_ms())?;
-        serve_media(&app, &mut inner, show.media_root)?;
+        let show = resume_show(&sessions_root(&app)?, now_ms(), &media_folders(&app)?)?;
+        inner.media_root = show.media_root;
         replace_show(&mut inner, Some(show.game), Some(show.session));
         send_effects(&app, &mut inner, show.effects);
         emit_show_changed(&app, &inner);
@@ -466,9 +485,13 @@ pub fn run() {
             }
             app.manage(hardware);
             show_thread::start(app.handle(), queue, events);
-            // The windows load theme pictures and fonts from the built-in packages.
+            // The windows load theme pictures and fonts from the built-in
+            // packages, and a show's media from where they can be.
             let packages = app.path().resource_dir()?.join(themes::RESOURCE_FOLDER);
             app.asset_protocol_scope().allow_directory(&packages, true)?;
+            for folder in media_folders(app.handle())? {
+                app.asset_protocol_scope().allow_directory(&folder, true)?;
+            }
             let builtin = themes::builtin_themes(|id| packages.join(id).join("").to_string_lossy().into_owned())?;
             app.manage(themes::Themes(builtin));
             if let Ok(path) = teams::teams_path(app.handle()) {
@@ -605,6 +628,22 @@ mod tests {
     }
 
     #[test]
+    fn media_are_served_only_from_the_apps_own_folders() {
+        let base = sessions_dir("served");
+        let (cache, drafts, elsewhere) = (base.join("quizzes"), base.join("editor"), base.join("home"));
+        for folder in [cache.join("abc"), drafts.join("draft-1"), elsewhere.clone()] {
+            fs::create_dir_all(folder).unwrap();
+        }
+        let folders = [cache.clone(), drafts.clone()];
+        assert!(!refused(&cache.join("abc"), &folders));
+        assert!(!refused(&drafts.join("draft-1"), &folders));
+        assert!(refused(&elsewhere, &folders));
+        assert!(refused(&cache.join("abc/../../home"), &folders), "no way out with ..");
+        assert!(!refused(&cache.join("gone"), &folders), "a folder that is gone is missing, not refused");
+        fs::remove_dir_all(&base).unwrap();
+    }
+
+    #[test]
     fn a_show_resumes_after_a_crash_as_the_windows_last_saw_it() {
         let root = sessions_dir("same");
         let mut commands = up_to_the_first_question();
@@ -612,7 +651,7 @@ mod tests {
         let before = run_show_and_crash(&root, commands);
         assert!(matches!(before.phase(), quiz_core::Phase::Question(quiz_core::QuestionStep::Revealed { .. })), "{:?}", before.phase());
 
-        let resumed = resume_show(&root, 60_000).unwrap();
+        let resumed = resume_show(&root, 60_000, &[]).unwrap();
         assert_eq!(resumed.game, before);
         assert!(resumed.effects.is_empty());
         assert_eq!(resumed.warnings, []);
@@ -626,7 +665,7 @@ mod tests {
         let slide = before.slide_index();
         assert_eq!(before.recovery_command(), Some(Command::RestartQuestion), "{:?}", before.phase());
 
-        let resumed = resume_show(&root, 60_000).unwrap();
+        let resumed = resume_show(&root, 60_000, &[]).unwrap();
         // What the windows will see is on disk: the restart is journaled.
         let on_disk = Session::resume_latest(&root).unwrap().unwrap();
         assert_eq!(on_disk.journal.last(), Some(&Stamped { at_ms: 60_000, command: Command::RestartQuestion }));
@@ -683,9 +722,11 @@ mod tests {
         question.picture = Some("media/gone.png".into());
         let empty = std::env::temp_dir().join(format!("resume-warnings-{}", std::process::id()));
         std::fs::create_dir_all(&empty).unwrap();
-        let warnings = resume_warnings(&quiz, Some(&empty), true);
+        let warnings = resume_warnings(&quiz, Some(&empty), None, true);
         assert!(matches!(warnings[..], [AppError::QuizInvalid { .. }, AppError::RulesChanged]), "{warnings:?}");
-        assert_eq!(resume_warnings(&quiz, None, false), []);
+        assert_eq!(resume_warnings(&quiz, None, None, false), []);
+        let warnings = resume_warnings(&quiz, None, Some(&empty), false);
+        assert!(matches!(warnings[..], [AppError::MediaFolderRefused { .. }]), "{warnings:?}");
         std::fs::remove_dir_all(&empty).unwrap();
     }
 }

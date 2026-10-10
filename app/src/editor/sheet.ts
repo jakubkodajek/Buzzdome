@@ -5,10 +5,6 @@ import type { Lang, Translate } from "../i18n";
 import type { ListSeparator, QuestionSlide, Quiz, Slide } from "../types";
 import { fullyCorrect, newSlide, setBodyText, setHeadline, setNotes } from "./slides";
 
-/** File types questions are imported from: workbooks and CSV files. */
-export const SHEET_EXTENSIONS = ["xlsx", "xlsm", "xls", "ods", "csv"];
-export const CSV_EXTENSION = "csv";
-
 /**
  * The character between a CSV file's cells. Excel splits a CSV file it
  * opens at the system's list separator: a semicolon where the decimal mark

@@ -1,3 +1,66 @@
+//! Lists every command the windows can call, so that each window gets only
+//! the commands its capability allows (`capabilities/`): the projector
+//! needs few (A21). A test (`the_windows_get_exactly_the_commands_there_are`)
+//! keeps the list in step with `generate_handler!` in `src/lib.rs`.
+
+const COMMANDS: &[&str] = &[
+    "get_view",
+    "get_quiz",
+    "media_root",
+    "show_not_saved",
+    "start_show_from_file",
+    "start_demo_show",
+    "last_session",
+    "resume_last_session",
+    "end_show",
+    "dispatch",
+    "list_monitors",
+    "open_host_window",
+    "close_host_window",
+    "host_window_open",
+    "report_host_problem",
+    "quit_app",
+    "list_themes",
+    "installed_fonts",
+    "prepared_teams",
+    "teams_lost",
+    "add_teams",
+    "remove_team",
+    "media_library",
+    "media_add",
+    "media_add_dropped",
+    "media_remove",
+    "sound_board",
+    "sound_board_change",
+    "media_now",
+    "media_control",
+    "media_volume",
+    "media_set_volume",
+    "app_icon",
+    "set_app_icon",
+    "editor_load",
+    "editor_new",
+    "editor_open",
+    "editor_update",
+    "editor_save",
+    "editor_add_media",
+    "editor_category_name",
+    "editor_import_sheet",
+    "editor_export_sheet",
+    "editor_close",
+    "editor_test_run",
+    "receiver_info",
+    "receiver_devices",
+    "receiver_select",
+    "receiver_learn_start",
+    "receiver_learn_cancel",
+    "receiver_learn_finish",
+    "receiver_forget_learned",
+    "receiver_export_log",
+    "receiver_udev_rule",
+];
+
 fn main() {
-    tauri_build::build()
+    let manifest = tauri_build::AppManifest::new().commands(COMMANDS);
+    tauri_build::try_build(tauri_build::Attributes::new().app_manifest(manifest)).expect("failed to run the Tauri build script");
 }

@@ -14,16 +14,17 @@
 //! is never taken for "no draft": nothing is deleted until the quizmaster
 //! discards the draft (A17).
 
+use crate::dialogs::{self, Picker};
 use crate::error::{AppError, CmdResult};
-use crate::{app_local_data, app_log, lock_show, off_ui, roaming_leftover};
-use quiz_core::{Category, Quiz, ValidationError};
+use crate::{app_local_data, app_log, lock_show, media_player, off_ui, roaming_leftover, show_running};
+use quiz_core::{Category, MediaKind, Quiz, ValidationError};
 use quiz_file::{FileAction, SheetExport, SheetImport};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, MutexGuard};
 use std::time::{SystemTime, UNIX_EPOCH};
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Manager, Window};
 use ts_rs::TS;
 
 const POINTER_FILE: &str = "draft.json";
@@ -68,7 +69,7 @@ pub struct EditorDraft {
 
 const EDITOR_FOLDER: &str = "editor";
 
-fn editor_dir(app: &AppHandle) -> CmdResult<PathBuf> {
+pub(crate) fn editor_dir(app: &AppHandle) -> CmdResult<PathBuf> {
     app_local_data(app, EDITOR_FOLDER)
 }
 
@@ -183,10 +184,9 @@ fn new_draft_folder(dir: &Path) -> CmdResult<(String, PathBuf)> {
     Ok((folder, root))
 }
 
-/// Lets the windows show the draft's media, and describes the draft.
-fn describe(app: &AppHandle, root: &Path, pointer: Pointer, quiz: Quiz) -> CmdResult<EditorDraft> {
-    app.asset_protocol_scope().allow_directory(root, true)?;
-    Ok(EditorDraft {
+/// Describes the draft in `root` for the editor.
+fn describe(root: &Path, pointer: Pointer, quiz: Quiz) -> EditorDraft {
+    EditorDraft {
         problems: quiz_file::problems(&quiz, root),
         id: pointer.folder,
         quiz,
@@ -194,17 +194,17 @@ fn describe(app: &AppHandle, root: &Path, pointer: Pointer, quiz: Quiz) -> CmdRe
         unsaved: pointer.unsaved,
         media_root: root.join("").to_string_lossy().into_owned(),
         dropped: pointer.dropped,
-    })
+    }
 }
 
 /// The draft left from last time, if any.
 #[tauri::command]
 pub async fn editor_load(app: AppHandle) -> CmdResult<Option<EditorDraft>> {
-    with_drafts(app, |app, dir| {
+    with_drafts(app, |_, dir| {
         let Some(pointer) = read_pointer(dir)? else { return Ok(None) };
         let root = dir.join(&pointer.folder);
         let quiz = quiz_file::read_quiz_json(&root)?;
-        describe(app, &root, pointer, quiz).map(Some)
+        Ok(Some(describe(&root, pointer, quiz)))
     })
     .await
 }
@@ -219,21 +219,36 @@ pub async fn editor_new(app: AppHandle, title: String) -> CmdResult<EditorDraft>
         quiz_file::write_quiz_json(&root, &quiz)?;
         let pointer = Pointer { folder, source_path: None, unsaved: false, dropped: Vec::new() };
         switch_to(app, dir, &pointer)?;
-        describe(app, &root, pointer, quiz)
+        Ok(describe(&root, pointer, quiz))
     })
     .await
 }
 
-/// Opens a quiz file in place of the draft.
+/// Opens a quiz file in place of the draft: `path`, a recent file, or one
+/// the quizmaster picks (none when they cancel). A path a window names is
+/// only read, within `quiz_file::open_into`'s limits. Refused during a
+/// show, whose journal must not wait for the disk while a large file
+/// unpacks (A20).
 #[tauri::command]
-pub async fn editor_open(app: AppHandle, path: String) -> CmdResult<EditorDraft> {
+pub async fn editor_open(app: AppHandle, window: Window, path: Option<String>, picker: Picker) -> CmdResult<Option<EditorDraft>> {
+    let path = match path {
+        Some(path) => PathBuf::from(path),
+        None => match dialogs::pick_file(window, picker, vec![quiz_file::EXTENSION, "json"]).await? {
+            Some(path) => path,
+            None => return Ok(None),
+        },
+    };
     with_drafts(app, move |app, dir| {
+        if show_running(app) {
+            return Err(AppError::ShowRunning);
+        }
         let (folder, root) = new_draft_folder(dir)?;
-        let opened = quiz_file::open_into(Path::new(&path), &root)?;
+        let opened = quiz_file::open_into(&path, &root)?;
         // A quiz that opening changed has to be saved to keep the change.
-        let pointer = Pointer { folder, source_path: Some(path), unsaved: opened.changed, dropped: opened.dropped };
+        let source_path = Some(path.to_string_lossy().into_owned());
+        let pointer = Pointer { folder, source_path, unsaved: opened.changed, dropped: opened.dropped };
         switch_to(app, dir, &pointer)?;
-        describe(app, &root, pointer, opened.quiz)
+        Ok(Some(describe(&root, pointer, opened.quiz)))
     })
     .await
 }
@@ -252,21 +267,42 @@ pub async fn editor_update(app: AppHandle, draft: String, quiz: Quiz, unsaved: b
     .await
 }
 
-/// Saves the quiz of the draft `draft` with its media to `path` as a quiz file.
+/// Saves the quiz of the draft `draft` with its media as a quiz file: over
+/// the quiz file it came from, unless `save_as`, else where the quizmaster
+/// picks (none when they cancel; a plain JSON quiz is never written over).
+/// Gives the file's path.
 #[tauri::command]
-pub async fn editor_save(app: AppHandle, draft: String, quiz: Quiz, path: String) -> CmdResult<()> {
+pub async fn editor_save(app: AppHandle, window: Window, draft: String, quiz: Quiz, save_as: bool, picker: Picker) -> CmdResult<Option<String>> {
+    let source = on_draft(app.clone(), draft.clone(), |_, _, _, pointer| Ok(pointer.source_path.map(PathBuf::from))).await?;
+    let path = match source {
+        Some(source) if !save_as && is_quiz_file(&source) => source,
+        source => match dialogs::pick_save(window, picker, quiz_file::EXTENSION, source).await? {
+            Some(path) => path,
+            None => return Ok(None),
+        },
+    };
     on_draft(app, draft, move |_, dir, root, pointer| {
         quiz_file::write_quiz_json(&root, &quiz)?;
-        quiz_file::save(&quiz, &root, Path::new(&path))?;
-        write_pointer(dir, &Pointer { source_path: Some(path), unsaved: false, dropped: Vec::new(), ..pointer })
+        quiz_file::save(&quiz, &root, &path)?;
+        let saved = path.to_string_lossy().into_owned();
+        write_pointer(dir, &Pointer { source_path: Some(saved.clone()), unsaved: false, dropped: Vec::new(), ..pointer })?;
+        Ok(Some(saved))
     })
     .await
 }
 
-/// Copies a picture, sound or video into the draft `draft` and returns its reference.
+/// Whether `path` names a quiz file (not a plain JSON quiz).
+fn is_quiz_file(path: &Path) -> bool {
+    path.extension().is_some_and(|extension| extension.eq_ignore_ascii_case(quiz_file::EXTENSION))
+}
+
+/// Copies a picture, sound or video of `kinds` that the quizmaster picks
+/// into the draft `draft` and returns its reference (none when they cancel).
 #[tauri::command]
-pub async fn editor_add_media(app: AppHandle, draft: String, path: String) -> CmdResult<String> {
-    on_draft(app, draft, move |_, _, root, _| Ok(quiz_file::import_media(&root, quiz_file::MediaSource::File(Path::new(&path)))?)).await
+pub async fn editor_add_media(app: AppHandle, window: Window, draft: String, kinds: Vec<MediaKind>, picker: Picker) -> CmdResult<Option<String>> {
+    let Some(path) = dialogs::pick_file(window, picker, media_player::extensions(&kinds)).await? else { return Ok(None) };
+    media_player::of_kind(&media_player::file_name(&path), &kinds)?;
+    on_draft(app, draft, move |_, _, root, _| Ok(Some(quiz_file::import_media(&root, quiz_file::MediaSource::File(&path))?))).await
 }
 
 /// A name for a new category that none of `categories` has (spec QZ-10).
@@ -275,21 +311,22 @@ pub fn editor_category_name(categories: Vec<Category>, base: String) -> String {
     quiz_core::fresh_category_name(&categories, &base)
 }
 
-/// Reads questions from a spreadsheet and copies the media they use into
-/// the draft; the editor inserts the slides as one change (spec QZ-8),
-/// giving a row that names one of the draft's categories its look (Z10).
+/// Reads questions from a spreadsheet the quizmaster picks (none when they
+/// cancel) and copies the media they use into the draft; the editor
+/// inserts the slides as one change (spec QZ-8), giving a row that names
+/// one of the draft's categories its look (Z10).
 #[tauri::command]
-pub async fn editor_import_sheet(app: AppHandle, draft: String, path: String) -> CmdResult<SheetImport> {
+pub async fn editor_import_sheet(app: AppHandle, window: Window, draft: String, picker: Picker) -> CmdResult<Option<SheetImport>> {
+    let Some(path) = dialogs::pick_file(window, picker, quiz_file::SHEET_EXTENSIONS.to_vec()).await? else { return Ok(None) };
     // The sheet reader may take until its time limit: the draft stays free
     // for other commands meanwhile.
-    let path = PathBuf::from(path);
     let read = path.clone();
     let tables = off_ui(move || crate::sheet_reader::read_tables(&read)).await?;
     on_draft(app, draft, move |_, _, root, _| {
         let categories = quiz_file::read_quiz_json(&root)?.categories;
         // Shuffles the answers of a question with none marked right.
         let seed = SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| d.as_nanos() as u64);
-        Ok(quiz_file::import_sheet(&path, &tables, &categories, &root, seed)?)
+        Ok(Some(quiz_file::import_sheet(&path, &tables, &categories, &root, seed)?))
     })
     .await
 }
@@ -305,14 +342,23 @@ pub enum ListSeparator {
     Comma,
 }
 
-/// Writes the quiz of the draft `draft` as a CSV file with its media next to it (spec QZ-8).
+/// Writes the quiz of the draft `draft` as a CSV file the quizmaster picks
+/// (none when they cancel), with its media next to it (spec QZ-8).
 #[tauri::command]
-pub async fn editor_export_sheet(app: AppHandle, draft: String, quiz: Quiz, path: String, separator: ListSeparator) -> CmdResult<SheetExport> {
+pub async fn editor_export_sheet(
+    app: AppHandle,
+    window: Window,
+    draft: String,
+    quiz: Quiz,
+    separator: ListSeparator,
+    picker: Picker,
+) -> CmdResult<Option<SheetExport>> {
     let separator = match separator {
         ListSeparator::Semicolon => b';',
         ListSeparator::Comma => b',',
     };
-    on_draft(app, draft, move |_, _, root, _| Ok(quiz_file::export_sheet(&quiz, &root, Path::new(&path), separator)?)).await
+    let Some(path) = dialogs::pick_save(window, picker, quiz_file::CSV_EXTENSION, None).await? else { return Ok(None) };
+    on_draft(app, draft, move |_, _, root, _| Ok(Some(quiz_file::export_sheet(&quiz, &root, &path, separator)?))).await
 }
 
 /// Discards the draft, also one that cannot be read: the quizmaster chose to.

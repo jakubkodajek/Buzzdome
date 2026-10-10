@@ -1,13 +1,10 @@
 import { FULL_SHARE, SLIDE_PLAYS } from "./bindings/Constants";
 import type { StringKey, Translate } from "./i18n";
-import type { Plays, QuestionSlide, Quiz, Slide, SlideType, TitledSlide } from "./types";
+import type { Picker, Plays, QuestionSlide, Quiz, Slide, SlideType, TitledSlide } from "./types";
 
-/** A quiz file's extension (a zip package, see the quiz-file crate). */
-export const QUIZ_EXTENSION = "quiz";
-
-/** The open dialog's filter for a quiz: a quiz file, or a plain quiz JSON. */
-export function quizOpenFilter(t: Translate): { name: string; extensions: string[] } {
-  return { name: t("quizFiles"), extensions: [QUIZ_EXTENSION, "json"] };
+/** The wording of a picker for quiz files (a quiz file, or a plain quiz JSON to open), offering `fileName` (without the extension) to save as. */
+export function quizPicker(t: Translate, fileName?: string): Picker {
+  return { filter: t("quizFiles"), fileName };
 }
 
 /** How each kind of slide is named in the UI. */
