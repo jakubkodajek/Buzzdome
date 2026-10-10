@@ -13,17 +13,20 @@ function viewIn(phase: Phase, controls: Partial<Controls> = {}): GameView {
 const running = viewIn({ phase: "question", step: "running", clock }, { pauseClock: true, restartQuestion: true });
 const paused = viewIn({ phase: "question", step: "running", clock }, { resumeClock: true, restartQuestion: true });
 
+const asked = { slideIndex: 0, pausedClock: true };
+const askedRunning = { slideIndex: 0, pausedClock: false };
+
 describe("restartOutcome", () => {
   it("restarts a question that can still start again", () => {
-    expect(restartOutcome(true, true, paused)).toEqual({ command: { type: "restartQuestion" } });
-    expect(restartOutcome(true, false, running)).toEqual({ command: { type: "restartQuestion" } });
+    expect(restartOutcome(true, asked, paused)).toEqual({ command: { type: "restartQuestion" } });
+    expect(restartOutcome(true, askedRunning, running)).toEqual({ command: { type: "restartQuestion" } });
   });
 
   it("on No resumes only a clock that asking paused and that is still paused", () => {
-    expect(restartOutcome(false, true, paused)).toEqual({ command: { type: "resumeClock" } });
-    expect(restartOutcome(false, false, paused)).toBeNull();
-    expect(restartOutcome(false, true, running)).toBeNull();
-    expect(restartOutcome(false, true, null)).toBeNull();
+    expect(restartOutcome(false, asked, paused)).toEqual({ command: { type: "resumeClock" } });
+    expect(restartOutcome(false, askedRunning, paused)).toBeNull();
+    expect(restartOutcome(false, asked, running)).toBeNull();
+    expect(restartOutcome(false, asked, null)).toBeNull();
   });
 
   it("tells why the question no longer starts again, from where the show is", () => {
@@ -31,10 +34,19 @@ describe("restartOutcome", () => {
     const revealed = viewIn({ phase: "question", step: "revealed", winner: null }, { next: true });
     // Another dialog's Yes restarted it already.
     const ready = viewIn({ phase: "question", step: "ready" }, { next: true });
-    expect(restartOutcome(true, true, closed)).toEqual({ notice: "restartTooLate" });
-    expect(restartOutcome(true, true, revealed)).toEqual({ notice: "restartTooLate" });
-    expect(restartOutcome(true, true, ready)).toEqual({ notice: "restartAlreadyDone" });
-    expect(restartOutcome(true, true, viewIn({ phase: "billboard" }, { next: true }))).toEqual({ notice: "restartMovedOn" });
-    expect(restartOutcome(true, true, null)).toEqual({ notice: "restartMovedOn" });
+    expect(restartOutcome(true, asked, closed)).toEqual({ notice: "restartTooLate" });
+    expect(restartOutcome(true, asked, revealed)).toEqual({ notice: "restartTooLate" });
+    expect(restartOutcome(true, asked, ready)).toEqual({ notice: "restartAlreadyDone" });
+    expect(restartOutcome(true, asked, viewIn({ phase: "billboard" }, { next: true }))).toEqual({ notice: "restartMovedOn" });
+    expect(restartOutcome(true, asked, null)).toEqual({ notice: "restartMovedOn" });
+  });
+
+  it("never touches another question the show moved on to meanwhile", () => {
+    const next = (phase: Phase, controls: Partial<Controls>) => ({ ...viewIn(phase, controls), slideIndex: 1 });
+    expect(restartOutcome(true, asked, next({ phase: "question", step: "ready" }, { next: true }))).toEqual({ notice: "restartMovedOn" });
+    expect(restartOutcome(true, asked, next({ phase: "question", step: "running", clock }, { resumeClock: true, restartQuestion: true }))).toEqual({
+      notice: "restartMovedOn",
+    });
+    expect(restartOutcome(false, asked, next({ phase: "question", step: "running", clock }, { resumeClock: true, restartQuestion: true }))).toBeNull();
   });
 });

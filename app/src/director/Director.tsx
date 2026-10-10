@@ -269,10 +269,11 @@ function CommandPanel(props: { view: GameView | null; projector: ProjectorSettin
   // while the quizmaster decides; the answer acts on the show as it is by
   // then (`restartOutcome`).
   const restartQuestion = () => {
-    const paused = controls?.pauseClock === true;
-    if (paused) dispatch({ type: "pauseClock" });
+    if (!view) return;
+    const asked = { slideIndex: view.slideIndex, pausedClock: view.controls.pauseClock };
+    if (asked.pausedClock) dispatch({ type: "pauseClock" });
     const answered = (yes: boolean) => {
-      const outcome = restartOutcome(yes, paused, latestView.current);
+      const outcome = restartOutcome(yes, asked, latestView.current);
       if (outcome && "command" in outcome) dispatch(outcome.command);
       else if (outcome) notify(t(outcome.notice));
     };
