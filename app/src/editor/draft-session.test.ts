@@ -13,22 +13,25 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
+const PICKER = { filter: "Quiz files" };
+
 /** A stand-in for the backend: one current draft, and a record of every call. */
 function fakeApi(current = "draft-1") {
   const calls: string[] = [];
   const draftApi = {
     editorLoad: vi.fn(async () => draft(current)),
     editorNew: vi.fn(async () => draft((current = "draft-new"))),
-    editorOpen: vi.fn(async (path: string) => draft((current = `draft-${path}`))),
+    editorOpen: vi.fn(async (path: string | null) => draft((current = `draft-${path}`))),
     editorClose: vi.fn(async () => undefined),
     editorUpdate: vi.fn(async (id: string, written: Quiz) => {
       calls.push(`update ${id} ${written.title}`);
       if (id !== current) throw { code: "draftChanged" };
       return [];
     }),
-    editorSave: vi.fn(async (id: string, saved: Quiz, path: string) => {
-      calls.push(`save ${id} ${saved.title} ${path}`);
+    editorSave: vi.fn(async (id: string, saved: Quiz, saveAs: boolean) => {
+      calls.push(`save ${id} ${saved.title}${saveAs ? " as" : ""}`);
       if (id !== current) throw { code: "draftChanged" };
+      return "/q.quiz";
     }),
     editorAddMedia: vi.fn(async () => "media/a.png"),
     editorImportSheet: vi.fn(),
@@ -47,9 +50,9 @@ describe("DraftSession", () => {
     const session = new DraftSession(draftApi);
     const opening = deferred<EditorDraft>();
     draftApi.editorOpen.mockImplementationOnce(() => opening.promise);
-    const open = session.exclusive("open", (api) => api.editorOpen("big"));
+    const open = session.exclusive("open", (api) => api.editorOpen("big", PICKER));
     expect(session.getStatus().busy).toBe("open");
-    expect(await session.exclusive("save", (api) => api.editorSave("draft-1", quiz("Old"), "/old.quiz"))).toBe(BUSY);
+    expect(await session.exclusive("save", (api) => api.editorSave("draft-1", quiz("Old"), false, PICKER))).toBe(BUSY);
     opening.resolve(draft("draft-big"));
     expect(await open).toEqual(draft("draft-big"));
     expect(session.getStatus().busy).toBe(null);
@@ -61,9 +64,9 @@ describe("DraftSession", () => {
     const session = new DraftSession(draftApi);
     session.write("draft-1", quiz("A"), true, () => undefined);
     session.write("draft-1", quiz("B"), true, () => undefined);
-    await session.exclusive("save", (api) => api.editorSave("draft-1", quiz("B"), "/q.quiz"));
+    await session.exclusive("save", (api) => api.editorSave("draft-1", quiz("B"), true, PICKER));
     // Writes still waiting collapse into the latest.
-    expect(calls).toEqual(["update draft-1 B", "save draft-1 B /q.quiz"]);
+    expect(calls).toEqual(["update draft-1 B", "save draft-1 B as"]);
     await expect(session.exclusive("save", async () => Promise.reject(FULL_DISK))).rejects.toBe(FULL_DISK);
     expect(session.getStatus().busy).toBe(null);
   });
@@ -109,7 +112,7 @@ describe("DraftSession", () => {
     await session.exclusive("open", async () => false);
     expect(session.getStatus().notWritten).toBe(FULL_DISK);
     await session.exclusive("open", async (api) => {
-      const opened = await api.editorOpen("other");
+      const opened = await api.editorOpen("other", PICKER);
       session.replaced();
       return opened;
     });

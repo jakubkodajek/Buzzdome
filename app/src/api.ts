@@ -14,9 +14,11 @@ import type {
   IconColor,
   LearnProgress,
   ListSeparator,
+  MediaKind,
   MediaLibrary,
   MonitorInfo,
   NowPlaying,
+  Picker,
   PlayerCommand,
   Press,
   PressEvent,
@@ -44,7 +46,9 @@ export const api = {
   mediaRoot: () => invoke<string | null>("media_root"),
   /** Why the running show's journal cannot be written, if so. */
   showNotSaved: () => invoke<AppError | null>("show_not_saved"),
-  startShowFromFile: (path: string) => invoke<void>("start_show_from_file", { path }),
+  // The backend opens the file pickers (A21): a window names no file to write.
+  /** Starts a show of a quiz file the quizmaster picks; false when they cancel. */
+  startShowFromFile: (picker: Picker) => invoke<boolean>("start_show_from_file", { picker }),
   startDemoShow: () => invoke<void>("start_demo_show"),
   lastSession: () => invoke<SessionSummary | null>("last_session"),
   /** Resumes the last show; returns warnings when it runs but not quite as before (its media are missing, other rules). */
@@ -71,8 +75,8 @@ export const api = {
   removeTeam: (name: string) => invoke<void>("remove_team", { name }),
   /** The media player's library of files, kept on this computer. */
   mediaLibrary: () => invoke<MediaLibrary>("media_library"),
-  /** Copies files into the library; returns their references in order. */
-  mediaAdd: (paths: string[]) => invoke<string[]>("media_add", { paths }),
+  /** Copies files the quizmaster picks into the library; returns their references in order. */
+  mediaAdd: (picker: Picker) => invoke<string[]>("media_add", { picker }),
   /** Copies a file dropped into the window into the library; returns its reference. */
   mediaAddDropped: async (file: File) =>
     invoke<string>("media_add_dropped", new Uint8Array(await file.arrayBuffer()), { headers: { [DROPPED_NAME_HEADER]: encodeURIComponent(file.name) } }),
@@ -97,29 +101,32 @@ export const api = {
   /** Saves the button being learned and returns it. */
   receiverLearnFinish: () => invoke<Press>("receiver_learn_finish"),
   receiverForgetLearned: () => invoke<void>("receiver_forget_learned"),
-  receiverExportLog: (path: string) => invoke<void>("receiver_export_log", { path }),
+  /** Writes the receiver's recent reports to a file the quizmaster picks; false when they cancel. */
+  receiverExportLog: (picker: Picker) => invoke<boolean>("receiver_export_log", { picker }),
   receiverUdevRule: () => invoke<string>("receiver_udev_rule"),
   // The editor's commands on a draft name it (`EditorDraft.id`): one that
   // another draft has replaced since is refused with `draftChanged` (A16).
   /** The quiz editor's draft left from last time, if any. */
   editorLoad: () => invoke<EditorDraft | null>("editor_load"),
   editorNew: (title: string) => invoke<EditorDraft>("editor_new", { title }),
-  editorOpen: (path: string) => invoke<EditorDraft>("editor_open", { path }),
+  /** Opens `path` (a recent file) or a quiz file the quizmaster picks; null when they cancel. */
+  editorOpen: (path: string | null, picker: Picker) => invoke<EditorDraft | null>("editor_open", { path, picker }),
   /** Stores the edited quiz; returns what keeps it from being played. */
   editorUpdate: (draft: string, quiz: Quiz, unsaved: boolean) => invoke<ValidationError[]>("editor_update", { draft, quiz, unsaved }),
-  editorSave: (draft: string, quiz: Quiz, path: string) => invoke<void>("editor_save", { draft, quiz, path }),
-  /** Copies a media file into the draft; returns its reference (`media/...`). */
-  editorAddMedia: (draft: string, path: string) => invoke<string>("editor_add_media", { draft, path }),
+  /** Saves over the quiz file the draft came from, unless `saveAs`, else where the quizmaster picks; returns the path, null when they cancel. */
+  editorSave: (draft: string, quiz: Quiz, saveAs: boolean, picker: Picker) => invoke<string | null>("editor_save", { draft, quiz, saveAs, picker }),
+  /** Copies a media file of `kinds` the quizmaster picks into the draft; returns its reference (`media/...`), null when they cancel. */
+  editorAddMedia: (draft: string, kinds: MediaKind[], picker: Picker) => invoke<string | null>("editor_add_media", { draft, kinds, picker }),
   /** A name for a new category, "`base` 2" or so, that none of `categories` has. */
   editorCategoryName: (categories: readonly Category[], base: string) => invoke<string>("editor_category_name", { categories, base }),
   /**
    * Reads questions from a spreadsheet, copying their media into the draft,
    * for the editor to insert; a row's `CAT` names one of the draft's categories.
    */
-  editorImportSheet: (draft: string, path: string) => invoke<SheetImport>("editor_import_sheet", { draft, path }),
-  /** Writes the quiz as a CSV file with its media next to it. */
-  editorExportSheet: (draft: string, quiz: Quiz, path: string, separator: ListSeparator) =>
-    invoke<SheetExport>("editor_export_sheet", { draft, quiz, path, separator }),
+  editorImportSheet: (draft: string, picker: Picker) => invoke<SheetImport | null>("editor_import_sheet", { draft, picker }),
+  /** Writes the quiz as a CSV file the quizmaster picks, with its media next to it; null when they cancel. */
+  editorExportSheet: (draft: string, quiz: Quiz, separator: ListSeparator, picker: Picker) =>
+    invoke<SheetExport | null>("editor_export_sheet", { draft, quiz, separator, picker }),
   /** Discards the draft, also one that cannot be read. */
   editorClose: () => invoke<void>("editor_close"),
   /** Plays the editor's quiz as a show that is not kept for resuming. */

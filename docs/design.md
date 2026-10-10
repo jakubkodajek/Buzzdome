@@ -141,6 +141,18 @@ two windows cannot disagree with each other or with the score.
   zone takes. A part that fails to render shows the error in its place
   (`ErrorBoundary`): a Director tab offers to try again, and a projector
   slide leaves the stage as it is and tells the Director.
+- **What a page may do.** Each window gets only the commands it needs
+  (`capabilities/director.json`, `capabilities/projector.json`; `build.rs`
+  lists the app's commands so Tauri checks them, and a test in
+  `app_windows.rs` keeps the three lists in step). The projector can read
+  the show and its media and dispatch, but not open, save or pick files.
+  A content security policy (`tauri.conf.json`) lets the pages load only
+  the app's own scripts and styles and media through the asset protocol.
+  Files the quizmaster opens, saves, imports or exports are picked by the
+  backend (`dialogs.rs`, worded by the UI's `Picker`), never named by a
+  page, and the pages confirm through the dialog plugin's `ask`
+  (`confirm.ts`); ESLint refuses `alert`, `confirm`, `prompt` and the
+  plugin's file pickers.
 - **Log.** `app_log.rs` writes `buzzdome.log` in the app's log folder
   (section 3): the start, a panic with its backtrace, and problems that
   have no window to show them. Each line carries the show clock's time, as
@@ -226,6 +238,9 @@ and the quiz's references are renamed with it (the draft then counts as
 unsaved); a plain `quiz.json` reads
 only safe names from the disk (no device names on Windows), and the show
 path keeps such a file refused.
+A `quiz.json` over 16 MB (`MAX_QUIZ_JSON_BYTES`) is refused before it is
+parsed, whether read from a package, from the disk or about to be saved, so
+a small packed file cannot unpack into a huge quiz.
 
 A slide's `style` (`quiz_core::style`) is typed: `Color`, `FontName`,
 `TextSize` and `Transparency` check their values whenever they are read,
@@ -256,7 +271,10 @@ The windows load media through Tauri's asset protocol. Its scope starts
 empty and the shell allows exactly the current quiz folder, the editor's
 draft folder, the built-in theme packages and the media player's library
 (`<app data>/library`, spec SN-7) (`asset_protocol_scope().allow_directory`),
-so a page cannot read anything else on the disk. `media_root` returns the folder with a trailing separator;
+so a page cannot read anything else on the disk. A quiz folder is allowed
+only inside the app's own folders (the unpacked quizzes and the editor's
+drafts): a session whose `meta.json` names another folder resumes without
+media, with a warning (`mediaFolderRefused`). `media_root` returns the folder with a trailing separator;
 `media.ts` appends a reference to it and calls `convertFileSrc`. Media
 references are checked in the core (`media.rs`) to stay inside `media/`.
 
@@ -424,8 +442,10 @@ table view toggle. It edits a quiz; it never touches a running show.
   `export_table` builds the rows and `export_sheet` places each media file
   next to the CSV (`place_file`, shared with media imports: the same name
   with the same bytes is reused, another gets a number) and writes the file
-  atomically. `sheet.ts` holds the extensions, the separator per language
-  and the sample sheet.
+  atomically, skipping a media reference that would leave the quiz
+  (`SheetExport.refused`). `quiz-file` holds the extensions
+  (`SHEET_EXTENSIONS`, `CSV_EXTENSION`); `sheet.ts` holds the separator per
+  language and the sample sheet.
 - **Test run.** F5 (from the start) and Shift+F5 (from the selected slide)
   start a show of the draft with keyboard and on-screen buzzers. The
   Director shows a test run badge and "Back to the editor" ends the show

@@ -56,6 +56,10 @@ pub enum AppError {
     /// A resumed show began under other rules (`RULES_VERSION`); it runs.
     #[error("the show began in another version of the app; its scores may differ")]
     RulesChanged,
+    /// A resumed show's media are in a folder the windows may not load
+    /// from (A21); it runs without them.
+    #[error("the show's media are in {folder}, which the windows may not load from")]
+    MediaFolderRefused { folder: String },
 
     // Quiz files and the editor.
     #[error("cannot {action:?} {path}: {detail}")]
@@ -73,6 +77,9 @@ pub enum AppError {
     TooLarge { max_mb: u64 },
     #[error("the quiz file has more than {max} files")]
     TooManyFiles { max: usize },
+    #[error("quiz.json is larger than {max_mb} MB")]
+    #[serde(rename_all = "camelCase")]
+    QuizJsonTooLarge { max_mb: u64 },
     #[error("the quiz has problems: {problems:?}")]
     QuizInvalid { problems: Vec<ValidationError> },
     #[error("no quiz is open in the editor")]
@@ -212,6 +219,7 @@ impl From<QuizFileError> for AppError {
             QuizFileError::MissingQuizJson => AppError::MissingQuizJson,
             QuizFileError::TooLarge => AppError::TooLarge { max_mb: quiz_file::MAX_UNPACKED_BYTES >> 20 },
             QuizFileError::TooManyFiles => AppError::TooManyFiles { max: quiz_file::MAX_ENTRIES },
+            QuizFileError::QuizJsonTooLarge => AppError::QuizJsonTooLarge { max_mb: quiz_file::MAX_QUIZ_JSON_BYTES >> 20 },
             QuizFileError::Invalid(problems) => AppError::QuizInvalid { problems },
             QuizFileError::Spreadsheet(detail) => AppError::NotASpreadsheet { detail },
             QuizFileError::SpreadsheetTooLarge => {

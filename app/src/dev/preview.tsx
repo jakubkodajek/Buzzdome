@@ -458,6 +458,9 @@ function changeBoard(change: BoardChange) {
   void emit("sound-board", board);
 }
 
+/** What a dialog answers, a check sets as `window.dialogAnswer` (a file picked, or "Yes"); cancelled otherwise. */
+const dialogAnswer = () => (window as unknown as { dialogAnswer?: string }).dialogAnswer ?? null;
+
 mockIPC(
   (cmd, payload) => {
     switch (cmd) {
@@ -466,10 +469,12 @@ mockIPC(
         return null;
       case "add_teams":
       case "remove_team":
-      case "media_add":
       case "media_remove":
         called.push({ cmd, ...(payload as object) });
         return null;
+      case "media_add":
+        called.push({ cmd, ...(payload as object) });
+        return [];
       case "media_library":
         return LIBRARY;
       case "sound_board":
@@ -553,18 +558,20 @@ mockIPC(
           { slideId: first.id, problem: { code: "styleUnread", path: "style.headline.color" } },
           { slideId: third.id, problem: { code: "mediaOnRanking" } },
         ];
-        const path = (payload as { path: string }).path;
+        // A recent file, else the file picked (see `dialogAnswer`).
+        const path = (payload as { path: string | null }).path ?? dialogAnswer();
+        if (!path) return null;
         return { id: `draft-${++drafts}`, quiz: editorQuiz, sourcePath: path, unsaved: true, mediaRoot: "/src/dev/", problems: [], dropped };
       }
       case "editor_update":
         called.push({ cmd, ...(payload as object) });
         if (draft === "failing") return Promise.reject({ code: "file", action: "write", path: "C:\\Users\\q\\AppData\\Local\\cz.kodajek.quizshow\\editor\\draft-1\\quiz.json", detail: "No space left on device (os error 28)" });
         return [];
-      // Dialogs answer what a check sets in `window.dialogAnswer`; cancelled otherwise.
-      case "plugin:dialog|open":
-      case "plugin:dialog|save":
+      case "editor_save":
+        called.push({ cmd, ...(payload as object) });
+        return "C:\\Kvizy\\hospodsky-kviz.quiz";
       case "plugin:dialog|message":
-        return (window as unknown as { dialogAnswer?: string }).dialogAnswer ?? null;
+        return dialogAnswer();
       case "editor_category_name": {
         // A stand-in: the backend also skips the names taken.
         const { categories, base } = payload as { categories: unknown[]; base: string };
@@ -575,7 +582,7 @@ mockIPC(
         return SHEET_IMPORT;
       case "editor_export_sheet":
         called.push({ cmd, ...(payload as object) });
-        return { media: 2, missing: ["media/gone.mp3"] };
+        return { media: 2, missing: ["media/gone.mp3"], refused: [] };
       case "receiver_info":
         return {
           status: { kind: "error", problem: "cannotOpen", detail: "access denied" },

@@ -1,4 +1,3 @@
-import { ask } from "@tauri-apps/plugin-dialog";
 import { useState, type DragEvent } from "react";
 import { api } from "../api";
 import { useApp, useDispatch, useRun } from "../app-context";
@@ -14,6 +13,7 @@ import { PAD_COLORS, padColor, padFile, progressOf, shownRows, type Progress } f
 import type { BoardChange, GameView, MediaKind, Pad, PadClick, PadColor, PadSource } from "../types";
 import { carriesFiles, KindIcon, LIBRARY_FILE_TYPE } from "./media-parts";
 import type { MediaPlayer } from "./useMediaPlayer";
+import { confirmAction } from "../confirm";
 
 /** Drag data of a pad: its place. */
 const PAD_TYPE = "application/x-quiz-show-pad";
@@ -149,7 +149,7 @@ export function SoundBoardGrid({ player, sound, view, selected, onSelect, import
     {
       label: t("boardClear"),
       icon: <TrashIcon />,
-      run: () => run(ask(t("boardClearConfirm"), { kind: "warning" }).then((yes) => (yes ? api.soundBoardChange({ type: "clearAll" }) : undefined))),
+      run: () => run(confirmAction(t("boardClearConfirm")).then((yes) => (yes ? api.soundBoardChange({ type: "clearAll" }) : undefined))),
     },
   ];
 

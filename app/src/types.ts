@@ -42,6 +42,7 @@ export type { PadClick } from "./bindings/PadClick";
 export type { PadColor } from "./bindings/PadColor";
 export type { PadSource } from "./bindings/PadSource";
 export type { Phase } from "./bindings/Phase";
+export type { Picker } from "./bindings/Picker";
 export type { Place } from "./bindings/Place";
 export type { PlayerCommand } from "./bindings/PlayerCommand";
 export type { PlayerView } from "./bindings/PlayerView";

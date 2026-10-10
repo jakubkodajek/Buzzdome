@@ -1,4 +1,3 @@
-import { ask, open } from "@tauri-apps/plugin-dialog";
 import { useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { api } from "../api";
 import { useApp, useReport, useRun } from "../app-context";
@@ -8,13 +7,14 @@ import { ContextMenu } from "../editor/controls";
 import { trackTime } from "../format";
 import { usePlayerVolume } from "../hooks";
 import { AddIcon, GridIcon, ListIcon, PauseIcon, PlayIcon, RewindIcon, SoundIcon, StopIcon, TrashIcon } from "../icons";
-import { mediaFileFilter, mediaFileName } from "../media";
+import { mediaFileName, mediaPicker } from "../media";
 import { progressOf, searchFiles } from "../media-player";
 import { readPreference, writePreference } from "../preferences";
 import type { GameView, LibraryFile, MediaKind } from "../types";
 import { carriesFiles, KindIcon, LIBRARY_FILE_TYPE, useTicking } from "./media-parts";
 import { SoundBoardGrid } from "./SoundBoardGrid";
 import type { MediaPlayer } from "./useMediaPlayer";
+import { confirmAction } from "../confirm";
 
 /** Dropped files are sent whole through memory; bigger ones are added with Add, from their path. */
 const LAYOUT_KEY = "quiz-show.media-player.layout";
@@ -74,14 +74,12 @@ export function MediaPlayerTab({ player, sound, view }: { player: MediaPlayer; s
   };
 
   const add = async () => {
-    const paths = await open({ multiple: true, filters: [mediaFileFilter(t, ALL_KINDS)] });
-    if (!paths || paths.length === 0) return;
-    const added = await api.mediaAdd(Array.isArray(paths) ? paths : [paths]);
+    const added = await api.mediaAdd(mediaPicker(t, ALL_KINDS));
     if (added[0]) setSelected(added[0]);
   };
 
   const remove = async (reference: string) => {
-    if (await ask(t("mediaRemoveConfirm", { name: mediaFileName(reference) }), { kind: "warning" })) await api.mediaRemove(reference);
+    if (await confirmAction(t("mediaRemoveConfirm", { name: mediaFileName(reference) }))) await api.mediaRemove(reference);
   };
 
   /** Copies files dropped from the system into the library; returns the references of those that came in. */

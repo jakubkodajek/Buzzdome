@@ -10,8 +10,8 @@
 mod sheet;
 
 pub use sheet::{
-    export_sheet, import_sheet, read_tables, SheetExport, SheetImport, SheetRead, MAX_SHEET_BYTES, MAX_SHEET_COLUMNS, MAX_SHEET_REPORT_BYTES, MAX_SHEET_ROWS,
-    MAX_SHEET_TEXT_BYTES,
+    export_sheet, import_sheet, read_tables, SheetExport, SheetImport, SheetRead, CSV_EXTENSION, MAX_SHEET_BYTES, MAX_SHEET_COLUMNS, MAX_SHEET_REPORT_BYTES,
+    MAX_SHEET_ROWS, MAX_SHEET_TEXT_BYTES, SHEET_EXTENSIONS,
 };
 
 use quiz_core::{
@@ -36,6 +36,10 @@ pub const QUIZ_JSON: &str = "quiz.json";
 /// Limits against damaged or hostile files.
 pub const MAX_UNPACKED_BYTES: u64 = 4 << 30;
 pub const MAX_ENTRIES: usize = 10_000;
+/// `quiz.json` is parsed whole, into many times its size, so it gets far
+/// less room than media: a small file must not unpack to one that takes the
+/// app's memory (A20). Text-only quizzes stay well under it.
+pub const MAX_QUIZ_JSON_BYTES: u64 = 16 << 20;
 
 const ZIP_MAGIC: &[u8; 4] = b"PK\x03\x04";
 const INCOMING_PREFIX: &str = ".incoming-";
@@ -67,6 +71,8 @@ pub enum QuizFileError {
     TooLarge,
     #[error("the quiz file has more than {MAX_ENTRIES} files")]
     TooManyFiles,
+    #[error("{QUIZ_JSON} is larger than {} MB", MAX_QUIZ_JSON_BYTES >> 20)]
+    QuizJsonTooLarge,
     #[error("the quiz has problems: {}", .0.iter().map(ToString::to_string).collect::<Vec<_>>().join("; "))]
     Invalid(Vec<ValidationError>),
     #[error("the spreadsheet cannot be read: {0}")]
@@ -239,12 +245,22 @@ pub fn read_quiz_json(root: &Path) -> Result<Quiz> {
 
 /// `read_quiz_json`, with what reading left out.
 fn read_quiz(root: &Path) -> Result<ReadQuiz> {
-    let path = root.join(QUIZ_JSON);
-    let json = fs::read_to_string(&path).map_err(|e| match e.kind() {
-        io::ErrorKind::NotFound => QuizFileError::MissingQuizJson,
-        _ => QuizFileError::Io { action: FileAction::Read, path, source: e },
+    let json = read_json(&root.join(QUIZ_JSON)).map_err(|e| match e {
+        QuizFileError::Io { source, .. } if source.kind() == io::ErrorKind::NotFound => QuizFileError::MissingQuizJson,
+        e => e,
     })?;
     Ok(Quiz::read_json(&json)?)
+}
+
+/// Reads the quiz JSON file `path`, refusing one larger than
+/// `MAX_QUIZ_JSON_BYTES` without reading past it.
+fn read_json(path: &Path) -> Result<String> {
+    let mut bytes = Vec::new();
+    File::open(path).and_then(|file| file.take(MAX_QUIZ_JSON_BYTES + 1).read_to_end(&mut bytes)).context(FileAction::Read, path)?;
+    if bytes.len() as u64 > MAX_QUIZ_JSON_BYTES {
+        return Err(QuizFileError::QuizJsonTooLarge);
+    }
+    String::from_utf8(bytes).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e)).context(FileAction::Read, path)
 }
 
 /// Checks the quiz and that every media file it uses exists under `root`.
@@ -297,11 +313,17 @@ fn problems_where(quiz: &Quiz, root: &Path, counts: impl Fn(&Problem) -> bool) -
 /// Writes `quiz.json` into the package folder `root` (see `write_atomic`).
 /// The quiz is not checked: a draft may be unfinished.
 pub fn write_quiz_json(root: &Path, quiz: &Quiz) -> Result<()> {
-    write_atomic(&root.join(QUIZ_JSON), quiz_json(quiz).as_bytes())
+    write_atomic(&root.join(QUIZ_JSON), quiz_json(quiz)?.as_bytes())
 }
 
-fn quiz_json(quiz: &Quiz) -> String {
-    serde_json::to_string_pretty(quiz).expect("a quiz serializes: it has no maps and no custom serializers that can fail")
+/// The quiz as `quiz.json`, refused when no reader would read it back
+/// (`MAX_QUIZ_JSON_BYTES`).
+fn quiz_json(quiz: &Quiz) -> Result<String> {
+    let json = serde_json::to_string_pretty(quiz).expect("a quiz serializes: it has no maps and no custom serializers that can fail");
+    if json.len() as u64 > MAX_QUIZ_JSON_BYTES {
+        return Err(QuizFileError::QuizJsonTooLarge);
+    }
+    Ok(json)
 }
 
 /// Replaces the file `dest` with `contents` so that a crash leaves either the
@@ -518,7 +540,7 @@ fn write_zip(quiz: &Quiz, media_root: &Path, temp: &Path, max_bytes: u64) -> Res
     if media.len() + 1 > MAX_ENTRIES {
         return Err(QuizFileError::TooManyFiles);
     }
-    let json = quiz_json(quiz);
+    let json = quiz_json(quiz)?;
     let mut total = json.len() as u64;
     for reference in &media {
         let path = media_root.join(reference);
@@ -624,7 +646,7 @@ fn entry_name(raw: &str) -> String {
 /// `dest`. Media names are not renamed: the author wrote them by hand, and
 /// `problems` lists the bad ones.
 fn copy_json(path: &Path, dest: &Path) -> Result<Unpacked> {
-    let json = fs::read_to_string(path).context(FileAction::Read, path)?;
+    let json = read_json(path)?;
     let quiz = Quiz::from_json(&json)?;
     let source_root = path.parent().unwrap_or(Path::new("."));
     let mut hasher = Sha256::new();
@@ -648,7 +670,9 @@ fn copy_json(path: &Path, dest: &Path) -> Result<Unpacked> {
 
 /// Writes one file of a package from `contents` (read from the file
 /// `source`), adds its name and contents to the hash and returns its size.
-/// Fails if it would exceed `budget` bytes.
+/// Fails if it would exceed `budget` bytes, or `quiz.json` its own limit
+/// (`MAX_QUIZ_JSON_BYTES`): a ZIP entry may unpack to far more than it
+/// takes in the file.
 fn write_file(
     dest: &Path,
     name: &str,
@@ -664,9 +688,16 @@ fn write_file(
     let mut file = File::create(&path).context(FileAction::Write, &path)?;
     hasher.update(name.as_bytes());
     hasher.update([0]);
-    let mut left = budget;
+    let room = if name == QUIZ_JSON { MAX_QUIZ_JSON_BYTES } else { u64::MAX };
+    let mut written = 0u64;
     let copied = copy(contents, source, &mut file, &path, |chunk| {
-        left = left.checked_sub(chunk.len() as u64).ok_or(QuizFileError::TooLarge)?;
+        written += chunk.len() as u64;
+        if written > room {
+            return Err(QuizFileError::QuizJsonTooLarge);
+        }
+        if written > budget {
+            return Err(QuizFileError::TooLarge);
+        }
         hasher.update(chunk);
         Ok(())
     })?;
@@ -997,6 +1028,25 @@ mod tests {
         assert_eq!(numbered("media/round.1/a.b.png", 2), "media/round.1/a.b-2.png");
         assert_eq!(numbered("media/round.1/noext", 3), "media/round.1/noext-3");
         assert_eq!(numbered("media/.hidden", 2), "media/.hidden-2");
+    }
+
+    #[test]
+    fn a_quiz_json_too_large_to_parse_is_refused() {
+        // Deflated, 17 MB of spaces take a few kilobytes: a ZIP bomb.
+        let bomb = vec![b' '; (MAX_QUIZ_JSON_BYTES + (1 << 20)) as usize];
+        let file = zip_of("bomb", &[(QUIZ_JSON, &bomb)]);
+        assert!(fs::metadata(&file).unwrap().len() < 1 << 20);
+        let dest = temp("bomb-dest").join("draft");
+        assert!(matches!(open_into(&file, &dest), Err(QuizFileError::QuizJsonTooLarge)));
+        assert!(!dest.exists());
+        // A plain JSON file as large is not read either.
+        let json = temp("bomb-json").join("quiz.json");
+        fs::write(&json, &bomb).unwrap();
+        assert!(matches!(open_into(&json, &dest), Err(QuizFileError::QuizJsonTooLarge)));
+        // Nor is a quiz that large written, which then could not be read back.
+        let text = "x".repeat(MAX_QUIZ_JSON_BYTES as usize);
+        let quiz = Quiz::new("Big", vec![Slide::new("s", SlideContent::Billboard { title: "Big".into(), text })]);
+        assert!(matches!(write_quiz_json(&temp("bomb-write"), &quiz), Err(QuizFileError::QuizJsonTooLarge)));
     }
 
     #[test]

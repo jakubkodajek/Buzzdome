@@ -1,4 +1,3 @@
-import { save } from "@tauri-apps/plugin-dialog";
 import { useCallback, useEffect, useState } from "react";
 import { BUTTONS, buttonLabel } from "../answers";
 import { api } from "../api";
@@ -6,6 +5,7 @@ import { useApp, useRun } from "../app-context";
 import { useBackendEvent, useLearnProgress } from "../hooks";
 import { errorText, protocolText, receiverProblemText, settingsLostText } from "../messages";
 import type { Button, DeviceInfo, Press, PressEvent, RawReport, ReceiverInfo, ReceiverStatus } from "../types";
+import { confirmAction } from "../confirm";
 
 const LOG_LEN = 40;
 
@@ -62,10 +62,7 @@ export function ReceiverTab() {
 
   const connected = status?.kind === "connected" ? status.device : null;
 
-  const exportLog = async () => {
-    const path = await save({ defaultPath: "receiver-log.txt", filters: [{ name: "Text", extensions: ["txt"] }] });
-    if (path) run(api.receiverExportLog(path));
-  };
+  const exportLog = () => run(api.receiverExportLog({ filter: t("textFile"), fileName: "receiver-log" }));
 
   const finishLearn = async () => {
     try {
@@ -211,9 +208,7 @@ export function ReceiverTab() {
             <span className="spacer" />
             <button
               disabled={!info?.learnedButtons}
-              onClick={() => {
-                if (confirm(t("learnForgetConfirm"))) run(api.receiverForgetLearned().then(reload));
-              }}
+              onClick={() => run(confirmAction(t("learnForgetConfirm")).then((yes) => (yes ? api.receiverForgetLearned().then(reload) : undefined)))}
             >
               {t("learnForget")}
             </button>

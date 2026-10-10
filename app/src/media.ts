@@ -2,7 +2,7 @@ import { convertFileSrc } from "@tauri-apps/api/core";
 import { createContext, useCallback, useContext } from "react";
 import { MEDIA_EXTENSIONS } from "./bindings/MediaExtensions";
 import type { StringKey, Translate } from "./i18n";
-import type { ThemeFile } from "./types";
+import type { Picker, ThemeFile } from "./types";
 
 export { MEDIA_EXTENSIONS };
 export type MediaKind = keyof typeof MEDIA_EXTENSIONS;
@@ -73,11 +73,9 @@ const MEDIA_FILTER_NAMES: Record<MediaKind, StringKey> = {
   video: "mediaVideo",
 };
 
-/** A file dialog's filter for media files of `kinds`. */
-export function mediaFileFilter(t: Translate, kinds: MediaKind[]): { name: string; extensions: string[] } {
-  const extensions = kinds.flatMap((kind) => MEDIA_EXTENSIONS[kind]);
-  // Upper case too: some systems match file names case-sensitively.
-  return { name: kinds.map((kind) => t(MEDIA_FILTER_NAMES[kind])).join(", "), extensions: [...extensions, ...extensions.map((e) => e.toUpperCase())] };
+/** The wording of a picker for media files of `kinds` (the backend knows their extensions). */
+export function mediaPicker(t: Translate, kinds: MediaKind[]): Picker {
+  return { filter: kinds.map((kind) => t(MEDIA_FILTER_NAMES[kind])).join(", ") };
 }
 
 /** The file name of a media reference, as the quizmaster knows it. */

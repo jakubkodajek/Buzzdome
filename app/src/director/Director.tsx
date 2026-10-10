@@ -1,4 +1,3 @@
-import { ask, open } from "@tauri-apps/plugin-dialog";
 import { useCallback, useRef, useState, type ReactNode } from "react";
 import { api } from "../api";
 import { AppProvider, useApp, useDispatch, useRun } from "../app-context";
@@ -29,7 +28,7 @@ import {
 import { keyHint, KEYS, useShortcuts } from "../keyboard";
 import { MediaRootContext } from "../media";
 import { phaseLabel } from "../phase";
-import { quizOpenFilter, slideContext } from "../quiz";
+import { quizPicker, slideContext } from "../quiz";
 import { ThemeContext, ThemesProvider, useResolvedTheme, useThemes } from "../theme/context";
 import { isThemeMissing } from "../theme/themes";
 import type { GameView, Quiz } from "../types";
@@ -39,6 +38,7 @@ import { MediaPlayerTab } from "./MediaPlayerTab";
 import { ResponsesTab } from "./ResponsesTab";
 import { SettingsTab, useProjectorSettings, type ProjectorSettings } from "./SettingsTab";
 import { TeamsTab } from "./TeamsTab";
+import { confirmAction } from "../confirm";
 import { useMediaPlayer, type MediaPlayer } from "./useMediaPlayer";
 import { VirtualBuzzers } from "./VirtualBuzzers";
 import "./director.css";
@@ -87,7 +87,7 @@ function DirectorScreens() {
   useBackendEvent("host-problem", (message) => notify(t("hostProblem", { message })));
   // Closing this window during a show asks first; the app ends with it (A10).
   useBackendEvent("close-requested", () => {
-    void ask(t("quitDuringShow"), { kind: "warning" }).then((quit) => {
+    void confirmAction(t("quitDuringShow")).then((quit) => {
       if (quit) run(api.quitApp());
     });
   });
@@ -248,10 +248,7 @@ function CommandPanel(props: { view: GameView | null; projector: ProjectorSettin
   };
   const problem = resumeProblem ?? last.problem;
 
-  const openQuiz = async () => {
-    const path = await open({ multiple: false, filters: [quizOpenFilter(t)] });
-    if (typeof path === "string") run(api.startShowFromFile(path));
-  };
+  const openQuiz = () => run(api.startShowFromFile(quizPicker(t)));
 
   const controls = view?.controls;
   const hint = (key: string) => keyHint(t, key);
@@ -325,7 +322,7 @@ function CommandPanel(props: { view: GameView | null; projector: ProjectorSettin
             icon={<PowerIcon />}
             label={t("endShow")}
             tone="bad"
-            onClick={() => run(ask(t("endShowConfirm"), { kind: "warning" }).then((yes) => (yes ? api.endShow() : undefined)))}
+            onClick={() => run(confirmAction(t("endShowConfirm")).then((yes) => (yes ? api.endShow() : undefined)))}
           />
         ))}
     </aside>
