@@ -66,14 +66,19 @@ export function channelWeights(count: number): number[] {
   return count === 6 ? [1, 1, 1, 0, 1.41, 1.41] : Array<number>(count).fill(1);
 }
 
+/** The samples `part` covers: the first and the one after the last. */
+export function partRange(samples: Samples, part: Span): [number, number] {
+  const length = samples.channels[0]?.length ?? 0;
+  const at = (ms: number) => Math.min(length, Math.max(0, Math.round((ms * samples.sampleRate) / 1000)));
+  const first = at(part.fromMs);
+  return [first, part.toMs === null ? length : Math.max(first, at(part.toMs))];
+}
+
 /** Measures `part` of `samples`, which must be at `LOUDNESS_RATE`. Time O(samples), memory O(samples / 4800). */
 export function measureLoudness(samples: Samples, part: Span = WHOLE_FILE): Loudness {
   const { sampleRate, channels } = samples;
   if (sampleRate !== LOUDNESS_RATE) throw new Error(`loudness is measured at ${LOUDNESS_RATE} Hz, not ${sampleRate} Hz`);
-  const length = channels[0]?.length ?? 0;
-  const at = (ms: number) => Math.min(length, Math.max(0, Math.round((ms * sampleRate) / 1000)));
-  const first = at(part.fromMs);
-  const last = part.toMs === null ? length : Math.max(first, at(part.toMs));
+  const [first, last] = partRange(samples, part);
   const step = (sampleRate * STEP_MS) / 1000;
   const steps = Math.floor((last - first) / step);
 

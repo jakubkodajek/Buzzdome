@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent } from "react";
-import { useApp } from "../app-context";
+import { useApp, useReport } from "../app-context";
 import { ClipPlayer, inSpan, linearGain, sameSpan, WHOLE_FILE } from "../audio/clip-player";
 import { decodeAudioFile, MAX_DECODED_MINUTES } from "../audio/decode";
-import { measureLoudness, type Samples } from "../audio/loudness";
+import { type Samples } from "../audio/loudness";
+import { measureCopy } from "../audio/measure";
 import type { StringKey } from "../i18n";
 import type { SoundClip, Span } from "../types";
 import { Dialog } from "./controls";
@@ -54,7 +55,18 @@ type Drag = { edge: "from" } | { edge: "to" } | { edge: null; anchorMs: number; 
  */
 export function TrimDialog({ url, name, sound, canReplay, onApply, onClose }: TrimDialogProps) {
   const { t } = useApp();
+  const report = useReport();
   const [samples, setSamples] = useState<Samples | null>(null);
+  /** The new part is being measured for its gain. */
+  const [measuring, setMeasuring] = useState(false);
+  /** The dialog is still open, for what finishes after it may have closed. */
+  const open = useRef(true);
+  useEffect(() => {
+    open.current = true;
+    return () => {
+      open.current = false;
+    };
+  }, []);
   /** Why the file could not be read. */
   const [failed, setFailed] = useState<UnreadSound | null>(null);
   const [cursorMs, setCursorMs] = useState(sound.part.fromMs);
@@ -230,11 +242,24 @@ export function TrimDialog({ url, name, sound, canReplay, onApply, onClose }: Tr
     }
   };
 
-  const apply = () => {
+  const apply = async () => {
     const trimmed = parts.result();
     let gainDb = sound.gainDb;
-    // A normalized sound is normalized again for the part it plays now.
-    if (gainDb !== 0 && samples && !sameSpan(trimmed.part, sound.part)) gainDb = gainAfterTrim(gainDb, measureLoudness(samples, trimmed.part), readLoudnessTarget());
+    // A normalized sound is normalized again for the part it plays now, off the window's thread.
+    if (gainDb !== 0 && samples && !sameSpan(trimmed.part, sound.part)) {
+      setMeasuring(true);
+      try {
+        gainDb = gainAfterTrim(gainDb, await measureCopy(samples, trimmed.part), readLoudnessTarget());
+      } catch (error) {
+        // The dialog stays open: OK tries again, Cancel keeps the sound as it was.
+        if (open.current) report(error);
+        return;
+      } finally {
+        if (open.current) setMeasuring(false);
+      }
+      // Closed while measuring: nothing changes.
+      if (!open.current) return;
+    }
     onApply({ ...trimmed, gainDb });
     onClose();
   };
@@ -248,7 +273,7 @@ export function TrimDialog({ url, name, sound, canReplay, onApply, onClose }: Tr
       onClose={onClose}
       footer={
         <>
-          <button type="button" className="primary" disabled={!ready} onClick={apply}>
+          <button type="button" className="primary" disabled={!ready || measuring} onClick={() => void apply()}>
             {t("ok")}
           </button>
           <button type="button" onClick={onClose}>

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { channelWeights, LOUDNESS_RATE, measureLoudness, normalization, type Loudness, type Samples } from "./loudness";
+import { measureCopy } from "./measure";
 
 /** `seconds` of a 997 Hz sine at `amplitude` (1 = 0 dBFS). */
 function sine(seconds: number, amplitude = 1): Float32Array {
@@ -44,6 +45,13 @@ describe("loudness", () => {
     const song = joined(silence(2), sine(2), silence(6));
     expect(measureLoudness(mono(song), { fromMs: 2_000, toMs: 4_000 }).lufs).toBeCloseTo(-3.01, 1);
     expect(measureLoudness(mono(song), { fromMs: 6_000, toMs: null })).toEqual({ lufs: null, peakDb: -Infinity, durationMs: 4_000 });
+  });
+
+  it("measures a copy of the part the same, leaving the samples as they were", async () => {
+    const song = mono(joined(silence(1), sine(3, 0.5), silence(2)));
+    const part = { fromMs: 500, toMs: 3_500 };
+    expect(await measureCopy(song, part)).toEqual(measureLoudness(song, part));
+    expect(song.channels[0].length).toBe(6 * LOUDNESS_RATE);
   });
 
   it("refuses samples at another rate", () => {

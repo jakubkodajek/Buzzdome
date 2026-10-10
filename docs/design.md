@@ -104,11 +104,15 @@ two windows cannot disagree with each other or with the score.
   that reaches a target), `decode.ts` and `measure.ts`.
   - A sound is decoded whole only up to `MAX_DECODED_MINUTES` (10), read
     from its metadata first: decoded stereo takes about 23 MB a minute, in
-    the window that may run the show. A longer one cannot be trimmed or
-    normalized, and the windows say so.
+    the window that may run the show. One that tells no length is read only
+    up to `MAX_UNTIMED_BYTES` (what 10 minutes at 64 kbit/s take), checked
+    on the response's length and again on the bytes. A longer one cannot be
+    trimmed or normalized, and the windows say so.
   - Measuring runs in a Worker (`loudness.worker.ts`), since a long part
     takes over a second; decoding stays in the window, which alone has an
-    `OfflineAudioContext`. The samples move to the Worker, not copied.
+    `OfflineAudioContext`. The samples move to the Worker, not copied,
+    except where the window still shows them: the trim window sends a copy
+    of the new part only (`measureCopy`).
   - A gain above 1 goes through a Web Audio `GainNode` (an element's
     `volume` stops at 1). That needs the media response to allow the
     window's origin, which Tauri's asset protocol does; a gain at or below 1

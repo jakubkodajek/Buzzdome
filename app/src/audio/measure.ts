@@ -3,7 +3,8 @@
 // Decoding stays in the window, since only a window has OfflineAudioContext.
 
 import type { Span } from "../types";
-import { measureLoudness, type Loudness, type Samples } from "./loudness";
+import { WHOLE_FILE } from "./clip-player";
+import { measureLoudness, partRange, type Loudness, type Samples } from "./loudness";
 
 export interface MeasureRequest {
   id: number;
@@ -52,4 +53,15 @@ export function measureParts(samples: Samples, parts: Span[]): Promise<Loudness[
     const buffers = new Set(samples.channels.map((channel) => channel.buffer as ArrayBuffer));
     measurer().postMessage(request, [...buffers]);
   });
+}
+
+/**
+ * The loudness of `part` of `samples`, measured in the Worker on a copy of
+ * that part, so `samples` stay usable (a dialog still draws them).
+ */
+export async function measureCopy(samples: Samples, part: Span): Promise<Loudness> {
+  const [first, last] = partRange(samples, part);
+  const copy = { sampleRate: samples.sampleRate, channels: samples.channels.map((channel) => channel.slice(first, last)) };
+  const [loudness] = await measureParts(copy, [WHOLE_FILE]);
+  return loudness;
 }

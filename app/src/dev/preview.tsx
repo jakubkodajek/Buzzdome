@@ -493,6 +493,7 @@ mockIPC(
         return { quiz: editorQuiz, sourcePath: path, unsaved: true, mediaRoot: "/src/dev/", problems: [], dropped };
       }
       case "editor_update":
+        called.push({ cmd, ...(payload as object) });
         return [];
       // Dialogs answer what a check sets in `window.dialogAnswer`; cancelled otherwise.
       case "plugin:dialog|open":
