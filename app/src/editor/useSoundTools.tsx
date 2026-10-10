@@ -1,13 +1,14 @@
 import { useState, type ReactNode } from "react";
 import { useApp } from "../app-context";
 import { sameSpan } from "../audio/clip-player";
+import { MAX_DECODED_MINUTES } from "../audio/decode";
 import { decibels } from "../format";
 import { mediaFileName, mediaUrl } from "../media";
 import type { Slide } from "../types";
 import type { OpenQuiz } from "./editor-state";
 import type { Edit } from "./history";
 import { LoudnessDialog } from "./LoudnessDialog";
-import { LOUDNESS_STATUS_KEYS, measureSound, normalizedGain, readLoudnessTarget } from "./normalize";
+import { LOUDNESS_STATUS_KEYS, measureSound, normalizedGain, readLoudnessTarget, unreadSound } from "./normalize";
 import { setSoundOptions, setVideoOptions } from "./slides";
 import { TrimDialog } from "./TrimDialog";
 import { VideoTrimDialog } from "./VideoTrimDialog";
@@ -52,7 +53,7 @@ export function useSoundTools(open: OpenQuiz | null, edit: (edit: Edit, mergeKey
       },
       (error: unknown) => {
         console.error("normalize:", error);
-        notify(t(LOUDNESS_STATUS_KEYS.failed));
+        notify(t(LOUDNESS_STATUS_KEYS[unreadSound(error)], { minutes: MAX_DECODED_MINUTES }));
       },
     );
   };

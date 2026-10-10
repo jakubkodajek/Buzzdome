@@ -101,7 +101,14 @@ two windows cannot disagree with each other or with the score.
   at volume × loudness gain), `slide-sound.ts` (when a slide's sound plays),
   `replay.ts` (the replay part after the reveal, for a slide's sound and
   its video alike), `loudness.ts` (ITU-R BS.1770-4 measurement and the gain
-  that reaches a target) and `decode.ts`.
+  that reaches a target), `decode.ts` and `measure.ts`.
+  - A sound is decoded whole only up to `MAX_DECODED_MINUTES` (10), read
+    from its metadata first: decoded stereo takes about 23 MB a minute, in
+    the window that may run the show. A longer one cannot be trimmed or
+    normalized, and the windows say so.
+  - Measuring runs in a Worker (`loudness.worker.ts`), since a long part
+    takes over a second; decoding stays in the window, which alone has an
+    `OfflineAudioContext`. The samples move to the Worker, not copied.
   - A gain above 1 goes through a Web Audio `GainNode` (an element's
     `volume` stops at 1). That needs the media response to allow the
     window's origin, which Tauri's asset protocol does; a gain at or below 1

@@ -1,8 +1,9 @@
 // Evening out the loudness of a quiz's sounds (SN-9): the target the
 // quizmaster chose, and measuring the part of a sound that plays.
 
-import { decodeAudioFile } from "../audio/decode";
-import { LOUDNESS_TARGETS, measureLoudness, normalization, type Loudness, type LoudnessStatus, type LoudnessTarget, type Normalization } from "../audio/loudness";
+import { decodeAudioFile, SoundTooLong } from "../audio/decode";
+import { LOUDNESS_TARGETS, normalization, type Loudness, type LoudnessStatus, type LoudnessTarget, type Normalization } from "../audio/loudness";
+import { measureParts } from "../audio/measure";
 import type { StringKey } from "../i18n";
 import { readPreference, writePreference } from "../preferences";
 import type { SoundClip } from "../types";
@@ -21,7 +22,15 @@ export function writeLoudnessTarget(target: LoudnessTarget): void {
 
 /** The loudness of the part of `sound` that plays, from its file at `url`. */
 export async function measureSound(url: string, sound: Pick<SoundClip, "part">): Promise<Loudness> {
-  return measureLoudness(await decodeAudioFile(url), sound.part);
+  const [loudness] = await measureParts(await decodeAudioFile(url), [sound.part]);
+  return loudness;
+}
+
+/** Why a sound was not measured: its file could not be read, or is too long to read whole. */
+export type UnreadSound = "failed" | "tooLong";
+
+export function unreadSound(error: unknown): UnreadSound {
+  return error instanceof SoundTooLong ? "tooLong" : "failed";
 }
 
 /** How each target is offered. */
@@ -31,14 +40,15 @@ export const LOUDNESS_TARGET_KEYS: Record<LoudnessTarget, StringKey> = {
   [-23]: "loudnessBroadcast",
 };
 
-/** What became of a sound; "failed" when its file could not be read. */
-export const LOUDNESS_STATUS_KEYS: Record<LoudnessStatus | "failed", StringKey> = {
+/** What became of a sound, or why it was not measured (worded with `minutes`, see `MAX_DECODED_MINUTES`). */
+export const LOUDNESS_STATUS_KEYS: Record<LoudnessStatus | UnreadSound, StringKey> = {
   changed: "loudnessChanged",
   atTarget: "loudnessAtTarget",
   limited: "loudnessLimited",
   silent: "loudnessSilent",
   tooShort: "loudnessTooShort",
   failed: "loudnessFailed",
+  tooLong: "loudnessTooLong",
 };
 
 export interface GainChange {

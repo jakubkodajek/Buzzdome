@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { useApp } from "../app-context";
-import { decodeAudioFile } from "../audio/decode";
-import { LOUDNESS_TARGETS, measureLoudness, type Loudness, type LoudnessTarget } from "../audio/loudness";
+import { decodeAudioFile, MAX_DECODED_MINUTES } from "../audio/decode";
+import { LOUDNESS_TARGETS, type Loudness, type LoudnessTarget } from "../audio/loudness";
+import { measureParts } from "../audio/measure";
 import { decibels } from "../format";
 import { mediaFileName, mediaUrl } from "../media";
 import type { Quiz } from "../types";
 import { Dialog, Select } from "./controls";
-import { LOUDNESS_STATUS_KEYS, LOUDNESS_TARGET_KEYS, normalizedGain, readLoudnessTarget, writeLoudnessTarget } from "./normalize";
+import { LOUDNESS_STATUS_KEYS, LOUDNESS_TARGET_KEYS, normalizedGain, readLoudnessTarget, unreadSound, writeLoudnessTarget, type UnreadSound } from "./normalize";
 
 interface LoudnessDialogProps {
   quiz: Quiz;
@@ -17,8 +18,8 @@ interface LoudnessDialogProps {
   onClose: () => void;
 }
 
-/** A measured sound: its loudness, or that its file could not be read. */
-type Measured = Loudness | "failed";
+/** A measured sound: its loudness, or why it was not measured. */
+type Measured = Loudness | UnreadSound;
 
 /**
  * Measures every sound of the quiz and evens them out to one loudness
@@ -40,12 +41,13 @@ export function LoudnessDialog({ quiz, mediaRoot, onApply, onClose }: LoudnessDi
     void (async () => {
       for (const file of new Set(rows.map((row) => row.sound.file))) {
         const results = new Map<string, Measured>();
+        const playing = rows.filter((r) => r.sound.file === file);
         try {
-          const samples = await decodeAudioFile(mediaUrl(mediaRoot, file));
-          for (const row of rows.filter((r) => r.sound.file === file)) results.set(row.id, measureLoudness(samples, row.sound.part));
+          const loudness = await measureParts(await decodeAudioFile(mediaUrl(mediaRoot, file)), playing.map((row) => row.sound.part));
+          playing.forEach((row, i) => results.set(row.id, loudness[i]));
         } catch (error) {
           console.error("loudness:", error);
-          for (const row of rows.filter((r) => r.sound.file === file)) results.set(row.id, "failed");
+          for (const row of playing) results.set(row.id, unreadSound(error));
         }
         if (!alive) return;
         setMeasured((done) => new Map([...done, ...results]));
@@ -58,10 +60,12 @@ export function LoudnessDialog({ quiz, mediaRoot, onApply, onClose }: LoudnessDi
 
   const results = rows.map((row) => {
     const loudness = measured.get(row.id);
-    const change = loudness && loudness !== "failed" ? normalizedGain(row.sound.gainDb, loudness, target) : null;
+    const read = typeof loudness === "object" ? loudness : null;
+    const change = read ? normalizedGain(row.sound.gainDb, read, target) : null;
     /** The new gain; null when it stays. */
     const gainDb = change?.gainDb ?? null;
-    return { ...row, loudness, change, gainDb, ticked: gainDb !== null && !unticked.has(row.id) };
+    const status = change?.status ?? (typeof loudness === "string" ? loudness : null);
+    return { ...row, loudness, read, change, status, gainDb, ticked: gainDb !== null && !unticked.has(row.id) };
   });
   const done = measured.size === rows.length;
   const apply = () => {
@@ -130,10 +134,10 @@ export function LoudnessDialog({ quiz, mediaRoot, onApply, onClose }: LoudnessDi
                 <td className="loudness-file" title={row.sound.file}>
                   {mediaFileName(row.sound.file)}
                 </td>
-                <td className="tabular">{row.loudness && row.loudness !== "failed" && row.loudness.lufs !== null ? decibels(row.loudness.lufs, false) : ""}</td>
-                <td className="tabular">{row.loudness && row.loudness !== "failed" && Number.isFinite(row.loudness.peakDb) ? decibels(row.loudness.peakDb, false) : ""}</td>
+                <td className="tabular">{row.read && row.read.lufs !== null ? decibels(row.read.lufs, false) : ""}</td>
+                <td className="tabular">{row.read && Number.isFinite(row.read.peakDb) ? decibels(row.read.peakDb, false) : ""}</td>
                 <td className="tabular">{row.change ? decibels((row.gainDb ?? row.sound.gainDb) - row.sound.gainDb) : ""}</td>
-                <td>{row.loudness === undefined ? t("loudnessWaiting") : t(LOUDNESS_STATUS_KEYS[row.change?.status ?? "failed"])}</td>
+                <td>{row.status === null ? t("loudnessWaiting") : t(LOUDNESS_STATUS_KEYS[row.status], { minutes: MAX_DECODED_MINUTES })}</td>
               </tr>
             ))}
           </tbody>

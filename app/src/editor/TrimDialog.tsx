@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent } from "react";
 import { useApp } from "../app-context";
 import { ClipPlayer, inSpan, linearGain, sameSpan, WHOLE_FILE } from "../audio/clip-player";
-import { decodeAudioFile } from "../audio/decode";
+import { decodeAudioFile, MAX_DECODED_MINUTES } from "../audio/decode";
 import { measureLoudness, type Samples } from "../audio/loudness";
+import type { StringKey } from "../i18n";
 import type { SoundClip, Span } from "../types";
 import { Dialog } from "./controls";
-import { gainAfterTrim, readLoudnessTarget } from "./normalize";
+import { gainAfterTrim, readLoudnessTarget, unreadSound, type UnreadSound } from "./normalize";
 import { onPartKeys, PART_COLOR, PART_COLORS, PartTimes, REPLAY_COLOR, ReplayChoice, usePartEditing } from "./part-editing";
 import { panned, waveformPeaks, zoomed, type TimeWindow } from "./waveform";
 
@@ -30,6 +31,8 @@ const BAR_HEIGHT = 12;
 const EDGE_PX = 6;
 /** A press that moves less than this is a click. */
 const CLICK_PX = 3;
+/** What the window says when it cannot show the sound. */
+const TRIM_UNREAD_KEYS: Record<UnreadSound, StringKey> = { failed: "trimFailed", tooLong: "trimTooLong" };
 const COLORS = {
   background: "#fbfbfb",
   wave: "#4b5563",
@@ -52,7 +55,8 @@ type Drag = { edge: "from" } | { edge: "to" } | { edge: null; anchorMs: number; 
 export function TrimDialog({ url, name, sound, canReplay, onApply, onClose }: TrimDialogProps) {
   const { t } = useApp();
   const [samples, setSamples] = useState<Samples | null>(null);
-  const [failed, setFailed] = useState(false);
+  /** Why the file could not be read. */
+  const [failed, setFailed] = useState<UnreadSound | null>(null);
   const [cursorMs, setCursorMs] = useState(sound.part.fromMs);
   /** The stretch in view; null shows the whole sound. */
   const [view, setView] = useState<TimeWindow | null>(null);
@@ -75,7 +79,7 @@ export function TrimDialog({ url, name, sound, canReplay, onApply, onClose }: Tr
       (decoded) => alive && setSamples(decoded),
       (error: unknown) => {
         console.error("trim:", error);
-        if (alive) setFailed(true);
+        if (alive) setFailed(unreadSound(error));
       },
     );
     return () => {
@@ -267,7 +271,7 @@ export function TrimDialog({ url, name, sound, canReplay, onApply, onClose }: Tr
             onPointerUp={onPointerUp}
             onPointerCancel={() => (drag.current = null)}
           />
-          {!ready && <p className="trim-status">{failed ? t("trimFailed") : t("loading")}</p>}
+          {!ready && <p className="trim-status">{failed ? t(TRIM_UNREAD_KEYS[failed], { minutes: MAX_DECODED_MINUTES }) : t("loading")}</p>}
         </div>
         {zoomedIn && (
           <input

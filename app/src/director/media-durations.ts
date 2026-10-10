@@ -3,7 +3,7 @@
 // dozens of files at once.
 
 import { useEffect, useSyncExternalStore } from "react";
-import { mediaUrl } from "../media";
+import { mediaUrl, readMediaLength } from "../media";
 import type { MediaLibrary, MediaKind } from "../types";
 
 /** Length in ms by file URL; NaN for a file whose length cannot be read. */
@@ -13,27 +13,11 @@ const listeners = new Set<() => void>();
 let version = 0;
 let queue: Promise<void> = Promise.resolve();
 
-function readLength(url: string, kind: Exclude<MediaKind, "image">): Promise<number> {
-  return new Promise((resolve) => {
-    const media = document.createElement(kind);
-    media.preload = "metadata";
-    const done = (ms: number) => {
-      media.removeAttribute("src");
-      media.load();
-      resolve(ms);
-    };
-    // Some files tell no length (Infinity) until played through: unknown, like a broken one.
-    media.onloadedmetadata = () => done(Number.isFinite(media.duration) ? media.duration * 1000 : Number.NaN);
-    media.onerror = () => done(Number.NaN);
-    media.src = url;
-  });
-}
-
 function measure(url: string, kind: Exclude<MediaKind, "image">) {
   if (lengths.has(url) || queued.has(url)) return;
   queued.add(url);
   queue = queue
-    .then(() => readLength(url, kind))
+    .then(() => readMediaLength(url, kind))
     .then((ms) => {
       queued.delete(url);
       lengths.set(url, ms);

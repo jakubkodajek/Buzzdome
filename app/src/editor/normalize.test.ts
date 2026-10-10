@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { gainAfterTrim, gainChange, readLoudnessTarget, writeLoudnessTarget } from "./normalize";
+import { readsWhole, SoundTooLong } from "../audio/decode";
+import { gainAfterTrim, gainChange, readLoudnessTarget, unreadSound, writeLoudnessTarget } from "./normalize";
 
 describe("normalize", () => {
   afterEach(() => vi.unstubAllGlobals());
@@ -31,5 +32,13 @@ describe("normalize", () => {
     expect(gainAfterTrim(3, { lufs: -20, peakDb: -10, durationMs: 5_000 }, -16)).toBe(4);
     expect(gainAfterTrim(3, { lufs: null, peakDb: -Infinity, durationMs: 5_000 }, -16)).toBe(3);
     expect(gainAfterTrim(3, { lufs: null, peakDb: -20, durationMs: 100 }, -16)).toBe(3);
+  });
+
+  it("reads a sound whole up to ten minutes, and one that tells no length", () => {
+    expect(readsWhole(10 * 60_000)).toBe(true);
+    expect(readsWhole(10 * 60_000 + 1)).toBe(false);
+    expect(readsWhole(Number.NaN)).toBe(true);
+    expect(unreadSound(new SoundTooLong("media/long.mp3"))).toBe("tooLong");
+    expect(unreadSound(new Error("media/song.mp3: HTTP 404"))).toBe("failed");
   });
 });

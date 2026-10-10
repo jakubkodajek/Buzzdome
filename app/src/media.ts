@@ -24,6 +24,26 @@ export function mediaUrl(root: string, reference: string): string {
   return convertFileSrc(root + reference.split("/").join(separator));
 }
 
+/**
+ * The length of a sound or video file in ms, read from its metadata; NaN
+ * when it cannot be read or the file tells none (some only know it once
+ * played through).
+ */
+export function readMediaLength(url: string, kind: Exclude<MediaKind, "image">): Promise<number> {
+  return new Promise((resolve) => {
+    const media = document.createElement(kind);
+    media.preload = "metadata";
+    const done = (ms: number) => {
+      media.removeAttribute("src");
+      media.load();
+      resolve(ms);
+    };
+    media.onloadedmetadata = () => done(Number.isFinite(media.duration) ? media.duration * 1000 : Number.NaN);
+    media.onerror = () => done(Number.NaN);
+    media.src = url;
+  });
+}
+
 /** URL for a file of a theme package. */
 export function themeFileUrl(file: ThemeFile): string {
   return mediaUrl(file.root, file.path);
