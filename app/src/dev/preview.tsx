@@ -473,6 +473,8 @@ mockIPC(
       case "list_themes":
         // Their files are served by Vite from src-tauri/themes.
         return builtinThemes;
+      case "installed_fonts":
+        return ["Arial", "Courier New", "DejaVu Sans", "Georgia", "Impact", "Times New Roman", "Verdana"];
       case "media_root":
         // Served by Vite from this folder (see the convertFileSrc mock below).
         return "/src/dev/";

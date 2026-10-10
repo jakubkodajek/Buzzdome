@@ -22,6 +22,8 @@ tauri = { version = "2", features = ["protocol-asset"] }
 tauri-plugin-dialog = "2"
 # Decodes the name of a file dropped into a window (an IPC header).
 percent-encoding = "2"
+# Lists the installed fonts for the editor's font picker.
+fontdb = "0.23"
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true

@@ -3,13 +3,25 @@
 // pasting a value. Pure, so it is tested without a screen.
 
 import type { ReactNode } from "react";
+import { isColor, readColor } from "../theme/color";
+import type { Color, Gradient, TextStyle } from "../types";
+import type { Action } from "./actions";
+import { isGradient, readGradient } from "./gradients";
+
+/** A text's font as one property: the font, its size and the B, I and U buttons. */
+export type FontValue = Pick<TextStyle, "font" | "size" | "bold" | "italic" | "underline">;
 
 /** A row's value and how to set it, for Reset, Copy and Paste and to compare slides. */
 export type RowValue =
   | { kind: "number"; value: number; initial?: number; min: number; max: number; step: number; set: (value: number) => void }
   | { kind: "flag"; value: boolean; initial?: boolean; set: (value: boolean) => void }
   | { kind: "choice"; value: string | number; initial?: string | number; options: (string | number)[]; set: (value: string | number) => void }
-  | { kind: "media"; value: string | null; initial?: null; accepts: (file: string) => boolean; set: (file: string | null) => void };
+  | { kind: "media"; value: string | null; initial?: null; accepts: (file: string) => boolean; set: (file: string | null) => void }
+  /** Null: the theme's colour (or, where there is none, no colour). */
+  | { kind: "color"; value: Color | null; initial?: Color | null; set: (color: Color | null) => void }
+  /** Null: no gradient, the theme's look. */
+  | { kind: "gradient"; value: Gradient | null; initial?: null; set: (gradient: Gradient | null) => void }
+  | { kind: "font"; value: FontValue; initial?: FontValue; set: (font: FontValue) => void };
 
 export interface PropertyRow {
   /** Unique among a slide's rows and the same for the same property on every slide. */
@@ -23,21 +35,38 @@ export interface PropertyRow {
   rare?: boolean;
   /** Without one, the row is the selected slide's alone and not offered for several slides. */
   value?: RowValue;
+  /** The rows of its parts (a gradient's From, To and Type), shown under it once its name is clicked; the row sums them up. */
+  parts?: PropertyRow[];
+  /** More entries for the row's context menu. */
+  menu?: Action[];
 }
 
-/** Which of the first slide's rows every slide has, and those whose values differ. */
+/** The row and the rows of its parts, in order. */
+export function withParts(rows: PropertyRow[]): PropertyRow[] {
+  return rows.flatMap((row) => [row, ...(row.parts ?? [])]);
+}
+
+/** Which of the first slide's rows (and their parts) every slide has, and those whose values differ. */
 export function commonRows(perSlide: PropertyRow[][]): { shown: Set<string>; mixed: Set<string> } {
-  const [first = [], ...others] = perSlide;
+  const [first = [], ...others] = perSlide.map(withParts);
   const shown = new Set<string>();
   const mixed = new Set<string>();
   for (const row of first) {
-    if (!row.value) continue;
-    const matching = others.map((rows) => rows.find((other) => other.id === row.id && other.value?.kind === row.value?.kind));
-    if (matching.some((other) => !other?.value)) continue;
+    const value = row.value;
+    if (!value) continue;
+    const matching = others.map((rows) => rows.find((other) => other.id === row.id && other.value?.kind === value.kind)?.value);
+    if (matching.some((other) => !other)) continue;
     shown.add(row.id);
-    if (matching.some((other) => other?.value?.value !== row.value?.value)) mixed.add(row.id);
+    if (matching.some((other) => other && !sameValue(other.value, value.value))) mixed.add(row.id);
   }
   return { shown, mixed };
+}
+
+/** Whether two values of one kind of row are the same: a gradient or a font by what it holds. */
+export function sameValue(a: RowValue["value"], b: RowValue["value"]): boolean {
+  if (typeof a !== "object" || typeof b !== "object" || a === null || b === null) return a === b;
+  const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
+  return [...keys].every((key) => (a as Record<string, unknown>)[key] === (b as Record<string, unknown>)[key]);
 }
 
 /** A part of a text, and whether it matches the search. */
@@ -106,7 +135,7 @@ function roundedTo(value: number, step: number): number {
 export interface CopiedValue {
   id: string;
   kind: RowValue["kind"];
-  value: number | boolean | string | null;
+  value: RowValue["value"];
 }
 
 export function copiedValue(row: PropertyRow): CopiedValue | null {
@@ -116,8 +145,9 @@ export function copiedValue(row: PropertyRow): CopiedValue | null {
 /**
  * What pasting `copied` into `row` does, or null when it cannot: a number
  * goes into any number (brought within its limits and onto its steps), a
- * switch into any switch, a file into a row that takes its kind, a choice
- * only into the same property.
+ * switch into any switch, a file into a row that takes its kind, a colour,
+ * a gradient or a font into any of its kind, a choice only into the same
+ * property.
  */
 export function pasteAction(row: PropertyRow, copied: CopiedValue): (() => void) | null {
   const target = row.value;
@@ -132,13 +162,48 @@ export function pasteAction(row: PropertyRow, copied: CopiedValue): (() => void)
       return copied.id === row.id && (typeof value === "string" || typeof value === "number") && target.options.includes(value) ? () => target.set(value) : null;
     case "media":
       return value === null || (typeof value === "string" && target.accepts(value)) ? () => target.set(value) : null;
+    case "color":
+      return value === null || (typeof value === "string" && isColor(value)) ? () => target.set(value) : null;
+    case "gradient":
+      return value === null || isGradient(value) ? () => target.set(value) : null;
+    case "font":
+      return typeof value === "object" && value !== null && !isGradient(value) ? () => target.set(value) : null;
+  }
+}
+
+/**
+ * What pasting text from another program into `row` does, or null when the
+ * text is no value for it: a colour as `#1E4A6B` (or as `readColor` takes
+ * it), a number, `true` or `false`, one of a choice's options, or a
+ * gradient as `valueText` writes it.
+ */
+export function pasteText(row: PropertyRow, text: string): (() => void) | null {
+  const value = row.value;
+  if (!value) return null;
+  const typed = (kind: RowValue["kind"], pasted: RowValue["value"] | undefined) =>
+    pasted === undefined ? null : pasteAction(row, { id: row.id, kind, value: pasted });
+  const trimmed = text.trim();
+  switch (value.kind) {
+    case "color":
+      return typed("color", readColor(trimmed) ?? undefined);
+    case "number":
+      return typed("number", trimmed !== "" && Number.isFinite(Number(trimmed)) ? Number(trimmed) : undefined);
+    case "flag":
+      return typed("flag", trimmed === "true" ? true : trimmed === "false" ? false : undefined);
+    case "choice":
+      return typed("choice", value.options.find((option) => String(option) === trimmed));
+    case "gradient":
+      return typed("gradient", readGradient(trimmed) ?? undefined);
+    case "media":
+    case "font":
+      return null;
   }
 }
 
 /** Whether Reset would change the row: it has a default and is not at it. */
 export function canReset(row: PropertyRow): boolean {
   const value = row.value;
-  return value !== undefined && value.initial !== undefined && value.initial !== value.value;
+  return value !== undefined && value.initial !== undefined && !sameValue(value.initial, value.value);
 }
 
 /** Sets the row to its default; see `canReset`. */
@@ -156,14 +221,22 @@ export function resetValue(row: PropertyRow): void {
       value.set(value.initial);
       break;
     case "media":
+    case "gradient":
       value.set(null);
+      break;
+    case "color":
+      value.set(value.initial);
+      break;
+    case "font":
+      value.set(value.initial);
       break;
   }
 }
 
-/** The value as text for other programs. */
+/** The value as text for other programs: a colour as `#1E4A6B`, a gradient or a font as JSON. */
 export function valueText(value: CopiedValue): string {
-  return value.value === null ? "" : String(value.value);
+  if (value.value === null) return "";
+  return typeof value.value === "object" ? JSON.stringify(value.value) : String(value.value);
 }
 
 /**

@@ -1068,6 +1068,353 @@
   color: #333;
 }
 
+/* Colour, gradient and font properties (ColorPicker.tsx, GradientPicker.tsx, FontPicker.tsx) */
+
+.studio {
+  /* Behind a colour, so its transparency shows; tiles of 10 px. */
+  --chequer: repeating-conic-gradient(#d6d6d6 0 25%, #fff 0 50%);
+}
+
+.color-box,
+.gradient-box {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  width: 100%;
+  justify-content: flex-end;
+}
+
+.studio .swatch {
+  flex: none;
+  width: 26px;
+  height: 22px;
+  padding: 2px;
+  border: 1px solid #c8c8c8;
+  border-radius: 3px;
+  background: #fff;
+}
+
+.swatch-color {
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-width: 16px;
+  min-height: 14px;
+  border-radius: 2px;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.15);
+  background-image: var(--chequer);
+  background-size: 10px 10px;
+}
+
+/* No colour: white, struck through in red. */
+.swatch-color.none {
+  background: linear-gradient(to top right, transparent calc(50% - 1px), #d33 calc(50% - 1px), #d33 calc(50% + 1px), transparent calc(50% + 1px)), #fff;
+}
+
+.studio .hex-field {
+  width: 88px;
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  text-transform: uppercase;
+}
+
+.studio .hex-field::placeholder {
+  text-transform: none;
+}
+
+.color-picker,
+.gradient-picker,
+.font-picker {
+  position: fixed;
+  z-index: 21;
+  border: 1px solid #c6c6c6;
+  color: #222;
+  background: #fff;
+  box-shadow: 2px 4px 14px rgba(0, 0, 0, 0.22);
+  outline: none;
+}
+
+.color-picker-body,
+.gradient-picker-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 238px;
+  padding: 8px;
+}
+
+.studio .color-none {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 26px;
+  padding: 2px 6px;
+  border: 1px solid transparent;
+  text-align: left;
+}
+
+.color-none .swatch-color {
+  flex: none;
+  width: 18px;
+  height: 16px;
+}
+
+.studio .color-none:hover,
+.studio .color-none.selected {
+  border-color: var(--hover-line);
+  background: var(--hover);
+}
+
+.color-heading {
+  margin-top: 4px;
+  color: var(--muted);
+}
+
+.color-grid {
+  display: grid;
+  grid-template-columns: repeat(10, 1fr);
+  gap: 3px;
+}
+
+.color-grid.shades {
+  grid-auto-flow: row;
+  gap: 1px 3px;
+}
+
+.studio .color-tile {
+  aspect-ratio: 1;
+  padding: 0;
+  border: 1px solid rgba(0, 0, 0, 0.18);
+  border-radius: 1px;
+}
+
+.studio .color-tile:hover,
+.studio .color-tile.selected {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.color-custom-title {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.color-custom {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.color-square {
+  position: relative;
+  height: 130px;
+  border-radius: 3px;
+  touch-action: none;
+  cursor: crosshair;
+}
+
+.color-bar {
+  position: relative;
+  height: 12px;
+  border-radius: 6px;
+  touch-action: none;
+  cursor: ew-resize;
+}
+
+.color-bar.opacity {
+  background-size: 100% 100%, 10px 10px;
+}
+
+.color-bar.hue {
+  background: linear-gradient(to right, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00);
+}
+
+.color-marker {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.6);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.color-square:focus-visible,
+.color-bar:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.color-custom-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.color-custom-row .swatch-color {
+  width: 32px;
+  height: 22px;
+}
+
+.studio .gradient-preview {
+  flex: 1;
+  min-width: 0;
+  max-width: 150px;
+  height: 22px;
+  padding: 0 6px;
+  overflow: hidden;
+  border: 1px solid #c8c8c8;
+  border-radius: 3px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--muted);
+}
+
+.gradient-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 5px;
+}
+
+.studio .gradient-tile {
+  aspect-ratio: 4 / 3;
+  padding: 0;
+  border: 1px solid rgba(0, 0, 0, 0.18);
+  border-radius: 3px;
+}
+
+.studio .gradient-tile:hover,
+.studio .gradient-tile.selected {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.gradient-empty,
+.font-empty {
+  margin: 2px 0;
+  color: var(--muted);
+}
+
+.font-box {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+}
+
+.studio .font-name {
+  height: 26px;
+  padding: 0 8px;
+  overflow: hidden;
+  border: 1px solid #c8c8c8;
+  border-radius: 3px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  text-align: left;
+  font-size: 14px;
+  background: #fff;
+}
+
+.font-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.font-row .number-box {
+  margin-right: auto;
+}
+
+.studio .font-toggle {
+  width: 26px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid #c8c8c8;
+  border-radius: 3px;
+  background: #fafafa;
+}
+
+.font-toggle:nth-of-type(1) {
+  font-weight: bold;
+}
+
+.font-toggle:nth-of-type(2) {
+  font-style: italic;
+  font-family: Georgia, serif;
+}
+
+.font-toggle:nth-of-type(3) {
+  text-decoration: underline;
+}
+
+.studio .font-toggle.on {
+  border-color: var(--accent);
+  color: #fff;
+  background: var(--accent);
+}
+
+.font-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px;
+}
+
+.font-options {
+  display: flex;
+  flex-direction: column;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.studio .font-options button {
+  flex: none;
+  height: 28px;
+  padding: 0 8px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  text-align: left;
+  font-size: 15px;
+}
+
+.studio .font-options button:hover,
+.studio .font-options button.selected {
+  background: var(--hover);
+}
+
+/* A grouped property's name folds its parts open; the parts sit under it, indented. */
+.studio .props-fold {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  text-align: left;
+}
+
+.props-row.part .props-label {
+  padding-left: 16px;
+}
+
+.properties-panel.dark .color-picker,
+.properties-panel.dark .gradient-picker,
+.properties-panel.dark .font-picker {
+  border-color: var(--line);
+  color: var(--text);
+  background: #262626;
+}
+
+.studio .properties-panel.dark .swatch,
+.studio .properties-panel.dark .gradient-preview,
+.studio .properties-panel.dark .font-name,
+.studio .properties-panel.dark .font-toggle:not(.on) {
+  border-color: #4a4a4a;
+  color: var(--text);
+  background-color: #2a2a2a;
+}
+
 .studio .mini {
   flex: none;
   width: 24px;

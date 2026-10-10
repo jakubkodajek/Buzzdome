@@ -226,17 +226,26 @@ export function Dialog(props: { title: string; onClose: () => void; children: Re
   );
 }
 
-/** A box over the window at a point (kept inside the window); closes on any click outside or Escape. */
+/**
+ * A box over the window at a point, kept inside the window also as it grows
+ * (a picker folding a part open); closes on any click outside or Escape.
+ */
 export function Popup(props: { x: number; y: number; onClose: () => void; className: string; role: string; label?: string; children: ReactNode }) {
   const { x, y, onClose, className, role, label, children } = props;
   const box = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
     const element = box.current;
     if (!element) return;
-    const rect = element.getBoundingClientRect();
-    element.style.left = `${Math.max(0, Math.min(x, window.innerWidth - rect.width - 4))}px`;
-    element.style.top = `${Math.max(0, Math.min(y, window.innerHeight - rect.height - 4))}px`;
+    const place = () => {
+      const rect = element.getBoundingClientRect();
+      element.style.left = `${Math.max(0, Math.min(x, window.innerWidth - rect.width - 4))}px`;
+      element.style.top = `${Math.max(0, Math.min(y, window.innerHeight - rect.height - 4))}px`;
+    };
+    place();
     element.focus();
+    const resized = new ResizeObserver(place);
+    resized.observe(element);
+    return () => resized.disconnect();
   }, [x, y]);
   return (
     <div
@@ -257,7 +266,10 @@ export function Popup(props: { x: number; y: number; onClose: () => void; classN
         onMouseDown={(e) => e.stopPropagation()}
         onContextMenu={(e) => e.stopPropagation()}
         onKeyDown={(e) => {
-          if (e.key === "Escape") onClose();
+          if (e.key !== "Escape") return;
+          // Only the popup closes, not what the editor's Esc does.
+          e.stopPropagation();
+          onClose();
         }}
       >
         {children}

@@ -7,8 +7,10 @@ import {
   draggedValue,
   findMatch,
   pasteAction,
+  pasteText,
   resetValue,
   rowMatches,
+  sameValue,
   valueText,
   type CopiedValue,
   type PropertyRow,
@@ -46,6 +48,25 @@ describe("rows several slides share", () => {
 
   it("are all valued rows for one slide, none mixed", () => {
     expect(commonRows([[time(5), row("id")]])).toEqual({ shown: new Set(["answerTime"]), mixed: new Set() });
+  });
+});
+
+describe("rows with parts", () => {
+  const gradient = (from: string) => {
+    const whole = row("fill", { kind: "gradient", value: { from, to: "#000000", kind: "vertical" } });
+    return { ...whole, parts: [row("fill.from", { kind: "color", value: from }), row("fill.to", { kind: "color", value: "#000000" })] };
+  };
+
+  it("are shared with their parts, a gradient or a colour mixed by what it holds", () => {
+    expect(commonRows([[gradient("#FF0000")], [gradient("#FF0000")]])).toEqual({ shown: new Set(["fill", "fill.from", "fill.to"]), mixed: new Set() });
+    expect(commonRows([[gradient("#FF0000")], [gradient("#00FF00")]]).mixed).toEqual(new Set(["fill", "fill.from"]));
+  });
+
+  it("compare a font by its fields, whichever order they were set in", () => {
+    expect(sameValue({ font: "Arial", bold: true }, { bold: true, font: "Arial" })).toBe(true);
+    expect(sameValue({ font: "Arial" }, { font: "Arial", bold: false })).toBe(false);
+    expect(sameValue(null, { from: "#000000", to: "#000000", kind: "radial" })).toBe(false);
+    expect(sameValue("#ABCDEF", "#ABCDEF")).toBe(true);
   });
 });
 
@@ -133,6 +154,57 @@ describe("copying and pasting a value", () => {
     expect(picture.setTo).toEqual(["media/flag.png", null]);
     expect(valueText({ id: "picture", kind: "media", value: null })).toBe("");
     expect(valueText({ id: "speed", kind: "number", value: 150 })).toBe("150");
+  });
+});
+
+describe("copying and pasting a look", () => {
+  const color = () => row("color", { kind: "color", value: null, initial: null });
+  const fill = () => row("fill", { kind: "gradient", value: null, initial: null });
+  const font = () => row("font", { kind: "font", value: {}, initial: {} });
+
+  it("pastes a colour, a gradient or a font into any row of its kind", () => {
+    const target = color();
+    expect(paste(target, { id: "shadowColor", kind: "color", value: "#1E4A6B" })).toBe(true);
+    expect(paste(target, { id: "x", kind: "color", value: "red" })).toBe(false);
+    const gradient = fill();
+    expect(paste(gradient, { id: "answers.fill", kind: "gradient", value: { from: "#000000", to: "#FFFFFF", kind: "radial" } })).toBe(true);
+    expect(paste(gradient, { id: "x", kind: "gradient", value: { from: "#000000", to: "#FFFFFF", kind: "spiral" } as never })).toBe(false);
+    const text = font();
+    expect(paste(text, { id: "headline.font", kind: "font", value: { font: "Arial", bold: true } })).toBe(true);
+    expect([target.setTo, gradient.setTo, text.setTo]).toEqual([["#1E4A6B"], [{ from: "#000000", to: "#FFFFFF", kind: "radial" }], [{ font: "Arial", bold: true }]]);
+  });
+
+  it("takes a colour from another program's text, as hex with or without its hash", () => {
+    const target = color();
+    for (const text of [" #1e4a6b ", "1E4A6B", "#fff", "#1E4A6B80", "rgb(1, 2, 3)", "blue"]) pasteText(target, text)?.();
+    expect(target.setTo).toEqual(["#1E4A6B", "#1E4A6B", "#FFFFFF", "#1E4A6B80"]);
+  });
+
+  it("takes a number, a switch, a choice or a gradient as text, and never a file or a font", () => {
+    const speed = row("speed", { kind: "number", value: 100, min: 25, max: 250, step: 5 });
+    pasteText(speed, "1000")?.();
+    expect(pasteText(speed, "")).toBeNull();
+    const loop = row("loop", { kind: "flag", value: false });
+    pasteText(loop, "true")?.();
+    const effect = row("effect", { kind: "choice", value: "none", options: ["none", "blur"] });
+    pasteText(effect, "blur")?.();
+    expect(pasteText(effect, "zoom")).toBeNull();
+    const gradient = fill();
+    const copied = valueText({ id: "fill", kind: "gradient", value: { from: "#000000", to: "#FFFFFF", kind: "horizontal" } });
+    pasteText(gradient, copied)?.();
+    expect(pasteText(gradient, "{not json")).toBeNull();
+    expect([speed.setTo, loop.setTo, effect.setTo, gradient.setTo]).toEqual([[250], [true], ["blur"], [{ from: "#000000", to: "#FFFFFF", kind: "horizontal" }]]);
+    expect(pasteText(row("sound", { kind: "media", value: null, accepts: () => true }), "media/a.mp3")).toBeNull();
+    expect(pasteText(font(), "{}")).toBeNull();
+  });
+
+  it("resets a colour, a gradient and a font to the theme's", () => {
+    const target = row("color", { kind: "color", value: "#FF0000", initial: null });
+    const text = row("font", { kind: "font", value: { bold: true }, initial: {} });
+    expect([canReset(target), canReset(text), canReset(font())]).toEqual([true, true, false]);
+    resetValue(target);
+    resetValue(text);
+    expect([target.setTo, text.setTo]).toEqual([[null], [{}]]);
   });
 });
 

@@ -1,7 +1,6 @@
 // The editable properties of a slide, each a labelled control with a
 // description. The properties panel and the ribbon lay out the same rows.
 
-import type { ReactNode } from "react";
 import { ANSWER_LETTERS } from "../answers";
 import {
   DEFAULT_POINTS,
@@ -21,8 +20,9 @@ import type { StringKey, Translate } from "../i18n";
 import { isVideo, mediaKindOf, type MediaKind } from "../media";
 import { SLIDE_TYPE_LABEL, type SlideContext } from "../quiz";
 import type { QuestionSlide, Replay, Slide, SlideType, SoundClip, SoundStart, Span, TitledSlide, VideoClip, VideoEffect } from "../types";
-import { MediaPicker, NumberBox, Select, Switch } from "./controls";
+import { MediaPicker } from "./controls";
 import type { PropertyRow } from "./property-rows";
+import { rowBuilders } from "./row-builders";
 import {
   answerLimits,
   convertSlide,
@@ -69,55 +69,10 @@ export interface SlideEditing {
 
 const SLIDE_TYPES: SlideType[] = ["question", "billboard", "explanation", "endOfRound", "final"];
 
-type RowOptions = Pick<PropertyRow, "wide" | "rare" | "value">;
-
 /** Every property row of the slide being edited. */
 export function slideProperties(t: Translate, { slide, context, update, chooseMedia, trimSound, trimVideo, normalizeSound }: SlideEditing) {
   const question = (change: (q: QuestionSlide) => QuestionSlide, field?: string) => update((s) => (s.type === "question" ? change(s) : s), field);
-  const row = (id: string, label: StringKey, description: StringKey, control: ReactNode, options: RowOptions = {}): PropertyRow => ({
-    id,
-    label: t(label),
-    description: t(description),
-    control,
-    ...options,
-  });
-  /** A number: its box, with a slider when `slider`, and its value for Reset, Copy and Paste. */
-  const numberRow = (
-    id: string,
-    label: StringKey,
-    description: StringKey,
-    number: { value: number; initial?: number; min: number; max: number; step?: number; unit?: string; slider?: boolean; set: (value: number) => void },
-    options: RowOptions = {},
-  ) => {
-    const { value, initial, min, max, step = 1, unit, slider, set } = number;
-    const control = <NumberBox label={t(label)} value={value} min={min} max={max} step={step} unit={unit} slider={slider} onChange={set} />;
-    return row(id, label, description, control, { ...options, value: { kind: "number", value, initial, min, max, step, set } });
-  };
-  const flagRow = (
-    id: string,
-    label: StringKey,
-    description: StringKey,
-    flag: { value: boolean; initial?: boolean; disabled?: boolean; set: (on: boolean) => void },
-    options: RowOptions = {},
-  ) =>
-    row(id, label, description, <Switch label={t(label)} checked={flag.value} disabled={flag.disabled} onChange={flag.set} />, {
-      ...options,
-      value: { kind: "flag", value: flag.value, initial: flag.initial, set: flag.set },
-    });
-  const choiceRow = <T extends string | number>(
-    id: string,
-    label: StringKey,
-    description: StringKey,
-    choice: { value: T; initial?: T; options: [T, string][]; disabled?: boolean; set: (value: T) => void },
-  ) => {
-    const { value, initial, options, disabled, set } = choice;
-    const control = <Select label={t(label)} value={value} options={options} disabled={disabled} onChange={set} />;
-    const setOffered = (picked: string | number) => {
-      const option = options.find(([offered]) => offered === picked);
-      if (option) set(option[0]);
-    };
-    return row(id, label, description, control, { value: { kind: "choice", value, initial, options: options.map(([offered]) => offered), set: setOffered } });
-  };
+  const { row, numberRow, flagRow, choiceRow } = rowBuilders(t);
   /** A media file of the slide: choose, remove, and Copy and Paste between slides. */
   const mediaRow = (id: string, label: StringKey, description: StringKey, file: string | null, kinds: MediaKind[], apply: (s: Slide, file: string | null) => Slide) =>
     row(

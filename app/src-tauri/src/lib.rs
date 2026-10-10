@@ -4,6 +4,7 @@
 mod app_file;
 mod editor;
 mod error;
+mod fonts;
 mod hardware;
 mod media_player;
 mod pump;
@@ -471,6 +472,7 @@ pub fn run() {
             close_host_window,
             host_window_open,
             themes::list_themes,
+            fonts::installed_fonts,
             teams::prepared_teams,
             teams::teams_lost,
             teams::add_teams,

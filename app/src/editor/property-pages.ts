@@ -8,6 +8,8 @@ import type { Slide } from "../types";
 import { answerIndex, type ElementId } from "./elements";
 import { slideProperties, type SlideEditing, type SlideProperties } from "./properties";
 import { commonRows, type PropertyRow } from "./property-rows";
+import type { StyledPart } from "./slides";
+import { lookTitle, styledPartOf, styledParts, styleProperties, type StyleProperties } from "./style-properties";
 
 export type PageId = "gameplay" | "scoring" | "text" | "media" | "design" | "advanced";
 
@@ -28,7 +30,7 @@ export interface Page {
  * selected slide, as `editings` say.
  */
 export function selectionPages(t: Translate, editings: SlideEditing[], element: ElementId): { pages: Page[]; mixed: ReadonlySet<string> } {
-  const rows = editings.map((editing) => slideProperties(t, editing));
+  const rows = editings.map((editing) => ({ slide: slideProperties(t, editing), style: styleProperties(t, editing) }));
   if (editings.length < 2) return { pages: editings.length === 0 ? [] : propertyPages(editings[0].slide, element, rows[0]), mixed: new Set() };
   const pages = editings.map((editing, i) => propertyPages(editing.slide, "slide", rows[i]));
   const { shown, mixed } = commonRows(pages.map(pagesRows));
@@ -48,15 +50,22 @@ export function withRows(pages: Page[], keep: (row: PropertyRow) => boolean): Pa
 }
 
 /** The pages for the selected part of the slide, the most used first. */
-function propertyPages(slide: Slide, element: ElementId, rows: SlideProperties): Page[] {
+function propertyPages(slide: Slide, element: ElementId, { slide: rows, style }: { slide: SlideProperties; style: StyleProperties }): Page[] {
   const page = (id: PageId, sections: Section[]): Page => ({ id, sections });
   const answer = answerIndex(element);
+  const look = (part: StyledPart): Section => ({ title: lookTitle(slide, part), rows: style.look(part) });
+  // A text selected on the canvas has its look on the design page.
+  const part = styledPartOf(element);
+  const lookPage = part && styledParts(slide).includes(part) ? [page("design", [look(part)])] : [];
 
   if (answer !== null && slide.type === "question") {
-    return [page("text", [{ title: "sectionAnswer", rows: [rows.answerText(slide, answer), rows.isCorrect(slide, answer), rows.removeAnswer(slide, answer)] }])];
+    return [
+      page("text", [{ title: "sectionAnswer", rows: [rows.answerText(slide, answer), rows.isCorrect(slide, answer), rows.removeAnswer(slide, answer)] }]),
+      ...lookPage,
+    ];
   }
-  if (element === "question" && slide.type === "question") return [page("text", [{ title: "sectionText", rows: [rows.questionText(slide)] }])];
-  if ((element === "title" || element === "text") && slide.type !== "question") return [page("text", [{ title: "sectionText", rows: textRows(slide, rows) }])];
+  if (element === "question" && slide.type === "question") return [page("text", [{ title: "sectionText", rows: [rows.questionText(slide)] }]), ...lookPage];
+  if ((element === "title" || element === "text") && slide.type !== "question") return [page("text", [{ title: "sectionText", rows: textRows(slide, rows) }]), ...lookPage];
   if (element === "picture") return [page("media", [{ title: "sectionPictureVideo", rows: [rows.picture] }])];
   if (element === "video") return [page("media", [{ title: "sectionPictureVideo", rows: videoRows(rows) }])];
   if (element === "sound") return [page("media", [{ title: "sectionSound", rows: soundRows(rows) }])];
@@ -85,7 +94,7 @@ function propertyPages(slide: Slide, element: ElementId, rows: SlideProperties):
     : [{ title: "sectionPictureVideo", rows: [rows.picture, ...videoRows(rows)] }];
   pages.push(
     page("media", [...pictureVideo, { title: "sectionSound", rows: soundRows(rows) }]),
-    page("design", [{ title: "sectionBackground", rows: [rows.background, ...rows.backgroundOptions] }]),
+    page("design", [{ title: "sectionBackground", rows: [style.fill, rows.background, ...rows.backgroundOptions] }, ...styledParts(slide).map(look)]),
     page("advanced", [{ title: "sectionMetadata", rows: [rows.id] }]),
   );
   return pages;

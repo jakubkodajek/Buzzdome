@@ -247,7 +247,29 @@ table view toggle. It edits a quiz; it never touches a running show.
   What the panel does with a row's value (search with accents ignored,
   dragging a number's name, Reset, Copy and Paste between rows, the
   alphabetical list) is pure in `property-rows.ts`, tested in
-  `property-rows.test.ts`.
+  `property-rows.test.ts`. `row-builders.tsx` makes a row of each kind
+  with its control, so the slide's rows (`properties.tsx`) and its look
+  (`style-properties.tsx`) are built alike.
+- **Look.** A slide's style (1.4) is set on the design page: a gradient
+  behind the slide and, for each of its texts, font, colour, alignment,
+  shadow, fill and transparency. Only what differs from the theme is
+  stored (`setTextStyle` drops what is unset), so Reset goes back to the
+  theme's. A gradient row is a grouped row: its preview sums it up and its
+  From, To and Type are `parts`, folded open by clicking its name. The
+  colour picker (`ColorPicker.tsx`) offers the theme's colour, a palette of
+  shades, standard colours, the colours used since the app started
+  (`palette.ts`, kept in memory) and a custom colour; its pipette is the
+  web view's `EyeDropper`, which only Chromium has (WebView2 on Windows),
+  so on macOS and Linux the button is not shown. Gradient presets and up to
+  five own gradients (`gradients.ts`, kept per computer) are in
+  `GradientPicker.tsx`; the font list (`FontPicker.tsx`) asks the backend
+  for the installed fonts (`fonts.rs`, fontdb, read once per run, only
+  names a quiz can store) and offers common fonts where they cannot be
+  read. Ctrl+C and Ctrl+V on a row copy and paste its value instead of
+  slides: copying puts the value on the clipboard as text (a colour as
+  `#1E4A6B`), and pasting takes text from another program where the row
+  can read it (`pasteText`), else the value copied in the panel. A hex box
+  is a text field, so pasting into it works on every platform.
 - **Rendering.** The canvas, the thumbnails (editor and Director) and the
   projector all draw a slide with `SlideScreen` inside a 16:9 `Stage`
   (`app/src/host/`). The editor and thumbnails feed it `previewView`, a

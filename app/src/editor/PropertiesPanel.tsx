@@ -1,4 +1,13 @@
-import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
+import {
+  Fragment,
+  useEffect,
+  useRef,
+  useState,
+  type ClipboardEvent,
+  type KeyboardEvent,
+  type PointerEvent as ReactPointerEvent,
+  type ReactNode,
+} from "react";
 import { ANSWER_LETTERS } from "../answers";
 import { useApp } from "../app-context";
 import type { StringKey, Translate } from "../i18n";
@@ -6,7 +15,7 @@ import { CrossIcon, GamepadIcon, PaletteIcon, PictureIcon, QuestionIcon, SlideIc
 import { readPreference, writePreference } from "../preferences";
 import { SLIDE_TYPE_LABEL, slideTitle } from "../quiz";
 import type { Slide } from "../types";
-import type { Action } from "./actions";
+import { keyCombo, type Action } from "./actions";
 import { ContextMenu, MixedContext } from "./controls";
 import { answerIndex, type ElementId } from "./elements";
 import { withRows, type Page, type PageId, type Section } from "./property-pages";
@@ -17,6 +26,7 @@ import {
   draggedValue,
   findMatch,
   pasteAction,
+  pasteText,
   resetValue,
   rowMatches,
   valueText,
@@ -103,7 +113,10 @@ export function PropertiesPanel({ slide, count, element, pages, mixed, copied, o
   const [query, setQuery] = useState("");
   const [folded, setFolded] = useState<ReadonlySet<StringKey>>(new Set());
   const [more, setMore] = useState<ReadonlySet<StringKey>>(new Set());
+  const [openParts, setOpenParts] = useState<ReadonlySet<string>>(new Set());
   const [described, setDescribed] = useState<PropertyRow | null>(null);
+  // A row whose Ctrl+V waits for the web view's paste event.
+  const pasteWaiting = useRef<PropertyRow | null>(null);
   const [menu, setMenu] = useState<{ x: number; y: number; row: PropertyRow | null } | null>(null);
   const [descriptions, setDescriptions] = useStoredFlag(DESCRIPTIONS_KEY, true);
   const [dark, setDark] = useStoredFlag(DARK_KEY, false);
@@ -112,16 +125,17 @@ export function PropertiesPanel({ slide, count, element, pages, mixed, copied, o
   const header = count > 1 ? severalHeader(t, count) : panelHeader(t, slide, element);
   const needle = query.trim();
 
+  const matches = (row: PropertyRow) => rowMatches(row, needle) || (row.parts ?? []).some((part) => rowMatches(part, needle));
   const sections: Section[] = needle
-    ? withRows(pages, (row) => rowMatches(row, needle)).flatMap((p) => p.sections)
+    ? withRows(pages, matches).flatMap((p) => p.sections)
     : classic
       ? [{ title: "classicList", rows: alphabetical(pages.flatMap((p) => p.sections.map((s) => ({ name: t(s.title), rows: s.rows }))), lang) }]
       : (page?.sections ?? []);
 
-  const toggle = (set: (change: (current: ReadonlySet<StringKey>) => ReadonlySet<StringKey>) => void, title: StringKey) =>
+  const toggle = <T,>(set: (change: (current: ReadonlySet<T>) => ReadonlySet<T>) => void, item: T) =>
     set((current) => {
       const next = new Set(current);
-      if (!next.delete(title)) next.add(title);
+      if (!next.delete(item)) next.add(item);
       return next;
     });
 
@@ -133,23 +147,50 @@ export function PropertiesPanel({ slide, count, element, pages, mixed, copied, o
     { label: t("darkPanel"), checked: dark, run: () => setDark(!dark) },
     { label: t("classicList"), checked: classic, run: () => setClassic(!classic) },
   ];
-  const rowMenu = (row: PropertyRow): Action[] => {
+  const copy = (row: PropertyRow) => {
     const value = copiedValue(row);
-    const paste = copied && pasteAction(row, copied);
+    if (!value) return;
+    onCopy(value);
+    // Other programs get the value as text (a colour as #1E4A6B); pasting here works without a clipboard too.
+    navigator.clipboard?.writeText(valueText(value)).catch(() => undefined);
+  };
+  /** Pastes the clipboard's text, or the value copied here while the clipboard still holds it (or cannot be read). */
+  const paste = (row: PropertyRow, text: string | null) => {
+    const own = copied && (text === null || text === valueText(copied)) ? pasteAction(row, copied) : null;
+    (own ?? (text === null ? null : pasteText(row, text)))?.();
+  };
+  const rowMenu = (row: PropertyRow): (Action | "separator")[] => {
+    const pasted = copied && pasteAction(row, copied);
     return [
       { label: t("resetValue"), disabled: !canReset(row), run: () => resetValue(row) },
-      {
-        label: t("copyValue"),
-        disabled: !value,
-        run: () => {
-          if (!value) return;
-          onCopy(value);
-          // Other programs get the value as text; pasting here works without a clipboard too.
-          navigator.clipboard?.writeText(valueText(value)).catch(() => undefined);
-        },
-      },
-      { label: t("pasteValue"), disabled: !paste, run: () => paste?.() },
+      { label: t("copyValue"), keys: ["Ctrl+C"], disabled: !row.value, run: () => copy(row) },
+      { label: t("pasteValue"), keys: ["Ctrl+V"], disabled: !pasted, run: () => pasted?.() },
+      ...(row.menu ? ["separator" as const, ...row.menu] : []),
     ];
+  };
+  // Ctrl+C and Ctrl+V copy and paste the value of the property being worked in, not slides; a text field keeps its own.
+  const rowKeys = (row: PropertyRow) => (e: KeyboardEvent<HTMLDivElement>) => {
+    const combo = keyCombo(e);
+    if ((combo !== "Ctrl+C" && combo !== "Ctrl+V") || !row.value || editsText(e.target)) return;
+    e.stopPropagation();
+    if (combo === "Ctrl+C") {
+      e.preventDefault();
+      copy(row);
+      return;
+    }
+    // The web view follows with a paste event that has the clipboard's text; where none comes, the value copied here is pasted.
+    pasteWaiting.current = row;
+    setTimeout(() => {
+      if (pasteWaiting.current !== row) return;
+      pasteWaiting.current = null;
+      paste(row, null);
+    });
+  };
+  const rowPaste = (row: PropertyRow) => (e: ClipboardEvent<HTMLDivElement>) => {
+    if (!row.value || editsText(e.target)) return;
+    e.preventDefault();
+    pasteWaiting.current = null;
+    paste(row, e.clipboardData.getData("text"));
   };
 
   const searchKeys = (e: KeyboardEvent<HTMLInputElement>) => {
@@ -161,30 +202,36 @@ export function PropertiesPanel({ slide, count, element, pages, mixed, copied, o
     else e.currentTarget.blur();
   };
 
-  const renderRow = (row: PropertyRow) => {
+  const renderRow = (row: PropertyRow, part = false): ReactNode => {
     const descriptionMatch = needle !== "" && findMatch(row.label, needle) === null ? findMatch(row.description, needle) : null;
+    const parts = row.parts ?? [];
+    const partsOpen = parts.length > 0 && (needle !== "" || openParts.has(row.id));
     return (
-      <div
-        key={row.id}
-        className={row.wide ? "props-row wide" : "props-row"}
-        title={descriptions ? undefined : row.description}
-        onMouseEnter={() => setDescribed(row)}
-        onFocusCapture={() => setDescribed(row)}
-        onContextMenu={(e) => {
-          e.preventDefault();
-          setMenu({ x: e.clientX, y: e.clientY, row });
-        }}
-      >
-        <RowLabel row={row} needle={needle} />
-        <span className="props-control">
-          <MixedContext value={mixed.has(row.id)}>{row.control}</MixedContext>
-        </span>
-        {descriptionMatch && (
-          <small className="props-match">
-            <Highlighted parts={descriptionMatch} />
-          </small>
-        )}
-      </div>
+      <Fragment key={row.id}>
+        <div
+          className={["props-row", row.wide && "wide", part && "part"].filter(Boolean).join(" ")}
+          title={descriptions ? undefined : row.description}
+          onMouseEnter={() => setDescribed(row)}
+          onFocusCapture={() => setDescribed(row)}
+          onContextMenu={(e) => {
+            e.preventDefault();
+            setMenu({ x: e.clientX, y: e.clientY, row });
+          }}
+          onKeyDown={rowKeys(row)}
+          onPaste={rowPaste(row)}
+        >
+          <RowLabel row={row} needle={needle} fold={parts.length > 0 ? { open: partsOpen, toggle: () => toggle(setOpenParts, row.id) } : undefined} />
+          <span className="props-control">
+            <MixedContext value={mixed.has(row.id)}>{row.control}</MixedContext>
+          </span>
+          {descriptionMatch && (
+            <small className="props-match">
+              <Highlighted parts={descriptionMatch} />
+            </small>
+          )}
+        </div>
+        {partsOpen && parts.map((p) => renderRow(p, true))}
+      </Fragment>
     );
   };
 
@@ -259,7 +306,7 @@ export function PropertiesPanel({ slide, count, element, pages, mixed, copied, o
       <div className="props-body">
         {sections.length === 0 && <p className="props-empty">{needle ? t("noMatch") : t("noCommonProperties")}</p>}
         {sections.map((section) => {
-          if (classic && !needle) return <div key={section.title}>{section.rows.map(renderRow)}</div>;
+          if (classic && !needle) return <div key={section.title}>{section.rows.map((row) => renderRow(row))}</div>;
           const open = needle !== "" || !folded.has(section.title);
           const rare = section.rows.some((row) => row.rare);
           const showsAll = needle !== "" || more.has(section.title);
@@ -269,7 +316,7 @@ export function PropertiesPanel({ slide, count, element, pages, mixed, copied, o
                 <span className={open ? "fold open" : "fold"}>›</span>
                 {t(section.title)}
               </button>
-              {open && section.rows.filter((row) => showsAll || !row.rare).map(renderRow)}
+              {open && section.rows.filter((row) => showsAll || !row.rare).map((row) => renderRow(row))}
               {open && rare && !needle && (
                 <button type="button" className="props-more" aria-expanded={showsAll} onClick={() => toggle(setMore, section.title)}>
                   {t(showsAll ? "fewerOptions" : "moreOptions")}
@@ -296,8 +343,19 @@ export function PropertiesPanel({ slide, count, element, pages, mixed, copied, o
   );
 }
 
-/** A row's name, with the search match marked; a number's name drags it (Shift: faster, Alt: slower). */
-function RowLabel({ row, needle }: { row: PropertyRow; needle: string }) {
+/** Whether a key press or a paste is for the text of a field rather than for its property. */
+function editsText(target: EventTarget | null): boolean {
+  if (target instanceof HTMLTextAreaElement) return true;
+  if (target instanceof HTMLInputElement) return !["range", "checkbox", "radio", "button"].includes(target.type);
+  return target instanceof HTMLElement && target.isContentEditable;
+}
+
+/**
+ * A row's name, with the search match marked. A number's name drags it
+ * (Shift: faster, Alt: slower); a grouped property's name folds its parts
+ * open (`fold`).
+ */
+function RowLabel({ row, needle, fold }: { row: PropertyRow; needle: string; fold?: { open: boolean; toggle: () => void } }) {
   const { t } = useApp();
   const number = row.value?.kind === "number" ? row.value : null;
   const parts = needle ? findMatch(row.label, needle) : null;
@@ -323,9 +381,18 @@ function RowLabel({ row, needle }: { row: PropertyRow; needle: string }) {
     label.addEventListener("pointerup", end);
     label.addEventListener("pointercancel", end);
   };
+  const text = parts ? <Highlighted parts={parts} /> : row.label;
+  if (fold) {
+    return (
+      <button type="button" className="props-label props-fold" aria-expanded={fold.open} onClick={fold.toggle}>
+        <span className={fold.open ? "fold open" : "fold"}>›</span>
+        {text}
+      </button>
+    );
+  }
   return (
     <span className={number ? "props-label draggable" : "props-label"} title={number ? t("dragToChange") : undefined} onPointerDown={startDrag}>
-      {parts ? <Highlighted parts={parts} /> : row.label}
+      {text}
     </span>
   );
 }
