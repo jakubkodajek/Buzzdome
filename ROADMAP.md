@@ -60,8 +60,10 @@ Status keys: `[x]` done, `[~]` in progress, `[ ]` not started.
 - [x] Sound trim on a waveform with a replay part after the reveal (SN-8), loudness normalization to a LUFS target (SN-9), background video options and preview (BG-4); quiz format v3
 - [x] Video options and Play video (QZ-4), the Director's media player with a sound board and search (SN-7): docs gap items 4, 8, 9
 - [x] Questions from Excel, OpenDocument and CSV sheets, and export to CSV (QZ-8): docs gap item 5
-- [x] Properties panel features and several selected slides at once (QZ-1): docs gap item 7, without the colour, gradient and font pickers
-- [ ] Rest of the manual's new features, P2 (`quizxpress-docs` gap list): category background video, colour, gradient and font pickers with per-slide styles
+- [x] Properties panel features and several selected slides at once (QZ-1): docs gap item 7
+- [x] Colour, gradient and font pickers with per-slide styles (QZ-9): docs gap item 7
+- [x] Several right answers per question, each with a share of the points: quiz format v5
+- [ ] Rest of the manual's new features, P2 (`quizxpress-docs` gap list): categories with a background video (docs gap item 6)
 - [ ] Show settings: team names, sounds, welcome screen, end-of-question actions
 
 ### M4: Show polish (week 3-4)

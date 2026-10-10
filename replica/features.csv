@@ -1,7 +1,7 @@
 feature,area,priority,original,clone,notes
 Create save and reopen a quiz,studio,must,yes,yes,§3.2; original uses .qx files; clone: .quiz files; crash-safe draft; File page with recent files
 Slide list with drag to reorder duplicate and delete,studio,must,yes,yes,§3.2.4 thumbnails panel
-Properties panel with search and several selected slides,studio,should,yes,partial,§3.2.5; clone: pages, More options, search, Reset/Copy/Paste, dark and alphabetical views, Mixed values; colour gradient and font pickers still to come
+Properties panel with search and several selected slides,studio,should,yes,yes,§3.2.5; clone: pages, More options, search, Reset/Copy/Paste, dark and alphabetical views, Mixed values, colour gradient and font pickers with per-slide styles
 Multiple-choice question with 2 to 6 answers and one correct answer,studio,must,yes,yes,§3.4.1.1; clone: fastest finger may have 0 answers or no correct one
 Picture on a question slide,studio,must,yes,yes,§3.7.1; also show it on phones (§4.2.1 option); clone: projector only; phones out of scope
 Info slide without interaction (billboard),studio,must,yes,yes,§3.4.2; round intros and announcements
@@ -65,7 +65,7 @@ Round scores and round winners,host screen,should,yes,no,§5.4.6 Ctrl+S and §5.
 Works without internet on a local network,reliability,should,yes,no,§4.2.1 local Wi-Fi mode; decide in /replica-architect
 Export results to a spreadsheet,results,should,yes,no,§7.1 Analyzer export
 Reversed leaderboard (lowest first),host screen,could,yes,no,§5.4.6 Shift+S
-Multiple correct answers with correctness percentages,studio,could,yes,no,§3.4.1.2
+Multiple correct answers with correctness percentages,studio,could,yes,yes,§3.4.1.2; clone: several right answers each with a share of the points (quiz format v5)
 Ordered answers with exact or partial scoring,studio,could,yes,no,§3.4.1.2
 Answers revealed one by one,studio,could,yes,no,§3.2.5.1 Show answers action
 First-letter answer with an A-Z grid,studio,could,yes,no,§3.4.1.3.3
