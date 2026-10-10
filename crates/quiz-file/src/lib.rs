@@ -32,6 +32,7 @@ pub const MAX_ENTRIES: usize = 10_000;
 
 const ZIP_MAGIC: &[u8; 4] = b"PK\x03\x04";
 const INCOMING_PREFIX: &str = ".incoming-";
+const TRASH_PREFIX: &str = ".trash-";
 
 /// What was being done to a file when the disk failed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
@@ -97,7 +98,7 @@ pub fn open(path: &Path, cache: &Path) -> Result<Package> {
             remove_dir(&incoming);
         } else {
             // Not there, or left half-deleted by a `prune` that could not finish.
-            remove_dir(&root);
+            set_aside(&root, cache);
             fs::rename(&incoming, &root).context(FileAction::Move, &root)?;
         }
         Ok(Package { quiz, root })
@@ -161,6 +162,21 @@ fn unpack(path: &Path, dest: &Path) -> Result<Unpacked> {
 fn incoming_dir(parent: &Path) -> Result<PathBuf> {
     fs::create_dir_all(parent).context(FileAction::CreateFolder, parent)?;
     Ok(parent.join(format!("{INCOMING_PREFIX}{}-{}", std::process::id(), unique_suffix())))
+}
+
+/// Moves the stale folder `dir` out of the way into `cache`, then deletes
+/// it. Moving works where deleting may not (a read-only file, or on Windows
+/// a file another program still holds open); what cannot be deleted now,
+/// `prune` deletes later.
+fn set_aside(dir: &Path, cache: &Path) {
+    if fs::symlink_metadata(dir).is_err() {
+        return;
+    }
+    let trash = cache.join(format!("{TRASH_PREFIX}{}-{}", std::process::id(), unique_suffix()));
+    match fs::rename(dir, &trash) {
+        Ok(()) => remove_dir(&trash),
+        Err(_) => remove_dir(dir),
+    }
 }
 
 /// Reads and checks the package in `root`: the quiz is valid and every media
@@ -247,9 +263,9 @@ fn replace_file(dest: &Path, write: impl FnOnce(&Path) -> Result<()>) -> Result<
     sync_dir(dest.parent().unwrap_or(Path::new(".")))
 }
 
-/// Makes the renames in `dir` durable. Only Unix can open a directory to
-/// sync it; on Windows this does nothing.
-fn sync_dir(dir: &Path) -> Result<()> {
+/// Makes the files created, renamed or deleted in `dir` durable. Only Unix
+/// can open a directory to sync it; on Windows this does nothing.
+pub fn sync_dir(dir: &Path) -> Result<()> {
     #[cfg(unix)]
     File::open(dir).and_then(|d| d.sync_all()).context(FileAction::Write, dir)?;
     #[cfg(not(unix))]
@@ -605,6 +621,43 @@ mod tests {
         // The same file opens into the same folder, and nothing is left over.
         let again = open(&file, &cache).unwrap();
         assert_eq!(again.root, package.root);
+        assert_eq!(fs::read_dir(&cache).unwrap().count(), 1);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_stale_folder_that_cannot_be_deleted_is_moved_aside() {
+        use std::os::unix::fs::PermissionsExt;
+        let quiz = quiz_with_picture("media/flag.png");
+        let media = media_folder("stale-media", &[("media/flag.png", b"png bytes")]);
+        let file = temp("stale-out").join("test.quiz");
+        save(&quiz, &media, &file).unwrap();
+        let cache = temp("stale-cache");
+        let first = open(&file, &cache).unwrap();
+        // The package is broken, and a folder in it cannot be emptied.
+        fs::remove_file(first.root.join(QUIZ_JSON)).unwrap();
+        let locked = first.root.join("locked");
+        fs::create_dir(&locked).unwrap();
+        fs::write(locked.join("file"), b"x").unwrap();
+        fs::set_permissions(&locked, fs::Permissions::from_mode(0o555)).unwrap();
+        let unlock = |cache: &Path| {
+            for entry in fs::read_dir(cache).unwrap() {
+                let locked = entry.unwrap().path().join("locked");
+                if locked.exists() {
+                    fs::set_permissions(&locked, fs::Permissions::from_mode(0o755)).unwrap();
+                }
+            }
+        };
+        if fs::remove_file(locked.join("file")).is_ok() {
+            // Running as root, which may delete anything: nothing to test.
+            unlock(&cache);
+            return;
+        }
+        let again = open(&file, &cache).unwrap();
+        assert_eq!(again.root, first.root);
+        assert_eq!(again.quiz, quiz);
+        unlock(&cache);
+        prune(&cache, &[&again.root]).unwrap();
         assert_eq!(fs::read_dir(&cache).unwrap().count(), 1);
     }
 

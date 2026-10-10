@@ -116,7 +116,10 @@ file (or a plain `quiz.json` with `media/` next to it) by unpacking it into
 Unpacking writes into a temporary folder, syncs each file, checks the quiz
 (`Quiz::validate` plus "every media file is there") and only then renames the
 folder into place, so a half-unpacked quiz is never used. Opening the same
-file again reuses the folder.
+file again reuses the folder. A folder left broken (by a crash, or a `prune`
+that could not finish) is first renamed aside into `.trash-*` and then
+deleted: renaming works where deleting may not (a read-only file, or on
+Windows a file another program holds open), and `prune` deletes what is left.
 
 The editor opens a file with `open_into`, which unpacks the same way but
 does not check the quiz: a file an older version wrote may break rules added
@@ -369,7 +372,9 @@ button, presses it at least twice, and saves.
   other way round) is refused, so two buttons never decode to the same press.
 - Decoding picks the matching signature with the most fixed bytes.
 - Stored per vendor and product ID in `receiver.json` in the app data folder,
-  next to the chosen receiver. Written atomically (temp file, then rename).
+  next to the chosen receiver. Written atomically (temp file, then rename),
+  and used only once written: if the write fails, the receiver keeps its
+  previous settings and learn mode stays on.
 
 Limits: learned mode cannot drive lights (the light commands are unknown) and
 it assumes one press per report. If the receiver packs several presses into
@@ -386,11 +391,17 @@ lock or for earlier presses' fsync costs a team no points. `execute_at`
 applies the command to a copy of the game, appends it to the journal
 (fsync'd file), swaps the new state in, sends light effects to the driver,
 and only then emits the new state to the windows. If the journal write
-fails, the press is rejected and the screen does not change.
+fails, the press is rejected and the screen does not change. A new show's
+session folder, and the journal's entry in it, are synced to disk when the
+show starts, so a power cut cannot lose the journal itself.
 
 Because a press can be applied a moment after it was received, the core
 judges it by its `at_ms`: it counts only if it was received while the
-question clock ran (or stood paused) and before time up. The same thread
+question clock ran (or stood paused) and before time up. The clock keeps the
+time presses count from (`Clock::presses_from_ms`): when the question
+started, or when it went on after a wrong answer. So a press made while
+another player answered never counts, and one made during the quizmaster's
+pause counts even when it is applied after the resume. The same thread
 closes a question `PRESS_GRACE_MS` (250 ms) after time up, and only after it
 has handled every event already received (`pump::pump_once`), so a press
 that came in on time counts however far behind the thread is; the grace

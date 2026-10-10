@@ -3,4 +3,10 @@
 /**
  * A countdown that can pause. `limit_ms == None` means untimed.
  */
-export type Clock = { limitMs: number | null, elapsedBeforeMs: number, runningSinceMs: number | null, };
+export type Clock = { limitMs: number | null, elapsedBeforeMs: number, runningSinceMs: number | null, 
+/**
+ * Presses received from this time on count: when the question started,
+ * or when it went on after a player's buzz. The quizmaster's pause does
+ * not move it.
+ */
+pressesFromMs: number, };

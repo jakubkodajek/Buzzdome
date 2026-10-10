@@ -159,6 +159,30 @@ fn a_buzz_received_while_another_team_answers_does_not_count() {
 }
 
 #[test]
+fn a_press_made_while_the_clock_was_paused_counts_however_late_it_is_applied() {
+    let mut show = Show::new(vec![question("q1", AnswerMode::Everyone), question("q2", AnswerMode::FastestFinger)]);
+    show.press(0, 1, Button::Big);
+    show.run(0, Command::Next).unwrap();
+    show.run(0, Command::Next).unwrap();
+    show.run(4_000, Command::PauseClock).unwrap();
+    show.run(6_000, Command::ResumeClock).unwrap();
+    // Received at 5 000 while paused, applied after the resume: counts at the paused time.
+    show.press(5_000, 1, Button::B);
+    assert_eq!(show.game.responses().get(&1).map(|r| r.elapsed_ms), Some(4_000));
+
+    show.run(7_000, Command::Next).unwrap();
+    show.run(7_000, Command::Next).unwrap();
+    show.run(8_000, Command::Next).unwrap();
+    show.run(9_000, Command::PauseClock).unwrap();
+    show.run(12_000, Command::ResumeClock).unwrap();
+    show.press(10_000, 1, Button::Big);
+    match step(&show.game) {
+        QuestionStep::Buzzed { buzzer: 1, clock } => assert_eq!(clock.elapsed_ms(20_000), 1_000),
+        other => panic!("the buzz did not count: {other:?}"),
+    }
+}
+
+#[test]
 fn paused_clock_does_not_run_out() {
     let mut show = Show::new(vec![question("q1", AnswerMode::Everyone)]);
     show.press(0, 1, Button::Big);

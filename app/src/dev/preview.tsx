@@ -105,7 +105,7 @@ const SCENES: Record<string, GameView | null> = {
   billboard: view({ phase: { phase: "billboard" }, slideIndex: 0, slide: quiz.slides[0] }),
   ready: view({}),
   running: view({
-    phase: { phase: "question", step: "running", clock: { limitMs: 20000, elapsedBeforeMs: 0, runningSinceMs: 0 } },
+    phase: { phase: "question", step: "running", clock: { limitMs: 20000, elapsedBeforeMs: 0, runningSinceMs: 0, pressesFromMs: 0 } },
     clock: { limitMs: 20000, remainingMs: 12400, elapsedMs: 7600, running: true, points: 81 },
     players: players(answered),
     answeredCount: 4,
@@ -126,7 +126,7 @@ const SCENES: Record<string, GameView | null> = {
     answerCounts: [1, 2, 1, 0],
   }),
   buzzed: view({
-    phase: { phase: "question", step: "buzzed", buzzer: 3, clock: { limitMs: 30000, elapsedBeforeMs: 4300, runningSinceMs: null } },
+    phase: { phase: "question", step: "buzzed", buzzer: 3, clock: { limitMs: 30000, elapsedBeforeMs: 4300, runningSinceMs: null, pressesFromMs: 0 } },
     slideIndex: 7,
     slide: quiz.slides[7],
     clock: { limitMs: 30000, remainingMs: 25700, elapsedMs: 4300, running: false, points: 129 },

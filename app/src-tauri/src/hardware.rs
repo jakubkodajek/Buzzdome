@@ -150,13 +150,21 @@ impl Hardware {
         self.handle.clone()
     }
 
-    fn save_settings(&self) -> CmdResult<()> {
-        let json = serde_json::to_string_pretty(&*self.settings.lock().unwrap())
-            .expect("receiver settings serialize: no maps and no custom serializers");
+    /// A copy of the settings to change and pass to `store_settings`.
+    fn settings(&self) -> ReceiverSettings {
+        self.settings.lock().unwrap().clone()
+    }
+
+    /// Writes `settings` to disk and only then uses them, so the app never
+    /// works with settings that a restart would lose.
+    fn store_settings(&self, settings: ReceiverSettings) -> CmdResult<()> {
+        let json = serde_json::to_string_pretty(&settings).expect("receiver settings serialize: no maps and no custom serializers");
         if let Some(dir) = self.settings_path.parent() {
             std::fs::create_dir_all(dir).map_err(|e| AppError::file(FileAction::CreateFolder, dir, e))?;
         }
-        Ok(quiz_file::write_atomic(&self.settings_path, json.as_bytes())?)
+        quiz_file::write_atomic(&self.settings_path, json.as_bytes())?;
+        *self.settings.lock().unwrap() = settings;
+        Ok(())
     }
 
     /// Ends learn mode, if on, so presses play again.
@@ -275,8 +283,7 @@ pub fn receiver_devices(hw: tauri::State<Hardware>) -> CmdResult<Vec<DeviceInfo>
 #[tauri::command]
 pub fn receiver_select(hw: tauri::State<Hardware>, device: Option<DeviceInfo>) -> CmdResult<()> {
     let selector = device.as_ref().map(DeviceSelector::for_device);
-    hw.settings.lock().unwrap().receiver = selector.clone();
-    hw.save_settings()?;
+    hw.store_settings(ReceiverSettings { receiver: selector.clone(), ..hw.settings() })?;
     hw.handle.as_ref().ok_or(AppError::UsbUnavailable)?.select(selector);
     Ok(())
 }
@@ -302,20 +309,22 @@ pub fn receiver_learn_cancel(app: AppHandle, hw: tauri::State<Hardware>) {
 pub fn receiver_learn_finish(app: AppHandle, hw: tauri::State<Hardware>) -> CmdResult<Press> {
     let device = hw.connected_device().ok_or(AppError::ReceiverNotConnected)?;
     let recorder = hw.learn.lock().unwrap().clone().ok_or(AppError::LearnNotStarted)?;
-    recorder.save_into(&mut hw.settings.lock().unwrap().learned, &device)?;
-    hw.save_settings()?;
-    *hw.learn.lock().unwrap() = None;
+    let mut settings = hw.settings();
+    // Too few presses or a clash with another button: learn mode stays on to fix it.
+    recorder.save_into(&mut settings.learned, &device)?;
+    let stored = hw.store_settings(settings);
+    // Stored or not, learn mode ends, so presses play again.
+    hw.end_learning(&app);
+    stored?;
     if let Some(handle) = hw.handle.as_ref() {
         handle.reload_protocol();
     }
-    let _ = app.emit("receiver-learn", hw.learn_progress());
     Ok(Press { buzzer: recorder.buzzer, button: recorder.button })
 }
 
 #[tauri::command]
 pub fn receiver_forget_learned(hw: tauri::State<Hardware>) -> CmdResult<()> {
-    hw.settings.lock().unwrap().learned.clear();
-    hw.save_settings()?;
+    hw.store_settings(ReceiverSettings { learned: Vec::new(), ..hw.settings() })?;
     if let Some(handle) = hw.handle.as_ref() {
         handle.reload_protocol();
     }
@@ -348,4 +357,42 @@ pub fn receiver_udev_rule(hw: tauri::State<Hardware>) -> String {
         .map(|d| (d.vendor_id, d.product_id))
         .or_else(|| hw.settings.lock().unwrap().receiver.as_ref().map(|s| (s.vendor_id, s.product_id)));
     udev_rule(ids.map(|i| i.0), ids.map(|i| i.1))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn hardware(settings_path: PathBuf) -> Hardware {
+        Hardware {
+            backend: None,
+            handle: None,
+            init_error: None,
+            settings_error: None,
+            settings: Arc::new(Mutex::new(ReceiverSettings::default())),
+            settings_path,
+            learn: Mutex::new(None),
+            raw_log: Mutex::new(VecDeque::new()),
+        }
+    }
+
+    fn receiver() -> Option<DeviceSelector> {
+        Some(DeviceSelector { vendor_id: 1, product_id: 2, usage_page: None, interface_number: None })
+    }
+
+    #[test]
+    fn settings_are_used_only_once_they_are_on_disk() {
+        let dir = std::env::temp_dir().join(format!("receiver-settings-{}", std::process::id()));
+        // A folder where the file should be: writing it fails.
+        let blocked = hardware(dir.join("blocked"));
+        std::fs::create_dir_all(dir.join("blocked")).unwrap();
+        assert!(blocked.store_settings(ReceiverSettings { receiver: receiver(), ..blocked.settings() }).is_err());
+        assert!(blocked.settings().receiver.is_none());
+
+        let fine = hardware(dir.join(SETTINGS_FILE));
+        fine.store_settings(ReceiverSettings { receiver: receiver(), ..fine.settings() }).unwrap();
+        assert_eq!(fine.settings().receiver, receiver());
+        assert_eq!(load_settings(&dir.join(SETTINGS_FILE)).0.receiver, receiver());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
 }

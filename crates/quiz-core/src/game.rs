@@ -149,11 +149,15 @@ pub struct Clock {
     pub limit_ms: Option<u64>,
     pub elapsed_before_ms: u64,
     pub running_since_ms: Option<u64>,
+    /// Presses received from this time on count: when the question started,
+    /// or when it went on after a player's buzz. The quizmaster's pause does
+    /// not move it.
+    pub presses_from_ms: u64,
 }
 
 impl Clock {
     fn start(limit_ms: Option<u64>, now: u64) -> Clock {
-        Clock { limit_ms, elapsed_before_ms: 0, running_since_ms: Some(now) }
+        Clock { limit_ms, elapsed_before_ms: 0, running_since_ms: Some(now), presses_from_ms: now }
     }
 
     pub fn elapsed_ms(&self, now: u64) -> u64 {
@@ -187,12 +191,21 @@ impl Clock {
         self.remaining_ms(now) == Some(0)
     }
 
-    /// A press received at `now` was made while this clock ran (or stood
-    /// paused) and before time up. Presses can be applied a moment after they
-    /// were received, so one received before the clock last started (for
-    /// example while another team's buzz held it) does not count.
+    /// The clock goes on after a player's buzz was judged wrong; presses
+    /// received while that player answered do not count.
+    fn go_on_after_buzz(&mut self, now: u64) {
+        self.resume(now);
+        self.presses_from_ms = now;
+    }
+
+    /// A press received at `now` was made while this clock ran or stood
+    /// paused, and before time up. Presses can be applied a moment after they
+    /// were received, so this goes by `now` alone: one received while the
+    /// quizmaster paused counts even when applied after the resume, and one
+    /// received before the question started or while another team's buzz
+    /// held the clock does not.
     fn takes_press_at(&self, now: u64) -> bool {
-        !self.expired(now) && self.running_since_ms.is_none_or(|since| now >= since)
+        !self.expired(now) && now >= self.presses_from_ms
     }
 }
 
@@ -622,7 +635,7 @@ impl Game {
             return Ok(effects);
         }
         let mut clock = clock;
-        clock.resume(now);
+        clock.go_on_after_buzz(now);
         self.phase = Phase::Question(QuestionStep::Running { clock });
         effects.push(self.lights_waiting());
         Ok(effects)

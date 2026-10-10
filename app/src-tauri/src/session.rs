@@ -60,9 +60,15 @@ impl Session {
     pub fn create(root: &Path, quiz: &Quiz, meta: &SessionMeta) -> io::Result<Session> {
         let dir = root.join(meta.started_ms.to_string());
         fs::create_dir_all(&dir)?;
+        // A power cut must not lose the new folder (or a sessions folder made
+        // just now) or the journal's entry in it, only their unsynced data.
+        for created in root.parent().into_iter().chain([root]) {
+            sync_dir(created)?;
+        }
         write_atomic(&dir.join(QUIZ_FILE), quiz)?;
         write_atomic(&dir.join(META_FILE), meta)?;
         let journal = open_journal(&dir.join(JOURNAL_FILE))?;
+        sync_dir(&dir)?;
         let len = journal.metadata()?.len();
         Ok(Session { journal, len, broken: false })
     }
@@ -170,6 +176,10 @@ fn append_line(file: &mut impl JournalFile, len: &mut u64, line: &[u8]) -> Resul
 fn write_atomic<T: Serialize>(path: &Path, value: &T) -> io::Result<()> {
     let json = serde_json::to_string_pretty(value)?;
     quiz_file::write_atomic(path, json.as_bytes()).map_err(io::Error::other)
+}
+
+fn sync_dir(dir: &Path) -> io::Result<()> {
+    quiz_file::sync_dir(dir).map_err(io::Error::other)
 }
 
 /// Session folders are named by start time in milliseconds.
