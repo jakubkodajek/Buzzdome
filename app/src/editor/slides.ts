@@ -1,0 +1,441 @@
+// Changes to one slide. Each keeps the slide playable: the editor offers no
+// way to make a question the show would refuse (see `Quiz::validate` in
+// crates/quiz-core/src/model.rs).
+
+import { WHOLE_FILE } from "../audio/clip-player";
+import {
+  ANSWER_LIMITS,
+  DEFAULT_POINTS,
+  DEFAULT_TIME_LIMIT_S,
+  FULL_SHARE,
+  MAX_EVERYONE_ANSWERS,
+  MAX_GAIN_DB,
+  MAX_INTRO_PAUSE_MS,
+  MAX_POINTS,
+  MAX_REPLAY_DELAY_MS,
+  MAX_TIME_LIMIT_S,
+  MAX_VIDEO_SPEED,
+  MIN_GAIN_DB,
+  MIN_VIDEO_SPEED,
+  NEW_VIDEO_INTRO_PAUSE_MS,
+} from "../bindings/Constants";
+import { hasTitle, isCorrect, plays, slideTitle } from "../quiz";
+import type {
+  AnswerMode,
+  Background,
+  Category,
+  CorrectAnswer,
+  Gradient,
+  Quiz,
+  QuestionSlide,
+  Replay,
+  Slide,
+  SlideStyle,
+  SlideType,
+  SoundClip,
+  Span,
+  TextStyle,
+  TimerDesign,
+  VideoClip,
+} from "../types";
+
+/** Answers a new everyone-answers question starts with: one per buzzer button. */
+const DEFAULT_ANSWERS = MAX_EVERYONE_ANSWERS;
+
+/** Answer `answer` as giving all of the points. */
+export const fullyCorrect = (answer: number): CorrectAnswer => ({ answer, share: FULL_SHARE });
+
+/** Fewest and most answers a question can have in `mode` (`AnswerMode::answer_limits` in quiz-core). */
+export function answerLimits(mode: AnswerMode): { fewest: number; most: number } {
+  return ANSWER_LIMITS[mode];
+}
+
+/** A new, empty slide. */
+export function newSlide(type: SlideType, id: string): Slide {
+  const base = { id, notes: "", picture: null, video: null, sound: null, background: null };
+  switch (type) {
+    case "billboard":
+      return { ...base, type, title: "", text: "" };
+    case "question":
+      // The same defaults as a quiz file that leaves the fields out.
+      return {
+        ...base,
+        type,
+        text: "",
+        mode: "everyone",
+        answers: Array<string>(DEFAULT_ANSWERS).fill(""),
+        correct: [fullyCorrect(0)],
+        timeLimitS: DEFAULT_TIME_LIMIT_S,
+        points: DEFAULT_POINTS,
+        pointsEnd: null,
+        penalty: 0,
+      };
+    case "explanation":
+      return { ...base, type, text: "" };
+    case "endOfRound":
+    case "final":
+      return { ...base, type, title: "" };
+  }
+}
+
+/** Sets the text the slide is listed by (see `slideTitle`). */
+export function setHeadline(slide: Slide, text: string): Slide {
+  return hasTitle(slide) ? { ...slide, title: text } : { ...slide, text };
+}
+
+/** Sets the text under a billboard's title; other slides have none. */
+export function setBodyText(slide: Slide, text: string): Slide {
+  return slide.type === "billboard" ? { ...slide, text } : slide;
+}
+
+export function setNotes(slide: Slide, notes: string): Slide {
+  return { ...slide, notes };
+}
+
+/**
+ * The slide as another type. Its id, notes and media stay, the question,
+ * explanation or title carries over, and the rest starts as on a new slide.
+ * What the new type cannot play goes (`plays`): without a reveal, the
+ * replay parts of the sound and video; without a clock, a video effect,
+ * and a sound waiting for the clock plays when the slide opens; on a
+ * ranking, the picture and video. The fill behind the slide and the clock's
+ * design stay, and the headline keeps its look (`headlinePart`); the texts
+ * that start anew start with the theme's look.
+ */
+export function convertSlide(slide: Slide, type: SlideType): Slide {
+  if (slide.type === type) return slide;
+  const { id, notes, background, category } = slide;
+  const { pictureAndVideo, clockAndReveal } = plays(type);
+  const sound =
+    slide.sound && !clockAndReveal ? { ...slide.sound, start: slide.sound.start === "withClock" ? "onSlide" : slide.sound.start, replay: null } : slide.sound;
+  const video = slide.video && !clockAndReveal ? { ...slide.video, replay: null, effect: null } : slide.video;
+  const media = pictureAndVideo ? { picture: slide.picture, video } : { picture: null, video: null };
+  const converted = setHeadline({ ...newSlide(type, id), notes, ...media, sound, background, category }, slideTitle(slide));
+  return withStyle(converted, { fill: slide.style?.fill, timer: slide.style?.timer, [headlinePart(type)]: slide.style?.[headlinePart(slide.type)] });
+}
+
+/** The part whose look the slide's headline (`slideTitle`) has: an explanation's text is its headline. */
+export function headlinePart(type: SlideType): StyledPart {
+  return type === "explanation" ? "text" : "headline";
+}
+
+/** The texts of a slide that have a look of their own, its headline's first. */
+export function styledParts(slide: Slide): StyledPart[] {
+  switch (slide.type) {
+    case "question":
+      return ["headline", "answers"];
+    case "billboard":
+      return ["headline", "text"];
+    case "explanation":
+      return ["text"];
+    case "endOfRound":
+    case "final":
+      return ["headline"];
+  }
+}
+
+export const randomId = () => Math.random().toString(36).slice(2, 10);
+
+/** An id no slide of `quiz` has yet. */
+export function freshSlideId(quiz: Quiz, random: () => string = randomId): string {
+  return freshId(new Set(quiz.slides.map((slide) => slide.id)), random);
+}
+
+/**
+ * Copies of `slides` to insert them all into `quiz` (pasting, duplicating,
+ * importing): with ids no slide of `quiz` has, nor each other, and without
+ * a category `quiz` does not have (one deleted since they were copied).
+ */
+export function withFreshIds(quiz: Quiz, slides: Slide[], random: () => string = randomId): Slide[] {
+  const taken = new Set(quiz.slides.map((slide) => slide.id));
+  const categories = new Set((quiz.categories ?? []).map((category) => category.id));
+  return slides.map((slide) => {
+    const id = freshId(taken, random);
+    taken.add(id);
+    const category = slide.category !== undefined && categories.has(slide.category) ? slide.category : undefined;
+    return { ...slide, id, category };
+  });
+}
+
+/** An id of `random` characters after `prefix` that is not `taken`. */
+export function freshId(taken: ReadonlySet<string>, random: () => string, prefix = "s"): string {
+  for (;;) {
+    const id = `${prefix}-${random()}`;
+    if (!taken.has(id)) return id;
+  }
+}
+
+export function setMode(question: QuestionSlide, mode: AnswerMode): QuestionSlide {
+  // The quizmaster judges a fastest finger answer without knowing which one it was: a right one gives all of the points.
+  if (mode === "fastestFinger") return { ...question, mode, correct: question.correct.map((c) => fullyCorrect(c.answer)) };
+  // Everyone answers with the buttons: an answer per button at most, and a right one.
+  const { fewest, most } = answerLimits(mode);
+  const count = question.answers.length;
+  const answers =
+    count < fewest ? [...question.answers, ...Array<string>(DEFAULT_ANSWERS - count).fill("")] : question.answers.slice(0, most);
+  return withCorrect({ ...question, mode, answers }, question.correct.filter((c) => c.answer < answers.length));
+}
+
+export function setAnswer(question: QuestionSlide, index: number, text: string): QuestionSlide {
+  return { ...question, answers: question.answers.map((answer, i) => (i === index ? text : answer)) };
+}
+
+export function addAnswer(question: QuestionSlide): QuestionSlide {
+  if (question.answers.length >= answerLimits(question.mode).most) return question;
+  return { ...question, answers: [...question.answers, ""] };
+}
+
+/**
+ * Types into answer `index`. The first row after the last answer is there to
+ * type a new answer into (as in the Edit question form and the table);
+ * rows further down take nothing.
+ */
+export function setAnswerAt(question: QuestionSlide, index: number, text: string): QuestionSlide {
+  if (index === question.answers.length) {
+    const added = addAnswer(question);
+    return added === question ? question : setAnswer(added, index, text);
+  }
+  return index >= 0 && index < question.answers.length ? setAnswer(question, index, text) : question;
+}
+
+/** Adds empty answers or removes the last ones until there are `count`, as far as the mode allows. */
+export function withAnswerCount(question: QuestionSlide, count: number): QuestionSlide {
+  let next = question;
+  for (;;) {
+    const step = next.answers.length < count ? addAnswer(next) : next.answers.length > count ? removeAnswer(next, next.answers.length - 1) : next;
+    if (step === next) return next;
+    next = step;
+  }
+}
+
+/** Removes an answer; the right answers stay the same ones (or, with none left, the first is right). */
+export function removeAnswer(question: QuestionSlide, index: number): QuestionSlide {
+  if (question.answers.length <= answerLimits(question.mode).fewest || index < 0 || index >= question.answers.length) return question;
+  const answers = question.answers.filter((_, i) => i !== index);
+  const correct = question.correct.filter((c) => c.answer !== index).map((c) => (c.answer > index ? { ...c, answer: c.answer - 1 } : c));
+  return withCorrect({ ...question, answers }, correct);
+}
+
+/**
+ * Makes answer `index` right (with all of the points) or wrong. A question
+ * may have several right answers; an everyone-answers question keeps at
+ * least one, a fastest-finger question may have none.
+ */
+export function setCorrect(question: QuestionSlide, index: number, on: boolean): QuestionSlide {
+  if (index < 0 || index >= question.answers.length || on === isCorrect(question, index)) return question;
+  const answers = question.correct.map((c) => c.answer);
+  return setCorrectAnswers(question, on ? [...answers, index] : answers.filter((answer) => answer !== index));
+}
+
+/**
+ * Makes the answers numbered `answers` the right ones (those past the last
+ * answer left out); those right already keep their share, the others give
+ * all of the points. An everyone-answers question left without one stays
+ * as it was.
+ */
+export function setCorrectAnswers(question: QuestionSlide, answers: number[]): QuestionSlide {
+  const right = [...new Set(answers)].filter((answer) => Number.isInteger(answer) && answer >= 0 && answer < question.answers.length);
+  if (right.length === 0 && question.mode === "everyone") return question;
+  const correct = right.sort((a, b) => a - b).map((answer) => question.correct.find((c) => c.answer === answer) ?? fullyCorrect(answer));
+  return { ...question, correct };
+}
+
+/** Makes a right answer wrong or a wrong one right; the same question where `setCorrect` refuses. */
+export function toggleCorrect(question: QuestionSlide, index: number): QuestionSlide {
+  return setCorrect(question, index, !isCorrect(question, index));
+}
+
+/** Sets the share of the points a right answer gives, a whole percent from 1 to 100; only on an everyone-answers question. */
+export function setShare(question: QuestionSlide, index: number, share: number): QuestionSlide {
+  if (!isCorrect(question, index) || question.mode !== "everyone") return question;
+  const percent = clampInt(share, 1, FULL_SHARE);
+  return { ...question, correct: question.correct.map((c) => (c.answer === index ? { ...c, share: percent } : c)) };
+}
+
+/** `question` with `correct` as its right answers; an everyone-answers question left without one gets the first. */
+function withCorrect(question: QuestionSlide, correct: CorrectAnswer[]): QuestionSlide {
+  return { ...question, correct: correct.length === 0 && question.mode === "everyone" ? [fullyCorrect(0)] : correct };
+}
+
+type Scoring = Pick<QuestionSlide, "timeLimitS" | "points" | "pointsEnd" | "penalty">;
+
+/** Sets the clock and points, kept to whole numbers in range. */
+export function setScoring(question: QuestionSlide, scoring: Partial<Scoring>): QuestionSlide {
+  const next = { ...question, ...scoring };
+  return {
+    ...next,
+    timeLimitS: clampInt(next.timeLimitS, 0, MAX_TIME_LIMIT_S),
+    points: clampInt(next.points, -MAX_POINTS, MAX_POINTS),
+    pointsEnd: next.pointsEnd === null ? null : clampInt(next.pointsEnd, -MAX_POINTS, MAX_POINTS),
+    penalty: clampInt(next.penalty, 0, MAX_POINTS),
+  };
+}
+
+/** A whole number in [min, max]; an empty field counts as 0. */
+function clampInt(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, Number.isFinite(value) ? Math.round(value) : 0));
+}
+
+/**
+ * The options a new video, sound and background get in the editor, and the
+ * defaults the properties' Reset goes back to. A quiz file that names only
+ * the file gets the same, except that its video starts without an intro
+ * pause (`VideoClip::new` in crates/quiz-core/src/media.rs).
+ */
+export const NEW_VIDEO: Omit<VideoClip, "file"> = {
+  autoplay: true,
+  introPauseMs: NEW_VIDEO_INTRO_PAUSE_MS,
+  muted: false,
+  repeat: false,
+  volume: 100,
+  speed: 100,
+  part: WHOLE_FILE,
+  effect: null,
+  replay: null,
+};
+export const NEW_SOUND: Omit<SoundClip, "file"> = { start: "onSlide", repeat: false, volume: 100, part: WHOLE_FILE, gainDb: 0, replay: null };
+export const NEW_BACKGROUND: Omit<Background, "file"> = { repeat: true, muted: true, sync: false };
+
+/** Shows a picture; a slide shows a picture or a video, so the video goes. */
+export function setPicture(slide: Slide, file: string | null): Slide {
+  return { ...slide, picture: file, video: file === null ? slide.video : null };
+}
+
+/** Shows a video (keeping its options when the file is replaced); the picture goes. */
+export function setVideo(slide: Slide, file: string | null): Slide {
+  if (file === null) return { ...slide, video: null };
+  return { ...slide, video: { ...(slide.video ?? NEW_VIDEO), file }, picture: null };
+}
+
+/**
+ * Changes the video's options, kept playable (see `playable`): speed and
+ * intro pause within their limits, an effect on questions only.
+ */
+export function setVideoOptions(slide: Slide, options: Partial<Omit<VideoClip, "file">>): Slide {
+  const video = slide.video && playable(slide, { ...slide.video, ...options });
+  if (!video) return slide;
+  const speed = clampInt(video.speed, MIN_VIDEO_SPEED, MAX_VIDEO_SPEED);
+  const introPauseMs = clampInt(video.introPauseMs, 0, MAX_INTRO_PAUSE_MS);
+  return { ...slide, video: { ...video, speed, introPauseMs, effect: plays(slide.type).clockAndReveal ? video.effect : null } };
+}
+
+/** Plays a sound (keeping its options when the file is replaced). */
+export function setSound(slide: Slide, file: string | null): Slide {
+  if (file === null) return { ...slide, sound: null };
+  return { ...slide, sound: { ...(slide.sound ?? NEW_SOUND), file } };
+}
+
+/**
+ * Changes the sound's options, kept playable (see `playable`): loudness
+ * gain within its limits to 0.1 dB.
+ */
+export function setSoundOptions(slide: Slide, options: Partial<Omit<SoundClip, "file">>): Slide {
+  const sound = slide.sound && playable(slide, { ...slide.sound, ...options });
+  if (!sound) return slide;
+  const gainDb = Math.round(Math.min(MAX_GAIN_DB, Math.max(MIN_GAIN_DB, Number.isFinite(sound.gainDb) ? sound.gainDb : 0)) * 10) / 10;
+  return { ...slide, sound: { ...sound, gainDb } };
+}
+
+/**
+ * A sound's or video's options as the show takes them (`playback_problems`
+ * in crates/quiz-core/src/model.rs): volume a whole percentage, parts in
+ * whole milliseconds, a replay part on questions only that starts within
+ * its limit. Null when a part would hold nothing.
+ */
+function playable<T extends { volume: number; part: Span; replay: Replay | null }>(slide: Slide, clip: T): T | null {
+  const part = wholeMs(clip.part);
+  const replay =
+    plays(slide.type).clockAndReveal && clip.replay ? { part: wholeMs(clip.replay.part), delayMs: clampInt(clip.replay.delayMs, 0, MAX_REPLAY_DELAY_MS) } : null;
+  if (isEmptySpan(part) || (replay && isEmptySpan(replay.part))) return null;
+  return { ...clip, volume: clampInt(clip.volume, 0, 100), part, replay };
+}
+
+/** A replay part as it is first ticked: the part that plays, at once after the reveal. */
+export function newReplay(part: Span): Replay {
+  return { part, delayMs: 0 };
+}
+
+/** `span` in whole, non-negative milliseconds. */
+function wholeMs(span: Span): Span {
+  return { fromMs: Math.max(0, Math.round(span.fromMs)), toMs: span.toMs === null ? null : Math.max(0, Math.round(span.toMs)) };
+}
+
+/** Holds nothing: ends where or before it starts (`Span::is_empty` in Rust). */
+export function isEmptySpan(span: Span): boolean {
+  return span.toMs !== null && span.toMs <= span.fromMs;
+}
+
+/** Shows a picture or video behind the slide (keeping its options when the file is replaced). */
+export function setBackground(slide: Slide, file: string | null): Slide {
+  return { ...slide, background: file === null ? null : { ...(slide.background ?? NEW_BACKGROUND), file } };
+}
+
+export function setBackgroundOptions(slide: Slide, options: Partial<Omit<Background, "file">>): Slide {
+  return slide.background ? { ...slide, background: { ...slide.background, ...options } } : slide;
+}
+
+/** The texts of a slide that have a style of their own (`SlideStyle`). */
+export type StyledPart = "headline" | "text" | "answers";
+
+/** Every text a slide style can give a look, as `SlideStyle` lists them. */
+export const STYLED_PARTS: readonly StyledPart[] = ["headline", "text", "answers"];
+
+/** Sets the gradient behind the slide; null shows the theme's background. */
+export function setSlideFill(slide: Slide, fill: Gradient | null): Slide {
+  return withStyle(slide, { ...slide.style, fill: fill ?? undefined });
+}
+
+/** Changes the style of one of the slide's texts; a value set to undefined is the theme's again. */
+export function setTextStyle(slide: Slide, part: StyledPart, change: Partial<TextStyle>): Slide {
+  return withStyle(slide, { ...slide.style, [part]: { ...slide.style?.[part], ...change } });
+}
+
+/** Sets how a question's clock is drawn; null draws the default ring. */
+export function setTimer(slide: Slide, timer: TimerDesign | null): Slide {
+  return withStyle(slide, { ...slide.style, timer: timer ?? undefined });
+}
+
+/**
+ * Gives the slide the look of `category` and remembers it (spec QZ-10): the
+ * category's fill, the looks of the texts the slide shows and a question's
+ * clock in place of the slide's, and its background when it has one. The
+ * slide's picture, video and sound stay.
+ */
+export function formatLike(slide: Slide, category: Category): Slide {
+  const style = category.style ?? {};
+  const shown = Object.fromEntries(styledParts(slide).map((part) => [part, style[part]]));
+  const timer = plays(slide.type).clockAndReveal ? style.timer : slide.style?.timer;
+  return { ...withStyle(slide, { fill: style.fill, timer, ...shown }), background: category.background ?? slide.background, category: category.id };
+}
+
+/**
+ * An imported slide with the look of the category its row named (see
+ * `formatLike`); a background of its row's own (`BACKGROUND-VIDEO`) stays.
+ */
+export function formatImported(slide: Slide, categories: readonly Category[]): Slide {
+  const category = categories.find((c) => c.id === slide.category);
+  return category ? { ...formatLike(slide, category), background: slide.background ?? category.background } : slide;
+}
+
+/** Forgets the slide's category; its look stays. */
+export function forgetCategory(slide: Slide): Slide {
+  return slide.category === undefined ? slide : { ...slide, category: undefined };
+}
+
+/** The slide with `style`, keeping only what is set: a slide that looks as its theme has no style. */
+function withStyle(slide: Slide, style: SlideStyle): Slide {
+  const parts = {
+    fill: style.fill,
+    headline: setOnly(style.headline ?? {}),
+    text: setOnly(style.text ?? {}),
+    answers: setOnly(style.answers ?? {}),
+    timer: style.timer,
+  };
+  return { ...slide, style: setOnly(parts) };
+}
+
+/** `value` without its undefined fields; undefined when none is left. */
+function setOnly<T extends object>(value: T): T | undefined {
+  const set = Object.entries(value).filter(([, field]) => field !== undefined);
+  return set.length > 0 ? (Object.fromEntries(set) as T) : undefined;
+}

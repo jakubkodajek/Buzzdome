@@ -1,0 +1,779 @@
+/* Slide screens, shared by the projector and the quiz editor. Everything
+   is laid out on a 1920x1080 stage that is scaled to its frame (Stage.tsx),
+   so sizes below are in stage pixels. Colours and fonts come from the theme
+   as --theme-* variables (themeStyle in theme/themes.ts); only colours that
+   mean the same in every look (medals, the clock face) are written here.
+   A slide's own style (theme/slide-style.ts) sets only variables on the
+   texts it changes: --style-* (read under "Styled texts" below, each
+   falling back to the theme's look), --text-scale for their size and
+   --answer-fill for the answers' panels. */
+
+.stage {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform-origin: center center;
+  overflow: hidden;
+  color: var(--theme-text);
+  font-family: var(--theme-font-body);
+  background: #000;
+}
+
+.stage > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* The theme's background (Stage.tsx), under everything else. */
+.stage .backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+}
+
+/* Titles, names and big numbers. */
+.slide-title,
+.welcome-header,
+.explained-number,
+.digits,
+.answer .letter,
+.buzz-bar,
+.leaderboard li,
+.podium-step {
+  font-family: var(--theme-font-heading);
+}
+
+/* The bars across the top and bottom of a screen: the theme's bar colour
+   with a sheen, which reads on any colour. */
+.welcome-header,
+.welcome-footer,
+.info-panel,
+.buzz-bar {
+  color: var(--theme-bar-text);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.16) 0%, rgba(255, 255, 255, 0.04) 48%, rgba(0, 0, 0, 0.1) 52%, rgba(0, 0, 0, 0.3) 100%),
+    var(--theme-bar);
+}
+
+/* Shared slide layouts */
+
+.center-slide {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 50px;
+  padding: 80px 140px;
+  text-align: center;
+}
+
+.slide-title {
+  margin: 0;
+  font-size: calc(110px * var(--text-scale, 1));
+  line-height: 1.1;
+}
+
+.slide-title.small {
+  font-size: calc(80px * var(--text-scale, 1));
+}
+
+.slide-text {
+  margin: 0;
+  font-size: calc(48px * var(--text-scale, 1));
+  line-height: 1.35;
+  white-space: pre-line;
+  opacity: 0.9;
+}
+
+/* Answer explanation: the question and its correct answer, then why */
+
+.explanation-screen {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 44px;
+  padding: 70px 140px 80px;
+  text-align: center;
+}
+
+.explained {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 22px;
+  width: 100%;
+}
+
+.explained-number {
+  padding: 6px 28px;
+  border-radius: 999px;
+  font-size: 30px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  background: var(--theme-panel);
+}
+
+.explained-question {
+  margin: 0;
+  font-size: 46px;
+  font-weight: 700;
+  line-height: 1.2;
+  opacity: 0.85;
+}
+
+.explained-answers {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  margin-top: 22px;
+}
+
+.explained-answer {
+  min-width: 760px;
+  max-width: 1300px;
+  height: 130px;
+}
+
+.explained-answers.several .explained-answer {
+  height: 100px;
+}
+
+.explained-missing {
+  margin: 0;
+  font-size: 32px;
+  font-style: italic;
+  opacity: 0.7;
+}
+
+.explanation-text {
+  margin: 0;
+  max-width: 1500px;
+  font-size: calc(50px * var(--text-scale, 1));
+  line-height: 1.35;
+  white-space: pre-line;
+}
+
+/* Welcome and registration */
+
+.welcome {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.welcome-header,
+.welcome-footer {
+  padding: 28px 60px;
+  text-align: center;
+  border-bottom: 3px solid var(--theme-bar-edge);
+}
+
+.welcome-header {
+  font-size: 72px;
+  font-weight: 800;
+}
+
+.welcome-footer {
+  font-size: 40px;
+  border-top: 3px solid var(--theme-bar-edge);
+  border-bottom: none;
+}
+
+.welcome-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 50px;
+}
+
+.register-grid {
+  display: grid;
+  grid-template-columns: repeat(10, 120px);
+  gap: 14px;
+}
+
+.register-grid span {
+  height: 76px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-size: 38px;
+  font-weight: 700;
+  border-radius: 12px;
+  background: var(--theme-panel);
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  opacity: 0.4;
+}
+
+.register-grid span.on {
+  color: var(--theme-correct-text);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.3), rgba(0, 0, 0, 0.1)), var(--theme-correct);
+  border-color: rgba(255, 255, 255, 0.7);
+  box-shadow: 0 0 24px var(--theme-correct);
+  opacity: 1;
+}
+
+.register-grid small {
+  max-width: 100%;
+  padding: 0 6px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+/* Question screen */
+
+.question-screen {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 0 70px 60px;
+}
+
+.info-panel {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  height: 160px;
+  margin: 0 -70px 30px;
+  padding: 0 40px 0 30px;
+  border-bottom: 4px solid var(--theme-bar-edge);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
+}
+
+.info-middle {
+  flex: 1;
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.info-stat {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 10px 26px;
+  border-radius: 14px;
+  background: rgba(0, 0, 0, 0.35);
+  border: 2px solid rgba(255, 255, 255, 0.15);
+}
+
+.info-stat svg {
+  width: 64px;
+  height: 64px;
+  opacity: 0.8;
+}
+
+.digits {
+  min-width: 120px;
+  font-size: 84px;
+  font-weight: 900;
+  line-height: 1;
+  color: var(--theme-accent);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 0 18px var(--theme-accent-glow);
+}
+
+.responders {
+  display: grid;
+  grid-auto-flow: column;
+  grid-template-rows: repeat(2, 54px);
+  gap: 6px;
+  padding: 8px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.35);
+  border: 2px solid rgba(255, 255, 255, 0.12);
+}
+
+/* Nobody left to answer, or the editor: no empty box beside the clock. */
+.responders:empty {
+  display: none;
+}
+
+.responders span {
+  width: 62px;
+  display: grid;
+  place-items: center;
+  font-size: 26px;
+  font-weight: 700;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--theme-bar-edge);
+}
+
+.result-bars {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 20px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.35);
+}
+
+.result-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  height: 34px;
+  font-size: 30px;
+  font-weight: 800;
+}
+
+.result-row svg {
+  width: 34px;
+  height: 34px;
+  flex: none;
+}
+
+.result-row .bar {
+  height: 22px;
+  min-width: 4px;
+  border-radius: 4px;
+  transition: width 0.8s ease-out;
+}
+
+.result-row.right { color: var(--theme-correct); }
+.result-row.wrong { color: var(--theme-wrong); }
+.result-row.none { color: var(--theme-bar-edge); }
+.result-row .bar { background: currentColor; }
+
+.question-text {
+  margin: 0 0 40px;
+  font-size: calc(66px * var(--text-scale, 1));
+  line-height: 1.18;
+}
+
+.answers {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-auto-rows: 170px;
+  gap: 34px 46px;
+  align-content: start;
+  padding: 0 40px;
+}
+
+.answer {
+  position: relative;
+  display: flex;
+  align-items: center;
+  padding: 0 70px 0 110px;
+  border-radius: 22px;
+  font-size: calc(52px * var(--text-scale, 1));
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.22), rgba(0, 0, 0, 0.12)), var(--answer-fill, var(--answer));
+  border: 4px solid rgba(255, 255, 255, 0.55);
+  box-shadow: inset 0 -10px 0 rgba(0, 0, 0, 0.18), 0 10px 26px rgba(0, 0, 0, 0.45);
+  transition: opacity 0.4s, transform 0.4s, filter 0.4s;
+}
+
+.answer .letter {
+  position: absolute;
+  left: -18px;
+  top: -18px;
+  width: 92px;
+  height: 92px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  font-size: 54px;
+  font-weight: 900;
+  background: inherit;
+  border: 4px solid #fff;
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.4);
+}
+
+.answer-0 { --answer: var(--theme-answer-0); --answer-text: var(--theme-answer-0-text); }
+.answer-1 { --answer: var(--theme-answer-1); --answer-text: var(--theme-answer-1-text); }
+.answer-2 { --answer: var(--theme-answer-2); --answer-text: var(--theme-answer-2-text); }
+.answer-3 { --answer: var(--theme-answer-3); --answer-text: var(--theme-answer-3-text); }
+.answer-4 { --answer: var(--theme-answer-4); --answer-text: var(--theme-answer-4-text); }
+.answer-5 { --answer: var(--theme-answer-5); --answer-text: var(--theme-answer-5-text); }
+
+.answer-count {
+  position: absolute;
+  right: 24px;
+  bottom: 12px;
+  font-size: 40px;
+  font-weight: 900;
+  opacity: 0.9;
+}
+
+.answer.is-correct {
+  transform: scale(1.04);
+  box-shadow: 0 0 0 6px #fff, 0 0 50px var(--theme-correct);
+}
+
+.answer.is-dim {
+  opacity: 0.3;
+  filter: grayscale(0.6);
+}
+
+.answer-share {
+  position: absolute;
+  right: 92px;
+  top: -18px;
+  padding: 2px 18px;
+  border-radius: 999px;
+  font-size: 34px;
+  font-weight: 800;
+  color: var(--theme-correct-text);
+  background: var(--theme-correct);
+  border: 4px solid #fff;
+}
+
+.answer-check {
+  position: absolute;
+  right: -20px;
+  top: -26px;
+  width: 96px;
+  height: 96px;
+  padding: 10px;
+  border-radius: 50%;
+  color: var(--theme-correct-text);
+  background: var(--theme-correct);
+  border: 4px solid #fff;
+}
+
+/* Fastest finger */
+
+.buzz-bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 150px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 90px;
+  border-top: 4px solid var(--theme-bar-edge);
+  animation: slide-up 0.25s ease-out;
+}
+
+.buzz-bar.idle {
+  justify-content: center;
+  font-size: 56px;
+  font-weight: 800;
+  opacity: 0.85;
+}
+
+.buzz-name {
+  font-size: 80px;
+  font-weight: 900;
+}
+
+.buzz-delta {
+  font-size: 84px;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+}
+
+.buzz-delta.plus { color: var(--theme-correct); }
+.buzz-delta.minus { color: var(--theme-wrong); }
+
+@keyframes slide-up {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+
+/* Leaderboard: two columns of ten */
+
+.leaderboard {
+  display: flex;
+  gap: 40px;
+}
+
+.leaderboard ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.leaderboard li {
+  display: grid;
+  grid-template-columns: 70px 560px 140px;
+  align-items: center;
+  height: 70px;
+  font-size: 40px;
+  font-weight: 800;
+  border-radius: 10px;
+  overflow: hidden;
+  color: var(--theme-tile-text);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(0, 0, 0, 0.25)), var(--theme-tile);
+  border: 2px solid rgba(255, 255, 255, 0.14);
+  animation: row-in 0.35s ease-out backwards;
+}
+
+.leaderboard li .rank {
+  height: 100%;
+  display: grid;
+  place-items: center;
+  background: rgba(0, 0, 0, 0.4);
+}
+
+.leaderboard li .name {
+  padding: 0 20px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  text-align: center;
+}
+
+.leaderboard li .score {
+  padding-right: 20px;
+  text-align: right;
+  color: var(--theme-accent);
+  font-variant-numeric: tabular-nums;
+}
+
+.leaderboard li.top { color: #fff; }
+.leaderboard li.top-1 { background: linear-gradient(180deg, #7a5a00, #3d2d00); border-color: #ffd21f; }
+.leaderboard li.top-2 { background: linear-gradient(180deg, #5a6170, #2d3038); border-color: #d8dee9; }
+.leaderboard li.top-3 { background: linear-gradient(180deg, #6b3d17, #35200d); border-color: #e09a5a; }
+
+@keyframes row-in {
+  from { opacity: 0; transform: translateX(-30px); }
+}
+
+/* Final podium */
+
+.podium {
+  display: flex;
+  align-items: flex-end;
+  gap: 30px;
+}
+
+.podium-step {
+  width: 460px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+}
+
+.podium-name {
+  height: 190px;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.podium-name.shown {
+  animation: pop 0.5s ease-out;
+}
+
+.podium-name .name {
+  font-size: 58px;
+  font-weight: 900;
+}
+
+.podium-name .score {
+  font-size: 50px;
+  font-weight: 800;
+  color: var(--theme-accent);
+}
+
+.podium-block {
+  width: 100%;
+  display: grid;
+  place-items: center;
+  font-size: 120px;
+  font-weight: 900;
+  border-radius: 16px 16px 0 0;
+  border: 3px solid rgba(255, 255, 255, 0.4);
+}
+
+.place-1 .podium-block { height: 360px; background: linear-gradient(180deg, #ffd84a, #b88a00); }
+.place-2 .podium-block { height: 270px; background: linear-gradient(180deg, #e6ebf2, #8a93a3); color: #222; }
+.place-3 .podium-block { height: 200px; background: linear-gradient(180deg, #f0a865, #9a5520); }
+
+@keyframes pop {
+  from { opacity: 0; transform: scale(0.5); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+/* Quiz media: pictures and videos from the quiz file */
+
+.slide-fill,
+.slide-background {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+}
+
+.stage .backdrop img,
+.stage .backdrop video,
+.slide-background img,
+.slide-background video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* Outside the show: the background is a video, standing still. */
+.slide-background .background-video-mark {
+  position: absolute;
+  right: 24px;
+  bottom: 24px;
+  width: 72px;
+  height: 72px;
+  padding: 10px;
+  border-radius: 12px;
+  color: #fff;
+  background: #000000a6;
+}
+
+.slide-media,
+.question-media,
+.explanation-media {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  min-height: 0;
+}
+
+.slide-media {
+  max-height: 560px;
+}
+
+.question-media {
+  flex: 1 1 0;
+  margin: -10px 0 34px;
+}
+
+.slide-media img,
+.slide-media video,
+.question-media img,
+.question-media video,
+.explanation-media img,
+.explanation-media video {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  border-radius: 18px;
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.55);
+}
+
+.explanation-media {
+  flex: 1 1 0;
+}
+
+/* A video's mosaic effect, laid over the video's box in blocks (slide-video.tsx). */
+.video-mosaic {
+  position: absolute;
+  border-radius: 18px;
+  image-rendering: pixelated;
+  pointer-events: none;
+}
+
+/* With a picture the answers give up height to it. */
+.question-screen.has-media .answers {
+  flex: 0 0 auto;
+  grid-auto-rows: 120px;
+  gap: 24px 46px;
+}
+
+/* Five or six answers: three rows in the same space. */
+.answers.answers-6 {
+  grid-auto-rows: 120px;
+  gap: 24px 40px;
+}
+
+.question-screen.has-media .answers.answers-6 {
+  grid-auto-rows: 96px;
+}
+
+.question-screen.has-media .question-text {
+  margin-bottom: 30px;
+  font-size: calc(56px * var(--text-scale, 1));
+}
+
+/* Styled texts: the ones a slide's own style changes (slide-style.ts).
+   Each has its theme look here: --text-font, its weight, --text-bold (its
+   weight when made bold) and --text-shadow (drawn when its shadow is on),
+   and reads the --style-* variables over them. */
+
+.slide-title {
+  --text-font: var(--theme-font-heading);
+  --text-bold: 800;
+  --text-shadow: 0 6px 30px var(--style-shadow-color, var(--theme-glow));
+  font-weight: var(--style-weight, var(--text-bold));
+  text-shadow: var(--style-shadow, var(--text-shadow));
+}
+
+.question-text {
+  --text-font: var(--theme-font-body);
+  --text-bold: 800;
+  --text-shadow: 0 4px 18px var(--style-shadow-color, var(--theme-shadow));
+  font-weight: var(--style-weight, var(--text-bold));
+  text-shadow: var(--style-shadow, var(--text-shadow));
+}
+
+.slide-text,
+.explanation-text {
+  --text-font: var(--theme-font-body);
+  --text-bold: bold;
+  --text-shadow: 0 4px 18px var(--style-shadow-color, var(--theme-shadow));
+  font-weight: var(--style-weight, normal);
+  text-shadow: var(--style-shadow, none);
+}
+
+.answer {
+  --text-font: var(--theme-font-body);
+  --text-bold: 700;
+  --text-shadow: 0 4px 18px var(--style-shadow-color, var(--theme-shadow));
+  font-weight: var(--style-weight, var(--text-bold));
+  text-shadow: var(--style-shadow, none);
+  /* The fill goes to --answer-fill, under the panel's sheen; the text sits in the panel. */
+  color: var(--style-color, var(--answer-text));
+  justify-content: var(--style-align, center);
+}
+
+.slide-title,
+.question-text,
+.slide-text,
+.explanation-text,
+.answer {
+  /* A font that is not installed falls back to the theme's. */
+  font-family: var(--style-font, var(--text-font)), var(--text-font);
+  font-style: var(--style-italic, normal);
+  text-decoration: var(--style-underline, none);
+  text-align: var(--style-align, center);
+}
+
+/* Another text keeps the colour it inherits, has its fill as a box around
+   it, and spans the screen once it is aligned, so the alignment shows. */
+.slide-title,
+.question-text,
+.slide-text,
+.explanation-text {
+  color: var(--style-color, currentColor);
+  background: var(--style-fill, none);
+  padding: calc(var(--style-boxed, 0) * 0.15em) calc(var(--style-boxed, 0) * 0.5em);
+  border-radius: calc(var(--style-boxed, 0) * 22px);
+  align-self: var(--style-stretch, auto);
+}

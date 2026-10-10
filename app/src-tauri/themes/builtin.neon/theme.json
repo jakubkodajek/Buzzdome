@@ -1,0 +1,26 @@
+{
+  "format": 1,
+  "id": "builtin.neon",
+  "version": "1.0.0",
+  "name": { "cs": "Neon", "en": "Neon" },
+  "parent": "builtin.night",
+  "backgrounds": {
+    "default": "backgrounds/neon.svg"
+  },
+  "colors": {
+    "glow": "#00e5ffb3",
+    "bar": "#0b0716",
+    "barEdge": "#00e5ff",
+    "tile": "#120a24",
+    "accent": "#ff4fe1",
+    "answerA": "#0077cc",
+    "answerB": "#d94f00",
+    "answerC": "#00a35a",
+    "answerD": "#ffe600",
+    "correct": "#00c46a"
+  },
+  "fonts": {
+    "heading": "fonts/Exo2.woff2",
+    "body": "fonts/Exo2.woff2"
+  }
+}

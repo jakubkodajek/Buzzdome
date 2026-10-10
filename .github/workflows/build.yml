@@ -1,0 +1,163 @@
+name: Build
+
+# Checks every push. Installers for Windows, macOS and Linux are built on
+# main, on version tags (v*) and on demand ("Run workflow" in the Actions tab),
+# because macOS runner minutes are the most expensive on a private repository.
+# Download them from the run's "Artifacts" section.
+on:
+  push:
+  workflow_dispatch:
+
+env:
+  # hidapi (buzzer receiver) needs libudev on Linux; the rest is Tauri's WebKitGTK stack.
+  LINUX_DEPS: libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libudev-dev
+
+jobs:
+  check:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system libraries
+        run: sudo apt-get update && sudo apt-get install -y $LINUX_DEPS
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install UI dependencies
+        working-directory: app
+        run: npm ci
+
+      - name: Lint the UI
+        working-directory: app
+        run: npm run lint
+
+      - name: Test the UI logic
+        working-directory: app
+        run: npm test
+
+      # Tauri embeds the built UI, so it must exist before the Rust crates compile.
+      - name: Type-check and build the UI
+        working-directory: app
+        run: npm run build
+
+      - name: Lint Rust
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      # The tests also write the TypeScript bindings (ts-rs); start from an empty
+      # folder so a type removed in Rust is noticed too.
+      - name: Test the Rust workspace
+        run: |
+          rm -rf app/src/bindings
+          cargo test --workspace
+
+      - name: Check the TypeScript bindings are up to date
+        run: |
+          if [ -n "$(git status --porcelain -- app/src/bindings)" ]; then
+            git status --short -- app/src/bindings
+            echo "::error::app/src/bindings is out of date. Run 'cargo test --workspace' and commit the result."
+            exit 1
+          fi
+
+  # The show journal and quiz files depend on how the OS opens, truncates and
+  # renames files, so the Rust tests also run on Windows, the event laptop's OS.
+  windows-tests:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: windows-tests
+
+      - name: Install UI dependencies
+        working-directory: app
+        run: npm ci
+
+      # Tauri embeds the built UI, so it must exist before the shell compiles.
+      - name: Build the UI
+        working-directory: app
+        run: npm run build
+
+      - name: Test the Rust workspace
+        run: cargo test --workspace
+
+  installers:
+    needs: [check, windows-tests]
+    if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: windows
+            os: windows-latest
+            args: --bundles nsis
+            artifacts: |
+              target/release/bundle/nsis/*.exe
+              target/release/buzzdome.exe
+          - name: macos
+            os: macos-latest
+            # One build for Apple silicon and Intel Macs.
+            args: --target universal-apple-darwin --bundles dmg
+            rust-targets: aarch64-apple-darwin,x86_64-apple-darwin
+            artifacts: target/universal-apple-darwin/release/bundle/dmg/*.dmg
+          - name: linux
+            # The oldest supported runner keeps the glibc requirement low.
+            os: ubuntu-22.04
+            args: --bundles deb,appimage
+            artifacts: |
+              target/release/bundle/deb/*.deb
+              target/release/bundle/appimage/*.AppImage
+    name: installer (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system libraries
+        if: matrix.name == 'linux'
+        run: sudo apt-get update && sudo apt-get install -y $LINUX_DEPS
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust-targets }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.name }}
+
+      - name: Install UI dependencies
+        working-directory: app
+        run: npm ci
+
+      - name: Build the installer
+        working-directory: app
+        run: npm run tauri build -- ${{ matrix.args }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: buzzdome-${{ matrix.name }}
+          path: ${{ matrix.artifacts }}
+          if-no-files-found: error

@@ -1,0 +1,301 @@
+/* A question's clock (Timer.tsx) at the left of the info panel, in stage
+   pixels like slide.css. The ring and the stopwatch are clock faces, the
+   same in every look; what runs out (--timer-fill) and the seconds
+   (--timer-digits) take the theme's accent, and turn red in the last
+   seconds. */
+
+.timer {
+  --timer-fill: var(--theme-accent);
+  --timer-digits: var(--theme-accent);
+  --timer-glow: var(--theme-accent-glow);
+  position: relative;
+  flex: none;
+}
+
+.timer.urgent {
+  --timer-fill: #ff3b3b;
+  --timer-digits: #ff3b3b;
+  --timer-glow: rgba(255, 59, 59, 0.6);
+}
+
+.timer svg {
+  filter: drop-shadow(0 6px 14px rgba(0, 0, 0, 0.6));
+}
+
+.timer-seconds {
+  font-size: 84px;
+  font-weight: 900;
+  line-height: 1;
+  color: var(--timer-digits);
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 0 18px var(--timer-glow);
+}
+
+.timer.urgent .timer-seconds {
+  animation: blink 1s steps(2, start) infinite;
+}
+
+.timer-label {
+  font-size: 24px;
+  font-weight: 700;
+  opacity: 0.75;
+}
+
+.timer-face {
+  fill: #e9eef7;
+  stroke: #9fb0cf;
+  stroke-width: 4;
+}
+
+/* Ring: the dial hangs below the panel. */
+
+.timer-ring {
+  width: 190px;
+  height: 190px;
+  margin-top: 40px;
+}
+
+.timer-ring svg {
+  width: 100%;
+  height: 100%;
+}
+
+.ring-track {
+  fill: none;
+  stroke: #cdd6e6;
+  stroke-width: 14;
+}
+
+.ring-fill {
+  fill: none;
+  stroke: #ff8a1f;
+  stroke-width: 14;
+  stroke-linecap: round;
+  transition: stroke-dashoffset 0.25s linear; /* one clock tick */
+}
+
+.timer-ring.urgent .ring-fill {
+  stroke: #ff3b3b;
+}
+
+.ring-seconds {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding-bottom: 18px;
+  font-size: 76px;
+  color: #1b2235;
+  text-shadow: none;
+}
+
+.timer-ring.urgent .ring-seconds {
+  color: #d41f1f;
+}
+
+.ring-label {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 42px;
+  text-align: center;
+  font-size: 24px;
+  font-weight: 700;
+  color: #4a5670;
+}
+
+/* Bar: the seconds beside a bar that empties to the left. */
+
+.timer-bar {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  width: 520px;
+  height: 116px;
+  padding: 0 28px 0 18px;
+  border-radius: 16px;
+  background: rgba(0, 0, 0, 0.35);
+  border: 2px solid rgba(255, 255, 255, 0.15);
+}
+
+.timer-bar .timer-seconds {
+  min-width: 110px;
+  text-align: right;
+}
+
+.bar-gauge {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.bar-track {
+  height: 34px;
+  border-radius: 17px;
+  background: rgba(255, 255, 255, 0.14);
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+}
+
+.bar-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0) 55%),
+    var(--timer-fill);
+  transition: width 0.25s linear;
+}
+
+/* Digital: lit digits over the unlit ones, as on an LED display. */
+
+.timer-digital {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 22px 12px;
+  border-radius: 14px;
+  background: #05080d;
+  border: 3px solid rgba(255, 255, 255, 0.2);
+  box-shadow:
+    inset 0 0 24px #000,
+    0 6px 14px rgba(0, 0, 0, 0.6);
+}
+
+.digital-display {
+  position: relative;
+  display: block;
+}
+
+.digital-unlit,
+.timer-digital .timer-seconds {
+  font-family: var(--theme-font-heading);
+  font-weight: 800;
+  letter-spacing: 4px;
+}
+
+.digital-unlit {
+  position: absolute;
+  inset: 0;
+  font-size: 84px;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  color: var(--timer-digits);
+  opacity: 0.12;
+}
+
+.timer-digital .timer-seconds {
+  position: relative;
+  display: block;
+}
+
+.digital-foot {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  color: #ffffff;
+}
+
+.digital-line {
+  flex: 1;
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+}
+
+.digital-fill {
+  display: block;
+  height: 100%;
+  background: var(--timer-fill);
+  transition: width 0.25s linear;
+}
+
+.timer-digital .timer-label {
+  font-size: 18px;
+  opacity: 0.6;
+}
+
+/* Hourglass and stopwatch: the picture, the seconds beside it. */
+
+.timer-hourglass,
+.timer-stopwatch {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  height: 150px;
+}
+
+.timer-readout {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 110px;
+}
+
+.hourglass {
+  width: 92px;
+  height: 138px;
+}
+
+.hourglass-glass {
+  fill: rgba(255, 255, 255, 0.12);
+  stroke: rgba(255, 255, 255, 0.85);
+  stroke-width: 3;
+  stroke-linejoin: round;
+}
+
+.hourglass-sand,
+.hourglass-stream {
+  fill: var(--timer-fill);
+}
+
+.hourglass-cap {
+  fill: var(--theme-bar-edge);
+  stroke: rgba(0, 0, 0, 0.35);
+  stroke-width: 2;
+}
+
+.stopwatch {
+  width: 124px;
+  height: 142px;
+}
+
+.stopwatch-crown {
+  fill: #c7d0e0;
+  stroke: #8d9ab3;
+  stroke-width: 2;
+}
+
+.stopwatch-slice {
+  fill: none;
+  stroke: var(--timer-fill);
+  opacity: 0.85;
+  transition: stroke-dashoffset 0.25s linear;
+}
+
+.stopwatch-tick {
+  stroke: #4a5670;
+  stroke-width: 3;
+  stroke-linecap: round;
+}
+
+.stopwatch-hand {
+  stroke: #1b2235;
+  stroke-width: 4;
+  stroke-linecap: round;
+  transform-box: view-box;
+  transform-origin: 70px 88px;
+  transition: transform 0.25s linear;
+}
+
+.stopwatch-pin {
+  fill: #1b2235;
+}
+
+@keyframes blink {
+  to {
+    visibility: hidden;
+  }
+}

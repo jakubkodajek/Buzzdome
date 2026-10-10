@@ -1,0 +1,67 @@
+/* Projector window: the stage (slide.css) filling the screen, with the
+   verdict and the leaderboard over it. */
+
+.host-viewport {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  background: #000;
+  cursor: none;
+}
+
+.verdict {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+  animation: verdict 1.6s ease-out forwards;
+}
+
+.verdict svg {
+  width: 620px;
+  height: 620px;
+  filter: drop-shadow(0 20px 40px rgba(0, 0, 0, 0.6));
+}
+
+.verdict-correct { color: var(--theme-correct); }
+.verdict-wrong { color: var(--theme-wrong); }
+
+@keyframes verdict {
+  0% { opacity: 0; transform: scale(0.4); }
+  15% { opacity: 1; transform: scale(1.05); }
+  25% { transform: scale(1); }
+  80% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+/* Leaderboard shown over any slide, on the theme's leaderboard background */
+
+.overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  display: grid;
+  place-items: center;
+}
+
+.overlay > .leaderboard {
+  position: relative;
+}
+
+/* A picture or video from the Director's media player, over everything */
+
+.media-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  background: #000;
+}
+
+.media-overlay img,
+.media-overlay video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}

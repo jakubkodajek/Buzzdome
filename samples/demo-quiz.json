@@ -1,0 +1,95 @@
+{
+  "schemaVersion": 5,
+  "title": "Ukázkový kvíz",
+  "slides": [
+    {
+      "id": "round-1",
+      "type": "billboard",
+      "title": "1. kolo: Česko",
+      "text": "Všichni odpovídají tlačítky A–D."
+    },
+    {
+      "id": "q-capital",
+      "type": "question",
+      "mode": "everyone",
+      "text": "Které město je hlavním městem Moravskoslezského kraje?",
+      "answers": ["Opava", "Ostrava", "Frýdek-Místek", "Karviná"],
+      "correct": [{ "answer": 1, "share": 100 }],
+      "timeLimitS": 20,
+      "points": 100,
+      "pointsEnd": 50,
+      "notes": "Ostrava je krajským městem od roku 2000."
+    },
+    {
+      "id": "q-river",
+      "type": "question",
+      "mode": "everyone",
+      "text": "Která řeka protéká Českými Budějovicemi?",
+      "answers": ["Ohře", "Sázava", "Vltava", "Morava"],
+      "correct": [{ "answer": 2, "share": 100 }],
+      "timeLimitS": 15,
+      "points": 100,
+      "pointsEnd": 50
+    },
+    {
+      "id": "q-peak",
+      "type": "question",
+      "mode": "everyone",
+      "text": "Jak se jmenuje nejvyšší hora Česka?",
+      "answers": ["Praděd", "Lysá hora", "Sněžka", "Ještěd"],
+      "correct": [{ "answer": 2, "share": 100 }],
+      "timeLimitS": 15,
+      "points": 100,
+      "penalty": 20
+    },
+    {
+      "id": "x-peak",
+      "type": "explanation",
+      "text": "Sněžka (1603 m) leží v Krkonoších na hranici s Polskem. Praděd (1491 m) je nejvyšší horou Moravy."
+    },
+    {
+      "id": "end-1",
+      "type": "endOfRound",
+      "title": "Konec 1. kola"
+    },
+    {
+      "id": "round-2",
+      "type": "billboard",
+      "title": "2. kolo: Rychlé prsty",
+      "text": "Kdo zmáčkne velké tlačítko první, odpovídá nahlas. Špatná odpověď = −30 bodů a do konce otázky stop."
+    },
+    {
+      "id": "q-ff-1",
+      "type": "question",
+      "mode": "fastestFinger",
+      "text": "Kolik nohou má pavouk?",
+      "timeLimitS": 30,
+      "points": 150,
+      "penalty": 30,
+      "notes": "Správně: 8."
+    },
+    {
+      "id": "q-ff-2",
+      "type": "question",
+      "mode": "fastestFinger",
+      "text": "Jak se jmenuje autor knihy Válka s mloky?",
+      "answers": ["Karel Čapek", "Jaroslav Hašek", "Bohumil Hrabal", "Franz Kafka", "Milan Kundera", "Josef Čapek"],
+      "correct": [{ "answer": 0, "share": 100 }],
+      "timeLimitS": 30,
+      "points": 150,
+      "penalty": 30,
+      "notes": "Správně: Karel Čapek (1936)."
+    },
+    {
+      "id": "end-2",
+      "type": "endOfRound",
+      "title": "Konec 2. kola"
+    },
+    {
+      "id": "final",
+      "type": "final",
+      "title": "Vítězové kvízu",
+      "notes": "Hudbu pro vítěze přidejte jako zvuk tohoto snímku."
+    }
+  ]
+}

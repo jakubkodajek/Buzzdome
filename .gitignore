@@ -1,0 +1,45 @@
+# Claude Code personal files
+CLAUDE.local.md
+.claude/settings.local.json
+
+# Reference material from the original app: copyrighted, never committed or shipped
+replica/sources/
+replica/screens/
+# USB captures of the original software talking to the buzzer receiver
+replica/captures/
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# OS and tooling
+.DS_Store
+node_modules/
+target/
+__pycache__/
+*.pyc
+
+# Jakub's local copy of the reference app's manual (copyrighted, never commit).
+# Our own docs in docs/ (specification.md, design.md, hardware-test.md) stay tracked.
+/docs/advanced/
+/docs/analyzer/
+/docs/assets/
+/docs/hardware-installation/
+/docs/installation/
+/docs/javascripts/
+/docs/legal/
+/docs/live/
+/docs/setup/
+/docs/studio/
+/docs/stylesheets/
+/docs/troubleshooting/
+/docs/index.md
+/docs/solo.md
+/docs/tips-and-tricks.md
+
+# Test media for the browser preview, generated locally (only our own drawings are committed)
+app/src/dev/media/*.mp3
+app/src/dev/media/*.mp4
+app/src/dev/media/*.webm
+app/src/dev/media/*.wav

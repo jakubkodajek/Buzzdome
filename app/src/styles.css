@@ -1,0 +1,33 @@
+/* Base styles shared by both windows. Screen styles live next to their
+   components: director/director.css and host/host.css. */
+
+:root {
+  --good: #1a8f4a;
+  --bad: #c42b1c;
+  --answer-0: #0b86d9;
+  --answer-1: #ea6a0c;
+  --answer-2: #45a51c;
+  --answer-3: #e8c400;
+  --answer-4: #7d3ce0;
+  --answer-5: #d92742;
+  font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+.good-text {
+  color: var(--good);
+}
+
+.bad-text {
+  color: var(--bad);
+}

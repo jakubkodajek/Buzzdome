@@ -1,0 +1,22 @@
+{
+  "format": 1,
+  "id": "builtin.night",
+  "version": "1.0.0",
+  "name": { "cs": "Noc", "en": "Night" },
+  "parent": "builtin.classic",
+  "backgrounds": {
+    "default": "backgrounds/night.svg"
+  },
+  "colors": {
+    "glow": "#ffffff38",
+    "panel": "#ffffff1a",
+    "bar": "#23262e",
+    "barEdge": "#8b93a5",
+    "tile": "#1b1d23",
+    "accent": "#f5c542",
+    "answerA": "#2a73c0",
+    "answerB": "#c9661c",
+    "answerC": "#2f8a49",
+    "answerD": "#d6b52c"
+  }
+}

@@ -1,0 +1,7 @@
+[
+  { "name": "playing, it counts on from where it last started", "positionMs": 2000, "sinceMs": 10000, "atMs": 10500, "expected": 2500 },
+  { "name": "at the moment it starts", "positionMs": 2000, "sinceMs": 10000, "atMs": 10000, "expected": 2000 },
+  { "name": "a clock read just before the start does not go back", "positionMs": 2000, "sinceMs": 10000, "atMs": 9990, "expected": 2000 },
+  { "name": "paused, it stands still", "positionMs": 2000, "sinceMs": null, "atMs": 99000, "expected": 2000 },
+  { "name": "from the start of the file", "positionMs": 0, "sinceMs": 0, "atMs": 1234, "expected": 1234 }
+]

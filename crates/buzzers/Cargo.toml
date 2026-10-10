@@ -1,0 +1,25 @@
+[package]
+name = "buzzers"
+description = "Buzzer drivers behind one trait: virtual (keyboard and on-screen) and hardware receivers."
+version.workspace = true
+edition.workspace = true
+
+[features]
+default = ["hidapi"]
+# Real USB-HID access. Without it the crate builds with the virtual driver and
+# test backends only (useful where hidapi's system libraries are missing).
+hidapi = ["dep:hidapi"]
+
+[dependencies]
+quiz-core = { path = "../quiz-core" }
+serde.workspace = true
+thiserror.workspace = true
+ts-rs.workspace = true
+hidapi = { version = "2.6", optional = true }
+
+[dev-dependencies]
+serde_json.workspace = true
+
+[[example]]
+name = "hid-monitor"
+required-features = ["hidapi"]
