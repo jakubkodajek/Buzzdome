@@ -47,6 +47,8 @@ export type { ValidationError } from "./bindings/ValidationError";
 export type { VideoClip } from "./bindings/VideoClip";
 
 export type QuestionSlide = Extract<Slide, { type: "question" }>;
+/** The slides listed by a title. */
+export type TitledSlide = Extract<Slide, { type: "billboard" | "endOfRound" | "final" }>;
 export type SlideType = Slide["type"];
 
 /** Buzzer number as the hardware reports it (`BuzzerId` in Rust). */

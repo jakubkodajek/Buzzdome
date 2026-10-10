@@ -14,7 +14,7 @@ import {
   MIN_EVERYONE_ANSWERS,
   MIN_GAIN_DB,
 } from "../bindings/Constants";
-import { slideTitle } from "../quiz";
+import { hasTitle, slideTitle } from "../quiz";
 import type { AnswerMode, Background, Quiz, QuestionSlide, Replay, Slide, SlideType, SoundClip, Span, VideoClip } from "../types";
 
 /** Answers a new everyone-answers question starts with: one per buzzer button. */
@@ -53,13 +53,14 @@ export function newSlide(type: SlideType, id: string): Slide {
     case "explanation":
       return { ...base, type, text: "" };
     case "endOfRound":
+    case "final":
       return { ...base, type, title: "" };
   }
 }
 
 /** Sets the text the slide is listed by (see `slideTitle`). */
 export function setHeadline(slide: Slide, text: string): Slide {
-  return slide.type === "question" || slide.type === "explanation" ? { ...slide, text } : { ...slide, title: text };
+  return hasTitle(slide) ? { ...slide, title: text } : { ...slide, text };
 }
 
 /** Sets the text under a billboard's title; other slides have none. */

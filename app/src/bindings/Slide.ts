@@ -16,4 +16,4 @@ video: VideoClip | null, sound: SoundClip | null,
 /**
  * Picture or video behind the slide; the theme's otherwise.
  */
-background: Background | null, } & ({ "type": "billboard", title: string, text: string, } | { "type": "question" } & Question | { "type": "explanation", text: string, } | { "type": "endOfRound", title: string, });
+background: Background | null, } & ({ "type": "billboard", title: string, text: string, } | { "type": "question" } & Question | { "type": "explanation", text: string, } | { "type": "endOfRound", title: string, } | { "type": "final", title: string, });

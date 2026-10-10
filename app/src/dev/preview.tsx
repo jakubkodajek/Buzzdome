@@ -161,7 +161,9 @@ const SCENES: Record<string, GameView | null> = {
   explanation: view({ phase: { phase: "explanation" }, slideIndex: 4, slide: quiz.slides[4] }),
   leaderboard: view({ phase: { phase: "endOfRound" }, slideIndex: 5, slide: quiz.slides[5] }),
   overlay: view({ leaderboardVisible: true }),
-  final3: view({ phase: { phase: "final", step: 3 }, slide: null }),
+  final3: view({ phase: { phase: "final", step: 3 }, slideIndex: quiz.slides.length, slide: null }),
+  // The demo quiz's final slide, with the winners' music to play on demand.
+  finalSlide: view({ phase: { phase: "final", step: 3 }, slideIndex: quiz.slides.length - 1, slide: { ...quiz.slides[quiz.slides.length - 1], sound: SONG } }),
   picture: view({
     phase: { phase: "question", step: "ready" },
     slide: { ...quiz.slides[1], picture: "media/landscape.svg", sound: SONG },

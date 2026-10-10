@@ -1,4 +1,4 @@
-# Quiz file format (version 3)
+# Quiz file format (version 4)
 
 A quiz travels as one file with the extension `.quiz`. It is a ZIP archive:
 
@@ -51,7 +51,7 @@ was moved or deleted.
 
 ```json
 {
-  "schemaVersion": 3,
+  "schemaVersion": 4,
   "title": "Pub quiz, March",
   "theme": "builtin.night",
   "slides": [
@@ -70,7 +70,9 @@ was moved or deleted.
       "sound": { "file": "media/song.mp3", "start": "withClock", "volume": 80,
                  "part": { "fromMs": 15000, "toMs": 45000 }, "gainDb": -2.5,
                  "replay": { "part": { "fromMs": 45000, "toMs": null }, "delayMs": 1000 } } },
-    { "id": "end-1", "type": "endOfRound", "title": "End of round 1" }
+    { "id": "end-1", "type": "endOfRound", "title": "End of round 1" },
+    { "id": "final", "type": "final", "title": "Tonight's winners",
+      "sound": { "file": "media/fanfare.mp3", "start": "onDemand", "volume": 90 } }
   ]
 }
 ```
@@ -79,7 +81,7 @@ was moved or deleted.
 
 | Field | Type | Meaning |
 | --- | --- | --- |
-| `schemaVersion` | number | `3`. Version 1 and 2 files open unchanged; a file with a higher version is refused with a message. |
+| `schemaVersion` | number | `4`. Version 1 to 3 files open unchanged; a file with a higher version is refused with a message. |
 | `title` | text | Shown on the welcome screen and in the Director. |
 | `theme` | text or `null` | Id of the look of the screens (`builtin.classic`, `builtin.studio`, `builtin.night`, `builtin.showtime`, `builtin.neon`, later installed themes, spec 5.2). Missing, `null` or not installed: the default look, so a quiz never fails to open or play over it. A value that is not a theme id (dot-separated parts of lower-case letters, digits, `-` and `_`, at least two parts, at most 100 bytes) reads as missing. |
 | `slides` | list | The show in order. |
@@ -89,7 +91,7 @@ was moved or deleted.
 | Field | Type | Default | Meaning |
 | --- | --- | --- | --- |
 | `id` | text | required | Unique within the quiz. Keeps the show journal valid when slides are edited. |
-| `type` | `billboard`, `question`, `explanation`, `endOfRound` | required | See below. |
+| `type` | `billboard`, `question`, `explanation`, `endOfRound`, `final` | required | See below. |
 | `notes` | text | `""` | For the quizmaster only. |
 | `picture` | media path | none | PNG, JPEG, WebP, GIF or SVG. |
 | `video` | object | none | Shown in place of a picture; a slide has one or the other. |
@@ -141,7 +143,7 @@ starts.
 ### `explanation`
 
 Explains the answer of a question. It explains the nearest question before
-it in the same round (an `endOfRound` slide ends the search), and the screen
+it in the same round (an `endOfRound` or `final` slide ends the search), and the screen
 shows that question with its correct answer above `text`. With no question
 before it in its round, only `text` and the slide's picture or video are
 shown. Players do not answer; the next step goes to the next slide.
@@ -155,6 +157,20 @@ shown. Players do not answer; the next step goes to the next slide.
 | Field | Type | Default | Meaning |
 | --- | --- | --- | --- |
 | `title` | text | required | Shown above the leaderboard. |
+
+### `final`
+
+The final ranking: a drum roll, then third, second and first place one by
+one, then the whole ranking, one quizmaster step each. Its `sound` plays as
+on any slide (when the slide opens, or on demand from the Director), so it
+carries the winners' music, and its `background` replaces the theme's
+`final` screen. A quiz without a `final` slide shows the ranking after its
+last slide; with one, the show ends after its last slide, and the
+quizmaster's "go to the final ranking" goes to the last `final` slide.
+
+| Field | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `title` | text | `""` | Shown above the podium and the ranking; empty shows the default title. |
 
 ## Playback notes
 
@@ -174,6 +190,7 @@ shown. Players do not answer; the next step goes to the next slide.
 | 1 | First version. |
 | 2 | Adds `explanation` slides and, later within version 2, the quiz `theme` (builds from before that drop it when they save). Version 1 files read as version 2 unchanged. |
 | 3 | `background` becomes an object with video options; sounds get `part`, `gainDb` and `replay`. Version 1 and 2 files read as version 3 unchanged. |
+| 4 | Adds `final` slides. Version 1 to 3 files read as version 4 unchanged. |
 
 Fields may be added within a version as long as older files keep their
 meaning; readers ignore fields they do not know. Anything else (a new slide

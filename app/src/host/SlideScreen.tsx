@@ -66,7 +66,16 @@ export function SlideScreen(props: { view: GameView; context: SlideContext; cloc
         </div>
       );
     case "final":
-      return <FinalScores players={ranked(view)} step={phase.step} />;
+      return (
+        <FinalScores
+          players={ranked(view)}
+          step={phase.step}
+          // A final slide's own title, or the default one.
+          title={(view.slide?.type === "final" && placeholder(view.slide.title, t("final"))) || t("final")}
+          titled={view.slide?.type === "final"}
+          sample={mode !== "show"}
+        />
+      );
     case "question":
       return view.slide?.type === "question" ? (
         <QuestionScreen
@@ -293,12 +302,27 @@ export function Leaderboard({ players }: { players: PlayerView[] }) {
   );
 }
 
-function FinalScores({ players, step }: { players: PlayerView[]; step: number }) {
+interface FinalScoresProps {
+  players: PlayerView[];
+  step: number;
+  title: ReactNode;
+  /** The title belongs to a final slide, which the editor can select. */
+  titled: boolean;
+  /** Outside the show: empty places show where the names go. */
+  sample: boolean;
+}
+
+function FinalScores({ players, step, title, titled, sample }: FinalScoresProps) {
   const { t } = useApp();
+  const heading = (text: ReactNode) => (
+    <h1 className="slide-title small" data-element={titled ? "title" : undefined}>
+      {text}
+    </h1>
+  );
   if (step >= FINAL_LAST_STEP) {
     return (
       <div className="center-slide">
-        <h1 className="slide-title small">{t("final")}</h1>
+        {heading(title)}
         <Leaderboard players={players} />
       </div>
     );
@@ -307,20 +331,21 @@ function FinalScores({ players, step }: { players: PlayerView[]; step: number })
   const places = [2, 1, 3];
   return (
     <div className="center-slide">
-      <h1 className="slide-title small">{step === 0 ? t("drumroll") : t("final")}</h1>
+      {heading(step === 0 ? t("drumroll") : title)}
       <div className="podium">
         {places.map((place) => {
           const p = players[place - 1];
           const shown = step >= FINAL_LAST_STEP - place;
           return (
             <div key={place} className={`podium-step place-${place}`}>
-              <div className={`podium-name ${shown && p ? "shown" : ""}`}>
+              <div className={`podium-name ${shown && (p || sample) ? "shown" : ""}`}>
                 {shown && p && (
                   <>
                     <span className="name">{playerName(t, p)}</span>
                     <span className="score">{scoreDigits(p.score)}</span>
                   </>
                 )}
+                {shown && !p && sample && <span className="name placeholder">{t("place", { n: place })}</span>}
               </div>
               <div className="podium-block">{place}</div>
             </div>

@@ -1,3 +1,4 @@
+import { FINAL_LAST_STEP } from "../bindings/Constants";
 import type { Controls, GameView, Phase, Slide } from "../types";
 
 /** A preview is not a show: no command applies. */
@@ -39,5 +40,8 @@ function previewPhase(slide: Slide): Phase {
       return { phase: "explanation" };
     case "endOfRound":
       return { phase: "endOfRound" };
+    case "final":
+      // The podium with its three places shown.
+      return { phase: "final", step: FINAL_LAST_STEP - 1 };
   }
 }

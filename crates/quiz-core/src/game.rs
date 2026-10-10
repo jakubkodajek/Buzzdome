@@ -359,10 +359,34 @@ impl Game {
         self.slide
     }
 
+    /// The slide on screen; none in the lobby and in the final ranking that
+    /// follows the last slide of a quiz without a final slide.
     pub fn current_slide(&self) -> Option<&Slide> {
         match self.phase {
-            Phase::Lobby | Phase::Final { .. } => None,
+            Phase::Lobby => None,
             _ => self.quiz.slides.get(self.slide),
+        }
+    }
+
+    /// The slide `Next` goes to once the current one is done: the one after
+    /// it, or after the last slide the final ranking, unless the quiz has a
+    /// final slide of its own (it then ends with its last slide). None when
+    /// the show is over.
+    pub fn following(&self) -> Option<usize> {
+        let next = match self.phase {
+            Phase::Lobby => 0,
+            _ => self.slide + 1,
+        };
+        let count = self.quiz.slides.len();
+        (next < count || (next == count && self.quiz.final_slide().is_none())).then_some(next)
+    }
+
+    /// The next `Next` leaves the current slide (rather than moving on within it).
+    fn next_leaves_slide(&self) -> bool {
+        match &self.phase {
+            Phase::Lobby | Phase::Billboard | Phase::Explanation | Phase::EndOfRound => true,
+            Phase::Question(step) => matches!(step, QuestionStep::Revealed { .. }),
+            Phase::Final { step } => *step >= FINAL_LAST_STEP,
         }
     }
 
@@ -421,9 +445,9 @@ impl Game {
             _ => None,
         };
         let buzzed = matches!(step, Some(QuestionStep::Buzzed { .. }));
-        let last_final_step = matches!(self.phase, Phase::Final { step } if step >= FINAL_LAST_STEP);
+        let show_over = self.next_leaves_slide() && self.following().is_none();
         Controls {
-            next: !buzzed && !last_final_step,
+            next: !buzzed && !show_over,
             judge: buzzed,
             pause_clock: running.is_some_and(Clock::is_running),
             resume_clock: running.is_some_and(|clock| !clock.is_running()),
@@ -488,7 +512,7 @@ impl Game {
                 }
                 Ok(self.enter_slide(*slide))
             }
-            Command::GoToFinal => Ok(self.enter_slide(self.quiz.slides.len())),
+            Command::GoToFinal => Ok(self.enter_slide(self.quiz.final_slide().unwrap_or(self.quiz.slides.len()))),
             Command::PauseClock => match &mut self.phase {
                 Phase::Question(QuestionStep::Running { clock }) if clock.is_running() => {
                     clock.pause(now);
@@ -700,9 +724,12 @@ impl Game {
     }
 
     fn next(&mut self, now: u64) -> Result<Vec<Effect>, GameError> {
+        if self.next_leaves_slide() {
+            let following = self.following().ok_or(GameError::NotNow)?;
+            return Ok(self.enter_slide(following));
+        }
         match self.phase.clone() {
-            Phase::Lobby => Ok(self.enter_slide(0)),
-            Phase::Billboard | Phase::Explanation | Phase::EndOfRound => Ok(self.enter_slide(self.slide + 1)),
+            Phase::Lobby | Phase::Billboard | Phase::Explanation | Phase::EndOfRound => Err(GameError::NotNow),
             Phase::Question(step) => match step {
                 QuestionStep::Ready => {
                     let limit = self.question().and_then(Question::time_limit_ms);
@@ -719,13 +746,12 @@ impl Game {
                     }
                     Ok(effects)
                 }
-                QuestionStep::Revealed { .. } => Ok(self.enter_slide(self.slide + 1)),
+                QuestionStep::Revealed { .. } => Err(GameError::NotNow),
             },
-            Phase::Final { step } if step < FINAL_LAST_STEP => {
+            Phase::Final { step } => {
                 self.phase = Phase::Final { step: step + 1 };
                 Ok(vec![])
             }
-            Phase::Final { .. } => Err(GameError::NotNow),
         }
     }
 
@@ -756,6 +782,7 @@ impl Game {
             Some(SlideContent::Billboard { .. }) => Phase::Billboard,
             Some(SlideContent::Explanation { .. }) => Phase::Explanation,
             Some(SlideContent::EndOfRound { .. }) => Phase::EndOfRound,
+            Some(SlideContent::Final { .. }) => Phase::Final { step: 0 },
             Some(SlideContent::Question(_)) => Phase::Question(QuestionStep::Ready),
         };
         vec![self.lights_all(Light::Off)]

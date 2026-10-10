@@ -93,7 +93,7 @@ pub struct PlayerView {
 
 pub fn slide_title(slide: &Slide) -> String {
     match &slide.content {
-        SlideContent::Billboard { title, .. } | SlideContent::EndOfRound { title } => title.clone(),
+        SlideContent::Billboard { title, .. } | SlideContent::EndOfRound { title } | SlideContent::Final { title } => title.clone(),
         SlideContent::Question(q) => q.text.clone(),
         SlideContent::Explanation { text } => text.clone(),
     }
@@ -167,10 +167,6 @@ impl Game {
             _ => None,
         };
 
-        let next_index = match self.phase() {
-            Phase::Lobby => 0,
-            _ => self.slide_index() + 1,
-        };
 
         GameView {
             quiz_title: self.quiz().title.clone(),
@@ -178,7 +174,7 @@ impl Game {
             slide_count: self.quiz().slides.len(),
             phase: self.phase().clone(),
             slide: self.current_slide().cloned(),
-            next_slide_title: self.quiz().slides.get(next_index).map(slide_title),
+            next_slide_title: self.following().and_then(|i| self.quiz().slides.get(i)).map(slide_title),
             clock: self.clock_view(now),
             enabled_count: enabled.len(),
             answered_count: enabled.iter().filter(|p| p.answered).count(),

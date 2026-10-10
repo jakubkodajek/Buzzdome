@@ -10,7 +10,7 @@ import type { StringKey, Translate } from "../i18n";
 import { SoundIcon } from "../icons";
 import { isVideo, type MediaKind } from "../media";
 import { SLIDE_TYPE_LABEL, type SlideContext } from "../quiz";
-import type { QuestionSlide, Slide, SlideType, SoundStart, Span } from "../types";
+import type { QuestionSlide, Slide, SlideType, SoundStart, Span, TitledSlide } from "../types";
 import { MediaPicker, NumberBox, Select, Switch } from "./controls";
 import {
   answerLimits,
@@ -58,7 +58,7 @@ export interface PropertyRow {
   wide?: boolean;
 }
 
-const SLIDE_TYPES: SlideType[] = ["question", "billboard", "explanation", "endOfRound"];
+const SLIDE_TYPES: SlideType[] = ["question", "billboard", "explanation", "endOfRound", "final"];
 
 /** Every property row of the slide being edited. */
 export function slideProperties(t: Translate, { slide, context, update, chooseMedia, trimSound, normalizeSound }: SlideEditing) {
@@ -72,9 +72,10 @@ export function slideProperties(t: Translate, { slide, context, update, chooseMe
   const textArea = (label: StringKey, value: string, onChange: (text: string) => void) => (
     <textarea rows={3} aria-label={t(label)} value={value} onChange={(e) => onChange(e.target.value)} />
   );
+  // Only a question has a clock (a file may still say so of another slide).
   const soundStarts: [SoundStart, string][] = [
     ["onSlide", t("soundOnSlide")],
-    ["withClock", t("soundWithClock")],
+    ...(slide.type === "question" || slide.sound?.start === "withClock" ? [["withClock", t("soundWithClock")] as [SoundStart, string]] : []),
     ["onDemand", t("soundOnDemand")],
   ];
   const spanText = (span: Span) =>
@@ -202,7 +203,7 @@ export function slideProperties(t: Translate, { slide, context, update, chooseMe
         textArea("questionField", q.text, (text) => update((s) => setHeadline(s, text), "text")),
         true,
       ),
-    title: (s: Extract<Slide, { type: "billboard" | "endOfRound" }>) =>
+    title: (s: TitledSlide) =>
       row(
         "slideTitleField",
         "descTitle",

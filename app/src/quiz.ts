@@ -1,5 +1,5 @@
 import type { StringKey } from "./i18n";
-import type { QuestionSlide, Quiz, Slide, SlideType } from "./types";
+import type { QuestionSlide, Quiz, Slide, SlideType, TitledSlide } from "./types";
 
 /** How each kind of slide is named in the UI. */
 export const SLIDE_TYPE_LABEL: Record<SlideType, StringKey> = {
@@ -7,11 +7,21 @@ export const SLIDE_TYPE_LABEL: Record<SlideType, StringKey> = {
   question: "typeQuestion",
   explanation: "typeExplanation",
   endOfRound: "typeEndOfRound",
+  final: "typeFinal",
 };
 
 /** The line a slide is listed by: the question or explanation text, or the title. */
 export function slideTitle(slide: Slide): string {
-  return slide.type === "question" || slide.type === "explanation" ? slide.text : slide.title;
+  return hasTitle(slide) ? slide.title : slide.text;
+}
+
+export function hasTitle(slide: Slide): slide is TitledSlide {
+  return slide.type === "billboard" || slide.type === "endOfRound" || slide.type === "final";
+}
+
+/** The slide shows a ranking where others have a picture or video. */
+export function showsRanking(type: SlideType): boolean {
+  return type === "endOfRound" || type === "final";
 }
 
 /** Position of a question among the questions, e.g. 3 of 12. */
@@ -58,6 +68,7 @@ export function slideContexts(quiz: Quiz): SlideContext[] {
       case "explanation":
         return { position: null, explains: lastQuestion };
       case "endOfRound":
+      case "final":
         lastQuestion = null;
         return NO_CONTEXT;
       case "billboard":

@@ -3,7 +3,7 @@ import { ANSWER_LETTERS } from "../answers";
 import { useApp } from "../app-context";
 import type { StringKey, Translate } from "../i18n";
 import { GamepadIcon, PaletteIcon, PictureIcon, QuestionIcon, SlideIcon, SoundIcon, StarIcon, VideoIcon } from "../icons";
-import { SLIDE_TYPE_LABEL, slideTitle } from "../quiz";
+import { showsRanking, SLIDE_TYPE_LABEL, slideTitle } from "../quiz";
 import type { Slide } from "../types";
 import { answerIndex, type ElementId } from "./elements";
 import { slideProperties, type PropertyRow, type SlideEditing, type SlideProperties } from "./properties";
@@ -201,9 +201,10 @@ function propertyPages(slide: Slide, element: ElementId, rows: SlideProperties):
           page("text", [{ title: "sectionText", rows: [rows.questionText(slide), rows.notes] }]),
         ]
       : [page("gameplay", [{ title: "sectionSlide", rows: [rows.type] }]), page("text", [{ title: "sectionText", rows: [...textRows(slide, rows), rows.notes] }])];
-  // The end-of-round screen shows the leaderboard, not a picture or video.
-  const pictureVideo: Section[] =
-    slide.type === "endOfRound" ? [] : [{ title: "sectionPictureVideo", rows: [rows.picture, rows.video, ...rows.videoOptions] }];
+  // Ranking screens show the ranking, not a picture or video.
+  const pictureVideo: Section[] = showsRanking(slide.type)
+    ? []
+    : [{ title: "sectionPictureVideo", rows: [rows.picture, rows.video, ...rows.videoOptions] }];
   pages.push(
     page("design", [
       ...pictureVideo,
@@ -227,6 +228,7 @@ function textRows(slide: Exclude<Slide, { type: "question" }>, rows: SlideProper
     case "explanation":
       return [rows.explains, rows.explanationText(slide)];
     case "endOfRound":
+    case "final":
       return [rows.title(slide)];
   }
 }

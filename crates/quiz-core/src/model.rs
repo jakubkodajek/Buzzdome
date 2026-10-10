@@ -1,4 +1,4 @@
-//! Quiz file model (schema version 3). This is the contract with quiz authors:
+//! Quiz file model (schema version 4). This is the contract with quiz authors:
 //! change it only with a schema version bump and a migration.
 
 use crate::media::{check_reference, Background, MediaIssue, MediaKind, SoundClip, VideoClip, MAX_GAIN_DB, MIN_GAIN_DB};
@@ -9,8 +9,8 @@ use ts_rs::TS;
 
 /// 1: first version. 2: adds explanation slides. 3: backgrounds become
 /// objects with video options; sounds get a part, a loudness gain and a
-/// replay part. Older files read unchanged.
-pub const SCHEMA_VERSION: u32 = 3;
+/// replay part. 4: adds final slides. Older files read unchanged.
+pub const SCHEMA_VERSION: u32 = 4;
 
 /// Most answers a question can show (A-F, as many as the reference app's
 /// keypads have). A fastest finger question is answered aloud, so it may use
@@ -139,6 +139,14 @@ pub enum SlideContent {
     /// Closes a round and shows the leaderboard.
     #[serde(rename_all = "camelCase")]
     EndOfRound { title: String },
+    /// The final ranking: a drum roll, then third, second and first place,
+    /// then everyone. As a slide it has a sound (the winners' music) and a
+    /// background; a quiz without one shows the ranking after its last slide.
+    #[serde(rename_all = "camelCase")]
+    Final {
+        #[serde(default)]
+        title: String,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -318,6 +326,12 @@ impl Quiz {
         Ok(quiz)
     }
 
+    /// Index of the slide that shows the final ranking: the last final slide.
+    /// None when the quiz has no final slide.
+    pub fn final_slide(&self) -> Option<usize> {
+        self.slides.iter().rposition(|slide| matches!(slide.content, SlideContent::Final { .. }))
+    }
+
     /// Every media file the quiz uses, each once.
     pub fn media_files(&self) -> BTreeSet<&str> {
         self.slides.iter().flat_map(|s| s.media()).map(|(file, _)| file).collect()
@@ -398,6 +412,19 @@ mod tests {
         assert_eq!(q.points_at(5_000), 75);
         assert_eq!(q.points_at(10_000), 50);
         assert_eq!(q.points_at(60_000), 50);
+    }
+
+    #[test]
+    fn a_final_slide_reads_without_a_title_and_marks_where_the_ranking_is() {
+        let json = r#"{"schemaVersion": 4, "title": "x", "slides": [
+            {"id": "a", "type": "billboard", "title": ""},
+            {"id": "f", "type": "final"}
+        ]}"#;
+        let quiz = Quiz::from_json(json).unwrap();
+        assert_eq!(quiz.slides[1].content, SlideContent::Final { title: String::new() });
+        assert_eq!(quiz.final_slide(), Some(1));
+        assert!(quiz.validate().is_ok());
+        assert_eq!(Quiz::new("y", vec![]).final_slide(), None);
     }
 
     #[test]

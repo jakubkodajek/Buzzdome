@@ -43,6 +43,7 @@ export const LAYOUT_GROUPS: LayoutGroup[] = [
       { type: "explanation" },
       { type: "explanation", media: "picture" },
       { type: "endOfRound" },
+      { type: "final" },
     ],
   },
   { title: "layouts2", layouts: withAndWithoutPicture(2) },

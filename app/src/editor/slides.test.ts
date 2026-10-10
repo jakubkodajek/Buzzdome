@@ -168,6 +168,7 @@ describe("slides", () => {
     expect(setHeadline(question(), "Who?")).toMatchObject({ text: "Who?" });
     expect(setHeadline(newSlide("explanation", "e"), "Because")).toMatchObject({ text: "Because" });
     expect(setHeadline(newSlide("endOfRound", "r"), "End")).toMatchObject({ title: "End" });
+    expect(setHeadline(newSlide("final", "f"), "Winners")).toMatchObject({ type: "final", title: "Winners" });
     const billboard = setBodyText(setHeadline(newSlide("billboard", "b"), "Round 1"), "Geography");
     expect(billboard).toMatchObject({ title: "Round 1", text: "Geography" });
     // Only a billboard has text under its title.

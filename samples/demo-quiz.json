@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 2,
+  "schemaVersion": 4,
   "title": "Ukázkový kvíz",
   "slides": [
     {
@@ -84,6 +84,12 @@
       "id": "end-2",
       "type": "endOfRound",
       "title": "Konec 2. kola"
+    },
+    {
+      "id": "final",
+      "type": "final",
+      "title": "Vítězové kvízu",
+      "notes": "Hudbu pro vítěze přidejte jako zvuk tohoto snímku."
     }
   ]
 }

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ANSWER_LETTERS } from "../answers";
 import { useApp } from "../app-context";
-import { SLIDE_TYPE_LABEL } from "../quiz";
+import { hasTitle, SLIDE_TYPE_LABEL } from "../quiz";
 import type { QuestionSlide, Slide } from "../types";
 import { Dialog } from "./controls";
 import type { ElementId } from "./elements";
@@ -61,7 +61,7 @@ export function EditSlideDialog(props: { slide: Slide; focus: ElementId; onApply
         }}
       >
         {draft.type === "question" && <QuestionFields question={draft} onChange={setDraft} />}
-        {(draft.type === "billboard" || draft.type === "endOfRound") && (
+        {hasTitle(draft) && (
           <label className="field">
             <span>{t("slideTitleField")}</span>
             <input data-field="title" value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })} />

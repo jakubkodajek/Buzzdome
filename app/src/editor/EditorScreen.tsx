@@ -33,7 +33,7 @@ import {
   VideoIcon,
 } from "../icons";
 import { isVideo, mediaFileName, MediaRootContext, mediaUrl, type MediaKind } from "../media";
-import { NO_CONTEXT, slideContexts } from "../quiz";
+import { NO_CONTEXT, showsRanking, slideContexts } from "../quiz";
 import { ThemeContext } from "../theme/context";
 import type { Slide, ValidationError } from "../types";
 import { tooltip, useActionKeys, type Action, type Actions } from "./actions";
@@ -300,14 +300,14 @@ function Studio({ editor, open, onExit }: { editor: QuizEditor; open: OpenQuiz |
     insertPicture: {
       label: t("mediaPicture"),
       icon: <PictureIcon />,
-      // The end-of-round screen has the leaderboard where a picture would go.
-      disabled: noSlide || slide.type === "endOfRound",
+      // Ranking screens have the ranking where a picture would go.
+      disabled: noSlide || showsRanking(slide.type),
       run: () => slide && chooseMedia(slide.id, MEDIA.picture.kinds, setPicture, "picture"),
     },
     insertVideo: {
       label: t("mediaVideo"),
       icon: <VideoIcon />,
-      disabled: noSlide || slide.type === "endOfRound",
+      disabled: noSlide || showsRanking(slide.type),
       run: () => slide && chooseMedia(slide.id, MEDIA.video.kinds, setVideo, "video"),
     },
     insertSound: { label: t("mediaSound"), icon: <SoundIcon />, disabled: noSlide, run: () => slide && chooseMedia(slide.id, MEDIA.sound.kinds, setSound, "sound") },

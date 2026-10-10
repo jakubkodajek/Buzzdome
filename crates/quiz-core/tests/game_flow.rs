@@ -2,6 +2,7 @@ use quiz_core::{
     AnswerMode, Button, Command, Cue, Effect, Game, GameError, Light, Phase, Question, QuestionStep, Quiz, Slide,
     SlideContent, Stamped, MAX_NAME_CHARS, MAX_TEAMS, PRESS_GRACE_MS,
 };
+use quiz_core::game::FINAL_LAST_STEP;
 use quiz_core::view::AnswerResults;
 
 fn question(id: &str, mode: AnswerMode) -> Slide {
@@ -364,6 +365,8 @@ fn controls_offer_exactly_the_commands_each_step_takes() {
         question("q1", AnswerMode::FastestFinger),
         Slide::new("why", SlideContent::Explanation { text: "Because.".into() }),
         Slide::new("end", SlideContent::EndOfRound { title: "End".into() }),
+        final_slide("final"),
+        billboard("thanks"),
     ]);
     show.press(0, 1, Button::Big);
     show.press(0, 2, Button::Big);
@@ -380,7 +383,7 @@ fn controls_offer_exactly_the_commands_each_step_takes() {
         Command::JudgeRight,  // revealed
         Command::Next,        // explanation
         Command::Next,        // end of round
-        Command::Next,        // final scores
+        Command::Next,        // final slide
     ];
     let mut at_ms = 0;
     assert_controls_match_apply(&show.game, at_ms);
@@ -393,7 +396,7 @@ fn controls_offer_exactly_the_commands_each_step_takes() {
         show.run(at_ms, Command::Next).unwrap();
         assert_controls_match_apply(&show.game, at_ms);
     }
-    assert!(matches!(show.game.phase(), Phase::Final { .. }));
+    assert_eq!(show.game.current_slide().map(|s| s.id.as_str()), Some("thanks"));
 
     // A question closed by its clock, then revealed.
     let mut show = Show::new(vec![question("q1", AnswerMode::Everyone)]);
@@ -479,6 +482,52 @@ fn final_scores_reveal_step_by_step() {
         assert_eq!(show.game.phase(), &Phase::Final { step: expected });
     }
     assert_eq!(show.run(0, Command::Next), Err(GameError::NotNow));
+}
+
+fn final_slide(id: &str) -> Slide {
+    Slide::new(id, SlideContent::Final { title: "Winners".into() })
+}
+
+fn billboard(id: &str) -> Slide {
+    Slide::new(id, SlideContent::Billboard { title: id.into(), text: String::new() })
+}
+
+#[test]
+fn a_final_slide_shows_the_ranking_where_it_stands_and_the_show_ends_with_the_last_slide() {
+    let mut show = Show::new(vec![question("q1", AnswerMode::Everyone), final_slide("final"), billboard("thanks")]);
+    show.run(0, Command::Next).unwrap();
+    show.run(0, Command::GoTo { slide: 1 }).unwrap();
+    assert_eq!(show.game.phase(), &Phase::Final { step: 0 });
+    // The final slide is on screen, so its sound and background play.
+    assert_eq!(show.game.current_slide().map(|s| s.id.as_str()), Some("final"));
+    assert_eq!(show.game.view(0).next_slide_title.as_deref(), Some("thanks"));
+    for expected in 1..=4 {
+        show.run(0, Command::Next).unwrap();
+        assert_eq!(show.game.phase(), &Phase::Final { step: expected });
+    }
+    show.run(0, Command::Next).unwrap();
+    assert_eq!(show.game.current_slide().map(|s| s.id.as_str()), Some("thanks"));
+    // No second ranking after the last slide: the quiz has its own.
+    assert!(!show.game.controls().next);
+    assert_eq!(show.run(0, Command::Next), Err(GameError::NotNow));
+    assert_eq!(show.game.view(0).next_slide_title, None);
+
+    show.run(0, Command::GoToFinal).unwrap();
+    assert_eq!(show.game.current_slide().map(|s| s.id.as_str()), Some("final"));
+    assert_eq!(show.game.phase(), &Phase::Final { step: 0 });
+}
+
+#[test]
+fn a_final_slide_at_the_end_ends_the_show_after_the_full_ranking() {
+    let mut show = Show::new(vec![billboard("intro"), final_slide("final")]);
+    show.run(0, Command::Next).unwrap();
+    show.run(0, Command::Next).unwrap();
+    assert_eq!(show.game.current_slide().map(|s| s.id.as_str()), Some("final"));
+    while show.game.controls().next {
+        show.run(0, Command::Next).unwrap();
+    }
+    assert_eq!(show.game.phase(), &Phase::Final { step: FINAL_LAST_STEP });
+    assert_eq!(show.game.current_slide().map(|s| s.id.as_str()), Some("final"));
 }
 
 #[test]

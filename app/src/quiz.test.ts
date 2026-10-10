@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { newSlide } from "./editor/slides";
-import { sameContext, slideContexts } from "./quiz";
+import { hasTitle, sameContext, showsRanking, slideContexts, slideTitle } from "./quiz";
 import type { Quiz, SlideType } from "./types";
 
 const quizOf = (...types: SlideType[]): Quiz => ({
@@ -17,9 +17,20 @@ describe("slideContexts", () => {
   });
 
   it("links an explanation to the nearest question before it in its round", () => {
-    const quiz = quizOf("explanation", "question", "billboard", "explanation", "question", "explanation", "endOfRound", "explanation");
+    const quiz = quizOf("explanation", "question", "billboard", "explanation", "question", "explanation", "endOfRound", "explanation", "question", "final", "explanation");
     const explains = slideContexts(quiz).map((c) => (c.explains ? `${c.explains.question.id} ${c.explains.position.n}` : null));
-    expect(explains).toEqual([null, null, null, "s1 1", null, "s4 2", null, null]);
+    expect(explains).toEqual([null, null, null, "s1 1", null, "s4 2", null, null, null, null, null]);
+  });
+});
+
+describe("slide kinds", () => {
+  it("lists billboards, round ends and final slides by their title", () => {
+    const final = { ...newSlide("final", "f"), title: "Winners" };
+    expect(hasTitle(final)).toBe(true);
+    expect(slideTitle(final)).toBe("Winners");
+    expect(hasTitle(newSlide("explanation", "e"))).toBe(false);
+    expect(["endOfRound", "final"].every((type) => showsRanking(type as SlideType))).toBe(true);
+    expect(showsRanking("billboard")).toBe(false);
   });
 });
 

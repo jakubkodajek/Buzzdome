@@ -22,7 +22,8 @@ function readLayout(): Layout {
 export function QuestionsTab({ view, quiz }: { view: GameView; quiz: Quiz | null }) {
   const { t } = useApp();
   const dispatch = useDispatch();
-  const current = view.phase.phase === "lobby" || view.phase.phase === "final" ? null : view.slideIndex;
+  // None in the lobby and in the ranking after the last slide.
+  const current = view.phase.phase === "lobby" || view.slideIndex >= view.slideCount ? null : view.slideIndex;
   // A selection lasts until the show moves on; then the current slide is shown again.
   const [selection, setSelection] = useState<{ slide: number; madeOn: number | null } | null>(null);
   const selected = selection !== null && selection.madeOn === current ? selection.slide : null;

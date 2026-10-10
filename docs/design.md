@@ -60,6 +60,11 @@ two windows cannot disagree with each other or with the score.
   `Game::controls` is checked against `apply` by a test over a whole show.
   The Director shows only those buttons and `keyboard.ts` sends only those
   keys, so no key produces "not now" in a show.
+- **Where Next goes.** `Game::following` decides it: the next slide, or
+  after the last slide the final ranking, unless the quiz has a final slide
+  of its own (`Quiz::final_slide`), which then is the ranking and the show
+  ends with the last slide. `controls` and `GameView.next_slide_title` use
+  the same function.
 - **Commands** (UI to Rust) are the `api` object in `app/src/api.ts`, one
   entry per `#[tauri::command]`. Game actions all go through one command,
   `dispatch(Command)`, the same for buttons, keys, virtual and real buzzers.

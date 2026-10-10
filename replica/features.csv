@@ -19,7 +19,7 @@ Question screen with clock answered count and points available,host screen,must,
 Reveal the correct answer after a question,host screen,must,yes,no,§4.7 end-of-question actions
 Fastest-finger buzz bar with name and a big right or wrong verdict,host screen,must,yes,no,§5.4.5.1
 Leaderboard top 20,host screen,must,yes,no,§5.4.6
-Final scores with a 3-2-1 reveal,host screen,must,yes,no,§5.4.9 and the Show top three option §4.6
+Final scores with a 3-2-1 reveal,host screen,must,yes,yes,§5.4.9 and the Show top three option §4.6; clone: also as an optional final results slide with its own music
 Host screen scales to the projector at 16:9,host screen,must,yes,no,§3.14.11; 4:3 and 16:10 exist in the original
 Next and advance control from the Director,director,must,yes,no,§5.7 command panel; Space key on host
 Director runs on a second device (laptop tablet or phone),director,must,yes,no,§5.7 and §5.2.4.4; native in a web app

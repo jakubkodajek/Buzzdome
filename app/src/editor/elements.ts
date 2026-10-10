@@ -1,6 +1,7 @@
 // The parts of a slide the editor can select, as marked by `data-element`
 // in the slide screens (host/SlideScreen.tsx, slide-media.tsx).
 
+import { hasTitle } from "../quiz";
 import type { Slide } from "../types";
 
 export type ElementId = "slide" | "question" | "title" | "text" | "picture" | "video" | "sound" | `answer-${number}`;
@@ -21,7 +22,7 @@ export function hasElement(slide: Slide, element: ElementId): boolean {
     case "question":
       return slide.type === "question";
     case "title":
-      return slide.type === "billboard" || slide.type === "endOfRound";
+      return hasTitle(slide);
     case "text":
       return slide.type === "billboard" || slide.type === "explanation";
     case "picture":

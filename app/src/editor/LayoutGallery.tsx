@@ -66,6 +66,13 @@ function LayoutSketch({ layout }: { layout: SlideLayout }) {
           <span />
         </span>
       )}
+      {layout.type === "final" && (
+        <span className="sketch-podium">
+          <span />
+          <span />
+          <span />
+        </span>
+      )}
       {answers > 0 && (
         <span className="sketch-answers">
           {Array.from({ length: answers }, (_, i) => (
