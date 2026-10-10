@@ -141,7 +141,7 @@ export function Ribbon({ tab, onTab, actions, onGallery, slide, element, propert
           )}
           {shown === "design" && (
             <>
-              <Group title="groupThemes">
+              <Group title="groupThemes" gallery>
                 <ThemeGallery choice={themeChoice} />
               </Group>
               {!categoryView && (
@@ -261,10 +261,11 @@ function QuestionTab({ slide, properties, timer }: { slide: Slide | null; proper
   );
 }
 
-function Group({ title, children }: { title: StringKey; children: ReactNode }) {
+/** A group of the ribbon; a `gallery` group narrows first when the ribbon is too narrow, its gallery scrolling (`GalleryStrip`). */
+function Group({ title, gallery, children }: { title: StringKey; gallery?: boolean; children: ReactNode }) {
   const { t } = useApp();
   return (
-    <section className="ribbon-group">
+    <section className={gallery ? "ribbon-group gallery" : "ribbon-group"}>
       <div className="ribbon-group-body">{children}</div>
       <h3>{t(title)}</h3>
     </section>

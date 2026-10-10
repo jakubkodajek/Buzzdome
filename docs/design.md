@@ -433,14 +433,19 @@ packages users will install are read the same way.
   each file to `document.fonts` once (CSS Font Loading API), under a family
   named after the file, for every weight from 1 to 1000, so a variable font
   gets its real weights; the stage's font stack ends with system fonts for
-  letters the file lacks. The built-in fonts (Inter, Nunito, Oswald, Exo 2)
-  are variable WOFF2 files cut by Google Fonts to Latin (Basic, Latin-1,
-  Extended-A and B) and common punctuation, 38 to 76 kB each. All four are
-  under the SIL Open Font License 1.1, which allows bundling as long as the
-  licence goes with the font: each package has it as `fonts/OFL.txt`, and
-  it ships with the installers.
+  letters the file lacks. The built-in fonts (Inter, Nunito, Oswald, Exo 2,
+  Montserrat, Outfit, Baloo 2, Caveat, Cinzel) are variable WOFF2 files cut
+  to Latin (Basic, Latin-1, Extended-A and B, so Czech) and common
+  punctuation, 38 to 100 kB each; the newer five were cut from the Google
+  Fonts TTFs with fontTools' `pyftsubset`. All are under the SIL Open Font
+  License 1.1, which allows bundling as long as the licence goes with the
+  font: each package has it as `fonts/OFL.txt`, and it ships with the
+  installers. A cut font is a Modified Version under the licence, which may
+  not keep a Reserved Font Name, so the built-in fonts are ones without one.
 - **Choosing.** The editor's Design tab shows each installed theme on a
-  sample question (`ThemeGallery.tsx`). The theme under the pointer or focus
+  sample question (`ThemeGallery.tsx`); when the ribbon is too narrow for
+  all of them, the row pages with arrows at its ends (`GalleryStrip.tsx`)
+  and the groups after it stay in sight. The theme under the pointer or focus
   is shown on the slide canvas only, the thumbnails keep the quiz's; a click
   is a `setTheme` edit, so it is undone like any other change.
   `useThemeChoice.ts` holds both themes and the gallery's choice. A quiz

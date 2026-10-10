@@ -68,7 +68,8 @@ Status keys: `[x]` done, `[~]` in progress, `[ ]` not started.
 
 ### M4: Show polish (week 3-4)
 - [ ] Sounds, countdown, transitions, branding of the welcome screen
-- [x] Design templates: five built-in themes (colours, fonts, a background per screen) chosen on the editor's Design tab with live preview
+- [x] Design templates: ten built-in themes (colours, fonts, a background per screen) chosen on the editor's Design tab with live preview
+- [x] Clock designs: ring, bar, digital, hourglass or stopwatch, chosen per question
 - [x] Czech and English UI (switchable in Settings)
 - [ ] Should-haves from `features.csv` that the first event needs
 

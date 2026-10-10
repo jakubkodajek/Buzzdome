@@ -1,0 +1,27 @@
+{
+  "format": 1,
+  "id": "builtin.gala",
+  "version": "1.0.0",
+  "name": { "cs": "Gala", "en": "Gala" },
+  "parent": "builtin.classic",
+  "backgrounds": {
+    "default": "backgrounds/gala.svg"
+  },
+  "colors": {
+    "glow": "#d4af3780",
+    "panel": "#d4af371f",
+    "bar": "#121212",
+    "barEdge": "#d4af37",
+    "tile": "#1a1712",
+    "accent": "#f2d272",
+    "answerA": "#1f3f8f",
+    "answerB": "#8c1c2c",
+    "answerC": "#1b5e3b",
+    "answerD": "#c9a227",
+    "correct": "#1f8a4c",
+    "wrong": "#b3261e"
+  },
+  "fonts": {
+    "heading": "fonts/Cinzel.woff2"
+  }
+}

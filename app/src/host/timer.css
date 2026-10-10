@@ -168,11 +168,13 @@
   display: block;
 }
 
+/* A monospaced font, not the theme's: every digit as wide as the unlit 8
+   behind it, whatever figures the theme's font has. */
 .digital-unlit,
 .timer-digital .timer-seconds {
-  font-family: var(--theme-font-heading);
+  font-family: ui-monospace, "Cascadia Mono", Consolas, "SF Mono", Menlo, "DejaVu Sans Mono", monospace;
   font-weight: 800;
-  letter-spacing: 4px;
+  letter-spacing: 2px;
 }
 
 .digital-unlit {
@@ -239,9 +241,12 @@
   height: 138px;
 }
 
+/* The glass in the bar's text colour, so it shows on a light bar too. */
 .hourglass-glass {
-  fill: rgba(255, 255, 255, 0.12);
-  stroke: rgba(255, 255, 255, 0.85);
+  fill: currentColor;
+  fill-opacity: 0.12;
+  stroke: currentColor;
+  stroke-opacity: 0.85;
   stroke-width: 3;
   stroke-linejoin: round;
 }

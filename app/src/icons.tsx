@@ -389,6 +389,22 @@ export function CategoryIcon(props: IconProps) {
   );
 }
 
+export function ChevronLeftIcon(props: IconProps) {
+  return (
+    <LineIcon {...props}>
+      <path d="M14.5 5.5 8 12l6.5 6.5" />
+    </LineIcon>
+  );
+}
+
+export function ChevronRightIcon(props: IconProps) {
+  return (
+    <LineIcon {...props}>
+      <path d="M9.5 5.5 16 12l-6.5 6.5" />
+    </LineIcon>
+  );
+}
+
 /** A stopwatch: a question's clock. */
 export function TimerIcon(props: IconProps) {
   return (

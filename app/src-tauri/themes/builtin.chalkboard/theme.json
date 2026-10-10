@@ -1,0 +1,27 @@
+{
+  "format": 1,
+  "id": "builtin.chalkboard",
+  "version": "1.0.0",
+  "name": { "cs": "Tabule", "en": "Chalkboard" },
+  "parent": "builtin.classic",
+  "backgrounds": {
+    "default": "backgrounds/chalkboard.svg"
+  },
+  "colors": {
+    "text": "#f7f5ee",
+    "shadow": "#00000080",
+    "glow": "#ffffff40",
+    "panel": "#ffffff14",
+    "bar": "#4a3020",
+    "barEdge": "#c8925e",
+    "tile": "#22382b",
+    "accent": "#fff3a3",
+    "answerA": "#2f6aa8",
+    "answerB": "#b8562e",
+    "answerC": "#3d7f4c",
+    "answerD": "#d4ab3c"
+  },
+  "fonts": {
+    "heading": "fonts/Caveat.woff2"
+  }
+}

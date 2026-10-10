@@ -341,6 +341,53 @@
   gap: 2px;
 }
 
+/* The themes give way when the ribbon is narrow, down to a tile and its arrows. */
+.ribbon-group.gallery,
+.ribbon-group.gallery .ribbon-group-body {
+  min-width: 0;
+}
+
+.gallery-strip {
+  display: flex;
+  align-items: stretch;
+  min-width: 136px;
+}
+
+/* Pages end on whole tiles. */
+.gallery-strip .theme-gallery {
+  min-width: 0;
+  overflow: hidden;
+  scroll-snap-type: x mandatory;
+}
+
+.gallery-strip .theme-tile {
+  scroll-snap-align: start;
+}
+
+.studio .gallery-scroll {
+  flex: none;
+  width: 16px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  color: var(--muted);
+}
+
+.studio .gallery-scroll:hover:not(:disabled) {
+  border-color: var(--hover-line);
+  background: var(--hover);
+  color: inherit;
+}
+
+.studio .gallery-scroll:disabled {
+  opacity: 0.35;
+}
+
+.gallery-scroll svg {
+  width: 14px;
+  height: 14px;
+}
+
 .studio .theme-tile {
   display: flex;
   flex-direction: column;
