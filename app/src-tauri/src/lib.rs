@@ -92,7 +92,8 @@ struct AppState(Mutex<Inner>);
 /// (`Hardware::change_settings`) is never taken under this one, and is
 /// taken before the learn lock. The close request
 /// (`app_windows::CloseRequest`) is taken under this one when a show begins
-/// or ends, and holds no other lock.
+/// or ends, and holds no other lock. The updates lock (`updates::Updates`)
+/// is taken before this one and never under it.
 fn lock_show(app: &AppHandle) -> MutexGuard<'_, Inner> {
     app.state::<AppState>().inner().0.lock().unwrap()
 }

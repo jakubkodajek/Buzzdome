@@ -24,16 +24,18 @@ are public: anyone who finds it can download the installers.
 2. In `buzzdome-updates`: Actions > Release > Run workflow. `ref` is the
    branch, tag or commit to build (`main`); `notes` say what changed, in
    Czech: the quizmaster reads them before installing.
-3. The workflow refuses a version that is not higher than the latest
-   release, builds the Windows installer, then the macOS one (one after the
-   other, as each adds its platforms to the release's `latest.json`),
-   checks that `latest.json` names every platform and only then publishes
-   the release. From then on each app offers it the next time the Director
-   opens without a show.
+3. The workflow builds the commit `ref` points to when it starts and
+   refuses a version that is not higher than every release. It builds the
+   Windows installer and the macOS app into a draft release, then checks
+   each update the way the installed apps will: signed by the key whose
+   public half is in that commit's `tauri.conf.json`, for the version it
+   declares. Only then does it write `latest.json` and publish the release.
+   From then on each app offers it the next time the Director opens without
+   a show.
 
-The release page also serves a first install:
-`Buzzdome_<version>_x64-setup.exe` for Windows, `Buzzdome_<version>_universal.dmg`
-for macOS.
+The latest installers for a first install always have the same address:
+`https://github.com/jakubkodajek/buzzdome-updates/releases/latest/download/Buzzdome_x64-setup.exe`
+for Windows and `.../Buzzdome_universal.dmg` for macOS.
 
 ## What the app checks
 
@@ -46,7 +48,8 @@ for macOS.
 - The update server is reached over HTTPS only.
 - Nothing installs while a show runs, as installing ends the app; the show
   state stays locked while the new version goes in, so no show can begin
-  meanwhile. On Windows the installer runs in its passive mode (a progress
+  meanwhile. A show that begins during the download puts the update off:
+  the Director offers it again once the show ends. On Windows the installer runs in its passive mode (a progress
   bar, no questions) and starts the new version; on macOS the app replaces
   itself and starts again.
 - Debug builds (`npm run tauri dev`, the E2E tests) never ask the server.
@@ -54,6 +57,11 @@ for macOS.
 A release build merges `app/src-tauri/tauri.release.conf.json` into the
 configuration, which makes the bundler sign the updater files. Every other
 build (`npm run tauri build`, the installers job in `build.yml`) needs no key.
+
+The jobs that hold the release key run no action from another repository,
+only the runner's own tools and the app's locked dependencies, installed
+without their install scripts: whoever could change such an action could
+take the key and sign an update every installed app accepts.
 
 ## One-time setup
 
