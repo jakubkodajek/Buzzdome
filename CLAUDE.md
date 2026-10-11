@@ -77,7 +77,8 @@ event order, `app_windows.rs` the Director and projector windows, `remote.rs` wh
 `teams.rs` prepared team names, `media_player.rs` media library, player, volume and sound board,
 `themes.rs` built-in themes, `fonts.rs` installed fonts, `app_file.rs` settings files,
 `app_icon.rs` the windows' icon colour, `stage_lights.rs` the lights setup and what the show tells them,
-`fixture_library.rs` the fixture library in use and its download, `ai.rs` `--mcp` and File › AI assistants),
+`fixture_library.rs` the fixture library in use and its download, `ai.rs` `--mcp` and File › AI assistants,
+`updates.rs` checking for and installing app updates),
 `app/src` (React UI: `director/`, `host/`, `editor/`; `browser-guard.ts` and `error-boundary.tsx`
 keep the windows from acting as a browser or going blank), `app/e2e` (E2E tests through WebDriver),
 `samples/demo-quiz.json`.

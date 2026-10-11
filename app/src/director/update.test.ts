@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { translator } from "../i18n";
-import { installQuestion, installStatus } from "./update";
+import { installQuestion, installStatus, waitsForShow } from "./update";
 
 const t = translator("en");
 
@@ -23,5 +23,13 @@ describe("installStatus", () => {
   it("gives no percent when the server does not say the size", () => {
     expect(installStatus(t, "0.2.0", { downloaded: 5_000, total: null })).toBe(t("updateDownloading", { version: "0.2.0" }));
     expect(installStatus(t, "0.2.0", { downloaded: 0, total: 0 })).toBe(t("updateDownloading", { version: "0.2.0" }));
+  });
+});
+
+describe("waitsForShow", () => {
+  it("lets only a show begun during the download put the update off", () => {
+    expect(waitsForShow({ code: "showRunning" })).toBe(true);
+    expect(waitsForShow({ code: "updateFailed", detail: "signature" })).toBe(false);
+    expect(waitsForShow(new Error("showRunning"))).toBe(false);
   });
 });

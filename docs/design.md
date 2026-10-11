@@ -1724,10 +1724,13 @@ Releases the installed apps update to are built and published by the
 Release workflow of the public repository `jakubkodajek/buzzdome-updates`
 (free Actions minutes; it holds no source code), merging
 `tauri.release.conf.json` so the bundler signs the updater files with the
-release key. The app's updater (`tauri-plugin-updater`, `updates.rs`) is
+release key. It runs no action from another repository, and publishes only
+updates that verify against the public key in the built commit for the
+version that commit declares. The app's updater (`tauri-plugin-updater`, `updates.rs`) is
 asked from the Director, which offers a newer version only while no show
 runs, since installing ends the app; `update_install` keeps the show state
-locked while the new version goes in, so no show begins meanwhile. Each
+locked while the new version goes in, so no show begins meanwhile, and a
+show begun during the download puts the update off until it ends. Each
 download is verified against `plugins.updater.pubkey`, and its signature
 must name the version `latest.json` announces. Debug builds never ask.
 How to release: `docs/releasing.md`.

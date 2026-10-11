@@ -3,7 +3,7 @@ import { api } from "../api";
 import { useApp, useReport } from "../app-context";
 import { confirmAction } from "../confirm";
 import type { AvailableUpdate, UpdateProgress } from "../types";
-import { installQuestion, installStatus } from "./update";
+import { installQuestion, installStatus, waitsForShow } from "./update";
 
 /**
  * Offers the newer version of the app the update server has, while no show
@@ -39,7 +39,9 @@ export function UpdateBanner({ showRunning }: { showRunning: boolean }) {
         // On success the app ends and starts again in the new version.
         return api.updateInstall(setProgress);
       })
-      .catch(report)
+      .catch((error: unknown) => {
+        if (!waitsForShow(error)) report(error);
+      })
       .finally(() => setProgress(undefined));
   };
 

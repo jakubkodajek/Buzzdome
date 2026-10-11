@@ -100,6 +100,8 @@ struct AppState(Mutex<Inner>);
 /// (`app_windows::CloseRequest`) is taken under this one when a show begins
 /// or ends, and holds no other lock; so does what the stage lights were
 /// last told (`stage_lights`), taken under this one with every change.
+/// The updates lock (`updates::Updates`) is taken before this one and
+/// never under it.
 fn lock_show(app: &AppHandle) -> MutexGuard<'_, Inner> {
     app.state::<AppState>().inner().0.lock().unwrap()
 }
