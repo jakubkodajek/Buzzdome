@@ -90,6 +90,8 @@ const ERROR_KEYS: Record<Exclude<AppError["code"], WordedApart>, StringKey> = {
   learnNotStarted: "errLearnNotStarted",
   learnTooFewPresses: "errLearnTooFewPresses",
   learnInconsistent: "errLearnInconsistent",
+  noUpdate: "errNoUpdate",
+  updateFailed: "errUpdateFailed",
   noDataFolder: "errNoDataFolder",
   system: "errSystem",
   libraryDownload: "errLibraryDownload",

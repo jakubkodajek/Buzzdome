@@ -25,6 +25,7 @@ mod show_thread;
 mod stage_lights;
 mod teams;
 mod themes;
+mod updates;
 
 use buzzers::clock::ShowClock;
 use buzzers::receiver::HardwareDriver;
@@ -671,6 +672,7 @@ pub fn run() {
         // the running app's Director forward instead.
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| app_windows::show_director(app)))
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(app_windows::navigation_guard());
     // Only macOS has an app menu, whose Quit asks during a show.
     #[cfg(target_os = "macos")]
@@ -681,6 +683,7 @@ pub fn run() {
         .on_menu_event(app_windows::on_menu_event)
         .manage(inner.close_request.clone())
         .manage(editor::EditorLock::default())
+        .manage(updates::Updates::default())
         .manage(AppState(Mutex::new(inner)))
         .setup(|app| {
             app_log::start(app.path().app_log_dir()?, &app.package_info().version.to_string());
@@ -801,6 +804,8 @@ pub fn run() {
             stage_lights::lights_hold,
             stage_lights::lights_blackout,
             stage_lights::lights_universe,
+            updates::update_check,
+            updates::update_install,
         ])
         .run(context)
         .expect("error while running tauri application");

@@ -87,6 +87,8 @@
     "allow-lights-library-reset",
     "allow-lights-hold",
     "allow-lights-blackout",
-    "allow-lights-universe"
+    "allow-lights-universe",
+    "allow-update-check",
+    "allow-update-install"
   ]
 }

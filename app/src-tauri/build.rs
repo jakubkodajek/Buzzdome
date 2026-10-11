@@ -83,6 +83,8 @@ const COMMANDS: &[&str] = &[
     "lights_hold",
     "lights_blackout",
     "lights_universe",
+    "update_check",
+    "update_install",
 ];
 
 fn main() {

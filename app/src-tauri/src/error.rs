@@ -198,6 +198,15 @@ pub enum AppError {
     #[error("the downloaded fixture library has only {models} models")]
     LibraryTooSmall { models: usize, least: usize },
 
+    // Updates of the app.
+    /// No newer version was found to install.
+    #[error("no newer version of the app was found")]
+    NoUpdate,
+    /// Checking for, downloading or installing a newer version failed;
+    /// `detail` is the updater's message.
+    #[error("updating the app failed: {detail}")]
+    UpdateFailed { detail: String },
+
     // Windows and the operating system.
     /// The system gave the app no folder for its data (team names, sessions, the media library).
     #[error("the app has no data folder")]
@@ -309,6 +318,12 @@ impl From<LearnError> for AppError {
             LearnError::Inconsistent => AppError::LearnInconsistent,
             LearnError::Conflict { buzzer, button } => AppError::LearnConflict { buzzer, button },
         }
+    }
+}
+
+impl From<tauri_plugin_updater::Error> for AppError {
+    fn from(e: tauri_plugin_updater::Error) -> AppError {
+        AppError::UpdateFailed { detail: e.to_string() }
     }
 }
 
