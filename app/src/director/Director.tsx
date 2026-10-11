@@ -50,6 +50,7 @@ import { MediaPlayerTab } from "./MediaPlayerTab";
 import { ResponsesTab } from "./ResponsesTab";
 import { SettingsTab, useProjectorSettings, type ProjectorSettings } from "./SettingsTab";
 import { TeamsTab } from "./TeamsTab";
+import { UpdateBanner } from "./UpdateBanner";
 import { confirmAction } from "../confirm";
 import { useMediaPlayer, type MediaPlayer } from "./useMediaPlayer";
 import { restartOutcome } from "./restart";
@@ -162,6 +163,7 @@ function DirectorLayout({ testRun, onEditor }: { testRun: boolean; onEditor: () 
         </nav>
         <NotSavedBanner />
         <LearnBanner />
+        <UpdateBanner showRunning={view !== null} />
         <div className="tab-body" role="tabpanel">
           <ThemeContext value={theme}>
             {/* A tab that fails to render keeps the rest of the window, and its keys, working. */}

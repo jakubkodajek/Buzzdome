@@ -37,6 +37,11 @@ not code-signed yet:
 - Linux: to open the receiver without root, install the udev rule that the
   Receiver tab shows.
 
+Once installed from a release of
+[`buzzdome-updates`](https://github.com/jakubkodajek/buzzdome-updates/releases),
+the app offers newer versions itself when the Director opens without a show
+(Windows and macOS). How releases are made: [`docs/releasing.md`](docs/releasing.md).
+
 ## Development
 
 Needs Rust (stable) and Node.js.

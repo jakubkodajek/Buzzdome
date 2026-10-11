@@ -1,3 +1,4 @@
+import { getVersion } from "@tauri-apps/api/app";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import blueIcon from "../../src-tauri/icons/colors/buzzdome-blue.png";
 import greenIcon from "../../src-tauri/icons/colors/buzzdome-green.png";
@@ -99,8 +100,27 @@ export function SettingsTab({ projector }: { projector: ProjectorSettings }) {
         </select>
       </fieldset>
       <p className="muted">{t("keyboardHint")}</p>
+      <AppVersion />
     </div>
   );
+}
+
+/** The app's version, which an update changes. */
+function AppVersion() {
+  const { t } = useApp();
+  const [version, setVersion] = useState<string | null>(null);
+  useEffect(() => {
+    let alive = true;
+    getVersion()
+      .then((v) => {
+        if (alive) setVersion(v);
+      })
+      .catch((e) => console.error(e));
+    return () => {
+      alive = false;
+    };
+  }, []);
+  return version && <p className="muted">{t("appVersion", { name: t("appTitle"), version })}</p>;
 }
 
 /** The colour of the windows' icon, orange unless another is chosen. */

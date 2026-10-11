@@ -3,6 +3,8 @@ members = ["crates/quiz-core", "crates/quiz-file", "crates/buzzers", "crates/sho
 resolver = "2"
 
 [workspace.package]
+# The crates' version. The app's own, which releases raise and updates
+# compare, is `version` in app/src-tauri/tauri.conf.json.
 version = "0.1.0"
 edition = "2021"
 

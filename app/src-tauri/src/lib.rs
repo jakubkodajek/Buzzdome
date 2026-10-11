@@ -21,6 +21,7 @@ pub mod sheet_reader;
 mod show_thread;
 mod teams;
 mod themes;
+mod updates;
 
 use buzzers::clock::ShowClock;
 use buzzers::receiver::HardwareDriver;
@@ -533,6 +534,7 @@ pub fn run() {
         // the running app's Director forward instead.
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| app_windows::show_director(app)))
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(app_windows::navigation_guard());
     // Only macOS has an app menu, whose Quit asks during a show.
     #[cfg(target_os = "macos")]
@@ -543,9 +545,10 @@ pub fn run() {
         .on_menu_event(app_windows::on_menu_event)
         .manage(inner.close_request.clone())
         .manage(editor::EditorLock::default())
+        .manage(updates::Updates::default())
         .manage(AppState(Mutex::new(inner)))
         .setup(|app| {
-            app_log::start(app.path().app_log_dir()?);
+            app_log::start(app.path().app_log_dir()?, &app.package_info().version.to_string());
             editor::move_roaming_drafts(app.handle());
             // One queue for the receiver's events and the quizmaster's commands.
             let (queue, events) = mpsc::channel();
@@ -639,6 +642,8 @@ pub fn run() {
             hardware::receiver_forget_learned,
             hardware::receiver_export_log,
             hardware::receiver_udev_rule,
+            updates::update_check,
+            updates::update_install,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

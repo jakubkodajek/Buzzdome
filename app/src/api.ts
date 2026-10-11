@@ -1,6 +1,7 @@
-import { invoke } from "@tauri-apps/api/core";
+import { Channel, invoke } from "@tauri-apps/api/core";
 import type {
   AppError,
+  AvailableUpdate,
   BoardChange,
   Button,
   BuzzerId,
@@ -33,6 +34,7 @@ import type {
   SheetImport,
   SoundBoard,
   Theme,
+  UpdateProgress,
   ValidationError,
 } from "./types";
 
@@ -113,6 +115,18 @@ export const api = {
   /** Writes the receiver's recent reports to a file the quizmaster picks; false when they cancel. */
   receiverExportLog: (picker: Picker) => invoke<boolean>("receiver_export_log", { picker }),
   receiverUdevRule: () => invoke<string>("receiver_udev_rule"),
+  /** The newer version of the app the update server offers, if any; asked until it answers once a run. */
+  updateCheck: () => invoke<AvailableUpdate | null>("update_check"),
+  /**
+   * Downloads the update found, verifies it and installs it, telling
+   * `onProgress` how the download goes; the app then starts again in the
+   * new version. Refused while a show runs.
+   */
+  updateInstall: (onProgress: (progress: UpdateProgress) => void) => {
+    const progress = new Channel<UpdateProgress>();
+    progress.onmessage = onProgress;
+    return invoke<void>("update_install", { progress });
+  },
   // The editor's commands on a draft name it (`EditorDraft.id`): one that
   // another draft has replaced since is refused with `draftChanged`.
   /** The quiz editor's draft left from last time, if any. */

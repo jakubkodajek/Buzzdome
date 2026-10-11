@@ -66,6 +66,8 @@
     "allow-receiver-learn-finish",
     "allow-receiver-forget-learned",
     "allow-receiver-export-log",
-    "allow-receiver-udev-rule"
+    "allow-receiver-udev-rule",
+    "allow-update-check",
+    "allow-update-install"
   ]
 }

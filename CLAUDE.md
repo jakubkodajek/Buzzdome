@@ -124,7 +124,8 @@ UI conventions (keep one way of doing each thing):
 - `docs/specification.md`: requirements with IDs (buzzer link, themes, plugins).
   `docs/design.md`: architecture, buzzer stack. `docs/quiz-format.md`: the quiz
   file format. `docs/hardware-test.md`:
-  checklist for the real receiver. Jakub keeps a copy of the reference manual
+  checklist for the real receiver. `docs/releasing.md`: how versions are
+  released and how installed apps update. Jakub keeps a copy of the reference manual
   in `docs/` locally; it is gitignored and must never be committed.
 - `replica/recon.md`: screens (S01..S42), flows (F01..F10), components, data model and
   scoring rules of the reference app. Read it before designing or building a feature.

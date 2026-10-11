@@ -63,6 +63,8 @@ const COMMANDS: &[&str] = &[
     "receiver_forget_learned",
     "receiver_export_log",
     "receiver_udev_rule",
+    "update_check",
+    "update_install",
 ];
 
 fn main() {

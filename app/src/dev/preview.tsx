@@ -65,6 +65,8 @@ const resume = params.get("resume");
 const saving = params.get("saving");
 /** `unreadable`: the editor's draft does not read; `failing`: writing it fails, as on a full disk; `busy`: a sheet import does not finish. */
 const draft = params.get("draft");
+/** `available`: the update server offers a newer version; `installing`: it also downloads without end once asked. */
+const update = params.get("update");
 /** `slide`: the fourth slide has no answers list, so it fails to render; `view`: the show's view has no players, so the Director's screen does. */
 const broken = params.get("broken");
 /** The slides, the fourth broken when asked (`broken`). */
@@ -642,6 +644,13 @@ mockIPC(
         };
       case "receiver_devices":
         return [];
+      case "update_check":
+        return update ? { version: "0.2.0", notes: "Fixes the podium for shared places.\nThe Director offers newer versions." } : null;
+      case "update_install":
+        called.push({ cmd });
+        return update === "installing" ? new Promise(() => undefined) : Promise.reject({ code: "updateFailed", detail: "error sending request" });
+      case "plugin:app|version":
+        return "0.1.0";
       case "receiver_udev_rule":
         return 'SUBSYSTEM=="hidraw", ATTRS{idVendor}=="VVVV", MODE="0660", TAG+="uaccess"';
       default:

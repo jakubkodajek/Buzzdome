@@ -362,14 +362,16 @@ pub async fn receiver_forget_learned(app: AppHandle) -> CmdResult<()> {
 #[tauri::command]
 pub async fn receiver_export_log(app: AppHandle, window: Window, picker: Picker) -> CmdResult<bool> {
     let Some(path) = dialogs::pick_save(window, picker, "txt", None).await? else { return Ok(false) };
-    off_ui(move || write_log(&app.state::<Hardware>(), &path).map(|()| true)).await
+    let version = app.package_info().version.to_string();
+    off_ui(move || write_log(&app.state::<Hardware>(), &version, &path).map(|()| true)).await
 }
 
-fn write_log(hw: &Hardware, path: &Path) -> CmdResult<()> {
+/// Writes the receiver's recent reports to `path`, naming the app's `version`.
+fn write_log(hw: &Hardware, version: &str, path: &Path) -> CmdResult<()> {
     let status = hw.handle.as_ref().map(ReceiverHandle::status);
     let mut out = format!(
         "# Receiver log, app {} on {}\n# status: {}\n# unix-ms\tbytes (hex)\tdecoded\n",
-        env!("CARGO_PKG_VERSION"),
+        version,
         std::env::consts::OS,
         serde_json::to_string(&status).unwrap_or_default()
     );

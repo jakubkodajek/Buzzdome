@@ -5,6 +5,7 @@ import type { Slide } from "./bindings/Slide";
 
 export type { AnswerMode } from "./bindings/AnswerMode";
 export type { AppError } from "./bindings/AppError";
+export type { AvailableUpdate } from "./bindings/AvailableUpdate";
 export type { BoardChange } from "./bindings/BoardChange";
 export type { Background } from "./bindings/Background";
 export type { AnswerResults } from "./bindings/AnswerResults";
@@ -79,6 +80,7 @@ export type { Theme } from "./bindings/Theme";
 export type { ThemeFile } from "./bindings/ThemeFile";
 export type { TimerDesign } from "./bindings/TimerDesign";
 export type { Transparency } from "./bindings/Transparency";
+export type { UpdateProgress } from "./bindings/UpdateProgress";
 export type { ValidationError } from "./bindings/ValidationError";
 export type { VideoClip } from "./bindings/VideoClip";
 export type { VideoEffect } from "./bindings/VideoEffect";
