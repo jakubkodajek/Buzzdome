@@ -1,8 +1,9 @@
 // After a failed test, keeps what each window showed (a screenshot and its
-// text) in e2e-output/, which CI uploads.
+// text) in e2e-output/, which CI uploads; after each file, makes sure no app
+// it started is left running, whatever its own clean-up did.
 
 import { mkdirSync, writeFileSync } from "node:fs";
-import { afterEach } from "vitest";
+import { afterAll, afterEach } from "vitest";
 import { App } from "./harness";
 
 afterEach(async (context) => {
@@ -20,4 +21,9 @@ afterEach(async (context) => {
       // That window is not open, or the app is gone: nothing to keep.
     }
   }
+});
+
+afterAll(async () => {
+  await App.running?.quit();
+  App.running = null;
 });

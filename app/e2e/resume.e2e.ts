@@ -4,7 +4,7 @@
 
 import { afterAll, describe, expect, test } from "vitest";
 import type { Button, GameView } from "../src/types";
-import { App, dataFolder, sleep, t } from "./harness";
+import { App, dataFolder, t } from "./harness";
 
 const data = dataFolder();
 let app: App;
@@ -117,7 +117,6 @@ describe("a show killed mid-way resumes", () => {
 /** Next from wherever the show is, waiting for the step to change. */
 async function nextAny(): Promise<GameView> {
   const before = (await app.view())!;
-  await sleep(50);
   await app.step("next");
   return app.waitView("the next step", (view) => view.slideIndex !== before.slideIndex || step(view) !== step(before));
 }

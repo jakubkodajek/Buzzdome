@@ -9,13 +9,13 @@ export type ElementRef = { [ELEMENT]: string };
 
 /** Keys as WebDriver names them (https://www.w3.org/TR/webdriver2/#keyboard-actions). */
 export const Key = {
-  Enter: "",
-  Escape: "",
+  Enter: "\uE007",
+  Escape: "\uE00C",
   Space: " ",
-  ArrowRight: "",
-  Control: "",
-  Shift: "",
-  F5: "",
+  ArrowRight: "\uE014",
+  Control: "\uE009",
+  Shift: "\uE008",
+  F5: "\uE035",
 } as const;
 
 export class WebDriverError extends Error {

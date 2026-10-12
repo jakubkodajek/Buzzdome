@@ -1,29 +1,35 @@
 name: E2E
 
-# The real app driven through WebDriver (tauri-driver with WebKitWebDriver)
-# on a virtual display: a whole show, crashes and resumes, every Director
-# and editor button (app/e2e). Called by build.yml on every push and by
-# nightly.yml, which plays the suite several times over.
+# The real app driven through WebDriver (tauri-driver): a whole show,
+# crashes and resumes, every Director and editor button (app/e2e). On Linux
+# (WebKitWebDriver, a virtual display) and on Windows (msedgedriver with
+# WebView2, as on the event laptop). macOS has no WebDriver for its web view.
+# Called by build.yml on every push and by nightly.yml, which plays the
+# suite several times over. Windows minutes cost more, so the Windows suite
+# runs only where the caller asks for it.
 on:
   workflow_call:
     inputs:
       runs:
-        description: How many times the whole suite runs.
+        description: How many times the whole suite runs on Linux.
         type: number
         default: 1
+      windows-runs:
+        description: How many times the whole suite runs on Windows (0 skips it).
+        type: number
+        default: 0
 
 permissions:
   contents: read
 
 env:
-  RUST_TOOLCHAIN: "1.97.0"
-  LINUX_DEPS: libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libudev-dev
   # WebKitWebDriver, a virtual display, and xdotool for the system's file picker.
   E2E_DEPS: webkit2gtk-driver xvfb xdotool
   TAURI_DRIVER_VERSION: "2.1.0"
+  MSEDGEDRIVER_TOOL_REV: 8c4b34f51b45f5cf08013366d703de464ab871d1
 
 jobs:
-  e2e:
+  linux:
     runs-on: ubuntu-22.04
     timeout-minutes: 90
     steps:
@@ -31,8 +37,9 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Install system libraries
-        run: sudo apt-get update && sudo apt-get install -y $LINUX_DEPS $E2E_DEPS
+      - uses: ./.github/actions/linux-deps
+        with:
+          extra: ${{ env.E2E_DEPS }}
 
       - uses: actions/setup-node@v4
         with:
@@ -40,9 +47,7 @@ jobs:
           cache: npm
           cache-dependency-path: app/package-lock.json
 
-      - uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - uses: ./.github/actions/rust
 
       - uses: Swatinem/rust-cache@v2
         with:
@@ -78,6 +83,76 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
-          name: e2e-output
+          name: e2e-output-linux
           path: app/e2e-output
           if-no-files-found: ignore
+          retention-days: 14
+
+  windows:
+    if: inputs.windows-runs > 0
+    runs-on: windows-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - uses: ./.github/actions/rust
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: e2e-windows
+
+      - name: Install tauri-driver
+        run: cargo install tauri-driver --locked --version "$env:TAURI_DRIVER_VERSION"
+
+      # The runner's own msedgedriver matches its Edge, not the WebView2
+      # runtime the app runs in, and with it no session started ("DevToolsActivePort
+      # file doesn't exist"). This tool (the one Tauri's
+      # WebDriver CI guide uses) fetches the driver of the installed WebView2.
+      - name: Install the msedgedriver that matches WebView2
+        run: |
+          cargo install --locked --git https://github.com/chippers/msedgedriver-tool --rev "$env:MSEDGEDRIVER_TOOL_REV"
+          $dir = New-Item -ItemType Directory -Force (Join-Path $env:RUNNER_TEMP "msedgedriver")
+          Push-Location $dir
+          msedgedriver-tool
+          Pop-Location
+          Write-Output "runner's driver: $(& (Join-Path $env:EDGEWEBDRIVER 'msedgedriver.exe') --version)"
+          Write-Output "WebView2's driver: $(& (Join-Path $dir 'msedgedriver.exe') --version)"
+          "NATIVE_DRIVER=$(Join-Path $dir 'msedgedriver.exe')" >> $env:GITHUB_ENV
+
+      - name: Install UI dependencies
+        working-directory: app
+        run: npm ci
+
+      - name: Build the app
+        working-directory: app
+        run: npm run tauri build -- --debug --no-bundle
+
+      # The tests use this machine's real app data folders, which is why they
+      # run only on CI (app/e2e/harness.ts).
+      - name: Run the E2E tests
+        working-directory: app
+        env:
+          RUNS: ${{ inputs.windows-runs }}
+        run: |
+          for ($run = 1; $run -le [int]$env:RUNS; $run++) {
+            Write-Output "::group::run $run of $env:RUNS"
+            npm run e2e
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            Write-Output "::endgroup::"
+          }
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: e2e-output-windows
+          path: app/e2e-output
+          if-no-files-found: ignore
+          retention-days: 14
