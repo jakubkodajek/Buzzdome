@@ -1,7 +1,8 @@
 //! Random shows played to the end, checking every rule after every step
 //! (`show_sim::Show::check`). `SOAK_SHOWS` sets how many (40 by default;
-//! CI's soak job and the nightly run play thousands, in release), `SOAK_FIRST`
-//! the first seed, and `SOAK_SEED` replays one show that failed.
+//! the nightly run plays thousands, in release), `SOAK_FIRST` the first
+//! seed, and `SOAK_SEED` replays one show that failed. The long evening is
+//! left to the nightly run (`--include-ignored`), so every push stays quick.
 
 use show_sim::{play, play_many, Plan, MAX_BUZZERS};
 
@@ -19,6 +20,7 @@ fn random_shows_keep_every_rule() {
 }
 
 #[test]
+#[ignore = "takes about 20 s in debug; the nightly run plays it"]
 fn a_long_evening_with_fifty_buzzers_keeps_every_rule() {
     // One show of thousands of steps: a whole evening's journal, replayed in full now and then.
     let show = play(env("SOAK_SEED").unwrap_or(2026), Plan { steps: 3_000, replay_every: 500 });

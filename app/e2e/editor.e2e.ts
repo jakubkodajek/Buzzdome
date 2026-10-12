@@ -2,11 +2,11 @@
 // ribbon, every ribbon button clicked, a test run, saving through the
 // system's file picker, and the draft surviving a crash.
 
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import type { StringKey } from "../src/i18n";
-import { App, dataFolder, sleep, t, waitFor } from "./harness";
+import { App, dataFolder, t, waitFor } from "./harness";
 import { Key } from "./webdriver";
 
 const data = dataFolder();
@@ -48,6 +48,22 @@ const NOT_CLICKED: (StringKey | { text: string })[] = [
 ];
 
 const slideCount = () => app.count(".thumbnails .thumbnail-number");
+
+/** How many slides each editor draft of the app holds on disk (`quiz.json` in a `draft-*` folder, editor.rs). */
+function draftSlides(): number[] {
+  const counts: number[] = [];
+  for (const folder of app.storage.filter((f) => existsSync(f))) {
+    for (const entry of readdirSync(folder, { recursive: true, encoding: "utf8" })) {
+      if (!/(^|[\\/])draft-[^\\/]+[\\/]quiz\.json$/.test(entry)) continue;
+      try {
+        counts.push((JSON.parse(readFileSync(join(folder, entry), "utf8")) as { slides: unknown[] }).slides.length);
+      } catch {
+        // Being written right now.
+      }
+    }
+  }
+  return counts;
+}
 
 async function ctrl(key: string, shift = false): Promise<void> {
   await app.page.keys([key], shift ? [Key.Control, Key.Shift] : [Key.Control]);
@@ -115,8 +131,8 @@ describe("the quiz editor", () => {
 
   test("the draft survives a crash", async () => {
     const slides = await slideCount();
-    // The draft is written a moment after each change.
-    await sleep(1500);
+    // The draft is written a moment after each change: wait until it is on disk.
+    await waitFor("the draft on disk", async () => draftSlides().includes(slides));
     await app.crash();
     app = await App.launch(data);
     await app.press("quizEditor");

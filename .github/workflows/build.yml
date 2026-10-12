@@ -1,24 +1,21 @@
 name: Build
 
 # Checks every push. Installers for Windows, macOS and Linux are built on
-# main, on version tags (v*) and on demand ("Run workflow" in the Actions tab),
-# because macOS runner minutes are the most expensive on a private repository.
-# Download them from the run's "Artifacts" section.
+# version tags (v*) and on demand ("Run workflow" in the Actions tab), not on
+# every merge, because runner minutes on a private repository are paid and
+# macOS minutes cost the most. Download them from the run's "Artifacts" section.
 on:
   push:
   workflow_dispatch:
 
+# A newer push to a branch cancels the run it replaces; main runs every merge.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
 # The jobs only read the repository; installers go up as run artifacts.
 permissions:
   contents: read
-
-env:
-  # The Rust release CI builds with, so a lint added by a new release cannot
-  # turn CI red unasked; raise it on purpose, with the fixes it asks for,
-  # together with rust-toolchain.toml.
-  RUST_TOOLCHAIN: "1.97.0"
-  # hidapi (buzzer receiver) needs libudev on Linux; the rest is Tauri's WebKitGTK stack.
-  LINUX_DEPS: libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libudev-dev
 
 jobs:
   check:
@@ -28,8 +25,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Install system libraries
-        run: sudo apt-get update && sudo apt-get install -y $LINUX_DEPS
+      - uses: ./.github/actions/linux-deps
 
       - uses: actions/setup-node@v4
         with:
@@ -37,9 +33,8 @@ jobs:
           cache: npm
           cache-dependency-path: app/package-lock.json
 
-      - uses: dtolnay/rust-toolchain@master
+      - uses: ./.github/actions/rust
         with:
-          toolchain: ${{ env.RUST_TOOLCHAIN }}
           components: clippy
 
       - uses: Swatinem/rust-cache@v2
@@ -94,9 +89,7 @@ jobs:
           cache: npm
           cache-dependency-path: app/package-lock.json
 
-      - uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - uses: ./.github/actions/rust
 
       - uses: Swatinem/rust-cache@v2
         with:
@@ -115,12 +108,17 @@ jobs:
         run: cargo test --workspace
 
   # The real app, clicked through as the quizmaster would (app/e2e).
+  # Windows (dearer minutes) on main, tags and "Run workflow", which can also
+  # be started on a branch.
   e2e:
     uses: ./.github/workflows/e2e.yml
+    with:
+      windows-runs: ${{ (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch') && 1 || 0 }}
 
   installers:
-    needs: [check, windows-tests, e2e]
-    if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
+    # Not after e2e: a flaky E2E run must not hold back an installer before an event.
+    needs: [check, windows-tests]
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
     strategy:
       fail-fast: false
       matrix:
@@ -151,9 +149,8 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Install system libraries
+      - uses: ./.github/actions/linux-deps
         if: matrix.name == 'linux'
-        run: sudo apt-get update && sudo apt-get install -y $LINUX_DEPS
 
       - uses: actions/setup-node@v4
         with:
@@ -161,9 +158,8 @@ jobs:
           cache: npm
           cache-dependency-path: app/package-lock.json
 
-      - uses: dtolnay/rust-toolchain@master
+      - uses: ./.github/actions/rust
         with:
-          toolchain: ${{ env.RUST_TOOLCHAIN }}
           targets: ${{ matrix.rust-targets }}
 
       - uses: Swatinem/rust-cache@v2
