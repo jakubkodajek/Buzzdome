@@ -145,7 +145,11 @@ UI conventions (keep one way of doing each thing):
 - Clean room. Rebuild behaviour from the recon map and manuals. Never copy the
   reference app's code, text, screenshots, sounds, skins, icons or example quizzes.
   Never use decompiled code or vendor SDKs obtained from unofficial reposts; the
-  buzzer SDK comes from the manufacturer or not at all.
+  buzzer SDK comes from the manufacturer or not at all. One exception, Jakub's
+  decision of 2026-10-20 for this private, non-distributed app: the Enjoy RF215
+  protocol is implemented from a description of it written in our own words
+  from an unofficial copy of the SDK (`docs/design.md` 2.4). No file or code
+  from that copy goes into the repository.
 - No trademarked names in the product or UI: not QuizXpress, Jeopardy!, Who Wants to
   Be a Millionaire?, Family Feud or Wheel of Fortune. Use generic names
   ("topic board", "ladder round", "survey round").

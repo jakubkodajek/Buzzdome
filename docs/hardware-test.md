@@ -36,13 +36,46 @@ about 30 minutes with four buzzers.
    goes is the receiver. Note its VID:PID, usage and interface.
 3. If several rows share that VID:PID, start with the one whose usage page is
    not `0001` (keyboard or mouse).
-4. Click **Use**. Expected: status "Connected ... protocol raw" (green).
+4. Click **Use**. Expected: status "Connected ..." (green), with the
+   protocol:
+   - **Enjoy RF215** for VID:PID `10c4:1819` once the receiver answered:
+     go on with section 3 (learn mode is not offered, section 5 does not
+     apply).
+   - **Enjoy RF215, but the receiver did not answer the connect command**:
+     the cable is the RF215's, the receiver is not. Check its power light
+     and the RJ45 plug, then unplug and plug the cable again. If it stays,
+     note it and go on with section 3 all the same.
+   - **raw reports only** for any other receiver: skip section 3.
    - Linux: if it says the device cannot be opened, copy the udev rule from
      the tab, install it as shown, unplug and replug.
    - macOS: if asked about Input Monitoring, allow the app, then restart it.
    - Windows: if it cannot open, make sure no other quiz program is running.
 
-## 3. Record raw reports
+## 3. Enjoy RF215
+
+Only when the status names the Enjoy RF215. The app sets the receiver up by
+itself, as described in `docs/design.md` (2.4); these steps check what could
+not be checked without the hardware. Keep the Receiver tab open: "Presses"
+shows what the app read, "Raw data" the bytes behind it.
+
+1. With no show running, the buzzers take answers. Press A, B, C and D on
+   buzzer 1, then on buzzers 2 to 4. Expected: "buzzer N, button X" under
+   "Presses" for each, with the buzzer's own number.
+   - Raw data but no presses, or the wrong buttons: note which, then go on
+     with step 5 of section 4 (export).
+   - Nothing at all: check the label (section 1). A 303S speaks another
+     protocol, which the app does not have yet.
+2. Press the big button on buzzer 1 and note whether it shows as a press
+   (the receiver may report only A to D while everyone answers; teams
+   register with A to D either way).
+3. **Buzzer numbers above 15.** This is the part the app has to guess. Press
+   A on buzzers numbered 16 or more (give one such a number with the
+   vendor's ID programming if none has one). Expected: their own numbers.
+   If they show other numbers (say 0 or 4 for 16 or 20), note each real
+   number and what the app showed, and export the log.
+4. Section 6 (play) then checks the lights and the rounds.
+
+## 4. Record raw reports
 
 1. Press **A** on buzzer 1. Expected: a line appears under "Raw reports".
    - If nothing appears: try the other rows with the same VID:PID. If none
@@ -54,7 +87,10 @@ about 30 minutes with four buzzers.
 4. Hold the big button on buzzer 1 for three seconds.
 5. Click **Export log** and save the file.
 
-## 4. Teach buttons (learn mode)
+## 5. Teach buttons (learn mode)
+
+Not with the Enjoy RF215, whose protocol the app knows: the section is
+hidden then.
 
 1. Under "Teach buttons": buzzer 1, button A, **Start**. Press A three times,
    then **Save**. The form moves on to B, then C, D, the big button, then
@@ -64,7 +100,7 @@ about 30 minutes with four buzzers.
    "Presses". If saving shows a conflict, note which buttons; export the log
    again.
 
-## 5. Play
+## 6. Play
 
 1. Start the demo quiz. In the lobby, press the big button on each buzzer:
    each registers as a team.
@@ -75,15 +111,31 @@ about 30 minutes with four buzzers.
 4. Hold a button: it must count once.
 5. Keyboard keys `1`-`0` still work next to the buzzers.
 
-## 6. Failures
+With the Enjoy RF215 also:
+
+6. Fastest-finger question: when it starts, the buzzers light green
+   (ready); when one presses, it flashes white and beeps and the others
+   turn red (the receiver does this by itself). Note what each light did.
+7. Judge that buzz wrong. Expected: that buzzer shows wrong, then the
+   others can buzz again. Note whether the one judged wrong can buzz
+   again too (it should not).
+8. Judge a buzz right. Expected: that buzzer shows right.
+9. Everyone-answers question: after the results, the buzzers that answered
+   right show right and the others wrong. Note if nothing lights.
+10. Switch one player off in the Director and press their big button at
+    the start of a fastest-finger question. Expected: the others can still
+    buzz.
+
+## 7. Failures
 
 1. Mid-question, pull the USB cable. Expected: the Director shows "connection
    lost, reconnecting". Plug it back: "Connected" again within about two
-   seconds, and presses work without restarting the show.
+   seconds, and presses work without restarting the show. With the Enjoy
+   RF215 the round goes on where it was, lights included.
 2. Mid-question, force-quit the app. Start it again and resume the show:
    scores and the question state are as before.
 
-## 7. Release smoke check
+## 8. Release smoke check
 
 The pages run under the app's content security policy only in an installed
 build (`tauri dev` serves them without it), so check once on the Windows
@@ -106,18 +158,22 @@ note the step and attach `buzzdome.log`, where each window notes what the
 policy blocked ("the content security policy blocked …", at most five a
 minute).
 
-## 8. Send back
+## 9. Send back
 
 Attach to the project thread:
 
 - the model (215 or 303S) and the photos;
 - the VID:PID, usage and interface of the receiver row;
-- the exported log files from steps 3 and 4;
-- the result of the release smoke check (step 7);
+- with the Enjoy RF215: the notes from sections 3 and 6, above all the
+  buzzer numbers above 15;
+- the exported log files from sections 4 and 5;
+- the result of the release smoke check (section 8);
 - what failed, with the exact message.
 
-With the log and the vendor SDK, the vendor protocol can be written so that
-lights, press times and battery level work (specification BZ-5, BZ-10, BZ-14).
+For the Enjoy RF215 that settles the open points of its protocol. For any
+other receiver, the log and the vendor SDK are what the vendor protocol is
+written from, so that lights, press times and battery level work
+(specification BZ-5, BZ-10, BZ-14).
 
 ## Without the app
 
@@ -126,4 +182,10 @@ The same raw reports can be printed from a terminal on any machine with Rust:
 ```sh
 cargo run -p buzzers --example hid-monitor              # list devices
 cargo run -p buzzers --example hid-monitor -- 1234:abcd # print reports
+cargo run -p buzzers --example hid-monitor -- 10c4:1819 rf215      # Enjoy RF215, A to D
+cargo run -p buzzers --example hid-monitor -- 10c4:1819 rf215-rush # Enjoy RF215, big button
 ```
+
+With `rf215` or `rf215-rush` it sets the receiver up as the app does,
+starts an everyone-answers or a fastest-finger round, and prints whether
+the receiver answered and each press it reads, under the raw bytes.

@@ -62,4 +62,8 @@ impl HidDevice for Device {
     fn write(&mut self, data: &[u8]) -> Result<usize, DriverError> {
         self.0.write(data).map_err(err)
     }
+
+    fn send_feature_report(&mut self, data: &[u8]) -> Result<(), DriverError> {
+        self.0.send_feature_report(data).map_err(err)
+    }
 }

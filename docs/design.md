@@ -799,17 +799,17 @@ USB HID device ──► HidBackend / HidDevice      crates/buzzers/src/hid.rs
                     a fake in tests)
                 ──► receiver thread             receiver.rs
                     open, read, reconnect,
-                    write lights
-                ──► Protocol                    protocol.rs, learned.rs
-                    report bytes → presses,
-                    lights → report bytes
+                    write the mode and lights
+                ──► Protocol                    protocol.rs, learned.rs,
+                    report bytes → presses,     rf215.rs (over cp2110.rs)
+                    mode and lights → reports
                 ──► EdgeFilter                  edge.rs
                     held button = one press
                 ──► show queue (with commands)  app/src-tauri/src/show_thread.rs
                 ──► show thread (app)           show_thread.rs, pump.rs, hardware.rs
                     learn mode, raw log, UI events, time up
                 ──► execute(Command::Press)     app/src-tauri/src/lib.rs
-                    journal, then game state, then lights
+                    journal, then game state, then lights and mode
 ```
 
 Each layer is replaceable on its own: the protocol does not know about USB,
@@ -829,26 +829,47 @@ where a press came from (keyboard, on-screen button or receiver are the same
   they are never stored.
 - `hidapi::HidDevice` may be used from one thread at a time, so a single
   thread owns the open device. Everyone else talks to it through a
-  `ReceiverHandle` (a channel): select a device, set lights, reload the
-  protocol, shut down.
+  `ReceiverHandle` (a channel): select a device, set the buzzer mode and
+  lights, pass on a press the app ignored, reload the protocol, shut down.
+- Besides input and output reports, a receiver may need feature reports to
+  be set up (the RF215's cable is a USB-to-serial bridge set up that way,
+  2.4). `HidDevice::send_feature_report` sends them, and each report a
+  protocol gives says which kind it is (`hid::Report`).
 
 ### 2.3 Receiver thread
 
 Loop, every iteration:
 
-1. Drain control messages (select, lights, reload, shutdown).
-2. If connected: `read_timeout(20 ms)`. A report goes through the protocol
-   and the edge filter; the thread sends `Raw` (bytes, time, decoded presses)
-   and then one `Press` event per press, in the order the protocol returned
-   them. A read error closes the device and reports `Error`
-   (`ConnectionLost`; the thread reconnects).
+1. Drain control messages (select, mode, lights, ignored press, reload,
+   shutdown). The thread keeps the buzzer mode and each buzzer's light as
+   the app last set them; only what changed is encoded with the active
+   protocol and queued for writing.
+2. If connected: write the next queued report if it is due, then
+   `read_timeout` (20 ms, or less when the next report is due sooner). A
+   report goes through the protocol and the edge filter; the thread sends
+   `Raw` (bytes, time, decoded presses) and then one `Press` event per
+   press, in the order the protocol returned them. A read or write error
+   closes the device and reports `Error` (`ConnectionLost` or
+   `WriteFailed`; the thread reconnects).
 3. If not connected and a receiver is selected: every 2 seconds list devices,
-   open the first match, send the protocol's init reports, then report
-   `Connected` (init goes first so lights work as soon as the UI says
-   "connected").
+   open the first match and set it up: write the protocol's init reports,
+   queue the lights and the mode the buzzers should show, then report
+   `Connected` (init goes first so the receiver is set up as soon as the UI
+   says "connected"). So a receiver unplugged mid-show gets the round and
+   the lights it missed once it is back.
+
+Writes go out one at a time, at least `write_gap` (10 ms) apart, as the
+vendor's SDK paces them, so a slow receiver is not flooded; a report the
+same as the one queued just before it is not queued twice. After init,
+writes wait until the protocol says the receiver is ready
+(`Protocol::ready`: the RF215 answered the connect command), for
+`ready_timeout` (500 ms, as long as the vendor's SDK waits for that answer)
+at most, and then go out anyway. A lost connection drops the queue; the
+next set-up queues what is current.
 
 Statuses: `Off` (nothing selected), `Searching` (selected, not plugged in),
-`Connected` (with the `ProtocolKind` and whether it drives lights), `Error`
+`Connected` (with the `ProtocolKind`, which for the RF215 says whether the
+receiver answered the connect command, and whether it drives lights), `Error`
 (a `ReceiverProblem` and the system's message; for `CannotOpen` the
 Director adds what to check: the udev rule on Linux, Input Monitoring on
 macOS, another program holding the receiver on Windows).
@@ -859,23 +880,73 @@ macOS, another program holding the receiver on Windows).
 trait Protocol: Send {
     fn kind(&self) -> ProtocolKind;
     fn decode(&mut self, report: &[u8]) -> Vec<Press>;
-    fn init_reports(&self) -> Vec<Vec<u8>>;                        // default: none
-    fn encode_lights(&self, lights: &[(BuzzerId, Light)]) -> Vec<Vec<u8>>; // default: none
-    fn has_lights(&self) -> bool;                                  // default: false
+    fn init_reports(&self) -> Vec<Report>;                                // default: none
+    fn ready(&self) -> bool;                                              // default: true
+    fn encode_lights(&self, lights: &[(BuzzerId, Light)]) -> Vec<Report>; // default: none
+    fn encode_mode(&self, mode: BuzzerMode) -> Vec<Report>;              // default: none
+    fn rearm(&self, press: Press, mode: BuzzerMode) -> Vec<Report>;      // default: none
+    fn has_lights(&self) -> bool;                                         // default: false
 }
 ```
 
-A resolver picks the protocol when a device opens, in this order:
+`protocol::for_device` picks the protocol when a device opens, in this
+order:
 
-1. **Vendor protocol** for the device's vendor and product ID. Empty slot
-   today, marked in `hardware.rs`; filled once the SDK documentation arrives
-   (dome and RGB get separate implementations, since the vendor says their
-   protocols differ). `decode` is stateful so it can track sequence numbers
-   or multi-report frames.
+1. **Vendor protocol** for the device's vendor and product ID: the Enjoy
+   RF215 (below). The 303S (RGB) needs its own, since the vendor says the
+   protocols differ, from Enjoy's SDK for it. `decode` is stateful, so it
+   can read messages split over reports.
 2. **Learned protocol** if the user taught buttons for this vendor and
-   product ID.
+   product ID. The Receiver tab offers learn mode only for receivers
+   without a vendor protocol.
 3. **Raw only**: decodes nothing, but every report still appears in the raw
    log, which is how the real protocol gets worked out.
+
+#### Enjoy RF215
+
+Enjoy does not publish its SDK and has not sent it yet. On 2026-10-20 Jakub
+approved working from an unofficial copy of it, for this private,
+non-distributed app: a project thread read it and wrote the protocol down in
+its own words, and `rf215.rs`, `cp2110.rs` and this description come from
+that write-up. No file or code from the copy is in the repository. None of
+it is checked on a real receiver yet ([`hardware-test.md`](hardware-test.md)).
+
+- The USB-HID cable (VID:PID `10C4:1819`) is a Silicon Labs CP2110-type
+  HID-to-UART bridge to the receiver's serial line (`cp2110.rs`, report
+  layout from Silicon Labs AN434). Three feature reports open the UART:
+  `50` with the settings (115200 baud as a big-endian u32, no parity, no
+  flow control, 8 data bits, one stop bit), `43 03` to purge both FIFOs,
+  `41 01` to enable it. Serial bytes go both ways in 64-byte reports whose
+  ID is the number of bytes they carry (1 to 63), so a message can be split
+  over reports and is read from a byte stream. The vendor's SDK purges the
+  FIFOs before every command; the app purges them only on connect, as a
+  purge also drops presses the receiver has just sent.
+- Every message, either way, is three bytes: two bytes and their XOR. The
+  receiver's have the first byte's top bit clear; a stream that does not
+  line up is read on a byte at a time until it does.
+- PC to receiver, `order, 0x80 | parameter, XOR`: connect for buzzer IDs 1
+  to 100 `01 E4`, stop `03 85`, a new fastest-finger round with the big
+  button `03 83`, the round goes on `03 86`, everyone answers A to D
+  `03 8A`, buzzer *n* right `06 80|n`, wrong `07 80|n`. The receiver
+  answers connect with three bytes starting `7E`, until when the thread
+  holds back other writes (2.3).
+- Receiver to PC, a press, with `c1 = d0 >> 5 & 3`, `k1 = d0 & 1F`,
+  `c2 = d1 >> 4 & 7` and `k2 = d1 & F`. In the older form, `c1 = 0`, `k1`
+  1 to 5 is the big button, A, B, C or D and `k2` the buzzer (`k1 = 0` is
+  a key of the quizmaster's remote, which the app ignores). With `c1 = 1`,
+  `c2` 0 to 3 is A to D, 4 and 5 are E and F (no press: a dome buzzer has
+  neither), anything else the big button, and the buzzer is
+  `k1 * 16 + k2`. **Unverified:** the SDK keeps only `k2` there, so IDs up
+  to 15, though a receiver takes 100 buzzers and gives a newly set ID as
+  `k1 * 16 + k2`; the app takes the latter for presses too
+  (`rf215::buzzer_id`). Other messages are skipped.
+- The receiver runs each round itself: in fastest finger it locks the other
+  buzzers out when one presses, and lights and beeps the first. So the app
+  does not send each buzzer's light but the round (`BuzzerMode`, 2.7), and
+  the results: a Correct light as right, a Wrong one as wrong. The other
+  lights follow from the round.
+- No press times, battery level or colours: fastest-finger order is the
+  order the receiver sends presses in.
 
 ### 2.5 Learn mode
 
@@ -984,8 +1055,8 @@ handles the events received up to then and ticks at that moment; events
 that come in meanwhile wait for the next round, so a burst of presses never
 holds the clock or time up back.
 
-Fastest-finger order is therefore the receiver's order. When the vendor
-protocol provides press times, `Command::Press` gets an optional
+Fastest-finger order is therefore the receiver's order. When a vendor
+protocol provides press times (the RF215's has none), `Command::Press` gets an optional
 `pressed_at` from the receiver and the game ranks presses that arrive close
 together by that time; the PC clock is never used for ranking. A keyboard
 or on-screen buzzer press competes with the buzzers by the order the
@@ -1019,22 +1090,51 @@ active protocol and writes the reports. Light failures are logged and never
 block the show. With the learned or raw protocol, `has_lights()` is false and
 the Director says "this receiver does not light the buzzers yet".
 
+A receiver that runs each round itself (the RF215) gets the round instead.
+`Game::buzzer_mode` derives it from the same phase as the lights:
+`BuzzerMode` is off, register (the lobby), answers (everyone answers),
+fastest finger (new, or going on after a wrong answer), buzzed or results.
+The shell sends it with `BuzzerDriver::set_mode` after the lights of every
+show change, so a wrong answer is lit before the round goes on, and when a
+show begins or ends; with no show the buzzers register, so the Receiver tab
+sees their presses. A question started again passes through ready (off), so
+the receiver always gets a new round. A press the app ignores (from a
+player switched off, or just after time up) goes back to the receiver
+thread (`ReceiverHandle::ignored`), since the RF215 locked the others out
+for it all the same: in fastest finger the protocol sends "the round goes
+on" (`Protocol::rearm`).
+
+Open with the RF215, to check on the hardware: whether "the round goes on"
+keeps out the buzzers that already buzzed; whether right and wrong light
+after the round stopped; whether the big button reports while everyone
+answers (registering with A to D works either way). A keyboard or on-screen
+buzzer that buzzes first leaves the receiver armed, so a buzzer may still
+flash as first after it (keyboard and on-screen buzzers are for shows
+without the hardware, 2.6).
+
 ### 2.8 Diagnostics
 
 - The app keeps the last 2000 raw reports in memory; the Receiver tab shows the
   latest ones and can export all of them as text
   (`unix-ms <tab> hex bytes <tab> decoded presses`).
 - `cargo run -p buzzers --example hid-monitor` lists HID devices and, with a
-  `VID:PID` argument, prints reports with timestamps, without the app.
+  `VID:PID` argument, prints reports with timestamps, without the app. With
+  `10c4:1819 rf215` (or `rf215-rush`) it first sets an RF215 up as the app
+  does, starts an everyone-answers (or fastest-finger) round, and also
+  prints the presses it decodes and whether the receiver answered.
 
 ### 2.9 Testing
 
 `crates/buzzers/tests/receiver.rs` runs the real receiver thread against a
 fake HID backend: connect and init, decode order, held-button repeats,
-unknown reports, light commands, unplug and replug, open failure and retry,
-deselect. Unit tests cover the edge filter, signatures, the recorder and
-conflict detection. None of this proves the real receiver's format: see
-[`hardware-test.md`](hardware-test.md).
+unknown reports, light and mode commands, the lights and mode replayed on
+connect and after replugging, writes held until the receiver answers or the
+ready timeout, the write gap, ignored presses, unplug and replug, open
+failure and retry, deselect. Unit tests cover the edge filter, signatures,
+the recorder, conflict detection, the CP2110 reports and the RF215's orders
+and both press forms, split and after noise; `quiz-core`'s `game_flow.rs`
+follows the buzzer mode through a show. None of this proves the real
+receiver's format: see [`hardware-test.md`](hardware-test.md).
 
 ## 3. OS specifics
 
@@ -1139,4 +1239,5 @@ them.
 | Media through the asset protocol, autoplay of video and sound | needs the installed app on each OS | **not tested** |
 | Windows and macOS installers | CI | see the PR's checks |
 | Real receiver: detection, raw reports, learn mode, presses in a show | needs the hardware | **not tested** |
-| Lights, press times, battery | need the vendor protocol | **not built** |
+| RF215 protocol: set-up, presses, rounds, right and wrong | `cargo test -p buzzers` against fakes; needs the hardware | **not tested** on a receiver |
+| Press times, battery, RGB colours | not in the RF215 protocol; the 303S needs Enjoy's SDK | **not built** |

@@ -75,16 +75,20 @@ The manufacturer (Enjoy Tech) answered Jakub's email in October 2026:
 - dome and RGB versions use **different protocols**;
 - the protocol is described in their SDK, which they provide free of charge.
 
-Until the SDK arrives the exact report format is unknown. The app is
-therefore built to work in three stages, each a fallback for the next:
+Enjoy has not sent the SDK yet. The RF215 (dome) protocol is now known from
+a description written from an unofficial copy of it, which Jakub approved
+on 2026-10-20 (`docs/design.md` 2.4); it carries no press times. The 303S
+(RGB) protocol is still unknown. The app therefore works in three stages,
+each a fallback for the one before:
 
 1. **Learned mapping** (works now, no vendor information needed): the user
    teaches the app which USB report each button of each buzzer sends.
    Presses work; lights do not. Teaching is per buzzer, which is fine for a
    test with a few buzzers but too slow for a full event.
-2. **Vendor protocol** (when the SDK arrives): presses with buzzer ID and
-   press time, lights, battery level. Selected automatically by the
-   receiver's USB vendor and product ID.
+2. **Vendor protocol**: presses with buzzer ID, and lights; press time and
+   battery level where the protocol has them. Selected automatically by the
+   receiver's USB vendor and product ID. Built for the RF215 (presses, the
+   receiver's own rounds, right and wrong), to be checked on the hardware.
 3. **Keyboard**: keys `1`-`0` and the on-screen virtual buzzers, always
    available, also covering the vendor's "keystroke" mode.
 
@@ -96,16 +100,16 @@ therefore built to work in three stages, each a fallback for the next:
 | BZ-2 | The chosen receiver is remembered and reopened automatically at the next start. | done |
 | BZ-3 | When the receiver is unplugged or fails, the Director shows it at once and the app reconnects by itself within 2 seconds of the receiver coming back, without losing the show. | done (simulated) |
 | BZ-4 | Every press becomes a game command (buzzer ID, button) that is written to the show journal **before** it changes anything on screen, exactly like a keyboard press. After a crash the show resumes with those presses. | done |
-| BZ-5 | Fastest-finger order is the order the receiver reports, or the receiver's press times when the protocol provides them. The PC never re-orders presses. Presses in one USB report keep their order within the report. | done for receiver order; press times wait for the protocol |
+| BZ-5 | Fastest-finger order is the order the receiver reports, or the receiver's press times when the protocol provides them. The PC never re-orders presses. Presses in one USB report keep their order within the report. | done for receiver order; the RF215 has no press times, the 303S waits for its protocol |
 | BZ-6 | A button held down, or a receiver that repeats a report, counts as one press. A new press needs a release or a 150 ms pause. | done |
 | BZ-7 | Learn mode: for a chosen buzzer number and button, the user presses the button at least twice; the app derives a signature (which bytes matter) and stores it per receiver model. Conflicting signatures are refused with a message. While learning, presses do not reach the game. | done |
 | BZ-8 | Diagnostics: the Director shows live presses and the raw reports (hex) with what they decoded to, and exports the raw log to a text file that can be sent to a developer. | done |
 | BZ-9 | A command-line monitor (`hid-monitor`) lists devices and prints raw reports with timestamps, without the app. | done |
-| BZ-10 | Lights follow the game: ready, locked out, first to buzz, correct, wrong (table 4.3). Dome buzzers use their fixed colours; RGB buzzers use the colours in table 4.3. | partial: the app sends light states; the encoding waits for the protocol |
+| BZ-10 | Lights follow the game: ready, locked out, first to buzz, correct, wrong (table 4.3). Dome buzzers use their fixed colours; RGB buzzers use the colours in table 4.3. | partial: the app sends light states; the RF215 runs ready, locked out and first itself and gets correct and wrong (not yet checked on the hardware); RGB waits for the protocol |
 | BZ-11 | Up to 100 dome buzzers or 64 RGB buzzers on one receiver (the receiver's own limits, see `replica/hardware.md`). Up to about 50 are used at our events. | to verify on hardware |
 | BZ-12 | Keyboard and on-screen virtual buzzers work at the same time as the receiver, so a missing buzzer can be replaced mid-show. | done |
 | BZ-13 | If another program (for example the vendor's software) holds the receiver, the error says so. | done |
-| BZ-14 | Battery level of each buzzer, shown in the buzzer test view. | planned, needs the protocol |
+| BZ-14 | Battery level of each buzzer, shown in the buzzer test view. | planned, needs the protocol (the RF215's has none) |
 | BZ-15 | Host screen shows a small "buzzers not connected" sign on the welcome screen while the chosen receiver is not connected (the reference app does this too). | planned |
 | BZ-16 | Buzzer test view: a grid of buzzer numbers that light up with the pressed button, for range tests in the venue. | partial (Receiver tab shows presses as a list) |
 | BZ-17 | Buzzer panel in the Director during a show: every known buzzer number with its state (registered, last button and when, light, battery when the protocol gives it), and the receiver state on top. A buzzer not seen for a long time is marked. | planned |

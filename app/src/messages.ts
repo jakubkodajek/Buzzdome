@@ -223,7 +223,20 @@ export function settingsLostText(t: Translate, lost: SettingsLost): string {
 
 /** Which protocol reads the receiver. */
 export function protocolText(t: Translate, protocol: ProtocolKind): string {
-  return protocol.type === "learned" ? t("protocolLearned", { buttons: protocol.buttons }) : t("protocolRawOnly");
+  switch (protocol.type) {
+    case "rawOnly":
+      return t("protocolRawOnly");
+    case "learned":
+      return t("protocolLearned", { buttons: protocol.buttons });
+    case "rf215":
+      return t(protocol.answered ? "protocolRf215" : "protocolRf215Silent");
+  }
+}
+
+/** Whether buttons can be taught for a receiver read by `protocol`: not
+ * one the app knows the vendor's protocol of. */
+export function teachesButtons(protocol: ProtocolKind): boolean {
+  return protocol.type === "rawOnly" || protocol.type === "learned";
 }
 
 const IMPORT_ISSUE_KEYS: Record<ImportIssue["code"], StringKey> = {

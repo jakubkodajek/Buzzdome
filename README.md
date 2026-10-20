@@ -13,8 +13,10 @@ not affiliated with or endorsed by QuizXpress or its makers.
 First playable version: demo quiz, everyone-answers and fastest-finger
 questions, scores, leaderboard, final scores, crash recovery, keyboard and
 on-screen buzzers. The wireless buzzer receiver connects through its USB-HID
-cable (Director > Receiver tab); until the vendor protocol is in, buttons are
-taught once in learn mode and the buzzer lights stay off. Plan and progress:
+cable (Director > Receiver tab). The Enjoy RF215 (dome) receiver is read with
+its own protocol, rounds and right or wrong lights included, though not yet
+checked on the hardware; for other receivers, buttons are taught once in learn
+mode and the buzzer lights stay off. Plan and progress:
 [`ROADMAP.md`](ROADMAP.md).
 
 What the app must do: [`docs/specification.md`](docs/specification.md).
