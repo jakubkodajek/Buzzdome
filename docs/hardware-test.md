@@ -71,8 +71,9 @@ shows what the app read, "Raw data" the bytes behind it.
 3. **Buzzer numbers above 15.** This is the part the app has to guess. Press
    A on buzzers numbered 16 or more (give one such a number with the
    vendor's ID programming if none has one). Expected: their own numbers.
-   If they show other numbers (say 0 or 4 for 16 or 20), note each real
-   number and what the app showed, and export the log.
+   If they show other numbers (say 0 or 4 for 16 or 20), or only a line
+   under "Raw data" and no press (the app drops numbers above 100), note
+   each real number and what the app showed, and export the log.
 4. Section 6 (play) then checks the lights and the rounds.
 
 ## 4. Record raw reports
@@ -125,13 +126,20 @@ With the Enjoy RF215 also:
 10. Switch one player off in the Director and press their big button at
     the start of a fastest-finger question. Expected: the others can still
     buzz.
+11. Fastest-finger question: buzz first with a keyboard key (say `5`).
+    Expected: the domes go dark while it is judged, and none flashes as
+    first when pressed. Judge it wrong: all domes light as ready again, and
+    the first to press then flashes and counts.
 
 ## 7. Failures
 
 1. Mid-question, pull the USB cable. Expected: the Director shows "connection
    lost, reconnecting". Plug it back: "Connected" again within about two
    seconds, and presses work without restarting the show. With the Enjoy
-   RF215 the round goes on where it was, lights included.
+   RF215 the domes show the round again (a fastest-finger round begins
+   anew), and the results if they were showing. Also pull it while a buzz
+   is being judged: once back, no dome flashes as first until the
+   quizmaster judges.
 2. Mid-question, force-quit the app. Start it again and resume the show:
    scores and the question state are as before.
 
@@ -180,12 +188,13 @@ written from, so that lights, press times and battery level work
 The same raw reports can be printed from a terminal on any machine with Rust:
 
 ```sh
-cargo run -p buzzers --example hid-monitor              # list devices
-cargo run -p buzzers --example hid-monitor -- 1234:abcd # print reports
-cargo run -p buzzers --example hid-monitor -- 10c4:1819 rf215      # Enjoy RF215, A to D
-cargo run -p buzzers --example hid-monitor -- 10c4:1819 rf215-rush # Enjoy RF215, big button
+cargo run -p buzzers --example hid-monitor                    # list devices
+cargo run -p buzzers --example hid-monitor -- 1234:abcd       # print reports
+cargo run -p buzzers --example hid-monitor -- 10c4:1819 rush  # Enjoy RF215, big button
 ```
 
-With `rf215` or `rf215-rush` it sets the receiver up as the app does,
-starts an everyone-answers or a fastest-finger round, and prints whether
-the receiver answered and each press it reads, under the raw bytes.
+It runs the app's own receiver code: it prints the status (for the Enjoy
+RF215, `answered: true` once the receiver answered), each report and the
+presses read from it. An RF215 takes answers A to D, or with `rush` a
+fastest-finger round, which the monitor sets going again after each buzz:
+a buzzer that buzzed once should then stay out, which is worth noting too.

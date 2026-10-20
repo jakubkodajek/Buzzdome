@@ -3,7 +3,7 @@ import { BUTTONS, buttonLabel } from "../answers";
 import { api } from "../api";
 import { useApp, useRun } from "../app-context";
 import { useBackendEvent, useLearnProgress } from "../hooks";
-import { errorText, protocolText, receiverProblemText, settingsLostText, teachesButtons } from "../messages";
+import { errorText, protocolText, receiverProblemText, settingsLostText } from "../messages";
 import type { Button, DeviceInfo, Press, PressEvent, RawReport, ReceiverInfo, ReceiverStatus } from "../types";
 import { confirmAction } from "../confirm";
 
@@ -63,7 +63,7 @@ export function ReceiverTab() {
 
   const connected = status?.kind === "connected" ? status.device : null;
   // A receiver whose protocol the app knows has nothing to teach.
-  const teaches = status?.kind !== "connected" || teachesButtons(status.protocol);
+  const teaches = status?.kind !== "connected" || status.learnable;
 
   const exportLog = () => run(api.receiverExportLog({ filter: t("textFile"), fileName: "receiver-log" }));
 

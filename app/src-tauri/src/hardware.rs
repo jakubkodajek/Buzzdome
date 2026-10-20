@@ -305,8 +305,10 @@ pub async fn receiver_select(app: AppHandle, device: Option<DeviceInfo>) -> CmdR
 pub async fn receiver_learn_start(app: AppHandle, buzzer: BuzzerId, button: Button) -> CmdResult<()> {
     off_ui(move || {
         let hw = app.state::<Hardware>();
-        if hw.connected_device().is_none() {
-            return Err(AppError::ReceiverNotConnected);
+        match hw.handle.as_ref().map(ReceiverHandle::status) {
+            Some(ReceiverStatus::Connected { learnable: true, .. }) => {}
+            Some(ReceiverStatus::Connected { .. }) => return Err(AppError::ReceiverNotLearnable),
+            _ => return Err(AppError::ReceiverNotConnected),
         }
         // Held until learn mode is on, so no show starts in between; the
         // show's lock comes before the learn lock (`lock_show`).

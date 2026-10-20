@@ -46,24 +46,30 @@ pub trait Protocol: Send {
 
     /// Reports that set the lights of these buzzers, whose lights changed.
     /// Empty when unsupported.
-    fn encode_lights(&self, _lights: &[(BuzzerId, Light)]) -> Vec<Report> {
+    fn encode_lights(&mut self, _lights: &[(BuzzerId, Light)]) -> Vec<Report> {
         Vec::new()
     }
 
     /// Reports that put the buzzers in `mode`, which changed: for receivers
     /// that run each round themselves.
-    fn encode_mode(&self, _mode: BuzzerMode) -> Vec<Report> {
+    fn encode_mode(&mut self, _mode: BuzzerMode) -> Vec<Report> {
         Vec::new()
     }
 
-    /// Reports that set the round in `mode` going again after the app
-    /// ignored `press`: for receivers that lock the other buzzers by
-    /// themselves when one presses, though the app took no buzz.
-    fn rearm(&self, _press: Press, _mode: BuzzerMode) -> Vec<Report> {
+    /// Reports that set the round going again after the app ignored
+    /// `press`: for receivers that lock the other buzzers by themselves
+    /// when one presses, though the app took no buzz.
+    fn rearm(&mut self, _press: Press) -> Vec<Report> {
         Vec::new()
     }
 
     fn has_lights(&self) -> bool {
+        false
+    }
+
+    /// Whether buttons can be taught for this receiver (`learned`): only
+    /// while the app does not know its vendor's protocol.
+    fn learnable(&self) -> bool {
         false
     }
 }
@@ -96,6 +102,10 @@ impl Protocol for RawOnly {
 
     fn decode(&mut self, _report: &[u8]) -> Vec<Press> {
         Vec::new()
+    }
+
+    fn learnable(&self) -> bool {
+        true
     }
 }
 

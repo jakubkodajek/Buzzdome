@@ -60,6 +60,7 @@ const ERROR_KEYS: Record<Exclude<AppError["code"], WordedApart>, StringKey> = {
   usbUnavailable: "errUsbUnavailable",
   usbListFailed: "errUsbListFailed",
   receiverNotConnected: "errReceiverNotConnected",
+  receiverNotLearnable: "errReceiverNotLearnable",
   learnNotStarted: "errLearnNotStarted",
   learnTooFewPresses: "errLearnTooFewPresses",
   learnInconsistent: "errLearnInconsistent",
@@ -233,11 +234,6 @@ export function protocolText(t: Translate, protocol: ProtocolKind): string {
   }
 }
 
-/** Whether buttons can be taught for a receiver read by `protocol`: not
- * one the app knows the vendor's protocol of. */
-export function teachesButtons(protocol: ProtocolKind): boolean {
-  return protocol.type === "rawOnly" || protocol.type === "learned";
-}
 
 const IMPORT_ISSUE_KEYS: Record<ImportIssue["code"], StringKey> = {
   noQuestionColumn: "importNoQuestionColumn",

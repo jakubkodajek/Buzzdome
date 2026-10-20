@@ -882,12 +882,16 @@ trait Protocol: Send {
     fn decode(&mut self, report: &[u8]) -> Vec<Press>;
     fn init_reports(&self) -> Vec<Report>;                                // default: none
     fn ready(&self) -> bool;                                              // default: true
-    fn encode_lights(&self, lights: &[(BuzzerId, Light)]) -> Vec<Report>; // default: none
-    fn encode_mode(&self, mode: BuzzerMode) -> Vec<Report>;              // default: none
-    fn rearm(&self, press: Press, mode: BuzzerMode) -> Vec<Report>;      // default: none
-    fn has_lights(&self) -> bool;                                         // default: false
+    fn encode_lights(&mut self, lights: &[(BuzzerId, Light)]) -> Vec<Report>; // default: none
+    fn encode_mode(&mut self, mode: BuzzerMode) -> Vec<Report>;              // default: none
+    fn rearm(&mut self, press: Press) -> Vec<Report>;                        // default: none
+    fn has_lights(&self) -> bool;                                             // default: false
+    fn learnable(&self) -> bool;                                              // default: false
 }
 ```
+
+The encoders take `&mut self`, so a protocol can keep what it told the
+receiver (the RF215 keeps its round, below).
 
 `protocol::for_device` picks the protocol when a device opens, in this
 order:
@@ -897,8 +901,10 @@ order:
    protocols differ, from Enjoy's SDK for it. `decode` is stateful, so it
    can read messages split over reports.
 2. **Learned protocol** if the user taught buttons for this vendor and
-   product ID. The Receiver tab offers learn mode only for receivers
-   without a vendor protocol.
+   product ID. Only the learned and the raw protocol are `learnable`: the
+   Receiver tab offers learn mode, and `receiver_learn_start` starts it,
+   only for those (`receiverNotLearnable` otherwise), as buttons taught
+   for a receiver with a vendor protocol would never be used.
 3. **Raw only**: decodes nothing, but every report still appears in the raw
    log, which is how the real protocol gets worked out.
 
@@ -939,12 +945,25 @@ it is checked on a real receiver yet ([`hardware-test.md`](hardware-test.md)).
   `k1 * 16 + k2`. **Unverified:** the SDK keeps only `k2` there, so IDs up
   to 15, though a receiver takes 100 buzzers and gives a newly set ID as
   `k1 * 16 + k2`; the app takes the latter for presses too
-  (`rf215::buzzer_id`). Other messages are skipped.
+  (`rf215::buzzer_id`). A press from a buzzer outside 1 to 100, the range
+  the receiver is told on connect, is dropped (it shows in the raw log
+  only), so a garbled message or another ID layout never registers a
+  player who is not there. Other messages are skipped.
 - The receiver runs each round itself: in fastest finger it locks the other
   buzzers out when one presses, and lights and beeps the first. So the app
   does not send each buzzer's light but the round (`BuzzerMode`, 2.7), and
   the results: a Correct light as right, a Wrong one as wrong. The other
   lights follow from the round.
+- The protocol keeps the round it told the receiver (`rf215::Round`) and,
+  in a fastest-finger round, the buzzer the receiver let in first. As the
+  vendor's SDK does, its first order after connecting is a stop, so a
+  round from before a replug does not go on. When the buzz being judged is
+  the one the receiver let in, nothing is sent, and after a wrong answer
+  the round goes on (`03 86`). When it is not (a keyboard or on-screen
+  buzzer won), the receiver's round is stopped, so no dome lights as first
+  meanwhile, and the next round is a new one (`03 83`), which a dome that
+  pressed after the keyboard is in again. A buzz the receiver let in that
+  the app ignored sets the round going again (`rearm`).
 - No press times, battery level or colours: fastest-finger order is the
   order the receiver sends presses in.
 
@@ -1093,24 +1112,24 @@ the Director says "this receiver does not light the buzzers yet".
 A receiver that runs each round itself (the RF215) gets the round instead.
 `Game::buzzer_mode` derives it from the same phase as the lights:
 `BuzzerMode` is off, register (the lobby), answers (everyone answers),
-fastest finger (new, or going on after a wrong answer), buzzed or results.
+fastest finger, buzzed (with the buzzer whose buzz is judged) or results.
 The shell sends it with `BuzzerDriver::set_mode` after the lights of every
 show change, so a wrong answer is lit before the round goes on, and when a
 show begins or ends; with no show the buzzers register, so the Receiver tab
 sees their presses. A question started again passes through ready (off), so
-the receiver always gets a new round. A press the app ignores (from a
-player switched off, or just after time up) goes back to the receiver
-thread (`ReceiverHandle::ignored`), since the RF215 locked the others out
-for it all the same: in fastest finger the protocol sends "the round goes
-on" (`Protocol::rearm`).
+the receiver always gets a new round. Whether a fastest-finger round begins
+anew or goes on is the protocol's to decide from what the receiver did
+(2.4). A press the app ignores (from a player switched off or out for the
+question, or just after time up) goes back to the receiver thread
+(`ReceiverHandle::ignored`), since the RF215 may have locked the others out
+for it all the same (`Protocol::rearm`). A keyboard or on-screen buzzer can
+stand in for a dome (BZ-12) in fastest finger too: the receiver's round is
+stopped while it is judged.
 
 Open with the RF215, to check on the hardware: whether "the round goes on"
 keeps out the buzzers that already buzzed; whether right and wrong light
 after the round stopped; whether the big button reports while everyone
-answers (registering with A to D works either way). A keyboard or on-screen
-buzzer that buzzes first leaves the receiver armed, so a buzzer may still
-flash as first after it (keyboard and on-screen buzzers are for shows
-without the hardware, 2.6).
+answers (registering with A to D works either way).
 
 ### 2.8 Diagnostics
 
@@ -1118,10 +1137,11 @@ without the hardware, 2.6).
   latest ones and can export all of them as text
   (`unix-ms <tab> hex bytes <tab> decoded presses`).
 - `cargo run -p buzzers --example hid-monitor` lists HID devices and, with a
-  `VID:PID` argument, prints reports with timestamps, without the app. With
-  `10c4:1819 rf215` (or `rf215-rush`) it first sets an RF215 up as the app
-  does, starts an everyone-answers (or fastest-finger) round, and also
-  prints the presses it decodes and whether the receiver answered.
+  `VID:PID` argument, runs the app's receiver thread and protocol on that
+  receiver without the app, printing the status, every report with its
+  timestamp and the presses decoded. An RF215 takes answers A to D, or a
+  fastest-finger round with a further `rush` argument, which the monitor
+  sets going again after every buzz.
 
 ### 2.9 Testing
 
@@ -1129,10 +1149,12 @@ without the hardware, 2.6).
 fake HID backend: connect and init, decode order, held-button repeats,
 unknown reports, light and mode commands, the lights and mode replayed on
 connect and after replugging, writes held until the receiver answers or the
-ready timeout, the write gap, ignored presses, unplug and replug, open
-failure and retry, deselect. Unit tests cover the edge filter, signatures,
-the recorder, conflict detection, the CP2110 reports and the RF215's orders
-and both press forms, split and after noise; `quiz-core`'s `game_flow.rs`
+ready timeout, the write gap, ignored presses, an RF215 round stopped for a
+keyboard winner and begun anew, unplug and replug, open failure and retry,
+deselect. Unit tests cover the edge filter, signatures, the recorder,
+conflict detection, the CP2110 reports and the RF215's orders, round
+bookkeeping, buzzer ID range and both press forms, split and after noise;
+`quiz-core`'s `game_flow.rs`
 follows the buzzer mode through a show. None of this proves the real
 receiver's format: see [`hardware-test.md`](hardware-test.md).
 

@@ -67,13 +67,16 @@ impl Order {
 }
 
 /// The press a message from the receiver stands for, if any. The two
-/// forms of a press are those the vendor's SDK reads.
+/// forms of a press are those the vendor's SDK reads. A buzzer the
+/// receiver was not told to take (`MAX_BUZZER`) makes no press: the
+/// message is garbled, or IDs are laid out otherwise than `buzzer_id`
+/// takes, and the game would register a player who is not there.
 fn press_in(d0: u8, d1: u8) -> Option<Press> {
     let kind = (d0 >> 5) & 0x03;
     let high = d0 & 0x1f;
     let code = (d1 >> 4) & 0x07;
     let low = d1 & 0x0f;
-    match kind {
+    let press = match kind {
         // The older form: the button in the first byte, a buzzer ID up to
         // 15 in the second. 0 is a key of the quizmaster's remote.
         0 => {
@@ -85,7 +88,7 @@ fn press_in(d0: u8, d1: u8) -> Option<Press> {
                 5 => Button::D,
                 _ => return None,
             };
-            Some(Press { buzzer: BuzzerId::from(low), button })
+            Press { buzzer: BuzzerId::from(low), button }
         }
         // The button in the second byte; 4 and 5 are E and F, which a dome
         // buzzer does not have.
@@ -98,10 +101,11 @@ fn press_in(d0: u8, d1: u8) -> Option<Press> {
                 4 | 5 => return None,
                 _ => Button::Big,
             };
-            Some(Press { buzzer: buzzer_id(high, low), button })
+            Press { buzzer: buzzer_id(high, low), button }
         }
-        _ => None,
-    }
+        _ => return None,
+    };
+    (1..=BuzzerId::from(MAX_BUZZER)).contains(&press.buzzer).then_some(press)
 }
 
 /// The buzzer ID in a press of the second form. Unverified: the SDK keeps
@@ -113,17 +117,52 @@ fn buzzer_id(high: u8, low: u8) -> BuzzerId {
     BuzzerId::from(high) * 16 + BuzzerId::from(low)
 }
 
+/// The round the receiver runs, as far as the app has told it.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+enum Round {
+    /// Nothing told since connecting: a round from before may go on.
+    #[default]
+    Unknown,
+    Stopped,
+    AllAnswer,
+    /// A fastest-finger round, with the buzzer the receiver let in first
+    /// since it began or went on, once one pressed.
+    Rush { first: Option<BuzzerId> },
+}
+
 #[derive(Debug, Default)]
 pub struct Rf215 {
     /// Bytes received and not yet read as a message.
     pending: Vec<u8>,
     /// The receiver answered the connect command.
     answered: bool,
+    round: Round,
 }
 
 impl Rf215 {
     pub fn handles(device: &DeviceInfo) -> bool {
         device.vendor_id == VENDOR_ID && device.product_id == PRODUCT_ID
+    }
+
+    /// The reports that give `orders`, minding the round they leave the
+    /// receiver in. As the vendor's SDK does, the first order after
+    /// connecting is a stop, so no round from before goes on.
+    fn send(&mut self, orders: impl IntoIterator<Item = Order>) -> Vec<Report> {
+        let mut reports = Vec::new();
+        for order in orders {
+            if self.round == Round::Unknown && order != Order::Stop {
+                reports.extend(Order::Stop.reports());
+                self.round = Round::Stopped;
+            }
+            match order {
+                Order::Stop => self.round = Round::Stopped,
+                Order::AllAnswer => self.round = Round::AllAnswer,
+                Order::Rush | Order::RushOn => self.round = Round::Rush { first: None },
+                Order::Connect | Order::Right(_) | Order::Wrong(_) => {}
+            }
+            reports.extend(order.reports());
+        }
+        reports
     }
 }
 
@@ -145,7 +184,13 @@ impl Protocol for Rf215 {
                 self.answered = true;
                 at += 3;
             } else if d0 & 0x80 == 0 && d2 == d0 ^ d1 {
-                presses.extend(press_in(d0, d1));
+                if let Some(press) = press_in(d0, d1) {
+                    // The receiver lets in the first big button of a round.
+                    if press.button == Button::Big && self.round == (Round::Rush { first: None }) {
+                        self.round = Round::Rush { first: Some(press.buzzer) };
+                    }
+                    presses.push(press);
+                }
                 at += 3;
             } else {
                 at += 1;
@@ -166,37 +211,47 @@ impl Protocol for Rf215 {
     }
 
     /// Right and wrong. The other lights follow from the round.
-    fn encode_lights(&self, lights: &[(BuzzerId, Light)]) -> Vec<Report> {
-        lights
+    fn encode_lights(&mut self, lights: &[(BuzzerId, Light)]) -> Vec<Report> {
+        let orders: Vec<Order> = lights
             .iter()
             .filter_map(|&(buzzer, light)| match light {
                 Light::Correct => Some(Order::Right(buzzer)),
                 Light::Wrong => Some(Order::Wrong(buzzer)),
                 Light::Off | Light::Ready | Light::Locked | Light::First => None,
             })
-            .flat_map(Order::reports)
-            .collect()
+            .collect();
+        self.send(orders)
     }
 
-    /// A buzz and the results go on in the round the receiver runs, and
-    /// the results come as lights.
-    fn encode_mode(&self, mode: BuzzerMode) -> Vec<Report> {
+    /// The round for `mode`. A fastest-finger round goes on after the buzz
+    /// the receiver let in was judged wrong, so the players who answered
+    /// stay out; otherwise it begins anew. A buzz the receiver did not let
+    /// in (from a keyboard or on-screen buzzer) ends its round, so no dome
+    /// lights as first meanwhile. The results come as lights.
+    fn encode_mode(&mut self, mode: BuzzerMode) -> Vec<Report> {
         let order = match mode {
-            BuzzerMode::Off => Order::Stop,
-            BuzzerMode::Register | BuzzerMode::Answers => Order::AllAnswer,
-            BuzzerMode::FastestFinger { again: false } => Order::Rush,
-            BuzzerMode::FastestFinger { again: true } => Order::RushOn,
-            BuzzerMode::Buzzed | BuzzerMode::Results => return Vec::new(),
+            BuzzerMode::Off => Some(Order::Stop),
+            BuzzerMode::Register | BuzzerMode::Answers => Some(Order::AllAnswer),
+            BuzzerMode::FastestFinger => match self.round {
+                Round::Rush { first: Some(_) } => Some(Order::RushOn),
+                _ => Some(Order::Rush),
+            },
+            BuzzerMode::Buzzed { buzzer } => match self.round {
+                Round::Rush { first } if first == Some(buzzer) => None,
+                Round::Stopped => None,
+                _ => Some(Order::Stop),
+            },
+            BuzzerMode::Results => (self.round == Round::Unknown).then_some(Order::Stop),
         };
-        order.reports()
+        self.send(order)
     }
 
-    /// A buzz the app did not take (from a player switched off, or just
-    /// after time up) locked the other buzzers all the same, so the round
-    /// goes on.
-    fn rearm(&self, press: Press, mode: BuzzerMode) -> Vec<Report> {
-        match (press.button, mode) {
-            (Button::Big, BuzzerMode::FastestFinger { .. }) => Order::RushOn.reports(),
+    /// A buzz the app did not take (from a player switched off or out for
+    /// the question, or just after time up) that the receiver let in
+    /// locked the others out all the same, so the round goes on.
+    fn rearm(&mut self, press: Press) -> Vec<Report> {
+        match self.round {
+            Round::Rush { first: Some(first) } if first == press.buzzer && press.button == Button::Big => self.send([Order::RushOn]),
             _ => Vec::new(),
         }
     }
@@ -256,30 +311,85 @@ mod tests {
         assert_eq!(rf.kind(), ProtocolKind::Rf215 { answered: true });
     }
 
-    #[test]
-    fn rounds_and_results_are_the_vendor_orders() {
-        let rf = Rf215::default();
-        let mode = |mode| serial(&rf.encode_mode(mode));
-        assert_eq!(mode(BuzzerMode::Off), [vec![0x03, 0x85, 0x86]]);
-        assert_eq!(mode(BuzzerMode::Register), [vec![0x03, 0x8a, 0x89]]);
-        assert_eq!(mode(BuzzerMode::Answers), [vec![0x03, 0x8a, 0x89]]);
-        assert_eq!(mode(BuzzerMode::FastestFinger { again: false }), [vec![0x03, 0x83, 0x80]]);
-        assert_eq!(mode(BuzzerMode::FastestFinger { again: true }), [vec![0x03, 0x86, 0x85]]);
-        assert!(mode(BuzzerMode::Buzzed).is_empty());
-        assert!(mode(BuzzerMode::Results).is_empty());
+    /// A protocol that has told the receiver its first order, a stop.
+    fn stopped() -> Rf215 {
+        let mut rf = Rf215::default();
+        assert_eq!(serial(&rf.encode_mode(BuzzerMode::Off)), [STOP]);
+        rf
+    }
 
-        let lights = [(3, Light::Correct), (4, Light::Wrong), (5, Light::Ready), (6, Light::First), (200, Light::Correct)];
-        assert_eq!(serial(&rf.encode_lights(&lights)), [vec![0x06, 0x83, 0x85], vec![0x07, 0x84, 0x83]]);
+    const STOP: [u8; 3] = [0x03, 0x85, 0x86];
+    const RUSH: [u8; 3] = [0x03, 0x83, 0x80];
+    const RUSH_ON: [u8; 3] = [0x03, 0x86, 0x85];
+    const ALL_ANSWER: [u8; 3] = [0x03, 0x8a, 0x89];
+
+    #[test]
+    fn the_first_order_after_connecting_stops_a_round_from_before() {
+        assert_eq!(serial(&Rf215::default().encode_mode(BuzzerMode::Answers)), [STOP, ALL_ANSWER]);
+        assert_eq!(serial(&Rf215::default().encode_mode(BuzzerMode::Buzzed { buzzer: 3 })), [STOP]);
+        assert_eq!(serial(&Rf215::default().encode_mode(BuzzerMode::Results)), [STOP]);
+        // Results shown again after replugging: the stop comes before them.
+        let mut rf = Rf215::default();
+        assert_eq!(serial(&rf.encode_lights(&[(3, Light::Correct)])), [STOP, [0x06, 0x83, 0x85]]);
+        assert!(rf.encode_mode(BuzzerMode::Results).is_empty());
     }
 
     #[test]
-    fn only_a_big_button_in_fastest_finger_sets_the_round_going_again() {
-        let rf = Rf215::default();
-        let ff = BuzzerMode::FastestFinger { again: false };
-        assert_eq!(serial(&rf.rearm(press(2, Button::Big), ff)), [vec![0x03, 0x86, 0x85]]);
-        assert!(rf.rearm(press(2, Button::A), ff).is_empty());
-        assert!(rf.rearm(press(2, Button::Big), BuzzerMode::Buzzed).is_empty());
-        assert!(rf.rearm(press(2, Button::Big), BuzzerMode::Answers).is_empty());
+    fn rounds_and_results_are_the_vendor_orders() {
+        let mut rf = stopped();
+        assert_eq!(serial(&rf.encode_mode(BuzzerMode::Register)), [ALL_ANSWER]);
+        assert_eq!(serial(&rf.encode_mode(BuzzerMode::Answers)), [ALL_ANSWER]);
+        assert_eq!(serial(&rf.encode_mode(BuzzerMode::Off)), [STOP]);
+        assert_eq!(serial(&rf.encode_mode(BuzzerMode::FastestFinger)), [RUSH]);
+
+        let lights = [(3, Light::Correct), (4, Light::Wrong), (5, Light::Ready), (6, Light::First), (200, Light::Correct)];
+        assert_eq!(serial(&rf.encode_lights(&lights)), [[0x06, 0x83, 0x85], [0x07, 0x84, 0x83]]);
+        assert!(rf.encode_mode(BuzzerMode::Results).is_empty());
+    }
+
+    #[test]
+    fn a_fastest_finger_round_goes_on_after_the_buzz_the_receiver_let_in() {
+        let mut rf = stopped();
+        assert_eq!(serial(&rf.encode_mode(BuzzerMode::FastestFinger)), [RUSH]);
+        assert_eq!(rf.decode(&input(&[message(4, 6), message(5, 6)].concat())), [press(4, Button::Big), press(5, Button::Big)]);
+        assert!(rf.encode_mode(BuzzerMode::Buzzed { buzzer: 4 }).is_empty());
+        // Judged wrong: the others go on, 4 stays out.
+        assert_eq!(serial(&rf.encode_mode(BuzzerMode::FastestFinger)), [RUSH_ON]);
+        assert_eq!(rf.decode(&input(&message(5, 6))), [press(5, Button::Big)]);
+        assert!(rf.encode_mode(BuzzerMode::Buzzed { buzzer: 5 }).is_empty());
+    }
+
+    #[test]
+    fn a_buzz_the_receiver_did_not_let_in_ends_its_round_and_the_next_begins_anew() {
+        let mut rf = stopped();
+        rf.encode_mode(BuzzerMode::FastestFinger);
+        // Keyboard buzzer 9 wins before any dome.
+        assert_eq!(serial(&rf.encode_mode(BuzzerMode::Buzzed { buzzer: 9 })), [STOP]);
+        // A dome the receiver let in just before the stop is no buzz.
+        assert_eq!(rf.decode(&input(&message(2, 6))), [press(2, Button::Big)]);
+        assert!(rf.rearm(press(2, Button::Big)).is_empty());
+        // 9 judged wrong: a new round, which 2 is in.
+        assert_eq!(serial(&rf.encode_mode(BuzzerMode::FastestFinger)), [RUSH]);
+
+        // Keyboard buzzer 9 wins though the receiver let in dome 2 first.
+        assert_eq!(rf.decode(&input(&message(2, 6))), [press(2, Button::Big)]);
+        assert_eq!(serial(&rf.encode_mode(BuzzerMode::Buzzed { buzzer: 9 })), [STOP]);
+        assert_eq!(serial(&rf.encode_mode(BuzzerMode::FastestFinger)), [RUSH]);
+    }
+
+    #[test]
+    fn an_ignored_buzz_the_receiver_let_in_sets_the_round_going_again() {
+        let mut rf = stopped();
+        rf.encode_mode(BuzzerMode::FastestFinger);
+        rf.decode(&input(&message(2, 6)));
+        assert!(rf.rearm(press(2, Button::A)).is_empty());
+        assert!(rf.rearm(press(3, Button::Big)).is_empty());
+        assert_eq!(serial(&rf.rearm(press(2, Button::Big))), [RUSH_ON]);
+        assert!(rf.rearm(press(2, Button::Big)).is_empty(), "the round already goes on");
+
+        rf.encode_mode(BuzzerMode::Answers);
+        rf.decode(&input(&message(2, 6)));
+        assert!(rf.rearm(press(2, Button::Big)).is_empty());
     }
 
     #[test]
@@ -321,6 +431,14 @@ mod tests {
     }
 
     #[test]
+    fn a_buzzer_the_receiver_does_not_take_makes_no_press() {
+        let mut rf = Rf215::default();
+        let older_big_0 = [0x01, 0x00, 0x01];
+        let bytes: Vec<u8> = [message(0, 6), older_big_0, message(101, 0), message(100, 0)].concat();
+        assert_eq!(rf.decode(&input(&bytes)), [press(100, Button::A)]);
+    }
+
+    #[test]
     fn messages_split_over_reports_or_after_noise_are_read_in_order() {
         let mut rf = Rf215::default();
         let [a0, a1, a2] = message(1, 6);
@@ -352,5 +470,9 @@ mod tests {
         };
         assert!(Rf215::handles(&device(0x10c4, 0x1819)));
         assert!(!Rf215::handles(&device(0x10c4, 0xea80)));
+        // Picked before learned buttons, and none can be taught for it.
+        let protocol = crate::protocol::for_device(&[], &device(0x10c4, 0x1819));
+        assert_eq!(protocol.kind(), ProtocolKind::Rf215 { answered: false });
+        assert!(!protocol.learnable());
     }
 }

@@ -33,7 +33,7 @@ pub enum ReceiverStatus {
     #[serde(rename_all = "camelCase")]
     Searching { selector: DeviceSelector },
     #[serde(rename_all = "camelCase")]
-    Connected { device: DeviceInfo, protocol: ProtocolKind, has_lights: bool },
+    Connected { device: DeviceInfo, protocol: ProtocolKind, has_lights: bool, learnable: bool },
     /// The receiver cannot be used now; the thread keeps retrying. `detail`
     /// is the system's own message.
     Error { problem: ReceiverProblem, detail: String },
@@ -307,7 +307,7 @@ impl<E: From<ReceiverEvent>> Worker<E> {
             }
             Control::Lights(lights) => {
                 let changed: Vec<_> = lights.into_iter().filter(|&(buzzer, light)| self.lights.insert(buzzer, light) != Some(light)).collect();
-                if let Some(conn) = &self.conn {
+                if let Some(conn) = self.conn.as_mut() {
                     let reports = conn.protocol.encode_lights(&changed);
                     self.queue(reports);
                 }
@@ -317,14 +317,14 @@ impl<E: From<ReceiverEvent>> Worker<E> {
                     return;
                 }
                 self.mode = mode;
-                if let Some(conn) = &self.conn {
+                if let Some(conn) = self.conn.as_mut() {
                     let reports = conn.protocol.encode_mode(mode);
                     self.queue(reports);
                 }
             }
             Control::Ignored(press) => {
-                if let Some(conn) = &self.conn {
-                    let reports = conn.protocol.rearm(press, self.mode);
+                if let Some(conn) = self.conn.as_mut() {
+                    let reports = conn.protocol.rearm(press);
                     self.queue(reports);
                 }
             }
@@ -465,6 +465,7 @@ fn connected_status(conn: &Connection) -> ReceiverStatus {
         device: conn.info.clone(),
         protocol: conn.kind.clone(),
         has_lights: conn.protocol.has_lights(),
+        learnable: conn.protocol.learnable(),
     }
 }
 

@@ -102,6 +102,10 @@ impl Protocol for LearnedProtocol {
             .map(|s| vec![Press { buzzer: s.buzzer, button: s.button }])
             .unwrap_or_default()
     }
+
+    fn learnable(&self) -> bool {
+        true
+    }
 }
 
 /// True for reports without button data: every byte after the report ID is zero.
@@ -247,6 +251,9 @@ mod tests {
         assert_eq!(mappings.len(), 2);
         assert_eq!(for_device(&mappings, &device(1)).kind(), ProtocolKind::Learned { buttons: 1 });
         assert_eq!(for_device(&[], &device(1)).kind(), ProtocolKind::RawOnly);
+        // Buttons can be taught again, or for the first time.
+        assert!(for_device(&mappings, &device(1)).learnable());
+        assert!(for_device(&[], &device(1)).learnable());
 
         let mut same = Recorder::new(2, Button::B);
         same.feed(&[1, 1, 0x12], 0);

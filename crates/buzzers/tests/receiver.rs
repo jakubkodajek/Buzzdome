@@ -2,9 +2,11 @@
 //! lights, unplug and replug.
 
 use buzzers::clock::ShowClock;
+use buzzers::cp2110;
 use buzzers::hid::{DeviceInfo, DeviceSelector, HidBackend, HidDevice, Report};
 use buzzers::protocol::{Protocol, ProtocolKind};
 use buzzers::receiver::{spawn, ReceiverConfig, ReceiverEvent, ReceiverHandle, ReceiverProblem, ReceiverStatus};
+use buzzers::rf215::Rf215;
 use buzzers::{DriverError, Press};
 use quiz_core::{BuzzerId, BuzzerMode, Button, Light};
 use std::collections::VecDeque;
@@ -108,9 +110,8 @@ fn mode_byte(mode: BuzzerMode) -> u8 {
         BuzzerMode::Off => 0,
         BuzzerMode::Register => 1,
         BuzzerMode::Answers => 2,
-        BuzzerMode::FastestFinger { again: false } => 3,
-        BuzzerMode::FastestFinger { again: true } => 4,
-        BuzzerMode::Buzzed => 5,
+        BuzzerMode::FastestFinger => 3,
+        BuzzerMode::Buzzed { .. } => 5,
         BuzzerMode::Results => 6,
     }
 }
@@ -146,15 +147,15 @@ impl Protocol for TestProtocol {
         self.answered
     }
 
-    fn encode_lights(&self, lights: &[(BuzzerId, Light)]) -> Vec<Report> {
+    fn encode_lights(&mut self, lights: &[(BuzzerId, Light)]) -> Vec<Report> {
         lights.iter().map(|(b, l)| Report::Output(vec![0x02, *b as u8, *l as u8])).collect()
     }
 
-    fn encode_mode(&self, mode: BuzzerMode) -> Vec<Report> {
+    fn encode_mode(&mut self, mode: BuzzerMode) -> Vec<Report> {
         vec![Report::Output(vec![0x04, mode_byte(mode)])]
     }
 
-    fn rearm(&self, press: Press, _mode: BuzzerMode) -> Vec<Report> {
+    fn rearm(&mut self, press: Press) -> Vec<Report> {
         vec![Report::Output(vec![0x05, press.buzzer as u8])]
     }
 
@@ -285,13 +286,13 @@ fn writes_light_commands() {
 fn shows_the_lights_and_mode_set_before_the_receiver_connected_and_again_after_replugging() {
     let backend = FakeBackend::default();
     let (handle, rx) = start(&backend);
-    handle.set_mode(BuzzerMode::FastestFinger { again: true });
+    handle.set_mode(BuzzerMode::FastestFinger);
     handle.set_lights(vec![(2, Light::Wrong), (3, Light::Ready)]);
     handle.select(Some(selector()));
     wait_for(&rx, |e| matches!(e, ReceiverEvent::Status(ReceiverStatus::Searching { .. })));
     backend.0.lock().unwrap().plugged = true;
     wait_for(&rx, is_connected);
-    let shown = [vec![0x02, 2, Light::Wrong as u8], vec![0x02, 3, Light::Ready as u8], vec![0x04, 4]];
+    let shown = [vec![0x02, 2, Light::Wrong as u8], vec![0x02, 3, Light::Ready as u8], vec![0x04, 3]];
     assert_eq!(written_after_init(&backend, 3), shown);
 
     {
@@ -376,6 +377,38 @@ fn tells_the_protocol_of_a_press_the_app_ignored_once_however_often() {
     assert_eq!(written_after_init(&backend, 2), [vec![0x04, 0], vec![0x05, 6]]);
     std::thread::sleep(Duration::from_millis(250));
     assert_eq!(backend.0.lock().unwrap().written.len(), 3);
+    handle.shutdown();
+}
+
+#[test]
+fn an_rf215_ends_its_round_for_a_keyboard_winner_and_begins_the_next_anew() {
+    let backend = FakeBackend::default();
+    backend.0.lock().unwrap().plugged = true;
+    let (tx, rx) = mpsc::channel();
+    let resolver = Arc::new(|_: &DeviceInfo| Box::new(Rf215::default()) as Box<dyn Protocol>);
+    let (handle, _join) = spawn(Arc::new(backend.clone()), resolver, tx, config());
+    handle.set_mode(BuzzerMode::FastestFinger);
+    handle.select(Some(selector()));
+    wait_for(&rx, is_connected);
+    // The receiver answers the connect command.
+    backend.0.lock().unwrap().inbox.push_back(vec![0x03, 0x7e, 0x00, 0x00]);
+    wait_for(&rx, |e| matches!(e, ReceiverEvent::Status(ReceiverStatus::Connected { protocol: ProtocolKind::Rf215 { answered: true }, .. })));
+
+    // Keyboard buzzer 9 wins; then dome 2 buzzes, which the app ignores.
+    handle.set_mode(BuzzerMode::Buzzed { buzzer: 9 });
+    let dome_2 = [0x20, 0x62, 0x42];
+    backend.0.lock().unwrap().inbox.push_back([&[0x03][..], &dome_2].concat());
+    let ReceiverEvent::Press { press, .. } = wait_for(&rx, |e| matches!(e, ReceiverEvent::Press { .. })) else { unreachable!() };
+    assert_eq!(press, Press { buzzer: 2, button: Button::Big });
+    handle.ignored(press);
+    // 9 is judged wrong.
+    handle.set_mode(BuzzerMode::FastestFinger);
+
+    let serial: Vec<Vec<u8>> = written_after_init(&backend, 4).iter().map(|r| cp2110::received(r).to_vec()).collect();
+    let (stop, rush) = (vec![0x03, 0x85, 0x86], vec![0x03, 0x83, 0x80]);
+    assert_eq!(serial, [stop.clone(), rush.clone(), stop, rush], "a new round, not the old one going on");
+    std::thread::sleep(Duration::from_millis(50));
+    assert_eq!(backend.0.lock().unwrap().written.len(), 5, "nothing more is written");
     handle.shutdown();
 }
 

@@ -147,6 +147,8 @@ pub enum AppError {
     UsbListFailed { detail: String },
     #[error("the receiver is not connected")]
     ReceiverNotConnected,
+    #[error("the app knows this receiver's protocol, so its buttons need no teaching")]
+    ReceiverNotLearnable,
     #[error("learning was not started")]
     LearnNotStarted,
     #[error("press the button at least {min} times")]

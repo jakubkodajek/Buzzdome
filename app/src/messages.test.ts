@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { translator } from "./i18n";
-import { errorText, importIssueText, placesText, problemText, protocolText, receiverProblemText, settingsLostText, teachesButtons, thrownText } from "./messages";
+import { errorText, importIssueText, placesText, problemText, protocolText, receiverProblemText, settingsLostText, thrownText } from "./messages";
 
 const cs = translator("cs");
 const en = translator("en");
@@ -98,12 +98,6 @@ describe("receiver texts", () => {
     expect(protocolText(en, { type: "rawOnly" })).toBe("raw reports only");
     expect(protocolText(en, { type: "rf215", answered: true })).toBe("Enjoy RF215");
     expect(protocolText(cs, { type: "rf215", answered: false })).toContain("neodpověděl");
-  });
-
-  it("teaches buttons only to a receiver whose protocol the app does not know", () => {
-    expect(teachesButtons({ type: "rawOnly" })).toBe(true);
-    expect(teachesButtons({ type: "learned", buttons: 2 })).toBe(true);
-    expect(teachesButtons({ type: "rf215", answered: true })).toBe(false);
   });
 
   it("says where a file that was not read went, or that it was left alone", () => {

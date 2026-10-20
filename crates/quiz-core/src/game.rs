@@ -103,12 +103,11 @@ pub enum BuzzerMode {
     Register,
     /// An everyone-answers question runs: each player answers A to D.
     Answers,
-    /// A fastest-finger question runs: the first big button wins. `again`
-    /// once a player answered wrong: the others go on, the players who
-    /// answered stay out.
-    FastestFinger { again: bool },
-    /// The buzz is being judged.
-    Buzzed,
+    /// A fastest-finger question runs: the first big button of a player who
+    /// has not answered yet wins.
+    FastestFinger,
+    /// `buzzer`'s buzz is being judged.
+    Buzzed { buzzer: BuzzerId },
     /// The question's results show: right or wrong.
     Results,
 }
@@ -692,18 +691,16 @@ impl Game {
 
     /// What the buzzers take in the current step, as a whole: the steps of
     /// `light_of`, in which a buzzer can be ready, lit for the buzz being
-    /// judged or show a result. A fastest-finger question goes on `again`
-    /// after a wrong answer, so a receiver that runs the round itself keeps
-    /// the players who answered out.
+    /// judged or show a result.
     pub fn buzzer_mode(&self) -> BuzzerMode {
         match &self.phase {
             Phase::Lobby => BuzzerMode::Register,
             Phase::Question(QuestionStep::Running { .. }) => match self.question().map(|q| q.mode) {
                 Some(AnswerMode::Everyone) => BuzzerMode::Answers,
-                Some(AnswerMode::FastestFinger) => BuzzerMode::FastestFinger { again: !self.locked_out.is_empty() },
+                Some(AnswerMode::FastestFinger) => BuzzerMode::FastestFinger,
                 None => BuzzerMode::Off,
             },
-            Phase::Question(QuestionStep::Buzzed { .. }) => BuzzerMode::Buzzed,
+            Phase::Question(QuestionStep::Buzzed { buzzer, .. }) => BuzzerMode::Buzzed { buzzer: *buzzer },
             Phase::Question(QuestionStep::Revealed { winner }) if winner.is_some() || !self.counted.is_empty() => BuzzerMode::Results,
             _ => BuzzerMode::Off,
         }
