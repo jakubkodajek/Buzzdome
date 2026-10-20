@@ -129,7 +129,10 @@ With the Enjoy RF215 also:
 11. Fastest-finger question: buzz first with a keyboard key (say `5`).
     Expected: the domes go dark while it is judged, and none flashes as
     first when pressed. Judge it wrong: all domes light as ready again, and
-    the first to press then flashes and counts.
+    the first to press then flashes and counts. If a dome judged wrong
+    earlier in that question presses first, it may flash and beep once;
+    the others must still be able to buzz right after, and it must not
+    count.
 
 ## 7. Failures
 

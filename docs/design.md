@@ -963,7 +963,11 @@ it is checked on a real receiver yet ([`hardware-test.md`](hardware-test.md)).
   buzzer won), the receiver's round is stopped, so no dome lights as first
   meanwhile, and the next round is a new one (`03 83`), which a dome that
   pressed after the keyboard is in again. A buzz the receiver let in that
-  the app ignored sets the round going again (`rearm`).
+  the app ignored sets the round going again (`rearm`). So in that new
+  round a dome judged wrong earlier in the question, if it presses first,
+  flashes and beeps once before the round goes on without it; letting the
+  old round go on (`03 86`) instead would keep out the dome that pressed
+  after the keyboard for the rest of the question.
 - No press times, battery level or colours: fastest-finger order is the
   order the receiver sends presses in.
 
