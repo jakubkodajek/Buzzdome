@@ -68,7 +68,7 @@ mod tests {
     use quiz_core::{BuzzerId, Button};
 
     fn timed(buzzer: BuzzerId, timer: u32) -> Press {
-        Press { timer: Some(timer), ..Press::new(buzzer, Button::Big) }
+        Press::timed(buzzer, Button::Big, timer)
     }
 
     #[test]

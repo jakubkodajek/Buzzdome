@@ -8,14 +8,17 @@
 //! With a VID:PID it runs the app's own receiver thread on the first matching
 //! interface, with the protocol the app picks for it, and prints the status,
 //! every input report in hex with a millisecond timestamp, and the presses
-//! decoded from it, with the buzzer's own timer when it sends one. Press each
+//! decoded from it, with the buzzer's own timer when it sends one, or
+//! dropped as from a buzzer that was not ready. Press each
 //! button on a buzzer and save the output: for a receiver the app does not
 //! know, it is what the real protocol decoder is written from.
 //!
 //! The buzzers show ready and take answers as in a question; with `rush` as
 //! in a fastest-finger round, whose buzzes go in the order of the buzzers'
-//! timers; with `lights` they show each light of a show in turn, two
-//! seconds each.
+//! timers. With `lights` they show each light of a show in turn, two
+//! seconds each, and a second into each, buzzers 2 and 6 alone take the
+//! next one: one order lights all buzzers, then one order each lights
+//! those two. Every press is taken then, whatever the buzzer shows.
 
 use buzzers::clock::ShowClock;
 use buzzers::enjoy303s::MAX_BUZZER;
@@ -61,7 +64,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let (mode, cycle) = match std::env::args().nth(2).as_deref() {
         None => (BuzzerMode::Answers, false),
         Some("rush") => (BuzzerMode::FastestFinger, false),
-        Some("lights") => (BuzzerMode::Answers, true),
+        Some("lights") => (BuzzerMode::Register, true),
         Some(other) => return Err(format!("unknown option {other}: expected rush or lights").into()),
     };
     let resolver = Arc::new(|device: &DeviceInfo| protocol::for_device(&[], device));
@@ -74,10 +77,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let handle = handle.clone();
         std::thread::spawn(move || {
             let lights = [Light::Off, Light::Ready, Light::Locked, Light::First, Light::Correct, Light::Wrong];
-            for light in lights.into_iter().cycle() {
+            for (light, next) in lights.into_iter().zip(lights.into_iter().cycle().skip(1)).cycle() {
                 println!("{:>14}all buzzers: {light:?}", "");
                 light_all(&handle, light);
-                std::thread::sleep(Duration::from_secs(2));
+                std::thread::sleep(Duration::from_secs(1));
+                println!("{:>14}buzzers 2 and 6: {next:?}", "");
+                handle.set_lights(vec![(2, next), (6, next)]);
+                std::thread::sleep(Duration::from_secs(1));
             }
         });
     }
@@ -85,7 +91,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     for event in rx {
         match event {
             ReceiverEvent::Status(status) => println!("{status:?}"),
-            ReceiverEvent::Raw(raw) => println!("{:>9.3}s  [{:>2}]  {}", raw.at_ms as f64 / 1000.0, raw.bytes.len(), format_hex(&raw.bytes)),
+            ReceiverEvent::Raw(raw) => {
+                println!("{:>9.3}s  [{:>2}]  {}", raw.at_ms as f64 / 1000.0, raw.bytes.len(), format_hex(&raw.bytes));
+                for press in raw.dropped {
+                    println!("{:>14}buzzer {}, {:?}: dropped, the buzzer was not ready", "", press.buzzer, press.button);
+                }
+            }
             ReceiverEvent::Press { press, .. } => {
                 let timer = press.timer.map(|t| format!(", timer {t}")).unwrap_or_default();
                 println!("{:>14}buzzer {}, {:?}{timer}", "", press.buzzer, press.button);

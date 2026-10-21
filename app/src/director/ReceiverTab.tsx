@@ -4,7 +4,7 @@ import { api } from "../api";
 import { useApp, useRun } from "../app-context";
 import { useBackendEvent, useLearnProgress } from "../hooks";
 import type { Translate } from "../i18n";
-import { errorText, protocolText, receiverProblemText, settingsLostText } from "../messages";
+import { awaitsAnswer, errorText, protocolText, receiverProblemText, settingsLostText } from "../messages";
 import type { Button, DeviceInfo, Press, PressEvent, RawReport, ReceiverInfo, ReceiverStatus } from "../types";
 import { confirmAction } from "../confirm";
 
@@ -96,7 +96,7 @@ export function ReceiverTab() {
             {t("receiverUnavailable")} {info.initError}
           </p>
         ) : (
-          <p className={`receiver-state ${status?.kind ?? "off"}`}>
+          <p className={`receiver-state ${status?.kind === "connected" && awaitsAnswer(status.protocol) ? "searching" : (status?.kind ?? "off")}`}>
             {status?.kind === "connected" &&
               t("receiverConnected", { name: status.device.product ?? "HID", id: vidPid(status.device), protocol: protocolText(t, status.protocol) })}
             {status?.kind === "searching" && t("receiverSearching", { id: vidPid(status.selector) })}
@@ -151,7 +151,12 @@ export function ReceiverTab() {
                 <td>{d.interfaceNumber}</td>
                 <td>
                   {connected?.path === d.path ? (
-                    t("inUse")
+                    <>
+                      {t("inUse")}{" "}
+                      <button title={t("reconnectReceiverHint")} onClick={() => run(api.receiverSelect(d))}>
+                        {t("reconnectReceiver")}
+                      </button>
+                    </>
                   ) : (
                     <button onClick={() => run(api.receiverSelect(d))}>{t("useReceiver")}</button>
                   )}
@@ -251,6 +256,12 @@ export function ReceiverTab() {
                 <li key={i}>
                   {hexBytes(r.bytes)}
                   {r.decoded.length > 0 && <span className="decoded"> → {r.decoded.map((p) => pressLabel(t, p)).join(", ")}</span>}
+                  {r.dropped.length > 0 && (
+                    <span className="muted">
+                      {" "}
+                      ✕ {r.dropped.map((p) => pressLabel(t, p)).join(", ")}: {t("droppedNotReady")}
+                    </span>
+                  )}
                 </li>
               ))}
             </ul>

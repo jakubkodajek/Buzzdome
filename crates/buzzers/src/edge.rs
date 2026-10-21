@@ -45,12 +45,6 @@ impl EdgeFilter {
     }
 }
 
-impl Default for EdgeFilter {
-    fn default() -> Self {
-        EdgeFilter::new(150)
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

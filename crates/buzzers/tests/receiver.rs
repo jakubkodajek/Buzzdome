@@ -3,9 +3,9 @@
 
 use buzzers::clock::ShowClock;
 use buzzers::cp2110;
+use buzzers::enjoy303s::Enjoy303s;
 use buzzers::hid::{DeviceInfo, DeviceSelector, HidBackend, HidDevice, Report};
 use buzzers::protocol::{Protocol, ProtocolKind};
-use buzzers::enjoy303s::Enjoy303s;
 use buzzers::receiver::{spawn, ReceiverConfig, ReceiverEvent, ReceiverHandle, ReceiverProblem, ReceiverStatus};
 use buzzers::{DriverError, Press};
 use quiz_core::{BuzzerId, BuzzerMode, Button, Light};
@@ -145,7 +145,7 @@ impl Protocol for TestProtocol {
         vec![Report::Feature(vec![0x30]), Report::Output(vec![0x03, 0x01])]
     }
 
-    fn follow_up(&mut self) -> Vec<Report> {
+    fn follow_up(&mut self, _now_ms: u64) -> Vec<Report> {
         std::mem::take(&mut self.follow)
     }
 
@@ -290,7 +290,7 @@ fn shows_the_lights_and_mode_set_before_the_receiver_connected_and_again_after_r
     wait_for(&rx, |e| matches!(e, ReceiverEvent::Status(ReceiverStatus::Searching { .. })));
     backend.0.lock().unwrap().plugged = true;
     wait_for(&rx, is_connected);
-    let shown = [vec![0x02, 2, Light::Wrong as u8], vec![0x02, 3, Light::Ready as u8], vec![0x04, 3]];
+    let shown = [vec![0x04, 3], vec![0x02, 2, Light::Wrong as u8], vec![0x02, 3, Light::Ready as u8]];
     assert_eq!(written_after_init(&backend, 3), shown);
 
     {
@@ -353,7 +353,12 @@ fn from_303s(payload: &[u8]) -> Vec<u8> {
 
 /// A press of `buzzer`'s big button, showing ready, `timer` after its light changed.
 fn buzz_303s(buzzer: u8, timer: u8) -> Vec<u8> {
-    from_303s(&[0x32, buzzer - 1, 0x50, 0x43, timer, 0, 0, 0, 0, 0])
+    buzz_303s_showing(buzzer, timer, 0x43)
+}
+
+/// A press of `buzzer`'s big button while it showed the colour `shown`.
+fn buzz_303s_showing(buzzer: u8, timer: u8, shown: u8) -> Vec<u8> {
+    from_303s(&[0x32, buzzer - 1, 0x50, shown, timer, 0, 0, 0, 0, 0])
 }
 
 /// The receiver thread on an Enjoy 303S receiver that answered its set-up.
@@ -382,6 +387,21 @@ fn an_enjoy_303s_shows_what_waited_once_it_answered_its_set_up() {
     wait_for(&rx, is_connected);
     std::thread::sleep(Duration::from_millis(30));
     assert_eq!(backend.0.lock().unwrap().written.len(), 1, "only the connect order until the receiver answers");
+    // Unanswered, as when its power adapter is plugged in after the cable,
+    // it is set up again from the cable's settings.
+    let deadline = Instant::now() + Duration::from_secs(3);
+    while backend.0.lock().unwrap().written.len() < 2 {
+        assert!(Instant::now() < deadline, "the connect order was not sent again");
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    let (written, features) = {
+        let w = backend.0.lock().unwrap();
+        (w.written.clone(), w.features.clone())
+    };
+    assert_eq!(written[0], written[1], "the connect order again");
+    assert_eq!(features[..3], features[3..6], "the cable's settings again");
+    assert!(matches!(handle.status(), ReceiverStatus::Connected { protocol: ProtocolKind::Enjoy303s { answered: false }, .. }));
+    backend.0.lock().unwrap().written.truncate(1);
 
     backend.0.lock().unwrap().inbox.push_back(from_303s(&[0x10, 0x00]));
     backend.0.lock().unwrap().inbox.push_back(from_303s(&[0x12, 0x01]));
@@ -390,7 +410,7 @@ fn an_enjoy_303s_shows_what_waited_once_it_answered_its_set_up() {
     let open = vec![0x35, 0x96, 0x02, 0x12, 0x00, 0x12];
     let ready_all = vec![0x35, 0x96, 0x02, 0x74, 0x43, 0x37];
     let start = vec![0x35, 0x96, 0x01, 0x85, 0x85];
-    assert_eq!(serial, [take_64, open, ready_all, start]);
+    assert_eq!(serial, [take_64, open, start, ready_all]);
     handle.shutdown();
 }
 
@@ -419,6 +439,53 @@ fn orders_a_fastest_finger_buzz_by_the_buzzers_timers() {
     wait_for(&rx, |e| matches!(e, ReceiverEvent::Press { press, .. } if press.buzzer == 3));
     assert!(sent.elapsed() < Duration::from_millis(60), "{:?}", sent.elapsed());
     handle.shutdown();
+}
+
+#[test]
+fn a_buzz_from_a_buzzer_that_was_not_ready_is_dropped_and_logged() {
+    let backend = FakeBackend::default();
+    let (handle, rx) = start_303s(&backend, config());
+    // Team 5 hammers its locked buzzer while team 2's buzz is judged.
+    handle.set_mode(BuzzerMode::Buzzed);
+    backend.0.lock().unwrap().inbox.extend([buzz_303s_showing(5, 30, 0x15), buzz_303s_showing(5, 140, 0x15)]);
+    for _ in 0..2 {
+        let pressed = |e: &ReceiverEvent| matches!(e, ReceiverEvent::Raw(r) if r.bytes.get(4) == Some(&0x32));
+        let ReceiverEvent::Raw(raw) = wait_for(&rx, pressed) else { unreachable!() };
+        assert!(raw.decoded.is_empty());
+        assert_eq!(raw.dropped, [Press::timed(5, Button::Big, raw.dropped[0].timer.unwrap())]);
+    }
+    // Judged wrong: the round goes on, and team 5's next press, as its
+    // buzzer turned ready, counts, however soon after its last.
+    handle.set_mode(BuzzerMode::FastestFinger);
+    backend.0.lock().unwrap().inbox.push_back(buzz_303s(5, 8));
+    let ReceiverEvent::Press { press, .. } = wait_for(&rx, |e| matches!(e, ReceiverEvent::Press { .. })) else { unreachable!() };
+    assert_eq!(press, Press::timed(5, Button::Big, 8));
+    handle.shutdown();
+}
+
+#[test]
+fn a_fastest_finger_buzz_waiting_for_the_timers_goes_on_when_the_receiver_goes() {
+    for deselect in [false, true] {
+        let backend = FakeBackend::default();
+        let config = ReceiverConfig { timer_window: Duration::from_secs(30), ..config() };
+        let (handle, rx) = start_303s(&backend, config);
+        handle.set_mode(BuzzerMode::FastestFinger);
+        backend.0.lock().unwrap().inbox.push_back(buzz_303s(4, 90));
+        wait_for(&rx, |e| matches!(e, ReceiverEvent::Raw(r) if !r.decoded.is_empty()));
+        if deselect {
+            handle.select(None);
+        } else {
+            backend.0.lock().unwrap().break_link = true;
+        }
+        wait_for(&rx, |e| matches!(e, ReceiverEvent::Press { press, .. } if press.buzzer == 4));
+        handle.shutdown();
+    }
+}
+
+#[test]
+fn the_timer_window_ends_before_presses_stop_counting_after_time_up() {
+    let window = ReceiverConfig::new(ShowClock::start()).timer_window;
+    assert!(window < Duration::from_millis(quiz_core::PRESS_GRACE_MS), "{window:?}");
 }
 
 #[test]

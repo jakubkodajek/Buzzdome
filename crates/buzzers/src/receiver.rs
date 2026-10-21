@@ -63,6 +63,9 @@ pub struct RawReport {
     pub at_ms: u64,
     pub bytes: Vec<u8>,
     pub decoded: Vec<Press>,
+    /// Presses read but dropped as ones that cannot count now, such as a
+    /// buzz from a buzzer that was not ready (`Protocol::take_dropped`).
+    pub dropped: Vec<Press>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -193,7 +196,8 @@ pub fn spawn<E: From<ReceiverEvent> + Send + 'static>(
     let (tx, rx) = mpsc::channel();
     let status = Arc::new(Mutex::new(ReceiverStatus::Off));
     let handle = ReceiverHandle { tx, status: status.clone() };
-    let order = TimerOrder::new(config.timer_window.as_millis() as u64);
+    let edge = EdgeFilter::new(config.repeat_gap_ms);
+    let order = TimerOrder::new(u64::try_from(config.timer_window.as_millis()).unwrap_or(u64::MAX));
     let worker = Worker {
         backend,
         resolver,
@@ -203,7 +207,7 @@ pub fn spawn<E: From<ReceiverEvent> + Send + 'static>(
         selector: None,
         conn: None,
         next_try: Instant::now(),
-        edge: EdgeFilter::default(),
+        edge,
         order,
         mode: BuzzerMode::Off,
         lights: BTreeMap::new(),
@@ -270,7 +274,12 @@ impl<E: From<ReceiverEvent>> Worker<E> {
                     Ok(n) => self.report(&buf[..n]),
                     Err(e) => self.lost(ReceiverProblem::ConnectionLost, &e),
                 }
-                let due = self.order.release(self.config.clock.now_ms());
+                let now_ms = self.config.clock.now_ms();
+                if let Some(conn) = self.conn.as_mut() {
+                    let reports = conn.protocol.follow_up(now_ms);
+                    self.queue(reports);
+                }
+                let due = self.order.release(now_ms);
                 self.send_presses(due);
                 continue;
             }
@@ -351,7 +360,7 @@ impl<E: From<ReceiverEvent>> Worker<E> {
 
     /// Sets up the receiver on `conn` with its protocol's init reports,
     /// written one after another with the write gap before the connection
-    /// is announced. Then the lights and mode the buzzers should show wait
+    /// is announced. Then the mode and lights the buzzers should show wait
     /// to be written, in the order the app sends a change in; a protocol
     /// that must first hear from the receiver keeps them until it has
     /// (`Protocol::follow_up`).
@@ -368,8 +377,8 @@ impl<E: From<ReceiverEvent>> Worker<E> {
         }
         self.next_write = Instant::now() + self.config.write_gap;
         let lights: Vec<_> = self.lights.iter().map(|(&buzzer, &light)| (buzzer, light)).collect();
-        let mut shown = conn.protocol.encode_lights(&lights);
-        shown.extend(conn.protocol.encode_mode(self.mode));
+        let mut shown = conn.protocol.encode_mode(self.mode);
+        shown.extend(conn.protocol.encode_lights(&lights));
         let status = connected_status(&conn);
         self.conn = Some(conn);
         self.queue(shown);
@@ -380,21 +389,20 @@ impl<E: From<ReceiverEvent>> Worker<E> {
         let Some(conn) = self.conn.as_mut() else { return };
         let at_ms = self.config.clock.now_ms();
         let decoded = conn.protocol.decode(bytes);
+        let dropped = conn.protocol.take_dropped();
         // The report may have changed what the protocol knows of the receiver.
         let kind = conn.protocol.kind();
         let status = (kind != conn.kind).then(|| {
             conn.kind = kind;
             connected_status(conn)
         });
-        let follow_up = conn.protocol.follow_up();
         let presses = self.edge.filter(decoded.clone(), at_ms);
         if let Some(status) = status {
             self.set_status(status);
         }
-        let _ = self.events.send(ReceiverEvent::Raw(RawReport { at_ms, bytes: bytes.to_vec(), decoded }).into());
+        let _ = self.events.send(ReceiverEvent::Raw(RawReport { at_ms, bytes: bytes.to_vec(), decoded, dropped }).into());
         let presses = self.order.take(presses, at_ms, self.mode == BuzzerMode::FastestFinger);
         self.send_presses(presses);
-        self.queue(follow_up);
     }
 
     fn send_presses(&self, presses: Vec<(Press, u64)>) {

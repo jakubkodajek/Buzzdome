@@ -11,6 +11,7 @@
 //! of 64 colours, and decides who buzzed first. Each press comes with the
 //! colour its buzzer showed and the buzzer's own timer, which counts from
 //! the moment its colour last changed (`Press::timer`, `timer_order`).
+//! Nothing here is checked on a receiver yet: what is unverified says so.
 
 use crate::cp2110;
 use crate::hid::{DeviceInfo, Report};
@@ -33,19 +34,34 @@ const CONNECTED: u8 = 0x10;
 const OPENED: u8 = 0x12;
 const PRESS: u8 = 0x32;
 
+/// How long a set-up step waits for the receiver's answer before it is
+/// asked again: the vendor's SDK waits 200 ms for one.
+const ANSWER_WAIT_MS: u64 = 500;
+
 /// A colour byte: brightness, then red, green and blue at 0 (off) to 3.
 /// The top bit, which the app never sets, stores a colour without showing it.
 const fn colour(bright: bool, red: u8, green: u8, blue: u8) -> u8 {
+    assert!(red < 4 && green < 4 && blue < 4, "a colour level is 0 to 3");
     ((bright as u8) << 6) | (red << 4) | (green << 2) | blue
 }
-const STORED_ONLY: u8 = 0x80;
+
+/// The red, green and blue of a colour byte, without its brightness or
+/// the top bit.
+const fn rgb(colour: u8) -> u8 {
+    colour & 0x3f
+}
 
 const OFF: u8 = colour(false, 0, 0, 0);
 const READY: u8 = colour(true, 0, 0, 3);
-const LOCKED: u8 = colour(false, 3, 0, 0);
+/// Dim white, which the red of a wrong answer next to it is told apart from.
+const LOCKED: u8 = colour(false, 1, 1, 1);
 const FIRST: u8 = colour(true, 3, 3, 3);
 const CORRECT: u8 = colour(true, 0, 3, 0);
 const WRONG: u8 = colour(true, 3, 0, 0);
+
+/// The colours of a buzzer that is not ready: one pressed showing any of
+/// them is out of the round (`Enjoy303s::press_in`).
+const NOT_READY: [u8; 5] = [OFF, LOCKED, FIRST, CORRECT, WRONG];
 
 fn colour_of(light: Light) -> u8 {
     match light {
@@ -73,7 +89,6 @@ enum Order {
     Open,
     /// Take presses.
     Start,
-    Stop,
     /// One buzzer's colour, by its slot.
     Paint(usize, u8),
     /// Every buzzer's colour.
@@ -87,7 +102,6 @@ impl Order {
             Order::TakeBuzzers => vec![0x14, MAX_BUZZER as u8 - 1],
             Order::Open => vec![0x12, 0x00],
             Order::Start => vec![0x85],
-            Order::Stop => vec![0x87],
             Order::Paint(slot, colour) => vec![0x2d, slot as u8 % 4, slot as u8 / 4, colour],
             Order::PaintAll(colour) => vec![0x74, colour],
         };
@@ -145,13 +159,16 @@ pub struct Enjoy303s {
     stage: Stage,
     /// Reports for `follow_up`.
     follow: Vec<Report>,
+    /// When the set-up step waiting for its answer was last asked, once
+    /// `follow_up` saw it.
+    asked_ms: Option<u64>,
     /// The colour each buzzer should show, by slot, as the app last set it.
     wanted: [Option<u8>; BUZZERS],
     /// The colour each buzzer was last told to show, by slot: none until told.
     shown: [Option<u8>; BUZZERS],
     mode: BuzzerMode,
-    /// Whether the receiver was last told to take presses: none until told.
-    taking: Option<bool>,
+    /// Presses read but not passed on, for `take_dropped`.
+    dropped: Vec<Press>,
 }
 
 impl Default for Enjoy303s {
@@ -160,10 +177,11 @@ impl Default for Enjoy303s {
             pending: Vec::new(),
             stage: Stage::default(),
             follow: Vec::new(),
+            asked_ms: None,
             wanted: [None; BUZZERS],
             shown: [None; BUZZERS],
             mode: BuzzerMode::Off,
-            taking: None,
+            dropped: Vec::new(),
         }
     }
 }
@@ -173,18 +191,36 @@ impl Enjoy303s {
         device.vendor_id == VENDOR_ID && device.product_id == PRODUCT_ID
     }
 
+    /// The orders of the set-up step that waits for the receiver's answer:
+    /// to connect, the cable's settings first, as after plugging it in.
+    fn ask(&self) -> Vec<Report> {
+        match self.stage {
+            Stage::Connecting => [cp2110::open_uart(BAUD), Order::Connect.reports()].concat(),
+            Stage::Opening => [Order::TakeBuzzers, Order::Open].into_iter().flat_map(Order::reports).collect(),
+            Stage::Open => Vec::new(),
+        }
+    }
+
     /// Handles one message from the receiver: the press it is, if any.
+    ///
+    /// The answer to connect or open, once open, says the receiver started
+    /// again (unverified that a receiver powered again says so): it has
+    /// forgotten its set-up and what the buzzers were told, so both are
+    /// sent again.
     fn read(&mut self, payload: &[u8]) -> Option<Press> {
         match payload {
-            [CONNECTED, ..] if self.stage == Stage::Connecting => {
+            [CONNECTED, ..] if self.stage != Stage::Opening => {
                 self.stage = Stage::Opening;
-                self.follow.extend([Order::TakeBuzzers, Order::Open].into_iter().flat_map(Order::reports));
+                self.asked_ms = None;
+                self.follow.extend(self.ask());
                 None
             }
-            [OPENED, 0x01, ..] if self.stage == Stage::Opening => {
+            [OPENED, 0x01, ..] if self.stage != Stage::Connecting => {
                 self.stage = Stage::Open;
-                // What the buzzers should show waited for this.
-                let shown = [self.paint(), self.start_or_stop()].concat();
+                // What the buzzers should show waited for this. The receiver
+                // takes presses before any buzzer lights ready.
+                self.shown = [None; BUZZERS];
+                let shown = [Order::Start.reports(), self.paint()].concat();
                 self.follow.extend(shown);
                 None
             }
@@ -196,51 +232,65 @@ impl Enjoy303s {
     /// The press in a press message: the buzzer's radio ID, the button in
     /// the high four bits, the colour the buzzer showed, its timer in three
     /// bytes, low byte first, and a time the app does not use. A message
-    /// cut short gives what it holds.
+    /// too short to hold all the app uses is no press.
     ///
-    /// In fastest finger only a buzzer that showed ready buzzes: one pressed
-    /// before its light turned ready, or while locked out, carries a timer
-    /// from an older change of its light, which cannot be set against the
-    /// others'.
-    fn press_in(&self, payload: &[u8]) -> Option<Press> {
-        let [_, radio_id, code, rest @ ..] = payload else { return None };
-        let buzzer = BuzzerId::from(*radio_id) + 1;
+    /// In fastest finger, and while its buzz is judged, a press counts only
+    /// from a buzzer that was ready: one pressed while dark, locked out or
+    /// showing a result must not count when it arrives just after the step
+    /// changed, before the mode did, and its timer counts from another
+    /// moment. Brightness aside, as the buzzer may report its own, and a
+    /// colour the app never sets lets the press through: what the buzzer
+    /// reports is unverified, and a byte read wrong must not silence every
+    /// buzzer. Elsewhere the game decides, and any buzzer can register.
+    fn press_in(&mut self, payload: &[u8]) -> Option<Press> {
+        let [_, radio_id, code, shown, t0, t1, t2, ..] = *payload else { return None };
+        let buzzer = BuzzerId::from(radio_id) + 1;
         slot(buzzer)?;
-        // Unverified: which code the big button sends. The others are A to D
-        // (and E, F of the vendor's keypads), so any other code is taken for it.
+        // Unverified: which code the big button sends. The guide gives 5
+        // and 6 for keys E and F of the vendor's keypads, which a buzzer
+        // does not have; any other code is no press, so nothing unknown
+        // ever buzzes.
         let button = match code >> 4 {
             1 => Button::A,
             2 => Button::B,
             3 => Button::C,
             4 => Button::D,
-            _ => Button::Big,
+            5 | 6 => Button::Big,
+            _ => return None,
         };
-        let shown = rest.first().map(|c| c & !STORED_ONLY);
-        if self.mode == BuzzerMode::FastestFinger && shown.is_some_and(|c| c != READY) {
+        let press = Press::timed(buzzer, button, u32::from_le_bytes([t0, t1, t2, 0]));
+        let judged = matches!(self.mode, BuzzerMode::FastestFinger | BuzzerMode::Buzzed);
+        if judged && NOT_READY.iter().any(|&c| rgb(c) == rgb(shown)) {
+            self.dropped.push(press);
             return None;
         }
-        let timer = rest.get(1..4).map(|t| u32::from_le_bytes([t[0], t[1], t[2], 0]));
-        Some(Press { buzzer, button, timer })
+        Some(press)
     }
 
     /// The orders that make every buzzer show the colour it should.
+    ///
     /// Buzzers that turn ready together get it all at once, as their timers
     /// count from that moment and fastest-finger presses are ordered by them
     /// (`timer_order`): one by one, a write apart, the last one painted
     /// would gain that much. Any other colour goes to all at once when that
-    /// takes fewer orders. Then each buzzer that should show another colour
-    /// gets its own, though it shows the common one for a moment, which
-    /// counts for nothing: it is out of the round. A buzzer the app never
-    /// lit takes the common colour too.
+    /// takes fewer orders, but never while a buzzer should show ready, which
+    /// would then be lit again one by one. Each buzzer that should show
+    /// another colour than the common one then gets its own, though it
+    /// shows the common one for a moment, which counts for nothing: it is
+    /// out of the round. A buzzer the app never lit takes the common colour
+    /// too. No buzzer turns ready alone while others already count: a player
+    /// switched on mid-round joins at the next one (`quiz_core::Game`).
     fn paint(&mut self) -> Vec<Report> {
         let changed: Vec<usize> = (0..BUZZERS).filter(|&i| self.wanted[i].is_some() && self.wanted[i] != self.shown[i]).collect();
         let wanted = self.wanted.iter().flatten();
         let others = |c: u8| wanted.clone().filter(|&&w| w != c).count();
+        let any_ready = wanted.clone().any(|&c| c == READY);
         let turning_ready = changed.iter().filter(|&&i| self.wanted[i] == Some(READY)).count();
         let common = if turning_ready > 1 {
             Some(READY)
         } else {
-            wanted.clone().copied().min_by_key(|&c| others(c)).filter(|&c| 1 + others(c) < changed.len())
+            let candidates = wanted.clone().copied().filter(|&c| c == READY || !any_ready);
+            candidates.min_by_key(|&c| others(c)).filter(|&c| 1 + others(c) < changed.len())
         };
         let orders: Vec<Order> = match common {
             Some(common) => {
@@ -257,23 +307,6 @@ impl Enjoy303s {
             }
         }
         orders.into_iter().flat_map(Order::reports).collect()
-    }
-
-    /// The order that has the receiver take presses while they can count,
-    /// and stop between questions. While a buzz is judged or the results
-    /// show it goes on as it was, so a round is not stopped and started
-    /// again for nothing.
-    fn start_or_stop(&mut self) -> Vec<Report> {
-        let take = match self.mode {
-            BuzzerMode::Off => false,
-            BuzzerMode::Register | BuzzerMode::Answers | BuzzerMode::FastestFinger => true,
-            BuzzerMode::Buzzed | BuzzerMode::Results => return Vec::new(),
-        };
-        if self.taking == Some(take) {
-            return Vec::new();
-        }
-        self.taking = Some(take);
-        if take { Order::Start.reports() } else { Order::Stop.reports() }
     }
 }
 
@@ -309,12 +342,24 @@ impl Protocol for Enjoy303s {
     }
 
     fn init_reports(&self) -> Vec<Report> {
-        let mut reports = cp2110::open_uart(BAUD);
-        reports.extend(Order::Connect.reports());
-        reports
+        self.ask()
     }
 
-    fn follow_up(&mut self) -> Vec<Report> {
+    fn take_dropped(&mut self) -> Vec<Press> {
+        std::mem::take(&mut self.dropped)
+    }
+
+    /// What the receiver's answers call for, and the set-up step again
+    /// while its answer is overdue: one lost or spoiled on the way, or a
+    /// receiver powered after the cable connected, delays the set-up only.
+    fn follow_up(&mut self, now_ms: u64) -> Vec<Report> {
+        if self.stage != Stage::Open {
+            let asked_ms = *self.asked_ms.get_or_insert(now_ms);
+            if now_ms.saturating_sub(asked_ms) >= ANSWER_WAIT_MS {
+                self.asked_ms = Some(now_ms);
+                self.follow.extend(self.ask());
+            }
+        }
         std::mem::take(&mut self.follow)
     }
 
@@ -328,10 +373,12 @@ impl Protocol for Enjoy303s {
         if self.stage == Stage::Open { self.paint() } else { Vec::new() }
     }
 
-    /// Kept until the receiver is open, then written.
+    /// Kept for telling presses that count from those that cannot: the
+    /// receiver takes presses all the time once open, so a late team still
+    /// registers between questions (unverified: that `85` once is enough).
     fn encode_mode(&mut self, mode: BuzzerMode) -> Vec<Report> {
         self.mode = mode;
-        if self.stage == Stage::Open { self.start_or_stop() } else { Vec::new() }
+        Vec::new()
     }
 
     fn has_lights(&self) -> bool {
@@ -373,20 +420,15 @@ mod tests {
     const TAKE_64: [u8; 6] = [0x35, 0x96, 0x02, 0x14, 0x3f, 0x2b];
     const OPEN: [u8; 6] = [0x35, 0x96, 0x02, 0x12, 0x00, 0x12];
     const START: [u8; 5] = [0x35, 0x96, 0x01, 0x85, 0x85];
-    const STOP: [u8; 5] = [0x35, 0x96, 0x01, 0x87, 0x87];
 
     /// A receiver that answered its set-up, and the orders it got for it.
     fn opened() -> (Enjoy303s, Vec<Vec<u8>>) {
         let mut p = Enjoy303s::default();
         p.decode(&input(&message(&[CONNECTED, 0x00])));
-        let mut written = serial(&p.follow_up());
+        let mut written = serial(&p.follow_up(0));
         p.decode(&input(&message(&[OPENED, 0x01])));
-        written.extend(serial(&p.follow_up()));
+        written.extend(serial(&p.follow_up(0)));
         (p, written)
-    }
-
-    fn timed(buzzer: BuzzerId, button: Button, timer: u32) -> Press {
-        Press { timer: Some(timer), ..Press::new(buzzer, button) }
     }
 
     #[test]
@@ -402,20 +444,56 @@ mod tests {
         let mut p = Enjoy303s::default();
         assert_eq!(p.kind(), ProtocolKind::Enjoy303s { answered: false });
         assert!(p.decode(&input(&message(&[OPENED, 0x01]))).is_empty());
-        assert!(p.follow_up().is_empty(), "nothing before the connect answer");
+        assert!(p.follow_up(0).is_empty(), "nothing before the connect answer");
 
         p.decode(&input(&message(&[CONNECTED, 0x00])));
-        assert_eq!(serial(&p.follow_up()), [TAKE_64.to_vec(), OPEN.to_vec()]);
+        assert_eq!(serial(&p.follow_up(0)), [TAKE_64.to_vec(), OPEN.to_vec()]);
         assert_eq!(p.kind(), ProtocolKind::Enjoy303s { answered: false });
         p.decode(&input(&message(&[OPENED, 0x00])));
         assert_eq!(p.kind(), ProtocolKind::Enjoy303s { answered: false }, "not opened");
         p.decode(&input(&message(&[OPENED, 0x01])));
         assert_eq!(p.kind(), ProtocolKind::Enjoy303s { answered: true });
-        // No lights were set; between questions a round from before stops.
-        assert_eq!(serial(&p.follow_up()), [STOP]);
-        // A second answer starts nothing again.
+        // No lights were set: it takes presses.
+        assert_eq!(serial(&p.follow_up(0)), [START]);
         p.decode(&input(&message(&[CONNECTED, 0x00])));
-        assert!(p.follow_up().is_empty());
+        assert_eq!(serial(&p.follow_up(0)), [TAKE_64.to_vec(), OPEN.to_vec()], "a second connect answer while opening");
+        p.decode(&input(&message(&[CONNECTED, 0x00])));
+        assert!(p.follow_up(0).is_empty(), "nor a third");
+    }
+
+    #[test]
+    fn a_receiver_that_answers_its_set_up_again_once_open_is_set_up_again() {
+        let (mut p, _) = opened();
+        p.encode_lights(&[(1, Light::Ready), (2, Light::Ready), (3, Light::Wrong)]);
+        let ready_all = [0x35, 0x96, 0x02, 0x74, READY, 0x74 ^ READY];
+        let wrong_3 = [0x35, 0x96, 0x04, 0x2d, 2, 0, WRONG, 0x2d ^ 2 ^ WRONG];
+        // Started again: connect is answered while open.
+        p.decode(&input(&message(&[CONNECTED, 0x00])));
+        assert_eq!(p.kind(), ProtocolKind::Enjoy303s { answered: false });
+        assert_eq!(serial(&p.follow_up(0)), [TAKE_64.to_vec(), OPEN.to_vec()]);
+        assert!(p.encode_lights(&[(4, Light::Ready)]).is_empty(), "kept until open again");
+        p.decode(&input(&message(&[OPENED, 0x01])));
+        // Every light again, as the receiver forgot them.
+        assert_eq!(serial(&p.follow_up(0)), [START.to_vec(), ready_all.to_vec(), wrong_3.to_vec()]);
+        // Open answered again while open: the same.
+        p.decode(&input(&message(&[OPENED, 0x01])));
+        assert_eq!(serial(&p.follow_up(0)), [START.to_vec(), ready_all.to_vec(), wrong_3.to_vec()]);
+    }
+
+    #[test]
+    fn asks_again_while_the_answer_to_a_set_up_step_is_overdue() {
+        let mut p = Enjoy303s::default();
+        assert!(p.follow_up(1_000).is_empty(), "the connect order just went");
+        assert!(p.follow_up(1_499).is_empty());
+        assert_eq!(p.follow_up(1_500), p.init_reports(), "the cable's settings and the connect order again");
+        assert!(p.follow_up(1_600).is_empty());
+        p.decode(&input(&message(&[CONNECTED, 0x00])));
+        assert_eq!(serial(&p.follow_up(1_700)), [TAKE_64.to_vec(), OPEN.to_vec()]);
+        assert!(p.follow_up(2_199).is_empty());
+        assert_eq!(serial(&p.follow_up(2_200)), [TAKE_64.to_vec(), OPEN.to_vec()]);
+        p.decode(&input(&message(&[OPENED, 0x01])));
+        assert_eq!(serial(&p.follow_up(2_300)), [START]);
+        assert!(p.follow_up(60_000).is_empty(), "nothing more to ask once open");
     }
 
     #[test]
@@ -424,11 +502,12 @@ mod tests {
         assert!(p.encode_lights(&[(1, Light::Ready), (2, Light::Ready), (3, Light::Wrong)]).is_empty());
         assert!(p.encode_mode(BuzzerMode::Answers).is_empty());
         p.decode(&input(&message(&[CONNECTED, 0x00])));
-        p.follow_up();
+        p.follow_up(0);
         p.decode(&input(&message(&[OPENED, 0x01])));
         let ready_all = [0x35, 0x96, 0x02, 0x74, READY, 0x74 ^ READY];
         let wrong_3 = [0x35, 0x96, 0x04, 0x2d, 2, 0, WRONG, 0x2d ^ 2 ^ WRONG];
-        assert_eq!(serial(&p.follow_up()), [ready_all.to_vec(), wrong_3.to_vec(), START.to_vec()]);
+        // The receiver takes presses before the buzzers light ready.
+        assert_eq!(serial(&p.follow_up(0)), [START.to_vec(), ready_all.to_vec(), wrong_3.to_vec()]);
     }
 
     #[test]
@@ -447,7 +526,7 @@ mod tests {
         let paint = |i: u8, c: u8| vec![0x35, 0x96, 0x04, 0x2d, i % 4, i / 4, c, 0x2d ^ (i % 4) ^ (i / 4) ^ c];
         let all = |c: u8| vec![0x35, 0x96, 0x02, 0x74, c, 0x74 ^ c];
         // Two buzzers: one order each costs no more than one for all and one more.
-        assert_eq!(serial(&p.encode_lights(&[(1, Light::Ready), (2, Light::Locked)])), [paint(0, READY), paint(1, LOCKED)]);
+        assert_eq!(serial(&p.encode_lights(&[(1, Light::Wrong), (2, Light::Locked)])), [paint(0, WRONG), paint(1, LOCKED)]);
         // A round begins on four buzzers, one of them switched off.
         let round: Vec<_> = (1..=4).map(|b| (b, Light::Ready)).chain([(5, Light::Locked)]).collect();
         assert_eq!(serial(&p.encode_lights(&round)), [all(READY), paint(4, LOCKED)]);
@@ -478,46 +557,85 @@ mod tests {
     }
 
     #[test]
-    fn the_receiver_takes_presses_while_they_can_count() {
+    fn no_colour_goes_to_all_while_a_buzzer_should_show_ready() {
+        let (mut p, _) = opened();
+        let paint = |i: u8, c: u8| vec![0x35, 0x96, 0x04, 0x2d, i % 4, i / 4, c, 0x2d ^ (i % 4) ^ (i / 4) ^ c];
+        let round: Vec<_> = (1..=3).map(|b| (b, Light::Ready)).chain([(4, Light::Locked)]).collect();
+        assert_eq!(serial(&p.encode_lights(&round)), [vec![0x35, 0x96, 0x02, 0x74, READY, 0x74 ^ READY], paint(3, LOCKED)]);
+        // Others locked out at once: an order to all would light the ready
+        // buzzers again one by one.
+        let locked: Vec<_> = (5..=9).map(|b| (b, Light::Locked)).collect();
+        assert_eq!(serial(&p.encode_lights(&locked)), (4..=8).map(|i| paint(i, LOCKED)).collect::<Vec<_>>());
+    }
+
+    #[test]
+    fn the_receiver_takes_presses_from_its_opening_on_whatever_the_mode() {
         let (mut p, written) = opened();
-        assert_eq!(written, [TAKE_64.to_vec(), OPEN.to_vec(), STOP.to_vec()], "between questions on connecting");
-        assert_eq!(serial(&p.encode_mode(BuzzerMode::Register)), [START]);
-        assert!(p.encode_mode(BuzzerMode::Answers).is_empty(), "taking already");
-        assert!(p.encode_mode(BuzzerMode::Results).is_empty());
-        assert_eq!(serial(&p.encode_mode(BuzzerMode::Off)), [STOP]);
-        assert_eq!(serial(&p.encode_mode(BuzzerMode::FastestFinger)), [START]);
-        assert!(p.encode_mode(BuzzerMode::Buzzed).is_empty());
-        assert!(p.encode_mode(BuzzerMode::FastestFinger).is_empty());
+        assert_eq!(written, [TAKE_64.to_vec(), OPEN.to_vec(), START.to_vec()]);
+        let modes = [BuzzerMode::Register, BuzzerMode::Answers, BuzzerMode::Off, BuzzerMode::FastestFinger, BuzzerMode::Buzzed, BuzzerMode::Results];
+        for mode in modes {
+            assert!(p.encode_mode(mode).is_empty(), "{mode:?}");
+        }
+    }
+
+    #[test]
+    fn the_colours_differ_by_more_than_brightness() {
+        let colours = [OFF, READY, LOCKED, FIRST, CORRECT, WRONG];
+        for (i, a) in colours.iter().enumerate() {
+            for b in &colours[i + 1..] {
+                assert_ne!(rgb(*a), rgb(*b), "{a:#04x} and {b:#04x}");
+            }
+        }
+        assert!(!NOT_READY.iter().any(|&c| rgb(c) == rgb(READY)));
     }
 
     #[test]
     fn reads_presses_with_the_buzzers_timer() {
         let (mut p, _) = opened();
+        p.encode_mode(BuzzerMode::Answers);
         // Pinned: buzzer 3 (radio ID 2) presses A, showing ready, 500 after its light changed.
         let frame = [0x27, 0xa5, 0x0a, 0x32, 0x02, 0x10, 0x43, 0xf4, 0x01, 0x00, 0x00, 0x00, 0x00, 0x96];
         assert_eq!(press_message(2, 0x10, READY, 500), frame);
-        assert_eq!(p.decode(&input(&frame)), [timed(3, Button::A, 500)]);
-        let codes = [(0x20, Button::B), (0x30, Button::C), (0x4f, Button::D), (0x50, Button::Big), (0x00, Button::Big)];
+        assert_eq!(p.decode(&input(&frame)), [Press::timed(3, Button::A, 500)]);
+        let codes = [(0x20, Button::B), (0x30, Button::C), (0x4f, Button::D), (0x50, Button::Big), (0x60, Button::Big)];
         for (code, button) in codes {
-            assert_eq!(p.decode(&input(&press_message(63, code, OFF, 0x01_02_03))), [timed(64, button, 0x01_02_03)]);
+            assert_eq!(p.decode(&input(&press_message(63, code, READY, 0x01_02_03))), [Press::timed(64, button, 0x01_02_03)]);
         }
-        assert!(p.decode(&input(&press_message(64, 0x10, OFF, 1))).is_empty(), "no buzzer 65");
-        // A message cut short gives what it holds.
-        assert_eq!(p.decode(&input(&message(&[PRESS, 0, 0x10]))), [Press::new(1, Button::A)]);
+        for code in [0x00, 0x70, 0xf0] {
+            assert!(p.decode(&input(&press_message(0, code, READY, 1))).is_empty(), "no button {code:#04x}");
+        }
+        assert!(p.decode(&input(&press_message(64, 0x10, READY, 1))).is_empty(), "no buzzer 65");
+        // A message too short to hold the colour and the whole timer is no press.
+        assert!(p.decode(&input(&message(&[PRESS, 0, 0x10, READY, 1, 0]))).is_empty());
+        assert_eq!(p.decode(&input(&message(&[PRESS, 0, 0x10, READY, 1, 0, 0]))), [Press::timed(1, Button::A, 1)]);
         // Quizmaster's remote and set-ID answers are not presses.
         assert!(p.decode(&input(&message(&[0x34, 0x05]))).is_empty());
         assert!(p.decode(&input(&message(&[0x17, 0x01]))).is_empty());
     }
 
     #[test]
-    fn in_fastest_finger_only_a_buzzer_that_showed_ready_buzzes() {
+    fn in_fastest_finger_only_a_buzzer_that_was_ready_presses() {
         let (mut p, _) = opened();
-        p.encode_mode(BuzzerMode::FastestFinger);
-        assert_eq!(p.decode(&input(&press_message(0, 0x50, READY | STORED_ONLY, 300))), [timed(1, Button::Big, 300)]);
-        assert!(p.decode(&input(&press_message(1, 0x50, LOCKED, 300))).is_empty());
-        assert!(p.decode(&input(&press_message(2, 0x50, OFF, 90_000))).is_empty(), "pressed before its light turned ready");
-        p.encode_mode(BuzzerMode::Answers);
-        assert_eq!(p.decode(&input(&press_message(2, 0x10, OFF, 90_000))), [timed(3, Button::A, 90_000)]);
+        for mode in [BuzzerMode::FastestFinger, BuzzerMode::Buzzed] {
+            p.encode_mode(mode);
+            // Brightness and the top bit aside, and a colour the app never sets.
+            for shown in [READY, READY | 0x80, rgb(READY), colour(true, 2, 2, 2)] {
+                assert_eq!(p.decode(&input(&press_message(0, 0x50, shown, 300))), [Press::timed(1, Button::Big, 300)], "{mode:?} {shown:#04x}");
+            }
+            assert!(p.take_dropped().is_empty());
+            for shown in [OFF, LOCKED, LOCKED | 0x40, FIRST, CORRECT, WRONG] {
+                assert!(p.decode(&input(&press_message(1, 0x50, shown, 300))).is_empty(), "{mode:?} {shown:#04x}");
+                assert_eq!(p.take_dropped(), [Press::timed(2, Button::Big, 300)], "logged");
+            }
+        }
+        // Elsewhere the game decides: a switched-off player is ignored, a
+        // new buzzer registers.
+        for mode in [BuzzerMode::Register, BuzzerMode::Answers, BuzzerMode::Off, BuzzerMode::Results] {
+            p.encode_mode(mode);
+            assert_eq!(p.decode(&input(&press_message(2, 0x10, OFF, 90_000))), [Press::timed(3, Button::A, 90_000)], "{mode:?}");
+            assert_eq!(p.decode(&input(&press_message(3, 0x10, LOCKED, 900))), [Press::timed(4, Button::A, 900)], "{mode:?}");
+        }
+        assert!(p.take_dropped().is_empty());
     }
 
     #[test]
@@ -528,7 +646,7 @@ mod tests {
         let stream = [&a[..], &[0x00, 0x27], &b[..]].concat();
         let (first, rest) = stream.split_at(5);
         assert!(p.decode(&input(first)).is_empty());
-        assert_eq!(p.decode(&input(rest)), [timed(1, Button::A, 1), timed(2, Button::B, 2)]);
+        assert_eq!(p.decode(&input(rest)), [Press::timed(1, Button::A, 1), Press::timed(2, Button::B, 2)]);
 
         // A wrong check byte drops the message.
         let mut spoiled = a.clone();
@@ -536,8 +654,8 @@ mod tests {
         assert!(p.decode(&input(&spoiled)).is_empty());
         // A header spoiled into a long length holds up no press behind it.
         let held_up = [&[0x27, 0xa5, 0x3c, 0x32][..], &b].concat();
-        assert_eq!(p.decode(&input(&held_up)), [timed(2, Button::B, 2)]);
-        assert_eq!(p.decode(&input(&a)), [timed(1, Button::A, 1)], "lined up again");
+        assert_eq!(p.decode(&input(&held_up)), [Press::timed(2, Button::B, 2)]);
+        assert_eq!(p.decode(&input(&a)), [Press::timed(1, Button::A, 1)], "lined up again");
         // A report that is not data carries no bytes.
         assert!(p.decode(&[0x50, 0x27, 0xa5]).is_empty());
     }

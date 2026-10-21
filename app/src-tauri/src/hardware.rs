@@ -370,18 +370,18 @@ pub async fn receiver_export_log(app: AppHandle, window: Window, picker: Picker)
 fn write_log(hw: &Hardware, path: &Path) -> CmdResult<()> {
     let status = hw.handle.as_ref().map(ReceiverHandle::status);
     let mut out = format!(
-        "# Receiver log, app {} on {}\n# status: {}\n# unix-ms\tbytes (hex)\tdecoded (buzzer, button, @ the buzzer's timer)\n",
+        "# Receiver log, app {} on {}\n# status: {}\n# unix-ms\tbytes (hex)\tdecoded (buzzer, button, @ the buzzer's timer)\tdropped as not ready\n",
         env!("CARGO_PKG_VERSION"),
         std::env::consts::OS,
         serde_json::to_string(&status).unwrap_or_default()
     );
+    let presses = |presses: &[Press]| -> String {
+        let presses: Vec<String> =
+            presses.iter().map(|p| format!("{}{:?}{}", p.buzzer, p.button, p.timer.map(|t| format!("@{t}")).unwrap_or_default())).collect();
+        presses.join(",")
+    };
     for r in hw.raw_log.lock().unwrap().iter() {
-        let decoded: Vec<String> = r
-            .decoded
-            .iter()
-            .map(|p| format!("{}{:?}{}", p.buzzer, p.button, p.timer.map(|t| format!("@{t}")).unwrap_or_default()))
-            .collect();
-        out.push_str(&format!("{}\t{}\t{}\n", r.at_ms, format_hex(&r.bytes), decoded.join(",")));
+        out.push_str(&format!("{}\t{}\t{}\t{}\n", r.at_ms, format_hex(&r.bytes), presses(&r.decoded), presses(&r.dropped)));
     }
     std::fs::write(path, out).map_err(|e| AppError::file(FileAction::Write, path, e))
 }

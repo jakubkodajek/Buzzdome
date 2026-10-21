@@ -33,16 +33,23 @@ pub trait Protocol: Send {
     /// buzzer's own timer are ordered by it in fastest finger (`timer_order`).
     fn decode(&mut self, report: &[u8]) -> Vec<Press>;
 
+    /// The presses `decode` read but did not pass on, as ones that cannot
+    /// count now, since this was last asked: for the raw log only.
+    fn take_dropped(&mut self) -> Vec<Press> {
+        Vec::new()
+    }
+
     /// Reports that set the receiver up, sent once after the device is opened.
     fn init_reports(&self) -> Vec<Report> {
         Vec::new()
     }
 
-    /// Reports that what the receiver sent calls for: the next step of its
-    /// set-up, and once it is set up, the lights and mode that waited for
-    /// it. Taken after every report read, and written after the reports
-    /// already waiting.
-    fn follow_up(&mut self) -> Vec<Report> {
+    /// Reports to write now, taken after every read, whether a report came
+    /// or the read timed out, at `now_ms` on the show clock: what the
+    /// receiver's messages call for, as the next step of its set-up and the
+    /// lights and mode that waited for it, or a step again whose answer is
+    /// overdue. Written after the reports already waiting.
+    fn follow_up(&mut self, _now_ms: u64) -> Vec<Report> {
         Vec::new()
     }
 

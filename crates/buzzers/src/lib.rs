@@ -49,6 +49,11 @@ impl Press {
     pub fn new(buzzer: BuzzerId, button: Button) -> Press {
         Press { buzzer, button, timer: None }
     }
+
+    /// A press with the buzzer's own `timer`.
+    pub fn timed(buzzer: BuzzerId, button: Button, timer: u32) -> Press {
+        Press { buzzer, button, timer: Some(timer) }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]

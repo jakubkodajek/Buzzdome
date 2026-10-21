@@ -234,6 +234,11 @@ export function protocolText(t: Translate, protocol: ProtocolKind): string {
   }
 }
 
+/** Whether the receiver has yet to answer its set-up: shown as still being looked for, not as connected. */
+export function awaitsAnswer(protocol: ProtocolKind): boolean {
+  return protocol.type === "enjoy303s" && !protocol.answered;
+}
+
 
 const IMPORT_ISSUE_KEYS: Record<ImportIssue["code"], StringKey> = {
   noQuestionColumn: "importNoQuestionColumn",
