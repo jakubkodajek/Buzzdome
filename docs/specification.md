@@ -79,19 +79,27 @@ Enjoy has not sent the SDK yet. The RF215 (dome) protocol is now known from
 a description written from an unofficial copy of it, which Jakub approved
 on 2026-10-20 (`docs/design.md` 2.4); it carries no press times. The 303S
 (RGB) protocol is still unknown, and Jakub's own set is the 303S (confirmed
-2026-10-21), so the RF215 driver does not apply to it. The app therefore works in three stages,
-each a fallback for the one before:
+2026-10-21), so the RF215 driver does not apply to it. The app therefore
+reads buzzers in three ways:
 
-1. **Learned mapping** (works now, no vendor information needed): the user
-   teaches the app which USB report each button of each buzzer sends.
-   Presses work; lights do not. Teaching is per buzzer, which is fine for a
-   test with a few buzzers but too slow for a full event.
+1. **Learned mapping** (no vendor information needed): the user teaches the
+   app which USB report each button of each buzzer sends. Presses work;
+   lights do not. Teaching is per buzzer, which is fine for a test with a
+   few buzzers but too slow for a full event. It needs a receiver that sends
+   plain HID reports, so it does not cover Enjoy's `10c4:1819` cable: that
+   cable is a USB-to-serial bridge whose serial line only the RF215 driver
+   opens (`docs/design.md` 2.4), and the app always uses that driver for
+   it, which takes no teaching.
 2. **Vendor protocol**: presses with buzzer ID, and lights; press time and
    battery level where the protocol has them. Selected automatically by the
    receiver's USB vendor and product ID. Built for the RF215 (presses, the
    receiver's own rounds, right and wrong), to be checked on the hardware.
 3. **Keyboard**: keys `1`-`0` and the on-screen virtual buzzers, always
    available, also covering the vendor's "keystroke" mode.
+
+So learn mode is no fallback for Jakub's 303S set: if the set shows the
+`10c4:1819` cable and does not answer like the 215, only the keyboard and
+on-screen buzzers work with it until Enjoy's 303S protocol is built.
 
 ### 4.2 Requirements
 

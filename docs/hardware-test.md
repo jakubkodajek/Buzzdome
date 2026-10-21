@@ -68,7 +68,10 @@ that shows the Enjoy RF215 status, go through this section all the same and
 note in each step what works and what does not: nobody knows yet how much of
 the 215's protocol the 303S shares. Even with no presses, the bytes under
 "Raw data" and the exported log are what the 303S protocol can be checked
-against once Enjoy sends it.
+against once Enjoy sends it. Learn mode is no way round it: the app always
+reads this cable with the 215's protocol, the only part of the app that
+opens the cable's serial line. If a 303S set shows no presses here, only the keyboard
+and on-screen buzzers work with it until Enjoy's protocol is built.
 
 1. With no show running, the buzzers take answers. Press A, B, C and D on
    buzzer 1, then on buzzers 2 to 4. Expected: "buzzer N, button X" under

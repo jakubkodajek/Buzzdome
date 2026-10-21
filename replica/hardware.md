@@ -1,6 +1,6 @@
 # Hardware: wireless buzzers
 
-Research notes, last updated 2026-10-09. Nothing here is verified on real
+Research notes, last updated 2026-10-21. Nothing here is verified on real
 hardware yet. The driver built from these notes is described in
 `docs/design.md`; the test plan for the real receiver is
 `docs/hardware-test.md`. Section numbers point into the v8.5 manual
@@ -8,8 +8,9 @@ hardware yet. The driver built from these notes is described in
 
 ## What the events use
 
-Players answer only with physical wireless buzzers, no phones. A colleague owns
-QuizXpress-branded buzzers, one of these two models (not yet confirmed which):
+Players answer only with physical wireless buzzers, no phones. QuizXpress sells
+two models; Jakub's set is the Galaxy RGB (Enjoy 303S), confirmed 2026-10-21,
+so the RF215 driver does not apply to it:
 
 | | Dome Buzzer | Galaxy RGB Buzzer |
 | --- | --- | --- |
@@ -21,8 +22,7 @@ QuizXpress-branded buzzers, one of these two models (not yet confirmed which):
 | likely OEM model | Enjoy B215 ("rf215") | Enjoy 303S / B303 |
 
 How to tell them apart: a battery compartment with two D cells means Dome; a
-charging socket means Galaxy. Jakub's own set is the Galaxy (confirmed
-2026-10-21), so the RF215 driver does not apply to it. QuizXpress keypads (6 answers + fastest finger +
+charging socket means Galaxy. QuizXpress keypads (6 answers + fastest finger +
 "hand" button, 400 per receiver) match the Enjoy RF217 keypad.
 
 ## Manufacturer (high confidence)
