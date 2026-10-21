@@ -17,6 +17,11 @@ answer: Button | null,
  */
 answerCorrect: boolean | null, answerMs: number | null, lockedOut: boolean, 
 /**
+ * Switched on or registered while the current fastest-finger question
+ * was under way, so plays from the next question (`Game::joins_next`).
+ */
+joinsNext: boolean, 
+/**
  * Score change from the current question.
  */
 delta: number | null, };

@@ -4,7 +4,7 @@
 //! the same quiz rebuilds the exact state after a crash. Time never comes from a
 //! clock inside this module: each command carries its own `at_ms`.
 
-use crate::model::{AnswerMode, Question, Quiz, Slide, SlideContent, MAX_EVERYONE_ANSWERS};
+use crate::model::{AnswerMode, Question, Quiz, Slide, SlideContent};
 use crate::text::{composed, name_key};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
@@ -67,15 +67,13 @@ pub enum Button {
     Big,
 }
 
+/// A buzzer's answer buttons, in the order of the answers they give.
+pub const ANSWER_BUTTONS: [Button; 4] = [Button::A, Button::B, Button::C, Button::D];
+
 impl Button {
+    /// Which answer the button gives, from 0; none for the big button.
     pub fn answer_index(self) -> Option<usize> {
-        match self {
-            Button::A => Some(0),
-            Button::B => Some(1),
-            Button::C => Some(2),
-            Button::D => Some(3),
-            Button::Big => None,
-        }
+        ANSWER_BUTTONS.iter().position(|&b| b == self)
     }
 
     /// Whether this button buzzes in on the fastest-finger `question`.
@@ -83,7 +81,7 @@ impl Button {
     /// first press is also the player's answer; with no answers, or with E
     /// and F, which are read out, the big button does.
     pub fn buzzes_in(self, question: &Question) -> bool {
-        let by_button = (1..=MAX_EVERYONE_ANSWERS).contains(&question.answers.len());
+        let by_button = (1..=ANSWER_BUTTONS.len()).contains(&question.answers.len());
         match self.answer_index() {
             Some(i) => by_button && i < question.answers.len(),
             None => !by_button,
@@ -454,9 +452,13 @@ pub struct Game {
     /// switched on when it closed. Its scores, results, answer counts and
     /// lights go by them alone, whoever is switched on or off later.
     counted: BTreeSet<BuzzerId>,
-    /// Fastest finger: players who answered wrong in the current question,
-    /// and those switched on while it was under way (rules version 5).
+    /// Fastest finger: players who answered wrong in the current question.
     locked_out: BTreeSet<BuzzerId>,
+    /// Fastest finger: players switched on or registered while the current
+    /// question was under way (rules version 5). The others' buzzer timers
+    /// count from when they lit ready, by which a buzz is ordered (BZ-5):
+    /// theirs would count from later, so they play from the next question.
+    joins_next: BTreeSet<BuzzerId>,
     /// What the current question gave each player (`credit`).
     gains: BTreeMap<BuzzerId, Gain>,
     leaderboard_visible: bool,
@@ -483,6 +485,7 @@ impl Game {
             responses: BTreeMap::new(),
             counted: BTreeSet::new(),
             locked_out: BTreeSet::new(),
+            joins_next: BTreeSet::new(),
             gains: BTreeMap::new(),
             leaderboard_visible: false,
             teams: Vec::new(),
@@ -581,6 +584,24 @@ impl Game {
 
     pub fn locked_out(&self) -> &BTreeSet<BuzzerId> {
         &self.locked_out
+    }
+
+    /// See `joins_next`.
+    pub fn joins_next(&self) -> &BTreeSet<BuzzerId> {
+        &self.joins_next
+    }
+
+    /// Whether the player has no buzz left in the current fastest-finger
+    /// question: they answered it wrong, or play from the next one.
+    fn sits_out(&self, buzzer: BuzzerId) -> bool {
+        self.locked_out.contains(&buzzer) || self.joins_next.contains(&buzzer)
+    }
+
+    /// Whether a player who joins now plays from the next question
+    /// (`joins_next`).
+    fn joins_at_next_question(&self) -> bool {
+        let fastest_finger = self.question().is_some_and(|q| q.mode == AnswerMode::FastestFinger);
+        self.rules_version >= 5 && fastest_finger && self.question_in_play()
     }
 
     /// See `counted`: empty until an everyone-answers question closes.
@@ -704,7 +725,7 @@ impl Game {
         match &self.phase {
             Phase::Lobby => Light::Ready,
             Phase::Question(QuestionStep::Running { .. }) => {
-                let done = self.responses.contains_key(&buzzer) || self.locked_out.contains(&buzzer);
+                let done = self.responses.contains_key(&buzzer) || self.sits_out(buzzer);
                 if done { Light::Locked } else { Light::Ready }
             }
             Phase::Question(QuestionStep::Buzzed { buzzer: first, .. }) => {
@@ -757,7 +778,7 @@ impl Game {
     /// player switched on answered it, or in fastest finger answered it
     /// wrong.
     fn nobody_left_to_answer(&self) -> bool {
-        self.enabled_buzzers().all(|b| self.responses.contains_key(&b) || self.locked_out.contains(&b))
+        self.enabled_buzzers().all(|b| self.responses.contains_key(&b) || self.sits_out(b))
     }
 
     pub fn apply(&mut self, stamped: &Stamped) -> Result<Vec<Effect>, GameError> {
@@ -815,8 +836,7 @@ impl Game {
                 if self.players.contains_key(buzzer) {
                     return Err(GameError::DuplicateBuzzer(*buzzer));
                 }
-                self.register(*buzzer, name.clone());
-                Ok(vec![])
+                Ok(vec![self.join(*buzzer, name.clone())])
             }
             Command::SetTeams { names } => {
                 self.teams = team_names(names.iter().map(String::as_str))?;
@@ -857,15 +877,14 @@ impl Game {
     }
 
     /// Switches a player on or off. A running question that then has nobody
-    /// left to answer closes, as it would on the last answer.
+    /// left to answer closes, as it would on the last answer. Switching on
+    /// a player who is on changes nothing.
     fn set_enabled(&mut self, buzzer: BuzzerId, enabled: bool) -> Result<Vec<Effect>, GameError> {
-        self.player_mut(buzzer)?.enabled = enabled;
-        // The others' buzzer timers count from when they lit ready, by which
-        // a buzz is ordered (BZ-5): a player switched on mid-question would
-        // count from later, so they join at the next question.
-        let fastest_finger = self.question().is_some_and(|q| q.mode == AnswerMode::FastestFinger);
-        if enabled && self.rules_version >= 5 && fastest_finger && self.question_in_play() {
-            self.locked_out.insert(buzzer);
+        let player = self.player_mut(buzzer)?;
+        let switched_on = enabled && !player.enabled;
+        player.enabled = enabled;
+        if switched_on && self.joins_at_next_question() {
+            self.joins_next.insert(buzzer);
         }
         let light = self.player_light(buzzer, enabled);
         let mut effects = vec![Effect::Lights { lights: vec![(buzzer, light)] }];
@@ -877,7 +896,10 @@ impl Game {
         Ok(effects)
     }
 
-    fn register(&mut self, buzzer: BuzzerId, name: String) {
+    /// Registers a new player, switched on, and lights their buzzer. In a
+    /// fastest-finger question under way they play from the next question,
+    /// as a player switched on then does (`joins_next`).
+    fn join(&mut self, buzzer: BuzzerId, name: String) -> Effect {
         self.players.entry(buzzer).or_insert(Player {
             buzzer,
             name: clean_name(&name),
@@ -885,14 +907,18 @@ impl Game {
             enabled: true,
             total_answer_ms: 0,
         });
+        if self.joins_at_next_question() {
+            self.joins_next.insert(buzzer);
+        }
+        Effect::Lights { lights: vec![(buzzer, self.light_of(buzzer))] }
     }
 
     fn press(&mut self, buzzer: BuzzerId, button: Button, now: u64) -> Vec<Effect> {
         // Any press from an unknown buzzer registers it, also late arrivals.
         if !self.players.contains_key(&buzzer) {
-            self.register(buzzer, String::new());
-            if self.phase == Phase::Lobby {
-                return vec![Effect::Lights { lights: vec![(buzzer, self.light_of(buzzer))] }];
+            let light = self.join(buzzer, String::new());
+            if self.phase == Phase::Lobby || self.joins_next.contains(&buzzer) {
+                return vec![light];
             }
         }
         match self.press_play(buzzer, button, now) {
@@ -930,7 +956,7 @@ impl Game {
             }
             AnswerMode::FastestFinger => {
                 let buzzes = self.rules_version < 5 || button.buzzes_in(question);
-                (buzzes && !self.locked_out.contains(&buzzer)).then_some(PressPlay::Buzz { clock })
+                (buzzes && !self.sits_out(buzzer)).then_some(PressPlay::Buzz { clock })
             }
         }
     }
@@ -1079,6 +1105,7 @@ impl Game {
         self.responses.clear();
         self.counted.clear();
         self.locked_out.clear();
+        self.joins_next.clear();
         self.gains.clear();
         self.leaderboard_visible = false;
         self.video_plays = 0;

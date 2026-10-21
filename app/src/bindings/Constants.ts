@@ -33,3 +33,4 @@ export const MAX_FONT_NAME_CHARS = 64;
 export const MAX_TRANSPARENCY = 100;
 export const MAX_CATEGORY_NAME_CHARS = 40;
 export const FULL_SHARE = 100;
+export const ANSWER_BUTTONS = ["a","b","c","d"] as const;
