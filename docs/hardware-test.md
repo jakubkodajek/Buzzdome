@@ -25,7 +25,9 @@ about 30 minutes with four buzzers.
 
 1. Read the label under a buzzer base: model 215 (dome) or 303S (RGB).
    Note it, and take a photo of the label, the receiver and the cable's
-   inline box.
+   inline box. Buzzers that light in colours other than green, white and
+   red (blue or orange, say) are most likely the 303S: the 215's lights are
+   fixed green, white and red.
 2. Plug the cable into the computer and the receiver. The receiver's power
    light should be on.
 
@@ -40,9 +42,11 @@ about 30 minutes with four buzzers.
    protocol:
    - **Enjoy RF215** for VID:PID `10c4:1819` once the receiver answered:
      go on with section 3 (learn mode is not offered, section 5 does not
-     apply).
+     apply). This names the cable and the receiver, not the buzzers: the
+     303S uses the same REC-A receiver, so a 303S set may show it too.
    - **Enjoy RF215, but the receiver did not answer the connect command**:
-     the cable is the RF215's, the receiver is not. Check its power light
+     the cable is the one the RF215 uses, but the receiver did not reply as
+     the RF215's does. Check its power light
      and the RJ45 plug, then unplug and plug the cable again. If it stays,
      note it and go on with section 3 all the same.
    - **raw reports only** for any other receiver: skip section 3.
@@ -58,13 +62,21 @@ itself, as described in `docs/design.md` (2.4); these steps check what could
 not be checked without the hardware. Keep the Receiver tab open: "Presses"
 shows what the app read, "Raw data" the bytes behind it.
 
+The app has only the 215's protocol, and Jakub's own set turned out to be
+the 303S (2026-10-21), whose protocol waits for Enjoy's SDK. With a 303S set
+that shows the Enjoy RF215 status, go through this section all the same and
+note in each step what works and what does not: nobody knows yet how much of
+the 215's protocol the 303S shares. Even with no presses, the bytes under
+"Raw data" and the exported log are what the 303S protocol can be checked
+against once Enjoy sends it.
+
 1. With no show running, the buzzers take answers. Press A, B, C and D on
    buzzer 1, then on buzzers 2 to 4. Expected: "buzzer N, button X" under
    "Presses" for each, with the buzzer's own number.
    - Raw data but no presses, or the wrong buttons: note which, then go on
      with step 5 of section 4 (export).
-   - Nothing at all: check the label (section 1). A 303S speaks another
-     protocol, which the app does not have yet.
+   - Nothing at all, not even raw data: note the model from section 1 and
+     export the log all the same.
 2. Press the big button on buzzer 1 and note whether it shows as a press
    (the receiver may report only A to D while everyone answers; teams
    register with A to D either way).

@@ -78,7 +78,8 @@ The manufacturer (Enjoy Tech) answered Jakub's email in October 2026:
 Enjoy has not sent the SDK yet. The RF215 (dome) protocol is now known from
 a description written from an unofficial copy of it, which Jakub approved
 on 2026-10-20 (`docs/design.md` 2.4); it carries no press times. The 303S
-(RGB) protocol is still unknown. The app therefore works in three stages,
+(RGB) protocol is still unknown, and Jakub's own set is the 303S (confirmed
+2026-10-21), so the RF215 driver does not apply to it. The app therefore works in three stages,
 each a fallback for the one before:
 
 1. **Learned mapping** (works now, no vendor information needed): the user
@@ -400,7 +401,7 @@ the Host screen.
 
 | Question | Who | Why it matters |
 | --- | --- | --- |
-| Which model is it: 215 (dome) or 303S (RGB)? Label under the buzzer base. | Jakub | Decides the protocol and whether lights are colours. |
+| Which model is it: 215 (dome) or 303S (RGB)? Answered 2026-10-21: Jakub's set is the 303S (RGB, 64 colours, up to 64 buzzers per receiver). | Jakub | Decides the protocol and whether lights are colours; the 303S protocol must come from Enjoy. |
 | USB vendor and product ID of the cable (Receiver tab or `hid-monitor`). | Jakub | Selects the protocol automatically. |
 | The SDK files and protocol documentation for that model and the HID cable. | Jakub, from Enjoy | Lights, press times, battery level. |
 | SDK terms for using it in this app. Decided 2026-10-09: the app is a private copy for Jakub, not open source and not distributed, so publishing the protocol is no longer a question; Enjoy is asked for the SDK for personal use. | Jakub, from Enjoy | The vendor protocol may then live in this (private) repository. |

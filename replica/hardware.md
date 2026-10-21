@@ -21,7 +21,8 @@ QuizXpress-branded buzzers, one of these two models (not yet confirmed which):
 | likely OEM model | Enjoy B215 ("rf215") | Enjoy 303S / B303 |
 
 How to tell them apart: a battery compartment with two D cells means Dome; a
-charging socket means Galaxy. QuizXpress keypads (6 answers + fastest finger +
+charging socket means Galaxy. Jakub's own set is the Galaxy (confirmed
+2026-10-21), so the RF215 driver does not apply to it. QuizXpress keypads (6 answers + fastest finger +
 "hand" button, 400 per receiver) match the Enjoy RF217 keypad.
 
 ## Manufacturer (high confidence)
