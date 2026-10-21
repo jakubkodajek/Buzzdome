@@ -1,6 +1,6 @@
 import type { CSSProperties, ReactNode } from "react";
 import { timeLeft } from "../answer-time";
-import { ANSWER_LETTERS } from "../answers";
+import { ANSWER_LETTERS, answerIndex } from "../answers";
 import { useApp } from "../app-context";
 import { FINAL_LAST_STEP, FULL_SHARE, MAX_EVERYONE_ANSWERS } from "../bindings/Constants";
 import { scoreDigits, signed } from "../format";
@@ -192,6 +192,7 @@ function QuestionScreen(props: {
   const winnerId = view.phase.phase === "question" && view.phase.step === "revealed" ? view.phase.winner : null;
   const winner = view.players.find((p) => p.buzzer === winnerId);
   const barPlayer = buzzed ?? winner;
+  const buzzedAnswer = view.phase.phase === "question" && view.phase.step === "buzzed" ? answerIndex(view.phase.button) : null;
   const hasMedia = question.picture !== null || question.video !== null;
   const answerStyle = styledText(question, "answer");
 
@@ -248,6 +249,7 @@ function QuestionScreen(props: {
       {question.mode === "fastestFinger" && barPlayer && (
         <div className="buzz-bar">
           <span className="buzz-name">{playerName(t, barPlayer)}</span>
+          {buzzedAnswer !== null && <span className={`buzz-answer answer-${buzzedAnswer}`}>{ANSWER_LETTERS[buzzedAnswer]}</span>}
           {barPlayer.delta !== null && barPlayer.delta !== 0 && (
             <span className={`buzz-delta ${barPlayer.delta > 0 ? "plus" : "minus"}`}>{signed(barPlayer.delta)}</span>
           )}

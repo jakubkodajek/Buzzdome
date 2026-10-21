@@ -4,7 +4,7 @@
 //! the same quiz rebuilds the exact state after a crash. Time never comes from a
 //! clock inside this module: each command carries its own `at_ms`.
 
-use crate::model::{AnswerMode, Question, Quiz, Slide, SlideContent};
+use crate::model::{AnswerMode, Question, Quiz, Slide, SlideContent, MAX_EVERYONE_ANSWERS};
 use crate::text::{composed, name_key};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
@@ -28,8 +28,11 @@ pub type BuzzerId = u16;
 /// ties, switching a player on or off in a running question closes it when
 /// nobody is left to answer, and names are the same however their accents
 /// are encoded. 4: a closed question no longer restarts, as the projector
-/// shows its results.
-pub const RULES_VERSION: u32 = 4;
+/// shows its results. 5: a fastest-finger question takes buzzes from the
+/// answer buttons where every answer has one, else from the big button
+/// (`Button::buzzes_in`), and a player switched on while one is under way
+/// joins at the next question.
+pub const RULES_VERSION: u32 = 5;
 
 /// The oldest `RULES_VERSION` whose shows replay today as they were played:
 /// every later change applies only to shows begun under it
@@ -74,6 +77,18 @@ impl Button {
             Button::Big => None,
         }
     }
+
+    /// Whether this button buzzes in on the fastest-finger `question`.
+    /// Where every answer has its button (A to D) those buttons do, so the
+    /// first press is also the player's answer; with no answers, or with E
+    /// and F, which are read out, the big button does.
+    pub fn buzzes_in(self, question: &Question) -> bool {
+        let by_button = (1..=MAX_EVERYONE_ANSWERS).contains(&question.answers.len());
+        match self.answer_index() {
+            Some(i) => by_button && i < question.answers.len(),
+            None => !by_button,
+        }
+    }
 }
 
 /// What the buzzer lights should show. Drivers map these to their hardware.
@@ -102,8 +117,8 @@ pub enum BuzzerMode {
     Register,
     /// An everyone-answers question runs: each player answers A to D.
     Answers,
-    /// A fastest-finger question runs: the first big button of a player who
-    /// has not answered yet wins.
+    /// A fastest-finger question runs: the first buzz of a player who has
+    /// not answered yet wins (`Button::buzzes_in`).
     FastestFinger,
     /// A buzz is being judged.
     Buzzed,
@@ -129,6 +144,21 @@ pub enum Cue {
 pub enum Effect {
     Lights { lights: Vec<(BuzzerId, Light)> },
     Sound { cue: Cue },
+}
+
+impl Effect {
+    /// Every light `effects` set, a buzzer's later light winning: to light
+    /// the buzzers once for one change. Lit effect by effect, a buzzer
+    /// judged wrong would show the round's light in between.
+    pub fn lights(effects: &[Effect]) -> Vec<(BuzzerId, Light)> {
+        let mut lights = BTreeMap::new();
+        for effect in effects {
+            if let Effect::Lights { lights: set } = effect {
+                lights.extend(set.iter().copied());
+            }
+        }
+        lights.into_iter().collect()
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -311,9 +341,11 @@ pub enum QuestionStep {
     /// Question on screen, clock not started.
     Ready,
     Running { clock: Clock },
-    /// Fastest finger: a player buzzed; the clock is paused until judged.
+    /// Fastest finger: a player buzzed with `button`, which is their answer
+    /// on a question whose answers each have a button; the clock is paused
+    /// until judged.
     #[serde(rename_all = "camelCase")]
-    Buzzed { buzzer: BuzzerId, clock: Clock },
+    Buzzed { buzzer: BuzzerId, button: Button, clock: Clock },
     /// Answers are in; points are applied.
     Closed,
     /// The correct answer is on screen. In fastest finger, `winner` is the
@@ -422,7 +454,8 @@ pub struct Game {
     /// switched on when it closed. Its scores, results, answer counts and
     /// lights go by them alone, whoever is switched on or off later.
     counted: BTreeSet<BuzzerId>,
-    /// Fastest finger: players who answered wrong in the current question.
+    /// Fastest finger: players who answered wrong in the current question,
+    /// and those switched on while it was under way (rules version 5).
     locked_out: BTreeSet<BuzzerId>,
     /// What the current question gave each player (`credit`).
     gains: BTreeMap<BuzzerId, Gain>,
@@ -705,6 +738,16 @@ impl Game {
         }
     }
 
+    /// Every player's light in the current step, switched-off ones locked:
+    /// what the buzzers should show when a show begins or resumes.
+    pub fn lights(&self) -> Vec<(BuzzerId, Light)> {
+        self.players.values().map(|p| (p.buzzer, self.player_light(p.buzzer, p.enabled))).collect()
+    }
+
+    fn player_light(&self, buzzer: BuzzerId, enabled: bool) -> Light {
+        if enabled { self.light_of(buzzer) } else { Light::Locked }
+    }
+
     /// Every switched-on buzzer's light in the current step (`light_of`).
     fn lights_now(&self) -> Effect {
         Effect::Lights { lights: self.enabled_buzzers().map(|b| (b, self.light_of(b))).collect() }
@@ -817,7 +860,14 @@ impl Game {
     /// left to answer closes, as it would on the last answer.
     fn set_enabled(&mut self, buzzer: BuzzerId, enabled: bool) -> Result<Vec<Effect>, GameError> {
         self.player_mut(buzzer)?.enabled = enabled;
-        let light = if enabled { self.light_of(buzzer) } else { Light::Locked };
+        // The others' buzzer timers count from when they lit ready, by which
+        // a buzz is ordered (BZ-5): a player switched on mid-question would
+        // count from later, so they join at the next question.
+        let fastest_finger = self.question().is_some_and(|q| q.mode == AnswerMode::FastestFinger);
+        if enabled && self.rules_version >= 5 && fastest_finger && self.question_in_play() {
+            self.locked_out.insert(buzzer);
+        }
+        let light = self.player_light(buzzer, enabled);
         let mut effects = vec![Effect::Lights { lights: vec![(buzzer, light)] }];
         // Before rules version 3 a switch never closed a question.
         let running = matches!(self.phase, Phase::Question(QuestionStep::Running { .. }));
@@ -852,7 +902,7 @@ impl Game {
             // PC clock never re-ranks them (BZ-5), not even against a keyboard press.
             Some(PressPlay::Buzz { mut clock }) => {
                 clock.pause(now);
-                self.phase = Phase::Question(QuestionStep::Buzzed { buzzer, clock });
+                self.phase = Phase::Question(QuestionStep::Buzzed { buzzer, button, clock });
                 vec![self.lights_now(), Effect::Sound { cue: Cue::Buzz }]
             }
         }
@@ -878,7 +928,10 @@ impl Game {
                 // The first answer counts; changing it is not allowed.
                 (valid && !self.responses.contains_key(&buzzer)).then(|| PressPlay::Answer { elapsed_ms: clock.elapsed_ms(now) })
             }
-            AnswerMode::FastestFinger => (!self.locked_out.contains(&buzzer)).then_some(PressPlay::Buzz { clock }),
+            AnswerMode::FastestFinger => {
+                let buzzes = self.rules_version < 5 || button.buzzes_in(question);
+                (buzzes && !self.locked_out.contains(&buzzer)).then_some(PressPlay::Buzz { clock })
+            }
         }
     }
 
@@ -937,7 +990,7 @@ impl Game {
     }
 
     fn judge(&mut self, right: bool, now: u64) -> Result<Vec<Effect>, GameError> {
-        let Phase::Question(QuestionStep::Buzzed { buzzer, clock }) = self.phase else {
+        let Phase::Question(QuestionStep::Buzzed { buzzer, clock, .. }) = self.phase else {
             return Err(GameError::NotNow);
         };
         let q = self.question().cloned().ok_or(GameError::NotNow)?;

@@ -9,6 +9,11 @@ export const BUTTONS: readonly Button[] = ["a", "b", "c", "d", "big"];
  */
 export const ANSWER_LETTERS = ["A", "B", "C", "D", "E", "F"] as const;
 
+/** Which answer a button gives, from 0, or null for the big button. */
+export function answerIndex(button: Button): number | null {
+  return button === "big" ? null : BUTTONS.indexOf(button);
+}
+
 /** How a button is written on screen: its letter, or a dot for the big button. */
 export function buttonLabel(button: Button): string {
   return button === "big" ? "●" : button.toUpperCase();
