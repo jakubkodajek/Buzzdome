@@ -334,6 +334,7 @@ function Studio({ editor, open, onExit }: { editor: QuizEditor; open: OpenQuiz |
               recentFiles={editor.recentFiles}
               onOpenFile={(recent) => void editor.openQuiz(recent).then(opened)}
               onTitle={(text) => editor.edit({ type: "setTitle", title: text }, "title")}
+              onSettings={(settings) => editor.edit({ type: "setSettings", settings }, "settings")}
               onShowSlide={(id) => {
                 list.setSelection(selectIds([id], 0));
                 setView("graphical");

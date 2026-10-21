@@ -115,8 +115,9 @@ draws slides without a show.
   the wall clock once when the app starts and counts on from a monotonic
   clock, so the system setting its clock mid-show (say, on joining the
   venue's network) neither freezes the countdown nor ends a question early.
-  The show thread (`show_thread.rs`) applies due timer commands (time up)
-  and otherwise sends `clock-tick` with the core's `ClockView`. The UI never
+  The show thread (`show_thread.rs`) applies due timer commands (time up,
+  and the step the quiz's settings take once everyone answered) and
+  otherwise sends `clock-tick` with the core's `ClockView`. The UI never
   reads the wall clock: what plays counts on from the show clock it heard,
   by one monotonic clock (`showClockNow` and `msSinceHeard` in
   `media-player.ts`; ESLint refuses other clock reads anywhere in the UI,
@@ -725,6 +726,24 @@ packages users will install are read the same way.
   not answered closes the question. A player switched off cannot answer;
   one switched on mid-question can, unless they already answered or were
   locked out.
+- **Everyone answered (QZ-11).** A question that closed for having nobody
+  left to answer notes when (`Game::all_answered_at`), and the quiz's
+  `settings.allAnswered` decides what follows: wait for Next, as before,
+  or after `allAnsweredDelayS` the step Next would take (the reveal) or the
+  jump to the slide Next would go on to (`GoTo`, or `GoToFinal` past the
+  last). `Game::pending_step` says which and when; `due_command` issues it
+  through the show thread like time up, so it is journaled and a replay
+  ends where the show did, and `GameView::auto_step` shows it coming in the
+  Director with a bar that runs out in CSS. The quizmaster's Next leaves
+  the closed step first, and `PauseClock` holds the step (the Director
+  calls it Hold): the question then waits for Next. A question closed by
+  time up or by the quizmaster has no `all_answered_at` and always waits.
+  The settings come with the quiz the session keeps, so a resumed show
+  goes on with them; no rules version is needed, as a quiz without them
+  plays as before. A step command a window sends within `STEP_PAUSE_MS` of
+  a step it did not send (`StepGuard.shown`) is dropped as meant for the
+  step before, so Space pressed as the reveal comes does not also leave
+  the slide.
 - **Ranking.** `Game::ranking` orders the players switched on by score,
   then by the time their right answers took together (`total_answer_ms`,
   less first); wrong answers add no time, so not answering never helps.

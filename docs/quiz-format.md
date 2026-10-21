@@ -95,6 +95,7 @@ was moved or deleted.
 | `theme` | text or `null` | Id of the look of the screens (`builtin.classic`, `builtin.studio`, `builtin.night`, `builtin.showtime`, `builtin.neon`, `builtin.daylight`, `builtin.aurora`, `builtin.sunset`, `builtin.chalkboard`, `builtin.gala`, `builtin.bakchus`, `builtin.bakchus-contours`, later installed themes, spec 5.2). Missing, `null` or not installed: the default look, so a quiz never fails to open or play over it. A value that is not a theme id (dot-separated parts of lower-case letters, digits, `-` and `_`, at least two parts, at most 100 bytes) reads as missing. |
 | `slides` | list | The show in order. |
 | `categories` | list | Named looks the slides can take on; see [Categories](#categories). Left out when there are none. |
+| `settings` | object | How the show runs; see [Settings](#settings). Left out when every setting is its default. |
 
 ### Every slide
 
@@ -278,6 +279,22 @@ that keep the quiz from being saved. They do not keep it from being
 played: a show reads only the slides, which got the category's look when
 it was applied (`Problem::keeps_from_playing`).
 
+### Settings
+
+```json
+"settings": { "allAnswered": "reveal", "allAnsweredDelayS": 3 }
+```
+
+The quiz's advanced settings (spec QZ-11), for its whole show; each
+question keeps its own time, points and answers. Every default keeps the
+show as it ran before there were settings, and a value that does not read
+reads as its default, so a quiz always opens and plays.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `allAnswered` | text | What the show does once a question has nobody left to answer (every player switched on answered it, or in fastest finger answered it wrong): `wait` for the quizmaster's Next (default), `reveal` the right answer, or go on to the `nextSlide` without showing it. A question ended by its time or by the quizmaster always waits. |
+| `allAnsweredDelayS` | number | Whole seconds the show waits before it does it, 0 to 10 (default 3; more reads as 10). The quizmaster can press Next meanwhile, or hold the step (Hold, key P), and the question then waits for Next. |
+
 ## Spreadsheets
 
 Questions can also be written in a spreadsheet and imported into a quiz
@@ -383,7 +400,7 @@ the rows it came up in.
 | 2 | Adds `explanation` slides and, later within version 2, the quiz `theme` (builds from before that drop it when they save). Version 1 files read as version 2 unchanged. |
 | 3 | `background` becomes an object with video options; sounds get `part`, `gainDb` and `replay`. Version 1 and 2 files read as version 3 unchanged. Later within version 3, a `fastestFinger` question may have up to 6 answers instead of 4; earlier builds list such a question as a problem. |
 | 4 | Adds `final` slides. Version 1 to 3 files read as version 4 unchanged. Later within version 4, videos get `introPauseMs`, `volume`, `speed`, `part`, `effect` and `replay`; a video without them plays as before. Later still, slides get `style`; builds before it show the theme's look and drop the style when they save. |
-| 5 | A question's `correct` becomes a list of right answers, each with a `share` of the points. A version 1 to 4 question with `correct: n` reads as `[{ "answer": n, "share": 100 }]`, and one without as `[]`. Later within version 5, the quiz gets `categories` and slides `category`; builds before it drop them when they save, and the slides keep the look they took on. Later still, a slide's `style` gets `timer`; builds before it draw a ring and drop it when they save. |
+| 5 | A question's `correct` becomes a list of right answers, each with a `share` of the points. A version 1 to 4 question with `correct: n` reads as `[{ "answer": n, "share": 100 }]`, and one without as `[]`. Later within version 5, the quiz gets `categories` and slides `category`; builds before it drop them when they save, and the slides keep the look they took on. Later still, a slide's `style` gets `timer`; builds before it draw a ring and drop it when they save. Later still, the quiz gets `settings`; builds before it play as with the defaults and drop them when they save. |
 
 Fields may be added within a version as long as older files keep their
 meaning; readers ignore fields they do not know. Anything else (a new slide

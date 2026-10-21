@@ -13,7 +13,7 @@ function guarded() {
       sent.push(command.type);
       return new Promise<void>((resolve) => answers.push(resolve));
     });
-  return { send, sent, answer: () => answers.shift()?.(), wait: (by: number) => (ms += by) };
+  return { send, sent, answer: () => answers.shift()?.(), wait: (by: number) => (ms += by), shown: () => guard.shown() };
 }
 
 describe("step guard", () => {
@@ -52,6 +52,15 @@ describe("step guard", () => {
     show.wait(STEP_PAUSE_MS);
     expect(show.send({ type: "next" })).not.toBeNull();
     expect(show.sent).toEqual(["next", "next"]);
+  });
+
+  it("drops a step sent right after one the show took by itself, meant for the step before", () => {
+    const show = guarded();
+    show.shown();
+    expect(show.send({ type: "next" })).toBeNull();
+    show.wait(STEP_PAUSE_MS);
+    expect(show.send({ type: "next" })).not.toBeNull();
+    expect(show.sent).toEqual(["next"]);
   });
 
   it("lets presses and score changes through at any rate", () => {

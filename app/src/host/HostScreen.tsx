@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "../api";
-import { AppProvider, useApp, useRun } from "../app-context";
+import { AppProvider, useApp, useRun, useStepShown } from "../app-context";
 import { ErrorBoundary } from "../error-boundary";
 import { useBackendEvent, useClock, useGameView, useMediaRoot, useQuiz } from "../hooks";
 import { CheckIcon, CrossIcon } from "../icons";
@@ -37,6 +37,7 @@ function HostLayout() {
   const mediaRoot = useMediaRoot();
   const theme = useResolvedTheme(quiz?.theme ?? null);
   const close = useCallback(() => run(api.closeHostWindow()), [run]);
+  useStepShown(view);
   useShortcuts(view);
   useProjectorCloseKeys(close);
   const verdict = useVerdict();

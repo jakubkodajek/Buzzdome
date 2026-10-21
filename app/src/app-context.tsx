@@ -1,9 +1,9 @@
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { api } from "./api";
 import { translator, useLang, type Lang, type Translate } from "./i18n";
 import { errorText } from "./messages";
 import { createStepGuard, type StepGuard } from "./step-guard";
-import type { Command } from "./types";
+import type { Command, GameView } from "./types";
 
 interface AppContextValue {
   lang: Lang;
@@ -41,6 +41,15 @@ export function useReport(): (error: unknown) => void {
 export function useRun(): (call: Promise<unknown>) => void {
   const report = useReport();
   return useCallback((call) => void call.catch(report), [report]);
+}
+
+/** Tells the window's step guard whenever the show's step changes (`StepGuard.shown`). */
+export function useStepShown(view: GameView | null) {
+  const { steps } = useApp();
+  const step = view && `${view.slideIndex}/${view.phase.phase}/${"step" in view.phase ? view.phase.step : ""}`;
+  useEffect(() => {
+    if (step !== null) steps.shown();
+  }, [step, steps]);
 }
 
 /**

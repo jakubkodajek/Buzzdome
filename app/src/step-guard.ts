@@ -37,6 +37,12 @@ export interface StepGuard {
    * answer: it is dropped then, and the result is null.
    */
   send(command: Command, send: () => Promise<void>): Promise<void> | null;
+  /**
+   * A new step is on screen, whoever took it: a step command less than
+   * `STEP_PAUSE_MS` after it was meant for the step before, as when the
+   * show took a step by itself (time up, or everyone answered).
+   */
+  shown(): void;
 }
 
 // eslint-disable-next-line no-restricted-properties -- the spacing of this window's own presses, not the show clock
@@ -53,6 +59,9 @@ export function createStepGuard(now: () => number = () => performance.now()): St
         unanswered = false;
         lastMs = now();
       });
+    },
+    shown() {
+      lastMs = Math.max(lastMs, now());
     },
   };
 }
