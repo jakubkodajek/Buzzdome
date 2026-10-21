@@ -151,14 +151,15 @@ describe("the quiz editor", () => {
     for (const buzzer of [1, 2]) await app.page.click(await app.$(`.buzzer-grid .buzzer:nth-child(${buzzer}) .key-a`));
     const closed = await app.waitView("the question closed", (v) => v.phase.phase === "question" && v.phase.step === "closed");
     expect(closed.autoStep?.action).toBe("reveal");
-    await app.seeText(t("autoStepReveal", { s: 1 }));
+    await app.seeText(t("autoStepReveal"));
     await app.waitView("the answer shown by itself", (v) => v.phase.phase === "question" && v.phase.step === "revealed");
     await app.press("backToEditor");
     await app.$(".studio");
   });
 
   test("the draft survives a crash", async () => {
-    const slides = await slideCount();
+    // Back from a test run, the editor shows the slides once it has read its draft.
+    const slides = await waitFor("the slides", async () => (await slideCount()) || null);
     // The draft is written a moment after each change: wait until it is on disk.
     await waitFor("the draft on disk", async () => draftSlides().includes(slides));
     await app.crash();

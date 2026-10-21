@@ -51,6 +51,10 @@ onHold: boolean,
  */
 videoPlays: number, 
 /**
+ * See `Game::step_no`.
+ */
+stepNo: number, 
+/**
  * The step the show takes by itself once everyone answered
  * (`Game::pending_step`); none while it waits for the quizmaster.
  */

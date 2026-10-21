@@ -262,7 +262,8 @@ impl Show {
     }
 
     /// The show as the app rebuilds it after a crash: replayed from the
-    /// journal, with a question that was in play restarted (journaled too).
+    /// journal, with a question that was in play restarted and a step
+    /// coming by itself held (journaled too).
     pub fn crash_and_resume(&mut self) {
         let replayed = Game::replay(self.game.quiz().clone(), &self.journal, RULES_VERSION);
         assert_eq!(replayed, self.game, "the journal does not rebuild the show the windows saw");
@@ -275,6 +276,7 @@ impl Show {
             assert!(stepped.result.is_ok(), "the recovery command was refused: {:?}", stepped.result);
             assert!(!self.game.controls().restart_question, "a question is still in play after the recovery");
         }
+        assert_eq!(self.game.view(self.now).auto_step, None, "a step comes by itself right after the recovery");
     }
 
     /// Asserts that the whole journal rebuilds the current game.

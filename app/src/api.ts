@@ -55,7 +55,8 @@ export const api = {
   /** Resumes the last show; returns warnings when it runs but not quite as before (its media are missing, other rules). */
   resumeLastSession: () => invoke<AppError[]>("resume_last_session"),
   endShow: () => invoke<void>("end_show"),
-  dispatch: (command: Command) => invoke<void>("dispatch", { command }),
+  /** `seen`: the step the window shows, for a command that moves the show on (`StepGuard`). */
+  dispatch: (command: Command, seen: number | null = null) => invoke<void>("dispatch", { command, seen }),
   listMonitors: () => invoke<MonitorInfo[]>("list_monitors"),
   /** Opens the projector on the monitor with this `MonitorInfo.id`, or on one the Director is not on (null). */
   openHostWindow: (monitor: string | null, fullscreen: boolean) =>
@@ -140,8 +141,8 @@ export const api = {
     invoke<SheetExport | null>("editor_export_sheet", { draft, quiz, separator, picker }),
   /** Discards the draft, also one that cannot be read. */
   editorClose: () => invoke<void>("editor_close"),
-  /** Plays the editor's quiz as a show that is not kept for resuming. */
-  editorTestRun: (draft: string, quiz: Quiz) => invoke<void>("editor_test_run", { draft, quiz }),
+  /** Plays the editor's quiz as a show that is not kept for resuming, from the slide `from` if given. */
+  editorTestRun: (draft: string, quiz: Quiz, from: number | null = null) => invoke<void>("editor_test_run", { draft, quiz, from }),
 };
 
 /** Events the backend emits (`app.emit` in app/src-tauri), with their payloads. */

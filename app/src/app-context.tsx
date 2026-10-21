@@ -46,9 +46,9 @@ export function useRun(): (call: Promise<unknown>) => void {
 /** Tells the window's step guard whenever the show's step changes (`StepGuard.shown`). */
 export function useStepShown(view: GameView | null) {
   const { steps } = useApp();
-  const step = view && `${view.slideIndex}/${view.phase.phase}/${"step" in view.phase ? view.phase.step : ""}`;
+  const step = view?.stepNo ?? null;
   useEffect(() => {
-    if (step !== null) steps.shown();
+    if (step !== null) steps.shown(step);
   }, [step, steps]);
 }
 
@@ -62,7 +62,7 @@ export function useDispatch(): (command: Command) => void {
   const { steps } = useApp();
   return useCallback(
     (command) => {
-      const sent = steps.send(command, () => api.dispatch(command));
+      const sent = steps.send(command, (seen) => api.dispatch(command, seen));
       if (sent) run(sent);
     },
     [run, steps],

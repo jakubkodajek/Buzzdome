@@ -1,5 +1,6 @@
 import { useApp } from "../app-context";
 import { BackIcon } from "../icons";
+import { keyHint, KEYS } from "../keyboard";
 import { problemText } from "../messages";
 import { MAX_ALL_ANSWERED_DELAY_S } from "../bindings/Constants";
 import type { StringKey } from "../i18n";
@@ -159,7 +160,7 @@ function SettingsPage({ open, onSettings }: BackstageProps & { open: OpenQuiz })
           />
         </div>
       )}
-      <p className="backstage-hint">{t("allAnsweredHint")}</p>
+      <p className="backstage-hint">{t("allAnsweredHint", { key: keyHint(t, KEYS.clock) })}</p>
     </>
   );
 }

@@ -155,6 +155,7 @@ function view(partial: Partial<GameView>): GameView {
     controls: { ...NO_CONTROLS, next: true, goTo: true },
     onHold: false,
     videoPlays: 0,
+    stepNo: 0,
     autoStep: null,
     ...partial,
   };

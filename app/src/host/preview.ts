@@ -30,6 +30,7 @@ export function previewView(slide: Slide, slideIndex: number, slideCount: number
     controls: NO_CONTROLS,
     onHold: false,
     videoPlays: 0,
+    stepNo: 0,
     autoStep: null,
   };
 }

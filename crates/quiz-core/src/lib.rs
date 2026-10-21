@@ -25,7 +25,7 @@ pub use media::{
     NEW_VIDEO_INTRO_PAUSE_MS,
 };
 pub use media_player::{MediaPlayer, NowPlaying, PlayerCommand, MAX_DROPPED_MB, MAX_PLAYER_VOLUME};
-pub use settings::{AllAnswered, QuizSettings, DEFAULT_ALL_ANSWERED_DELAY_S, MAX_ALL_ANSWERED_DELAY_S};
+pub use settings::{AllAnswered, AutoStep, QuizSettings, DEFAULT_ALL_ANSWERED_DELAY_S, MAX_ALL_ANSWERED_DELAY_S};
 pub use model::{
     AnswerLimits, AnswerMode, CorrectAnswer, Plays, Problem, Question, Quiz, QuizJsonError, ReadQuiz, Slide, SlideContent, SlideType, ValidationError,
     DEFAULT_POINTS, DEFAULT_TIME_LIMIT_S, FULL_SHARE, MAX_ANSWERS, MAX_EVERYONE_ANSWERS, MAX_POINTS, MAX_TIME_LIMIT_S,

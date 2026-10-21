@@ -58,6 +58,26 @@ pub enum AllAnswered {
     NextSlide,
 }
 
+impl AllAnswered {
+    /// The step the show takes by itself; none when it waits.
+    pub fn auto_step(self) -> Option<AutoStep> {
+        match self {
+            AllAnswered::Wait => None,
+            AllAnswered::Reveal => Some(AutoStep::Reveal),
+            AllAnswered::NextSlide => Some(AutoStep::NextSlide),
+        }
+    }
+}
+
+/// A step the show takes by itself once everyone answered (`AllAnswered`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
+#[serde(rename_all = "camelCase")]
+pub enum AutoStep {
+    Reveal,
+    NextSlide,
+}
+
 /// A wait in whole seconds: one longer than the longest reads as the
 /// longest, and one that is not a number of seconds as the default.
 mod delay_in_range {

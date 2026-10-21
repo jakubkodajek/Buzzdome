@@ -253,7 +253,7 @@ function AutoStepNote({ step }: { step: AutoStepView }) {
   const { t } = useApp();
   return (
     <div className="auto-step" role="status">
-      {t(step.action === "nextSlide" ? "autoStepNextSlide" : "autoStepReveal", { s: Math.ceil(step.inMs / 1000) })}
+      {t(step.action === "nextSlide" ? "autoStepNextSlide" : "autoStepReveal")}
       <span key={step.inMs} className="auto-step-bar" style={{ animationDuration: `${step.inMs}ms` }} />
     </div>
   );

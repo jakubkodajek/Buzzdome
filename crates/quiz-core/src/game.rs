@@ -5,7 +5,7 @@
 //! clock inside this module: each command carries its own `at_ms`.
 
 use crate::model::{AnswerMode, Question, Quiz, Slide, SlideContent};
-use crate::settings::AllAnswered;
+use crate::settings::AutoStep;
 use crate::text::{composed, name_key};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
@@ -424,6 +424,17 @@ pub fn same_name(a: &str, b: &str) -> bool {
     !a.is_empty() && name_key(a) == name_key(b)
 }
 
+/// Two phases of a slide are the same step as the quizmaster sees it: a
+/// clock paused or resumed is, another buzzer buzzed in or another place of
+/// the ranking shown is not.
+fn same_step(a: &Phase, b: &Phase) -> bool {
+    match (a, b) {
+        (Phase::Question(QuestionStep::Buzzed { buzzer: x, .. }), Phase::Question(QuestionStep::Buzzed { buzzer: y, .. })) => x == y,
+        (Phase::Question(x), Phase::Question(y)) => std::mem::discriminant(x) == std::mem::discriminant(y),
+        _ => a == b,
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Response {
     pub button: Button,
@@ -476,6 +487,11 @@ pub struct Game {
     /// How many times the quizmaster started the current slide's video
     /// (`Command::PlayVideo`); the projector starts it whenever this grows.
     video_plays: u32,
+    /// How many steps the show has taken (`same_step`). A window sends the
+    /// one it shows with a command meant for it, which is dropped once the
+    /// show has taken another: one step per press, also when the show took
+    /// one by itself or another window did just before.
+    step_no: u32,
     /// The `RULES_VERSION` the show runs under: today's for a new show, its
     /// journal's for a replayed one (`replay`). A show resumed after an
     /// update goes on under the rules it began with, so its whole journal,
@@ -499,6 +515,7 @@ impl Game {
             leaderboard_visible: false,
             teams: Vec::new(),
             video_plays: 0,
+            step_no: 0,
             rules_version: RULES_VERSION,
         }
     }
@@ -515,9 +532,14 @@ impl Game {
     }
 
     /// After a crash the clock of a running question is meaningless, so the
-    /// question starts again (as in the original, §9.1). Returns the command
-    /// to apply and journal, if one is needed.
+    /// question starts again (as in the original, §9.1). A step the show
+    /// was to take by itself is held, so it waits for the quizmaster, who
+    /// first sees where the show stands (`pending_step`). Returns the
+    /// command to apply and journal, if one is needed.
     pub fn recovery_command(&self) -> Option<Command> {
+        if self.pending_step().is_some() {
+            return Some(Command::PauseClock);
+        }
         self.question_in_play().then_some(Command::RestartQuestion)
     }
 
@@ -689,6 +711,11 @@ impl Game {
         self.video_plays
     }
 
+    /// See `step_no`.
+    pub fn step_no(&self) -> u32 {
+        self.step_no
+    }
+
     /// True while the show holds still: a player is answering, the question
     /// clock is paused, or the question is over. A slide's video and a synced
     /// background video (BG-4) pause then.
@@ -709,33 +736,40 @@ impl Game {
                 Some(Command::CloseQuestion)
             }
             Phase::Question(QuestionStep::Closed) => {
-                let (step, at) = self.pending_step()?;
-                (now >= at).then_some(step)
+                let (_, command, at) = self.pending_step()?;
+                (now >= at).then_some(command)
             }
             _ => None,
         }
     }
 
+    /// The quizmaster took over: the step the show was to take by itself
+    /// (`pending_step`) waits for their Next.
+    fn hold_pending_step(&mut self) {
+        self.all_answered_at = None;
+    }
+
     /// The step the show takes by itself once a question closed for having
     /// nobody left to answer (`QuizSettings::all_answered`), and when: the
     /// question's `all_answered_at` and the settings' wait. The quizmaster
-    /// can take a step first, or hold it (`PauseClock`).
-    pub(crate) fn pending_step(&self) -> Option<(Command, u64)> {
+    /// can take a step first, or hold it (`PauseClock`). Gives the step,
+    /// the command that takes it and its time.
+    pub(crate) fn pending_step(&self) -> Option<(AutoStep, Command, u64)> {
         if self.phase != Phase::Question(QuestionStep::Closed) {
             return None;
         }
         let settings = self.quiz.settings;
+        let step = settings.all_answered.auto_step()?;
         let at = self.all_answered_at?.saturating_add(settings.all_answered_delay_ms());
-        let step = match settings.all_answered {
-            AllAnswered::Wait => return None,
-            AllAnswered::Reveal => Command::Next,
+        let command = match step {
+            AutoStep::Reveal => Command::Next,
             // As Next goes on from the slide, past the last to the final ranking.
-            AllAnswered::NextSlide => match self.following()? {
+            AutoStep::NextSlide => match self.following()? {
                 slide if slide < self.quiz.slides.len() => Command::GoTo { slide },
                 _ => Command::GoToFinal,
             },
         };
-        Some((step, at))
+        Some((step, command, at))
     }
 
     pub(crate) fn question(&self) -> Option<&Question> {
@@ -818,6 +852,15 @@ impl Game {
     }
 
     pub fn apply(&mut self, stamped: &Stamped) -> Result<Vec<Effect>, GameError> {
+        let (slide, phase) = (self.slide, self.phase.clone());
+        let effects = self.apply_command(stamped)?;
+        if self.slide != slide || !same_step(&self.phase, &phase) {
+            self.step_no = self.step_no.wrapping_add(1);
+        }
+        Ok(effects)
+    }
+
+    fn apply_command(&mut self, stamped: &Stamped) -> Result<Vec<Effect>, GameError> {
         let now = stamped.at_ms;
         match &stamped.command {
             Command::Press { buzzer, button } => Ok(self.press(*buzzer, *button, now)),
@@ -830,7 +873,7 @@ impl Game {
             }
             Command::GoToFinal => self.jump_to(self.final_index()),
             Command::PauseClock if self.pending_step().is_some() => {
-                self.all_answered_at = None;
+                self.hold_pending_step();
                 Ok(vec![])
             }
             Command::PauseClock => match &mut self.phase {
@@ -900,6 +943,9 @@ impl Game {
             }
             Command::ShowLeaderboard { visible } => {
                 self.leaderboard_visible = *visible;
+                if *visible {
+                    self.hold_pending_step();
+                }
                 Ok(vec![])
             }
             Command::PlayVideo => {
@@ -907,6 +953,7 @@ impl Game {
                     return Err(GameError::NotNow);
                 }
                 self.video_plays = self.video_plays.saturating_add(1);
+                self.hold_pending_step();
                 Ok(vec![])
             }
         }
