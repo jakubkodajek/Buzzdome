@@ -29,8 +29,9 @@ use dialogs::Picker;
 use error::CmdResult;
 pub use error::AppError;
 use hardware::Hardware;
-use quiz_core::{BuzzerMode, Command, Effect, Game, GameView, Quiz, Stamped};
+use quiz_core::{BuzzerId, BuzzerMode, Command, Effect, Game, GameView, Light, Quiz, Stamped};
 use session::{Resumed, Session, SessionMeta, SessionSummary};
+use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{mpsc, LazyLock, Mutex, MutexGuard};
@@ -219,6 +220,11 @@ fn apply_journaled(inner: &mut Inner, command: Command, at_ms: u64) -> CmdResult
 /// a test run), beginning now. A new journal has no failed write yet, and
 /// the next close during a show asks again. Every show begins and ends here.
 fn replace_show(inner: &mut Inner, game: Option<Game>, session: Option<Session>) {
+    // The buzzers of the show before go dark, and the new show's light as
+    // it stands, whatever they showed before: another show's lights, or
+    // those a receiver kept while the app restarted.
+    let mut lights: BTreeMap<BuzzerId, Light> = inner.game.iter().flat_map(Game::players).map(|p| (p.buzzer, Light::Off)).collect();
+    lights.extend(game.iter().flat_map(Game::lights));
     inner.game = game;
     inner.session = session;
     inner.save_problem = None;
@@ -226,6 +232,7 @@ fn replace_show(inner: &mut Inner, game: Option<Game>, session: Option<Session>)
     // A close request left unanswered was about the show before.
     inner.close_request.forget();
     send_mode(inner);
+    set_lights(inner, &lights.into_iter().collect::<Vec<_>>());
 }
 
 /// Tells the buzzers what they take now (`Game::buzzer_mode`). With no show
@@ -254,20 +261,27 @@ fn deliver(app: &AppHandle, inner: &mut Inner, effects: Vec<Effect>) {
 
 /// Sends a show change's effects to the buzzer lights and the windows' sound.
 fn send_effects(app: &AppHandle, inner: &mut Inner, effects: Vec<Effect>) {
+    // The mode before the lights: by the time the buzzers light ready, the
+    // receiver thread holds a round's presses for the buzzers' timers, and
+    // tells one made in the step before by the light it showed
+    // (`buzzers::enjoy303s`). The change's lights go at once.
+    send_mode(inner);
+    let lights = Effect::lights(&effects);
+    if !lights.is_empty() {
+        set_lights(inner, &lights);
+    }
     for effect in effects {
-        match effect {
-            Effect::Lights { lights } => {
-                if let Err(e) = inner.driver.set_lights(&lights) {
-                    app_log::note(&format!("buzzer lights: {e}"));
-                }
-            }
-            Effect::Sound { cue } => {
-                let _ = app.emit("sound-cue", cue);
-            }
+        if let Effect::Sound { cue } = effect {
+            let _ = app.emit("sound-cue", cue);
         }
     }
-    // After the lights: a result is lit before the round that follows it.
-    send_mode(inner);
+}
+
+/// Lights the buzzers; a failure is logged and never stops the show.
+fn set_lights(inner: &mut Inner, lights: &[(BuzzerId, Light)]) {
+    if let Err(e) = inner.driver.set_lights(lights) {
+        app_log::note(&format!("buzzer lights: {e}"));
+    }
 }
 
 /// Locks the show state to start a show, refusing while one runs. Learn
