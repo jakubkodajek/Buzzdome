@@ -539,10 +539,16 @@ fn may_give(window: &str, command: &Command) -> bool {
     }
 }
 
-/// Runs a window's `command`. One that moves the show on comes with the
-/// step the window showed (`seen`, `Game::step_no`): when the show has
-/// taken another since, the command was meant for the step before and is
-/// dropped, as the window's step guard drops one sent too soon.
+/// A window's command that moves the show on was meant for the step it
+/// showed (`seen`, `Game::step_no`), and the show has taken another since.
+fn step_gone(game: Option<&Game>, seen: Option<u32>) -> bool {
+    seen.is_some_and(|step| game.is_some_and(|game| game.step_no() != step))
+}
+
+/// Runs a window's `command`. One meant for a step the show has left
+/// (`step_gone`) is dropped, as the window's step guard drops one sent too
+/// soon, and the window is sent the show as it stands: one that missed a
+/// view (it opened as the step was taken) catches up, so its next press counts.
 #[tauri::command]
 async fn dispatch(app: AppHandle, window: Window, command: Command, seen: Option<u32>) -> CmdResult<()> {
     if !may_give(window.label(), &command) {
@@ -552,7 +558,8 @@ async fn dispatch(app: AppHandle, window: Window, command: Command, seen: Option
         return show_thread::press(&app, Press::new(buzzer, button));
     }
     show_thread::run(&app, move |app, inner, at_ms| {
-        if seen.is_some_and(|step| inner.game.as_ref().is_some_and(|game| game.step_no() != step)) {
+        if step_gone(inner.game.as_ref(), seen) {
+            emit_state(app, inner.game.as_ref());
             return Ok(());
         }
         match command {
@@ -803,6 +810,18 @@ mod tests {
         assert_eq!(resumed.game.slide_index(), slide);
         assert_ne!(resumed.game, before, "the question started again");
         std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn a_step_command_meant_for_a_step_the_show_left_is_dropped() {
+        let quiz = Quiz::from_json(DEMO_QUIZ).unwrap();
+        let journal: Vec<Stamped> = up_to_the_first_question().into_iter().map(|command| Stamped { at_ms: 1_000, command }).collect();
+        let game = Game::replay(quiz, &journal, quiz_core::RULES_VERSION);
+        let now = game.step_no();
+        assert!(!step_gone(Some(&game), Some(now)));
+        assert!(step_gone(Some(&game), Some(now - 1)), "meant for the step before");
+        assert!(!step_gone(Some(&game), None), "a command that does not move the show on");
+        assert!(!step_gone(None, Some(now)), "no show: the command is refused as before");
     }
 
     #[test]

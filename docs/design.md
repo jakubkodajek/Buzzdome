@@ -87,7 +87,11 @@ draws slides without a show.
   a press made as time ran out, a player buzzed in, the show took a step
   by itself or another window took one, before this window showed it, is
   not run on the step after. Pausing or resuming the clock and the
-  leaderboard are no steps; another buzzer buzzing in is.
+  leaderboard are no steps; another buzzer buzzing in is. A dropped
+  command also sends that window the show as it stands, so a window that
+  missed a view is not left sending stale steps; and a window loads its
+  first view only once it listens for the next (`useReceivedValue`), so a
+  step taken as it opens is not missed.
   Show keys count as typing only in text fields: after the quizmaster
   touched a slider, checkbox or list, the keys still work, and a slider
   lets go of the focus when released.
