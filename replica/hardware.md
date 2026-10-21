@@ -10,7 +10,7 @@ hardware yet. The driver built from these notes is described in
 
 Players answer only with physical wireless buzzers, no phones. QuizXpress sells
 two models; Jakub's set is the Galaxy RGB (Enjoy 303S), confirmed 2026-10-21,
-so the RF215 driver does not apply to it:
+which is the one the app drives:
 
 | | Dome Buzzer | Galaxy RGB Buzzer |
 | --- | --- | --- |
@@ -55,9 +55,11 @@ Cable ("USB-HID cable", USB to RJ45, inline box labelled "HID USB CABLE"):
 - Windows needs no driver: a USB HID device that tunnels the receiver's serial
   link ("serial port with HID device" in the vendor SDK's own description).
   Enjoy also sells driver-based variants (USB-serial) and an RS-232 port.
-- For the RF215, VID:PID `10C4:1819` (Silicon Labs' vendor ID, not the stock
-  CP2110 product ID) with the CP2110's HID-to-UART interface, which is
-  publicly documented (Silicon Labs AN434); not yet checked on Jakub's cable.
+- For the RF215 and the 303S alike, VID:PID `10C4:1819` (Silicon Labs' vendor
+  ID, not the stock CP2110 product ID) with the CP2110's HID-to-UART
+  interface, which is publicly documented (Silicon Labs AN434): 115200 baud
+  for the RF215, 750000 for the 303S. Enjoy's official 303S libraries name
+  the same IDs and rate; not yet checked on Jakub's cable.
 
 Behaviour:
 
@@ -72,8 +74,9 @@ Behaviour:
   The vendor SDK's public header text mentions per-press timestamps only for a
   newer model (RF317). The RF215's messages carry no press time (see the
   exception under "Deliberately not used"), so its fastest-finger order is
-  the arrival order; Enjoy's "the receiver reports the time" may hold for the
-  303S or newer firmware.
+  the arrival order. Enjoy's "the receiver reports the time" holds for the
+  303S: each press carries the buzzer's own timer since its light last
+  changed, which the app orders fastest finger by (`docs/design.md` 2.6).
 
 Vendor software model (from public descriptions of Enjoy's SDK "librf21x"):
 
@@ -129,8 +132,8 @@ Enjoy Tech replied to Jakub's email:
   licence allows (never bundled without permission), keyboard (keys 1 to 0,
   also covers Enjoy Keystroke), and on-screen virtual buzzers for testing.
 - Fastest-finger fairness: trust the receiver's order or timestamps; the PC
-  never re-orders presses. Document this once the captures show what the
-  receiver reports.
+  never re-orders presses by its own clock. The 303S's timers are those
+  timestamps (`docs/design.md` 2.6).
 
 ## Deliberately not used
 
@@ -141,12 +144,15 @@ and publishable, nobody on this project reads or copies their code; only the
 public README-level facts above were noted. Get the SDK from Enjoy directly.
 
 One exception (Jakub, 2026-10-20): with Enjoy's SDK still not sent, Jakub
-approved reading the SDK repost for the RF215 protocol, for his private,
-non-distributed copy of the app. A project thread wrote the protocol down in
-its own words, and the app implements that description
-(`crates/buzzers/src/rf215.rs`, `docs/design.md` 2.4). No file or code from
-the repost is in this repository, and the decompiled tools stay unread. The
-repost does not cover the 303S.
+approved reading the SDK repost for Enjoy's protocols, for his private,
+non-distributed copy of the app. An RF215 driver built from it was dropped
+once Jakub's set turned out to be the 303S. On 2026-10-21 Enjoy's official
+303S kit reached Jakub (a C# demo, a usage guide and Windows libraries); a
+project thread read it with the repost's RF219 driver, which carries the
+303S's commands, wrote the protocol down in its own words, and the app
+implements that description (`crates/buzzers/src/enjoy303s.rs`,
+`docs/design.md` 2.4). No file or code from the kit or the repost is in this
+repository, and the decompiled tools stay unread.
 
 ## Sources
 

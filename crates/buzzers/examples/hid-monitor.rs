@@ -1,25 +1,36 @@
 //! Command-line probe for a buzzer receiver, no app needed.
 //!
-//!   cargo run -p buzzers --example hid-monitor                    # list HID devices
-//!   cargo run -p buzzers --example hid-monitor -- 10c4:ea80       # print reports
-//!   cargo run -p buzzers --example hid-monitor -- 10c4:1819 rush  # fastest finger
+//!   cargo run -p buzzers --example hid-monitor                      # list HID devices
+//!   cargo run -p buzzers --example hid-monitor -- 10c4:ea80         # print reports
+//!   cargo run -p buzzers --example hid-monitor -- 10c4:1819 rush    # fastest finger
+//!   cargo run -p buzzers --example hid-monitor -- 10c4:1819 lights  # every light in turn
 //!
 //! With a VID:PID it runs the app's own receiver thread on the first matching
 //! interface, with the protocol the app picks for it, and prints the status,
 //! every input report in hex with a millisecond timestamp, and the presses
-//! decoded from it. Press each button on a buzzer and save the output: for a
-//! receiver the app does not know, it is what the real protocol decoder is
-//! written from. A receiver that runs its rounds itself (the Enjoy RF215) is
-//! set up as in the app and takes answers A to D, or with `rush` a
-//! fastest-finger round, which goes on when its first buzz is ignored.
+//! decoded from it, with the buzzer's own timer when it sends one. Press each
+//! button on a buzzer and save the output: for a receiver the app does not
+//! know, it is what the real protocol decoder is written from.
+//!
+//! The buzzers show ready and take answers as in a question; with `rush` as
+//! in a fastest-finger round, whose buzzes go in the order of the buzzers'
+//! timers; with `lights` they show each light of a show in turn, two
+//! seconds each.
 
 use buzzers::clock::ShowClock;
+use buzzers::enjoy303s::MAX_BUZZER;
 use buzzers::hid::{DeviceInfo, DeviceSelector, HidBackend};
 use buzzers::hidapi_backend::HidapiBackend;
 use buzzers::protocol::{self, format_hex};
-use buzzers::receiver::{self, ReceiverConfig, ReceiverEvent};
-use quiz_core::BuzzerMode;
+use buzzers::receiver::{self, ReceiverConfig, ReceiverEvent, ReceiverHandle};
+use quiz_core::{BuzzerMode, Light};
 use std::sync::{mpsc, Arc};
+use std::time::Duration;
+
+/// Lights every buzzer a receiver takes.
+fn light_all(handle: &ReceiverHandle, light: Light) {
+    handle.set_lights((1..=MAX_BUZZER).map(|b| (b, light)).collect());
+}
 
 fn parse_vid_pid(s: &str) -> Option<(u16, u16)> {
     let (v, p) = s.split_once(':')?;
@@ -47,28 +58,37 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         return Ok(());
     };
     let (vendor_id, product_id) = parse_vid_pid(&arg).ok_or("expected VID:PID in hex, e.g. 10c4:ea80")?;
-    let mode = match std::env::args().nth(2).as_deref() {
-        None => BuzzerMode::Answers,
-        Some("rush") => BuzzerMode::FastestFinger,
-        Some(other) => return Err(format!("unknown round {other}: expected rush").into()),
+    let (mode, cycle) = match std::env::args().nth(2).as_deref() {
+        None => (BuzzerMode::Answers, false),
+        Some("rush") => (BuzzerMode::FastestFinger, false),
+        Some("lights") => (BuzzerMode::Answers, true),
+        Some(other) => return Err(format!("unknown option {other}: expected rush or lights").into()),
     };
     let resolver = Arc::new(|device: &DeviceInfo| protocol::for_device(&[], device));
     let (events, rx) = mpsc::channel();
     let (handle, _join) = receiver::spawn(Arc::new(backend), resolver, events, ReceiverConfig::new(ShowClock::start()));
+    light_all(&handle, Light::Ready);
     handle.set_mode(mode);
     handle.select(Some(DeviceSelector { vendor_id, product_id, usage_page: None, interface_number: None }));
+    if cycle {
+        let handle = handle.clone();
+        std::thread::spawn(move || {
+            let lights = [Light::Off, Light::Ready, Light::Locked, Light::First, Light::Correct, Light::Wrong];
+            for light in lights.into_iter().cycle() {
+                println!("{:>14}all buzzers: {light:?}", "");
+                light_all(&handle, light);
+                std::thread::sleep(Duration::from_secs(2));
+            }
+        });
+    }
     println!("Waiting for {arg}. Press buzzer buttons; Ctrl+C to stop.");
     for event in rx {
         match event {
             ReceiverEvent::Status(status) => println!("{status:?}"),
             ReceiverEvent::Raw(raw) => println!("{:>9.3}s  [{:>2}]  {}", raw.at_ms as f64 / 1000.0, raw.bytes.len(), format_hex(&raw.bytes)),
             ReceiverEvent::Press { press, .. } => {
-                println!("{:>14}buzzer {}, {:?}", "", press.buzzer, press.button);
-                // As the app does with a press it does not take, so a
-                // fastest-finger round goes on.
-                if mode == BuzzerMode::FastestFinger {
-                    handle.ignored(press);
-                }
+                let timer = press.timer.map(|t| format!(", timer {t}")).unwrap_or_default();
+                println!("{:>14}buzzer {}, {:?}{timer}", "", press.buzzer, press.button);
             }
         }
     }

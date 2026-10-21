@@ -420,13 +420,13 @@ fn the_buzzer_mode_follows_the_steps_of_a_show() {
     show.run(1_000, Command::Next).unwrap();
     assert_eq!(mode(&show), BuzzerMode::FastestFinger);
     show.press(2_000, 1, Button::Big);
-    assert_eq!(mode(&show), BuzzerMode::Buzzed { buzzer: 1 });
+    assert_eq!(mode(&show), BuzzerMode::Buzzed);
     show.run(3_000, Command::JudgeWrong).unwrap();
     assert_eq!(mode(&show), BuzzerMode::FastestFinger);
     // A second wrong answer goes through a buzz again, so the round goes
     // on once more.
     show.press(4_000, 2, Button::Big);
-    assert_eq!(mode(&show), BuzzerMode::Buzzed { buzzer: 2 });
+    assert_eq!(mode(&show), BuzzerMode::Buzzed);
     show.run(5_000, Command::JudgeWrong).unwrap();
     assert_eq!(mode(&show), BuzzerMode::FastestFinger);
     show.press(6_000, 3, Button::Big);

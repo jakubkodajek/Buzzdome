@@ -1,12 +1,12 @@
 //! Receiver thread against a fake HID backend: connect, decode, mode and
-//! lights, unplug and replug.
+//! lights, fastest-finger order, unplug and replug.
 
 use buzzers::clock::ShowClock;
 use buzzers::cp2110;
 use buzzers::hid::{DeviceInfo, DeviceSelector, HidBackend, HidDevice, Report};
 use buzzers::protocol::{Protocol, ProtocolKind};
+use buzzers::enjoy303s::Enjoy303s;
 use buzzers::receiver::{spawn, ReceiverConfig, ReceiverEvent, ReceiverHandle, ReceiverProblem, ReceiverStatus};
-use buzzers::rf215::Rf215;
 use buzzers::{DriverError, Press};
 use quiz_core::{BuzzerId, BuzzerMode, Button, Light};
 use std::collections::VecDeque;
@@ -98,11 +98,12 @@ impl HidDevice for FakeDevice {
 }
 
 /// Test protocol: [0x01, buzzer, button 0..=4] is a press and [0x7e] the
-/// receiver's answer, which makes it ready. Set up with feature [0x30] and
-/// output [0x03, 0x01]; lights -> [0x02, buzzer, light], a mode ->
-/// [0x04, mode], an ignored press -> [0x05, buzzer].
+/// receiver's answer, which calls for [0x06, 0x01]. Set up with feature
+/// [0x30] and output [0x03, 0x01]; lights -> [0x02, buzzer, light], a
+/// mode -> [0x04, mode].
 struct TestProtocol {
     answered: bool,
+    follow: Vec<Report>,
 }
 
 fn mode_byte(mode: BuzzerMode) -> u8 {
@@ -111,19 +112,20 @@ fn mode_byte(mode: BuzzerMode) -> u8 {
         BuzzerMode::Register => 1,
         BuzzerMode::Answers => 2,
         BuzzerMode::FastestFinger => 3,
-        BuzzerMode::Buzzed { .. } => 5,
+        BuzzerMode::Buzzed => 5,
         BuzzerMode::Results => 6,
     }
 }
 
 impl Protocol for TestProtocol {
     fn kind(&self) -> ProtocolKind {
-        ProtocolKind::Rf215 { answered: self.answered }
+        ProtocolKind::Enjoy303s { answered: self.answered }
     }
 
     fn decode(&mut self, r: &[u8]) -> Vec<Press> {
         if r == [0x7e] {
             self.answered = true;
+            self.follow.push(Report::Output(vec![0x06, 0x01]));
         }
         if r.len() < 3 || r[0] != 0x01 {
             return vec![];
@@ -136,15 +138,15 @@ impl Protocol for TestProtocol {
             4 => Button::Big,
             _ => return vec![],
         };
-        vec![Press { buzzer: r[1] as BuzzerId, button }]
+        vec![Press::new(r[1] as BuzzerId, button)]
     }
 
     fn init_reports(&self) -> Vec<Report> {
         vec![Report::Feature(vec![0x30]), Report::Output(vec![0x03, 0x01])]
     }
 
-    fn ready(&self) -> bool {
-        self.answered
+    fn follow_up(&mut self) -> Vec<Report> {
+        std::mem::take(&mut self.follow)
     }
 
     fn encode_lights(&mut self, lights: &[(BuzzerId, Light)]) -> Vec<Report> {
@@ -153,10 +155,6 @@ impl Protocol for TestProtocol {
 
     fn encode_mode(&mut self, mode: BuzzerMode) -> Vec<Report> {
         vec![Report::Output(vec![0x04, mode_byte(mode)])]
-    }
-
-    fn rearm(&mut self, press: Press) -> Vec<Report> {
-        vec![Report::Output(vec![0x05, press.buzzer as u8])]
     }
 
     fn has_lights(&self) -> bool {
@@ -195,11 +193,11 @@ fn start(backend: &FakeBackend) -> (ReceiverHandle, Receiver<ReceiverEvent>) {
     start_with(backend, config(), true)
 }
 
-/// Starts the receiver thread with `config`; its receiver is ready at once
-/// when `answered`, else once it sends [0x7e].
+/// Starts the receiver thread with `config`; its receiver has answered at
+/// once when `answered`, else once it sends [0x7e].
 fn start_with(backend: &FakeBackend, config: ReceiverConfig, answered: bool) -> (ReceiverHandle, Receiver<ReceiverEvent>) {
     let (tx, rx) = mpsc::channel();
-    let resolver = Arc::new(move |_: &DeviceInfo| Box::new(TestProtocol { answered }) as Box<dyn Protocol>);
+    let resolver = Arc::new(move |_: &DeviceInfo| Box::new(TestProtocol { answered, follow: Vec::new() }) as Box<dyn Protocol>);
     let (handle, _join) = spawn(Arc::new(backend.clone()), resolver, tx, config);
     (handle, rx)
 }
@@ -249,7 +247,7 @@ fn connects_sends_init_and_decodes_presses_in_order() {
         presses.push((press, at_ms));
     }
     // Each press carries the arrival time of the report it came from.
-    let expected = [(Press { buzzer: 7, button: Button::Big }, raws[0].at_ms), (Press { buzzer: 3, button: Button::Big }, raws[1].at_ms)];
+    let expected = [(Press::new(7, Button::Big), raws[0].at_ms), (Press::new(3, Button::Big), raws[1].at_ms)];
     assert_eq!(presses, expected);
     handle.shutdown();
 }
@@ -308,40 +306,23 @@ fn shows_the_lights_and_mode_set_before_the_receiver_connected_and_again_after_r
 }
 
 #[test]
-fn holds_writes_until_the_receiver_answers_and_reports_that_it_did() {
+fn writes_what_the_receivers_answer_calls_for_and_reports_that_it_answered() {
     let backend = FakeBackend::default();
     backend.0.lock().unwrap().plugged = true;
-    let config = ReceiverConfig { ready_timeout: Duration::from_secs(10), ..config() };
-    let (handle, rx) = start_with(&backend, config, false);
+    let (handle, rx) = start_with(&backend, config(), false);
     handle.select(Some(selector()));
     match wait_for(&rx, is_connected) {
-        ReceiverEvent::Status(ReceiverStatus::Connected { protocol, .. }) => assert_eq!(protocol, ProtocolKind::Rf215 { answered: false }),
+        ReceiverEvent::Status(ReceiverStatus::Connected { protocol, .. }) => assert_eq!(protocol, ProtocolKind::Enjoy303s { answered: false }),
         _ => unreachable!(),
     }
-    handle.set_mode(BuzzerMode::Answers);
-    std::thread::sleep(Duration::from_millis(60));
-    assert_eq!(backend.0.lock().unwrap().written, [vec![0x03, 0x01]], "only the init report");
+    assert_eq!(written_after_init(&backend, 1), [vec![0x04, 0]]);
 
     backend.0.lock().unwrap().inbox.push_back(vec![0x7e]);
     match wait_for(&rx, is_connected) {
-        ReceiverEvent::Status(ReceiverStatus::Connected { protocol, .. }) => assert_eq!(protocol, ProtocolKind::Rf215 { answered: true }),
+        ReceiverEvent::Status(ReceiverStatus::Connected { protocol, .. }) => assert_eq!(protocol, ProtocolKind::Enjoy303s { answered: true }),
         _ => unreachable!(),
     }
-    assert_eq!(written_after_init(&backend, 2), [vec![0x04, 0], vec![0x04, 2]]);
-    handle.shutdown();
-}
-
-#[test]
-fn writes_to_a_receiver_that_never_answers_after_the_ready_timeout() {
-    let backend = FakeBackend::default();
-    backend.0.lock().unwrap().plugged = true;
-    let config = ReceiverConfig { ready_timeout: Duration::from_millis(80), ..config() };
-    let (handle, rx) = start_with(&backend, config, false);
-    let began = Instant::now();
-    handle.select(Some(selector()));
-    wait_for(&rx, is_connected);
-    assert_eq!(written_after_init(&backend, 1), [vec![0x04, 0]]);
-    assert!(began.elapsed() >= Duration::from_millis(80));
+    assert_eq!(written_after_init(&backend, 2), [vec![0x04, 0], vec![0x06, 0x01]]);
     handle.shutdown();
 }
 
@@ -362,53 +343,94 @@ fn spaces_writes_by_the_write_gap() {
     handle.shutdown();
 }
 
-#[test]
-fn tells_the_protocol_of_a_press_the_app_ignored_once_however_often() {
-    let backend = FakeBackend::default();
+/// An input report from an Enjoy 303S receiver carrying the message with
+/// `payload`.
+fn from_303s(payload: &[u8]) -> Vec<u8> {
+    let check = payload.iter().fold(0, |x, b| x ^ b);
+    let message = [&[0x27, 0xa5, payload.len() as u8][..], payload, &[check]].concat();
+    [&[message.len() as u8][..], &message].concat()
+}
+
+/// A press of `buzzer`'s big button, showing ready, `timer` after its light changed.
+fn buzz_303s(buzzer: u8, timer: u8) -> Vec<u8> {
+    from_303s(&[0x32, buzzer - 1, 0x50, 0x43, timer, 0, 0, 0, 0, 0])
+}
+
+/// The receiver thread on an Enjoy 303S receiver that answered its set-up.
+fn start_303s(backend: &FakeBackend, config: ReceiverConfig) -> (ReceiverHandle, Receiver<ReceiverEvent>) {
     backend.0.lock().unwrap().plugged = true;
-    let config = ReceiverConfig { write_gap: Duration::from_millis(100), ..config() };
-    let (handle, rx) = start_with(&backend, config, true);
+    let (tx, rx) = mpsc::channel();
+    let resolver = Arc::new(|_: &DeviceInfo| Box::new(Enjoy303s::default()) as Box<dyn Protocol>);
+    let (handle, _join) = spawn(Arc::new(backend.clone()), resolver, tx, config);
     handle.select(Some(selector()));
     wait_for(&rx, is_connected);
-    let press = Press { buzzer: 6, button: Button::Big };
-    // While the mode waits for its turn, the same order is not queued twice.
-    handle.ignored(press);
-    handle.ignored(press);
-    assert_eq!(written_after_init(&backend, 2), [vec![0x04, 0], vec![0x05, 6]]);
-    std::thread::sleep(Duration::from_millis(250));
-    assert_eq!(backend.0.lock().unwrap().written.len(), 3);
+    backend.0.lock().unwrap().inbox.extend([from_303s(&[0x10, 0x00]), from_303s(&[0x12, 0x01])]);
+    wait_for(&rx, |e| matches!(e, ReceiverEvent::Status(ReceiverStatus::Connected { protocol: ProtocolKind::Enjoy303s { answered: true }, .. })));
+    (handle, rx)
+}
+
+#[test]
+fn an_enjoy_303s_shows_what_waited_once_it_answered_its_set_up() {
+    let backend = FakeBackend::default();
+    let (tx, rx) = mpsc::channel();
+    let resolver = Arc::new(|_: &DeviceInfo| Box::new(Enjoy303s::default()) as Box<dyn Protocol>);
+    let (handle, _join) = spawn(Arc::new(backend.clone()), resolver, tx, config());
+    handle.set_lights((1..=3).map(|b| (b, Light::Ready)).collect());
+    handle.set_mode(BuzzerMode::Answers);
+    backend.0.lock().unwrap().plugged = true;
+    handle.select(Some(selector()));
+    wait_for(&rx, is_connected);
+    std::thread::sleep(Duration::from_millis(30));
+    assert_eq!(backend.0.lock().unwrap().written.len(), 1, "only the connect order until the receiver answers");
+
+    backend.0.lock().unwrap().inbox.push_back(from_303s(&[0x10, 0x00]));
+    backend.0.lock().unwrap().inbox.push_back(from_303s(&[0x12, 0x01]));
+    let serial: Vec<Vec<u8>> = written_after_init(&backend, 4).iter().map(|r| cp2110::received(r).to_vec()).collect();
+    let take_64 = vec![0x35, 0x96, 0x02, 0x14, 0x3f, 0x2b];
+    let open = vec![0x35, 0x96, 0x02, 0x12, 0x00, 0x12];
+    let ready_all = vec![0x35, 0x96, 0x02, 0x74, 0x43, 0x37];
+    let start = vec![0x35, 0x96, 0x01, 0x85, 0x85];
+    assert_eq!(serial, [take_64, open, ready_all, start]);
     handle.shutdown();
 }
 
 #[test]
-fn an_rf215_ends_its_round_for_a_keyboard_winner_and_begins_the_next_anew() {
+fn orders_a_fastest_finger_buzz_by_the_buzzers_timers() {
     let backend = FakeBackend::default();
-    backend.0.lock().unwrap().plugged = true;
-    let (tx, rx) = mpsc::channel();
-    let resolver = Arc::new(|_: &DeviceInfo| Box::new(Rf215::default()) as Box<dyn Protocol>);
-    let (handle, _join) = spawn(Arc::new(backend.clone()), resolver, tx, config());
+    let config = ReceiverConfig { timer_window: Duration::from_millis(60), ..config() };
+    let (handle, rx) = start_303s(&backend, config);
     handle.set_mode(BuzzerMode::FastestFinger);
-    handle.select(Some(selector()));
-    wait_for(&rx, is_connected);
-    // The receiver answers the connect command.
-    backend.0.lock().unwrap().inbox.push_back(vec![0x03, 0x7e, 0x00, 0x00]);
-    wait_for(&rx, |e| matches!(e, ReceiverEvent::Status(ReceiverStatus::Connected { protocol: ProtocolKind::Rf215 { answered: true }, .. })));
+    // Buzzer 1's press arrives first, though buzzer 2 pressed sooner after its light.
+    backend.0.lock().unwrap().inbox.extend([buzz_303s(1, 200), buzz_303s(2, 120)]);
+    let ReceiverEvent::Raw(first) = wait_for(&rx, |e| matches!(e, ReceiverEvent::Raw(r) if !r.decoded.is_empty())) else { unreachable!() };
+    assert_eq!(first.decoded[0].buzzer, 1);
+    let mut presses = Vec::new();
+    while presses.len() < 2 {
+        if let ReceiverEvent::Press { press, at_ms } = wait_for(&rx, |e| matches!(e, ReceiverEvent::Press { .. })) {
+            presses.push((press.buzzer, press.timer, at_ms));
+        }
+    }
+    assert_eq!(presses, [(2, Some(120), first.at_ms), (1, Some(200), first.at_ms)]);
 
-    // Keyboard buzzer 9 wins; then dome 2 buzzes, which the app ignores.
-    handle.set_mode(BuzzerMode::Buzzed { buzzer: 9 });
-    let dome_2 = [0x20, 0x62, 0x42];
-    backend.0.lock().unwrap().inbox.push_back([&[0x03][..], &dome_2].concat());
-    let ReceiverEvent::Press { press, .. } = wait_for(&rx, |e| matches!(e, ReceiverEvent::Press { .. })) else { unreachable!() };
-    assert_eq!(press, Press { buzzer: 2, button: Button::Big });
-    handle.ignored(press);
-    // 9 is judged wrong.
+    // Outside fastest finger a press goes on at once.
+    handle.set_mode(BuzzerMode::Answers);
+    let sent = Instant::now();
+    backend.0.lock().unwrap().inbox.push_back(buzz_303s(3, 50));
+    wait_for(&rx, |e| matches!(e, ReceiverEvent::Press { press, .. } if press.buzzer == 3));
+    assert!(sent.elapsed() < Duration::from_millis(60), "{:?}", sent.elapsed());
+    handle.shutdown();
+}
+
+#[test]
+fn a_fastest_finger_buzz_waiting_for_the_timers_goes_on_when_the_round_ends() {
+    let backend = FakeBackend::default();
+    let config = ReceiverConfig { timer_window: Duration::from_secs(30), ..config() };
+    let (handle, rx) = start_303s(&backend, config);
     handle.set_mode(BuzzerMode::FastestFinger);
-
-    let serial: Vec<Vec<u8>> = written_after_init(&backend, 4).iter().map(|r| cp2110::received(r).to_vec()).collect();
-    let (stop, rush) = (vec![0x03, 0x85, 0x86], vec![0x03, 0x83, 0x80]);
-    assert_eq!(serial, [stop.clone(), rush.clone(), stop, rush], "a new round, not the old one going on");
-    std::thread::sleep(Duration::from_millis(50));
-    assert_eq!(backend.0.lock().unwrap().written.len(), 5, "nothing more is written");
+    backend.0.lock().unwrap().inbox.push_back(buzz_303s(4, 90));
+    wait_for(&rx, |e| matches!(e, ReceiverEvent::Raw(r) if !r.decoded.is_empty()));
+    handle.set_mode(BuzzerMode::Off);
+    wait_for(&rx, |e| matches!(e, ReceiverEvent::Press { press, .. } if press.buzzer == 4));
     handle.shutdown();
 }
 

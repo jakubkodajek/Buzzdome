@@ -57,7 +57,7 @@ mod tests {
     use quiz_core::Button;
 
     fn p(buzzer: u16, button: Button) -> Press {
-        Press { buzzer, button }
+        Press::new(buzzer, button)
     }
 
     #[test]

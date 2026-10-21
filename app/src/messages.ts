@@ -229,8 +229,8 @@ export function protocolText(t: Translate, protocol: ProtocolKind): string {
       return t("protocolRawOnly");
     case "learned":
       return t("protocolLearned", { buttons: protocol.buttons });
-    case "rf215":
-      return t(protocol.answered ? "protocolRf215" : "protocolRf215Silent");
+    case "enjoy303s":
+      return t(protocol.answered ? "protocolEnjoy303s" : "protocolEnjoy303sSilent");
   }
 }
 

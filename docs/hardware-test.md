@@ -1,17 +1,20 @@
 # Hardware test: buzzer receiver
 
 A checklist for the first test with the real receiver and buzzers. It checks
-specification section 4 and collects what is needed to write the vendor
-protocol, then smoke-tests the installed build. Do it on the event laptop (Windows) first, then on a Mac. Takes
-about 30 minutes with four buzzers.
+specification section 4 and what the Enjoy 303S driver could not check
+without the hardware (specification section 11), then smoke-tests the
+installed build. Do it on the event laptop (Windows) first, then on a Mac.
+Takes about 45 minutes with four buzzers.
 
 ## What to have
 
-- The receiver, the USB-HID cable, at least four buzzers with batteries or
-  charged, each with its own ID (the vendor's ID programming: hold B or C and
-  the big button, see `replica/hardware.md`).
+- The receiver, the USB-HID cable, at least four buzzers, charged. Each
+  needs its own ID: step 2 of section 3 shows the numbers. The app cannot
+  set a 303S buzzer's ID yet (it goes through the receiver, with the
+  vendor's software); note any two that share one.
 - The app installed from the latest CI run (GitHub > Actions > Build > the run
-  > Artifacts: `buzzdome-windows`, `buzzdome-macos` or `buzzdome-linux`).
+  > Artifacts: `buzzdome-windows`, `buzzdome-macos` or `buzzdome-linux`),
+  or built on the computer with `npm run tauri build` in `app/`.
 - On Windows, a build from before the rename to Buzzdome uninstalled first:
   Settings > Apps > **Quiz Show** > Uninstall, with "Delete the application
   data" left unticked, as Buzzdome keeps its quizzes, teams and settings in
@@ -20,14 +23,14 @@ about 30 minutes with four buzzers.
   same show journal. Buzzdome itself runs once (starting it again brings the
   running Director forward), but an old Quiz Show does not step aside.
 - The vendor's quiz software closed: only one program can open the receiver.
+- A phone that films in slow motion helps with step 6 of section 6.
 
 ## 1. Identify
 
-1. Read the label under a buzzer base: model 215 (dome) or 303S (RGB).
-   Note it, and take a photo of the label, the receiver and the cable's
-   inline box. Buzzers that light in colours other than green, white and
-   red (blue or orange, say) are most likely the 303S: the 215's lights are
-   fixed green, white and red.
+1. Jakub's set is the Enjoy 303S (Galaxy RGB). For any other set, read the
+   label under a buzzer base: 215 (dome) or 303S (RGB). The app drives only
+   the 303S; with a 215 set, the keyboard and on-screen buzzers work, and
+   sections 4 and 9 still apply.
 2. Plug the cable into the computer and the receiver. The receiver's power
    light should be on.
 
@@ -40,57 +43,55 @@ about 30 minutes with four buzzers.
    not `0001` (keyboard or mouse).
 4. Click **Use**. Expected: status "Connected ..." (green), with the
    protocol:
-   - **Enjoy RF215** for VID:PID `10c4:1819` once the receiver answered:
-     go on with section 3 (learn mode is not offered, section 5 does not
-     apply). This names the cable and the receiver, not the buzzers: the
-     303S uses the same REC-A receiver, so a 303S set may show it too.
-   - **Enjoy RF215, but the receiver did not answer the connect command**:
-     the cable is the one the RF215 uses, but the receiver did not reply as
-     the RF215's does. Check its power light
-     and the RJ45 plug, then unplug and plug the cable again. If it stays,
-     note it and go on with section 3 all the same.
+   - **Enjoy 303S** for VID:PID `10c4:1819` once the receiver answered its
+     set-up: go on with section 3 (learn mode is not offered, section 5
+     does not apply). Note how long it took to show.
+   - **Enjoy 303S, but the receiver has not answered its set-up yet**: the
+     app opened the cable at 750000 baud and asked the receiver to connect,
+     but no answer came (or none to the open that follows). Check its power
+     light and the RJ45 plug, then unplug and plug the cable again. If it
+     stays, note whether anything shows under "Raw data", export the log
+     (section 4, step 5) and send it: that is what the set-up gets fixed
+     from. Only the keyboard and on-screen buzzers work until then.
    - **raw reports only** for any other receiver: skip section 3.
    - Linux: if it says the device cannot be opened, copy the udev rule from
      the tab, install it as shown, unplug and replug.
    - macOS: if asked about Input Monitoring, allow the app, then restart it.
    - Windows: if it cannot open, make sure no other quiz program is running.
 
-## 3. Enjoy RF215
+## 3. Enjoy 303S
 
-Only when the status names the Enjoy RF215. The app sets the receiver up by
-itself, as described in `docs/design.md` (2.4); these steps check what could
-not be checked without the hardware. Keep the Receiver tab open: "Presses"
-shows what the app read, "Raw data" the bytes behind it.
+Only when the status names the Enjoy 303S. The app sets the receiver up by
+itself, as described in `docs/design.md` (2.4); these steps check what
+could not be checked without the hardware. Keep the Receiver tab open:
+"Presses" shows what the app read, with each buzzer's timer ("timer 1234"),
+"Raw data" the bytes behind it. Each step says what to note when it does
+not go as expected; whatever happens, go on and export the log at the end
+(section 4, step 5).
 
-The app has only the 215's protocol, and Jakub's own set turned out to be
-the 303S (2026-10-21), whose protocol waits for Enjoy's SDK. With a 303S set
-that shows the Enjoy RF215 status, go through this section all the same and
-note in each step what works and what does not: nobody knows yet how much of
-the 215's protocol the 303S shares. Even with no presses, the bytes under
-"Raw data" and the exported log are what the 303S protocol can be checked
-against once Enjoy sends it. Learn mode is no way round it: the app always
-reads this cable with the 215's protocol, the only part of the app that
-opens the cable's serial line. If a 303S set shows no presses here, only the keyboard
-and on-screen buzzers work with it until Enjoy's protocol is built.
+1. **Connect on both computers.** The status above, on the Windows laptop
+   and on the Mac. The cable runs at 750000 baud, which nobody has tried
+   through macOS yet: note it if the Mac does not connect when Windows does.
+2. **Buttons.** With no show running, the buzzers take presses. Press A, B,
+   C and D on buzzer 1, then on buzzers 2 to 4. Expected: "buzzer N, button
+   X" under "Presses" for each, with the buzzer's own number. Note wrong
+   buttons or numbers, and the "Raw data" line of one of them.
+3. **The big button.** Press the big button on buzzer 1. Expected: "button
+   Big". The vendor's guide does not say which code it sends, so the app
+   takes anything but A to D for it. Note what shows, and copy its "Raw
+   data" line.
+4. **Other buttons.** Switch a buzzer off and on with its power button, if
+   it has one, and press any other key it has. Expected: no press. A line
+   under "Presses" here would buzz in a show whenever someone switches a
+   buzzer on: note it with its "Raw data" line, as it must then be told
+   apart from the big button.
+5. **High numbers.** Press A on the highest-numbered buzzer of the set.
+   Expected: its own number (up to 64).
+6. **Colours.** Section 6 checks each light in a show. If the colours look
+   wrong there, or a light does not change, run `hid-monitor` with `lights`
+   (end of this file) to see each colour on every buzzer in turn.
 
-1. With no show running, the buzzers take answers. Press A, B, C and D on
-   buzzer 1, then on buzzers 2 to 4. Expected: "buzzer N, button X" under
-   "Presses" for each, with the buzzer's own number.
-   - Raw data but no presses, or the wrong buttons: note which, then go on
-     with step 5 of section 4 (export).
-   - Nothing at all, not even raw data: note the model from section 1 and
-     export the log all the same.
-2. Press the big button on buzzer 1 and note whether it shows as a press
-   (the receiver may report only A to D while everyone answers; teams
-   register with A to D either way).
-3. **Buzzer numbers above 15.** This is the part the app has to guess. Press
-   A on buzzers numbered 16 or more (give one such a number with the
-   vendor's ID programming if none has one). Expected: their own numbers.
-   If they show other numbers (say 0 or 4 for 16 or 20), or only a line
-   under "Raw data" and no press (the app drops numbers above 100), note
-   each real number and what the app showed, and export the log.
-4. Section 6 (play) then checks the lights and the rounds.
-
+## 4. Record raw reports
 ## 4. Record raw reports
 
 1. Press **A** on buzzer 1. Expected: a line appears under "Raw reports".
@@ -105,8 +106,9 @@ and on-screen buzzers work with it until Enjoy's protocol is built.
 
 ## 5. Teach buttons (learn mode)
 
-Not with the Enjoy RF215, whose protocol the app knows: the section is
-hidden then.
+Not with the Enjoy 303S, whose protocol the app knows: the section is
+hidden then. Learning could not work on its cable anyway, as the cable
+passes nothing until the app has set the receiver up.
 
 1. Under "Teach buttons": buzzer 1, button A, **Start**. Press A three times,
    then **Save**. The form moves on to B, then C, D, the big button, then
@@ -127,38 +129,58 @@ hidden then.
 4. Hold a button: it must count once.
 5. Keyboard keys `1`-`0` still work next to the buzzers.
 
-With the Enjoy RF215 also:
+With the Enjoy 303S also. The colours: ready blue, locked out dim red, first
+white, right green, wrong red, no question dark.
 
-6. Fastest-finger question: when it starts, the buzzers light green
-   (ready); when one presses, it flashes white and beeps and the others
-   turn red (the receiver does this by itself). Note what each light did.
-7. Judge that buzz wrong. Expected: that buzzer shows wrong, then the
-   others can buzz again. Note whether the one judged wrong can buzz
-   again too (it should not).
-8. Judge a buzz right. Expected: that buzzer shows right.
-9. Everyone-answers question: after the results, the buzzers that answered
-   right show right and the others wrong. Note if nothing lights.
-10. Switch one player off in the Director and press their big button at
-    the start of a fastest-finger question. Expected: the others can still
-    buzz.
-11. Fastest-finger question: buzz first with a keyboard key (say `5`).
-    Expected: the domes go dark while it is judged, and none flashes as
-    first when pressed. Judge it wrong: all domes light as ready again, and
-    the first to press then flashes and counts. If a dome judged wrong
-    earlier in that question presses first, it may flash and beep once;
-    the others must still be able to buzz right after, and it must not
-    count.
+6. **Fastest finger.** When a fastest-finger question starts, every buzzer
+   turns blue at the same moment. When one presses, it turns white and the
+   others dim red. Note what each light did, and whether the lights change
+   later than the press by a delay you can see (film it in slow motion if
+   unsure): the app takes all 64 buzzer IDs, which the vendor's guide says
+   slows the lights.
+7. **The buzzer's timer.** In a fastest-finger question, count about five
+   seconds after the buzzers turn blue, then press. Note the timer the
+   Receiver tab shows for that press: about 5000 means it counts
+   milliseconds, which the app assumes. Do it twice, once after about two
+   seconds.
+8. **Two at once.** Two players press together, ten times. The team shown
+   first must have the lower timer under "Presses", and match who the
+   players think was first; note any case where it does not, with both
+   timers. Also note how far apart the two presses' "Raw data" lines are
+   (their times, in seconds): the app waits 100 ms for presses made at the
+   same moment, so a gap near or above 0.1 s means it must wait longer.
+9. **Too early.** Press during the countdown or before the buzzers turn
+   blue, and hold the big button down while they turn. Expected: neither
+   counts (the press shows under "Raw data" but not as a buzz), and pressing
+   again once blue does.
+10. Judge a buzz wrong. Expected: that buzzer turns red, the others turn
+    blue again together and can buzz; the one judged wrong cannot (its
+    press may show under "Presses" but does not count).
+11. Judge a buzz right. Expected: that buzzer turns green.
+12. Everyone-answers question: the buzzers turn blue, and each turns dim
+    red once it answered. After the results, the buzzers that answered
+    right turn green and the others red.
+13. Switch one player off in the Director. Expected: their buzzer turns dim
+    red, its presses do not count, and the others can still buzz.
+14. Fastest-finger question: buzz first with a keyboard key (say `5`).
+    Expected: the buzzers turn dim red while it is judged. Judge it wrong:
+    they turn blue again, and the first to press then counts.
 
 ## 7. Failures
 
 1. Mid-question, pull the USB cable. Expected: the Director shows "connection
    lost, reconnecting". Plug it back: "Connected" again within about two
    seconds, and presses work without restarting the show. With the Enjoy
-   RF215 the domes show the round again (a fastest-finger round begins
-   anew), and the results if they were showing. Also pull it while a buzz
-   is being judged: once back, no dome flashes as first until the
-   quizmaster judges.
-2. Mid-question, force-quit the app. Start it again and resume the show:
+   303S the buzzers show their lights again once it is back: blue in a
+   fastest-finger round, the results if they were showing, white and dim
+   red while a buzz is judged. Also pull it while a buzz is being judged:
+   once back, no buzz counts until the quizmaster judges.
+2. Mid-question, pull the RJ45 plug at the receiver and plug it back,
+   leaving the USB side in. The computer cannot see this, as the cable
+   stays connected. Note whether presses and lights work again by
+   themselves; if they do not, pulling and plugging the USB side as in
+   step 1 must bring them back.
+3. Mid-question, force-quit the app. Start it again and resume the show:
    scores and the question state are as before.
 
 ## 8. Release smoke check
@@ -188,31 +210,34 @@ minute).
 
 Attach to the project thread:
 
-- the model (215 or 303S) and the photos;
 - the VID:PID, usage and interface of the receiver row;
-- with the Enjoy RF215: the notes from sections 3 and 6, above all the
-  buzzer numbers above 15;
+- with the Enjoy 303S: the notes from sections 3, 6 and 7, above all the
+  big button, other buttons, the timer readings, the two-at-once presses
+  and how the lights looked;
 - the exported log files from sections 4 and 5;
 - the result of the release smoke check (section 8);
 - what failed, with the exact message.
 
-For the Enjoy RF215 that settles the open points of its protocol. For any
-other receiver, the log and the vendor SDK are what the vendor protocol is
-written from, so that lights, press times and battery level work
-(specification BZ-5, BZ-10, BZ-14).
+For the Enjoy 303S that settles the open points of its protocol
+(specification section 11). For any other receiver, the log is what a
+protocol for it would be written from (specification BZ-5, BZ-10).
 
 ## Without the app
 
 The same raw reports can be printed from a terminal on any machine with Rust:
 
 ```sh
-cargo run -p buzzers --example hid-monitor                    # list devices
-cargo run -p buzzers --example hid-monitor -- 1234:abcd       # print reports
-cargo run -p buzzers --example hid-monitor -- 10c4:1819 rush  # Enjoy RF215, big button
+cargo run -p buzzers --example hid-monitor                      # list devices
+cargo run -p buzzers --example hid-monitor -- 1234:abcd         # print reports
+cargo run -p buzzers --example hid-monitor -- 10c4:1819 rush    # Enjoy 303S, fastest finger
+cargo run -p buzzers --example hid-monitor -- 10c4:1819 lights  # Enjoy 303S, every light
 ```
 
 It runs the app's own receiver code: it prints the status (for the Enjoy
-RF215, `answered: true` once the receiver answered), each report and the
-presses read from it. An RF215 takes answers A to D, or with `rush` a
-fastest-finger round, which the monitor sets going again after each buzz:
-a buzzer that buzzed once should then stay out, which is worth noting too.
+303S, `answered: true` once the receiver answered its set-up), each report
+and the presses read from it, with each buzzer's timer. The buzzers show
+blue and take answers A to D; with `rush` they are in a fastest-finger
+round, whose presses come in the order of their timers. With `lights` every
+buzzer shows off, ready, locked, first, right and wrong in turn, two seconds
+each, and still takes presses: one made just before a change shows a timer
+near 2000 if the timer counts milliseconds.

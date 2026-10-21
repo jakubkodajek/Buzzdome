@@ -89,11 +89,10 @@ pub enum Light {
     Wrong,
 }
 
-/// What the buzzers take in the current step, as a whole. For receivers
-/// that run a round themselves, as one that locks the others out after the
-/// first buzz, and light their buzzers by the round rather than one by one.
-/// It follows from the same state as the lights (`Game::buzzer_mode`), so the
-/// two never disagree.
+/// What the buzzers take in the current step, as a whole: for receivers
+/// that take presses only while told to, and to order fastest-finger
+/// presses by the buzzers' own timers. It follows from the same state as
+/// the lights (`Game::buzzer_mode`), so the two never disagree.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BuzzerMode {
     /// Presses play no part: between questions, before a question starts
@@ -106,8 +105,8 @@ pub enum BuzzerMode {
     /// A fastest-finger question runs: the first big button of a player who
     /// has not answered yet wins.
     FastestFinger,
-    /// `buzzer`'s buzz is being judged.
-    Buzzed { buzzer: BuzzerId },
+    /// A buzz is being judged.
+    Buzzed,
     /// The question's results show: right or wrong.
     Results,
 }
@@ -700,7 +699,7 @@ impl Game {
                 Some(AnswerMode::FastestFinger) => BuzzerMode::FastestFinger,
                 None => BuzzerMode::Off,
             },
-            Phase::Question(QuestionStep::Buzzed { buzzer, .. }) => BuzzerMode::Buzzed { buzzer: *buzzer },
+            Phase::Question(QuestionStep::Buzzed { .. }) => BuzzerMode::Buzzed,
             Phase::Question(QuestionStep::Revealed { winner }) if winner.is_some() || !self.counted.is_empty() => BuzzerMode::Results,
             _ => BuzzerMode::Off,
         }

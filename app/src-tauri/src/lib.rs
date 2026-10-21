@@ -518,7 +518,7 @@ async fn dispatch(app: AppHandle, window: Window, command: Command) -> CmdResult
         return Err(AppError::NotFromProjector);
     }
     if let Command::Press { buzzer, button } = command {
-        return show_thread::press(&app, Press { buzzer, button });
+        return show_thread::press(&app, Press::new(buzzer, button));
     }
     show_thread::run(&app, move |app, inner, at_ms| match command {
         // The names a show is given are the prepared ones, also kept on disk.

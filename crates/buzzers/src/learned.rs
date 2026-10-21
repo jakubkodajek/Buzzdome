@@ -99,7 +99,7 @@ impl Protocol for LearnedProtocol {
             .iter()
             .filter(|s| s.matches(report))
             .max_by_key(|s| s.specificity())
-            .map(|s| vec![Press { buzzer: s.buzzer, button: s.button }])
+            .map(|s| vec![Press::new(s.buzzer, s.button)])
             .unwrap_or_default()
     }
 
@@ -266,8 +266,8 @@ mod tests {
         let generic = sig(1, Button::A, &[1, 0, 0], &[true, false, false]);
         let specific = sig(2, Button::B, &[1, 2, 0], &[true, true, false]);
         let mut p = LearnedProtocol::new(LearnedMapping { vendor_id: 1, product_id: 2, signatures: vec![generic, specific] });
-        assert_eq!(p.decode(&[1, 2, 9]), vec![Press { buzzer: 2, button: Button::B }]);
-        assert_eq!(p.decode(&[1, 7, 9]), vec![Press { buzzer: 1, button: Button::A }]);
+        assert_eq!(p.decode(&[1, 2, 9]), vec![Press::new(2, Button::B)]);
+        assert_eq!(p.decode(&[1, 7, 9]), vec![Press::new(1, Button::A)]);
         assert!(p.decode(&[2, 2, 9]).is_empty());
     }
 

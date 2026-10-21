@@ -251,12 +251,6 @@ pub fn handle_event(app: &AppHandle, event: ReceiverEvent) {
             // While learning, presses only teach; they must not play.
             let learning = hw.learn.lock().unwrap().is_some();
             let used = !learning && crate::play_press(app, press, at_ms);
-            if !used {
-                // A receiver that locked the others out for it sets the round going again.
-                if let Some(handle) = &hw.handle {
-                    handle.ignored(press);
-                }
-            }
             let _ = app.emit("receiver-press", PressEvent { press, used });
         }
     }
@@ -345,7 +339,7 @@ pub async fn receiver_learn_finish(app: AppHandle) -> CmdResult<Press> {
         if let Some(handle) = hw.handle.as_ref() {
             handle.reload_protocol();
         }
-        Ok(Press { buzzer: recorder.buzzer, button: recorder.button })
+        Ok(Press::new(recorder.buzzer, recorder.button))
     })
     .await
 }
@@ -376,13 +370,17 @@ pub async fn receiver_export_log(app: AppHandle, window: Window, picker: Picker)
 fn write_log(hw: &Hardware, path: &Path) -> CmdResult<()> {
     let status = hw.handle.as_ref().map(ReceiverHandle::status);
     let mut out = format!(
-        "# Receiver log, app {} on {}\n# status: {}\n# unix-ms\tbytes (hex)\tdecoded\n",
+        "# Receiver log, app {} on {}\n# status: {}\n# unix-ms\tbytes (hex)\tdecoded (buzzer, button, @ the buzzer's timer)\n",
         env!("CARGO_PKG_VERSION"),
         std::env::consts::OS,
         serde_json::to_string(&status).unwrap_or_default()
     );
     for r in hw.raw_log.lock().unwrap().iter() {
-        let decoded: Vec<String> = r.decoded.iter().map(|p| format!("{}{:?}", p.buzzer, p.button)).collect();
+        let decoded: Vec<String> = r
+            .decoded
+            .iter()
+            .map(|p| format!("{}{:?}{}", p.buzzer, p.button, p.timer.map(|t| format!("@{t}")).unwrap_or_default()))
+            .collect();
         out.push_str(&format!("{}\t{}\t{}\n", r.at_ms, format_hex(&r.bytes), decoded.join(",")));
     }
     std::fs::write(path, out).map_err(|e| AppError::file(FileAction::Write, path, e))

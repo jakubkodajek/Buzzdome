@@ -3,6 +3,7 @@ import { BUTTONS, buttonLabel } from "../answers";
 import { api } from "../api";
 import { useApp, useRun } from "../app-context";
 import { useBackendEvent, useLearnProgress } from "../hooks";
+import type { Translate } from "../i18n";
 import { errorText, protocolText, receiverProblemText, settingsLostText } from "../messages";
 import type { Button, DeviceInfo, Press, PressEvent, RawReport, ReceiverInfo, ReceiverStatus } from "../types";
 import { confirmAction } from "../confirm";
@@ -12,7 +13,9 @@ const LOG_LEN = 40;
 const hex4 = (n: number) => n.toString(16).padStart(4, "0");
 const vidPid = (d: { vendorId: number; productId: number }) => `${hex4(d.vendorId)}:${hex4(d.productId)}`;
 const hexBytes = (bytes: number[]) => bytes.map((b) => b.toString(16).padStart(2, "0")).join(" ");
-const pressLabel = (p: Press) => `${p.buzzer} ${buttonLabel(p.button)}`;
+/** A press as the logs show it, with the buzzer's own timer when it sends one. */
+const pressLabel = (t: Translate, p: Press) =>
+  `${p.buzzer} ${buttonLabel(p.button)}${p.timer === null ? "" : ` · ${t("pressTimer", { timer: p.timer })}`}`;
 const isKeyboardOrMouse = (d: DeviceInfo) => d.usagePage === 1 && (d.usage === 2 || d.usage === 6);
 
 /** Receiver setup and diagnostics: pick the USB receiver, watch its raw data, teach buttons. */
@@ -235,7 +238,7 @@ export function ReceiverTab() {
             <ul className="log">
               {presses.map((p, i) => (
                 <li key={i} className={p.used ? "used" : ""}>
-                  {new Date(p.at).toLocaleTimeString()} · {pressLabel(p.press)}
+                  {new Date(p.at).toLocaleTimeString()} · {pressLabel(t, p.press)}
                   {p.used && ` · ${t("pressUsed")}`}
                 </li>
               ))}
@@ -247,7 +250,7 @@ export function ReceiverTab() {
               {raw.map((r, i) => (
                 <li key={i}>
                   {hexBytes(r.bytes)}
-                  {r.decoded.length > 0 && <span className="decoded"> → {r.decoded.map(pressLabel).join(", ")}</span>}
+                  {r.decoded.length > 0 && <span className="decoded"> → {r.decoded.map((p) => pressLabel(t, p)).join(", ")}</span>}
                 </li>
               ))}
             </ul>

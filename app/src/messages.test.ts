@@ -96,8 +96,8 @@ describe("receiver texts", () => {
   it("names the protocol", () => {
     expect(protocolText(cs, { type: "learned", buttons: 5 })).toBe("naučená tlačítka (5)");
     expect(protocolText(en, { type: "rawOnly" })).toBe("raw reports only");
-    expect(protocolText(en, { type: "rf215", answered: true })).toBe("Enjoy RF215");
-    expect(protocolText(cs, { type: "rf215", answered: false })).toContain("neodpověděl");
+    expect(protocolText(en, { type: "enjoy303s", answered: true })).toBe("Enjoy 303S");
+    expect(protocolText(cs, { type: "enjoy303s", answered: false })).toContain("neodpověděl");
   });
 
   it("says where a file that was not read went, or that it was left alone", () => {
