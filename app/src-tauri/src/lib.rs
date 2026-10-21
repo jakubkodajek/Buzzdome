@@ -990,12 +990,24 @@ mod tests {
     fn the_buzzers_hear_the_mode_before_the_lights() {
         let told = Arc::new(Mutex::new(Vec::new()));
         let mut inner = Inner { driver: Box::new(Recording(told.clone())), ..Inner::new() };
-        replace_show(&mut inner, Some(Game::new(Quiz::from_json(DEMO_QUIZ).unwrap())), None);
+        let quiz = Quiz::from_json(DEMO_QUIZ).unwrap();
+        let fastest_finger = quiz
+            .slides
+            .iter()
+            .position(|slide| matches!(&slide.content, quiz_core::SlideContent::Question(q) if q.mode == quiz_core::AnswerMode::FastestFinger))
+            .unwrap();
+        replace_show(&mut inner, Some(Game::new(quiz)), None);
         assert_eq!(*told.lock().unwrap(), ["mode Register", "lights []"]);
-        told.lock().unwrap().clear();
-        let effects = apply_journaled(&mut inner, Command::Press { buzzer: 3, button: quiz_core::Button::Big }, 1_000).unwrap().unwrap();
-        light_buzzers(&mut inner, &effects);
-        assert_eq!(*told.lock().unwrap(), ["mode Register", "lights [(3, Ready)]"]);
+        let mut step = |command, at_ms| {
+            told.lock().unwrap().clear();
+            let effects = apply_journaled(&mut inner, command, at_ms).unwrap().unwrap();
+            light_buzzers(&mut inner, &effects);
+            told.lock().unwrap().clone()
+        };
+        assert_eq!(step(Command::Press { buzzer: 3, button: quiz_core::Button::Big }, 1_000), ["mode Register", "lights [(3, Ready)]"]);
+        step(Command::GoTo { slide: fastest_finger }, 2_000);
+        // A fastest-finger clock starts: the buzzers take presses as buzzes before they turn ready.
+        assert_eq!(step(Command::Next, 3_000), ["mode FastestFinger", "lights [(3, Ready)]"]);
     }
 
     #[test]

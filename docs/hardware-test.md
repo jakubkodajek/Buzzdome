@@ -216,7 +216,11 @@ log (section 4, step 5; its first column is in milliseconds) or from
 11. **Too early.** Press before the clock starts or before the buzzers turn
     blue, and hold the big button down while they turn. Expected: neither
     buzzes (the press shows under "Presses" or as not counted, but the
-    question goes on), and pressing again once blue does. Then one player
+    question goes on), and pressing again once blue does. If the held
+    button buzzes, the receiver repeats a held button and the app takes
+    the first repeat in a round for a new press: note it, as the app must
+    then forget only when the last press came, not which buttons were
+    held. Then one player
     alone hammers the buzzer, eight or more presses a second, from before
     the question starts until after it turns blue: its first press once
     blue must buzz.
@@ -294,7 +298,11 @@ log (section 4, step 5; its first column is in milliseconds) or from
    same with the receiver's power adapter, out for about five seconds,
    once while a question runs and once while a buzz is judged; note what
    the status, the lights and the presses did, and anything under "Raw
-   data" when it powered up again.
+   data" when it powered up again. Once, after the adapter goes back in,
+   press a buzzer before anything else and note whether the lights work
+   then: a press tells the app the receiver is open without it being set
+   up again, so if they stay dark the app must also send take and open
+   once on such a press.
 3. **Reconnect while working.** During a fastest-finger question, with
    nothing unplugged, click **Reconnect**. The app sets up a receiver that
    is already open. Expected: "Enjoy 303S" again within a second. If it
