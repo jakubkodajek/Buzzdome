@@ -98,7 +98,11 @@ export function ReceiverTab() {
         ) : (
           <p className={`receiver-state ${status?.kind === "connected" && awaitsAnswer(status.protocol) ? "searching" : (status?.kind ?? "off")}`}>
             {status?.kind === "connected" &&
-              t("receiverConnected", { name: status.device.product ?? "HID", id: vidPid(status.device), protocol: protocolText(t, status.protocol) })}
+              t(awaitsAnswer(status.protocol) ? "receiverNotReady" : "receiverConnected", {
+                name: status.device.product ?? "HID",
+                id: vidPid(status.device),
+                protocol: protocolText(t, status.protocol),
+              })}
             {status?.kind === "searching" && t("receiverSearching", { id: vidPid(status.selector) })}
             {status?.kind === "error" && receiverProblemText(t, status.problem, status.detail, info?.platform ?? "")}
             {(!status || status.kind === "off") && t("receiverOff")}

@@ -97,7 +97,7 @@ describe("receiver texts", () => {
     expect(protocolText(cs, { type: "learned", buttons: 5 })).toBe("naučená tlačítka (5)");
     expect(protocolText(en, { type: "rawOnly" })).toBe("raw reports only");
     expect(protocolText(en, { type: "enjoy303s", answered: true })).toBe("Enjoy 303S");
-    expect(protocolText(cs, { type: "enjoy303s", answered: false })).toContain("neodpovídá");
+    expect(protocolText(cs, { type: "enjoy303s", answered: false })).toBe("Enjoy 303S");
     expect(awaitsAnswer({ type: "enjoy303s", answered: false })).toBe(true);
     expect(awaitsAnswer({ type: "enjoy303s", answered: true })).toBe(false);
     expect(awaitsAnswer({ type: "rawOnly" })).toBe(false);

@@ -148,6 +148,8 @@ const strings = {
     receiverOff: "Žádný přijímač není vybrán. Připojte ho k USB a vyberte ho v seznamu.",
     receiverSearching: "Čekám na přijímač {id}. Připojte ho k USB.",
     receiverConnected: "Připojeno: {name} ({id}), protokol: {protocol}",
+    receiverNotReady:
+      "Kabel {name} ({id}) je připojený, ale přijímač {protocol} ještě není připravený. Zkontrolujte jeho napájecí adaptér a kabel RJ45; když to nepomůže, odpojte přijímači na chvíli napájení. Aplikace se ptá dál.",
     receiverNoLights: "Tento protokol neumí ovládat světla bzučáků.",
     receiverSettingsLost: "Uložené nastavení přijímače nešlo přečíst, naučená tlačítka je potřeba naučit znovu:",
     learnBanner: "Učím tlačítko bzučáku: stisky se ve hře nepočítají.",
@@ -809,7 +811,6 @@ const strings = {
     protocolRawOnly: "jen surová data",
     protocolLearned: "naučená tlačítka ({buttons})",
     protocolEnjoy303s: "Enjoy 303S",
-    protocolEnjoy303sSilent: "Enjoy 303S: přijímač zatím neodpovídá. Zkontrolujte jeho napájecí adaptér a kabel RJ45, aplikace se ptá dál.",
     learned: "Naučeno: bzučák {buzzer}, tlačítko {button}.",
     displayN: "Monitor {n}",
     keySpace: "Mezerník",
@@ -985,6 +986,8 @@ const strings = {
     receiverOff: "No receiver selected. Plug it into USB and pick it from the list.",
     receiverSearching: "Waiting for receiver {id}. Plug it into USB.",
     receiverConnected: "Connected: {name} ({id}), protocol: {protocol}",
+    receiverNotReady:
+      "The cable {name} ({id}) is connected, but the {protocol} receiver is not ready yet. Check its power adapter and the RJ45 cable; if that does not help, unplug the receiver's power for a moment. The app keeps asking.",
     receiverNoLights: "This protocol cannot drive the buzzer lights.",
     receiverSettingsLost: "The saved receiver settings could not be read; learned buttons need to be learned again:",
     learnBanner: "Learning a buzzer button: presses do not play in the show.",
@@ -1645,7 +1648,6 @@ const strings = {
     protocolRawOnly: "raw reports only",
     protocolLearned: "learned buttons ({buttons})",
     protocolEnjoy303s: "Enjoy 303S",
-    protocolEnjoy303sSilent: "Enjoy 303S: the receiver does not answer yet. Check its power adapter and the RJ45 cable; the app keeps asking.",
     learned: "Learned buzzer {buzzer}, button {button}.",
     displayN: "Display {n}",
     keySpace: "Space",
