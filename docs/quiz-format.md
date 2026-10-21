@@ -205,7 +205,7 @@ right) or `radial` (middle out); `from` and `to` alike make a plain colour.
 | --- | --- | --- | --- |
 | `text` | text | required | The question. |
 | `mode` | `everyone`, `fastestFinger` | required | Everyone answers with A-D; or the first to buzz answers and the quizmaster judges. |
-| `answers` | list of text | `[]` | 2 to 4 for `everyone` (one per answer button A-D). Up to 6 (A-F) for `fastestFinger`, which the player answers aloud; it may be empty. |
+| `answers` | list of text | `[]` | 2 to 4 for `everyone` (one per answer button A-D). Up to 6 (A-F) for `fastestFinger`; it may be empty. With 1 to 4 the player buzzes in with the answer's button, A-D, so the first press is the answer; with none, 5 or 6 the big button buzzes in and the player answers aloud (specification BZ-19). |
 | `correct` | list of objects | `[]` | The right answers, each once: `answer` is an index into `answers` from 0, `share` the percent of the points it gives, 1 to 100 (default `100`). At least one for `everyone`; a `fastestFinger` question may have none, and then the quizmaster judges. Only `everyone` may give a share below 100: the quizmaster judges a `fastestFinger` answer without saying which one it was, so a right one gives all of the points. A `fastestFinger` share below 100 in a file saved before this was checked reads as 100, and the editor says so. |
 | `timeLimitS` | number | `20` | Seconds, at most 3600; `0` means no clock (the quizmaster ends the question). |
 | `points` | number | `10` | Points for a right answer with a `share` of 100 at the start of the clock, -100000 to 100000. Another share gives that percent of them, rounded half away from zero. |

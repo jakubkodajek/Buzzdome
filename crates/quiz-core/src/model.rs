@@ -28,8 +28,10 @@ use ts_rs::TS;
 pub const SCHEMA_VERSION: u32 = 5;
 
 /// Most answers a question can show (A-F, as many as the reference app's
-/// keypads have). A fastest finger question is answered aloud, so it may use
-/// them all.
+/// keypads have). A fastest finger question is judged by the quizmaster, so
+/// it may use them all: with one to four the first press of A to D is the
+/// answer, otherwise the big button buzzes and the answer is said aloud
+/// (`Button::buzzes_in`).
 pub const MAX_ANSWERS: usize = 6;
 /// Most answers an everyone-answers question can have: one per answer button
 /// of a buzzer (A-D).
@@ -328,7 +330,8 @@ impl AnswerMode {
     pub const ALL: [AnswerMode; 2] = [AnswerMode::Everyone, AnswerMode::FastestFinger];
 
     /// Everyone answers with a button, so 2 to 4; a fastest finger question
-    /// is answered aloud, so none to all six letters.
+    /// is judged by the quizmaster, so none to all six letters
+    /// (`MAX_ANSWERS`).
     pub fn answer_limits(self) -> AnswerLimits {
         match self {
             AnswerMode::Everyone => AnswerLimits { fewest: MIN_EVERYONE_ANSWERS, most: MAX_EVERYONE_ANSWERS },
@@ -1237,8 +1240,10 @@ mod tests {
     #[test]
     fn an_everyone_answers_question_has_at_most_one_answer_per_button() {
         // Every answer must be one a buzzer button can choose.
+        assert_eq!(MAX_EVERYONE_ANSWERS, crate::game::ANSWER_BUTTONS.len());
         let buttons = [Button::A, Button::B, Button::C, Button::D, Button::Big];
         assert!((0..MAX_EVERYONE_ANSWERS).all(|i| buttons.iter().any(|b| b.answer_index() == Some(i))));
+        assert_eq!(Button::Big.answer_index(), None);
     }
 
     #[test]

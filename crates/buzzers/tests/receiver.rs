@@ -464,6 +464,57 @@ fn a_buzz_from_a_buzzer_that_was_not_ready_is_dropped_and_logged() {
 }
 
 #[test]
+fn a_press_just_before_a_round_begins_does_not_hide_the_first_one_in_it() {
+    let backend = FakeBackend::default();
+    let (handle, rx) = start_303s(&backend, config());
+    // A team hammers its buzzer through the start: one press while dark...
+    backend.0.lock().unwrap().inbox.push_back(buzz_303s_showing(5, 30, 0x00));
+    wait_for(&rx, |e| matches!(e, ReceiverEvent::Press { press, .. } if press.buzzer == 5));
+    handle.set_mode(BuzzerMode::FastestFinger);
+    std::thread::sleep(Duration::from_millis(20));
+    // ...and the next, within the repeat gap, as its buzzer showed ready.
+    backend.0.lock().unwrap().inbox.push_back(buzz_303s(5, 8));
+    let ReceiverEvent::Press { press, .. } = wait_for(&rx, |e| matches!(e, ReceiverEvent::Press { .. })) else { unreachable!() };
+    assert_eq!(press, Press::timed(5, Button::Big, 8));
+    handle.shutdown();
+}
+
+#[test]
+fn reconnecting_to_an_enjoy_303s_in_use_sets_it_up_again_and_a_press_says_it_is_open() {
+    let backend = FakeBackend::default();
+    let (handle, rx) = start_303s(&backend, config());
+    handle.set_lights(vec![(1, Light::Ready)]);
+    // Reconnect in the Receiver tab: the same receiver again.
+    handle.select(Some(selector()));
+    wait_for(&rx, |e| matches!(e, ReceiverEvent::Status(ReceiverStatus::Connected { protocol: ProtocolKind::Enjoy303s { answered: false }, .. })));
+    let (features, connect) = {
+        let mut w = backend.0.lock().unwrap();
+        assert_eq!(w.opens, 2, "opened again");
+        let connect = cp2110::received(w.written.last().unwrap()).to_vec();
+        w.written.clear();
+        (w.features.len(), connect)
+    };
+    assert_eq!(features, 6, "the cable's settings again");
+    assert_eq!(connect, [0x35, 0x96, 0x02, 0x10, 0x00, 0x10]);
+    // The receiver stayed open and does not answer connect, but a press comes.
+    backend.0.lock().unwrap().inbox.push_back(buzz_303s(2, 40));
+    wait_for(&rx, |e| matches!(e, ReceiverEvent::Status(ReceiverStatus::Connected { protocol: ProtocolKind::Enjoy303s { answered: true }, .. })));
+    wait_for(&rx, |e| matches!(e, ReceiverEvent::Press { press, .. } if press.buzzer == 2));
+    let start = vec![0x35, 0x96, 0x01, 0x85, 0x85];
+    let ready_1 = vec![0x35, 0x96, 0x04, 0x2d, 0, 0, 0x43, 0x2d ^ 0x43];
+    let deadline = Instant::now() + Duration::from_secs(3);
+    loop {
+        let serial: Vec<Vec<u8>> = backend.0.lock().unwrap().written.iter().map(|r| cp2110::received(r).to_vec()).collect();
+        if serial.ends_with(&[start.clone(), ready_1.clone()]) {
+            break;
+        }
+        assert!(Instant::now() < deadline, "not started and painted: {serial:x?}");
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    handle.shutdown();
+}
+
+#[test]
 fn a_fastest_finger_buzz_waiting_for_the_timers_goes_on_when_the_receiver_goes() {
     for deselect in [false, true] {
         let backend = FakeBackend::default();

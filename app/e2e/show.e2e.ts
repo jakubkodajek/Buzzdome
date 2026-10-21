@@ -212,9 +212,27 @@ describe("a show of the demo quiz", () => {
     await next("question:revealed", 8);
   });
 
+  test("fastest finger with answers A to D: the letter pressed first buzzes in", async () => {
+    await next("question:ready", 9);
+    await next("question:running", 9);
+    // Here A to D buzz, the big button does not (BZ-19).
+    await buzz(1, "big");
+    await buzz(1, "c");
+    let buzzed = await waitPhase("question:buzzed", 9);
+    expect(buzzed.phase).toMatchObject({ buzzer: 1, button: "c" });
+    await onProjector(() => app.$(".buzz-answer.answer-2"));
+    await app.step("wrong");
+    await waitPhase("question:running", 9);
+    await buzz(2, "b");
+    buzzed = await waitPhase("question:buzzed", 9);
+    expect(buzzed.phase).toMatchObject({ buzzer: 2, button: "b" });
+    await app.stepKeys("y");
+    await waitPhase("question:revealed", 9);
+  });
+
   test("the final ranking reveals step by step and the show ends there", async () => {
-    await next("endOfRound", 9);
-    let view = await next("final", 10);
+    await next("endOfRound", 10);
+    let view = await next("final", 11);
     while (view.controls.next) {
       const step = (view.phase as { step: number }).step;
       await app.step("next");

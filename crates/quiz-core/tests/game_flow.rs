@@ -1090,6 +1090,52 @@ fn a_player_switched_on_mid_question_joins_at_the_next_and_one_switched_off_cann
 }
 
 #[test]
+fn enabling_players_who_are_on_leaves_them_in_the_fastest_finger_question() {
+    let mut show = Show::new(vec![question("q1", AnswerMode::FastestFinger)]);
+    for buzzer in 1..=2 {
+        show.press(0, buzzer, Button::Big);
+    }
+    show.run(0, Command::Next).unwrap();
+    show.run(0, Command::Next).unwrap();
+    // The Teams tab sends Enable for every selected row.
+    for buzzer in 1..=2 {
+        let effects = show.run(500, Command::SetPlayerEnabled { buzzer, enabled: true }).unwrap();
+        assert_eq!(effects, [Effect::Lights { lights: vec![(buzzer, Light::Ready)] }]);
+    }
+    assert!(matches!(step(&show.game), QuestionStep::Running { .. }), "still open");
+    assert!(show.game.view(500).players.iter().all(|p| !p.joins_next && !p.locked_out));
+    show.press(1_000, 2, Button::Big);
+    assert!(matches!(step(&show.game), QuestionStep::Buzzed { buzzer: 2, .. }));
+}
+
+#[test]
+fn a_buzzer_new_to_the_show_mid_fastest_finger_plays_from_the_next_question() {
+    let mut show = Show::new(vec![question("q1", AnswerMode::FastestFinger), question("q2", AnswerMode::Everyone)]);
+    show.press(0, 1, Button::Big);
+    show.run(0, Command::Next).unwrap();
+    show.run(0, Command::Next).unwrap();
+    // A press registers a buzzer whenever it comes, an added player too.
+    assert_eq!(show.press(500, 2, Button::Big), [Effect::Lights { lights: vec![(2, Light::Locked)] }]);
+    assert_eq!(show.run(500, Command::AddPlayer { buzzer: 3, name: "Late".into() }).unwrap(), [Effect::Lights { lights: vec![(3, Light::Locked)] }]);
+    assert!(show.press(700, 3, Button::Big).is_empty(), "plays from the next question");
+    let view = show.game.view(700);
+    let joining: Vec<u16> = view.players.iter().filter(|p| p.joins_next).map(|p| p.buzzer).collect();
+    assert_eq!(joining, [2, 3]);
+    assert!(view.players.iter().all(|p| !p.locked_out), "not marked as answered wrong");
+    assert!(matches!(step(&show.game), QuestionStep::Running { .. }), "1 is left to buzz");
+
+    // In the next question, everyone answers; a buzzer new to it answers at once.
+    show.run(1_000, Command::CloseQuestion).unwrap();
+    show.run(1_000, Command::Next).unwrap();
+    show.run(1_000, Command::Next).unwrap();
+    show.run(1_000, Command::Next).unwrap();
+    assert!(show.game.view(1_000).players.iter().all(|p| !p.joins_next));
+    show.press(1_500, 4, Button::B);
+    assert_eq!(show.game.responses().get(&4).map(|r| r.button), Some(Button::B));
+    assert_eq!(Game::replay(show.game.quiz().clone(), &show.journal, RULES_VERSION), show.game);
+}
+
+#[test]
 fn a_player_switched_on_mid_question_could_buzz_at_once_under_older_rules() {
     let mut show = Show::new(vec![question("q1", AnswerMode::FastestFinger)]);
     for buzzer in 1..=2 {

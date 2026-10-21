@@ -113,6 +113,9 @@ pub struct PlayerView {
     pub answer_correct: Option<bool>,
     pub answer_ms: Option<u64>,
     pub locked_out: bool,
+    /// Switched on or registered while the current fastest-finger question
+    /// was under way, so plays from the next question (`Game::joins_next`).
+    pub joins_next: bool,
     /// Score change from the current question.
     pub delta: Option<i32>,
 }
@@ -175,6 +178,7 @@ impl Game {
                 answer_correct: self.responses().get(&p.buzzer).map(|r| question.is_some_and(|q| r.is_right(q))),
                 answer_ms: self.responses().get(&p.buzzer).map(|r| r.elapsed_ms),
                 locked_out: self.locked_out().contains(&p.buzzer),
+                joins_next: self.joins_next().contains(&p.buzzer),
                 delta: self.delta(p.buzzer),
             })
             .collect();

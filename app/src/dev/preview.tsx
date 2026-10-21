@@ -88,6 +88,7 @@ function players(overrides: Partial<PlayerView>[] = []): PlayerView[] {
     answerCorrect: null,
     answerMs: null,
     lockedOut: false,
+    joinsNext: false,
     delta: null,
     ...overrides[i],
   }));

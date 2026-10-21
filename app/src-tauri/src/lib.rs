@@ -261,19 +261,24 @@ fn deliver(app: &AppHandle, inner: &mut Inner, effects: Vec<Effect>) {
 
 /// Sends a show change's effects to the buzzer lights and the windows' sound.
 fn send_effects(app: &AppHandle, inner: &mut Inner, effects: Vec<Effect>) {
-    // The mode before the lights: by the time the buzzers light ready, the
-    // receiver thread holds a round's presses for the buzzers' timers, and
-    // tells one made in the step before by the light it showed
-    // (`buzzers::enjoy303s`). The change's lights go at once.
-    send_mode(inner);
-    let lights = Effect::lights(&effects);
-    if !lights.is_empty() {
-        set_lights(inner, &lights);
-    }
+    light_buzzers(inner, &effects);
     for effect in effects {
         if let Effect::Sound { cue } = effect {
             let _ = app.emit("sound-cue", cue);
         }
+    }
+}
+
+/// Tells the buzzers what a show change's effects call for. The mode goes
+/// before the lights: by the time the buzzers light ready, the receiver
+/// thread holds a round's presses for the buzzers' timers, and tells one
+/// made in the step before by the light it showed (`buzzers::enjoy303s`).
+/// The change's lights go at once.
+fn light_buzzers(inner: &mut Inner, effects: &[Effect]) {
+    send_mode(inner);
+    let lights = Effect::lights(effects);
+    if !lights.is_empty() {
+        set_lights(inner, &lights);
     }
 }
 
@@ -674,6 +679,7 @@ pub fn run() {
 mod tests {
     use super::*;
     use app_windows::{CloseAnswer, CLOSE_ANSWER_WAIT};
+    use std::sync::Arc;
     use std::time::Instant;
 
     #[test]
@@ -956,6 +962,40 @@ mod tests {
         // The show resumed after a crash begins here too (`resume_last_session`).
         replace_show(&mut inner, Some(demo()), None);
         assert_eq!(request.answer(now + CLOSE_ANSWER_WAIT), CloseAnswer::Ask, "a show resumed");
+    }
+
+    /// Notes what the buzzers are told, in order.
+    struct Recording(Arc<Mutex<Vec<String>>>);
+
+    impl BuzzerDriver for Recording {
+        fn name(&self) -> &'static str {
+            "recording"
+        }
+
+        fn has_lights(&self) -> bool {
+            true
+        }
+
+        fn set_lights(&mut self, lights: &[(BuzzerId, Light)]) -> Result<(), buzzers::DriverError> {
+            self.0.lock().unwrap().push(format!("lights {lights:?}"));
+            Ok(())
+        }
+
+        fn set_mode(&mut self, mode: BuzzerMode) {
+            self.0.lock().unwrap().push(format!("mode {mode:?}"));
+        }
+    }
+
+    #[test]
+    fn the_buzzers_hear_the_mode_before_the_lights() {
+        let told = Arc::new(Mutex::new(Vec::new()));
+        let mut inner = Inner { driver: Box::new(Recording(told.clone())), ..Inner::new() };
+        replace_show(&mut inner, Some(Game::new(Quiz::from_json(DEMO_QUIZ).unwrap())), None);
+        assert_eq!(*told.lock().unwrap(), ["mode Register", "lights []"]);
+        told.lock().unwrap().clear();
+        let effects = apply_journaled(&mut inner, Command::Press { buzzer: 3, button: quiz_core::Button::Big }, 1_000).unwrap().unwrap();
+        light_buzzers(&mut inner, &effects);
+        assert_eq!(*told.lock().unwrap(), ["mode Register", "lights [(3, Ready)]"]);
     }
 
     #[test]

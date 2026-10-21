@@ -872,7 +872,9 @@ Loop, every iteration:
    dropped as unable to count, `Protocol::take_dropped`) and then one `Press`
    event per press, in the order the protocol returned them, except that in
    a fastest-finger round presses with the buzzer's own timer wait for the
-   timer order (2.6). After every read, a report or a timeout, it queues
+   timer order (2.6). The edge filter starts afresh as a fastest-finger
+   round begins, so a press made just before it cannot hide the first one
+   in it as a held button's repeat. After every read, a report or a timeout, it queues
    what the protocol has to write now (`Protocol::follow_up`): what the
    receiver's messages call for, or a step again whose answer is overdue.
    A read or write error
@@ -979,14 +981,24 @@ between the two could go wrong mid-show.
   lights wait for the last. A step not answered within 500 ms (the SDK
   waits 200 ms) is sent again, connect with the cable's settings before it
   as after plugging in, so a lost or spoiled answer, or a receiver powered
-  after the cable connected, only delays the set-up. Until the receiver
-  answers, the Receiver tab shows it as still being looked for and says to
-  check the receiver's power adapter and RJ45 cable. The guide says fewer
+  after the cable connected, only delays the set-up. Open unanswered four
+  times, the set-up starts again from connect, as a receiver that answered
+  connect and then lost its power needs. Until the receiver answers, the
+  Receiver tab shows it as still being looked for (blue, as the search)
+  and says to check the receiver's power adapter and RJ45 cable, and else
+  to unplug its power for a moment. The guide says fewer
   buzzers make the lights quicker; the app takes all 64, so any buzzer's ID
   works (the lag is to check on the hardware, `hardware-test.md` 6).
-- An answer to connect or open while the receiver is open says it started
-  again (**unverified** that a receiver powered again says so): it is set
-  up again and every buzzer's light sent again, as it forgot them. A
+- An answer to connect while the receiver is open says it started again
+  (**unverified** that a receiver powered again says so): it is set up
+  again and every buzzer's light sent again, as it forgot them; the app
+  never asks to connect while open. An answer to open counts only while
+  open is asked: a late one, to an open asked again, would otherwise light
+  the ready buzzers again and start their timers anew. A press while the
+  set-up is unanswered says the receiver is open already: it stayed
+  powered while the app started again (a crash, Reconnect, a reloaded
+  protocol) and may not answer connect then (**unverified**), so the app
+  starts it and sends every light, as after its answer to open. A
   receiver that loses power or its RJ45 plug while the USB side stays in,
   and says nothing, is not noticed: the cable gives no sign of it, and no
   message the app could ask for is known to be safe mid-show. The Receiver
@@ -1010,9 +1022,9 @@ between the two could go wrong mid-show.
   orders, but not while a buzzer should show ready, which would then be
   lit again one by one; then each buzzer that should show another colour
   gets its own. A buzzer out of the round may so show ready for a moment,
-  which counts for nothing. No buzzer turns ready alone while others
-  already count: a player switched on mid-round joins at the next question
-  (2.7).
+  which counts for nothing: one judged wrong as the round goes on, say. No
+  buzzer turns ready alone while others already count: a player who joins
+  mid-round plays from the next question (2.7).
 - A press, `32 id code colour t0 t1 t2` and three more bytes the app does
   not use: buzzer `id + 1`; button `code >> 4`, 1 to 4 for A to D and 5
   or 6 the big button (**unverified**: the guide gives 5 and 6 for keys E
@@ -1031,9 +1043,11 @@ between the two could go wrong mid-show.
   locked buzzer while another team's answer is judged must not win as the
   round goes on. Its timer also counts from another moment than the
   others'. The raw log shows it as dropped. A colour the app never sets
-  lets the press through, as what the buzzer reports is unverified and a
-  byte read wrong must not silence every buzzer. Elsewhere the game alone
-  decides, so any buzzer can register. The quizmaster's remote (`34`) and
+  lets the press through, as what the buzzer reports is unverified; one
+  that reads as dark (`00`) does not, so if the buzzers reported `00`
+  whatever they show, fastest finger would take no press, which the
+  hardware test checks first (`hardware-test.md`, 6.7). Elsewhere the game
+  alone decides, so any buzzer can register. The quizmaster's remote (`34`) and
   the answers to setting a buzzer's ID (`17`, `24`) are skipped.
 - The receiver runs no round itself and locks nobody out: the app lights
   every buzzer (2.7) and decides who buzzed first (2.6).
@@ -1211,16 +1225,22 @@ judged, dark while a question is closed, and the result from the reveal. A
 buzz judged wrong shows wrong while the others get the lights of the step
 that follows (ready again, or dark when it closed the question), until the
 next step's lights: another buzz, the question's close or its reveal. A
-player switched on gets the light of the step at once, but one switched on
-while a fastest-finger question is under way joins at the next question
-and shows locked until then (rules version 5): the others' buzzer timers
-count from when they lit ready (2.6). One switched off shows locked. The
-lights of one show change go to the driver at once, a buzzer's last light
-winning (`Effect::lights`), so a buzzer judged wrong does not show the
-round's light for a moment first. When a show begins, resumes or ends, the shell
-lights every buzzer as the show then stands (`Game::lights`), and those of
-the show before go dark, so no light is left from another show or from
-before the app restarted. The shell passes it to `BuzzerDriver::set_lights`; for the hardware
+player who joins (switched on, or new to the show by a press or by being
+added in the Teams tab) gets the light of the step at once; but one who
+joins while a fastest-finger question is under way plays from the next
+question and shows locked until then, and the Teams tab says so (rules
+version 5, BZ-19): the others' buzzer timers count from when they lit
+ready (2.6). Switching on a player who is on changes nothing, so Enable
+on every selected team brings back only those switched off. One switched
+off shows locked. The lights of one show change go to the driver at once,
+a buzzer's last light winning (`Effect::lights`), so the driver is never
+told the round's light for a buzzer judged wrong (an order to all may
+still show it for a moment on the 303S, 2.4). When a show begins, resumes
+or ends, the shell lights every buzzer as the show then stands
+(`Game::lights`), and those of the show before go dark, so no light is
+left from another show. After the app restarted, the shell knows no show
+before: a buzzer outside the resumed show keeps what it showed until a
+light goes to all. The shell passes it to `BuzzerDriver::set_lights`; for the hardware
 driver that is a message to the receiver thread, which encodes it with the
 active protocol and writes the reports. Light failures are logged and never
 block the show. With the learned or raw protocol, `has_lights()` is false and
@@ -1232,8 +1252,8 @@ white, right green, wrong red, off dark (`enjoy303s.rs`); no two differ in
 brightness alone. A light that goes to all buzzers at once reaches spare
 buzzers too, which the app never lit and so show whatever went to all
 last: in a fastest-finger round they light ready, so a spare's press
-registers a late team and can win the buzz, as any unknown buzzer's press
-registers a late arrival.
+registers a late team, which plays from the next question as any player
+who joins then.
 
 The driver also gets what the buzzers take as a whole. `Game::buzzer_mode`
 derives it from the same phase as the lights: `BuzzerMode` is off, register

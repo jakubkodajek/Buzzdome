@@ -324,6 +324,10 @@ impl<E: From<ReceiverEvent>> Worker<E> {
                 if mode != BuzzerMode::FastestFinger {
                     let held = self.order.flush();
                     self.send_presses(held);
+                } else {
+                    // A press while the round had not begun must not hide the
+                    // first one in it as a held button's repeat.
+                    self.edge.reset();
                 }
                 if let Some(conn) = self.conn.as_mut() {
                     let reports = conn.protocol.encode_mode(mode);

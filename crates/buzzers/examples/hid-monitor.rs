@@ -4,6 +4,7 @@
 //!   cargo run -p buzzers --example hid-monitor -- 10c4:ea80         # print reports
 //!   cargo run -p buzzers --example hid-monitor -- 10c4:1819 rush    # fastest finger
 //!   cargo run -p buzzers --example hid-monitor -- 10c4:1819 lights  # every light in turn
+//!   cargo run -p buzzers --example hid-monitor -- 10c4:1819 start   # no light at all
 //!
 //! With a VID:PID it runs the app's own receiver thread on the first matching
 //! interface, with the protocol the app picks for it, and prints the status,
@@ -18,7 +19,9 @@
 //! timers. With `lights` they show each light of a show in turn, two
 //! seconds each, and a second into each, buzzers 2 and 6 alone take the
 //! next one: one order lights all buzzers, then one order each lights
-//! those two. Every press is taken then, whatever the buzzer shows.
+//! those two. Every press is taken then, whatever the buzzer shows. With
+//! `start` the receiver is set up and started, but no buzzer is told a
+//! colour: what start alone does, which a show's first colours hide.
 
 use buzzers::clock::ShowClock;
 use buzzers::enjoy303s::MAX_BUZZER;
@@ -61,16 +64,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         return Ok(());
     };
     let (vendor_id, product_id) = parse_vid_pid(&arg).ok_or("expected VID:PID in hex, e.g. 10c4:ea80")?;
-    let (mode, cycle) = match std::env::args().nth(2).as_deref() {
-        None => (BuzzerMode::Answers, false),
-        Some("rush") => (BuzzerMode::FastestFinger, false),
-        Some("lights") => (BuzzerMode::Register, true),
-        Some(other) => return Err(format!("unknown option {other}: expected rush or lights").into()),
+    let (mode, cycle, lit) = match std::env::args().nth(2).as_deref() {
+        None => (BuzzerMode::Answers, false, true),
+        Some("rush") => (BuzzerMode::FastestFinger, false, true),
+        Some("lights") => (BuzzerMode::Register, true, true),
+        Some("start") => (BuzzerMode::Register, false, false),
+        Some(other) => return Err(format!("unknown option {other}: expected rush, lights or start").into()),
     };
     let resolver = Arc::new(|device: &DeviceInfo| protocol::for_device(&[], device));
     let (events, rx) = mpsc::channel();
     let (handle, _join) = receiver::spawn(Arc::new(backend), resolver, events, ReceiverConfig::new(ShowClock::start()));
-    light_all(&handle, Light::Ready);
+    if lit {
+        light_all(&handle, Light::Ready);
+    }
     handle.set_mode(mode);
     handle.select(Some(DeviceSelector { vendor_id, product_id, usage_page: None, interface_number: None }));
     if cycle {

@@ -37,6 +37,10 @@ const PRESS: u8 = 0x32;
 /// How long a set-up step waits for the receiver's answer before it is
 /// asked again: the vendor's SDK waits 200 ms for one.
 const ANSWER_WAIT_MS: u64 = 500;
+/// How many times open goes unanswered before the set-up starts again from
+/// connect: a receiver that answered connect and then lost its power, or
+/// never opens, is asked to connect as after plugging it in.
+const OPENS_BEFORE_CONNECT: u32 = 4;
 
 /// A colour byte: brightness, then red, green and blue at 0 (off) to 3.
 /// The top bit, which the app never sets, stores a colour without showing it.
@@ -162,6 +166,8 @@ pub struct Enjoy303s {
     /// When the set-up step waiting for its answer was last asked, once
     /// `follow_up` saw it.
     asked_ms: Option<u64>,
+    /// How many times open was asked since connect was answered.
+    opens: u32,
     /// The colour each buzzer should show, by slot, as the app last set it.
     wanted: [Option<u8>; BUZZERS],
     /// The colour each buzzer was last told to show, by slot: none until told.
@@ -178,6 +184,7 @@ impl Default for Enjoy303s {
             stage: Stage::default(),
             follow: Vec::new(),
             asked_ms: None,
+            opens: 0,
             wanted: [None; BUZZERS],
             shown: [None; BUZZERS],
             mode: BuzzerMode::Off,
@@ -203,30 +210,45 @@ impl Enjoy303s {
 
     /// Handles one message from the receiver: the press it is, if any.
     ///
-    /// The answer to connect or open, once open, says the receiver started
-    /// again (unverified that a receiver powered again says so): it has
-    /// forgotten its set-up and what the buzzers were told, so both are
-    /// sent again.
+    /// The answer to connect once open says the receiver started again
+    /// (unverified that a receiver powered again says so): it has forgotten
+    /// its set-up and what the buzzers were told, so both are sent again.
+    /// The app never asks to connect while open. An answer to open counts
+    /// only while open is asked: a late one, to an open asked again, says
+    /// nothing new. A press before the set-up was answered says the
+    /// receiver is open already: it stayed powered while the app started
+    /// again, and may not answer connect then (unverified).
     fn read(&mut self, payload: &[u8]) -> Option<Press> {
         match payload {
             [CONNECTED, ..] if self.stage != Stage::Opening => {
                 self.stage = Stage::Opening;
                 self.asked_ms = None;
+                self.opens = 1;
                 self.follow.extend(self.ask());
                 None
             }
-            [OPENED, 0x01, ..] if self.stage != Stage::Connecting => {
-                self.stage = Stage::Open;
-                // What the buzzers should show waited for this. The receiver
-                // takes presses before any buzzer lights ready.
-                self.shown = [None; BUZZERS];
-                let shown = [Order::Start.reports(), self.paint()].concat();
-                self.follow.extend(shown);
+            [OPENED, 0x01, ..] if self.stage == Stage::Opening => {
+                self.opened();
                 None
             }
-            [PRESS, ..] => self.press_in(payload),
+            [PRESS, ..] => {
+                if self.stage != Stage::Open {
+                    self.opened();
+                }
+                self.press_in(payload)
+            }
             _ => None,
         }
+    }
+
+    /// The receiver is open: it takes presses, and every buzzer is told
+    /// what it should show, which waited for this. The receiver takes
+    /// presses before any buzzer lights ready.
+    fn opened(&mut self) {
+        self.stage = Stage::Open;
+        self.shown = [None; BUZZERS];
+        let shown = [Order::Start.reports(), self.paint()].concat();
+        self.follow.extend(shown);
     }
 
     /// The press in a press message: the buzzer's radio ID, the button in
@@ -239,9 +261,10 @@ impl Enjoy303s {
     /// showing a result must not count when it arrives just after the step
     /// changed, before the mode did, and its timer counts from another
     /// moment. Brightness aside, as the buzzer may report its own, and a
-    /// colour the app never sets lets the press through: what the buzzer
-    /// reports is unverified, and a byte read wrong must not silence every
-    /// buzzer. Elsewhere the game decides, and any buzzer can register.
+    /// colour the app never sets lets the press through, as what the
+    /// buzzer reports is unverified; one that reads as dark does not, which
+    /// the hardware test checks. Elsewhere the game decides, and any buzzer
+    /// can register.
     fn press_in(&mut self, payload: &[u8]) -> Option<Press> {
         let [_, radio_id, code, shown, t0, t1, t2, ..] = *payload else { return None };
         let buzzer = BuzzerId::from(radio_id) + 1;
@@ -352,11 +375,20 @@ impl Protocol for Enjoy303s {
     /// What the receiver's answers call for, and the set-up step again
     /// while its answer is overdue: one lost or spoiled on the way, or a
     /// receiver powered after the cable connected, delays the set-up only.
+    /// Open unanswered `OPENS_BEFORE_CONNECT` times, the set-up starts again
+    /// from connect.
     fn follow_up(&mut self, now_ms: u64) -> Vec<Report> {
         if self.stage != Stage::Open {
             let asked_ms = *self.asked_ms.get_or_insert(now_ms);
             if now_ms.saturating_sub(asked_ms) >= ANSWER_WAIT_MS {
                 self.asked_ms = Some(now_ms);
+                if self.stage == Stage::Opening {
+                    if self.opens >= OPENS_BEFORE_CONNECT {
+                        self.stage = Stage::Connecting;
+                    } else {
+                        self.opens += 1;
+                    }
+                }
                 self.follow.extend(self.ask());
             }
         }
@@ -421,6 +453,16 @@ mod tests {
     const OPEN: [u8; 6] = [0x35, 0x96, 0x02, 0x12, 0x00, 0x12];
     const START: [u8; 5] = [0x35, 0x96, 0x01, 0x85, 0x85];
 
+    /// The order that colours the buzzer in slot `i`.
+    fn paint(i: u8, c: u8) -> Vec<u8> {
+        vec![0x35, 0x96, 0x04, 0x2d, i % 4, i / 4, c, 0x2d ^ (i % 4) ^ (i / 4) ^ c]
+    }
+
+    /// The order that colours every buzzer.
+    fn all(c: u8) -> Vec<u8> {
+        vec![0x35, 0x96, 0x02, 0x74, c, 0x74 ^ c]
+    }
+
     /// A receiver that answered its set-up, and the orders it got for it.
     fn opened() -> (Enjoy303s, Vec<Vec<u8>>) {
         let mut p = Enjoy303s::default();
@@ -456,17 +498,15 @@ mod tests {
         // No lights were set: it takes presses.
         assert_eq!(serial(&p.follow_up(0)), [START]);
         p.decode(&input(&message(&[CONNECTED, 0x00])));
-        assert_eq!(serial(&p.follow_up(0)), [TAKE_64.to_vec(), OPEN.to_vec()], "a second connect answer while opening");
+        assert_eq!(serial(&p.follow_up(0)), [TAKE_64.to_vec(), OPEN.to_vec()], "connect answered once open: started again");
         p.decode(&input(&message(&[CONNECTED, 0x00])));
-        assert!(p.follow_up(0).is_empty(), "nor a third");
+        assert!(p.follow_up(0).is_empty(), "connect answered again while opening");
     }
 
     #[test]
     fn a_receiver_that_answers_its_set_up_again_once_open_is_set_up_again() {
         let (mut p, _) = opened();
         p.encode_lights(&[(1, Light::Ready), (2, Light::Ready), (3, Light::Wrong)]);
-        let ready_all = [0x35, 0x96, 0x02, 0x74, READY, 0x74 ^ READY];
-        let wrong_3 = [0x35, 0x96, 0x04, 0x2d, 2, 0, WRONG, 0x2d ^ 2 ^ WRONG];
         // Started again: connect is answered while open.
         p.decode(&input(&message(&[CONNECTED, 0x00])));
         assert_eq!(p.kind(), ProtocolKind::Enjoy303s { answered: false });
@@ -474,10 +514,44 @@ mod tests {
         assert!(p.encode_lights(&[(4, Light::Ready)]).is_empty(), "kept until open again");
         p.decode(&input(&message(&[OPENED, 0x01])));
         // Every light again, as the receiver forgot them.
-        assert_eq!(serial(&p.follow_up(0)), [START.to_vec(), ready_all.to_vec(), wrong_3.to_vec()]);
-        // Open answered again while open: the same.
+        assert_eq!(serial(&p.follow_up(0)), [START.to_vec(), all(READY), paint(2, WRONG)]);
+        // A late answer to an open asked again says nothing new: the ready
+        // buzzers' timers keep counting from when they lit.
         p.decode(&input(&message(&[OPENED, 0x01])));
-        assert_eq!(serial(&p.follow_up(0)), [START.to_vec(), ready_all.to_vec(), wrong_3.to_vec()]);
+        assert!(p.follow_up(0).is_empty());
+        assert_eq!(p.kind(), ProtocolKind::Enjoy303s { answered: true });
+    }
+
+    #[test]
+    fn a_receiver_that_does_not_open_is_asked_to_connect_again() {
+        let mut p = Enjoy303s::default();
+        p.decode(&input(&message(&[CONNECTED, 0x00])));
+        assert_eq!(serial(&p.follow_up(0)), [TAKE_64.to_vec(), OPEN.to_vec()]);
+        for at in [500, 1_000, 1_500] {
+            assert_eq!(serial(&p.follow_up(at)), [TAKE_64.to_vec(), OPEN.to_vec()], "{at}");
+        }
+        // Four opens unanswered: as after plugging it in.
+        assert_eq!(p.follow_up(2_000), p.init_reports());
+        p.decode(&input(&message(&[CONNECTED, 0x00])));
+        assert_eq!(serial(&p.follow_up(2_100)), [TAKE_64.to_vec(), OPEN.to_vec()], "open asked again from the start");
+        assert_eq!(serial(&p.follow_up(2_600)), [TAKE_64.to_vec(), OPEN.to_vec()]);
+    }
+
+    #[test]
+    fn a_press_before_the_set_up_is_answered_says_the_receiver_is_open() {
+        for opening in [false, true] {
+            // The app started again while the receiver stayed open.
+            let mut p = Enjoy303s::default();
+            if opening {
+                p.decode(&input(&message(&[CONNECTED, 0x00])));
+                p.follow_up(0);
+            }
+            p.encode_lights(&[(1, Light::Ready), (2, Light::Ready), (3, Light::Wrong)]);
+            assert_eq!(p.decode(&input(&press_message(4, 0x10, OFF, 300))), [Press::timed(5, Button::A, 300)], "{opening}");
+            assert_eq!(p.kind(), ProtocolKind::Enjoy303s { answered: true });
+            assert_eq!(serial(&p.follow_up(0)), [START.to_vec(), all(READY), paint(2, WRONG)], "{opening}");
+            assert!(p.follow_up(60_000).is_empty(), "nothing more to ask once open");
+        }
     }
 
     #[test]
@@ -504,10 +578,8 @@ mod tests {
         p.decode(&input(&message(&[CONNECTED, 0x00])));
         p.follow_up(0);
         p.decode(&input(&message(&[OPENED, 0x01])));
-        let ready_all = [0x35, 0x96, 0x02, 0x74, READY, 0x74 ^ READY];
-        let wrong_3 = [0x35, 0x96, 0x04, 0x2d, 2, 0, WRONG, 0x2d ^ 2 ^ WRONG];
         // The receiver takes presses before the buzzers light ready.
-        assert_eq!(serial(&p.follow_up(0)), [START.to_vec(), ready_all.to_vec(), wrong_3.to_vec()]);
+        assert_eq!(serial(&p.follow_up(0)), [START.to_vec(), all(READY), paint(2, WRONG)]);
     }
 
     #[test]
@@ -523,8 +595,6 @@ mod tests {
     #[test]
     fn a_colour_most_buzzers_take_goes_to_all_at_once() {
         let (mut p, _) = opened();
-        let paint = |i: u8, c: u8| vec![0x35, 0x96, 0x04, 0x2d, i % 4, i / 4, c, 0x2d ^ (i % 4) ^ (i / 4) ^ c];
-        let all = |c: u8| vec![0x35, 0x96, 0x02, 0x74, c, 0x74 ^ c];
         // Two buzzers: one order each costs no more than one for all and one more.
         assert_eq!(serial(&p.encode_lights(&[(1, Light::Wrong), (2, Light::Locked)])), [paint(0, WRONG), paint(1, LOCKED)]);
         // A round begins on four buzzers, one of them switched off.
@@ -543,14 +613,12 @@ mod tests {
     #[test]
     fn buzzers_turning_ready_together_turn_at_once() {
         let (mut p, _) = opened();
-        let paint = |i: u8, c: u8| vec![0x35, 0x96, 0x04, 0x2d, i % 4, i / 4, c, 0x2d ^ (i % 4) ^ (i / 4) ^ c];
         let buzzed: Vec<_> = [(1, Light::First)].into_iter().chain((2..=6).map(|b| (b, Light::Locked))).collect();
         p.encode_lights(&buzzed);
         // Three out of the round: one order each would cost fewer orders but
         // start the timers of buzzers 2 and 3 a write apart.
         let on = [(1, Light::Wrong), (2, Light::Ready), (3, Light::Ready)];
-        let all_ready = vec![0x35, 0x96, 0x02, 0x74, READY, 0x74 ^ READY];
-        assert_eq!(serial(&p.encode_lights(&on)), [all_ready, paint(0, WRONG), paint(3, LOCKED), paint(4, LOCKED), paint(5, LOCKED)]);
+        assert_eq!(serial(&p.encode_lights(&on)), [all(READY), paint(0, WRONG), paint(3, LOCKED), paint(4, LOCKED), paint(5, LOCKED)]);
         // Buzzer 2 buzzes and is judged wrong: buzzer 3 alone turns ready.
         assert_eq!(serial(&p.encode_lights(&[(2, Light::First), (3, Light::Locked)])), [paint(1, FIRST), paint(2, LOCKED)]);
         assert_eq!(serial(&p.encode_lights(&[(2, Light::Wrong), (3, Light::Ready)])), [paint(1, WRONG), paint(2, READY)]);
@@ -559,9 +627,8 @@ mod tests {
     #[test]
     fn no_colour_goes_to_all_while_a_buzzer_should_show_ready() {
         let (mut p, _) = opened();
-        let paint = |i: u8, c: u8| vec![0x35, 0x96, 0x04, 0x2d, i % 4, i / 4, c, 0x2d ^ (i % 4) ^ (i / 4) ^ c];
         let round: Vec<_> = (1..=3).map(|b| (b, Light::Ready)).chain([(4, Light::Locked)]).collect();
-        assert_eq!(serial(&p.encode_lights(&round)), [vec![0x35, 0x96, 0x02, 0x74, READY, 0x74 ^ READY], paint(3, LOCKED)]);
+        assert_eq!(serial(&p.encode_lights(&round)), [all(READY), paint(3, LOCKED)]);
         // Others locked out at once: an order to all would light the ready
         // buzzers again one by one.
         let locked: Vec<_> = (5..=9).map(|b| (b, Light::Locked)).collect();
