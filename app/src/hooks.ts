@@ -16,7 +16,8 @@ export function useLatest<T>(value: T): { readonly current: T } {
 
 /**
  * Calls `handler` for every `event` from the backend while mounted, and
- * `listening` once it is registered: no event after that is missed.
+ * `listening` once it is registered: no event after that is missed. If it
+ * cannot be registered, the error is logged and `listening` runs anyway.
  */
 export function useBackendEvent<E extends keyof BackendEvents>(event: E, handler: (payload: BackendEvents[E]) => void, listening?: () => void) {
   // The latest handlers run without re-subscribing on every render.
@@ -25,12 +26,18 @@ export function useBackendEvent<E extends keyof BackendEvents>(event: E, handler
   useEffect(() => {
     let alive = true;
     let stop: (() => void) | null = null;
-    listen<BackendEvents[E]>(event, (e) => latest.current(e.payload)).then((unlisten) => {
-      if (alive) {
-        stop = unlisten;
-        latestListening.current?.();
-      } else unlisten();
-    });
+    listen<BackendEvents[E]>(event, (e) => latest.current(e.payload)).then(
+      (unlisten) => {
+        if (alive) {
+          stop = unlisten;
+          latestListening.current?.();
+        } else unlisten();
+      },
+      (e) => {
+        console.error(e);
+        if (alive) latestListening.current?.();
+      },
+    );
     return () => {
       alive = false;
       stop?.();
