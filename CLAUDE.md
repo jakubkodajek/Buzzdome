@@ -47,7 +47,7 @@ on `PATH` first (macOS dev machine).
 
 | task | command (from the repo root unless noted) |
 | --- | --- |
-| install UI deps | `cd app && npm install` |
+| install UI deps (as locked; `npm install <pkg>` only to add or upgrade one) | `cd app && npm ci` |
 | run the app (dev) | `cd app && npm run tauri dev` |
 | core + driver tests (also regenerates `app/src/bindings`) | `cargo test --workspace` |
 | lint Rust | `cargo clippy --workspace --all-targets` |

@@ -130,18 +130,19 @@ not go as expected; whatever happens, go on and export the log at the end
    not sent by this build.)
 10. **Battery.** The 303S's SDK has no battery level (specification
     BZ-14), but a buzzer may still send one unasked. Take one buzzer
-    charged full and one nearly flat (or the least charged one). Run
-    `hid-monitor` with no option (end of this file) and press A five
-    times on each. A press line is `27 A5 0A 32`, the buzzer, the button
-    in the first hex digit of the next byte, its colour, two 3-byte
-    timers, then the checksum. Compare the two buzzers' lines and note
-    any byte that stays the same on one buzzer and differs between them:
-    the second hex digit of the button byte, or bytes after the timers
-    (a length other than `0A`). A byte that grows from press to press is
-    a timer, not a battery. Then leave it running for five minutes with
-    nobody pressing, switch the flat buzzer off and on, and note every
-    line that is not a press. A battery level gets shown in the app only
-    if one of these carries it.
+    charged full and one nearly flat (or the least charged one). Close
+    the app, as only one program can open the receiver, then run
+    `cargo run -p buzzers --example hid-monitor -- 10c4:1819` (no option
+    after the VID:PID) and press A five times on each. A press line is
+    `27 A5 0A 32`, the buzzer, the button in the first hex digit of the
+    next byte, its colour, two 3-byte timers, then the checksum. Compare
+    the two buzzers' lines and note any byte that stays the same on one
+    buzzer and differs between them: the second hex digit of the button
+    byte, or bytes after the timers (a length other than `0A`). A byte
+    that grows from press to press is a timer, not a battery. Then leave
+    it running for five minutes with nobody pressing, switch the flat
+    buzzer off and on, and note every line that is not a press. A
+    battery level gets shown in the app only if one of these carries it.
 
 ## 4. Record raw reports
 
