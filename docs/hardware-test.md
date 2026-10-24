@@ -128,6 +128,20 @@ not go as expected; whatever happens, go on and export the log at the end
    in the app a show's first colours always follow start, which hides
    what start does by itself. (Ping `86`, which a heartbeat would use, is
    not sent by this build.)
+10. **Battery.** The 303S's SDK has no battery level (specification
+    BZ-14), but a buzzer may still send one unasked. Take one buzzer
+    charged full and one nearly flat (or the least charged one). Run
+    `hid-monitor` with no option (end of this file) and press A five
+    times on each. A press line is `27 A5 0A 32`, the buzzer, the button
+    in the first hex digit of the next byte, its colour, two 3-byte
+    timers, then the checksum. Compare the two buzzers' lines and note
+    any byte that stays the same on one buzzer and differs between them:
+    the second hex digit of the button byte, or bytes after the timers
+    (a length other than `0A`). A byte that grows from press to press is
+    a timer, not a battery. Then leave it running for five minutes with
+    nobody pressing, switch the flat buzzer off and on, and note every
+    line that is not a press. A battery level gets shown in the app only
+    if one of these carries it.
 
 ## 4. Record raw reports
 
@@ -348,8 +362,9 @@ Attach to the project thread:
 - the VID:PID, usage and interface of the receiver row;
 - with the Enjoy 303S: the notes from sections 3, 6 and 7, above all the
   big button, other buttons, the colour byte of a press, the timer
-  readings, the two-at-once presses, how the lights looked, and what the
-  receiver did when its power or RJ45 plug went;
+  readings, the two-at-once presses, how the lights looked, what the
+  receiver did when its power or RJ45 plug went, and the battery lines
+  of section 3, step 10;
 - the exported log files from sections 4 and 5;
 - the result of the release smoke check (section 8);
 - what failed, with the exact message.
