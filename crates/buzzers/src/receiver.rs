@@ -8,12 +8,14 @@
 //! what changed between reads, one report at a time with a gap, so a slow
 //! receiver is not flooded. When the cable is unplugged the read fails, the
 //! device is dropped and the thread retries until it is back, then sets the
-//! receiver up again with the mode and lights the buzzers should show.
+//! receiver up again with the mode and lights the buzzers should show. With
+//! no receiver chosen it takes the first one a built-in protocol knows,
+//! whenever one is plugged in (`ReceiverChoice::Automatic`).
 
 use crate::clock::ShowClock;
 use crate::edge::EdgeFilter;
 use crate::hid::{DeviceInfo, DeviceSelector, HidBackend, HidDevice, Report};
-use crate::protocol::{Protocol, ProtocolKind, ProtocolResolver};
+use crate::protocol::{self, Protocol, ProtocolKind, ProtocolResolver};
 use crate::timer_order::TimerOrder;
 use crate::{BuzzerDriver, DriverError, Press};
 use quiz_core::{BuzzerId, BuzzerMode, Light};
@@ -29,8 +31,10 @@ use std::time::{Duration, Instant};
 #[ts(export)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum ReceiverStatus {
-    /// No receiver chosen.
+    /// The receiver is closed.
     Off,
+    /// Waiting for a receiver a built-in protocol knows to be plugged in.
+    Looking,
     /// Waiting for the chosen receiver to be plugged in.
     #[serde(rename_all = "camelCase")]
     Searching { selector: DeviceSelector },
@@ -116,8 +120,40 @@ impl ReceiverConfig {
     }
 }
 
+/// Which receiver the thread uses.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ReceiverChoice {
+    /// None: the receiver is closed.
+    Off,
+    /// The first receiver a built-in protocol knows (`protocol::is_known`),
+    /// whenever one is plugged in.
+    Automatic,
+    /// This receiver, whatever its protocol.
+    Device(DeviceSelector),
+}
+
+impl ReceiverChoice {
+    /// Whether the thread opens `device` for this choice.
+    fn takes(&self, device: &DeviceInfo) -> bool {
+        match self {
+            ReceiverChoice::Off => false,
+            ReceiverChoice::Automatic => protocol::is_known(device),
+            ReceiverChoice::Device(selector) => selector.matches(device),
+        }
+    }
+
+    /// The status while no receiver for it is plugged in.
+    fn waiting(&self) -> ReceiverStatus {
+        match self {
+            ReceiverChoice::Off => ReceiverStatus::Off,
+            ReceiverChoice::Automatic => ReceiverStatus::Looking,
+            ReceiverChoice::Device(selector) => ReceiverStatus::Searching { selector: selector.clone() },
+        }
+    }
+}
+
 enum Control {
-    Select(Option<DeviceSelector>),
+    Select(ReceiverChoice),
     Lights(Vec<(BuzzerId, Light)>),
     /// These lights, every other buzzer dark.
     ResetLights(Vec<(BuzzerId, Light)>),
@@ -134,9 +170,10 @@ pub struct ReceiverHandle {
 }
 
 impl ReceiverHandle {
-    /// Chooses the receiver to use (and remember), or `None` to close it.
-    pub fn select(&self, selector: Option<DeviceSelector>) {
-        let _ = self.tx.send(Control::Select(selector));
+    /// Chooses the receiver to use, closing the one open. Choosing the same
+    /// again opens it anew, as a replug would.
+    pub fn select(&self, choice: ReceiverChoice) {
+        let _ = self.tx.send(Control::Select(choice));
     }
 
     /// Sets these buzzers' lights, now or once a receiver connects.
@@ -217,7 +254,7 @@ pub fn spawn<E: From<ReceiverEvent> + Send + 'static>(
         events,
         config,
         status,
-        selector: None,
+        choice: ReceiverChoice::Off,
         conn: None,
         next_try: Instant::now(),
         edge,
@@ -255,7 +292,7 @@ struct Worker<E> {
     events: Sender<E>,
     config: ReceiverConfig,
     status: Arc<Mutex<ReceiverStatus>>,
-    selector: Option<DeviceSelector>,
+    choice: ReceiverChoice,
     conn: Option<Connection>,
     next_try: Instant,
     edge: EdgeFilter,
@@ -296,7 +333,7 @@ impl<E: From<ReceiverEvent>> Worker<E> {
                 self.send_presses(due);
                 continue;
             }
-            if self.selector.is_some() && Instant::now() >= self.next_try {
+            if self.choice != ReceiverChoice::Off && Instant::now() >= self.next_try {
                 self.try_connect();
                 continue;
             }
@@ -312,14 +349,11 @@ impl<E: From<ReceiverEvent>> Worker<E> {
 
     fn control(&mut self, c: Control) {
         match c {
-            Control::Select(selector) => {
+            Control::Select(choice) => {
                 self.close();
-                self.selector = selector.clone();
+                self.choice = choice;
                 self.next_try = Instant::now();
-                self.set_status(match selector {
-                    Some(selector) => ReceiverStatus::Searching { selector },
-                    None => ReceiverStatus::Off,
-                });
+                self.set_status(self.choice.waiting());
             }
             Control::Lights(lights) => {
                 let changed: Vec<_> = lights.into_iter().filter(|&(buzzer, light)| self.lights.insert(buzzer, light) != Some(light)).collect();
@@ -365,14 +399,13 @@ impl<E: From<ReceiverEvent>> Worker<E> {
     }
 
     fn try_connect(&mut self) {
-        let Some(selector) = self.selector.clone() else { return };
         self.next_try = Instant::now() + self.config.retry;
         let devices = match self.backend.list() {
             Ok(d) => d,
             Err(e) => return self.set_status(error_status(ReceiverProblem::CannotList, &e)),
         };
-        let Some(info) = devices.into_iter().find(|d| selector.matches(d)) else {
-            return self.set_status(ReceiverStatus::Searching { selector });
+        let Some(info) = devices.into_iter().find(|d| self.choice.takes(d)) else {
+            return self.set_status(self.choice.waiting());
         };
         let device = match self.backend.open(&info.path) {
             Ok(d) => d,

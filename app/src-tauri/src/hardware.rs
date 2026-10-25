@@ -15,13 +15,13 @@ use crate::off_ui;
 use crate::show_thread::ShowEvent;
 use buzzers::learned::{LearnedMapping, Recorder};
 use buzzers::protocol::{self, format_hex, Protocol};
-use buzzers::receiver::{self, RawReport, ReceiverConfig, ReceiverEvent, ReceiverHandle, ReceiverStatus};
+use buzzers::receiver::{self, RawReport, ReceiverChoice, ReceiverConfig, ReceiverEvent, ReceiverHandle, ReceiverStatus};
 use buzzers::Press;
 use quiz_core::{BuzzerId, Button};
 use quiz_file::FileAction;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
-use std::collections::VecDeque;
+use std::collections::{BTreeMap, VecDeque};
 use std::path::Path;
 use std::sync::mpsc::Sender;
 use std::sync::{Arc, Mutex, MutexGuard};
@@ -35,6 +35,8 @@ const RAW_LOG_SNAPSHOT: usize = 50;
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct ReceiverSettings {
+    /// The receiver chosen in the Receiver tab; with none, the first one a
+    /// built-in protocol knows (`ReceiverChoice::Automatic`).
     #[serde(default)]
     receiver: Option<DeviceSelector>,
     #[serde(default)]
@@ -53,6 +55,17 @@ pub struct LearnProgress {
     can_save: bool,
 }
 
+/// A buzzer the receiver heard since it connected: its last press, counted
+/// or not, and when that came on the show clock (Unix ms).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
+#[serde(rename_all = "camelCase")]
+pub struct BuzzerSeen {
+    buzzer: BuzzerId,
+    button: Button,
+    at_ms: u64,
+}
+
 #[derive(Debug, Clone, Serialize, TS)]
 #[ts(export)]
 #[serde(rename_all = "camelCase")]
@@ -62,9 +75,14 @@ pub struct ReceiverInfo {
     /// Why USB-HID could not be initialised: the system's message.
     init_error: Option<String>,
     settings_error: Option<SettingsLost>,
+    /// The receiver chosen in the Receiver tab; none when it is found by
+    /// itself.
+    chosen: Option<DeviceSelector>,
     learned_buttons: usize,
     learn: LearnProgress,
     recent: Vec<RawReport>,
+    /// The buzzers heard since the receiver connected, by number.
+    buzzers: Vec<BuzzerSeen>,
     platform: &'static str,
 }
 
@@ -89,17 +107,20 @@ pub struct Hardware {
     changing: Mutex<()>,
     learn: Mutex<Option<Recorder>>,
     raw_log: Mutex<VecDeque<RawReport>>,
+    /// The buzzers heard since the receiver connected.
+    seen: Mutex<BTreeMap<BuzzerId, BuzzerSeen>>,
 }
 
 impl Hardware {
-    /// Starts the receiver thread and reconnects to the remembered receiver.
+    /// Starts the receiver thread and reconnects to the remembered receiver,
+    /// or looks for one a built-in protocol knows.
     /// Its events, stamped by `clock`, go to the show thread's queue `events`
     /// (`show_thread`), and wait there until that thread starts.
     pub fn start(app: &AppHandle, events: Sender<ShowEvent>, clock: ShowClock) -> Hardware {
         let settings_path = app.path().app_data_dir().map(|d| d.join(SETTINGS_FILE)).unwrap_or_else(|_| SETTINGS_FILE.into());
         // Unreadable settings are reported in the Receiver tab: learned buttons are gone until learned again.
         let (settings_file, settings) = AppFile::load::<ReceiverSettings>(settings_path);
-        let remembered = settings.receiver.clone();
+        let remembered = choice(settings.receiver.clone());
         let settings = Arc::new(Mutex::new(settings));
 
         let backend = match HidapiBackend::new() {
@@ -128,6 +149,7 @@ impl Hardware {
             changing: Mutex::new(()),
             learn: Mutex::new(None),
             raw_log: Mutex::new(VecDeque::new()),
+            seen: Mutex::new(BTreeMap::new()),
         }
     }
 
@@ -150,6 +172,19 @@ impl Hardware {
 
     fn learn_progress(&self) -> LearnProgress {
         progress(self.learn.lock().unwrap().as_ref())
+    }
+
+    /// Notes the buzzers `report` holds presses of, counted or not, and
+    /// returns them as they now stand.
+    fn hear(&self, report: &RawReport) -> Vec<BuzzerSeen> {
+        let heard: BTreeMap<BuzzerId, BuzzerSeen> = report
+            .decoded
+            .iter()
+            .chain(&report.dropped)
+            .map(|p| (p.buzzer, BuzzerSeen { buzzer: p.buzzer, button: p.button, at_ms: report.at_ms }))
+            .collect();
+        self.seen.lock().unwrap().extend(&heard);
+        heard.into_values().collect()
     }
 
     fn connected_device(&self) -> Option<DeviceInfo> {
@@ -182,6 +217,11 @@ impl SettingsChange<'_> {
         *self.hw.settings.lock().unwrap() = settings;
         Ok(())
     }
+}
+
+/// What the receiver thread uses for the receiver chosen in the settings.
+fn choice(chosen: Option<DeviceSelector>) -> ReceiverChoice {
+    chosen.map_or(ReceiverChoice::Automatic, ReceiverChoice::Device)
 }
 
 /// What the Receiver tab shows of learn mode.
@@ -227,9 +267,11 @@ pub fn handle_event(app: &AppHandle, event: ReceiverEvent) {
     let hw = app.state::<Hardware>();
     match event {
         ReceiverEvent::Status(status) => {
-            // Nothing more can be learned without the receiver.
+            // Nothing more can be learned without the receiver, and the
+            // buzzers it heard are to be heard again once it is back.
             if !matches!(status, ReceiverStatus::Connected { .. }) {
                 hw.end_learning(app);
+                hw.seen.lock().unwrap().clear();
             }
             let _ = app.emit("receiver-status", status);
         }
@@ -241,6 +283,9 @@ pub fn handle_event(app: &AppHandle, event: ReceiverEvent) {
                     log.pop_front();
                 }
                 log.push_back(report.clone());
+            }
+            for buzzer in hw.hear(&report) {
+                let _ = app.emit("receiver-buzzer", buzzer);
             }
             let _ = app.emit("receiver-raw", report);
             if sampled {
@@ -258,15 +303,18 @@ pub fn handle_event(app: &AppHandle, event: ReceiverEvent) {
 
 #[tauri::command]
 pub fn receiver_info(hw: tauri::State<Hardware>) -> ReceiverInfo {
+    let settings = hw.settings.lock().unwrap().clone();
     let log = hw.raw_log.lock().unwrap();
     let skip = log.len().saturating_sub(RAW_LOG_SNAPSHOT);
     ReceiverInfo {
         status: hw.handle.as_ref().map(ReceiverHandle::status),
         init_error: hw.init_error.clone(),
         settings_error: hw.settings_file.lost().cloned(),
-        learned_buttons: hw.settings.lock().unwrap().learned.iter().map(|m| m.signatures.len()).sum(),
+        chosen: settings.receiver.clone(),
+        learned_buttons: settings.learned.iter().map(|m| m.signatures.len()).sum(),
         learn: hw.learn_progress(),
         recent: log.iter().skip(skip).cloned().collect(),
+        buzzers: hw.seen.lock().unwrap().values().copied().collect(),
         platform: std::env::consts::OS,
     }
 }
@@ -279,7 +327,9 @@ pub fn receiver_devices(hw: tauri::State<Hardware>) -> CmdResult<Vec<DeviceInfo>
     Ok(devices)
 }
 
-/// Uses this receiver from now on (also after restarts), or none.
+/// Uses this receiver from now on (also after restarts), or with none the
+/// first one a built-in protocol knows, whenever one is plugged in. The
+/// receiver in use is opened anew, as a replug would.
 #[tauri::command]
 pub async fn receiver_select(app: AppHandle, device: Option<DeviceInfo>) -> CmdResult<()> {
     off_ui(move || {
@@ -288,7 +338,7 @@ pub async fn receiver_select(app: AppHandle, device: Option<DeviceInfo>) -> CmdR
         // Selected in the change too, so the receiver used is the one stored.
         let change = hw.change_settings();
         change.store(ReceiverSettings { receiver: selector.clone(), ..change.settings() })?;
-        hw.handle.as_ref().ok_or(AppError::UsbUnavailable)?.select(selector);
+        hw.handle.as_ref().ok_or(AppError::UsbUnavailable)?.select(choice(selector));
         Ok(())
     })
     .await
@@ -388,11 +438,13 @@ fn write_log(hw: &Hardware, path: &Path) -> CmdResult<()> {
 
 #[tauri::command]
 pub fn receiver_udev_rule(hw: tauri::State<Hardware>) -> String {
-    // The rule matters most when opening fails, so fall back to the chosen receiver.
+    // The rule matters most when opening fails, so fall back to the chosen
+    // receiver, or with none to the known one plugged in.
     let ids = hw
         .connected_device()
         .map(|d| (d.vendor_id, d.product_id))
-        .or_else(|| hw.settings.lock().unwrap().receiver.as_ref().map(|s| (s.vendor_id, s.product_id)));
+        .or_else(|| hw.settings.lock().unwrap().receiver.as_ref().map(|s| (s.vendor_id, s.product_id)))
+        .or_else(|| hw.backend.as_ref()?.list().ok()?.into_iter().find(protocol::is_known).map(|d| (d.vendor_id, d.product_id)));
     udev_rule(ids.map(|i| i.0), ids.map(|i| i.1))
 }
 
@@ -421,6 +473,19 @@ mod tests {
 
     fn receiver() -> Option<DeviceSelector> {
         Some(DeviceSelector { vendor_id: 1, product_id: 2, usage_page: None, interface_number: None })
+    }
+
+    #[test]
+    fn every_buzzer_heard_shows_with_its_last_press() {
+        let hw = hardware(std::env::temp_dir().join("receiver-heard").join(SETTINGS_FILE));
+        let report = |at_ms, decoded, dropped| RawReport { at_ms, bytes: Vec::new(), decoded, dropped };
+        let seen = |buzzer, button, at_ms| BuzzerSeen { buzzer, button, at_ms };
+        let heard = hw.hear(&report(100, vec![Press::new(5, Button::A), Press::new(3, Button::Big), Press::new(5, Button::B)], vec![Press::timed(7, Button::C, 40)]));
+        assert_eq!(heard, [seen(3, Button::Big, 100), seen(5, Button::B, 100), seen(7, Button::C, 100)], "a press not counted shows too");
+        assert!(hw.hear(&report(150, Vec::new(), Vec::new())).is_empty());
+        assert_eq!(hw.hear(&report(200, vec![Press::new(3, Button::D)], Vec::new())), [seen(3, Button::D, 200)]);
+        let all: Vec<_> = hw.seen.lock().unwrap().values().copied().collect();
+        assert_eq!(all, [seen(3, Button::D, 200), seen(5, Button::B, 100), seen(7, Button::C, 100)]);
     }
 
     #[test]

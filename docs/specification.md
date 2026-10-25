@@ -124,10 +124,11 @@ fixed.
 | BZ-13 | If another program (for example the vendor's software) holds the receiver, the error says so. | done |
 | BZ-14 | Battery level of each buzzer, shown in the buzzer test view. | not possible with the 303S: its SDK has no battery level, and in the hardware test of 2026-10-25 no press or other message carried one |
 | BZ-15 | Host screen shows a small "buzzers not connected" sign on the welcome screen while the chosen receiver is not connected (the reference app does this too). | planned |
-| BZ-16 | Buzzer test view: a grid of buzzer numbers that light up with the pressed button, for range tests in the venue. | partial (Receiver tab shows presses as a list) |
+| BZ-16 | Buzzer test view: a grid of buzzer numbers that light up with the pressed button, for range tests in the venue. | done: the Receiver tab lists each buzzer heard since the receiver connected, with its last button and when, the latest marked |
 | BZ-17 | Buzzer panel in the Director during a show: every known buzzer number with its state (registered, last button and when, light, battery when the protocol gives it), and the receiver state on top. A buzzer not seen for a long time is marked. | planned |
 | BZ-18 | If the receiver reports which buzzers are switched on and in range without a press (open question, section 11), the registration screen and the buzzer panel show them as "on" before anyone presses. | waits for the hardware: the 303S's ping may give it, but what it answers is unknown |
 | BZ-19 | Which buttons buzz in a fastest-finger question follows its answers (Jakub, 2026-10-21): where it has one to four answers, the answer buttons A to D do, so the first press is also the player's answer, and the Director and the projector show the letter pressed; with no answers, or with E and F, which are read out, the big button does. The quizmaster judges either way. A player who joins while a fastest-finger question is under way (switched on, or new to the show by a press or by being added) plays from the next question, as the others' buzzer timers count from the question's start; in other questions they play at once. | done (rules version 5; shows begun before take any button and let a joining player buzz at once) |
+| BZ-20 | With no receiver chosen, the app takes a receiver whose protocol it knows (the Enjoy 303S's cable) by itself as soon as it is plugged in, also mid-show, with no click (Jakub, 2026-10-25). One chosen in the Receiver tab is kept until the quizmaster lets the app find it by itself again. | done |
 
 ### 4.3 Light states
 

@@ -871,8 +871,8 @@ Loop, every iteration:
    A read or write error
    closes the device and reports `Error` (`ConnectionLost` or
    `WriteFailed`; the thread reconnects).
-3. If not connected and a receiver is selected: every 2 seconds list devices,
-   open the first match and set it up: write the protocol's init reports,
+3. If not connected and the receiver is not closed: every 2 seconds list
+   devices, open the first match and set it up: write the protocol's init reports,
    queue the mode and, as a reset, the lights the buzzers should show, then report
    `Connected` (init goes first so the receiver is set up as soon as the UI
    says "connected"). So a receiver unplugged mid-show gets the round and
@@ -888,7 +888,18 @@ is sent too soon or lost; a set-up step left unanswered is asked again
 until the receiver answers (2.4). A lost connection drops the queue; the
 next set-up queues what is current.
 
-Statuses: `Off` (nothing selected), `Searching` (selected, not plugged in),
+What matches is the `ReceiverChoice`: a device chosen in the Receiver tab
+(`Device`, by vendor and product ID, usage page and interface), or with
+none chosen the first device a built-in protocol knows (`Automatic`,
+`protocol::is_known`: today the 303S's cable), so the 303S needs no click
+and a receiver plugged in later, also mid-show, is taken by the next
+retry. A raw or learned receiver is used only once chosen, as any HID
+device could be it. The app keeps the choice in `receiver.json` (none:
+automatic); choosing again, also the same, opens the receiver anew, which
+is the Receiver tab's Reconnect.
+
+Statuses: `Off` (closed), `Looking` (automatic, nothing known plugged
+in), `Searching` (chosen, not plugged in),
 `Connected` (with the `ProtocolKind`, which for the 303S says whether the
 receiver answered its set-up, and whether it drives lights), `Error`
 (a `ReceiverProblem` and the system's message; for `CannotOpen` the
@@ -1297,6 +1308,10 @@ the buzzers' lights are the app's either way.
 
 ### 2.8 Diagnostics
 
+- The Receiver tab lists each buzzer heard since the receiver connected,
+  with its last press, counted or not, and when, so a press of the big
+  button on each buzzer shows which work and are in range (BZ-16). The
+  list starts again whenever the receiver goes.
 - The app keeps the last 2000 raw reports in memory; the Receiver tab shows the
   latest ones and can export all of them as text
   (`unix-ms <tab> hex bytes <tab> decoded presses <tab> dropped presses`,

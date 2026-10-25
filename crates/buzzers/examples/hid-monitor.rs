@@ -28,7 +28,7 @@ use buzzers::enjoy303s::MAX_BUZZER;
 use buzzers::hid::{DeviceInfo, DeviceSelector, HidBackend};
 use buzzers::hidapi_backend::HidapiBackend;
 use buzzers::protocol::{self, format_hex};
-use buzzers::receiver::{self, ReceiverConfig, ReceiverEvent, ReceiverHandle};
+use buzzers::receiver::{self, ReceiverChoice, ReceiverConfig, ReceiverEvent, ReceiverHandle};
 use quiz_core::{BuzzerMode, Light};
 use std::sync::{mpsc, Arc};
 use std::time::Duration;
@@ -78,7 +78,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         light_all(&handle, Light::Ready);
     }
     handle.set_mode(mode);
-    handle.select(Some(DeviceSelector { vendor_id, product_id, usage_page: None, interface_number: None }));
+    handle.select(ReceiverChoice::Device(DeviceSelector { vendor_id, product_id, usage_page: None, interface_number: None }));
     if cycle {
         let handle = handle.clone();
         std::thread::spawn(move || {

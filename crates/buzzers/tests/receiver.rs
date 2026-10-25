@@ -6,7 +6,7 @@ use buzzers::cp2110;
 use buzzers::enjoy303s::Enjoy303s;
 use buzzers::hid::{DeviceInfo, DeviceSelector, HidBackend, HidDevice, Report};
 use buzzers::protocol::{Protocol, ProtocolKind};
-use buzzers::receiver::{spawn, ReceiverConfig, ReceiverEvent, ReceiverHandle, ReceiverProblem, ReceiverStatus};
+use buzzers::receiver::{spawn, ReceiverChoice, ReceiverConfig, ReceiverEvent, ReceiverHandle, ReceiverProblem, ReceiverStatus};
 use buzzers::{DriverError, Press};
 use quiz_core::{BuzzerId, BuzzerMode, Button, Light};
 use std::collections::VecDeque;
@@ -17,6 +17,8 @@ use std::time::{Duration, Instant};
 #[derive(Default)]
 struct Wire {
     plugged: bool,
+    /// An Enjoy 303S cable is plugged in too (`cable_info`).
+    cable: bool,
     fail_open: bool,
     inbox: VecDeque<Vec<u8>>,
     written: Vec<Vec<u8>>,
@@ -45,9 +47,15 @@ fn info() -> DeviceInfo {
     }
 }
 
+/// The cable of an Enjoy 303S receiver, which a built-in protocol knows.
+fn cable_info() -> DeviceInfo {
+    DeviceInfo { path: "fake1".into(), vendor_id: 0x10c4, product_id: 0x1819, product: Some("HID Audience Response System".into()), ..info() }
+}
+
 impl HidBackend for FakeBackend {
     fn list(&self) -> Result<Vec<DeviceInfo>, DriverError> {
-        Ok(if self.0.lock().unwrap().plugged { vec![info()] } else { vec![] })
+        let w = self.0.lock().unwrap();
+        Ok([w.plugged.then(info), w.cable.then(cable_info)].into_iter().flatten().collect())
     }
 
     fn open(&self, _path: &str) -> Result<Box<dyn HidDevice>, DriverError> {
@@ -224,7 +232,7 @@ fn connects_sends_init_and_decodes_presses_in_order() {
     let backend = FakeBackend::default();
     backend.0.lock().unwrap().plugged = true;
     let (handle, rx) = start(&backend);
-    handle.select(Some(selector()));
+    handle.select(ReceiverChoice::Device(selector()));
     wait_for(&rx, is_connected);
     assert_eq!(backend.0.lock().unwrap().features, vec![vec![0x30]]);
     // The mode the buzzers are in from the start, and a reset of their
@@ -262,7 +270,7 @@ fn writes_light_commands() {
     let backend = FakeBackend::default();
     backend.0.lock().unwrap().plugged = true;
     let (handle, rx) = start(&backend);
-    handle.select(Some(selector()));
+    handle.select(ReceiverChoice::Device(selector()));
     wait_for(&rx, is_connected);
     handle.set_lights(vec![(4, Light::Ready), (5, Light::First)]);
     // Only what changed is written again.
@@ -292,7 +300,7 @@ fn shows_the_lights_and_mode_set_before_the_receiver_connected_and_again_after_r
     let (handle, rx) = start(&backend);
     handle.set_mode(BuzzerMode::FastestFinger);
     handle.set_lights(vec![(2, Light::Wrong), (3, Light::Ready)]);
-    handle.select(Some(selector()));
+    handle.select(ReceiverChoice::Device(selector()));
     wait_for(&rx, |e| matches!(e, ReceiverEvent::Status(ReceiverStatus::Searching { .. })));
     backend.0.lock().unwrap().plugged = true;
     wait_for(&rx, is_connected);
@@ -316,7 +324,7 @@ fn a_reset_replaces_every_light_also_after_replugging() {
     let backend = FakeBackend::default();
     backend.0.lock().unwrap().plugged = true;
     let (handle, rx) = start(&backend);
-    handle.select(Some(selector()));
+    handle.select(ReceiverChoice::Device(selector()));
     wait_for(&rx, is_connected);
     handle.set_lights(vec![(1, Light::Ready), (2, Light::Ready)]);
     handle.reset_lights(vec![(3, Light::Ready)]);
@@ -340,7 +348,7 @@ fn writes_what_the_receivers_answer_calls_for_and_reports_that_it_answered() {
     let backend = FakeBackend::default();
     backend.0.lock().unwrap().plugged = true;
     let (handle, rx) = start_with(&backend, config(), false);
-    handle.select(Some(selector()));
+    handle.select(ReceiverChoice::Device(selector()));
     match wait_for(&rx, is_connected) {
         ReceiverEvent::Status(ReceiverStatus::Connected { protocol, .. }) => assert_eq!(protocol, ProtocolKind::Enjoy303s { answered: false }),
         _ => unreachable!(),
@@ -362,7 +370,7 @@ fn spaces_writes_by_the_write_gap() {
     backend.0.lock().unwrap().plugged = true;
     let config = ReceiverConfig { write_gap: Duration::from_millis(25), ..config() };
     let (handle, rx) = start_with(&backend, config, true);
-    handle.select(Some(selector()));
+    handle.select(ReceiverChoice::Device(selector()));
     wait_for(&rx, is_connected);
     handle.set_lights((1..=4).map(|b| (b, Light::Correct)).collect());
     written_after_init(&backend, 6);
@@ -397,7 +405,7 @@ fn start_303s(backend: &FakeBackend, config: ReceiverConfig) -> (ReceiverHandle,
     let (tx, rx) = mpsc::channel();
     let resolver = Arc::new(|_: &DeviceInfo| Box::new(Enjoy303s::default()) as Box<dyn Protocol>);
     let (handle, _join) = spawn(Arc::new(backend.clone()), resolver, tx, config);
-    handle.select(Some(selector()));
+    handle.select(ReceiverChoice::Device(selector()));
     wait_for(&rx, is_connected);
     backend.0.lock().unwrap().inbox.extend([from_303s(&[0x10, 0x00]), from_303s(&[0x12, 0x01])]);
     wait_for(&rx, |e| matches!(e, ReceiverEvent::Status(ReceiverStatus::Connected { protocol: ProtocolKind::Enjoy303s { answered: true }, .. })));
@@ -413,7 +421,7 @@ fn an_enjoy_303s_shows_what_waited_once_it_answered_its_set_up() {
     handle.set_lights((1..=3).map(|b| (b, Light::Ready)).collect());
     handle.set_mode(BuzzerMode::Answers);
     backend.0.lock().unwrap().plugged = true;
-    handle.select(Some(selector()));
+    handle.select(ReceiverChoice::Device(selector()));
     wait_for(&rx, is_connected);
     std::thread::sleep(Duration::from_millis(30));
     assert_eq!(backend.0.lock().unwrap().written.len(), 1, "only the connect order until the receiver answers");
@@ -516,7 +524,7 @@ fn reconnecting_to_an_enjoy_303s_in_use_sets_it_up_again_and_a_press_says_it_is_
     let (handle, rx) = start_303s(&backend, config());
     handle.set_lights(vec![(1, Light::Ready)]);
     // Reconnect in the Receiver tab: the same receiver again.
-    handle.select(Some(selector()));
+    handle.select(ReceiverChoice::Device(selector()));
     wait_for(&rx, |e| matches!(e, ReceiverEvent::Status(ReceiverStatus::Connected { protocol: ProtocolKind::Enjoy303s { answered: false }, .. })));
     let (features, connect) = {
         let mut w = backend.0.lock().unwrap();
@@ -556,7 +564,7 @@ fn a_fastest_finger_buzz_waiting_for_the_timers_goes_on_when_the_receiver_goes()
         backend.0.lock().unwrap().inbox.push_back(buzz_303s(4, 90));
         wait_for(&rx, |e| matches!(e, ReceiverEvent::Raw(r) if !r.decoded.is_empty()));
         if deselect {
-            handle.select(None);
+            handle.select(ReceiverChoice::Off);
         } else {
             backend.0.lock().unwrap().break_link = true;
         }
@@ -588,7 +596,7 @@ fn a_fastest_finger_buzz_waiting_for_the_timers_goes_on_when_the_round_ends() {
 fn waits_for_the_receiver_and_reconnects_after_unplugging() {
     let backend = FakeBackend::default();
     let (handle, rx) = start(&backend);
-    handle.select(Some(selector()));
+    handle.select(ReceiverChoice::Device(selector()));
     wait_for(&rx, |e| matches!(e, ReceiverEvent::Status(ReceiverStatus::Searching { .. })));
 
     backend.0.lock().unwrap().plugged = true;
@@ -615,7 +623,7 @@ fn reports_open_failures_and_retries() {
         w.fail_open = true;
     }
     let (handle, rx) = start(&backend);
-    handle.select(Some(selector()));
+    handle.select(ReceiverChoice::Device(selector()));
     match wait_for(&rx, |e| matches!(e, ReceiverEvent::Status(ReceiverStatus::Error { .. }))) {
         ReceiverEvent::Status(ReceiverStatus::Error { problem, detail }) => {
             assert_eq!(problem, ReceiverProblem::CannotOpen);
@@ -629,13 +637,42 @@ fn reports_open_failures_and_retries() {
 }
 
 #[test]
+fn finds_a_known_receiver_by_itself_also_once_plugged_in_later() {
+    let backend = FakeBackend::default();
+    backend.0.lock().unwrap().plugged = true;
+    let (handle, rx) = start(&backend);
+    handle.select(ReceiverChoice::Automatic);
+    // A device no built-in protocol knows is left alone.
+    wait_for(&rx, |e| matches!(e, ReceiverEvent::Status(ReceiverStatus::Looking)));
+    std::thread::sleep(Duration::from_millis(100));
+    assert_eq!(handle.status(), ReceiverStatus::Looking);
+    assert_eq!(backend.0.lock().unwrap().opens, 0);
+
+    backend.0.lock().unwrap().cable = true;
+    let found = |e: &ReceiverEvent| matches!(e, ReceiverEvent::Status(ReceiverStatus::Connected { device, .. }) if *device == cable_info());
+    wait_for(&rx, found);
+
+    // Unplugged, it is looked for again, and taken again once back.
+    {
+        let mut w = backend.0.lock().unwrap();
+        w.cable = false;
+        w.break_link = true;
+    }
+    wait_for(&rx, |e| matches!(e, ReceiverEvent::Status(ReceiverStatus::Looking)));
+    backend.0.lock().unwrap().cable = true;
+    wait_for(&rx, found);
+    assert_eq!(backend.0.lock().unwrap().opens, 2);
+    handle.shutdown();
+}
+
+#[test]
 fn deselecting_closes_the_receiver() {
     let backend = FakeBackend::default();
     backend.0.lock().unwrap().plugged = true;
     let (handle, rx) = start(&backend);
-    handle.select(Some(selector()));
+    handle.select(ReceiverChoice::Device(selector()));
     wait_for(&rx, is_connected);
-    handle.select(None);
+    handle.select(ReceiverChoice::Off);
     wait_for(&rx, |e| matches!(e, ReceiverEvent::Status(ReceiverStatus::Off)));
     assert_eq!(handle.status(), ReceiverStatus::Off);
     handle.shutdown();

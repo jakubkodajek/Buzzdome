@@ -36,12 +36,23 @@ Takes about two hours with four buzzers, most of it on section 6.
 
 ## 2. Find the receiver
 
-1. Open the app, Director > **Receiver** tab, click **Refresh**.
-2. Unplug the cable, Refresh, plug it back, Refresh. The row that comes and
-   goes is the receiver. Note its VID:PID, usage and interface.
-3. If several rows share that VID:PID, start with the one whose usage page is
-   not `0001` (keyboard or mouse).
-4. Click **Use**. Expected: status "Connected ..." (green), with the
+1. Open the app, Director > **Receiver** tab. With no receiver chosen
+   before, the app takes the Enjoy 303S's cable (`10c4:1819`) by itself,
+   with no click: "the receiver was found by itself" under the status.
+   Unplug the cable: "looking for a receiver" within two seconds; plug it
+   back: connected again, also with a show running. Note it if any of
+   that needs a click.
+2. Press the big button on each buzzer. Expected: each shows under
+   "Buzzers" with its number, the button and the time, as soon as the
+   receiver hears it.
+3. With another receiver, or the 303S not found by itself, click
+   **Refresh**. Unplug the cable, Refresh, plug it back, Refresh. The row
+   that comes and goes is the receiver. Note its VID:PID, usage and
+   interface. If several rows share that VID:PID, start with the one whose
+   usage page is not `0001` (keyboard or mouse), and click **Use**. The
+   app then keeps to that receiver, also after a restart, until **Find
+   the receiver by itself** is clicked.
+4. Expected, either way: status "Connected ..." (green), with the
    protocol:
    - **Enjoy 303S** for VID:PID `10c4:1819` once the receiver answered its
      set-up: go on with section 3 (learn mode is not offered, section 5
