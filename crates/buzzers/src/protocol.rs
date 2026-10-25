@@ -59,9 +59,9 @@ pub trait Protocol: Send {
         Vec::new()
     }
 
-    /// Reports that light these buzzers and every other one dark, whatever
-    /// they showed before (`BuzzerDriver::reset_lights`). These buzzers'
-    /// lights only, by default.
+    /// Reports that darken every buzzer, whatever it showed before, and
+    /// light these (`BuzzerDriver::reset_lights`). By default they only
+    /// light these, so a protocol with lights must override it.
     fn reset_lights(&mut self, lights: &[(BuzzerId, Light)]) -> Vec<Report> {
         self.encode_lights(lights)
     }
