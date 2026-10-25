@@ -155,7 +155,7 @@ impl ReceiverChoice {
 enum Control {
     Select(ReceiverChoice),
     Lights(Vec<(BuzzerId, Light)>),
-    /// These lights, every other buzzer dark.
+    /// Every buzzer dark, then these lights.
     ResetLights(Vec<(BuzzerId, Light)>),
     Mode(BuzzerMode),
     ReloadProtocol,
@@ -181,8 +181,8 @@ impl ReceiverHandle {
         let _ = self.tx.send(Control::Lights(lights));
     }
 
-    /// Sets these buzzers' lights and every other buzzer's dark, now or
-    /// once a receiver connects (`BuzzerDriver::reset_lights`).
+    /// Darkens every buzzer and sets these buzzers' lights, now or once a
+    /// receiver connects (`BuzzerDriver::reset_lights`).
     pub fn reset_lights(&self, lights: Vec<(BuzzerId, Light)>) {
         let _ = self.tx.send(Control::ResetLights(lights));
     }

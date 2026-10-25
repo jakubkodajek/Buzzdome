@@ -72,9 +72,11 @@ pub trait BuzzerDriver: Send {
 
     fn set_lights(&mut self, lights: &[(BuzzerId, Light)]) -> Result<(), DriverError>;
 
-    /// Sets these buzzers' lights and every other buzzer's dark, whatever
-    /// they showed before: another show's lights, or those another program
-    /// left. These buzzers' lights only, by default.
+    /// Darkens every buzzer, whatever it showed before (another show's
+    /// lights, or those another program left), and sets these buzzers'
+    /// lights. A light then sent to all at once, such as ready for two or
+    /// more, reaches the buzzers not named too. By default it only sets
+    /// these lights, so a driver with lights must override it.
     fn reset_lights(&mut self, lights: &[(BuzzerId, Light)]) -> Result<(), DriverError> {
         self.set_lights(lights)
     }

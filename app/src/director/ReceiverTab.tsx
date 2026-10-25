@@ -121,7 +121,7 @@ export function ReceiverTab() {
             {status?.kind === "looking" && t("receiverLooking")}
             {status?.kind === "searching" && t("receiverSearching", { id: vidPid(status.selector) })}
             {status?.kind === "error" && receiverProblemText(t, status.problem, status.detail, info?.platform ?? "")}
-            {(!status || status.kind === "off") && t("receiverOff")}
+            {status?.kind === "off" && t("receiverOff")}
           </p>
         )}
         {status?.kind === "connected" && info && !info.chosen && <p className="muted">{t("receiverFoundAutomatically")}</p>}

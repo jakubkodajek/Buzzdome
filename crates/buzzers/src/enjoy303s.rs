@@ -241,8 +241,8 @@ impl Enjoy303s {
         }
     }
 
-    /// The receiver is open: it takes presses, and every buzzer is told
-    /// what it should show, which waited for this, the others dark
+    /// The receiver is open: it takes presses, and every buzzer goes dark
+    /// and is then told what it should show, which waited for this
     /// (`repaint`). The receiver takes presses before any buzzer lights
     /// ready.
     fn opened(&mut self) {
@@ -334,7 +334,9 @@ impl Enjoy303s {
 
     /// Every buzzer dark, then each the colour it should show: what the
     /// buzzers show whatever they showed before, such as the colours
-    /// another program left. A buzzer the app does not light stays dark.
+    /// another program left. A buzzer the app does not light stays dark,
+    /// unless a colour goes to all at once (`paint`), as ready for two or
+    /// more buzzers does: then it shows that colour too.
     fn repaint(&mut self) -> Vec<Report> {
         self.shown = [Some(OFF); BUZZERS];
         [Order::PaintAll(OFF).reports(), self.paint()].concat()
@@ -602,6 +604,16 @@ mod tests {
         p.decode(&input(&message(&[OPENED, 0x01])));
         // The receiver takes presses before the buzzers light ready.
         assert_eq!(serial(&p.follow_up(0)), [START.to_vec(), all(OFF), all(READY), paint(2, WRONG)]);
+    }
+
+    #[test]
+    fn a_reset_lighting_two_buzzers_ready_lights_them_all_at_once() {
+        let (mut p, _) = opened();
+        p.encode_lights(&[(1, Light::Ready), (2, Light::Locked)]);
+        // Their timers start together, so the order to all reaches the
+        // buzzers not named too, as in any round.
+        assert_eq!(serial(&p.reset_lights(&[(1, Light::Ready), (2, Light::Ready)])), [all(OFF), all(READY)]);
+        assert_eq!(serial(&p.reset_lights(&[(1, Light::Ready), (2, Light::Ready), (3, Light::Locked)])), [all(OFF), all(READY), paint(2, LOCKED)]);
     }
 
     #[test]

@@ -847,10 +847,12 @@ Loop, every iteration:
    shutdown). The thread keeps the buzzer mode and each buzzer's light as
    the app last set them; only what changed is encoded with the active
    protocol and queued for writing. A reset (`BuzzerDriver::reset_lights`,
-   as a show begins or ends, 2.7) replaces every light: a buzzer it does
-   not name goes dark, and the protocol sends the lot whole
-   (`Protocol::reset_lights`), as nothing says what the buzzers show
-   before it, such as colours another program left.
+   as a show begins or ends, 2.7) replaces every light: the protocol
+   darkens every buzzer and then sends the lights it names
+   (`Protocol::reset_lights`, which a protocol with lights overrides), as
+   nothing says what the buzzers show before it, such as colours another
+   program left. A buzzer it does not name stays dark unless a light then
+   goes to all at once (2.4).
 2. If connected: write the next queued report if it is due, then
    `read_timeout` (20 ms, or less when the next report or a held buzz is
    due sooner). A report goes through the protocol and the edge filter; the
@@ -1271,10 +1273,12 @@ a buzzer's last light winning (`Effect::lights`), so the driver is never
 told the round's light for a buzzer judged wrong (an order to all may
 still show it for a moment on the 303S, 2.4). When a show begins, resumes
 or ends, the shell resets the lights (`BuzzerDriver::reset_lights`): every
-buzzer as the show then stands (`Game::lights`), and every other one dark,
-so no light is left from another show or another program, also after the
-app restarted (the 2026-10-25 test found the lobby still lit blue by an
-earlier program). Otherwise the shell passes the lights to `BuzzerDriver::set_lights`; for the hardware
+buzzer dark, then each as the show then stands (`Game::lights`), so no
+light is left from another show or another program, also after the app
+restarted (the 2026-10-25 test found the lobby still lit blue by an
+earlier program). A spare buzzer stays dark then, unless two or more
+buzzers turn ready with that reset (a resume in the lobby or mid-round):
+the order to all that lights them reaches it too, as in any round. Otherwise the shell passes the lights to `BuzzerDriver::set_lights`; for the hardware
 driver that is a message to the receiver thread, which encodes it with the
 active protocol and writes the reports. Light failures are logged and never
 block the show. With the learned or raw protocol, `has_lights()` is false and

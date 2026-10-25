@@ -303,7 +303,9 @@ pub fn handle_event(app: &AppHandle, event: ReceiverEvent) {
 
 #[tauri::command]
 pub fn receiver_info(hw: tauri::State<Hardware>) -> ReceiverInfo {
+    // One lock at a time.
     let settings = hw.settings.lock().unwrap().clone();
+    let buzzers = hw.seen.lock().unwrap().values().copied().collect();
     let log = hw.raw_log.lock().unwrap();
     let skip = log.len().saturating_sub(RAW_LOG_SNAPSHOT);
     ReceiverInfo {
@@ -314,7 +316,7 @@ pub fn receiver_info(hw: tauri::State<Hardware>) -> ReceiverInfo {
         learned_buttons: settings.learned.iter().map(|m| m.signatures.len()).sum(),
         learn: hw.learn_progress(),
         recent: log.iter().skip(skip).cloned().collect(),
-        buzzers: hw.seen.lock().unwrap().values().copied().collect(),
+        buzzers,
         platform: std::env::consts::OS,
     }
 }
