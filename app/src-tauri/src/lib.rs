@@ -31,7 +31,6 @@ pub use error::AppError;
 use hardware::Hardware;
 use quiz_core::{BuzzerId, BuzzerMode, Command, Effect, Game, GameView, Light, Quiz, Stamped};
 use session::{Resumed, Session, SessionMeta, SessionSummary};
-use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{mpsc, LazyLock, Mutex, MutexGuard};
@@ -220,11 +219,10 @@ fn apply_journaled(inner: &mut Inner, command: Command, at_ms: u64) -> CmdResult
 /// a test run), beginning now. A new journal has no failed write yet, and
 /// the next close during a show asks again. Every show begins and ends here.
 fn replace_show(inner: &mut Inner, game: Option<Game>, session: Option<Session>) {
-    // The buzzers of the show before go dark, and the new show's light as
-    // it stands, whatever they showed before: another show's lights, or
-    // those a receiver kept while the app restarted.
-    let mut lights: BTreeMap<BuzzerId, Light> = inner.game.iter().flat_map(Game::players).map(|p| (p.buzzer, Light::Off)).collect();
-    lights.extend(game.iter().flat_map(Game::lights));
+    // The buzzers show the new show's lights as it stands and every other
+    // one goes dark, whatever they showed before: another show's lights,
+    // those a receiver kept while the app restarted, or another program's.
+    let lights = game.as_ref().map(Game::lights).unwrap_or_default();
     inner.game = game;
     inner.session = session;
     inner.save_problem = None;
@@ -232,7 +230,7 @@ fn replace_show(inner: &mut Inner, game: Option<Game>, session: Option<Session>)
     // A close request left unanswered was about the show before.
     inner.close_request.forget();
     send_mode(inner);
-    set_lights(inner, &lights.into_iter().collect::<Vec<_>>());
+    noted(inner.driver.reset_lights(&lights));
 }
 
 /// Tells the buzzers what they take now (`Game::buzzer_mode`). With no show
@@ -284,7 +282,12 @@ fn light_buzzers(inner: &mut Inner, effects: &[Effect]) {
 
 /// Lights the buzzers; a failure is logged and never stops the show.
 fn set_lights(inner: &mut Inner, lights: &[(BuzzerId, Light)]) {
-    if let Err(e) = inner.driver.set_lights(lights) {
+    noted(inner.driver.set_lights(lights));
+}
+
+/// Logs a failure to light the buzzers, which never stops the show.
+fn noted(lit: Result<(), buzzers::DriverError>) {
+    if let Err(e) = lit {
         app_log::note(&format!("buzzer lights: {e}"));
     }
 }
@@ -981,6 +984,11 @@ mod tests {
             Ok(())
         }
 
+        fn reset_lights(&mut self, lights: &[(BuzzerId, Light)]) -> Result<(), buzzers::DriverError> {
+            self.0.lock().unwrap().push(format!("lights {lights:?}, others dark"));
+            Ok(())
+        }
+
         fn set_mode(&mut self, mode: BuzzerMode) {
             self.0.lock().unwrap().push(format!("mode {mode:?}"));
         }
@@ -997,7 +1005,8 @@ mod tests {
             .position(|slide| matches!(&slide.content, quiz_core::SlideContent::Question(q) if q.mode == quiz_core::AnswerMode::FastestFinger))
             .unwrap();
         replace_show(&mut inner, Some(Game::new(quiz)), None);
-        assert_eq!(*told.lock().unwrap(), ["mode Register", "lights []"]);
+        // Whatever another program left on them, the buzzers go dark.
+        assert_eq!(*told.lock().unwrap(), ["mode Register", "lights [], others dark"]);
         let mut step = |command, at_ms| {
             told.lock().unwrap().clear();
             let effects = apply_journaled(&mut inner, command, at_ms).unwrap().unwrap();
@@ -1008,6 +1017,9 @@ mod tests {
         step(Command::GoTo { slide: fastest_finger }, 2_000);
         // A fastest-finger clock starts: the buzzers take presses as buzzes before they turn ready.
         assert_eq!(step(Command::Next, 3_000), ["mode FastestFinger", "lights [(3, Ready)]"]);
+        told.lock().unwrap().clear();
+        replace_show(&mut inner, None, None);
+        assert_eq!(*told.lock().unwrap(), ["mode Register", "lights [], others dark"], "the show ended");
     }
 
     #[test]

@@ -100,7 +100,7 @@ impl HidDevice for FakeDevice {
 /// Test protocol: [0x01, buzzer, button 0..=4] is a press and [0x7e] the
 /// receiver's answer, which calls for [0x06, 0x01]. Set up with feature
 /// [0x30] and output [0x03, 0x01]; lights -> [0x02, buzzer, light], a
-/// mode -> [0x04, mode].
+/// reset -> [0x05] and the lights, a mode -> [0x04, mode].
 struct TestProtocol {
     answered: bool,
     follow: Vec<Report>,
@@ -151,6 +151,10 @@ impl Protocol for TestProtocol {
 
     fn encode_lights(&mut self, lights: &[(BuzzerId, Light)]) -> Vec<Report> {
         lights.iter().map(|(b, l)| Report::Output(vec![0x02, *b as u8, *l as u8])).collect()
+    }
+
+    fn reset_lights(&mut self, lights: &[(BuzzerId, Light)]) -> Vec<Report> {
+        [vec![Report::Output(vec![0x05])], self.encode_lights(lights)].concat()
     }
 
     fn encode_mode(&mut self, mode: BuzzerMode) -> Vec<Report> {
@@ -223,8 +227,9 @@ fn connects_sends_init_and_decodes_presses_in_order() {
     handle.select(Some(selector()));
     wait_for(&rx, is_connected);
     assert_eq!(backend.0.lock().unwrap().features, vec![vec![0x30]]);
-    // The mode the buzzers are in from the start.
-    assert_eq!(written_after_init(&backend, 1), [vec![0x04, 0]]);
+    // The mode the buzzers are in from the start, and a reset of their
+    // lights, as nothing says what they kept.
+    assert_eq!(written_after_init(&backend, 2), [vec![0x04, 0], vec![0x05]]);
 
     {
         let mut w = backend.0.lock().unwrap();
@@ -266,9 +271,10 @@ fn writes_light_commands() {
     handle.set_mode(BuzzerMode::Answers);
     handle.set_mode(BuzzerMode::Answers);
     assert_eq!(
-        written_after_init(&backend, 5),
+        written_after_init(&backend, 6),
         [
             vec![0x04, 0],
+            vec![0x05],
             vec![0x02, 4, Light::Ready as u8],
             vec![0x02, 5, Light::First as u8],
             vec![0x02, 5, Light::Locked as u8],
@@ -276,7 +282,7 @@ fn writes_light_commands() {
         ]
     );
     std::thread::sleep(Duration::from_millis(50));
-    assert_eq!(backend.0.lock().unwrap().written.len(), 6, "nothing more is written");
+    assert_eq!(backend.0.lock().unwrap().written.len(), 7, "nothing more is written");
     handle.shutdown();
 }
 
@@ -290,8 +296,8 @@ fn shows_the_lights_and_mode_set_before_the_receiver_connected_and_again_after_r
     wait_for(&rx, |e| matches!(e, ReceiverEvent::Status(ReceiverStatus::Searching { .. })));
     backend.0.lock().unwrap().plugged = true;
     wait_for(&rx, is_connected);
-    let shown = [vec![0x04, 3], vec![0x02, 2, Light::Wrong as u8], vec![0x02, 3, Light::Ready as u8]];
-    assert_eq!(written_after_init(&backend, 3), shown);
+    let shown = [vec![0x04, 3], vec![0x05], vec![0x02, 2, Light::Wrong as u8], vec![0x02, 3, Light::Ready as u8]];
+    assert_eq!(written_after_init(&backend, 4), shown);
 
     {
         let mut w = backend.0.lock().unwrap();
@@ -300,8 +306,32 @@ fn shows_the_lights_and_mode_set_before_the_receiver_connected_and_again_after_r
     }
     wait_for(&rx, |e| matches!(e, ReceiverEvent::Status(ReceiverStatus::Error { .. })));
     wait_for(&rx, is_connected);
-    assert_eq!(written_after_init(&backend, 3), shown);
+    assert_eq!(written_after_init(&backend, 4), shown);
     assert_eq!(backend.0.lock().unwrap().features.len(), 2, "set up again");
+    handle.shutdown();
+}
+
+#[test]
+fn a_reset_replaces_every_light_also_after_replugging() {
+    let backend = FakeBackend::default();
+    backend.0.lock().unwrap().plugged = true;
+    let (handle, rx) = start(&backend);
+    handle.select(Some(selector()));
+    wait_for(&rx, is_connected);
+    handle.set_lights(vec![(1, Light::Ready), (2, Light::Ready)]);
+    handle.reset_lights(vec![(3, Light::Ready)]);
+    let lit = |b| vec![0x02, b, Light::Ready as u8];
+    assert_eq!(written_after_init(&backend, 6)[2..], [lit(1), lit(2), vec![0x05], lit(3)]);
+
+    {
+        let mut w = backend.0.lock().unwrap();
+        w.break_link = true;
+        w.written.clear();
+    }
+    wait_for(&rx, |e| matches!(e, ReceiverEvent::Status(ReceiverStatus::Error { .. })));
+    wait_for(&rx, is_connected);
+    // Set up again: buzzer 3 alone is lit, after a reset.
+    assert_eq!(written_after_init(&backend, 3), [vec![0x04, 0], vec![0x05], lit(3)]);
     handle.shutdown();
 }
 
@@ -315,14 +345,14 @@ fn writes_what_the_receivers_answer_calls_for_and_reports_that_it_answered() {
         ReceiverEvent::Status(ReceiverStatus::Connected { protocol, .. }) => assert_eq!(protocol, ProtocolKind::Enjoy303s { answered: false }),
         _ => unreachable!(),
     }
-    assert_eq!(written_after_init(&backend, 1), [vec![0x04, 0]]);
+    assert_eq!(written_after_init(&backend, 2), [vec![0x04, 0], vec![0x05]]);
 
     backend.0.lock().unwrap().inbox.push_back(vec![0x7e]);
     match wait_for(&rx, is_connected) {
         ReceiverEvent::Status(ReceiverStatus::Connected { protocol, .. }) => assert_eq!(protocol, ProtocolKind::Enjoy303s { answered: true }),
         _ => unreachable!(),
     }
-    assert_eq!(written_after_init(&backend, 2), [vec![0x04, 0], vec![0x06, 0x01]]);
+    assert_eq!(written_after_init(&backend, 3), [vec![0x04, 0], vec![0x05], vec![0x06, 0x01]]);
     handle.shutdown();
 }
 
@@ -335,7 +365,7 @@ fn spaces_writes_by_the_write_gap() {
     handle.select(Some(selector()));
     wait_for(&rx, is_connected);
     handle.set_lights((1..=4).map(|b| (b, Light::Correct)).collect());
-    written_after_init(&backend, 5);
+    written_after_init(&backend, 6);
     let at = backend.0.lock().unwrap().written_at.clone();
     for pair in at.windows(2) {
         assert!(pair[1] - pair[0] >= Duration::from_millis(25), "{:?}", pair[1] - pair[0]);
@@ -405,12 +435,13 @@ fn an_enjoy_303s_shows_what_waited_once_it_answered_its_set_up() {
 
     backend.0.lock().unwrap().inbox.push_back(from_303s(&[0x10, 0x00]));
     backend.0.lock().unwrap().inbox.push_back(from_303s(&[0x12, 0x01]));
-    let serial: Vec<Vec<u8>> = written_after_init(&backend, 4).iter().map(|r| cp2110::received(r).to_vec()).collect();
+    let serial: Vec<Vec<u8>> = written_after_init(&backend, 5).iter().map(|r| cp2110::received(r).to_vec()).collect();
     let take_64 = vec![0x35, 0x96, 0x02, 0x14, 0x3f, 0x2b];
     let open = vec![0x35, 0x96, 0x02, 0x12, 0x00, 0x12];
+    let dark_all = vec![0x35, 0x96, 0x02, 0x74, 0x00, 0x74];
     let ready_all = vec![0x35, 0x96, 0x02, 0x74, 0x43, 0x37];
     let start = vec![0x35, 0x96, 0x01, 0x85, 0x85];
-    assert_eq!(serial, [take_64, open, start, ready_all]);
+    assert_eq!(serial, [take_64, open, start, dark_all, ready_all]);
     handle.shutdown();
 }
 
@@ -501,11 +532,12 @@ fn reconnecting_to_an_enjoy_303s_in_use_sets_it_up_again_and_a_press_says_it_is_
     wait_for(&rx, |e| matches!(e, ReceiverEvent::Status(ReceiverStatus::Connected { protocol: ProtocolKind::Enjoy303s { answered: true }, .. })));
     wait_for(&rx, |e| matches!(e, ReceiverEvent::Press { press, .. } if press.buzzer == 2));
     let start = vec![0x35, 0x96, 0x01, 0x85, 0x85];
+    let dark_all = vec![0x35, 0x96, 0x02, 0x74, 0x00, 0x74];
     let ready_1 = vec![0x35, 0x96, 0x04, 0x2d, 0, 0, 0x43, 0x2d ^ 0x43];
     let deadline = Instant::now() + Duration::from_secs(3);
     loop {
         let serial: Vec<Vec<u8>> = backend.0.lock().unwrap().written.iter().map(|r| cp2110::received(r).to_vec()).collect();
-        if serial.ends_with(&[start.clone(), ready_1.clone()]) {
+        if serial.ends_with(&[start.clone(), dark_all.clone(), ready_1.clone()]) {
             break;
         }
         assert!(Instant::now() < deadline, "not started and painted: {serial:x?}");

@@ -72,6 +72,13 @@ pub trait BuzzerDriver: Send {
 
     fn set_lights(&mut self, lights: &[(BuzzerId, Light)]) -> Result<(), DriverError>;
 
+    /// Sets these buzzers' lights and every other buzzer's dark, whatever
+    /// they showed before: another show's lights, or those another program
+    /// left. These buzzers' lights only, by default.
+    fn reset_lights(&mut self, lights: &[(BuzzerId, Light)]) -> Result<(), DriverError> {
+        self.set_lights(lights)
+    }
+
     /// Tells the receiver what the buzzers take now: when presses count,
     /// and when they are ordered by the buzzers' own timers.
     fn set_mode(&mut self, mode: BuzzerMode);

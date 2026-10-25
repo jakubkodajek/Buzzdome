@@ -843,9 +843,14 @@ where a press came from (keyboard, on-screen button or receiver are the same
 
 Loop, every iteration:
 
-1. Drain control messages (select, mode, lights, reload, shutdown). The thread keeps the buzzer mode and each buzzer's light as
+1. Drain control messages (select, mode, lights, reset lights, reload,
+   shutdown). The thread keeps the buzzer mode and each buzzer's light as
    the app last set them; only what changed is encoded with the active
-   protocol and queued for writing.
+   protocol and queued for writing. A reset (`BuzzerDriver::reset_lights`,
+   as a show begins or ends, 2.7) replaces every light: a buzzer it does
+   not name goes dark, and the protocol sends the lot whole
+   (`Protocol::reset_lights`), as nothing says what the buzzers show
+   before it, such as colours another program left.
 2. If connected: write the next queued report if it is due, then
    `read_timeout` (20 ms, or less when the next report or a held buzz is
    due sooner). A report goes through the protocol and the edge filter; the
@@ -855,7 +860,12 @@ Loop, every iteration:
    a fastest-finger round presses with the buzzer's own timer wait for the
    timer order (2.6). The edge filter starts afresh as a fastest-finger
    round begins, so a press made just before it cannot hide the first one
-   in it as a held button's repeat. After every read, a report or a timeout, it queues
+   in it as a held button's repeat. A press that carries its buzzer's
+   timer and repeats that buzzer's last one, timer and all, within two
+   seconds is dropped as well, also after such a fresh start: it is the
+   receiver sending it again, which the 303S did 180 and 541 ms later,
+   twice in about 90 presses, in the hardware test of 2026-10-25 (a
+   buzzer's timer moves on every millisecond). After every read, a report or a timeout, it queues
    what the protocol has to write now (`Protocol::follow_up`): what the
    receiver's messages call for, or a step again whose answer is overdue.
    A read or write error
@@ -863,7 +873,7 @@ Loop, every iteration:
    `WriteFailed`; the thread reconnects).
 3. If not connected and a receiver is selected: every 2 seconds list devices,
    open the first match and set it up: write the protocol's init reports,
-   queue the mode and the lights the buzzers should show, then report
+   queue the mode and, as a reset, the lights the buzzers should show, then report
    `Connected` (init goes first so the receiver is set up as soon as the UI
    says "connected"). So a receiver unplugged mid-show gets the round and
    the lights it missed once it is back.
@@ -895,6 +905,7 @@ trait Protocol: Send {
     fn init_reports(&self) -> Vec<Report>;                                // default: none
     fn follow_up(&mut self, now_ms: u64) -> Vec<Report>;                  // default: none
     fn encode_lights(&mut self, lights: &[(BuzzerId, Light)]) -> Vec<Report>; // default: none
+    fn reset_lights(&mut self, lights: &[(BuzzerId, Light)]) -> Vec<Report>;  // default: encode_lights
     fn encode_mode(&mut self, mode: BuzzerMode) -> Vec<Report>;              // default: none
     fn has_lights(&self) -> bool;                                             // default: false
     fn learnable(&self) -> bool;                                              // default: false
@@ -932,8 +943,11 @@ the unofficial copy of the SDK Jakub approved on 2026-10-20, whose RF219
 driver carries the 303S's commands one to one as the guide lists them, and
 wrote the protocol down in its own words. `enjoy303s.rs`, `cp2110.rs` and
 this description come from that write-up. No file or code from the kit or
-the copy is in the repository. None of it is checked on a real receiver yet
-([`hardware-test.md`](hardware-test.md)).
+the copy is in the repository. The first test on a real receiver, on
+Windows 11 with buzzers 1 and 2 on 2026-10-25
+([`hardware-test.md`](hardware-test.md)), confirmed the cable, the
+set-up, the buttons, the colours and the timer as written below; what it
+could not check is marked **unverified**.
 
 The older Enjoy RF215 dome buzzers use the same cable with another
 protocol. Their driver was dropped once Jakub's set turned out to be the
@@ -956,10 +970,11 @@ between the two could go wrong mid-show.
   is read on a byte at a time; the start of a message that cannot be whole
   is skipped when a whole one follows it, so a spoiled length byte holds up
   no press.
-- Set-up: connect `10 00` (the answer starts `10`), take buzzers 1 to 64
-  (`14 3F`: radio IDs 0 to 63), open the receiver `12 00` (answer `12 01`).
-  Each step waits for the answer to the one before (`follow_up`), and the
-  lights wait for the last. A step not answered within 500 ms (the SDK
+- Set-up: connect `10 00` (the answer starts `10`; it was `10 82`), take
+  buzzers 1 to 64 (`14 3F`: radio IDs 0 to 63, answer `14 01`), open the
+  receiver `12 00` (answer `12 01`). Each step waits for the answer to the
+  one before (`follow_up`), and the lights wait for the last; in the test
+  the whole set-up was answered within about 50 ms. A step not answered within 500 ms (the SDK
   waits 200 ms) is sent again, connect with the cable's settings before it
   as after plugging in, so a lost or spoiled answer, or a receiver powered
   after the cable connected, only delays the set-up. Open unanswered four
@@ -987,17 +1002,25 @@ between the two could go wrong mid-show.
   sent again every few seconds, the receiver lost after two unanswered) is
   for after the hardware test, if it shows that connect while open is
   answered and changes no colour, timer or press taking.
-- The receiver takes presses after start `85` (**unverified**: what `85`
-  and stop `87` do besides). The app starts it once it is open and never
+- The receiver takes presses after start `85`, which it echoes. Start, or
+  the set-up again, makes every buzzer blink once and changes neither its
+  colour nor its timer; what stop `87` does is **unverified**. The app
+  starts it once it is open and never
   stops it, so a late team still registers between questions and the
   Receiver tab sees presses at any time; the game ignores the presses that
   do not count, and in fastest finger the colour a press shows tells a
   stale one (below). The mode goes before the lights (2.7).
 - A colour is one byte: bit 6 bright, then red, green and blue at 0 to 3
   each (bit 7, which stores a colour without showing it, the app never
-  sets). One buzzer's is `2D id%4 id/4 colour`, every buzzer's `74 colour`.
-  The protocol keeps the colour each buzzer should show and the one it was
-  told, and sends only changes (`Enjoy303s::paint`): buzzers that turn
+  sets). One buzzer's is `2D id%4 id/4 colour`, every buzzer's `74 colour`;
+  the receiver answers the second with `74` and the first with nothing,
+  and the app waits for neither. The protocol keeps the colour each buzzer
+  should show and the one it was told, and sends only changes
+  (`Enjoy303s::paint`). When the receiver opens, and on a reset (2.3), it
+  first turns every buzzer dark with one order and then lights those the
+  app names (`Enjoy303s::repaint`), so no buzzer keeps a colour from
+  another program, show or set-up, and a round under way when the
+  receiver came back starts its buzzers' timers anew together. Buzzers that turn
   ready together get it all at once, as their timers count from that
   moment (2.6); any other colour goes to all at once when that takes fewer
   orders, but not while a buzzer should show ready, which would then be
@@ -1007,15 +1030,18 @@ between the two could go wrong mid-show.
   buzzer turns ready alone while others already count: a player who joins
   mid-round plays from the next question (2.7).
 - A press, `32 id code colour t0 t1 t2` and three more bytes the app does
-  not use: buzzer `id + 1`; button `code >> 4`, 1 to 4 for A to D and 5
-  or 6 the big button (**unverified**: the guide gives 5 and 6 for keys E
-  and F, which a buzzer does not have, and does not say which the big
-  button sends); the colour the buzzer showed; and its timer,
-  little-endian, which counts from the moment the buzzer's colour last
-  changed (`Press::timer`; the unit is **unverified**, most likely
-  milliseconds). Any other button code, a message too short to hold all
+  not use (a second millisecond count, the same on every buzzer, most
+  likely the receiver's clock): buzzer `id + 1`; button `code >> 4`, 1 to
+  4 for A to D and 5 the big button (the low four bits were `C` on every
+  press); the colour the buzzer showed; and its timer, little-endian,
+  which counts milliseconds from the moment the buzzer's colour last
+  changed (`Press::timer`). An order that repeats the colour a buzzer
+  shows leaves its timer counting; 24 bits last 4.6 hours. A buzzer has
+  no other key and no power switch, and a held button sends one press.
+  Any other button code, a message too short to hold all
   that, and a buzzer outside 1 to 64 give no press (they show in the raw
-  log only), so nothing unknown ever buzzes. In fastest finger, and while
+  log only), so nothing unknown ever buzzes (code 6, a key F the buzzers
+  do not have, included). In fastest finger, and while
   its buzz is judged, a press from a buzzer that was not ready is dropped
   too, by the colour it showed: dark, locked, first, right or wrong,
   brightness aside. It was pressed when the game would not take it, and
@@ -1023,16 +1049,20 @@ between the two could go wrong mid-show.
   of it, it must not count in the next step either: a team hammering its
   locked buzzer while another team's answer is judged must not win as the
   round goes on. Its timer also counts from another moment than the
-  others'. The raw log shows it as dropped. A colour the app never sets
-  lets the press through, as what the buzzer reports is unverified; one
-  that reads as dark (`00`) does not, so if the buzzers reported `00`
-  whatever they show, fastest finger would take no press, which the
-  hardware test checks first (`hardware-test.md`, 6.7). Elsewhere the game
+  others'. The raw log shows it as dropped. The byte was the colour shown
+  in every press of the test (`43` in every buzz that counted, `00`
+  before a question started, `7F` while a buzz was judged), and the drop
+  worked in the app. A colour the app never sets, as another program
+  might leave, lets the press through. Elsewhere the game
   alone decides, so any buzzer can register. The quizmaster's remote (`34`) and
   the answers to setting a buzzer's ID (`17`, `24`) are skipped.
 - The receiver runs no round itself and locks nobody out: the app lights
   every buzzer (2.7) and decides who buzzed first (2.6).
-- No battery level: the 303S's SDK has none.
+- No battery level: the 303S's SDK has none, and in the test no byte of a
+  press differed between buzzers but the ID and the two counts, and the
+  receiver sent nothing unasked in 7.5 idle minutes.
+- The quizmaster's remote sends `34 key` with bit 7 set, keys 0 to 11, one
+  message per press, none while held or at the release.
 
 ### 2.5 Learn mode
 
@@ -1150,10 +1180,22 @@ presses on in. For presses that carry the buzzer's own timer (the 303S's),
 that is the timers' order: each timer counts from the moment its buzzer's
 light last changed, and a round's lights turn ready on every buzzer with one
 order (2.4), so the timers say who pressed first however the radio delivered
-the presses. Presses made at almost the same moment can reach the PC a
-little apart and in either order, so in a fastest-finger round the receiver
-thread holds the first timed press for `timer_window` (100 ms, a guess to
-check on the hardware, and to shorten to what it measures; a test keeps it
+the presses. A timer starts again only when the colour really changes, so
+every fastest-finger round starts with a change on every buzzer that can
+buzz in it: a question always opens dark (`QuestionStep::Ready`, also when
+it is restarted) and turns ready from there, a round that goes on after a
+wrong answer turns ready from locked, and when the receiver comes back or
+a show begins or resumes every buzzer goes dark before it lights (2.4,
+2.7). A guard test in `quiz-core` and a check in every simulated show
+(`show-sim`) hold the game to it. A buzzer that missed an order to all
+would keep counting from its earlier change and lose a near tie; the
+receiver confirms such an order, not each buzzer's taking it, and the test
+saw none missed. The receiver reports on a 36 ms tick, lower IDs first,
+so presses made at almost the same moment can reach the PC a
+little apart and in either order (0 to 36 ms for buzzers 1 and 2 in the
+test), so in a fastest-finger round the receiver
+thread holds the first timed press for `timer_window` (100 ms, kept until
+a test with buzzers far apart in ID measures their gap; a test keeps it
 under `PRESS_GRACE_MS`), takes in those that arrive meanwhile, and then
 passes them all on, the lowest timer first, equal timers in arrival order
 (`timer_order.rs`). They are all stamped with the first one's arrival, the
@@ -1217,11 +1259,11 @@ off shows locked. The lights of one show change go to the driver at once,
 a buzzer's last light winning (`Effect::lights`), so the driver is never
 told the round's light for a buzzer judged wrong (an order to all may
 still show it for a moment on the 303S, 2.4). When a show begins, resumes
-or ends, the shell lights every buzzer as the show then stands
-(`Game::lights`), and those of the show before go dark, so no light is
-left from another show. After the app restarted, the shell knows no show
-before: a buzzer outside the resumed show keeps what it showed until a
-light goes to all. The shell passes it to `BuzzerDriver::set_lights`; for the hardware
+or ends, the shell resets the lights (`BuzzerDriver::reset_lights`): every
+buzzer as the show then stands (`Game::lights`), and every other one dark,
+so no light is left from another show or another program, also after the
+app restarted (the 2026-10-25 test found the lobby still lit blue by an
+earlier program). Otherwise the shell passes the lights to `BuzzerDriver::set_lights`; for the hardware
 driver that is a message to the receiver thread, which encodes it with the
 active protocol and writes the reports. Light failures are logged and never
 block the show. With the learned or raw protocol, `has_lights()` is false and
@@ -1231,8 +1273,10 @@ The 303S shows them as colours: ready blue, locked dim white (Jakub's
 choice, told apart from the red of a wrong answer next to it), first
 white, right green, wrong red, off dark (`enjoy303s.rs`); no two share a
 colour byte. Locked and first are both white, told apart by brightness
-alone; that is checked on stage (`hardware-test.md` 6.6), with dim amber
-as the fallback. A light that goes to all buzzers at once reaches spare
+alone; on the 303S's lights both come out purple, dim white the lighter
+one, told apart at arm's length in the 2026-10-25 test. From the back of
+a room is still to check on stage (`hardware-test.md` 6.6), with dim
+amber as the fallback. A light that goes to all buzzers at once reaches spare
 buzzers too, which the app never lit and so show whatever went to all
 last: in a fastest-finger round they light ready, so a spare's press
 registers a late team, which plays from the next question as any player
@@ -1396,6 +1440,6 @@ them.
 | The real app end to end: show, crash and resume, every Director and editor button, file picker | `app/e2e` on Linux (WebKitGTK) and Windows (WebView2, no file picker), Linux on every push and five times nightly, Windows on main and once nightly | Linux pass; Windows see the PR's checks |
 | Media through the asset protocol, autoplay of video and sound | needs the installed app on each OS | **not tested** |
 | Windows and macOS installers | CI | see the PR's checks |
-| Real receiver: detection, raw reports, learn mode, presses in a show | needs the hardware | **not tested** |
-| Enjoy 303S protocol: set-up, presses, timers, colours | `cargo test -p buzzers` against fakes; needs the hardware | **not tested** on a receiver |
-| Battery level | not in the 303S's SDK | **not built** |
+| Real receiver: detection, raw reports, presses in a show | Enjoy 303S on Windows 11, buzzers 1 and 2, `hardware-test.md` sections 2 to 6 in part (2026-10-25) | pass; macOS, high IDs, two at once in the app, failures (section 7) **not tested** |
+| Enjoy 303S protocol: set-up, presses, timers, colours | `cargo test -p buzzers` against fakes; the receiver with `hid-monitor` and the app (2026-10-25) | pass; lights read from the back of a room **not tested** |
+| Battery level | not in the 303S's SDK, and no press or other message carried one (2026-10-25) | **not buildable** for the 303S |

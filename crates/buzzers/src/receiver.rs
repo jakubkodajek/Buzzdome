@@ -119,6 +119,8 @@ impl ReceiverConfig {
 enum Control {
     Select(Option<DeviceSelector>),
     Lights(Vec<(BuzzerId, Light)>),
+    /// These lights, every other buzzer dark.
+    ResetLights(Vec<(BuzzerId, Light)>),
     Mode(BuzzerMode),
     ReloadProtocol,
     Shutdown,
@@ -140,6 +142,12 @@ impl ReceiverHandle {
     /// Sets these buzzers' lights, now or once a receiver connects.
     pub fn set_lights(&self, lights: Vec<(BuzzerId, Light)>) {
         let _ = self.tx.send(Control::Lights(lights));
+    }
+
+    /// Sets these buzzers' lights and every other buzzer's dark, now or
+    /// once a receiver connects (`BuzzerDriver::reset_lights`).
+    pub fn reset_lights(&self, lights: Vec<(BuzzerId, Light)>) {
+        let _ = self.tx.send(Control::ResetLights(lights));
     }
 
     /// Puts the buzzers in `mode`, now or once a receiver connects.
@@ -177,6 +185,11 @@ impl BuzzerDriver for HardwareDriver {
 
     fn set_lights(&mut self, lights: &[(BuzzerId, Light)]) -> Result<(), DriverError> {
         self.0.set_lights(lights.to_vec());
+        Ok(())
+    }
+
+    fn reset_lights(&mut self, lights: &[(BuzzerId, Light)]) -> Result<(), DriverError> {
+        self.0.reset_lights(lights.to_vec());
         Ok(())
     }
 
@@ -315,6 +328,13 @@ impl<E: From<ReceiverEvent>> Worker<E> {
                     self.queue(reports);
                 }
             }
+            Control::ResetLights(lights) => {
+                self.lights = lights.iter().copied().collect();
+                if let Some(conn) = self.conn.as_mut() {
+                    let reports = conn.protocol.reset_lights(&lights);
+                    self.queue(reports);
+                }
+            }
             Control::Mode(mode) => {
                 if mode == self.mode {
                     return;
@@ -380,9 +400,10 @@ impl<E: From<ReceiverEvent>> Worker<E> {
             }
         }
         self.next_write = Instant::now() + self.config.write_gap;
+        // Every light as a reset: nothing says what the buzzers kept.
         let lights: Vec<_> = self.lights.iter().map(|(&buzzer, &light)| (buzzer, light)).collect();
         let mut shown = conn.protocol.encode_mode(self.mode);
-        shown.extend(conn.protocol.encode_lights(&lights));
+        shown.extend(conn.protocol.reset_lights(&lights));
         let status = connected_status(&conn);
         self.conn = Some(conn);
         self.queue(shown);

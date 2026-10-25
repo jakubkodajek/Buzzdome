@@ -59,6 +59,13 @@ pub trait Protocol: Send {
         Vec::new()
     }
 
+    /// Reports that light these buzzers and every other one dark, whatever
+    /// they showed before (`BuzzerDriver::reset_lights`). These buzzers'
+    /// lights only, by default.
+    fn reset_lights(&mut self, lights: &[(BuzzerId, Light)]) -> Vec<Report> {
+        self.encode_lights(lights)
+    }
+
     /// Reports that tell the receiver `mode`, which changed: for receivers
     /// that take presses only while told to.
     fn encode_mode(&mut self, _mode: BuzzerMode) -> Vec<Report> {
