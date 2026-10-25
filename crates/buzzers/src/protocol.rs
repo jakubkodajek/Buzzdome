@@ -59,6 +59,13 @@ pub trait Protocol: Send {
         Vec::new()
     }
 
+    /// Reports that light these buzzers and every other one dark, whatever
+    /// they showed before (`BuzzerDriver::reset_lights`). These buzzers'
+    /// lights only, by default.
+    fn reset_lights(&mut self, lights: &[(BuzzerId, Light)]) -> Vec<Report> {
+        self.encode_lights(lights)
+    }
+
     /// Reports that tell the receiver `mode`, which changed: for receivers
     /// that take presses only while told to.
     fn encode_mode(&mut self, _mode: BuzzerMode) -> Vec<Report> {
@@ -83,13 +90,25 @@ pub type ProtocolResolver = dyn Fn(&DeviceInfo) -> Box<dyn Protocol> + Send + Sy
 /// The protocol for `device`: its vendor's when it is known, else the
 /// buttons learned for its model, else raw reports only.
 pub fn for_device(learned: &[LearnedMapping], device: &DeviceInfo) -> Box<dyn Protocol> {
-    if Enjoy303s::handles(device) {
-        return Box::new(Enjoy303s::default());
+    if let Some(protocol) = built_in(device) {
+        return protocol;
     }
     match learned.iter().find(|m| m.for_device(device) && !m.signatures.is_empty()) {
         Some(mapping) => Box::new(LearnedProtocol::new(mapping.clone())),
         None => Box::new(RawOnly),
     }
+}
+
+/// Whether a protocol built into the app knows `device`, by its vendor and
+/// product ID: such a receiver is used without being chosen
+/// (`receiver::ReceiverChoice::Automatic`).
+pub fn is_known(device: &DeviceInfo) -> bool {
+    built_in(device).is_some()
+}
+
+/// The protocol built into the app for `device`'s vendor and product, if any.
+fn built_in(device: &DeviceInfo) -> Option<Box<dyn Protocol>> {
+    Enjoy303s::handles(device).then(|| Box::new(Enjoy303s::default()) as Box<dyn Protocol>)
 }
 
 /// Used when no protocol knows the device: decodes nothing, so the raw reports

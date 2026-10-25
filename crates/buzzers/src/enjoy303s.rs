@@ -242,12 +242,12 @@ impl Enjoy303s {
     }
 
     /// The receiver is open: it takes presses, and every buzzer is told
-    /// what it should show, which waited for this. The receiver takes
-    /// presses before any buzzer lights ready.
+    /// what it should show, which waited for this, the others dark
+    /// (`repaint`). The receiver takes presses before any buzzer lights
+    /// ready.
     fn opened(&mut self) {
         self.stage = Stage::Open;
-        self.shown = [None; BUZZERS];
-        let shown = [Order::Start.reports(), self.paint()].concat();
+        let shown = [Order::Start.reports(), self.repaint()].concat();
         self.follow.extend(shown);
     }
 
@@ -269,16 +269,16 @@ impl Enjoy303s {
         let [_, radio_id, code, shown, t0, t1, t2, ..] = *payload else { return None };
         let buzzer = BuzzerId::from(radio_id) + 1;
         slot(buzzer)?;
-        // Unverified: which code the big button sends. The guide gives 5
-        // and 6 for keys E and F of the vendor's keypads, which a buzzer
-        // does not have; any other code is no press, so nothing unknown
-        // ever buzzes.
+        // The big button sends 5 (hardware test, 2026-10-25), which the
+        // guide gives for key E of the vendor's keypads; a buzzer has no
+        // other key. Any other code is no press, so nothing unknown ever
+        // buzzes.
         let button = match code >> 4 {
             1 => Button::A,
             2 => Button::B,
             3 => Button::C,
             4 => Button::D,
-            5 | 6 => Button::Big,
+            5 => Button::Big,
             _ => return None,
         };
         let press = Press::timed(buzzer, button, u32::from_le_bytes([t0, t1, t2, 0]));
@@ -330,6 +330,23 @@ impl Enjoy303s {
             }
         }
         orders.into_iter().flat_map(Order::reports).collect()
+    }
+
+    /// Every buzzer dark, then each the colour it should show: what the
+    /// buzzers show whatever they showed before, such as the colours
+    /// another program left. A buzzer the app does not light stays dark.
+    fn repaint(&mut self) -> Vec<Report> {
+        self.shown = [Some(OFF); BUZZERS];
+        [Order::PaintAll(OFF).reports(), self.paint()].concat()
+    }
+
+    /// Notes the colours these buzzers should show.
+    fn want(&mut self, lights: &[(BuzzerId, Light)]) {
+        for &(buzzer, light) in lights {
+            if let Some(i) = slot(buzzer) {
+                self.wanted[i] = Some(colour_of(light));
+            }
+        }
     }
 }
 
@@ -397,12 +414,16 @@ impl Protocol for Enjoy303s {
 
     /// Kept until the receiver is open, then written.
     fn encode_lights(&mut self, lights: &[(BuzzerId, Light)]) -> Vec<Report> {
-        for &(buzzer, light) in lights {
-            if let Some(i) = slot(buzzer) {
-                self.wanted[i] = Some(colour_of(light));
-            }
-        }
+        self.want(lights);
         if self.stage == Stage::Open { self.paint() } else { Vec::new() }
+    }
+
+    /// Kept until the receiver is open, then written, all buzzers dark
+    /// first (`repaint`).
+    fn reset_lights(&mut self, lights: &[(BuzzerId, Light)]) -> Vec<Report> {
+        self.wanted = [None; BUZZERS];
+        self.want(lights);
+        if self.stage == Stage::Open { self.repaint() } else { Vec::new() }
     }
 
     /// Kept for telling presses that count from those that cannot: the
@@ -495,8 +516,8 @@ mod tests {
         assert_eq!(p.kind(), ProtocolKind::Enjoy303s { answered: false }, "not opened");
         p.decode(&input(&message(&[OPENED, 0x01])));
         assert_eq!(p.kind(), ProtocolKind::Enjoy303s { answered: true });
-        // No lights were set: it takes presses.
-        assert_eq!(serial(&p.follow_up(0)), [START]);
+        // No lights were set: it takes presses, every buzzer dark.
+        assert_eq!(serial(&p.follow_up(0)), [START.to_vec(), all(OFF)]);
         p.decode(&input(&message(&[CONNECTED, 0x00])));
         assert_eq!(serial(&p.follow_up(0)), [TAKE_64.to_vec(), OPEN.to_vec()], "connect answered once open: started again");
         p.decode(&input(&message(&[CONNECTED, 0x00])));
@@ -513,8 +534,9 @@ mod tests {
         assert_eq!(serial(&p.follow_up(0)), [TAKE_64.to_vec(), OPEN.to_vec()]);
         assert!(p.encode_lights(&[(4, Light::Ready)]).is_empty(), "kept until open again");
         p.decode(&input(&message(&[OPENED, 0x01])));
-        // Every light again, as the receiver forgot them.
-        assert_eq!(serial(&p.follow_up(0)), [START.to_vec(), all(READY), paint(2, WRONG)]);
+        // Every light again, as the receiver forgot them, from dark: every
+        // ready buzzer's timer starts again then.
+        assert_eq!(serial(&p.follow_up(0)), [START.to_vec(), all(OFF), all(READY), paint(2, WRONG)]);
         // A late answer to an open asked again says nothing new: the ready
         // buzzers' timers keep counting from when they lit.
         p.decode(&input(&message(&[OPENED, 0x01])));
@@ -549,7 +571,7 @@ mod tests {
             p.encode_lights(&[(1, Light::Ready), (2, Light::Ready), (3, Light::Wrong)]);
             assert_eq!(p.decode(&input(&press_message(4, 0x10, OFF, 300))), [Press::timed(5, Button::A, 300)], "{opening}");
             assert_eq!(p.kind(), ProtocolKind::Enjoy303s { answered: true });
-            assert_eq!(serial(&p.follow_up(0)), [START.to_vec(), all(READY), paint(2, WRONG)], "{opening}");
+            assert_eq!(serial(&p.follow_up(0)), [START.to_vec(), all(OFF), all(READY), paint(2, WRONG)], "{opening}");
             assert!(p.follow_up(60_000).is_empty(), "nothing more to ask once open");
         }
     }
@@ -566,7 +588,7 @@ mod tests {
         assert!(p.follow_up(2_199).is_empty());
         assert_eq!(serial(&p.follow_up(2_200)), [TAKE_64.to_vec(), OPEN.to_vec()]);
         p.decode(&input(&message(&[OPENED, 0x01])));
-        assert_eq!(serial(&p.follow_up(2_300)), [START]);
+        assert_eq!(serial(&p.follow_up(2_300)), [START.to_vec(), all(OFF)]);
         assert!(p.follow_up(60_000).is_empty(), "nothing more to ask once open");
     }
 
@@ -579,7 +601,28 @@ mod tests {
         p.follow_up(0);
         p.decode(&input(&message(&[OPENED, 0x01])));
         // The receiver takes presses before the buzzers light ready.
-        assert_eq!(serial(&p.follow_up(0)), [START.to_vec(), all(READY), paint(2, WRONG)]);
+        assert_eq!(serial(&p.follow_up(0)), [START.to_vec(), all(OFF), all(READY), paint(2, WRONG)]);
+    }
+
+    #[test]
+    fn a_reset_darkens_every_buzzer_but_those_it_lights() {
+        let (mut p, _) = opened();
+        p.encode_lights(&[(1, Light::Ready), (2, Light::Ready), (3, Light::Locked)]);
+        // Another show begins: buzzer 5 is a team in it, every other buzzer
+        // goes dark, whatever it showed.
+        assert_eq!(serial(&p.reset_lights(&[(5, Light::Ready)])), [all(OFF), paint(4, READY)]);
+        assert!(p.encode_lights(&[(5, Light::Ready)]).is_empty(), "shown already");
+        assert_eq!(serial(&p.reset_lights(&[])), [all(OFF)], "no show");
+
+        // Before the receiver opened: kept, and the buzzers it no longer
+        // lights are dark once it does.
+        let mut p = Enjoy303s::default();
+        p.encode_lights(&[(1, Light::Ready), (2, Light::Ready)]);
+        assert!(p.reset_lights(&[(5, Light::Ready)]).is_empty());
+        p.decode(&input(&message(&[CONNECTED, 0x00])));
+        p.follow_up(0);
+        p.decode(&input(&message(&[OPENED, 0x01])));
+        assert_eq!(serial(&p.follow_up(0)), [START.to_vec(), all(OFF), paint(4, READY)]);
     }
 
     #[test]
@@ -638,7 +681,7 @@ mod tests {
     #[test]
     fn the_receiver_takes_presses_from_its_opening_on_whatever_the_mode() {
         let (mut p, written) = opened();
-        assert_eq!(written, [TAKE_64.to_vec(), OPEN.to_vec(), START.to_vec()]);
+        assert_eq!(written, [TAKE_64.to_vec(), OPEN.to_vec(), START.to_vec(), all(OFF)]);
         let modes = [BuzzerMode::Register, BuzzerMode::Answers, BuzzerMode::Off, BuzzerMode::FastestFinger, BuzzerMode::Buzzed, BuzzerMode::Results];
         for mode in modes {
             assert!(p.encode_mode(mode).is_empty(), "{mode:?}");
@@ -664,11 +707,12 @@ mod tests {
         let frame = [0x27, 0xa5, 0x0a, 0x32, 0x02, 0x10, 0x43, 0xf4, 0x01, 0x00, 0x00, 0x00, 0x00, 0x96];
         assert_eq!(press_message(2, 0x10, READY, 500), frame);
         assert_eq!(p.decode(&input(&frame)), [Press::timed(3, Button::A, 500)]);
-        let codes = [(0x20, Button::B), (0x30, Button::C), (0x4f, Button::D), (0x50, Button::Big), (0x60, Button::Big)];
+        // The low four bits read `c` on every press in the hardware test.
+        let codes = [(0x2c, Button::B), (0x3c, Button::C), (0x4f, Button::D), (0x50, Button::Big), (0x5c, Button::Big)];
         for (code, button) in codes {
             assert_eq!(p.decode(&input(&press_message(63, code, READY, 0x01_02_03))), [Press::timed(64, button, 0x01_02_03)]);
         }
-        for code in [0x00, 0x70, 0xf0] {
+        for code in [0x00, 0x60, 0x70, 0xf0] {
             assert!(p.decode(&input(&press_message(0, code, READY, 1))).is_empty(), "no button {code:#04x}");
         }
         assert!(p.decode(&input(&press_message(64, 0x10, READY, 1))).is_empty(), "no buzzer 65");

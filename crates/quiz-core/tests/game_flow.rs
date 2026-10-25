@@ -478,6 +478,21 @@ fn the_lights_of_a_show_are_every_players_with_switched_off_ones_locked() {
 }
 
 #[test]
+fn every_buzzer_is_dark_before_a_question_runs() {
+    let mut show = Show::new(vec![question("q1", AnswerMode::FastestFinger)]);
+    for b in 1..=2 {
+        show.press(0, b, Button::Big);
+    }
+    assert_eq!(show.game.lights(), [(1, Light::Ready), (2, Light::Ready)], "registered in the lobby");
+    show.run(0, Command::Next).unwrap();
+    assert_eq!(show.game.lights(), [(1, Light::Off), (2, Light::Off)], "the question on screen");
+    show.run(1_000, Command::Next).unwrap();
+    assert_eq!(show.game.lights(), [(1, Light::Ready), (2, Light::Ready)]);
+    show.run(2_000, Command::RestartQuestion).unwrap();
+    assert_eq!(show.game.lights(), [(1, Light::Off), (2, Light::Off)], "restarted");
+}
+
+#[test]
 fn judging_needs_a_buzz_and_next_waits_for_the_verdict() {
     let mut show = Show::new(vec![question("q1", AnswerMode::FastestFinger)]);
     show.press(0, 1, Button::Big);

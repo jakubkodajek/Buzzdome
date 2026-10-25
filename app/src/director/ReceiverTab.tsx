@@ -5,7 +5,7 @@ import { useApp, useRun } from "../app-context";
 import { useBackendEvent, useLearnProgress } from "../hooks";
 import type { Translate } from "../i18n";
 import { awaitsAnswer, errorText, protocolText, receiverProblemText, settingsLostText } from "../messages";
-import type { Button, DeviceInfo, Press, PressEvent, RawReport, ReceiverInfo, ReceiverStatus } from "../types";
+import type { Button, BuzzerSeen, DeviceInfo, Press, PressEvent, RawReport, ReceiverInfo, ReceiverStatus } from "../types";
 import { confirmAction } from "../confirm";
 
 const LOG_LEN = 40;
@@ -18,7 +18,13 @@ const pressLabel = (t: Translate, p: Press) =>
   `${p.buzzer} ${buttonLabel(p.button)}${p.timer === null ? "" : ` · ${t("pressTimer", { timer: p.timer })}`}`;
 const isKeyboardOrMouse = (d: DeviceInfo) => d.usagePage === 1 && (d.usage === 2 || d.usage === 6);
 
-/** Receiver setup and diagnostics: pick the USB receiver, watch its raw data, teach buttons. */
+/** The status line's look: blue while the receiver is waited for. */
+const stateClass = (status: ReceiverStatus | null) => {
+  if (status?.kind === "connected") return awaitsAnswer(status.protocol) ? "searching" : "connected";
+  return status?.kind === "looking" ? "searching" : (status?.kind ?? "off");
+};
+
+/** Receiver setup and diagnostics: pick the USB receiver, see which buzzers it hears, watch its raw data, teach buttons. */
 export function ReceiverTab() {
   const { t } = useApp();
   const run = useRun();
@@ -27,6 +33,8 @@ export function ReceiverTab() {
   const [devices, setDevices] = useState<DeviceInfo[]>([]);
   const [raw, setRaw] = useState<RawReport[]>([]);
   const [presses, setPresses] = useState<(PressEvent & { at: number })[]>([]);
+  const [buzzers, setBuzzers] = useState<BuzzerSeen[]>([]);
+  const [latest, setLatest] = useState<number | null>(null);
   const [buzzer, setBuzzer] = useState(1);
   const [button, setButton] = useState<Button>("a");
   const [message, setMessage] = useState<string | null>(null);
@@ -38,6 +46,7 @@ export function ReceiverTab() {
         setInfo(i);
         setStatus(i.status);
         setRaw([...i.recent].reverse().slice(0, LOG_LEN));
+        setBuzzers(i.buzzers);
       }),
     );
   }, [run]);
@@ -52,6 +61,12 @@ export function ReceiverTab() {
   useBackendEvent("receiver-status", (next) => {
     setStatus(next);
     reload();
+    // A receiver found by itself shows in the list.
+    refreshDevices();
+  });
+  useBackendEvent("receiver-buzzer", (seen) => {
+    setBuzzers((list) => [...list.filter((b) => b.buzzer !== seen.buzzer), seen].sort((a, b) => a.buzzer - b.buzzer));
+    setLatest(seen.buzzer);
   });
   useBackendEvent("receiver-raw", (report) => setRaw((list) => [report, ...list].slice(0, LOG_LEN)));
   // eslint-disable-next-line no-restricted-properties -- the time of day a press came, as the log shows it, not the show clock
@@ -96,26 +111,30 @@ export function ReceiverTab() {
             {t("receiverUnavailable")} {info.initError}
           </p>
         ) : (
-          <p className={`receiver-state ${status?.kind === "connected" && awaitsAnswer(status.protocol) ? "searching" : (status?.kind ?? "off")}`}>
+          <p className={`receiver-state ${stateClass(status)}`}>
             {status?.kind === "connected" &&
               t(awaitsAnswer(status.protocol) ? "receiverNotReady" : "receiverConnected", {
                 name: status.device.product ?? "HID",
                 id: vidPid(status.device),
                 protocol: protocolText(t, status.protocol),
               })}
+            {status?.kind === "looking" && t("receiverLooking")}
             {status?.kind === "searching" && t("receiverSearching", { id: vidPid(status.selector) })}
             {status?.kind === "error" && receiverProblemText(t, status.problem, status.detail, info?.platform ?? "")}
             {(!status || status.kind === "off") && t("receiverOff")}
           </p>
         )}
+        {status?.kind === "connected" && info && !info.chosen && <p className="muted">{t("receiverFoundAutomatically")}</p>}
         {status?.kind === "connected" && !status.hasLights && <p className="muted">{t("receiverNoLights")}</p>}
         {info?.settingsError && (
           <p className="receiver-state error">
             {t("receiverSettingsLost")} {settingsLostText(t, info.settingsError)}
           </p>
         )}
-        {status && status.kind !== "off" && (
-          <button onClick={() => run(api.receiverSelect(null))}>{t("forgetReceiver")}</button>
+        {info?.chosen && (
+          <button title={t("findReceiverAutomaticallyHint")} onClick={() => run(api.receiverSelect(null).then(reload))}>
+            {t("findReceiverAutomatically")}
+          </button>
         )}
         {info?.platform === "linux" && udev && (
           <details>
@@ -123,6 +142,24 @@ export function ReceiverTab() {
             <pre className="code">{udev}</pre>
             <button onClick={() => navigator.clipboard.writeText(udev)}>{t("copy")}</button>
           </details>
+        )}
+      </fieldset>
+
+      <fieldset>
+        <legend>{t("buzzersSeen")}</legend>
+        <p className="muted">{t("buzzersSeenHint")}</p>
+        {buzzers.length > 0 ? (
+          <ul className="buzzers-seen">
+            {buzzers.map((b) => (
+              <li key={b.buzzer} className={b.buzzer === latest ? "latest" : ""}>
+                <strong>{b.buzzer}</strong>
+                <span>{buttonLabel(b.button)}</span>
+                <span className="muted">{new Date(b.atMs).toLocaleTimeString()}</span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="muted">{t("noBuzzersSeen")}</p>
         )}
       </fieldset>
 
@@ -157,12 +194,12 @@ export function ReceiverTab() {
                   {connected?.path === d.path ? (
                     <>
                       {t("inUse")}{" "}
-                      <button title={t("reconnectReceiverHint")} onClick={() => run(api.receiverSelect(d))}>
+                      <button title={t("reconnectReceiverHint")} onClick={() => run(api.receiverSelect(info?.chosen ? d : null))}>
                         {t("reconnectReceiver")}
                       </button>
                     </>
                   ) : (
-                    <button onClick={() => run(api.receiverSelect(d))}>{t("useReceiver")}</button>
+                    <button onClick={() => run(api.receiverSelect(d).then(reload))}>{t("useReceiver")}</button>
                   )}
                 </td>
               </tr>

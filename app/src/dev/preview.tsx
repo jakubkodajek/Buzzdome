@@ -639,9 +639,14 @@ mockIPC(
           status: { kind: "error", problem: "cannotOpen", detail: "access denied" },
           initError: null,
           settingsError: null,
+          chosen: null,
           learnedButtons: 0,
           learn: { active: false, buzzer: null, button: null, samples: 0, canSave: false },
           recent: [],
+          buzzers: [
+            { buzzer: 1, button: "big", atMs: 1_792_921_670_000 },
+            { buzzer: 2, button: "a", atMs: 1_792_921_675_500 },
+          ],
           platform: "linux",
         };
       case "receiver_devices":

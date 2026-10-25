@@ -37,12 +37,23 @@ Takes about two hours with four buzzers, most of it on section 6.
 
 ## 2. Find the receiver
 
-1. Open the app, Director > **Receiver** tab, click **Refresh**.
-2. Unplug the cable, Refresh, plug it back, Refresh. The row that comes and
-   goes is the receiver. Note its VID:PID, usage and interface.
-3. If several rows share that VID:PID, start with the one whose usage page is
-   not `0001` (keyboard or mouse).
-4. Click **Use**. Expected: status "Connected ..." (green), with the
+1. Open the app, Director > **Receiver** tab. With no receiver chosen
+   before, the app takes the Enjoy 303S's cable (`10c4:1819`) by itself,
+   with no click: "the receiver was found by itself" under the status.
+   Unplug the cable: "looking for a receiver" within two seconds; plug it
+   back: connected again, also with a show running. Note it if any of
+   that needs a click.
+2. Press the big button on each buzzer. Expected: each shows under
+   "Buzzers" with its number, the button and the time, as soon as the
+   receiver hears it.
+3. With another receiver, or the 303S not found by itself, click
+   **Refresh**. Unplug the cable, Refresh, plug it back, Refresh. The row
+   that comes and goes is the receiver. Note its VID:PID, usage and
+   interface. If several rows share that VID:PID, start with the one whose
+   usage page is not `0001` (keyboard or mouse), and click **Use**. The
+   app then keeps to that receiver, also after a restart, until **Find
+   the receiver by itself** is clicked.
+4. Expected, either way: status "Connected ..." (green), with the
    protocol:
    - **Enjoy 303S** for VID:PID `10c4:1819` once the receiver answered its
      set-up: go on with section 3 (learn mode is not offered, section 5
@@ -70,7 +81,10 @@ Takes about two hours with four buzzers, most of it on section 6.
 
 Only when the status names the Enjoy 303S. The app sets the receiver up by
 itself, as described in `docs/design.md` (2.4); these steps check what
-could not be checked without the hardware. Keep the Receiver tab open:
+could not be checked without the hardware. The first test, on Windows 11
+with buzzers 1 and 2 on 2026-10-25, answered most of them: each step says
+what it found, so a later test (on the Mac, or with more buzzers) checks
+that it still holds. Keep the Receiver tab open:
 "Presses" shows what the app read, with each buzzer's timer ("timer 1234"),
 "Raw data" the bytes behind it. Each step says what to note when it does
 not go as expected; whatever happens, go on and export the log at the end
@@ -79,10 +93,12 @@ not go as expected; whatever happens, go on and export the log at the end
 1. **Connect on both computers.** The status above, on the Windows laptop
    and on the Mac. The cable runs at 750000 baud, which nobody has tried
    through macOS yet: note it if the Mac does not connect when Windows does.
-   Note how long "Enjoy 303S" takes to show after **Use**, and in the
-   exported log how long the answer to open (`12 01`, after `27 A5 02`)
-   came after the open order: over half a second, the app asks again, so
-   note any blink of the buzzers or flicker of the status just after.
+   On Windows the whole set-up was answered in about 50 ms and "Enjoy
+   303S" showed at once. On the Mac, note how long it takes to show, and
+   in the exported log how long the answer to open (`12 01`, after
+   `27 A5 02`) came after the open order: over half a second, the app asks
+   again, so note any blink of the buzzers or flicker of the status just
+   after.
 2. **Plug order.** Unplug the receiver's power adapter, leave the USB cable
    in, and click **Use** (or start the app). Expected: "the receiver is
    not ready yet", in blue. Plug the adapter in. Expected: "Enjoy 303S"
@@ -90,28 +106,33 @@ not go as expected; whatever happens, go on and export the log at the end
    moment the receiver powers up.
 3. **Buttons.** With no show running, the buzzers take presses. Press A, B,
    C and D on buzzer 1, then on buzzers 2 to 4. Expected: "buzzer N, button
-   X" under "Presses" for each, with the buzzer's own number. Note wrong
-   buttons or numbers, and the "Raw data" line of one of them.
+   X" under "Presses" for each, with the buzzer's own number (right for
+   buzzers 1 and 2 on 2026-10-25). Note wrong buttons or numbers, and the
+   "Raw data" line of one of them.
 4. **The big button.** Press the big button on buzzer 1. Expected: "button
-   Big". The vendor's guide does not say which code it sends; the app takes
-   5 and 6 for it, the guide's codes for keys a buzzer does not have, and
-   no other code, so nothing unknown ever buzzes. If no press shows, copy
-   its "Raw data" line: the byte after `32` and the buzzer's number is the
-   code (its first hex digit). A code of 0 or 7 to F shows as raw data
-   only, with no "not counted" mark. Fastest finger with no answers needs
+   Big". It sends code 5 (2026-10-25; the guide gives 5 for key E of the
+   vendor's keypads), and the app takes no other code for it, so nothing
+   unknown ever buzzes. If no press shows, copy its "Raw data" line: the
+   byte after `32` and the buzzer's number is the code (its first hex
+   digit). A code of 0 or 6 to F shows as raw data only, with no "not
+   counted" mark. Fastest finger with no answers needs
    this fixed before a show, as only the big button buzzes there.
-5. **Other buttons.** Switch a buzzer off and on with its power button, if
-   it has one, and press any other key it has. Expected: no press under
-   "Presses". Note any that shows, with its "Raw data" line: it would buzz
-   in a show whenever someone switches a buzzer on. Then hold A down for
-   three seconds and let go. Expected: one press, none while held and none
-   at the release; note how many "Raw data" lines came.
+5. **Held buttons.** The 303S buzzer has A to D and the big button, and
+   no power switch or other key (2026-10-25). Hold A down for three
+   seconds and let go, then the big button. Expected: one press each, none
+   while held and none at the release, as on 2026-10-25; note how many
+   "Raw data" lines came. A buzzer of another set with more keys: press
+   each and note any that shows under "Presses", with its "Raw data" line.
 6. **High numbers.** Press A on the highest-numbered buzzer of the set.
-   Expected: its own number (up to 64).
+   Expected: its own number (up to 64). Not tried yet: the first test had
+   buzzers 1 and 2 only.
 7. **Colours.** Section 6 checks each light in a show; there, check also
    that dim white (locked out) is easy to tell from white (first) and from
    red (wrong) next to it, on the stage and in its light, and that it is
-   bright enough to see (steps 6 and 12 show them together). Before that,
+   bright enough to see (steps 6 and 12 show them together). On the 303S's
+   lights both whites come out purple, dim white the lighter one; at
+   arm's length they were told apart (2026-10-25), from the back of a room
+   nobody has judged yet. Before that,
    or if a light does not change, run
    `hid-monitor` with `lights` (end of this file): every buzzer takes each
    colour in turn, and a second into each, buzzers 2 and 6 alone take the
@@ -119,31 +140,29 @@ not go as expected; whatever happens, go on and export the log at the end
    one buzzer right after lighting all of them.
 8. **What the receiver says besides presses.** In the exported log, look
    at every line from the receiver (`27 A5 ...`) that is not a press
-   (`32` after the length byte): the replies, if any, to start `85`, to
-   colours `74` and `2D`, and to `14 3F`. Note each. None may start with
-   `10`, or with `12 01` while the receiver is open: the app would take
-   the first for a receiver that started again and set it up anew.
+   (`32` after the length byte). Expected, as on 2026-10-25: the set-up
+   answers `10 82`, `14 01`, `12 01` and `85` once, `74` after every
+   colour order to all, nothing after a colour order to one buzzer (`2D`),
+   `34` and a key when the quizmaster's remote is pressed, and nothing
+   else, not even in minutes with nobody pressing. Note any other line.
+   None may start with `10`, or with `12 01` while the receiver is open:
+   the app would take the first for a receiver that started again and set
+   it up anew.
 9. **Start alone.** Run `hid-monitor` with `start` (end of this file): it
-   sets the receiver up and starts it, but tells no buzzer a colour. Note
-   what the buzzers show, and the timer of a press a few seconds after:
-   in the app a show's first colours always follow start, which hides
-   what start does by itself. (Ping `86`, which a heartbeat would use, is
-   not sent by this build.)
-10. **Battery.** The 303S's SDK has no battery level (specification
-    BZ-14), but a buzzer may still send one unasked. Take one buzzer
-    charged full and one nearly flat (or the least charged one). Run
-    `cargo run -p buzzers --example hid-monitor -- 10c4:1819`, with no
-    option after the VID:PID (end of this file), and press A five times
-    on each. A press line is `27 A5 0A 32`, the buzzer, the button in
-    the first hex digit of the next byte, its colour, two 3-byte timers,
-    then the checksum. Compare the two buzzers' lines and note any byte
-    that stays the same on one buzzer and differs between them: the
-    second hex digit of the button byte, or bytes after the timers (a
-    length other than `0A`). A byte that grows from press to press is a
-    timer, not a battery. Then leave it running for five minutes with
-    nobody pressing, switch the flat buzzer off and on, and note every
-    line that is not a press. A battery level gets shown in the app only
-    if one of these carries it.
+   sets the receiver up and starts it, but tells no buzzer a colour. On
+   2026-10-25 every buzzer blinked once and kept its colour, and its timer
+   kept counting from its last colour change. Note it if a later test
+   differs. (Ping `86`, which a heartbeat would use, is not sent by this
+   build.)
+10. **Battery.** No message carried a battery level on 2026-10-25
+    (specification BZ-14): no byte of a press differed between the two
+    buzzers but the buzzer and the two timers, and the receiver sent
+    nothing unasked in 7.5 idle minutes. Nobody knew which buzzer was the
+    more charged, though, and the second hex digit of the button byte read
+    `C` on every press. With a buzzer nearly flat, run
+    `cargo run -p buzzers --example hid-monitor -- 10c4:1819` (end of this
+    file), press A a few times on it and on a full one, and note it if
+    that digit, or any byte but the buzzer and the timers, differs.
 
 ## 4. Record raw reports
 
@@ -174,7 +193,8 @@ passes nothing until the app has set the receiver up.
 ## 6. Play
 
 1. Start the demo quiz. In the lobby, press the big button on each buzzer:
-   each registers as a team.
+   each registers as a team. With the Enjoy 303S, every buzzer goes dark
+   when the show starts, whatever an earlier program left lit.
 2. Everyone-answers question: each buzzer answers with A-D; the counts match.
 3. Fastest-finger question: two players press together several times. The
    team shown first must match who the players think was first; note any
@@ -191,7 +211,9 @@ switched on light with the others and join by pressing, as a late team
 (in a fastest-finger question, from the next question): keep them
 switched off. Times below are read from the exported
 log (section 4, step 5; its first column is in milliseconds) or from
-`hid-monitor`, as the Receiver tab shows none.
+`hid-monitor`, as the Receiver tab shows none. On 2026-10-25 two presses
+seemed lost, and once ten pairs in a row with `hid-monitor`: note any
+press that leaves no line under "Raw data", and what came before it.
 
 6. **Fastest finger.** When a fastest-finger question starts, every buzzer
    turns blue at the same moment. When one presses, it turns white and the
@@ -202,33 +224,42 @@ log (section 4, step 5; its first column is in milliseconds) or from
    white; note it if that is long enough to see. Let buzzers 2, 3 and 4,
    and one numbered 5 or higher, each win once: exactly the winner turns
    white each time, none of the others. On the stage, in its light, check
-   that the winner's white and everyone else's dim white are easy to tell
-   apart from the back of the room (if not, dim amber is the fallback),
-   and that the letter on the projector's buzz bar can be read.
+   that the winner's white and everyone else's dim white (purple and
+   light purple on the 303S) are easy to tell apart from the back of the
+   room, and that the letter on the projector's buzz bar can be read.
 7. **The colour a press shows.** For one buzz of step 6, find its "Raw
    data" line: after `27 A5`, the length and `32`, come the buzzer's radio
    ID, the button code, then the colour the buzzer showed. Expected: `43`
    (blue). Brightness aside, a buzz showing any of the app's other colours
    is not counted, and shows as "not counted, the buzzer was not ready":
    if every buzz does that, note the byte, as no buzzer could win.
-8. **The buzzer's timer.** In a fastest-finger question, count about five
-   seconds after the buzzers turn blue, then press. Note the timer the
-   Receiver tab shows for that press: about 5000 means it counts
-   milliseconds, which the app assumes. Do it twice, once after about two
-   seconds. Then buzz, judge it wrong, and press again a second after the
-   others turn blue: about 1000 means the timer starts again when the
-   colour changes.
+8. **The buzzer's timer.** It counts milliseconds from the buzzer's last
+   colour change, and a colour order that repeats the colour it shows
+   leaves it counting (2026-10-25). In the app: buzz, judge it wrong, and
+   press again a second after the others turn blue. Expected: a timer near
+   1000 under "Presses"; note it if far higher, as the presses after a
+   Wrong would then be ordered by the wrong origin.
 9. **Long questions.** In a fastest-finger question with no time limit,
-   press 20 seconds after the buzzers turn blue, and in another 3 minutes
-   after. Expected: timers near 20000 and 180000. A far lower one means the
-   timer wrapped round, so the unit is not milliseconds: note both.
+   press 3 minutes after the buzzers turn blue. Expected: a timer near
+   180000 (on 2026-10-25, 25 minutes came through whole: the timer has
+   24 bits, so it wraps after 4.6 hours).
 10. **Two at once.** Two players press together, ten times. The team shown
     first must have the lower timer under "Presses", and match who the
     players think was first; note any case where it does not, with both
     timers. Also note how far apart the two presses arrive, from the
     exported log: the app waits 100 ms for presses made at the same moment,
-    so a gap near or above 0.1 s means it must wait longer, and a gap well
-    under it that it can wait less.
+    so a gap near or above 0.1 s means it must wait longer. The receiver
+    reports every 36 ms, lower numbers first, so pairs of buzzers 1 and 2
+    arrived 0 to 36 ms apart on 2026-10-25; buzzers far apart in number
+    may arrive further apart. Then the same with buzzer 1 and the
+    highest-numbered buzzer of the set, two players, one at each. Last,
+    press both big buttons at the same instant with a book laid across
+    them, ten times, then swap the two buzzers' places under it and do ten
+    more. On 2026-10-25 the timers put buzzer 2 first in all 22 pairs, by
+    5 to 45 ms, with one tester's two hands: if the higher number is ahead
+    under the book in both places too, its timer starts later after a
+    colour change, which favours high numbers in fastest finger. Note both
+    timers of every pair.
 11. **Too early.** Press before the clock starts or before the buzzers turn
     blue, and hold the big button down while they turn. Expected: neither
     buzzes (the press shows under "Presses" or as not counted, but the
