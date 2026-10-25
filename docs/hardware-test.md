@@ -203,9 +203,9 @@ press that leaves no line under "Raw data", and what came before it.
    white; note it if that is long enough to see. Let buzzers 2, 3 and 4,
    and one numbered 5 or higher, each win once: exactly the winner turns
    white each time, none of the others. On the stage, in its light, check
-   that the winner's white and everyone else's dim white are easy to tell
-   apart from the back of the room (if not, dim amber is the fallback),
-   and that the letter on the projector's buzz bar can be read.
+   that the winner's white and everyone else's dim white (purple and
+   light purple on the 303S) are easy to tell apart from the back of the
+   room, and that the letter on the projector's buzz bar can be read.
 7. **The colour a press shows.** For one buzz of step 6, find its "Raw
    data" line: after `27 A5`, the length and `32`, come the buzzer's radio
    ID, the button code, then the colour the buzzer showed. Expected: `43`

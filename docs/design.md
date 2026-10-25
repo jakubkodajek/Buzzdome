@@ -1274,9 +1274,8 @@ choice, told apart from the red of a wrong answer next to it), first
 white, right green, wrong red, off dark (`enjoy303s.rs`); no two share a
 colour byte. Locked and first are both white, told apart by brightness
 alone; on the 303S's lights both come out purple, dim white the lighter
-one, told apart at arm's length in the 2026-10-25 test. From the back of
-a room is still to check on stage (`hardware-test.md` 6.6), with dim
-amber as the fallback. A light that goes to all buzzers at once reaches spare
+one, told apart at arm's length in the 2026-10-25 test, and Jakub kept
+dim white for locked after it. A light that goes to all buzzers at once reaches spare
 buzzers too, which the app never lit and so show whatever went to all
 last: in a fastest-finger round they light ready, so a spare's press
 registers a late team, which plays from the next question as any player
