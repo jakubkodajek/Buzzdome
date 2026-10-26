@@ -20,6 +20,8 @@ pub enum AppError {
     NoShow,
     #[error("a show is running; end it first")]
     ShowRunning,
+    #[error("a show is starting")]
+    ShowStarting,
     #[error("there is no show to resume")]
     NoShowToResume,
     #[error("this command does not apply in the current step")]

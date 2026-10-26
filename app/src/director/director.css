@@ -132,6 +132,10 @@
   border: none;
 }
 
+.director .command:disabled {
+  opacity: 0.5;
+}
+
 .command-icon {
   flex: none;
   width: 38px;

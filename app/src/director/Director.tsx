@@ -7,7 +7,7 @@ import { useSlideSound, type SlideSound } from "../audio/slide-sound";
 import { clockSeconds } from "../format";
 import { EditorScreen } from "../editor/EditorScreen";
 import { ErrorBoundary, RenderFailed } from "../error-boundary";
-import { errorText } from "../messages";
+import { errorText, isAppError } from "../messages";
 import {
   useBackendEvent,
   useClock,
@@ -141,6 +141,7 @@ function DirectorLayout({ testRun, onEditor }: { testRun: boolean; onEditor: () 
   const sound = useSlideSound(view);
   // Here too, so what plays goes on and ends whichever tab is open.
   const player = useMediaPlayer();
+  const showStart = useShowStart();
 
   const tabs: [Tab, string][] = [
     ["questions", t("tabQuestions")],
@@ -154,7 +155,7 @@ function DirectorLayout({ testRun, onEditor }: { testRun: boolean; onEditor: () 
 
   return (
     <div className="director">
-      <CommandPanel view={view} projector={projector} sound={sound} testRun={testRun} onEditor={onEditor} />
+      <CommandPanel view={view} projector={projector} sound={sound} showStart={showStart} testRun={testRun} onEditor={onEditor} />
       <div className="workspace">
         <nav className="tabs" role="tablist">
           {tabs.map(([id, label]) => (
@@ -169,7 +170,7 @@ function DirectorLayout({ testRun, onEditor }: { testRun: boolean; onEditor: () 
           <ThemeContext value={theme}>
             {/* A tab that fails to render keeps the rest of the window, and its keys, working. */}
             <ErrorBoundary key={tab} fallback={(message, retry) => <RenderFailed t={t} text={t("partFailed", { message })} retry={retry} />}>
-              <TabBody tab={tab} view={view} quiz={quiz} projector={projector} player={player} sound={sound} />
+              <TabBody tab={tab} view={view} quiz={quiz} projector={projector} player={player} sound={sound} showStart={showStart} />
             </ErrorBoundary>
           </ThemeContext>
         </div>
@@ -213,16 +214,17 @@ interface TabBodyProps {
   projector: ProjectorSettings;
   player: MediaPlayer;
   sound: SlideSound;
+  showStart: ShowStart;
 }
 
-function TabBody({ tab, view, quiz, projector, player, sound }: TabBodyProps) {
+function TabBody({ tab, view, quiz, projector, player, sound, showStart }: TabBodyProps) {
   // Setup tabs work without a show; the others need one.
   if (tab === "settings") return <SettingsTab projector={projector} />;
   if (tab === "receiver") return <ReceiverTab />;
   // Team names can be prepared before a show, and the media player plays without one.
   if (tab === "teams") return <TeamsTab view={view} />;
   if (tab === "media") return <MediaPlayerTab player={player} sound={sound} view={view} />;
-  if (!view) return <StartPane />;
+  if (!view) return <StartPane showStart={showStart} />;
   switch (tab) {
     case "questions":
       return <QuestionsTab view={view} quiz={quiz} />;
@@ -234,28 +236,72 @@ function TabBody({ tab, view, quiz, projector, player, sound }: TabBodyProps) {
 }
 
 /** The show's tabs before a show: the recent quiz files, each starting a show in a click (spec SF-1). */
-function StartPane() {
+function StartPane({ showStart }: { showStart: ShowStart }) {
   const { t } = useApp();
-  const run = useRun();
   const recent = useRecentFiles();
   // Read again either way: a file that is gone leaves the list.
-  const start = (path: string) => run(api.startShowFromRecent(path).finally(recent.reload));
+  const open = (path: string) => showStart.start(() => api.startShowFromRecent(path).finally(recent.reload));
   return (
     <div className="start-pane">
-      <p className="muted">{t("welcome")}</p>
+      {showStart.starting ? (
+        <p className="muted" role="status">
+          {t("quizOpening")}
+        </p>
+      ) : (
+        <p className="muted">{t("welcome")}</p>
+      )}
       {recent.files.length > 0 && (
         <>
           <h2>{t("recentFiles")}</h2>
-          <RecentFileList files={recent.files} onOpen={start} />
+          <RecentFileList files={recent.files} disabled={showStart.starting} onOpen={open} />
         </>
       )}
     </div>
   );
 }
 
-function CommandButton(props: { icon: ReactNode; label: string; hint?: string; tone?: "good" | "bad"; onClick: () => void }) {
+/** Starting a show from the Director. */
+interface ShowStart {
+  /** A start is under way: every way to start one waits for it. */
+  starting: boolean;
+  /** Runs the start `call` unless one is under way; a failure is reported as `useRun` does. */
+  start: (call: () => Promise<unknown>) => void;
+}
+
+/**
+ * One show start at a time, so a double click opens a quiz once. The
+ * backend also refuses a second quiz file start meanwhile (`showStarting`),
+ * which needs no word here.
+ */
+function useShowStart(): ShowStart {
+  const run = useRun();
+  const [starting, setStarting] = useState(false);
+  // Also a ref: two clicks before the next render would both see `starting` false.
+  const busy = useRef(false);
+  const start = useCallback(
+    (call: () => Promise<unknown>) => {
+      if (busy.current) return;
+      busy.current = true;
+      setStarting(true);
+      const settled = () => {
+        busy.current = false;
+        setStarting(false);
+      };
+      run(call().catch(quietWhileStarting).finally(settled));
+    },
+    [run],
+  );
+  return { starting, start };
+}
+
+/** Throws `error` on, unless the backend refused a start because another is under way. */
+function quietWhileStarting(error: unknown) {
+  if (!isAppError(error) || error.code !== "showStarting") throw error;
+}
+
+function CommandButton(props: { icon: ReactNode; label: string; hint?: string; tone?: "good" | "bad"; disabled?: boolean; onClick: () => void }) {
   return (
-    <button className={`command ${props.tone ?? ""}`} onClick={props.onClick}>
+    <button className={`command ${props.tone ?? ""}`} disabled={props.disabled} onClick={props.onClick}>
       <span className="command-icon">{props.icon}</span>
       <span className="command-label">
         {props.label}
@@ -281,8 +327,15 @@ function AutoStepNote({ step }: { step: AutoStepView }) {
 }
 
 /** Left command area: only the commands that make sense right now. */
-function CommandPanel(props: { view: GameView | null; projector: ProjectorSettings; sound: SlideSound; testRun: boolean; onEditor: () => void }) {
-  const { view, projector, sound, testRun, onEditor } = props;
+function CommandPanel(props: {
+  view: GameView | null;
+  projector: ProjectorSettings;
+  sound: SlideSound;
+  showStart: ShowStart;
+  testRun: boolean;
+  onEditor: () => void;
+}) {
+  const { view, projector, sound, showStart, testRun, onEditor } = props;
   const { t, notify } = useApp();
   const dispatch = useDispatch();
   const run = useRun();
@@ -291,13 +344,14 @@ function CommandPanel(props: { view: GameView | null; projector: ProjectorSettin
   // waits on it.
   const [resumeProblem, setResumeProblem] = useState<unknown>(null);
   useBackendEvent("show-changed", () => setResumeProblem(null));
-  const resume = () => {
-    setResumeProblem(null);
-    api.resumeLastSession().then((warnings) => warnings.length > 0 && notify(warnings.map((w) => errorText(t, w)).join(" ")), setResumeProblem);
-  };
+  const resume = () =>
+    showStart.start(() => {
+      setResumeProblem(null);
+      return api.resumeLastSession().then((warnings) => warnings.length > 0 && notify(warnings.map((w) => errorText(t, w)).join(" ")), setResumeProblem);
+    });
   const problem = resumeProblem ?? last.problem;
 
-  const openQuiz = () => run(api.startShowFromFile(quizPicker(t)));
+  const openQuiz = () => showStart.start(() => api.startShowFromFile(quizPicker(t)));
 
   const controls = view?.controls;
   const latestView = useLatest(view);
@@ -321,14 +375,15 @@ function CommandPanel(props: { view: GameView | null; projector: ProjectorSettin
     <aside className="command-panel">
       {!view ? (
         <>
-          <CommandButton icon={<FolderIcon />} label={t("openQuiz")} onClick={openQuiz} />
-          <CommandButton icon={<PlayIcon />} label={t("demoQuiz")} onClick={() => run(api.startDemoShow())} />
+          <CommandButton icon={<FolderIcon />} label={t("openQuiz")} disabled={showStart.starting} onClick={openQuiz} />
+          <CommandButton icon={<PlayIcon />} label={t("demoQuiz")} disabled={showStart.starting} onClick={() => showStart.start(api.startDemoShow)} />
           <CommandButton icon={<EditIcon />} label={t("quizEditor")} onClick={onEditor} />
           {last.session && (
             <CommandButton
               icon={<NextIcon />}
               label={t("resume")}
               hint={t("resumeInfo", { title: last.session.meta.quizTitle, count: last.session.commandCount })}
+              disabled={showStart.starting}
               onClick={resume}
             />
           )}
