@@ -1,0 +1,275 @@
+name: Release
+
+# Publishes a version of Buzzdome when its tag is pushed (v0.2.0, say): the
+# signed Windows installer and macOS app go into a GitHub release of this
+# repository, with the latest.json the installed apps read to learn of it.
+# How to release, and the secrets this needs: docs/releasing.md.
+#
+# No action from another repository runs here. The build jobs hold the key
+# whose signature every installed app trusts, so they run only the runner's
+# own tools (git, rustup, node, gh) and the app's locked dependencies.
+on:
+  push:
+    tags: ["v*"]
+
+# Each job asks for what it needs.
+permissions: {}
+
+# Named, bash runs with pipefail, so a failing command in a pipe fails the step.
+defaults:
+  run:
+    shell: bash
+
+# One release at a time.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+env:
+  GH_REPO: ${{ github.repository }}
+  TAG: ${{ github.ref_name }}
+  # The release's files. Without the version in their names, the latest
+  # installers keep one address: releases/latest/download/<name>.
+  WINDOWS_INSTALLER: Buzzdome_x64-setup.exe
+  MACOS_UPDATE: Buzzdome_universal.app.tar.gz
+  MACOS_INSTALLER: Buzzdome_universal.dmg
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # creates the draft release
+      checks: read # reads the tagged commit's checks
+    outputs:
+      version: ${{ steps.source.outputs.version }}
+    steps:
+      - name: Fetch the tagged commit
+        run: |
+          git init -q source
+          git -C source fetch -q --depth 1 "https://github.com/$GH_REPO.git" "+refs/tags/$TAG:refs/tags/$TAG"
+          git -C source checkout -q --detach "refs/tags/$TAG"
+
+      # The apps compare the version their build declares; the tag must name it.
+      - id: source
+        name: Read the version the commit declares
+        working-directory: source
+        run: |
+          version=$(jq -r .version app/src-tauri/tauri.conf.json)
+          if ! [[ $version =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::The version in app/src-tauri/tauri.conf.json, $version, is not of the form 1.2.3."
+            exit 1
+          fi
+          if [ "$TAG" != "v$version" ]; then
+            echo "::error::The tag $TAG does not name the version in app/src-tauri/tauri.conf.json, $version. Tag the commit v$version."
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      # Only what main's checks passed on goes out (build.yml runs them on every push).
+      - name: Refuse a commit main's checks did not pass
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # "behind" or "identical": main holds the commit.
+          status=$(gh api "repos/$GH_REPO/compare/main...$GITHUB_SHA" --jq .status)
+          if [ "$status" != behind ] && [ "$status" != identical ]; then
+            echo "::error::$TAG is not on main. Tag a commit of main."
+            exit 1
+          fi
+          for check in check windows-tests; do
+            passed=$(gh api "repos/$GH_REPO/commits/$GITHUB_SHA/check-runs" -f check_name="$check" -X GET \
+              --jq '[.check_runs[] | select(.conclusion == "success")] | length')
+            if [ "$passed" = 0 ]; then
+              echo "::error::The check \"$check\" has not passed on $GITHUB_SHA. Once it has, re-run this workflow."
+              exit 1
+            fi
+          done
+
+      # The apps install only a version higher than their own.
+      - name: Refuse a version no higher than every release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.source.outputs.version }}
+        run: |
+          released=$(gh release list --exclude-drafts --limit 1000 --json tagName --jq '.[].tagName | ltrimstr("v")')
+          highest=$(printf '%s\n%s\n' "$released" "$VERSION" | sort -V | tail -n 1)
+          if grep -qxF "$VERSION" <<< "$released" || [ "$highest" != "$VERSION" ]; then
+            echo "::error::Version $VERSION is not higher than every release (the highest is $highest). Raise version in app/src-tauri/tauri.conf.json."
+            exit 1
+          fi
+
+      # A draft until every file is in and checked: the apps never see half a
+      # release. Its notes are the tag's message (git tag -a), which the
+      # quizmaster reads before installing.
+      - name: Start the release as a draft
+        working-directory: source
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.source.outputs.version }}
+        run: |
+          if [ "$(git cat-file -t "refs/tags/$TAG")" = tag ]; then
+            git for-each-ref --format='%(contents:subject)%0a%0a%(contents:body)' "refs/tags/$TAG" > ../notes.md
+          else
+            echo "::warning::$TAG is not an annotated tag, so the release has no notes."
+            : > ../notes.md
+          fi
+          # A draft left by an earlier, failed run of this version.
+          while [ "$(gh release view "$TAG" --json isDraft --jq .isDraft 2>/dev/null)" = true ]; do
+            gh release delete "$TAG" --yes
+          done
+          gh release create "$TAG" --draft --verify-tag --title "Buzzdome $VERSION" --notes-file ../notes.md
+
+  build:
+    needs: prepare
+    # The release key's secrets can be kept in this environment, limited to v* tags.
+    environment: release
+    permissions:
+      contents: write # adds the files to the draft
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - os: windows-latest
+            bundles: nsis
+          - os: macos-latest
+            # One build for Apple silicon and Intel Macs; the updater replaces the .app.
+            target: universal-apple-darwin
+            rust-targets: aarch64-apple-darwin x86_64-apple-darwin
+            bundles: app,dmg
+    runs-on: ${{ matrix.os }}
+    env:
+      VERSION: ${{ needs.prepare.outputs.version }}
+    steps:
+      # The tagged commit, even if the tag moves meanwhile.
+      - name: Fetch the code
+        run: |
+          git init -q source
+          git -C source fetch -q --depth 1 "https://github.com/$GH_REPO.git" "$GITHUB_SHA"
+          git -C source checkout -q --detach FETCH_HEAD
+
+      # The Rust release named in rust-toolchain.toml.
+      - name: Install Rust
+        working-directory: source
+        env:
+          RUST_TARGETS: ${{ matrix.rust-targets }}
+        run: |
+          rustup toolchain install --profile minimal
+          read -ra targets <<< "$RUST_TARGETS"
+          if [ ${#targets[@]} != 0 ]; then rustup target add "${targets[@]}"; fi
+          cargo --version
+
+      # No install scripts, so nothing but the build itself runs next to the key;
+      # a Node.js older than the build tools need fails here.
+      - name: Install UI dependencies
+        working-directory: source/app
+        run: |
+          node --version
+          npm ci --ignore-scripts --engine-strict
+
+      - name: Build and sign
+        working-directory: source/app
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          TARGET: ${{ matrix.target }}
+          BUNDLES: ${{ matrix.bundles }}
+        # The app's own CLI (package.json), and cargo held to Cargo.lock.
+        run: |
+          if [ -z "$TAURI_SIGNING_PRIVATE_KEY" ]; then
+            echo "::error::The secret TAURI_SIGNING_PRIVATE_KEY is not set (docs/releasing.md, one-time setup)."
+            exit 1
+          fi
+          npm run tauri -- build ${TARGET:+--target "$TARGET"} --bundles "$BUNDLES" --config src-tauri/tauri.release.conf.json -- --locked
+
+      - name: Add the files to the draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET: ${{ matrix.target }}
+        run: |
+          bundle="source/target/${TARGET:+$TARGET/}release/bundle"
+          # Sets `found` to the one file a pattern matches.
+          only() {
+            if [ $# != 1 ] || [ ! -f "$1" ]; then
+              echo "::error::Expected one file, found: $*"
+              exit 1
+            fi
+            found=$1
+          }
+          mkdir upload
+          if [ "$RUNNER_OS" = Windows ]; then
+            only "$bundle"/nsis/*-setup.exe
+            cp "$found" "upload/$WINDOWS_INSTALLER"
+            cp "$found.sig" "upload/$WINDOWS_INSTALLER.sig"
+          else
+            only "$bundle"/macos/*.app.tar.gz
+            cp "$found" "upload/$MACOS_UPDATE"
+            cp "$found.sig" "upload/$MACOS_UPDATE.sig"
+            only "$bundle"/dmg/*.dmg
+            cp "$found" "upload/$MACOS_INSTALLER"
+          fi
+          gh release upload "$TAG" upload/* --clobber
+
+  publish:
+    needs: [prepare, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # adds latest.json and publishes the release
+    env:
+      VERSION: ${{ needs.prepare.outputs.version }}
+    steps:
+      - name: Install minisign
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq minisign
+
+      - name: Read the public key the built app trusts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh api "repos/$GH_REPO/contents/app/src-tauri/tauri.conf.json?ref=$GITHUB_SHA" --jq .content | base64 -d | jq -er .plugins.updater.pubkey | base64 -d > app.pub
+
+      # What each installed app checks before installing, checked here first,
+      # so a release the apps would refuse never goes out.
+      - name: Check each update's signature and version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download "$TAG" --pattern "$WINDOWS_INSTALLER*" --pattern "$MACOS_UPDATE*"
+          tab=$'\t'
+          for update in "$WINDOWS_INSTALLER" "$MACOS_UPDATE"; do
+            base64 -d "$update.sig" > "$update.minisig"
+            comment=$(minisign -V -p app.pub -x "$update.minisig" -m "$update" | sed -n 's/^Trusted comment: //p')
+            # requireSignedVersion: the signature must name the version latest.json announces.
+            case "$tab$comment$tab" in
+              *"${tab}version:$VERSION$tab"*) echo "$update: signed for $VERSION." ;;
+              *) echo "::error::$update is not signed for version $VERSION: $comment"; exit 1 ;;
+            esac
+          done
+
+      - name: Write latest.json
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          notes=$(gh release view "$TAG" --json body --jq .body)
+          url="https://github.com/$GH_REPO/releases/download/$TAG"
+          jq -n \
+            --arg version "$VERSION" --arg notes "$notes" --arg date "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --arg windows "$url/$WINDOWS_INSTALLER" --arg windowsSignature "$(cat "$WINDOWS_INSTALLER.sig")" \
+            --arg macos "$url/$MACOS_UPDATE" --arg macosSignature "$(cat "$MACOS_UPDATE.sig")" '
+            {
+              version: $version,
+              notes: $notes,
+              pub_date: $date,
+              platforms: {
+                "windows-x86_64": {url: $windows, signature: $windowsSignature},
+                "darwin-aarch64": {url: $macos, signature: $macosSignature},
+                "darwin-x86_64": {url: $macos, signature: $macosSignature}
+              }
+            }' > latest.json
+          cat latest.json
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload "$TAG" latest.json --clobber
+          gh release edit "$TAG" --draft=false --latest

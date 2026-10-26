@@ -45,7 +45,7 @@
   "plugins": {
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDU1RDQ1OTZCQjY3MTVGNzcKUldSM1gzRzJhMW5VVmZjOXFYY0gzUHRtQ3FtcitGN2tHM0V5SVJJSWFaSXRhNDl5WVcydzhKdnMK",
-      "endpoints": ["https://github.com/jakubkodajek/buzzdome-updates/releases/latest/download/latest.json"],
+      "endpoints": ["https://github.com/jakubkodajek/Buzzdome/releases/latest/download/latest.json"],
       "requireSignedVersion": true,
       "windows": {
         "installMode": "passive"

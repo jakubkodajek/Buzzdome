@@ -1720,13 +1720,13 @@ A failing random show prints `SOAK_SEED=<n>`; that variable replays it alone.
 Signing and notarization need a Windows code-signing certificate and an Apple
 Developer ID; until then builds are unsigned (macOS ad-hoc), see PL-5.
 
-Releases the installed apps update to are built and published by the
-Release workflow of the public repository `jakubkodajek/buzzdome-updates`
-(free Actions minutes; it holds no source code), merging
+Releases the installed apps update to are built from a `v*` tag of main
+and published as GitHub releases of this repository by
+`.github/workflows/release.yml`, merging
 `tauri.release.conf.json` so the bundler signs the updater files with the
 release key. It runs no action from another repository, and publishes only
 updates that verify against the public key in the built commit for the
-version that commit declares. The app's updater (`tauri-plugin-updater`, `updates.rs`) is
+version that commit declares, which the tag must name. The app's updater (`tauri-plugin-updater`, `updates.rs`) is
 asked from the Director, which offers a newer version only while no show
 runs, since installing ends the app; `update_install` keeps the show state
 locked while the new version goes in, so no show begins meanwhile, and a

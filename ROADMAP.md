@@ -97,7 +97,7 @@ Status keys: `[x]` done, `[~]` in progress, `[ ]` not started.
 ## Phase 5: Run
 
 - [~] Installers for Windows, macOS and Linux from CI (unsigned); code signing and a portable build to do
-- [~] Automatic updates (Windows and macOS): the app offers and installs signed releases of `buzzdome-updates` (`docs/releasing.md`); the release key, that repository and its secrets to set up
+- [~] Automatic updates (Windows and macOS): the app offers and installs signed GitHub releases of this repository, built from `v*` tags (`docs/releasing.md`); the release key and its secrets to set up
 - [ ] Event checklist: laptop power, display settings, receiver, spare batteries, backup quiz file
 - [ ] First live event
 - [ ] Retrospective: what to fix and what to build next

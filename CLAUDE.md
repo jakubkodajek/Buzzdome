@@ -58,7 +58,8 @@ on `PATH` first (macOS dev machine).
 | random shows / crash drills (more, or replay one) | `SOAK_SHOWS=5000 cargo test --release -p show-sim`; `SOAK_SEED=<n> cargo test -p buzzdome crash_drill` |
 | UI preview in a browser (mocked backend) | `cd app && npm run dev`, then `/preview.html?window=host&scene=running` (scenes in `app/src/dev/preview.tsx`) |
 | nightly soak and E2E | CI: `.github/workflows/nightly.yml` every night main changed, and on "Run workflow" |
-| installers | CI: `.github/workflows/build.yml` on tags `v*` and "Run workflow"; artifacts `buzzdome-windows`, `buzzdome-macos`, `buzzdome-linux` |
+| test installers (unsigned) | CI: `.github/workflows/build.yml` on "Run workflow"; artifacts `buzzdome-windows`, `buzzdome-macos`, `buzzdome-linux` |
+| release (signed, offered to installed apps) | push an annotated tag `v<version>` of main: `.github/workflows/release.yml` (`docs/releasing.md`) |
 | quiz files for scripts and AI assistants (check, pack, unpack, schema, skill, MCP) | `cargo run -p quiz-ai -- <command>` (`docs/ai-assistants.md`) |
 | receiver probe (no app) | `cargo run -p buzzers --example hid-monitor [-- VID:PID]` |
 | build installer | `cd app && npm run tauri build` (each OS builds its own installer) |
