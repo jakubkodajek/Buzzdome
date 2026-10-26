@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { Fixture, LightsSetup } from "../types";
 import {
   addFixture,
+  channelOf,
   addLook,
   changeFixture,
   fixtureColor,
@@ -28,7 +29,7 @@ const empty: LightsSetup = {
   messages: { osc: null, midi: null },
 };
 
-const fixture = (id: number, address: number, channels = rgb): Fixture => ({ id, name: `F${id}`, address, channels });
+const fixture = (id: number, address: number, channels = rgb): Fixture => ({ id, name: `F${id}`, address, channels, labels: [] });
 
 describe("lights setup", () => {
   it("puts a new fixture after the others, with an id of its own", () => {
@@ -38,6 +39,9 @@ describe("lights setup", () => {
       [1, 1],
       [2, 4],
     ]);
+    expect(two.fixtures[0].labels).toEqual([]);
+    const named = addFixture(empty, "Par", rgb, ["Red", "Green", "Blue"]);
+    expect(named.fixtures[0].labels).toEqual(["Red", "Green", "Blue"]);
   });
 
   it("starts a fixture that no longer fits after the others at channel 1", () => {
@@ -89,5 +93,13 @@ describe("lights setup", () => {
     expect(parseChannelValues("  ")).toEqual([]);
     for (const wrong of ["100", "0=1", "513=1", "1=256", "a=1"]) expect(parseChannelValues(wrong)).toBeNull();
     expect(formatChannelValues([{ address: 3, value: 9 }, { address: 4, value: 0 }])).toBe("3=9, 4=0");
+  });
+});
+
+describe("channels", () => {
+  it("starts a shutter open at 255 and closed at 0, and a fixed one at 0", () => {
+    expect(channelOf("shutter")).toEqual({ kind: "shutter", open: 255, closed: 0 });
+    expect(channelOf("fixed")).toEqual({ kind: "fixed", value: 0 });
+    expect(channelOf("red")).toEqual({ kind: "red" });
   });
 });

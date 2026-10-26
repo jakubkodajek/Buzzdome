@@ -705,6 +705,7 @@ pub fn run() {
             stage_lights::lights_info,
             stage_lights::lights_store,
             stage_lights::lights_devices,
+            stage_lights::lights_library,
             stage_lights::lights_hold,
             stage_lights::lights_blackout,
             stage_lights::lights_universe,

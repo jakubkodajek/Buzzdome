@@ -70,6 +70,7 @@
     "allow-lights-info",
     "allow-lights-store",
     "allow-lights-devices",
+    "allow-lights-library",
     "allow-lights-hold",
     "allow-lights-blackout",
     "allow-lights-universe"

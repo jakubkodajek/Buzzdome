@@ -4,4 +4,4 @@
  * One DMX channel of a fixture, in the order the fixture takes them from
  * its start address. A look fills them from its colour and intensity.
  */
-export type Channel = { "kind": "dimmer" } | { "kind": "red" } | { "kind": "green" } | { "kind": "blue" } | { "kind": "white" } | { "kind": "strobe" } | { "kind": "fixed", value: number, } | { "kind": "unused" };
+export type Channel = { "kind": "dimmer" } | { "kind": "red" } | { "kind": "green" } | { "kind": "blue" } | { "kind": "white" } | { "kind": "strobe" } | { "kind": "shutter", open: number, closed: number, } | { "kind": "fixed", value: number, } | { "kind": "unused" };

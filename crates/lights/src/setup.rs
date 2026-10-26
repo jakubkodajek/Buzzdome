@@ -15,8 +15,9 @@ pub type LookId = u32;
 
 /// Most fixtures a setup has.
 pub const MAX_FIXTURES: usize = 128;
-/// Most channels one fixture takes.
-pub const MAX_FIXTURE_CHANNELS: usize = 64;
+/// Most channels one fixture takes: a whole universe, as a pixel bar's
+/// widest mode may.
+pub const MAX_FIXTURE_CHANNELS: usize = crate::dmx::UNIVERSE_SIZE;
 /// Most looks a setup has.
 pub const MAX_LOOKS: usize = 64;
 /// Most colours a look runs through.
@@ -66,6 +67,9 @@ pub enum Channel {
     White,
     /// The look's strobe value, as the fixture reads it; 0 when it has none.
     Strobe,
+    /// A shutter: `open` while the look lights the fixture, `closed` while
+    /// it is dark (blackout, a look without it, a strobe's dark half).
+    Shutter { open: u8, closed: u8 },
     /// Always this value, also in a blackout: a fixture's mode or a moving
     /// head's position.
     Fixed { value: u8 },
@@ -83,6 +87,10 @@ pub struct Fixture {
     /// Its first channel, from 1.
     pub address: u16,
     pub channels: Vec<Channel>,
+    /// What the manual calls each channel, from the fixture library; may be
+    /// shorter than `channels`, or empty for a fixture typed in by hand.
+    #[serde(default)]
+    pub labels: Vec<String>,
 }
 
 impl Fixture {
@@ -373,6 +381,8 @@ impl LightsSetup {
             ensure(name_fits(&fixture.name), out_of_range(Part::Fixture))?;
             ensure(!fixture.channels.is_empty(), out_of_range(Part::Channel))?;
             ensure(fixture.channels.len() <= MAX_FIXTURE_CHANNELS, SetupError::TooMany { what: Part::Channel })?;
+            ensure(fixture.labels.len() <= fixture.channels.len(), SetupError::TooMany { what: Part::Channel })?;
+            ensure(fixture.labels.iter().all(|label| label.chars().count() <= MAX_LIGHTS_NAME_CHARS), out_of_range(Part::Channel))?;
             ensure(in_universe(usize::from(fixture.address)), out_of_range(Part::Fixture))?;
             ensure(fixture.last_address() <= UNIVERSE_SIZE, SetupError::PastUniverse { name: fixture.name.clone() })?;
         }
@@ -433,7 +443,7 @@ mod tests {
     use super::*;
 
     fn par(id: FixtureId, address: u16) -> Fixture {
-        Fixture { id, name: format!("Par {id}"), address, channels: vec![Channel::Dimmer, Channel::Red, Channel::Green, Channel::Blue] }
+        Fixture { id, name: format!("Par {id}"), address, channels: vec![Channel::Dimmer, Channel::Red, Channel::Green, Channel::Blue], labels: Vec::new() }
     }
 
     #[test]

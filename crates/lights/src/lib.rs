@@ -13,6 +13,7 @@
 //! - [`dmx`]: the outputs a universe goes through: USB-DMX interfaces
 //!   (Enttec DMX USB Pro, Enttec Open DMX USB, SoundSwitch Micro DMX) and
 //!   the network (Art-Net, sACN).
+//! - [`library`]: the channel layouts of known fixture models.
 //! - [`signals`]: show events as OSC messages over UDP and as MIDI notes.
 //! - [`engine`]: the lights thread, which sends a frame at a steady rate,
 //!   reopens an output that failed and sends the messages, so the show
@@ -25,6 +26,7 @@
 pub mod desk;
 pub mod dmx;
 pub mod engine;
+pub mod library;
 pub mod look;
 pub mod setup;
 pub mod signals;

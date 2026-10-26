@@ -1549,7 +1549,28 @@ would stop meanwhile.
 Effects step at least every 500 ms (`MIN_EFFECT_MS`), at most 2 flashes a
 second; sources in spec LT-3.
 
-### 7.3 Outputs
+### 7.3 Fixture library
+
+`crates/lights/data/fixture-library.json` is our own format (`library::Library`),
+generated from a checkout of the Open Fixture Library
+(<https://github.com/OpenLightingProject/open-fixture-library>, MIT, licence
+in `data/OPEN-FIXTURE-LIBRARY-LICENSE`) by
+`cargo run -p lights --example ofl-import -- <checkout>`. The OFL documents
+its JSON format as one that "may introduce breaking, not-backwards-compatible
+changes at any time" and asks programs to transform it into a stable format
+(`docs/fixture-format.md` there), so the app only reads ours; refreshing
+the library is rerunning the import. `library::ofl` maps each channel
+(rules in its module docs, unit-tested): `Intensity` over the whole range is
+a dimmer, `ColorIntensity` red, green, blue or white (warm and cold too)
+that colour, a `ShutterStrobe` channel with an `Open` range a `Shutter`
+(open while the fixture is lit, closed otherwise), a dimmer that strobes at
+its top is held at its brightest value below the strobe, fine channels and
+anything else rest at their default value. Matrix channels are expanded
+per pixel or group. A test builds a fixture from every mode and runs the
+setup's checks on it. The library is read on first use (`OnceLock`) and
+searched off the windows' thread (`lights_library`).
+
+### 7.4 Outputs
 
 | Output | Transport | Frame |
 | --- | --- | --- |
@@ -1557,9 +1578,9 @@ second; sources in spec LT-3.
 | Enttec Open DMX USB | FTDI serial at 250 kbit/s, 8N2 | break (about 150 µs), mark after break, start code 0, 512 channels; the computer times it, so jitter on a busy computer is possible |
 | Art-Net | UDP 6454 | ArtDmx, protocol 14, 15-bit port address, sequence 1 to 255 (Art-Net 4) |
 | sACN | UDP 5568, multicast 239.255.hi.lo or one host | E1.31 data packet, 638 bytes, priority 100, a CID from the computer's name |
-| SoundSwitch Micro | USB bulk endpoint 0x01 (VID 0x15E4, PID 0x0053) | see 7.4 |
+| SoundSwitch Micro | USB bulk endpoint 0x01 (VID 0x15E4, PID 0x0053) | see 7.5 |
 
-### 7.4 SoundSwitch Micro DMX Interface
+### 7.5 SoundSwitch Micro DMX Interface
 
 SoundSwitch publishes no protocol. Ours is written, in our own words and
 code, from the description in the independent Apache-2.0 QLC+ plug-in
@@ -1580,7 +1601,7 @@ whether SoundSwitch's own driver allows that, or WinUSB has to be bound
 (for example with Zadig), is to check with the hardware. Only one program
 can hold the interface, so the SoundSwitch program must be closed.
 
-### 7.5 Show messages
+### 7.6 Show messages
 
 OSC 1.0 over UDP. Every event has an address of its own, so a program can
 map each to a button; triggers carry the float 1.0.

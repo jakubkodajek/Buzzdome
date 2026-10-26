@@ -2,7 +2,7 @@
 //! program or a sound desk. Each goes out as an OSC message over UDP
 //! (OSC 1.0, <https://opensoundcontrol.stanford.edu/spec-1_0.html>) and as
 //! a MIDI message, wherever the setup says. The addresses and notes are
-//! listed in `docs/design.md` section 7.5.
+//! listed in `docs/design.md` section 7.6.
 
 use crate::dmx::OutputError;
 use crate::setup::{MessageSetup, MidiTarget, OscTarget};

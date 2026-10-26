@@ -28,7 +28,7 @@ import { NumberBox, Select, Switch } from "../editor/controls";
 import { useLightsStatus } from "../hooks";
 import type { StringKey, Translate } from "../i18n";
 import { errorText, outputErrorText, settingsLostText, setupErrorText } from "../messages";
-import type { Channel, Cue, Fixture, LightsDevices, LightsInfo, LightsSetup, Look, LookEffect, OutputChoice, Stage } from "../types";
+import type { Channel, Cue, Fixture, LibraryFixture, LibraryMatches, LibraryMode, LightsDevices, LightsInfo, LightsSetup, Look, LookEffect, OutputChoice, Stage } from "../types";
 import {
   addFixture,
   addLook,
@@ -68,6 +68,7 @@ const CHANNEL_KEYS: Record<Channel["kind"], StringKey> = {
   blue: "lightsChannelBlue",
   white: "lightsChannelWhite",
   strobe: "lightsChannelStrobe",
+  shutter: "lightsChannelShutter",
   fixed: "lightsChannelFixed",
   unused: "lightsChannelUnused",
 };
@@ -350,6 +351,10 @@ function FixturesSection({ setup, change }: { setup: LightsSetup; change: Change
           {t("lightsAddFixture")}
         </button>
       </div>
+      <LibraryPicker
+        disabled={setup.fixtures.length >= MAX_FIXTURES}
+        onAdd={(name, mode) => change((s) => addFixture(s, name.slice(0, MAX_LIGHTS_NAME_CHARS), mode.channels, mode.labels))}
+      />
       {setup.fixtures.map((fixture) => (
         <FixtureRow
           key={fixture.id}
@@ -392,6 +397,7 @@ function FixtureRow(props: { fixture: Fixture; clash: boolean; onChange: (edit: 
         {fixture.channels.map((channel, i) => (
           <span key={i} className="inline lights-channel">
             <span className="muted">{fixture.address + i}</span>
+            {fixture.labels[i] && <span className="lights-label">{fixture.labels[i]}</span>}
             <Select
               label={`${t("lightsChannels")} ${fixture.address + i}`}
               value={channel.kind}
@@ -400,6 +406,14 @@ function FixtureRow(props: { fixture: Fixture; clash: boolean; onChange: (edit: 
             />
             {channel.kind === "fixed" && (
               <NumberBox label={t("lightsFixedValue")} value={channel.value} min={0} max={255} onChange={(value) => setChannel(i, { kind: "fixed", value })} />
+            )}
+            {channel.kind === "shutter" && (
+              <>
+                <span className="lights-label">{t("lightsShutterOpen")}</span>
+                <NumberBox label={t("lightsShutterOpen")} value={channel.open} min={0} max={255} onChange={(open) => setChannel(i, { ...channel, open })} />
+                <span className="lights-label">{t("lightsShutterClosed")}</span>
+                <NumberBox label={t("lightsShutterClosed")} value={channel.closed} min={0} max={255} onChange={(closed) => setChannel(i, { ...channel, closed })} />
+              </>
             )}
           </span>
         ))}
@@ -415,11 +429,93 @@ function FixtureRow(props: { fixture: Fixture; clash: boolean; onChange: (edit: 
           title={t("lightsRemoveChannel")}
           aria-label={t("lightsRemoveChannel")}
           disabled={fixture.channels.length <= 1}
-          onClick={() => onChange({ channels: fixture.channels.slice(0, -1) })}
+          onClick={() => onChange({ channels: fixture.channels.slice(0, -1), labels: fixture.labels.slice(0, fixture.channels.length - 1) })}
         >
           −
         </button>
       </div>
+    </div>
+  );
+}
+
+/** How long the library search waits after the last key. */
+const SEARCH_AFTER_MS = 250;
+
+/** Adds a fixture from the built-in fixture library: find the model, pick its DMX mode. */
+function LibraryPicker({ disabled, onAdd }: { disabled: boolean; onAdd: (name: string, mode: LibraryMode) => void }) {
+  const { t } = useApp();
+  const run = useRun();
+  const [query, setQuery] = useState("");
+  const [found, setFound] = useState<LibraryMatches | null>(null);
+  const [model, setModel] = useState<LibraryFixture | null>(null);
+  const [mode, setMode] = useState(0);
+  useEffect(() => {
+    if (query.trim() === "") return;
+    const timer = window.setTimeout(() => run(api.lightsLibrary(query).then(setFound)), SEARCH_AFTER_MS);
+    return () => window.clearTimeout(timer);
+  }, [query, run]);
+  const shown = query.trim() === "" ? null : found;
+  const chosen = model?.modes[mode];
+  return (
+    <div className="lights-library">
+      <div className="row">
+        <label className="inline">
+          <span>{t("lightsLibrary")}</span>
+          <input
+            type="search"
+            aria-label={t("lightsLibrarySearch")}
+            placeholder={t("lightsLibrarySearch")}
+            value={query}
+            onChange={(e) => {
+              setQuery(e.target.value);
+              setModel(null);
+            }}
+          />
+        </label>
+        {model && chosen && (
+          <>
+            <strong>
+              {model.manufacturer} {model.name}
+            </strong>
+            <Select
+              label={t("lightsLibraryMode")}
+              value={mode}
+              options={model.modes.map((m, i): [number, string] => [i, t("lightsLibraryModeName", { name: m.name, n: m.channels.length })])}
+              onChange={setMode}
+            />
+            <button disabled={disabled} onClick={() => onAdd(model.name, chosen)}>
+              {t("lightsAddFixture")}
+            </button>
+          </>
+        )}
+      </div>
+      {shown && !model && (
+        <>
+          {shown.total === 0 ? (
+            <p className="muted">{t("lightsLibraryNone")}</p>
+          ) : (
+            <ul className="lights-found">
+              {shown.fixtures.map((fixture) => (
+                <li key={fixture.key}>
+                  <button
+                    onClick={() => {
+                      setModel(fixture);
+                      setMode(0);
+                    }}
+                  >
+                    {fixture.manufacturer} {fixture.name}
+                  </button>
+                  <span className="muted">{t("lightsLibraryModes", { n: fixture.modes.length })}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+          {shown.total > shown.fixtures.length && <p className="muted">{t("lightsLibraryMore", { shown: shown.fixtures.length, total: shown.total })}</p>}
+        </>
+      )}
+      <p className="muted">
+        {t("lightsLibraryHint")} {found && t("lightsLibraryCredit", { source: found.source.name, copyright: found.source.copyright, url: found.source.url })}
+      </p>
     </div>
   );
 }

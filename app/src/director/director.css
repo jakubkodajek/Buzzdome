@@ -1463,3 +1463,20 @@
 .lights .number-box input:not([type="range"]) {
   width: 70px;
 }
+
+.lights-label {
+  font-size: 0.85em;
+  color: var(--muted);
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lights-library {
+  margin: 6px 0 10px;
+}
+
+.lights-library input[type="search"] {
+  width: 280px;
+}

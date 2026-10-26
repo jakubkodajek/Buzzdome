@@ -9,6 +9,7 @@ use crate::app_log;
 use crate::error::{AppError, CmdResult};
 use crate::{now_ms, off_ui};
 use lights::dmx::FoundOutput;
+use lights::library::LibraryMatches;
 use lights::setup::SetupError;
 use lights::{Control, Lights, LightsSetup, LightsStatus, LookId, ShowMoment, Universe};
 use quiz_core::{Cue, Effect, Game, Phase, QuestionStep};
@@ -159,6 +160,13 @@ pub async fn lights_store(app: AppHandle, setup: LightsSetup) -> CmdResult<()> {
 #[tauri::command]
 pub async fn lights_devices() -> CmdResult<LightsDevices> {
     off_ui(|| Ok(LightsDevices { outputs: lights::dmx::find(), midi_ports: lights::signals::midi_ports() })).await
+}
+
+/// The fixture models of the built-in library that match `query`. Off the
+/// windows' thread: the library is read the first time it is asked for.
+#[tauri::command]
+pub async fn lights_library(query: String) -> CmdResult<LibraryMatches> {
+    off_ui(move || Ok(lights::library::search(lights::library::library(), &query))).await
 }
 
 /// Holds `look` whatever the show does, or lets go with none.

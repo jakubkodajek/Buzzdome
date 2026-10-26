@@ -173,7 +173,7 @@ mod tests {
     /// no fade) and 3 (flash). The lobby takes look 1, a question look 2.
     fn desk() -> Desk {
         let setup = LightsSetup {
-            fixtures: vec![Fixture { id: 1, name: "Dimmer".into(), address: 1, channels: vec![Channel::Dimmer, Channel::Red] }],
+            fixtures: vec![Fixture { id: 1, name: "Dimmer".into(), address: 1, channels: vec![Channel::Dimmer, Channel::Red], labels: Vec::new() }],
             looks: vec![look(1, "#FFFFFF", 1_000), look(2, "#800000", 0), look(3, "#00FF00", 500)],
             stages: BTreeMap::from([(Stage::Lobby, 1), (Stage::QuestionReady, 2)]),
             flashes: BTreeMap::from([(Cue::Correct, Flash { look: 3, ms: 1_000 })]),

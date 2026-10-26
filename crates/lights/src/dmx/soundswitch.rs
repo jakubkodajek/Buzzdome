@@ -3,7 +3,7 @@
 //! that drives the interface (qlcplus-soundswitch-integration,
 //! <https://github.com/jloops412/qlcplus-soundswitch-integration>), in our
 //! own words and unverified on the hardware here, so the Director calls the
-//! output experimental. Our notes: `docs/design.md` section 7.4.
+//! output experimental. Our notes: `docs/design.md` section 7.5.
 //!
 //! The interface is a USB device with one bulk OUT endpoint. It takes two
 //! 12-byte start packets, then for a while frames of zeros, then a frame

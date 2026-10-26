@@ -36,8 +36,8 @@ pub fn draw(setup: &LightsSetup, look: &Look, elapsed_ms: u64, master: u8) -> Un
 }
 
 /// How much of the look's intensity its effect lets through at `phase`,
-/// the part of a step gone (0 to 1): a pulse starts full and dims to dark half a step in; a
-/// strobe is on for the first half of each step.
+/// the part of a step gone (0 to 1): a pulse starts full and dims to dark
+/// half a step in; a strobe is on for the first half of each step.
 fn effect_level(effect: LookEffect, phase: f32) -> f32 {
     match effect {
         LookEffect::Static | LookEffect::Chase => 1.0,
@@ -66,6 +66,13 @@ fn light(universe: &mut Universe, fixture: &Fixture, [red, green, blue]: [u8; 3]
             Channel::Blue => scaled(blue),
             Channel::White => scaled(red.min(green).min(blue)),
             Channel::Strobe => strobe,
+            Channel::Shutter { open, closed } => {
+                if level > 0.0 {
+                    open
+                } else {
+                    closed
+                }
+            }
             Channel::Fixed { value } => value,
             Channel::Unused => 0,
         };
@@ -80,7 +87,7 @@ mod tests {
     use quiz_core::Color;
 
     fn fixture(id: u32, address: u16, channels: Vec<Channel>) -> Fixture {
-        Fixture { id, name: format!("F{id}"), address, channels }
+        Fixture { id, name: format!("F{id}"), address, channels, labels: Vec::new() }
     }
 
     fn color(hex: &str) -> Color {
@@ -171,5 +178,15 @@ mod tests {
         let setup = LightsSetup { fixtures: vec![fixture(1, 10, vec![Channel::Dimmer, Channel::Fixed { value: 42 }, Channel::Red])], ..LightsSetup::default() };
         let u = dark(&setup);
         assert_eq!([u.get(10), u.get(11), u.get(12)], [0, 42, 0]);
+    }
+
+    #[test]
+    fn a_shutter_opens_only_while_the_fixture_is_lit() {
+        let shutter = Channel::Shutter { open: 8, closed: 2 };
+        let setup = LightsSetup { fixtures: vec![fixture(1, 1, vec![Channel::Dimmer, shutter])], ..LightsSetup::default() };
+        assert_eq!(dark(&setup).get(2), 2);
+        let look = setup.looks[1].clone();
+        assert_eq!(draw(&setup, &look, 0, 100).get(2), 8);
+        assert_eq!(draw(&setup, &look, 0, 0).get(2), 2);
     }
 }

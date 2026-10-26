@@ -317,7 +317,7 @@ mod tests {
     fn setup() -> LightsSetup {
         LightsSetup {
             output: OutputChoice::ArtNet { host: "fake".into(), universe: 0 },
-            fixtures: vec![Fixture { id: 1, name: "Dimmer".into(), address: 1, channels: vec![Channel::Dimmer] }],
+            fixtures: vec![Fixture { id: 1, name: "Dimmer".into(), address: 1, channels: vec![Channel::Dimmer], labels: Vec::new() }],
             messages: MessageSetup { osc: Some(OscTarget { host: "127.0.0.1".into(), port: 9 }), midi: None },
             ..LightsSetup::default()
         }

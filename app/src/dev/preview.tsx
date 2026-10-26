@@ -366,12 +366,13 @@ const called: unknown[] = [];
 const LIGHTS_SETUP: LightsSetup = {
   output: { kind: "artNet", host: "255.255.255.255", universe: 0 },
   fixtures: [
-    { id: 1, name: "PAR vlevo", address: 1, channels: [{ kind: "red" }, { kind: "green" }, { kind: "blue" }, { kind: "white" }] },
+    { id: 1, name: "PAR vlevo", address: 1, channels: [{ kind: "red" }, { kind: "green" }, { kind: "blue" }, { kind: "white" }], labels: [] },
     {
       id: 2,
       name: "PAR vpravo",
       address: 9,
-      channels: [{ kind: "dimmer" }, { kind: "red" }, { kind: "green" }, { kind: "blue" }, { kind: "strobe" }, { kind: "fixed", value: 0 }, { kind: "unused" }],
+      channels: [{ kind: "dimmer" }, { kind: "red" }, { kind: "green" }, { kind: "blue" }, { kind: "shutter", open: 10, closed: 0 }, { kind: "fixed", value: 0 }, { kind: "unused" }],
+      labels: ["Dimmer", "Red", "Green", "Blue", "Shutter", "Mode", "Speed"],
     },
   ],
   looks: [
@@ -682,6 +683,22 @@ mockIPC(
         slots.splice(8, 7, 200, 255, 0, 0, 0, 0, 0);
         return slots;
       }
+      case "lights_library":
+        return {
+          fixtures: [
+            {
+              manufacturer: "Example",
+              name: "LED Par 7",
+              key: "example/led-par-7",
+              modes: [
+                { name: "3-channel", channels: [{ kind: "red" }, { kind: "green" }, { kind: "blue" }], labels: ["Red", "Green", "Blue"] },
+                { name: "7-channel", channels: [{ kind: "dimmer" }, { kind: "red" }, { kind: "green" }, { kind: "blue" }, { kind: "shutter", open: 10, closed: 0 }, { kind: "unused" }, { kind: "unused" }], labels: ["Dimmer", "Red", "Green", "Blue", "Shutter", "Program", "Speed"] },
+              ],
+            },
+          ],
+          total: 1,
+          source: { name: "Open Fixture Library (MIT)", copyright: "Copyright (c) 2017 Florian & Felix Edelmann", url: "https://open-fixture-library.org", commit: "" },
+        };
       case "lights_devices":
         return { outputs: [{ choice: { kind: "enttecPro", port: "COM4" }, label: "COM4 (FTDI)" }], midiPorts: ["loopMIDI Port"] };
       case "receiver_devices":

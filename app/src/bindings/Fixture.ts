@@ -8,4 +8,9 @@ export type Fixture = { id: number, name: string,
 /**
  * Its first channel, from 1.
  */
-address: number, channels: Array<Channel>, };
+address: number, channels: Array<Channel>, 
+/**
+ * What the manual calls each channel, from the fixture library; may be
+ * shorter than `channels`, or empty for a fixture typed in by hand.
+ */
+labels: Array<string>, };

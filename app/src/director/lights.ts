@@ -31,11 +31,13 @@ export const FIXTURE_PRESETS: { id: string; label: StringKey; channels: Channel[
 ];
 
 /** The kinds of channel, in the order the channel picker lists them. */
-export const CHANNEL_KINDS: Channel["kind"][] = ["dimmer", "red", "green", "blue", "white", "strobe", "fixed", "unused"];
+export const CHANNEL_KINDS: Channel["kind"][] = ["dimmer", "red", "green", "blue", "white", "strobe", "shutter", "fixed", "unused"];
 
-/** A channel of `kind`; a fixed one at 0. */
+/** A channel of `kind`; a fixed one at 0, a shutter open at 255 and closed at 0. */
 export function channelOf(kind: Channel["kind"]): Channel {
-  return kind === "fixed" ? { kind, value: 0 } : { kind };
+  if (kind === "fixed") return { kind, value: 0 };
+  if (kind === "shutter") return { kind, open: 255, closed: 0 };
+  return { kind };
 }
 
 /** An id none of `items` has. */
@@ -71,9 +73,9 @@ export function overlapping(fixtures: Fixture[]): Set<number> {
   return clash;
 }
 
-/** `setup` with a fixture of `channels` named `name`, after the others. */
-export function addFixture(setup: LightsSetup, name: string, channels: Channel[]): LightsSetup {
-  const fixture: Fixture = { id: freshId(setup.fixtures), name, address: freeAddress(setup.fixtures, channels.length), channels };
+/** `setup` with a fixture of `channels` named `name`, after the others; `labels` name its channels, as a model's manual does. */
+export function addFixture(setup: LightsSetup, name: string, channels: Channel[], labels: string[] = []): LightsSetup {
+  const fixture: Fixture = { id: freshId(setup.fixtures), name, address: freeAddress(setup.fixtures, channels.length), channels, labels };
   return { ...setup, fixtures: [...setup.fixtures, fixture] };
 }
 

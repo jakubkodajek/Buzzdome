@@ -2,7 +2,7 @@
 
 export const UNIVERSE_SIZE = 512;
 export const MAX_FIXTURES = 128;
-export const MAX_FIXTURE_CHANNELS = 64;
+export const MAX_FIXTURE_CHANNELS = 512;
 export const MAX_LOOKS = 64;
 export const MAX_LOOK_COLORS = 8;
 export const MAX_LOOK_CHANNELS = 64;
