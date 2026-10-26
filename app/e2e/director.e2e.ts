@@ -44,6 +44,18 @@ const player = (view: GameView, buzzer: number) => {
   return found;
 };
 
+/** Chooses `value` in the Settings tab's list that offers all of `values`. */
+async function chooseSetting(value: string, ...values: string[]): Promise<void> {
+  for (const element of await app.page.findAll(".tab-body select")) {
+    const options = await app.page.execute<string[]>("return [...arguments[0].options].map((o) => o.value);", [element]);
+    if (values.every((v) => options.includes(v))) {
+      await app.page.execute("const s = arguments[0]; s.value = arguments[1]; s.dispatchEvent(new Event('change', { bubbles: true })); return true;", [element, value]);
+      return;
+    }
+  }
+  throw new Error(`no list of ${values.join(", ")}`);
+}
+
 describe("the Director", () => {
   test("every tab and button works before a show", async () => {
     for (const tab of TABS) {
@@ -134,15 +146,7 @@ describe("the Director", () => {
 
   test("Settings: the language switches the whole Director and back", async () => {
     await app.tab("tabSettings");
-    const select = async () => {
-      for (const element of await app.page.findAll(".tab-body select")) {
-        const options = await app.page.execute<string[]>("return [...arguments[0].options].map((o) => o.value);", [element]);
-        if (options.includes("en") && options.includes("cs")) return element;
-      }
-      throw new Error("no language list");
-    };
-    const choose = async (lang: string) =>
-      app.page.execute("const s = arguments[0]; s.value = arguments[1]; s.dispatchEvent(new Event('change', { bubbles: true })); return true;", [await select(), lang]);
+    const choose = (lang: string) => chooseSetting(lang, "cs", "en");
     await choose("en");
     const en = translator("en");
     await app.seeText(en("tabSettings"));
@@ -150,6 +154,18 @@ describe("the Director", () => {
     await app.assertHealthy();
     await choose("cs");
     await app.seeText(t("tabSettings"));
+  });
+
+  test("Settings: the dark look darkens the Director and back", async () => {
+    await app.tab("tabSettings");
+    const choose = (look: string) => chooseSetting(look, "light", "dark", "system");
+    const dark = () => app.count(".director.dark");
+    expect(await dark()).toBe(0);
+    await choose("dark");
+    await waitFor("the dark look", async () => (await dark()) === 1);
+    await app.assertHealthy();
+    await choose("light");
+    await waitFor("the light look", async () => (await dark()) === 0);
   });
 
   test("nothing failed in either window", async () => {
