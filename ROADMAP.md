@@ -86,7 +86,7 @@ Status keys: `[x]` done, `[~]` in progress, `[ ]` not started.
 - [x] Unit tests for scoring and the state machine (`crates/quiz-core/tests`), and a journal contract test for every command
 - [x] Simulated show with 50 virtual buzzers (`crates/show-sim`: random quizzes and shows checked against the game rules; 30 000 more every night in `.github/workflows/nightly.yml`)
 - [~] Crash drill: kill the app mid-question, restart, continue (automated as run, crash and resume tests in `app/src-tauri/src/lib.rs`, random crash drills with torn journal lines in `crash_drill.rs`, and the real app killed and resumed in `app/e2e/resume.e2e.ts`; the drill on the event laptop to do)
-- [x] End-to-end tests of the real app (`app/e2e`): a whole show, every Director and editor button, on every push (Linux), and on Windows for `main` and releases; a fake 303S receiver feeds buzzers and the remote
+- [~] End-to-end tests of the real app (`app/e2e`): a whole show, every Director and editor button, on every push (Linux), and on Windows for `main` and releases (red on `main` for now); the tests that press buzzers through a fake 303S receiver are in #27, and none presses the remote yet
 - [ ] Rehearsal on the event laptop with the projector and real buzzers
 - [ ] Parity check against `features.csv`
 

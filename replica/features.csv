@@ -52,7 +52,7 @@ Phone shows correct or incorrect and points won,player,should,yes,skip,"§5.2.4.
 Phone shows own score and rank,player,should,yes,skip,"§5.2.4.1 intermediate and final scores; desktop scope (2026-10-05): players answer on hardware buzzers, no phones"
 Pause and resume the countdown,director,should,yes,yes,§5.5.1 key P
 Stop a paused question,director,should,yes,yes,§5.2.4.4 Stop
-Question list with current and visited state and jump to a question,director,should,yes,yes,§5.7.1
+Question list with current and visited state and jump to a question,director,should,yes,partial,"§5.7.1; clone: the current slide is highlighted, Go to jumps; no visited mark"
 Undo the score changes of the last question,director,should,yes,partial,§5.7.2; clone: Restart question takes them back while the question is in play
 Live responses view showing who has not answered,director,should,yes,yes,§5.7.4
 Disable enable and remove a player,director,should,yes,partial,§5.7.2; clone: enable and disable; no remove
