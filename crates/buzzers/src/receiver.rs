@@ -2,7 +2,7 @@
 //!
 //! The thread owns the open device (hidapi handles are not shared across
 //! threads), reads input reports with a short timeout, decodes them in arrival
-//! order and sends presses to the app; in a fastest-finger round, presses
+//! order and sends presses and the keys of the quizmaster's remote to the app; in a fastest-finger round, presses
 //! that carry the buzzer's own timer go in its order (`timer_order`). The
 //! buzzer mode and lights reach it over a channel; it keeps them, and writes
 //! what changed between reads, one report at a time with a gap, so a slow
@@ -17,7 +17,7 @@ use crate::edge::EdgeFilter;
 use crate::hid::{DeviceInfo, DeviceSelector, HidBackend, HidDevice, Report};
 use crate::protocol::{self, Protocol, ProtocolKind, ProtocolResolver};
 use crate::timer_order::TimerOrder;
-use crate::{BuzzerDriver, DriverError, Press};
+use crate::{BuzzerDriver, DriverError, Press, RemoteKey};
 use quiz_core::{BuzzerId, BuzzerMode, Light};
 use serde::Serialize;
 use ts_rs::TS;
@@ -70,6 +70,9 @@ pub struct RawReport {
     /// Presses read but dropped as ones that cannot count now, such as a
     /// buzz from a buzzer that was not ready (`Protocol::take_dropped`).
     pub dropped: Vec<Press>,
+    /// Keys of the quizmaster's remote read from it, sent again or not
+    /// (`Protocol::take_remote`).
+    pub remote: Vec<RemoteKey>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -82,6 +85,9 @@ pub enum ReceiverEvent {
     /// arrived on the show clock (`ReceiverConfig::clock`). The game scores
     /// the press by that time, however long the app takes to apply it.
     Press { press: Press, at_ms: u64 },
+    /// A key of the quizmaster's remote, once however often the receiver
+    /// sent it (`EdgeFilter::remote`), after the presses of its report.
+    Remote { key: RemoteKey, at_ms: u64 },
 }
 
 #[derive(Debug, Clone)]
@@ -448,6 +454,7 @@ impl<E: From<ReceiverEvent>> Worker<E> {
         let at_ms = self.config.clock.now_ms();
         let decoded = conn.protocol.decode(bytes);
         let dropped = conn.protocol.take_dropped();
+        let remote = conn.protocol.take_remote();
         // The report may have changed what the protocol knows of the receiver.
         let kind = conn.protocol.kind();
         let status = (kind != conn.kind).then(|| {
@@ -458,9 +465,13 @@ impl<E: From<ReceiverEvent>> Worker<E> {
         if let Some(status) = status {
             self.set_status(status);
         }
-        let _ = self.events.send(ReceiverEvent::Raw(RawReport { at_ms, bytes: bytes.to_vec(), decoded, dropped }).into());
+        let keys: Vec<RemoteKey> = remote.iter().copied().filter(|&key| self.edge.remote(key, at_ms)).collect();
+        let _ = self.events.send(ReceiverEvent::Raw(RawReport { at_ms, bytes: bytes.to_vec(), decoded, dropped, remote }).into());
         let presses = self.order.take(presses, at_ms, self.mode == BuzzerMode::FastestFinger);
         self.send_presses(presses);
+        for key in keys {
+            let _ = self.events.send(ReceiverEvent::Remote { key, at_ms }.into());
+        }
     }
 
     fn send_presses(&self, presses: Vec<(Press, u64)>) {

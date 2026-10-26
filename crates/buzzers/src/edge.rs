@@ -1,6 +1,6 @@
 //! Press edge detection.
 
-use crate::Press;
+use crate::{Press, RemoteKey};
 use std::collections::{HashMap, HashSet};
 
 /// How long after a press that carries its buzzer's timer the receiver may
@@ -8,6 +8,13 @@ use std::collections::{HashMap, HashSet};
 /// 90 presses in the hardware test of 2026-10-25; a buzzer's timer moves on
 /// every millisecond, so a press with the same timer is that press again.
 const TIMED_REPEAT_MS: u64 = 2_000;
+
+/// How soon after a key of the quizmaster's remote the same key counts as
+/// that key sent again. The receiver sent presses again up to 541 ms later
+/// (`TIMED_REPEAT_MS`), and a remote's message carries nothing that tells
+/// a key sent again from one pressed again, so a key pressed twice this
+/// quickly counts once: a second step would go by unseen.
+const REMOTE_REPEAT_MS: u64 = 700;
 
 /// Turns a stream of decoded reports into press edges.
 ///
@@ -25,11 +32,13 @@ pub struct EdgeFilter {
     repeat_gap_ms: u64,
     /// Each buzzer's last press that carried a timer, and when it came.
     last_timed: HashMap<u16, (Press, u64)>,
+    /// The remote's last key that counted, and when it came.
+    last_remote: Option<(RemoteKey, u64)>,
 }
 
 impl EdgeFilter {
     pub fn new(repeat_gap_ms: u64) -> EdgeFilter {
-        EdgeFilter { previous: HashSet::new(), previous_at_ms: None, repeat_gap_ms, last_timed: HashMap::new() }
+        EdgeFilter { previous: HashSet::new(), previous_at_ms: None, repeat_gap_ms, last_timed: HashMap::new(), last_remote: None }
     }
 
     pub fn filter(&mut self, presses: Vec<Press>, at_ms: u64) -> Vec<Press> {
@@ -63,8 +72,18 @@ impl EdgeFilter {
         again
     }
 
+    /// Whether the remote's `key`, which came at `at_ms`, counts: not when
+    /// it repeats the last key that counted within `REMOTE_REPEAT_MS`.
+    pub fn remote(&mut self, key: RemoteKey, at_ms: u64) -> bool {
+        let again = self.last_remote.is_some_and(|(last, last_ms)| last == key && at_ms.saturating_sub(last_ms) < REMOTE_REPEAT_MS);
+        if !again {
+            self.last_remote = Some((key, at_ms));
+        }
+        !again
+    }
+
     /// Forgets the report before, so the next press counts even if its
-    /// button was in it. A press sent again is still known as one.
+    /// button was in it. A press or key sent again is still known as one.
     pub fn reset(&mut self) {
         self.previous.clear();
         self.previous_at_ms = None;
@@ -111,6 +130,20 @@ mod tests {
         assert_eq!(f.filter(vec![Press::timed(1, Button::A, 1_843_900)], 1_570), vec![Press::timed(1, Button::A, 1_843_900)]);
         // Long after, the same timer counts again: the window covers only the receiver's repeats.
         assert_eq!(f.filter(vec![next], 1_560 + TIMED_REPEAT_MS + 1), vec![next]);
+    }
+
+    #[test]
+    fn a_key_of_the_remote_sent_again_counts_once() {
+        let mut f = EdgeFilter::new(150);
+        assert!(f.remote(RemoteKey::Forward, 1_000));
+        f.reset();
+        assert!(!f.remote(RemoteKey::Forward, 1_541), "sent again, also after a reset");
+        // Another key at once counts, and so does the first after it.
+        assert!(f.remote(RemoteKey::Tick, 1_560));
+        assert!(f.remote(RemoteKey::Forward, 1_600));
+        // Counted from the key that counted, not from one dropped.
+        assert!(!f.remote(RemoteKey::Forward, 1_600 + REMOTE_REPEAT_MS - 1));
+        assert!(f.remote(RemoteKey::Forward, 1_600 + REMOTE_REPEAT_MS));
     }
 
     #[test]

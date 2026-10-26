@@ -394,9 +394,11 @@ impl Show {
 
     /// Keeps `baseline` after `command` changed the show from `before`.
     fn track_baseline(&mut self, before: &Game, command: &Command) {
-        let entered = !matches!(before.phase(), Phase::Question(QuestionStep::Ready)) || before.slide_index() != self.game.slide_index();
-        let fresh = matches!(self.game.phase(), Phase::Question(QuestionStep::Ready)) && (entered || matches!(command, Command::RestartQuestion));
-        if fresh {
+        // The show entered a slide (`Game::enter_slide`), where score changes start afresh: also a
+        // question that closed before, which comes back with its answer shown.
+        let jumped = matches!(command, Command::GoTo { .. } | Command::GoToFinal | Command::RestartQuestion);
+        let entered = jumped || before.phase() == &Phase::Lobby || before.slide_index() != self.game.slide_index();
+        if entered {
             self.baseline = Some(self.game.players().map(|p| (p.buzzer, i64::from(p.score))).collect());
         } else if let (Some(baselines), Command::AdjustScore { buzzer, delta }) = (&mut self.baseline, command) {
             *baselines.entry(*buzzer).or_default() += i64::from(*delta);

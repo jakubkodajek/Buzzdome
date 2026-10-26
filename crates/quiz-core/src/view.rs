@@ -20,6 +20,9 @@ pub struct GameView {
     /// (`Game::following`), for the quizmaster: past the last slide for the
     /// final ranking, none once the show is over.
     pub next_slide: Option<usize>,
+    /// The slide the quizmaster's Back goes to (`Game::previous`), none
+    /// where it goes nowhere.
+    pub previous_slide: Option<usize>,
     pub clock: Option<ClockView>,
     pub players: Vec<PlayerView>,
     /// The team names prepared for the show, in order, with their buzzers.
@@ -28,13 +31,15 @@ pub struct GameView {
     /// Enabled players who answered the current question.
     pub answered_count: usize,
     /// Everyone-answers: how many of the players it counted gave each
-    /// answer, in order, once the question is closed.
+    /// answer, in order, once the question is closed; none when it counted
+    /// nobody, as when the show came back to it (`Game::previous`).
     pub answer_counts: Option<Vec<usize>>,
     /// The current question's answers in order, each with the share of the
     /// points it scores (`FULL_SHARE` when fully right), none for a wrong
     /// one; empty on another slide. Windows mark the right answers from it.
     pub answer_shares: Vec<Option<u8>>,
-    /// Everyone-answers: how the players it counted did, once the question is closed.
+    /// Everyone-answers: how the players it counted did, once the question
+    /// is closed; none when it counted nobody, as `answer_counts`.
     pub results: Option<AnswerResults>,
     pub buzzed: Option<BuzzerId>,
     pub leaderboard_visible: bool,
@@ -140,7 +145,7 @@ impl Game {
 
     /// How the players a closed everyone-answers question counted did.
     fn results(&self) -> Option<AnswerResults> {
-        let question = self.question().filter(|q| q.mode == AnswerMode::Everyone && self.is_closed())?;
+        let question = self.question().filter(|q| q.mode == AnswerMode::Everyone && self.has_results())?;
         let answers: Vec<&Response> = self.counted().iter().filter_map(|b| self.responses().get(b)).collect();
         let right = answers.iter().filter(|r| r.is_right(question)).count();
         Some(AnswerResults { right, wrong: answers.len() - right, none: self.counted().len() - answers.len() })
@@ -149,7 +154,7 @@ impl Game {
     /// How many of the players a closed everyone-answers question counted
     /// gave each of its answers.
     fn answer_counts(&self) -> Option<Vec<usize>> {
-        let question = self.question().filter(|q| q.mode == AnswerMode::Everyone && self.is_closed())?;
+        let question = self.question().filter(|q| q.mode == AnswerMode::Everyone && self.has_results())?;
         let mut counts = vec![0; question.answers.len()];
         for response in self.counted().iter().filter_map(|b| self.responses().get(b)) {
             if let Some(count) = response.button.answer_index().and_then(|i| counts.get_mut(i)) {
@@ -159,8 +164,10 @@ impl Game {
         Some(counts)
     }
 
-    fn is_closed(&self) -> bool {
-        matches!(self.phase(), Phase::Question(QuestionStep::Closed | QuestionStep::Revealed { .. }))
+    /// The question closed and counted somebody, so it has results to show.
+    fn has_results(&self) -> bool {
+        let closed = matches!(self.phase(), Phase::Question(QuestionStep::Closed | QuestionStep::Revealed { .. }));
+        closed && !self.counted().is_empty()
     }
 
     pub fn view(&self, now: u64) -> GameView {
@@ -194,6 +201,7 @@ impl Game {
             phase: self.phase().clone(),
             slide: self.current_slide().cloned(),
             next_slide: self.following(),
+            previous_slide: self.previous(),
             clock: self.clock_view(now),
             enabled_count: enabled.len(),
             answered_count: enabled.iter().filter(|p| p.answered).count(),

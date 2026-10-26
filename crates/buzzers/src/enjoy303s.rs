@@ -17,7 +17,7 @@
 use crate::cp2110;
 use crate::hid::{DeviceInfo, Report};
 use crate::protocol::{Protocol, ProtocolKind};
-use crate::Press;
+use crate::{Press, RemoteKey};
 use quiz_core::{BuzzerId, BuzzerMode, Button, Light};
 use std::collections::BTreeMap;
 
@@ -35,11 +35,31 @@ const FROM_RECEIVER: [u8; 2] = [0x27, 0xa5];
 const CONNECTED: u8 = 0x10;
 const OPENED: u8 = 0x12;
 const PRESS: u8 = 0x32;
+const REMOTE: u8 = 0x34;
 
 /// Each button's code, in the high four bits of a press message's button byte.
 /// The big button sends 5 (hardware test, 2026-10-25), which the guide
 /// gives for key E of the vendor's keypads; a buzzer has no other key.
 const BUTTON_CODES: [(Button, u8); 5] = [(Button::A, 1), (Button::B, 2), (Button::C, 3), (Button::D, 4), (Button::Big, 5)];
+
+/// The remote's keys by their code, the low seven bits of a remote
+/// message's second byte; the top bit is always set (hardware test,
+/// 2026-10-25). The three arrows were named over chat, so the hardware
+/// test checks them again (`docs/hardware-test.md`).
+const REMOTE_KEYS: [RemoteKey; 12] = [
+    RemoteKey::Back,
+    RemoteKey::Forward,
+    RemoteKey::Power,
+    RemoteKey::Grid,
+    RemoteKey::Target,
+    RemoteKey::PlayPause,
+    RemoteKey::Centre,
+    RemoteKey::Question,
+    RemoteKey::Trophy,
+    RemoteKey::ColourBars,
+    RemoteKey::Cross,
+    RemoteKey::Tick,
+];
 
 /// How long a set-up step waits for the receiver's answer before it is
 /// asked again: the vendor's SDK waits 200 ms for one.
@@ -239,6 +259,8 @@ pub struct Enjoy303s {
     mode: BuzzerMode,
     /// Presses read but not passed on, for `take_dropped`.
     dropped: Vec<Press>,
+    /// Remote keys read, for `take_remote`.
+    remote: Vec<RemoteKey>,
 }
 
 impl Default for Enjoy303s {
@@ -253,6 +275,7 @@ impl Default for Enjoy303s {
             shown: [None; BUZZERS],
             mode: BuzzerMode::Off,
             dropped: Vec::new(),
+            remote: Vec::new(),
         }
     }
 }
@@ -272,7 +295,9 @@ impl Enjoy303s {
         }
     }
 
-    /// Handles one message from the receiver: the press it is, if any.
+    /// Handles one message from the receiver: the press it is, if any. A
+    /// key of the remote is kept for `take_remote`; a code no key has is
+    /// nothing.
     ///
     /// The answer to connect once open says the receiver started again
     /// (unverified that a receiver powered again says so): it has forgotten
@@ -300,6 +325,10 @@ impl Enjoy303s {
                     self.opened();
                 }
                 self.press_in(payload)
+            }
+            [REMOTE, code] => {
+                self.remote.extend(REMOTE_KEYS.get(usize::from(code & 0x7f)));
+                None
             }
             _ => None,
         }
@@ -426,6 +455,10 @@ impl Protocol for Enjoy303s {
         std::mem::take(&mut self.dropped)
     }
 
+    fn take_remote(&mut self) -> Vec<RemoteKey> {
+        std::mem::take(&mut self.remote)
+    }
+
     /// What the receiver's answers call for, and the set-up step again
     /// while its answer is overdue: one lost or spoiled on the way, or a
     /// receiver powered after the cable connected, delays the set-up only.
@@ -534,6 +567,12 @@ impl SimulatedReceiver {
         let [t0, t1, t2, _] = press.timer.unwrap_or(0).to_le_bytes();
         let shown = self.shown[slot].unwrap_or(OFF);
         self.out.extend(frame(FROM_RECEIVER, &[PRESS, slot as u8, code << 4, shown, t0, t1, t2, 0, 0, 0]));
+    }
+
+    /// Sends a press of the remote's `key`, as the receiver does.
+    pub(crate) fn remote(&mut self, key: RemoteKey) {
+        let code = REMOTE_KEYS.iter().position(|&k| k == key).expect("every key has a code") as u8;
+        self.out.extend(frame(FROM_RECEIVER, &[REMOTE, 0x80 | code]));
     }
 
     /// Sends `bytes` as they are, such as a spoiled message.
@@ -850,6 +889,27 @@ mod tests {
         // Quizmaster's remote and set-ID answers are not presses.
         assert!(p.decode(&input(&message(&[0x34, 0x05]))).is_empty());
         assert!(p.decode(&input(&message(&[0x17, 0x01]))).is_empty());
+        assert_eq!(p.take_remote(), [RemoteKey::PlayPause]);
+    }
+
+    #[test]
+    fn reads_the_keys_of_the_remote_apart_from_presses() {
+        let (mut p, _) = opened();
+        // Pinned: the green tick, top bit set, as the hardware test read it.
+        assert!(p.decode(&input(&[0x27, 0xa5, 0x02, 0x34, 0x8b, 0xbf])).is_empty());
+        assert_eq!(p.take_remote(), [RemoteKey::Tick]);
+        assert!(p.take_remote().is_empty(), "taken once");
+        // Every code in order, top bit or not; a code no key has is nothing,
+        // and so is a remote message of another length.
+        let codes = (0..12).map(|c| c | 0x80).chain([0x0c, 0x7f, 0x8c]);
+        for remote in codes.map(|c| message(&[REMOTE, c])).chain([message(&[REMOTE, 0x81, 0x00])]) {
+            assert!(p.decode(&input(&remote)).is_empty());
+        }
+        assert_eq!(p.take_remote(), REMOTE_KEYS);
+        // A press and a key in one report: each where it belongs.
+        let both = [press_message(0, 0x10, READY, 5), message(&[REMOTE, 0x80])].concat();
+        assert_eq!(p.decode(&input(&both)), [Press::timed(1, Button::A, 5)]);
+        assert_eq!(p.take_remote(), [RemoteKey::Back]);
     }
 
     #[test]
@@ -960,6 +1020,13 @@ mod tests {
         receiver.press(Press::new(9, Button::D));
         receiver.purge();
         assert!(listen(&mut p, &mut receiver).is_empty());
+
+        // The remote's keys, as the receiver sends them.
+        for key in RemoteKey::ALL {
+            receiver.remote(key);
+        }
+        assert!(listen(&mut p, &mut receiver).is_empty());
+        assert_eq!(p.take_remote(), RemoteKey::ALL);
     }
 
     #[test]

@@ -4,8 +4,8 @@ import { api } from "../api";
 import { useApp, useRun } from "../app-context";
 import { useBackendEvent, useLearnProgress } from "../hooks";
 import type { Translate } from "../i18n";
-import { awaitsAnswer, errorText, protocolText, receiverProblemText, settingsLostText } from "../messages";
-import type { Button, BuzzerSeen, DeviceInfo, Press, PressEvent, RawReport, ReceiverInfo, ReceiverStatus } from "../types";
+import { awaitsAnswer, errorText, protocolText, receiverProblemText, REMOTE_ACTIONS, remoteActionText, remoteKeyText, settingsLostText } from "../messages";
+import type { Button, BuzzerSeen, DeviceInfo, Press, PressEvent, RawReport, ReceiverInfo, ReceiverStatus, RemoteAction, RemoteKey, RemoteKeyAction } from "../types";
 import { confirmAction } from "../confirm";
 
 const LOG_LEN = 40;
@@ -24,7 +24,10 @@ const stateClass = (status: ReceiverStatus | null) => {
   return status?.kind === "looking" ? "searching" : (status?.kind ?? "off");
 };
 
-/** Receiver setup and diagnostics: pick the USB receiver, see which buzzers it hears, watch its raw data, teach buttons. */
+/**
+ * Receiver setup and diagnostics: pick the USB receiver, see which buzzers it hears, choose what the remote's keys
+ * do, watch its raw data, teach buttons.
+ */
 export function ReceiverTab() {
   const { t } = useApp();
   const run = useRun();
@@ -35,6 +38,8 @@ export function ReceiverTab() {
   const [presses, setPresses] = useState<(PressEvent & { at: number })[]>([]);
   const [buzzers, setBuzzers] = useState<BuzzerSeen[]>([]);
   const [latest, setLatest] = useState<number | null>(null);
+  const [remote, setRemote] = useState<RemoteKeyAction[]>([]);
+  const [pressedKey, setPressedKey] = useState<RemoteKey | null>(null);
   const [buzzer, setBuzzer] = useState(1);
   const [button, setButton] = useState<Button>("a");
   const [message, setMessage] = useState<string | null>(null);
@@ -47,6 +52,7 @@ export function ReceiverTab() {
         setStatus(i.status);
         setRaw([...i.recent].reverse().slice(0, LOG_LEN));
         setBuzzers(i.buzzers);
+        setRemote(i.remote);
       }),
     );
   }, [run]);
@@ -69,6 +75,7 @@ export function ReceiverTab() {
     setLatest(seen.buzzer);
   });
   useBackendEvent("receiver-raw", (report) => setRaw((list) => [report, ...list].slice(0, LOG_LEN)));
+  useBackendEvent("receiver-remote", ({ key }) => setPressedKey(key));
   // eslint-disable-next-line no-restricted-properties -- the time of day a press came, as the log shows it, not the show clock
   useBackendEvent("receiver-press", (event) => setPresses((list) => [{ ...event, at: Date.now() }, ...list].slice(0, LOG_LEN)));
   const learn = useLearnProgress();
@@ -82,6 +89,8 @@ export function ReceiverTab() {
   const connected = status?.kind === "connected" ? status.device : null;
   // A receiver whose protocol the app knows has nothing to teach.
   const teaches = status?.kind !== "connected" || status.learnable;
+
+  const setRemoteAction = (key: RemoteKey, action: RemoteAction) => run(api.receiverSetRemoteAction(key, action).then(reload));
 
   const exportLog = () => run(api.receiverExportLog({ filter: t("textFile"), fileName: "receiver-log" }));
 
@@ -161,6 +170,34 @@ export function ReceiverTab() {
         ) : (
           <p className="muted">{t("noBuzzersSeen")}</p>
         )}
+      </fieldset>
+
+      <fieldset>
+        <legend>{t("remoteKeys")}</legend>
+        <p className="muted">{t("remoteKeysHint")}</p>
+        <table className="grid remote-keys">
+          <tbody>
+            {remote.map(({ key, action }) => (
+              <tr key={key} className={key === pressedKey ? "selected" : ""}>
+                <th scope="row">{remoteKeyText(t, key)}</th>
+                <td>
+                  <select aria-label={remoteKeyText(t, key)} value={action} onChange={(e) => setRemoteAction(key, e.target.value as RemoteAction)}>
+                    {REMOTE_ACTIONS.map((a) => (
+                      <option key={a} value={a}>
+                        {remoteActionText(t, a)}
+                      </option>
+                    ))}
+                  </select>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <div className="row">
+          {pressedKey && <span>{t("remoteKeyPressed", { key: remoteKeyText(t, pressedKey) })}</span>}
+          <span className="spacer" />
+          <button onClick={() => run(api.receiverResetRemote().then(reload))}>{t("remoteKeysReset")}</button>
+        </div>
       </fieldset>
 
       <fieldset>
@@ -297,6 +334,9 @@ export function ReceiverTab() {
                 <li key={i}>
                   {hexBytes(r.bytes)}
                   {r.decoded.length > 0 && <span className="decoded"> → {r.decoded.map((p) => pressLabel(t, p)).join(", ")}</span>}
+                  {r.remote.length > 0 && (
+                    <span className="decoded"> → {t("remoteInLog", { keys: r.remote.map((k) => remoteKeyText(t, k)).join(", ") })}</span>
+                  )}
                   {r.dropped.length > 0 && (
                     <span className="muted">
                       {" "}

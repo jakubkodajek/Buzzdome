@@ -25,6 +25,7 @@ Host screen scales to the projector at 16:9,host screen,must,yes,no,§3.14.11; 4
 Next and advance control from the Director,director,must,yes,no,§5.7 command panel; Space key on host
 Director runs on a second device (laptop tablet or phone),director,must,yes,no,§5.7 and §5.2.4.4; native in a web app
 Judge right or wrong from the Director,director,must,yes,no,§5.2.4.4 Right/Wrong buttons
+Quizmaster's remote drives the show,director,should,yes,yes,the Galaxy set's 12-key remote through the buzzer receiver; each key's action chosen in the Receiver tab (spec BZ-21)
 Edit a player's score and add or subtract points,director,must,yes,no,§5.7.2
 Teams table with name score and enabled state,director,must,yes,yes,§5.7.2 Teams view; clone: team names paired with buzzers by dragging the buzzer number
 Resume a live show after a crash or reload,reliability,must,yes,no,§9.1 recovery mode: snapshot after every completed question; not in test mode

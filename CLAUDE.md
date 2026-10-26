@@ -73,7 +73,7 @@ the `buzzdome-quiz` command line),
 `crates/buzzers` (driver trait, USB-HID receiver thread, protocols, learn mode, `clock.rs` show clock, `fake_receiver.rs` the E2E tests' fake receiver),
 `crates/lights` (stage lights: DMX outputs, looks, the lights thread, OSC and MIDI show messages),
 `app/src-tauri` (Tauri shell, session journal, `show_thread.rs` and `pump.rs` the show thread and its
-event order, `app_windows.rs` the Director and projector windows, `app_log.rs` the log file, `editor.rs` draft, `sheet_reader.rs` spreadsheet reader process, `hardware.rs` receiver setup,
+event order, `app_windows.rs` the Director and projector windows, `remote.rs` what the quizmaster's remote keys do, `app_log.rs` the log file, `editor.rs` draft, `sheet_reader.rs` spreadsheet reader process, `hardware.rs` receiver setup,
 `teams.rs` prepared team names, `media_player.rs` media library, player, volume and sound board,
 `themes.rs` built-in themes, `fonts.rs` installed fonts, `app_file.rs` settings files,
 `app_icon.rs` the windows' icon colour, `stage_lights.rs` the lights setup and what the show tells them,

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { NO_CONTROLS, previewView } from "./host/preview";
 import { translator } from "./i18n";
 import { KEY_BUZZERS, PROJECTOR_COMMANDS } from "./bindings/ProjectorCommands";
-import { commandForKey, isFieldTarget, isHeldButtonPress, isPlainKey, isProjectorCloseKey, isTypingTarget, keyCombo, keyHint, KEYS } from "./keyboard";
+import { commandForAction, commandForKey, isFieldTarget, isHeldButtonPress, isPlainKey, isProjectorCloseKey, isTypingTarget, keyCombo, keyHint, KEYS } from "./keyboard";
 import type { Controls, GameView } from "./types";
 
 const slide = { id: "q1", type: "billboard", title: "Round 1", text: "", notes: "", picture: null, video: null, sound: null, background: null } as const;
@@ -50,6 +50,33 @@ describe("commandForKey", () => {
     expect(commandForKey("s", viewWith({}))).toEqual({ type: "showLeaderboard", visible: true });
     expect(commandForKey("s", viewWith({}, true))).toEqual({ type: "showLeaderboard", visible: false });
     expect(commandForKey("x", viewWith({ next: true }))).toBeNull();
+  });
+});
+
+describe("commandForAction", () => {
+  it("does what the keyboard's key for the action does", () => {
+    const all: Controls = { next: true, judge: true, pauseClock: true, resumeClock: false, closeQuestion: true, playVideo: true, goTo: true, restartQuestion: true };
+    const pairs = [
+      ["next", " "],
+      ["judgeRight", "y"],
+      ["judgeWrong", "n"],
+      ["clock", "p"],
+      ["leaderboard", "s"],
+    ] as const;
+    for (const [action, key] of pairs) expect(commandForAction(action, viewWith(all))).toEqual(commandForKey(key, viewWith(all)));
+  });
+
+  it("goes back to the slide the show says Back goes to, if any", () => {
+    expect(commandForAction("previous", { ...viewWith({ goTo: true }), previousSlide: 2 })).toEqual({ type: "goTo", slide: 2 });
+    expect(commandForAction("previous", { ...viewWith({ goTo: true }), previousSlide: null })).toBeNull();
+  });
+
+  it("ends the question and plays the video only when the step takes it", () => {
+    expect(commandForAction("closeQuestion", viewWith({ closeQuestion: true }))).toEqual({ type: "closeQuestion" });
+    expect(commandForAction("closeQuestion", viewWith({ next: true }))).toBeNull();
+    expect(commandForAction("playVideo", viewWith({ playVideo: true }))).toEqual({ type: "playVideo" });
+    expect(commandForAction("playVideo", viewWith({ next: true }))).toBeNull();
+    expect(commandForAction("projector", viewWith({ next: true, goTo: true }))).toBeNull();
   });
 });
 

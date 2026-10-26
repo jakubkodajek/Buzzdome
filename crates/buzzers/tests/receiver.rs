@@ -7,7 +7,7 @@ use buzzers::enjoy303s::Enjoy303s;
 use buzzers::hid::{DeviceInfo, DeviceSelector, HidBackend, HidDevice, Report};
 use buzzers::protocol::{Protocol, ProtocolKind};
 use buzzers::receiver::{spawn, ReceiverChoice, ReceiverConfig, ReceiverEvent, ReceiverHandle, ReceiverProblem, ReceiverStatus};
-use buzzers::{DriverError, Press};
+use buzzers::{DriverError, Press, RemoteKey};
 use quiz_core::{BuzzerId, BuzzerMode, Button, Light};
 use std::collections::VecDeque;
 use std::sync::mpsc::{self, Receiver};
@@ -252,7 +252,7 @@ fn connects_sends_init_and_decodes_presses_in_order() {
         match wait_for(&rx, |e| !matches!(e, ReceiverEvent::Status(_))) {
             ReceiverEvent::Raw(report) => raws.push(report),
             ReceiverEvent::Press { press, at_ms } => presses.push((press, at_ms)),
-            ReceiverEvent::Status(_) => {}
+            ReceiverEvent::Status(_) | ReceiverEvent::Remote { .. } => {}
         }
     }
     // Drain presses that follow the last raw report.
@@ -384,9 +384,14 @@ fn spaces_writes_by_the_write_gap() {
 /// An input report from an Enjoy 303S receiver carrying the message with
 /// `payload`.
 fn from_303s(payload: &[u8]) -> Vec<u8> {
-    let check = payload.iter().fold(0, |x, b| x ^ b);
-    let message = [&[0x27, 0xa5, payload.len() as u8][..], payload, &[check]].concat();
-    [&[message.len() as u8][..], &message].concat()
+    from_303s_all(&[payload])
+}
+
+/// One report holding the receiver's messages with these payloads.
+fn from_303s_all(payloads: &[&[u8]]) -> Vec<u8> {
+    let message = |payload: &[u8]| [&[0x27, 0xa5, payload.len() as u8][..], payload, &[payload.iter().fold(0, |x, b| x ^ b)]].concat();
+    let messages: Vec<u8> = payloads.iter().flat_map(|p| message(p)).collect();
+    [&[messages.len() as u8][..], &messages].concat()
 }
 
 /// A press of `buzzer`'s big button, showing ready, `timer` after its light changed.
@@ -499,6 +504,26 @@ fn a_buzz_from_a_buzzer_that_was_not_ready_is_dropped_and_logged() {
     backend.0.lock().unwrap().inbox.push_back(buzz_303s(5, 8));
     let ReceiverEvent::Press { press, .. } = wait_for(&rx, |e| matches!(e, ReceiverEvent::Press { .. })) else { unreachable!() };
     assert_eq!(press, Press::timed(5, Button::Big, 8));
+    handle.shutdown();
+}
+
+#[test]
+fn a_key_of_the_remote_reaches_the_app_once_after_the_presses_of_its_report() {
+    let backend = FakeBackend::default();
+    let (handle, rx) = start_303s(&backend, config());
+    handle.set_mode(BuzzerMode::Answers);
+    let tick: &[u8] = &[0x34, 0x8b];
+    let press: &[u8] = &[0x32, 3, 0x10, 0x43, 9, 0, 0, 0, 0, 0];
+    backend.0.lock().unwrap().inbox.extend([from_303s_all(&[tick, press]), from_303s(tick)]);
+    let ReceiverEvent::Raw(raw) = wait_for(&rx, |e| matches!(e, ReceiverEvent::Raw(r) if !r.remote.is_empty())) else { unreachable!() };
+    let not_status = |e: &ReceiverEvent| !matches!(e, ReceiverEvent::Status(_));
+    assert_eq!((raw.decoded.len(), raw.remote.as_slice()), (1, &[RemoteKey::Tick][..]));
+    assert_eq!(wait_for(&rx, not_status), ReceiverEvent::Press { press: Press::timed(4, Button::A, 9), at_ms: raw.at_ms });
+    assert_eq!(wait_for(&rx, not_status), ReceiverEvent::Remote { key: RemoteKey::Tick, at_ms: raw.at_ms });
+    // Sent again at once: in the log, not passed on.
+    let ReceiverEvent::Raw(again) = wait_for(&rx, not_status) else { panic!("the second report") };
+    assert_eq!(again.remote, [RemoteKey::Tick]);
+    assert!(rx.recv_timeout(Duration::from_millis(100)).is_err());
     handle.shutdown();
 }
 

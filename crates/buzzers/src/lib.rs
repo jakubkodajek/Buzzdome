@@ -59,6 +59,67 @@ impl Press {
     }
 }
 
+/// A key of the quizmaster's remote, named after what is printed on it.
+/// The Enjoy 303S receiver hears the Galaxy set's 12-key remote
+/// (`enjoy303s`); what each key does in a show is the app's choice.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, TS)]
+#[ts(export)]
+#[serde(rename_all = "camelCase")]
+pub enum RemoteKey {
+    /// The arrow pointing back.
+    Back,
+    /// The arrow pointing forward.
+    Forward,
+    Power,
+    Grid,
+    /// The quiz key, a target.
+    Target,
+    PlayPause,
+    /// The forward arrow in the middle.
+    Centre,
+    /// The question mark.
+    Question,
+    Trophy,
+    ColourBars,
+    /// The red cross.
+    Cross,
+    /// The green tick.
+    Tick,
+}
+
+impl RemoteKey {
+    pub const ALL: [RemoteKey; 12] = [
+        RemoteKey::Back,
+        RemoteKey::Forward,
+        RemoteKey::Power,
+        RemoteKey::Grid,
+        RemoteKey::Target,
+        RemoteKey::PlayPause,
+        RemoteKey::Centre,
+        RemoteKey::Question,
+        RemoteKey::Trophy,
+        RemoteKey::ColourBars,
+        RemoteKey::Cross,
+        RemoteKey::Tick,
+    ];
+}
+
+/// Stops compiling when a key is added: add it to `RemoteKey::ALL` too, then here.
+const _: fn(RemoteKey) = |key| match key {
+    RemoteKey::Back
+    | RemoteKey::Forward
+    | RemoteKey::Power
+    | RemoteKey::Grid
+    | RemoteKey::Target
+    | RemoteKey::PlayPause
+    | RemoteKey::Centre
+    | RemoteKey::Question
+    | RemoteKey::Trophy
+    | RemoteKey::ColourBars
+    | RemoteKey::Cross
+    | RemoteKey::Tick => {}
+};
+
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum DriverError {
     #[error("receiver not connected")]

@@ -15,6 +15,9 @@
 //! - `{"press": {"buzzer": 7, "button": "a", "timer": 120}}`: a press, as
 //!   `Press` (buttons `a` to `d` and `big`; `timer` is 0 when left out),
 //!   sent with the colour the buzzer shows, as the receiver does.
+//! - `{"remote": "tick"}`: a key of the quizmaster's remote, as `RemoteKey`
+//!   (`back`, `forward`, `power`, `grid`, `target`, `playPause`, `centre`,
+//!   `question`, `trophy`, `colourBars`, `cross`, `tick`).
 //! - `{"raw": "27 a5 01"}`: bytes the receiver sends as they are, in hex,
 //!   such as a spoiled message.
 //!
@@ -29,7 +32,7 @@
 use crate::cp2110;
 use crate::enjoy303s::{self, SimulatedReceiver};
 use crate::hid::{DeviceInfo, HidBackend, HidDevice};
-use crate::{DriverError, Press};
+use crate::{DriverError, Press, RemoteKey};
 use quiz_core::{BuzzerId, Light};
 use serde::{Deserialize, Serialize};
 use std::io::{BufRead, BufReader, Write};
@@ -48,6 +51,7 @@ const RECONNECT: Duration = Duration::from_millis(100);
 enum Command {
     Plug(bool),
     Press(Press),
+    Remote(RemoteKey),
     Raw(String),
 }
 
@@ -127,14 +131,15 @@ impl Shared {
 fn apply(cable: &mut Cable, command: Command) {
     match command {
         Command::Plug(plugged) => cable.plug(plugged),
-        // Pressed with the cable pulled out, a buzzer reaches no one.
+        // Pressed with the cable pulled out, a buzzer or the remote reaches no one.
         Command::Press(press) if cable.plugged => cable.receiver.press(press),
+        Command::Remote(key) if cable.plugged => cable.receiver.remote(key),
         Command::Raw(hex) => match bytes_of(&hex) {
             Some(bytes) if cable.plugged => cable.receiver.send_raw(&bytes),
             Some(_) => {}
             None => cable.tell(&Event::Error(format!("not hex: {hex}"))),
         },
-        Command::Press(_) => {}
+        Command::Press(_) | Command::Remote(_) => {}
     }
 }
 
@@ -269,6 +274,7 @@ mod tests {
         let press: Command = serde_json::from_str(r#"{"press": {"buzzer": 7, "button": "big", "timer": 120}}"#).unwrap();
         assert!(matches!(press, Command::Press(p) if p == Press::timed(7, quiz_core::Button::Big, 120)));
         assert!(matches!(serde_json::from_str(r#"{"plug": false}"#).unwrap(), Command::Plug(false)));
+        assert!(matches!(serde_json::from_str(r#"{"remote": "playPause"}"#).unwrap(), Command::Remote(RemoteKey::PlayPause)));
         let lights = Event::Lights(vec![Lit { buzzer: 7, light: Some(Light::Locked) }, Lit { buzzer: 8, light: None }]);
         assert_eq!(serde_json::to_string(&lights).unwrap(), r#"{"lights":[{"buzzer":7,"light":"locked"},{"buzzer":8,"light":null}]}"#);
     }

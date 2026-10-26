@@ -18,6 +18,7 @@ mod hardware;
 mod media_player;
 mod pump;
 mod recent_files;
+mod remote;
 mod session;
 pub mod sheet_reader;
 mod show_thread;
@@ -751,6 +752,8 @@ pub fn run() {
             hardware::receiver_learn_cancel,
             hardware::receiver_learn_finish,
             hardware::receiver_forget_learned,
+            hardware::receiver_set_remote_action,
+            hardware::receiver_reset_remote,
             hardware::receiver_export_log,
             hardware::receiver_udev_rule,
             stage_lights::lights_info,

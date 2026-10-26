@@ -4,6 +4,7 @@ import type { DeviceSelector } from "./DeviceSelector";
 import type { LearnProgress } from "./LearnProgress";
 import type { RawReport } from "./RawReport";
 import type { ReceiverStatus } from "./ReceiverStatus";
+import type { RemoteKeyAction } from "./RemoteKeyAction";
 import type { SettingsLost } from "./SettingsLost";
 
 export type ReceiverInfo = { 
@@ -23,4 +24,8 @@ chosen: DeviceSelector | null, learnedButtons: number, learn: LearnProgress, rec
 /**
  * The buzzers heard since the receiver connected, by number.
  */
-buzzers: Array<BuzzerSeen>, platform: string, };
+buzzers: Array<BuzzerSeen>, 
+/**
+ * Every key of the quizmaster's remote with what it does.
+ */
+remote: Array<RemoteKeyAction>, platform: string, };
