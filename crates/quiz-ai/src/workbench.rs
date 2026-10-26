@@ -29,6 +29,8 @@ pub enum WorkError {
     Exists(PathBuf),
     #[error("{} holds other files than a quiz: use a new or empty folder, or a quiz folder", .0.display())]
     NotQuizFolder(PathBuf),
+    #[error("{} is a link that leads out of its quiz folder", .0.display())]
+    LeadsOut(PathBuf),
     #[error("{} is not a .{EXTENSION} file", .0.display())]
     NotQuizFile(PathBuf),
     #[error("{} is not a picture, sound or video the app plays", .0.display())]
@@ -91,10 +93,37 @@ impl Check {
 /// without unpacking its media (`quiz_file::inspect`).
 pub fn check(path: &Path) -> Result<Check> {
     if path.is_dir() {
-        return Ok(Check::of(&quiz_file::read_quiz(path)?, path));
+        return Ok(Check::of(&read_inside(path)?, path));
     }
     let inspected = quiz_file::inspect(path)?;
     Ok(Check::with(&inspected.read, &inspected.problems()))
+}
+
+/// Refuses the quiz folder `folder` when its `quiz.json`, its `media`
+/// folder or one of the media files `named` (references such as
+/// `media/x.png`) is a link or junction that leads out of it
+/// (`quiz_file::leads_inside`): the assistant may have been given the
+/// folder, not where its links go. What is not there is left to the caller.
+fn stays_inside<'a>(folder: &Path, named: impl IntoIterator<Item = &'a str>) -> Result<()> {
+    let media = quiz_core::MEDIA_PREFIX.trim_end_matches('/');
+    // Only safe references are joined to the folder, so none climbs out by its name.
+    let named = named.into_iter().filter(|reference| quiz_core::is_safe_reference(reference));
+    for name in [quiz_file::QUIZ_JSON, media].into_iter().chain(named) {
+        let path = folder.join(name);
+        if fs::symlink_metadata(&path).is_ok() && !quiz_file::leads_inside(&path, folder).unwrap_or(false) {
+            return Err(WorkError::LeadsOut(path));
+        }
+    }
+    Ok(())
+}
+
+/// Reads the quiz in the quiz folder `folder` once `stays_inside` allows
+/// it and every media file it uses.
+fn read_inside(folder: &Path) -> Result<ReadQuiz> {
+    stays_inside(folder, [])?;
+    let read = quiz_file::read_quiz(folder)?;
+    stays_inside(folder, read.quiz.media_files())?;
+    Ok(read)
 }
 
 /// Refuses to write into `folder` unless it is a quiz folder, or can become
@@ -122,6 +151,7 @@ fn quiz_folder(folder: &Path) -> Result<()> {
 pub fn write_quiz(folder: &Path, json: &str) -> Result<Check> {
     let read = Quiz::read_json(json).map_err(QuizFileError::from)?;
     quiz_folder(folder)?;
+    stays_inside(folder, [])?;
     fs::create_dir_all(folder).map_err(|e| WorkError::io(FileAction::CreateFolder, folder, e))?;
     quiz_file::write_quiz_json(folder, &read.quiz)?;
     Ok(Check::of(&read, folder))
@@ -146,6 +176,7 @@ pub fn add_media(folder: &Path, files: &[PathBuf]) -> Result<Vec<Added>> {
         return Err(WorkError::NotMedia(file.clone()));
     }
     quiz_folder(folder)?;
+    stays_inside(folder, [])?;
     files
         .iter()
         .map(|from| {
@@ -166,7 +197,7 @@ pub fn pack(folder: &Path, dest: &Path, replace: bool) -> Result<Check> {
     if !replace && fs::symlink_metadata(dest).is_ok() {
         return Err(WorkError::Exists(dest.to_path_buf()));
     }
-    let read = quiz_file::read_quiz(folder)?;
+    let read = read_inside(folder)?;
     quiz_file::save(&read.quiz, folder, dest)?;
     Ok(Check::of(&read, folder))
 }
@@ -184,6 +215,7 @@ pub fn unpack(file: &Path, folder: &Path) -> Result<Check> {
 /// The `quiz.json` of the quiz folder `folder`, as it is written, up to
 /// `quiz_file::MAX_QUIZ_JSON_BYTES`.
 pub fn read_quiz(folder: &Path) -> Result<String> {
+    stays_inside(folder, [])?;
     Ok(quiz_file::read_json(&folder.join(quiz_file::QUIZ_JSON))?)
 }
 
@@ -402,6 +434,53 @@ pub(crate) mod tests {
         assert!(matches!(write_quiz(&documents, &quiz), Err(WorkError::NotQuizFolder(_))));
         assert!(matches!(add_media(&documents, &[dir.join("a.png")]), Err(WorkError::NotQuizFolder(_))));
         assert!(!documents.join(quiz_file::QUIZ_JSON).exists() && !documents.join("media").exists());
+    }
+
+    /// Links the quizmaster made inside a root that lead out of it: the
+    /// tools neither read, pack nor write through them.
+    #[cfg(unix)]
+    #[test]
+    fn nothing_is_read_or_written_through_a_link_out_of_the_quiz_folder() {
+        use std::os::unix::fs::symlink;
+        let dir = scratch("links-out");
+        let outside = dir.join("outside");
+        fs::create_dir_all(&outside).unwrap();
+        fs::write(outside.join("secret.png"), b"secret").unwrap();
+        fs::write(outside.join(quiz_file::QUIZ_JSON), quiz_with_picture("media/secret.png")).unwrap();
+        fs::write(dir.join("a.png"), b"png").unwrap();
+
+        // A media folder that is a link.
+        let linked_media = dir.join("linked-media");
+        fs::create_dir_all(&linked_media).unwrap();
+        symlink(&outside, linked_media.join("media")).unwrap();
+        assert!(matches!(add_media(&linked_media, &[dir.join("a.png")]), Err(WorkError::LeadsOut(_))));
+        assert!(!outside.join("a.png").exists());
+        assert!(matches!(write_quiz(&linked_media, &quiz_with_picture("media/secret.png")), Err(WorkError::LeadsOut(_))));
+
+        // A media file that is a link.
+        let linked_file = dir.join("linked-file");
+        fs::create_dir_all(linked_file.join("media")).unwrap();
+        symlink(outside.join("secret.png"), linked_file.join("media/secret.png")).unwrap();
+        fs::write(linked_file.join(quiz_file::QUIZ_JSON), quiz_with_picture("media/secret.png")).unwrap();
+        let file = dir.join("out.quiz");
+        assert!(matches!(pack(&linked_file, &file, false), Err(WorkError::LeadsOut(_))));
+        assert!(!file.exists());
+        assert!(matches!(check(&linked_file), Err(WorkError::LeadsOut(_))));
+
+        // A quiz.json that is a link.
+        let linked_json = dir.join("linked-json");
+        fs::create_dir_all(&linked_json).unwrap();
+        symlink(outside.join(quiz_file::QUIZ_JSON), linked_json.join(quiz_file::QUIZ_JSON)).unwrap();
+        assert!(matches!(read_quiz(&linked_json), Err(WorkError::LeadsOut(_))));
+        assert!(matches!(check(&linked_json), Err(WorkError::LeadsOut(_))));
+
+        // A link that stays inside the folder is fine.
+        let inner = dir.join("inner");
+        fs::create_dir_all(inner.join("media")).unwrap();
+        fs::write(inner.join("media/a.png"), b"png").unwrap();
+        symlink(inner.join("media/a.png"), inner.join("media/b.png")).unwrap();
+        fs::write(inner.join(quiz_file::QUIZ_JSON), quiz_with_picture("media/b.png")).unwrap();
+        assert!(check(&inner).unwrap().is_ready());
     }
 
     #[test]

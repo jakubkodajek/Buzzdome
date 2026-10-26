@@ -187,6 +187,42 @@ mod tests {
     }
 
     #[test]
+    fn the_script_says_when_a_media_field_names_no_media_file() {
+        let dir = crate::workbench::tests::scratch("skill-script-fields");
+        let skill = unpacked_skill(&dir);
+        let quiz = dir.join("quiz");
+        std::fs::create_dir_all(&quiz).unwrap();
+        let json = serde_json::json!({
+            "schemaVersion": quiz_core::SCHEMA_VERSION,
+            "title": "Outside media",
+            "categories": [{ "id": "c1", "name": "Films", "background": { "file": "pics/category.webm" } }],
+            "slides": [
+                { "id": "b1", "type": "billboard", "title": "Round", "background": { "file": "pics/background.png" },
+                  "sound": { "file": "pics/intro.mp3" } },
+                { "id": "q1", "type": "question", "mode": "everyone", "text": "Which?", "answers": ["A", "B"],
+                  "correct": [{ "answer": 0 }], "picture": "pics/picture.jpg" },
+                { "id": "q2", "type": "question", "mode": "everyone", "text": "Which?", "answers": ["A", "B"],
+                  "correct": [{ "answer": 1 }], "video": { "file": "pics/clip.mp4" } },
+            ]
+        });
+        std::fs::write(quiz.join("quiz.json"), json.to_string()).unwrap();
+        let output = dir.join("outside.quiz");
+        let run = make_quiz(&skill, &quiz, &output);
+        assert_eq!(run.status.code(), Some(1));
+        let said = String::from_utf8_lossy(&run.stderr);
+        for field in [
+            "quiz.categories[0].background.file",
+            "quiz.slides[0].background.file",
+            "quiz.slides[0].sound.file",
+            "quiz.slides[1].picture",
+            "quiz.slides[2].video.file",
+        ] {
+            assert!(said.contains(&format!("{field}: must match ^media/")), "{field} not in {said}");
+        }
+        assert!(!output.exists());
+    }
+
+    #[test]
     fn the_script_packs_nothing_from_outside_the_media_folder() {
         let dir = crate::workbench::tests::scratch("skill-script-names");
         let skill = unpacked_skill(&dir);

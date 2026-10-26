@@ -1,4 +1,1 @@
-# Files the app embeds and hands on as they are written: LF on every
-# system, so a build on Windows ships the same text (AR8).
-crates/quiz-ai/src/skill/** text eol=lf
-docs/quiz-format.md text eol=lf
+* text=auto eol=lf

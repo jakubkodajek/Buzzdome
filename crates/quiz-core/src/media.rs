@@ -7,6 +7,9 @@ use ts_rs::TS;
 
 /// Prefix of every media reference, the folder inside a quiz file.
 pub const MEDIA_PREFIX: &str = "media/";
+/// A media reference in the quiz's JSON Schema: one in the media folder
+/// (`is_safe_reference` is the whole rule, which a schema cannot say).
+pub(crate) const MEDIA_PATTERN: &str = "^media/";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[ts(export)]
@@ -178,6 +181,7 @@ impl Span {
 #[ts(export)]
 #[serde(rename_all = "camelCase")]
 pub struct SoundClip {
+    #[schemars(pattern(MEDIA_PATTERN))]
     pub file: String,
     #[serde(default)]
     pub start: SoundStart,
@@ -250,6 +254,7 @@ pub enum VideoEffect {
 #[ts(export)]
 #[serde(rename_all = "camelCase")]
 pub struct VideoClip {
+    #[schemars(pattern(MEDIA_PATTERN))]
     pub file: String,
     /// Start by itself, `intro_pause_ms` after the slide is shown; otherwise
     /// the quizmaster starts it from the Director.
@@ -356,6 +361,7 @@ pub(crate) const BACKGROUND_KINDS: &[MediaKind] = &[MediaKind::Image, MediaKind:
 #[ts(export)]
 #[serde(rename_all = "camelCase")]
 pub struct Background {
+    #[schemars(pattern(MEDIA_PATTERN))]
     pub file: String,
     /// Start again at the end; otherwise the last frame stays.
     #[serde(default = "yes")]

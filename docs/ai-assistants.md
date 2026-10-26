@@ -62,8 +62,12 @@ and asks the server to validate its inputs and control access
 asking first:
 
 - A path must be absolute and without `..`, and it counts by where it
-  really leads, once links are followed: a link inside a folder that leads
-  out of it is refused.
+  really leads, once links are followed: a path through a link that leads
+  out of the roots is refused.
+- In a quiz folder, `quiz.json`, the `media` folder and every media file
+  the quiz names must stay in the folder: a link or junction there that
+  leads out of it is refused, so no tool reads, packs or writes through
+  one.
 - Buzzdome's own data (the running show and its journal, editor drafts,
   settings) is never a root: the app refuses a folder that holds it or is
   inside it, and so the assistant cannot change a show, even by mistake.
@@ -122,7 +126,9 @@ the files the quizmaster uploaded into `media/`, and runs
 writes the `.quiz` file to download. It packs every text of the quiz that
 starts with `media/`, whichever field holds it, and only as
 `media/<file name>` with a name every system stores, so nothing from
-outside the media folder goes into the file. The script uses only Python's standard
+outside the media folder goes into the file. A picture, sound, video or
+background that names a file outside `media/` is reported, since the
+schema says media references start with `media/`. The script uses only Python's standard
 library. It checks the quiz's shape, not every rule; the editor lists the
 rest under File › Info when the file opens, and the show refuses a quiz
 until they are fixed. A slide that needs a picture the assistant does not

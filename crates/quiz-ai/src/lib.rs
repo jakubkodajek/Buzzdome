@@ -45,5 +45,9 @@ mod tests {
         let types: Vec<&str> = slide["oneOf"].as_array().unwrap().iter().map(|v| v["properties"]["type"]["const"].as_str().unwrap()).collect();
         let written: Vec<String> = quiz_core::SlideType::ALL.iter().map(|t| serde_json::to_value(t).unwrap().as_str().unwrap().to_owned()).collect();
         assert_eq!(types, written);
+        // Media references say where they point, for assistants that check the schema.
+        let media = format!("^{}", quiz_core::MEDIA_PREFIX);
+        assert_eq!(schema["$defs"]["Slide"]["properties"]["picture"]["pattern"], media);
+        assert_eq!(schema["$defs"]["SoundClip"]["properties"]["file"]["pattern"], media);
     }
 }

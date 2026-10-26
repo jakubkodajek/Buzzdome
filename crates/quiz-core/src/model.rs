@@ -93,6 +93,7 @@ pub struct Slide {
     #[serde(default)]
     pub notes: String,
     #[serde(default)]
+    #[schemars(pattern(crate::media::MEDIA_PATTERN))]
     pub picture: Option<String>,
     /// Shown in place of a picture; a slide has one or the other.
     #[serde(default)]

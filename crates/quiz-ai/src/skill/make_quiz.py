@@ -15,6 +15,7 @@ Only the standard library is used, so it runs without installing anything.
 
 import argparse
 import json
+import re
 import sys
 import zipfile
 from pathlib import Path
@@ -69,6 +70,8 @@ class Checker:
         if "enum" in schema and value not in schema["enum"]:
             return [f"{path}: must be one of {', '.join(json.dumps(v) for v in schema['enum'])}"]
         found = []
+        if isinstance(value, str) and "pattern" in schema and not re.search(schema["pattern"], value):
+            found.append(f"{path}: must match {schema['pattern']}")
         if isinstance(value, (int, float)) and not isinstance(value, bool):
             if "minimum" in schema and value < schema["minimum"]:
                 found.append(f"{path}: must be at least {schema['minimum']}")
@@ -82,8 +85,12 @@ class Checker:
         if isinstance(value, list) and "items" in schema:
             for i, item in enumerate(value):
                 found += self.errors(item, schema["items"], f"{path}[{i}]")
-        if "anyOf" in schema and all(self.errors(value, choice, path) for choice in schema["anyOf"]):
-            found.append(f"{path}: does not match any allowed form")
+        if "anyOf" in schema:
+            failures = [self.errors(value, choice, path) for choice in schema["anyOf"]]
+            if all(failures):
+                # An optional field (one form or null) says why the value is not that form.
+                forms = [failed for choice, failed in zip(schema["anyOf"], failures) if choice.get("type") != "null"]
+                found += forms[0] if len(forms) == 1 else [f"{path}: does not match any allowed form"]
         if "oneOf" in schema:
             found += self.one_of(value, schema["oneOf"], path)
         return found

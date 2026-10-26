@@ -293,12 +293,7 @@ const TOOLS: [Tool; 9] = [
         description: "Returns the quiz.json of a quiz folder, to change a quiz written before (unpack_quiz_file makes a folder of a .quiz file).",
         read_only: true,
         input: || object(json!({ "folder": path_property("Absolute path of the quiz folder.") }), &["folder"]),
-        run: |args| {
-            // quiz.json itself must be in the roots, not a link out of them.
-            let file = args.roots.resolve(&args.path("folder")?.join(quiz_file::QUIZ_JSON))?;
-            let folder = file.parent().unwrap_or(&file);
-            workbench::read_quiz(folder).map(|json| vec![text_block(&json)]).map_err(worded)
-        },
+        run: |args| workbench::read_quiz(&args.path("folder")?).map(|json| vec![text_block(&json)]).map_err(worded),
     },
     Tool {
         name: "check_quiz",
@@ -498,7 +493,7 @@ mod tests {
         std::os::unix::fs::symlink(dir.join("secret.json"), quizzes.join("q").join(quiz_file::QUIZ_JSON)).unwrap();
         let replies = session(&[&quizzes], &[call_tool(1, "read_quiz", json!({ "folder": quizzes.join("q") }))]);
         assert_eq!(replies[0]["result"]["isError"], true);
-        assert!(text(&replies[0]).contains("outside the folders"));
+        assert!(text(&replies[0]).contains("leads out of its quiz folder"), "{}", text(&replies[0]));
     }
 
     #[test]

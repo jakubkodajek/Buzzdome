@@ -854,7 +854,10 @@ and has no rules of its own: what it accepts is what `quiz_file` and
   `--root` (`roots::Roots`), as the reference filesystem server does. A
   path counts by its real path (`canonicalize` of the nearest part that is
   there, so links and junctions are followed), must be absolute and has
-  no `..`. A root that holds or is inside the app's data folders
+  no `..`. Inside a quiz folder, the workbench also refuses a
+  `quiz.json`, `media` folder or media file that leads out of the folder
+  (`stays_inside`, with `quiz_file::leads_inside`) before it reads, packs
+  or writes there. A root that holds or is inside the app's data folders
   (`roots::app_data_dirs`: Tauri's data, local data and, on macOS, log
   folders for the bundle identifier) is refused, so no tool reaches the
   show's journal, the drafts or the settings. The app passes its own
@@ -889,9 +892,12 @@ and has no rules of its own: what it accepts is what `quiz_file` and
   Schema checker for the parts the schema uses, media present, and the
   ZIP written as `quiz_file::save` writes it. Media are every text that
   starts with `media/`, so a new media field needs no change there, and
-  only `media/<portable file name>` is packed. `SKILL.md` gets the core's
+  only `media/<portable file name>` is packed. The schema gives media
+  fields the pattern `^media/` (`MEDIA_PATTERN`), which the script checks,
+  so a reference outside `media/` is reported too. `SKILL.md` gets the core's
   answer limits and media types from `skill_md()`, never written by hand;
-  `.gitattributes` keeps it and the format guide LF on every system. Its tests run it with Python
+  `.gitattributes` (`* text=auto eol=lf`) keeps it and the format guide LF
+  on every system. Its tests run it with Python
   and open what it wrote with `workbench::check`.
 
 ## 2. Buzzer link
