@@ -147,8 +147,6 @@ UI conventions (keep one way of doing each thing):
   one file per section, with `index.md`. Page markers equal printed page numbers.
   Gitignored. Search these instead of the PDFs.
 - `replica/screens/`: manual page renders of key screens, by screen ID. Gitignored.
-- `.claude/skills/replica-*`: the original web-oriented build workflow. Use the
-  parts that still fit (design, test, diff); the stack defaults there do not apply.
 
 ## Rules
 
