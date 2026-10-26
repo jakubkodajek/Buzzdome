@@ -1514,7 +1514,16 @@ receiver's format: see [`hardware-test.md`](hardware-test.md).
    and sending OSC on this machine (the tests listen on its UDP ports), a
    fixture from the library, and the AI tools: the app as an MCP server
    and the `buzzdome-quiz` command line writing quiz files the app then
-   plays. On Windows the app ignores environment
+   plays.
+   Buzzers with no hardware: a debug build
+   given `BUZZDOME_FAKE_RECEIVER=<host:port>` lists a fake 303S receiver
+   in place of USB-HID (`buzzers::fake_receiver`), which the test plugs
+   in, pulls out and presses over TCP, and which reports the lights the
+   app gives the buzzers; the receiver thread and the 303S protocol above
+   it are the real ones. Release builds never read the variable. With it
+   the tests check automatic detection, the buzzers heard, the lights,
+   fastest finger in timer order and a receiver pulled out mid-show
+   (`receiver.e2e.ts`). On Windows the app ignores environment
    overrides of its data folders, so the tests use the real ones and wipe
    them; the harness refuses to run there except on a GitHub-hosted runner.
    The runner is elevated and an elevated WebView2 ignores the debugging

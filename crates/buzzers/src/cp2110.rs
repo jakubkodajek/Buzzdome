@@ -40,15 +40,20 @@ pub fn open_uart(baud: u32) -> Vec<Report> {
 
 /// The output reports that send `bytes` down the serial line.
 pub fn send(bytes: &[u8]) -> Vec<Report> {
-    bytes
-        .chunks(MAX_DATA)
-        .map(|chunk| {
-            let mut report = vec![0; REPORT_LEN];
-            report[0] = chunk.len() as u8;
-            report[1..=chunk.len()].copy_from_slice(chunk);
-            Report::Output(report)
-        })
-        .collect()
+    bytes.chunks(MAX_DATA).map(|chunk| Report::Output(data_report(chunk))).collect()
+}
+
+/// The report that carries `chunk`, at most `MAX_DATA` bytes, either way.
+pub(crate) fn data_report(chunk: &[u8]) -> Vec<u8> {
+    let mut report = vec![0; REPORT_LEN];
+    report[0] = chunk.len() as u8;
+    report[1..=chunk.len()].copy_from_slice(chunk);
+    report
+}
+
+/// Whether the feature `report` purges the bridge's buffers (`open_uart`).
+pub(crate) fn purges(report: &[u8]) -> bool {
+    report.first() == Some(&PURGE_FIFOS)
 }
 
 /// The serial bytes an input report carries: none for a report that is not

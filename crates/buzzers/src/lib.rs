@@ -12,6 +12,8 @@
 //! - [`receiver`]: owns one receiver on an I/O thread: connect, read, decode,
 //!   order fastest-finger presses by the buzzers' own timers ([`timer_order`]),
 //!   write the mode and lights, reconnect after unplugging.
+//! - [`fake_receiver`]: a 303S receiver that end-to-end tests plug in and
+//!   press over TCP, in the app's debug builds.
 //!
 //! See `docs/design.md` and `replica/hardware.md`.
 
@@ -19,6 +21,7 @@ pub mod clock;
 pub mod cp2110;
 pub mod edge;
 pub mod enjoy303s;
+pub mod fake_receiver;
 pub mod hid;
 #[cfg(feature = "hidapi")]
 pub mod hidapi_backend;
