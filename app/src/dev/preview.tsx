@@ -711,13 +711,12 @@ mockIPC(
             name: "Open Fixture Library (MIT)",
             copyright: "Copyright (c) 2017 Florian & Felix Edelmann",
             url: "https://open-fixture-library.org",
-            commit: cmd === "lights_library_update" ? "" : "66a6843",
+            origin: cmd === "lights_library_update" ? { kind: "downloaded" } : { kind: "builtIn", commit: "66a6843" },
             dateMs: Date.UTC(2026, 9, 20),
             licence: "MIT License\n\nCopyright (c) 2017 Florian & Felix Edelmann\n\nPermission is hereby granted, free of charge, …",
           },
           models: 623,
           modes: 2828,
-          downloaded: cmd === "lights_library_update",
         };
       case "lights_devices":
         return { outputs: [{ choice: { kind: "enttecPro", port: "COM4" }, label: "COM4 (FTDI)" }], midiPorts: ["loopMIDI Port"] };

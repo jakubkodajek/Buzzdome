@@ -44,6 +44,7 @@ export type { LibraryMatches } from "./bindings/LibraryMatches";
 export type { LibraryInfo } from "./bindings/LibraryInfo";
 export type { LibraryMode } from "./bindings/LibraryMode";
 export type { LibrarySource } from "./bindings/LibrarySource";
+export type { LibraryOrigin } from "./bindings/LibraryOrigin";
 export type { LightsInfo } from "./bindings/LightsInfo";
 export type { LightsSetup } from "./bindings/LightsSetup";
 export type { LightsStatus } from "./bindings/LightsStatus";

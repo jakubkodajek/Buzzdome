@@ -93,6 +93,7 @@ pub fn from_zip(zip: &[u8], source: LibrarySource) -> Result<(Library, ImportCou
     };
     let manufacturers = archive.index_for_name("manufacturers.json").ok_or_else(|| not_read(&"no manufacturers.json"))?;
     let (_, manufacturers) = read(&mut archive, manufacturers)?;
+    check_format(&manufacturers)?;
     let mut import = Import::new(&manufacturers).map_err(|e| not_read(&format!("manufacturers.json: {e}")))?;
     for index in 0..archive.len() {
         let (name, text) = read(&mut archive, index)?;
@@ -100,31 +101,40 @@ pub fn from_zip(zip: &[u8], source: LibrarySource) -> Result<(Library, ImportCou
         if model.contains('/') {
             continue;
         }
-        if let Some(version) = schema_version(&text).filter(|version| version.split('.').next() != Some(SCHEMA_MAJOR)) {
-            return Err(ArchiveError::FormatChanged { version });
-        }
+        check_format(&text)?;
         import.add(maker, model, &text);
     }
     let counts = import.counts;
     Ok((import.finish(source), counts))
 }
 
-/// The format version a definition names in its `$schema` link
-/// (".../schema-12.6.0/schemas/fixture.json"); none when it names none.
-fn schema_version(text: &str) -> Option<String> {
+/// Refuses a file whose `$schema` link (".../schema-12.6.0/schemas/fixture.json")
+/// names another major version of the format, or no version ("none"): the
+/// download then is not the format this converter reads. A file that is not a
+/// JSON object is left to the import, which counts it as unreadable.
+fn check_format(text: &str) -> Result<(), ArchiveError> {
     #[derive(serde::Deserialize)]
     struct Schema {
         #[serde(rename = "$schema")]
-        schema: Option<String>,
+        schema: Option<serde_json::Value>,
     }
-    let schema = serde_json::from_str::<Schema>(text).ok()?.schema?;
-    let (_, after) = schema.split_once("/schema-")?;
-    Some(after.split('/').next()?.to_owned())
+    let Ok(Schema { schema }) = serde_json::from_str::<Schema>(text) else { return Ok(()) };
+    let version = schema
+        .as_ref()
+        .and_then(serde_json::Value::as_str)
+        .and_then(|link| link.split_once("/schema-"))
+        .and_then(|(_, after)| after.split('/').next())
+        .filter(|version| !version.is_empty());
+    match version {
+        Some(version) if version.split('.').next() == Some(SCHEMA_MAJOR) => Ok(()),
+        version => Err(ArchiveError::FormatChanged { version: version.unwrap_or("none").to_owned() }),
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::library::LibraryOrigin;
     use std::io::Write;
 
     fn zip(files: &[(&str, &str)]) -> Vec<u8> {
@@ -137,7 +147,7 @@ mod tests {
     }
 
     fn source() -> LibrarySource {
-        LibrarySource { name: "Test".into(), copyright: String::new(), url: String::new(), commit: String::new(), date_ms: 1, licence: String::new() }
+        LibrarySource { name: "Test".into(), copyright: String::new(), url: String::new(), origin: LibraryOrigin::Downloaded, date_ms: 1, licence: String::new() }
     }
 
     const SCHEMA: &str = "https://raw.githubusercontent.com/OpenLightingProject/open-fixture-library/schema-12.6.0/schemas/fixture.json";
@@ -150,15 +160,21 @@ mod tests {
         )
     }
 
+    fn manufacturers(entries: &str) -> String {
+        let schema = SCHEMA.replace("fixture.json", "manufacturers.json");
+        let comma = if entries.is_empty() { "" } else { "," };
+        format!(r#"{{ "$schema": "{schema}"{comma} {entries} }}"#)
+    }
+
     #[test]
     fn a_download_becomes_a_sorted_library_without_lasers() {
-        let manufacturers = r#"{ "$schema": "x", "acme": { "name": "Acme" }, "zeta": { "name": "Zeta" } }"#;
+        let manufacturers = &manufacturers(r#""acme": { "name": "Acme" }, "zeta": { "name": "Zeta" }"#);
         let bytes = zip(&[
             ("zeta/par.json", &definition("Par", r#""Color Changer""#)),
             ("acme/wash.json", &definition("Wash", r#""Color Changer""#)),
             ("acme/beam.json", &definition("Beam", r#""Laser""#)),
             ("acme/broken.json", "{ not json"),
-            ("manufacturers.json", manufacturers),
+            ("manufacturers.json", manufacturers.as_str()),
         ]);
         let (library, counts) = from_zip(&bytes, source()).unwrap();
         let names: Vec<_> = library.fixtures.iter().map(|f| format!("{} {}", f.manufacturer, f.name)).collect();
@@ -169,9 +185,22 @@ mod tests {
     #[test]
     fn a_download_in_another_major_version_of_the_format_is_refused() {
         let newer = definition("Par", "").replace("schema-12.6.0", "schema-13.0.0");
-        let bytes = zip(&[("manufacturers.json", "{}"), ("acme/par.json", &newer)]);
+        let bytes = zip(&[("manufacturers.json", &manufacturers("")), ("acme/par.json", &newer)]);
         assert_eq!(from_zip(&bytes, source()).map(|_| ()), Err(ArchiveError::FormatChanged { version: "13.0.0".into() }));
         assert!(matches!(from_zip(b"not a zip", source()), Err(ArchiveError::NotRead(_))));
         assert!(matches!(from_zip(&zip(&[("acme/par.json", &definition("Par", ""))]), source()), Err(ArchiveError::NotRead(_))));
+    }
+
+    #[test]
+    fn a_download_whose_files_name_no_format_version_is_refused() {
+        let none = || Err(ArchiveError::FormatChanged { version: "none".into() });
+        let unlinked = definition("Par", "").replace(&format!(r#""$schema": "{SCHEMA}","#), "");
+        let bytes = zip(&[("manufacturers.json", &manufacturers("")), ("acme/par.json", &unlinked)]);
+        assert_eq!(from_zip(&bytes, source()).map(|_| ()), none());
+        let master = definition("Par", "").replace("schema-12.6.0", "master");
+        let bytes = zip(&[("manufacturers.json", &manufacturers("")), ("acme/par.json", &master)]);
+        assert_eq!(from_zip(&bytes, source()).map(|_| ()), none());
+        let bytes = zip(&[("manufacturers.json", "{}"), ("acme/par.json", &definition("Par", ""))]);
+        assert_eq!(from_zip(&bytes, source()).map(|_| ()), none());
     }
 }

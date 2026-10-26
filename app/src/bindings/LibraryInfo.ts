@@ -4,8 +4,4 @@ import type { LibrarySource } from "./LibrarySource";
 /**
  * The library in use, as the Lights tab credits it.
  */
-export type LibraryInfo = { source: LibrarySource, models: number, modes: number, 
-/**
- * Downloaded, not the one built into the app.
- */
-downloaded: boolean, };
+export type LibraryInfo = { source: LibrarySource, models: number, modes: number, };

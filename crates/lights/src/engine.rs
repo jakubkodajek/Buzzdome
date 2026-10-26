@@ -6,6 +6,7 @@
 
 use crate::desk::Desk;
 use crate::dmx::{self, DmxOutput, OutputError, Universe, FRAME_EVERY};
+use crate::look;
 use crate::setup::{LightsSetup, LookId, OutputChoice};
 use crate::signals::{self, Signal, SignalOut, Target};
 use quiz_core::{Cue, Stage};
@@ -100,6 +101,7 @@ impl Lights {
             messages: setup.messages.targets().into_iter().map(MessageOut::new).collect(),
             desk: Desk::new(setup),
             output: None,
+            warming_up: 0,
             output_retry: None,
             shared: shared.clone(),
             openers,
@@ -159,6 +161,8 @@ impl MessageOut {
 struct Thread {
     desk: Desk,
     output: Option<Box<dyn DmxOutput>>,
+    /// Dark frames still to send the output before a look (`warm_up_frames`).
+    warming_up: u32,
     /// When to open the output again; none while it is open or none is chosen.
     output_retry: Option<Instant>,
     messages: Vec<MessageOut>,
@@ -175,7 +179,10 @@ impl Thread {
             match controls.recv_timeout(next_frame.saturating_duration_since(Instant::now())) {
                 Ok(control) => self.take(control, clock()),
                 Err(RecvTimeoutError::Timeout) => {}
-                Err(RecvTimeoutError::Disconnected) => break,
+                Err(RecvTimeoutError::Disconnected) => {
+                    self.let_go();
+                    break;
+                }
             }
             let now = Instant::now();
             if now < next_frame {
@@ -193,7 +200,7 @@ impl Thread {
             Control::Setup(setup) => {
                 if setup.output != self.desk.setup().output {
                     // Dropping an output lets go of its interface.
-                    self.output = None;
+                    self.let_go();
                     self.output_retry = Some(Instant::now());
                 }
                 if setup.messages != self.desk.setup().messages {
@@ -234,6 +241,7 @@ impl Thread {
             match (self.openers.output)(&self.desk.setup().output) {
                 Ok(output) => {
                     let status = output.as_ref().map_or(OutputStatus::Off, |o| OutputStatus::Connected { name: o.name() });
+                    self.warming_up = output.as_ref().map_or(0, |o| o.warm_up_frames());
                     self.output = output;
                     self.output_retry = None;
                     self.update(|s| s.output = status);
@@ -254,10 +262,29 @@ impl Thread {
             s.blackout = blackout;
         });
         self.shared.lock().unwrap().universe = universe.clone();
-        if let Some(Err(error)) = self.output.as_mut().map(|output| output.send(&universe)) {
+        let sent = if self.warming_up > 0 {
+            self.warming_up -= 1;
+            look::dark(self.desk.setup())
+        } else {
+            universe
+        };
+        if let Some(Err(error)) = self.output.as_mut().map(|output| output.send(&sent)) {
             self.output = None;
             self.output_retry = Some(at + RETRY_AFTER);
             self.update(|s| s.output = OutputStatus::Lost { error });
+        }
+    }
+
+    /// Lets go of the output, leaving its fixtures dark when it asks for that
+    /// (`dark_frames_at_release`), by the setup it lit.
+    fn let_go(&mut self) {
+        if let Some(mut output) = self.output.take() {
+            let dark = look::dark(self.desk.setup());
+            for _ in 0..output.dark_frames_at_release() {
+                if output.send(&dark).is_err() {
+                    break;
+                }
+            }
         }
     }
 
@@ -340,6 +367,61 @@ mod tests {
             assert!(Instant::now() < deadline, "timed out");
             std::thread::sleep(Duration::from_millis(5));
         }
+    }
+
+    /// An output that wants dark frames when opened and let go, and keeps
+    /// channel 1 of every frame.
+    struct Warming(Arc<Mutex<Vec<u8>>>);
+
+    impl DmxOutput for Warming {
+        fn name(&self) -> String {
+            "warming".into()
+        }
+
+        fn frame_every(&self) -> Duration {
+            Duration::from_millis(5)
+        }
+
+        fn warm_up_frames(&self) -> u32 {
+            2
+        }
+
+        fn dark_frames_at_release(&self) -> u32 {
+            2
+        }
+
+        fn send(&mut self, universe: &Universe) -> Result<(), OutputError> {
+            self.0.lock().unwrap().push(universe.get(1));
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn an_output_warms_up_and_is_let_go_with_the_setups_dark_not_zeros() {
+        let sent = Arc::new(Mutex::new(Vec::new()));
+        let openers = Openers {
+            output: Box::new({
+                let sent = sent.clone();
+                move |choice: &OutputChoice| Ok((*choice != OutputChoice::None).then(|| Box::new(Warming(sent.clone())) as Box<dyn DmxOutput>))
+            }),
+            signals: Box::new(|_| Err(OutputError::SendFailed { detail: "none".into() })),
+        };
+        // A dimmer that is dark at 255.
+        let mut inverted = setup();
+        inverted.messages = MessageSetup::default();
+        inverted.fixtures[0].channels = vec![Channel::DimmerRange { dark: 255, bright: 0 }];
+        for look in &mut inverted.looks {
+            look.fade_ms = 0;
+        }
+        let lights = Lights::start(inverted.clone(), || 0, openers, |_: &LightsStatus| {});
+        lights.send(Control::Stage(Stage::QuestionReady));
+        // 70 % of the way from 255 to 0.
+        wait_until(|| sent.lock().unwrap().contains(&77));
+        assert_eq!(sent.lock().unwrap()[..2], [255, 255]);
+        lights.send(Control::Setup(LightsSetup { output: OutputChoice::None, ..inverted }));
+        wait_until(|| matches!(lights.status().output, OutputStatus::Off));
+        let sent = sent.lock().unwrap().clone();
+        assert_eq!(sent[sent.len() - 3..], [77, 255, 255]);
     }
 
     #[test]

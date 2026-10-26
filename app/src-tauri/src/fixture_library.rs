@@ -8,7 +8,7 @@
 use crate::error::{AppError, CmdResult};
 use crate::{app_log, off_ui};
 use lights::library::archive::{self, ArchiveError};
-use lights::library::{Library, LibraryMatches, LibrarySource};
+use lights::library::{Library, LibraryMatches, LibraryOrigin, LibrarySource};
 use quiz_file::FileAction;
 use serde::Serialize;
 use std::path::{Path, PathBuf};
@@ -22,6 +22,10 @@ pub const LIBRARY_FILE: &str = "fixture-library.json";
 /// Every fixture definition of the Open Fixture Library, as a zip (its
 /// website's "ofl" export).
 const DOWNLOAD_URL: &str = "https://open-fixture-library.org/download.ofl";
+/// The only host a download is taken from, after any redirects.
+const DOWNLOAD_HOST: &str = "open-fixture-library.org";
+/// Redirects followed, each over HTTPS only.
+const MAX_REDIRECTS: u32 = 3;
 /// Most bytes a download may have; it had about 4 MB in 2026 [no source -
 /// my estimate].
 const MAX_DOWNLOAD_BYTES: u64 = 64 << 20;
@@ -82,13 +86,11 @@ pub struct LibraryInfo {
     pub source: LibrarySource,
     pub models: usize,
     pub modes: usize,
-    /// Downloaded, not the one built into the app.
-    pub downloaded: bool,
 }
 
 impl LibraryInfo {
     fn of(library: &Library) -> LibraryInfo {
-        LibraryInfo { source: library.source.clone(), models: library.fixtures.len(), modes: library.modes(), downloaded: library.source.commit.is_empty() }
+        LibraryInfo { source: library.source.clone(), models: library.fixtures.len(), modes: library.modes() }
     }
 }
 
@@ -114,7 +116,7 @@ pub async fn lights_library_update(app: AppHandle) -> CmdResult<LibraryInfo> {
         let _updating = state.updating.lock().unwrap();
         let zip = download()?;
         let built_in = &lights::library::built_in().source;
-        let source = LibrarySource { commit: String::new(), date_ms: unix_ms(), ..built_in.clone() };
+        let source = LibrarySource { origin: LibraryOrigin::Downloaded, date_ms: unix_ms(), ..built_in.clone() };
         let (library, counts) = archive::from_zip(&zip, source).map_err(|e| match e {
             ArchiveError::NotRead(detail) => AppError::LibraryNotRead { detail },
             ArchiveError::FormatChanged { version } => AppError::LibraryFormatChanged { version },
@@ -154,10 +156,23 @@ pub async fn lights_library_reset(app: AppHandle) -> CmdResult<LibraryInfo> {
 }
 
 fn download() -> CmdResult<Vec<u8>> {
+    use ureq::ResponseExt;
     let failed = |e: ureq::Error| AppError::LibraryDownload { detail: e.to_string() };
-    let agent: ureq::Agent = ureq::Agent::config_builder().timeout_global(Some(DOWNLOAD_TIMEOUT)).build().into();
-    let mut response = agent.get(DOWNLOAD_URL).call().map_err(failed)?;
+    let mut response = agent().get(DOWNLOAD_URL).call().map_err(failed)?;
+    if !from_the_library(response.get_uri()) {
+        return Err(AppError::LibraryDownload { detail: format!("redirected to {}", response.get_uri()) });
+    }
     response.body_mut().with_config().limit(MAX_DOWNLOAD_BYTES).read_to_vec().map_err(failed)
+}
+
+/// Talks to the library over HTTPS only, redirects included.
+fn agent() -> ureq::Agent {
+    ureq::Agent::config_builder().https_only(true).max_redirects(MAX_REDIRECTS).timeout_global(Some(DOWNLOAD_TIMEOUT)).build().into()
+}
+
+/// Whether a download ended up at the library's own site over HTTPS.
+fn from_the_library(uri: &ureq::http::Uri) -> bool {
+    uri.scheme_str() == Some("https") && uri.host() == Some(DOWNLOAD_HOST)
 }
 
 /// Writes `library` to `path` so that a crash leaves the old file or the new one.
@@ -181,6 +196,18 @@ pub fn library_path(app: &AppHandle) -> CmdResult<PathBuf> {
 mod tests {
     use super::*;
 
+    #[test]
+    fn a_download_goes_over_https_only_and_is_taken_only_from_the_library() {
+        let agent = agent();
+        assert!(agent.config().https_only());
+        assert_eq!(agent.config().max_redirects(), MAX_REDIRECTS);
+        let from = |uri: &str| from_the_library(&uri.parse().unwrap());
+        assert!(from(DOWNLOAD_URL));
+        assert!(!from("http://open-fixture-library.org/download.ofl"));
+        assert!(!from("https://open-fixture-library.org.example.com/download.ofl"));
+        assert!(!from("https://example.com/download.ofl"));
+    }
+
     fn dir(name: &str) -> PathBuf {
         let dir = std::env::temp_dir().join(format!("fixture-library-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
@@ -196,11 +223,10 @@ mod tests {
 
         let mut newer = built_in.clone();
         newer.fixtures.truncate(3);
-        newer.source.commit.clear();
+        newer.source.origin = LibraryOrigin::Downloaded;
         newer.source.date_ms = built_in.source.date_ms + 1;
         keep(&path, &newer).unwrap();
         assert_eq!(load(&path), newer);
-        assert!(LibraryInfo::of(&newer).downloaded);
 
         let mut older = newer.clone();
         older.source.date_ms = built_in.source.date_ms - 1;
@@ -209,7 +235,6 @@ mod tests {
 
         std::fs::write(&path, "{ not a library").unwrap();
         assert_eq!(&load(&path), built_in);
-        assert!(!LibraryInfo::of(built_in).downloaded);
         std::fs::remove_dir_all(&dir).unwrap();
     }
 }

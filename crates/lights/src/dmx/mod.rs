@@ -94,8 +94,20 @@ pub trait DmxOutput: Send {
         FRAME_EVERY
     }
 
-    /// Sends one frame. An error means the output is lost; the lights thread
-    /// opens it again a while later.
+    /// How many dark frames it needs once opened before the first one of
+    /// a look; the lights thread sends the setup's dark (`look::dark`).
+    fn warm_up_frames(&self) -> u32 {
+        0
+    }
+
+    /// How many dark frames it gets before it is let go, so the fixtures
+    /// are left dark; none leaves them as the last frame had them.
+    fn dark_frames_at_release(&self) -> u32 {
+        0
+    }
+
+    /// Sends one frame, as it is given. An error means the output is lost;
+    /// the lights thread opens it again a while later.
     fn send(&mut self, universe: &Universe) -> Result<(), OutputError>;
 }
 

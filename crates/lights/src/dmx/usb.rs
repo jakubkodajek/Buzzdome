@@ -2,7 +2,7 @@
 //! SoundSwitch's own software must be closed: only one program can hold
 //! the interface.
 
-use super::soundswitch::{frame, AFTER_START, ENDPOINT, FRAME_EVERY, PRODUCT_ID, START_PACKETS, VENDOR_ID, WARM_UP_FRAMES};
+use super::soundswitch::{frame, AFTER_START, DARK_FRAMES_AT_RELEASE, ENDPOINT, FRAME_EVERY, PRODUCT_ID, START_PACKETS, VENDOR_ID, WARM_UP_FRAMES};
 use super::{DmxOutput, FoundOutput, OutputError, Universe};
 use crate::setup::OutputChoice;
 use rusb::{DeviceHandle, GlobalContext};
@@ -19,8 +19,6 @@ fn not_available(e: impl ToString) -> OutputError {
 
 pub struct SoundSwitchMicro {
     handle: DeviceHandle<GlobalContext>,
-    /// Frames of zeros still to send before the channels.
-    warming_up: u32,
 }
 
 impl SoundSwitchMicro {
@@ -30,7 +28,7 @@ impl SoundSwitchMicro {
         // Where the system has a driver of its own on it (not on Windows), it lets go.
         let _ = handle.set_auto_detach_kernel_driver(true);
         handle.claim_interface(INTERFACE).map_err(not_available)?;
-        let mut micro = SoundSwitchMicro { handle, warming_up: WARM_UP_FRAMES };
+        let mut micro = SoundSwitchMicro { handle };
         for packet in START_PACKETS {
             micro.write(&packet)?;
         }
@@ -57,22 +55,22 @@ impl DmxOutput for SoundSwitchMicro {
         FRAME_EVERY
     }
 
+    fn warm_up_frames(&self) -> u32 {
+        WARM_UP_FRAMES
+    }
+
+    /// Leaves the lights dark, as SoundSwitch does when it lets go.
+    fn dark_frames_at_release(&self) -> u32 {
+        DARK_FRAMES_AT_RELEASE
+    }
+
     fn send(&mut self, universe: &Universe) -> Result<(), OutputError> {
-        if self.warming_up > 0 {
-            self.warming_up -= 1;
-            return self.write(&frame(&Universe::default()));
-        }
         self.write(&frame(universe))
     }
 }
 
 impl Drop for SoundSwitchMicro {
-    /// Leaves the lights dark, as SoundSwitch does when it lets go.
     fn drop(&mut self) {
-        let dark = frame(&Universe::default());
-        for _ in 0..3 {
-            let _ = self.write(&dark);
-        }
         let _ = self.handle.release_interface(INTERFACE);
     }
 }

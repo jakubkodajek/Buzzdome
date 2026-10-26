@@ -504,6 +504,7 @@ function LibraryPicker({ disabled, onAdd }: { disabled: boolean; onAdd: (name: s
   }, [query, run, info]);
   const shown = query.trim() === "" ? null : found;
   const chosen = model?.modes[mode];
+  const downloaded = info?.source.origin.kind === "downloaded";
   return (
     <div className="lights-library">
       <div className="row">
@@ -568,13 +569,13 @@ function LibraryPicker({ disabled, onAdd }: { disabled: boolean; onAdd: (name: s
         <>
           <div className="row">
             <span className="muted">
-              {t(info.downloaded ? "lightsLibraryDownloaded" : "lightsLibraryBuiltIn", { models: info.models, date: calendarDay(info.source.dateMs, lang) })}
+              {t(downloaded ? "lightsLibraryDownloaded" : "lightsLibraryBuiltIn", { models: info.models, date: calendarDay(info.source.dateMs, lang) })}
               {before !== null && ` ${t("lightsLibraryUpdated", { before })}`}
             </span>
             <button disabled={updating} title={t("lightsLibraryUpdateHint")} onClick={() => replace(api.lightsLibraryUpdate, true)}>
               {t(updating ? "lightsLibraryUpdating" : "lightsLibraryUpdate")}
             </button>
-            {info.downloaded && (
+            {downloaded && (
               <button disabled={updating} onClick={() => replace(api.lightsLibraryReset, false)}>
                 {t("lightsLibraryReset")}
               </button>

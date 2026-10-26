@@ -20,3 +20,4 @@ export const FIRST_CUE_NOTE = 60;
 export const SHOW_STARTED_NOTE = 70;
 export const SHOW_ENDED_NOTE = 71;
 export const BUZZ_NOTE = 72;
+export const LIT_BY_LOOKS: readonly string[] = ["dimmer", "dimmerRange", "red", "green", "blue", "white", "shutter"];

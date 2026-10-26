@@ -71,6 +71,9 @@ mod ui_constants {
         for (name, value) in constants {
             ts.push_str(&format!("export const {name} = {value};\n"));
         }
+        // The kinds of channel a look lights a fixture through (`Channel::follows_looks`).
+        let kinds: Vec<String> = Channel::KINDS.iter().filter(|c| c.follows_looks()).map(|c| serde_json::to_value(c).unwrap()["kind"].to_string()).collect();
+        ts.push_str(&format!("export const LIT_BY_LOOKS: readonly string[] = [{}];\n", kinds.join(", ")));
         std::fs::write(std::path::Path::new(&dir).join("LightsConstants.ts"), ts).unwrap();
     }
 }

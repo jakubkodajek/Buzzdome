@@ -28,14 +28,25 @@ pub struct LibrarySource {
     pub name: String,
     pub copyright: String,
     pub url: String,
-    /// The source's commit the library was made from; empty for a download.
-    pub commit: String,
+    /// Made with the app from a commit of the source, or downloaded.
+    pub origin: LibraryOrigin,
     /// When the source's data is from (its commit, or the download), in
     /// ms since the Unix epoch.
     #[ts(type = "number")]
     pub date_ms: u64,
     /// The source's licence, in full (MIT: it goes with every copy).
     pub licence: String,
+}
+
+/// How a library came to the app.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum LibraryOrigin {
+    /// Built into the app from the source's `commit`.
+    BuiltIn { commit: String },
+    /// Downloaded from the source by the app (`archive`).
+    Downloaded,
 }
 
 /// The library file (`data/fixture-library.json`).

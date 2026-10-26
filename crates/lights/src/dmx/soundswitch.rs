@@ -6,7 +6,7 @@
 //! output experimental. Our notes: `docs/design.md` section 7.5.
 //!
 //! The interface is a USB device with one bulk OUT endpoint. It takes two
-//! 12-byte start packets, then for a while frames of zeros, then a frame
+//! 12-byte start packets, then for a while dark frames, then a frame
 //! per universe every 25 ms: the tag "sTRt", four bytes that say "DMX
 //! data", the port (0) and a zero, then the 512 channels.
 
@@ -29,8 +29,10 @@ pub const START_PACKETS: [[u8; 12]; 2] = [
 ];
 /// How long it gets after the start packets.
 pub const AFTER_START: Duration = Duration::from_millis(200);
-/// How many frames of zeros it gets before the first frame of channels.
+/// How many dark frames it gets before the first frame of a look.
 pub const WARM_UP_FRAMES: u32 = 50;
+/// How many dark frames it gets before it is let go.
+pub const DARK_FRAMES_AT_RELEASE: u32 = 3;
 /// How often it takes a frame.
 pub const FRAME_EVERY: Duration = Duration::from_millis(25);
 

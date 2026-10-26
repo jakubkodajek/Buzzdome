@@ -1595,28 +1595,33 @@ runs the setup's checks on it; the guardian's
 The library is read on first use (`OnceLock`) and searched off the
 windows' thread (`lights_library`); its source and full MIT licence
 (`LibrarySource.licence`, copied from the checkout by the import) are
-shown in the tab before any search (`lights_library_info`).
+shown in the tab before any search (`lights_library_info`). When a picked
+mode has no channel a look can light (`Channel::follows_looks`, written to
+`LightsConstants.ts` as `LIT_BY_LOOKS`), the tab says so.
 
 The tab can bring the library up to date (`app/src-tauri/src/fixture_library.rs`,
 `lights_library_update`): off the windows' thread it downloads
 <https://open-fixture-library.org/download.ofl> (the site's "ofl" export
 of every fixture as `<manufacturer>/<model>.json` plus
 `manufacturers.json`, per `ui/api/download.js` and `plugins/ofl/export.js`
-in the OFL repository) over HTTPS from that one host, with a 64 MB cap and
-a 3-minute timeout, and converts it with `library::archive::from_zip`
+in the OFL repository) over HTTPS only, redirects included (at most 3),
+and takes it only when it ends at that host, with a 64 MB cap and a
+3-minute timeout, and converts it with `library::archive::from_zip`
 through the same `Import` the built-in library is made with. Each
-definition is capped at 4 MB unpacked and the zip at 256 MB; a definition
-whose `$schema` names a major format version other than 12 refuses the
-whole download (`ArchiveError::FormatChanged`), one that does not read is
-skipped and counted; serde_json's nesting limit and the converter's caps
+definition is capped at 4 MB unpacked and the zip at 256 MB. The export
+links every file to the format version it was made with
+(`$schema` ".../schema-12.6.0/..."), so `manufacturers.json` or a
+definition that names a major version other than 12, or none, refuses the
+whole download (`ArchiveError::FormatChanged`, "none" for no version); a
+definition that does not read is skipped and counted; serde_json's nesting limit and the converter's caps
 (16-bit shifts checked, at most 512 pixels, modes of at most 512 channels)
 keep any input from panicking or running away. Fewer than 300 models are
 refused as a cut-short download. The result is written atomically to
 `fixture-library.json` in the app's data and used from then on, unless the
 built-in library is newer (by `LibrarySource.date_ms`: the OFL commit's
 time, or the download's) or the file does not read. A download keeps the
-built-in library's source name, copyright and licence, with an empty
-commit. `lights_library_reset` removes it. The show never touches any of
+built-in library's source name, copyright and licence, with the origin
+`Downloaded` instead of `BuiltIn { commit }`. `lights_library_reset` removes it. The show never touches any of
 this.
 
 ### 7.4 Outputs
@@ -1639,10 +1644,14 @@ unverified on the hardware, so the Director calls it experimental:
 
 1. Two 12-byte start packets, both starting with the tag `sTRt`
    (`crates/lights/src/dmx/soundswitch.rs`), then a 200 ms wait.
-2. 50 frames of zeros.
+2. 50 frames of the setup's dark look. The output only says how many
+   (`DmxOutput::warm_up_frames`); the lights thread sends `look::dark`, so
+   a reversed dimmer, where 0 is full, stays dark.
 3. A 522-byte frame every 25 ms: `sTRt`, 01 00 02 02, the port (0), a
    zero, then the 512 channels.
-4. On close, three dark frames.
+4. On close, three frames of the setup's dark look, which the lights
+   thread sends before it lets the output go (`dark_frames_at_release`).
+   The plug-in warms up with frames of zeros.
 
 On Windows, libusb opens only a device bound to a driver it supports, such
 as WinUSB (libusb wiki, Windows, <https://github.com/libusb/libusb/wiki/Windows>);

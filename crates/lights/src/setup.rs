@@ -82,6 +82,32 @@ pub enum Channel {
     Unused,
 }
 
+impl Channel {
+    /// Every kind of channel, with sample values.
+    pub const KINDS: [Channel; 10] = [
+        Channel::Dimmer,
+        Channel::DimmerRange { dark: 0, bright: 255 },
+        Channel::Red,
+        Channel::Green,
+        Channel::Blue,
+        Channel::White,
+        Channel::Strobe,
+        Channel::Shutter { open: 255, closed: 0 },
+        Channel::Fixed { value: 0 },
+        Channel::Unused,
+    ];
+
+    /// Whether a look lights a fixture through it: by its intensity or
+    /// colour (`look::light`). A fixture with none of these is lit only by
+    /// what it does on its own or by a look's extra channels.
+    pub fn follows_looks(&self) -> bool {
+        match self {
+            Channel::Dimmer | Channel::DimmerRange { .. } | Channel::Red | Channel::Green | Channel::Blue | Channel::White | Channel::Shutter { .. } => true,
+            Channel::Strobe | Channel::Fixed { .. } | Channel::Unused => false,
+        }
+    }
+}
+
 /// A light at a DMX address.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[ts(export)]

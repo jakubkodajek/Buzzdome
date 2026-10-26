@@ -12,7 +12,7 @@
 //! (`data/OPEN-FIXTURE-LIBRARY-LICENSE`).
 
 use lights::library::archive::Import;
-use lights::library::LibrarySource;
+use lights::library::{LibraryOrigin, LibrarySource};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -37,7 +37,7 @@ fn main() {
         name: "Open Fixture Library (MIT)".into(),
         copyright: "Copyright (c) 2017 Florian & Felix Edelmann".into(),
         url: "https://open-fixture-library.org".into(),
-        commit: git(&["rev-parse", "HEAD"]),
+        origin: LibraryOrigin::BuiltIn { commit: git(&["rev-parse", "HEAD"]) },
         date_ms: git(&["log", "-1", "--format=%ct"]).parse::<u64>().expect("the commit's time") * 1000,
         licence: read(&checkout.join("LICENSE")),
     };
