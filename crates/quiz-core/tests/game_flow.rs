@@ -2073,15 +2073,21 @@ fn starting_over_keeps_the_players_and_team_names_and_asks_every_question_again(
     assert_eq!(Game::replay(show.game.quiz().clone(), &show.journal, RULES_VERSION), show.game);
 }
 
-/// What the results say each question asked gave, by slide: (buzzer, button, right, points, joker).
-fn marks(game: &Game) -> Vec<(usize, Vec<(u16, Option<Button>, bool, i32, bool)>)> {
+/// A mark in the results: (buzzer, button, right, points, joker).
+type MarkRow = (u16, Option<Button>, bool, i32, bool);
+
+/// A player in the results: (buzzer, place, points by round, changes by hand, score).
+type StandingRow = (u16, Option<usize>, Vec<i32>, i32, i32);
+
+/// What the results say each question asked gave, by slide.
+fn marks(game: &Game) -> Vec<(usize, Vec<MarkRow>)> {
     let results = game.show_results();
     let mark = |&(buzzer, m): &(u16, Mark)| (buzzer, m.answer.map(|a| a.button), m.right, m.points, m.joker);
     results.questions.iter().map(|q| (q.slide, q.marks.iter().map(mark).collect())).collect()
 }
 
 /// Each player's place, points by round, changes by hand and score, from the results.
-fn standings(game: &Game) -> Vec<(u16, Option<usize>, Vec<i32>, i32, i32)> {
+fn standings(game: &Game) -> Vec<StandingRow> {
     let results = game.show_results();
     results.players.into_iter().map(|p| (p.buzzer, p.rank, p.rounds, p.adjusted, p.score)).collect()
 }
