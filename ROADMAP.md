@@ -69,6 +69,7 @@ Status keys: `[x]` done, `[~]` in progress, `[ ]` not started.
 - [~] Show settings: team names (SF-5), the quiz settings (QZ-11: end-of-question steps, clock, answers, projector; jokers SF-8) and sounds (SN-1 to SN-3) done; the welcome screen to do
 - [x] Recent quiz files on the Director's start, played in one click (SF-1)
 - [x] Reset scores, or start the show over from registration with the same players and teams (SF-9)
+- [x] Results: the ranking with round totals and every question's answers in the Director, exported to CSV or printed and saved as a PDF (SF-11)
 
 ### M4: Show polish (week 3-4)
 - [~] Sounds (our own library with a choice per event, background music) and the countdown done (SN-1 to SN-3); transitions and branding of the welcome screen to do

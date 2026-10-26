@@ -6,7 +6,7 @@
 
 use crate::{place_file, write_atomic, Context, FileAction, MediaSource, QuizFileError, Result};
 use calamine::{open_workbook_auto, Data, DataRef, Reader, SheetType, SheetVisible, Sheets, XlsxError};
-use quiz_core::{export_table, import_tables, is_safe_reference, Category, ImportIssue, ImportNote, Quiz, Slide, Table};
+use quiz_core::{defused, export_table, import_tables, is_safe_reference, Category, ImportIssue, ImportNote, Quiz, Slide, Table};
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::collections::BTreeMap;
@@ -400,15 +400,28 @@ pub fn export_sheet(quiz: &Quiz, root: &Path, dest: &Path, separator: u8) -> Res
         let name = reference.rsplit('/').next().unwrap_or(reference);
         names.insert(reference, place_file(folder, name, MediaSource::File(&source))?);
     }
-    let rows = export_table(quiz, |reference| names.get(reference).cloned());
+    write_csv(export_table(quiz, |reference| names.get(reference).cloned()), dest, separator)?;
+    Ok(SheetExport { media: names.len(), missing, refused })
+}
+
+/// Writes a show's results to `dest` as a CSV file, the rows as the
+/// Director lays them out (spec SF-11). A cell a spreadsheet program would
+/// run as a formula, such as a player named `=1+1`, is written as text.
+pub fn export_results(rows: Vec<Vec<String>>, dest: &Path, separator: u8) -> Result<()> {
+    write_csv(rows.into_iter().map(|row| row.into_iter().map(defused).collect()).collect(), dest, separator)
+}
+
+/// Writes `rows` to `dest` as spreadsheet programs open a CSV file as it
+/// is: UTF-8 with a byte order mark, `separator` between cells, and CRLF
+/// line ends.
+fn write_csv(rows: Vec<Vec<String>>, dest: &Path, separator: u8) -> Result<()> {
     let unwritable = |e: csv::Error| QuizFileError::Spreadsheet(e.to_string());
     let mut writer = csv::WriterBuilder::new().delimiter(separator).terminator(csv::Terminator::CRLF).from_writer(UTF8_BOM.to_vec());
     for row in rows {
         writer.write_record(&row).map_err(unwritable)?;
     }
     let bytes = writer.into_inner().map_err(|e| QuizFileError::Spreadsheet(e.to_string()))?;
-    write_atomic(dest, &bytes)?;
-    Ok(SheetExport { media: names.len(), missing, refused })
+    write_atomic(dest, &bytes)
 }
 
 #[cfg(test)]
@@ -752,6 +765,18 @@ mod tests {
         fs::write(dir.join("songs.csv"), "Title,Artist\nSong,Band\n").unwrap();
         let songs = dir.join("songs.csv");
         assert!(matches!(import_sheet(&songs, &read_tables(&songs).unwrap(), &[], &dir, 1), Err(QuizFileError::Sheet(_))));
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn results_export_as_a_csv_file_with_formulas_written_as_text() {
+        let dir = temp_dir("results");
+        let dest = dir.join("results.csv");
+        let rows = vec![vec!["Place".to_string(), "Name".into(), "Score".into()], vec!["1".into(), "=1+1".into(), "-15".into()]];
+        export_results(rows, &dest, b';').unwrap();
+        let bytes = fs::read(&dest).unwrap();
+        assert!(bytes.starts_with(UTF8_BOM));
+        assert_eq!(&bytes[UTF8_BOM.len()..], b"Place;Name;Score\r\n1;'=1+1;-15\r\n", "a negative score stays a number");
         fs::remove_dir_all(&dir).unwrap();
     }
 }
