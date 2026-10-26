@@ -165,6 +165,8 @@ fn step_commands(game: &Game, rng: &mut Rng) -> Vec<Command> {
         Command::PlayVideo,
         Command::GoToFinal,
         Command::GoTo { slide: rng.index(slides + 2) },
+        Command::StartOver,
+        Command::ResetScores,
     ]
 }
 
@@ -194,7 +196,7 @@ fn offered(game: &Game, command: &Command) -> Option<bool> {
         Command::CloseQuestion => c.close_question,
         Command::RestartQuestion => c.restart_question,
         Command::PlayVideo => c.play_video,
-        Command::GoToFinal => c.go_to,
+        Command::GoToFinal | Command::StartOver | Command::ResetScores => c.go_to,
         Command::GoTo { slide } => c.go_to && *slide < game.quiz().slides.len(),
         Command::SetJoker { buzzer, on } => c.set_joker && game.can_set_joker(*buzzer, *on),
         _ => return None,
@@ -404,9 +406,10 @@ impl Show {
 
     /// Keeps `baseline` after `command` changed the show from `before`.
     fn track_baseline(&mut self, before: &Game, command: &Command) {
-        // The show entered a slide (`Game::enter_slide`), where score changes start afresh: also a
-        // question that closed before, which comes back with its answer shown.
-        let jumped = matches!(command, Command::GoTo { .. } | Command::GoToFinal | Command::RestartQuestion);
+        // Score changes start afresh where the show entered a slide (`Game::enter`), also a
+        // question that closed before, which comes back with its answer shown, and once the
+        // scores were reset.
+        let jumped = matches!(command, Command::GoTo { .. } | Command::GoToFinal | Command::RestartQuestion | Command::StartOver | Command::ResetScores);
         let entered = jumped || before.phase() == &Phase::Lobby || before.slide_index() != self.game.slide_index();
         if entered {
             self.baseline = Some(self.game.players().map(|p| (p.buzzer, i64::from(p.score))).collect());

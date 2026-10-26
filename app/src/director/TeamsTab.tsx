@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { buttonLabel } from "../answers";
-import { useApp, useDispatch } from "../app-context";
+import { useApp, useDispatch, useRun } from "../app-context";
 import { MAX_NAME_CHARS } from "../bindings/Constants";
+import { confirmAction } from "../confirm";
 import { seconds, signed } from "../format";
 import { usePreparedTeams, useTeamsLost } from "../hooks";
 import { settingsLostText } from "../messages";
@@ -44,6 +45,7 @@ function TeamsLost({ lost }: { lost: SettingsLost | null }) {
 function ShowTeams({ view, lost }: { view: GameView; lost: SettingsLost | null }) {
   const { t } = useApp();
   const dispatch = useDispatch();
+  const run = useRun();
   const [selected, setSelected] = useState<Set<BuzzerId>>(new Set());
   const [anchor, setAnchor] = useState<BuzzerId | null>(null);
   const [newBuzzer, setNewBuzzer] = useState("");
@@ -69,6 +71,8 @@ function ShowTeams({ view, lost }: { view: GameView; lost: SettingsLost | null }
   };
 
   const forSelected = (make: (buzzer: BuzzerId) => Command) => selected.forEach((buzzer) => dispatch(make(buzzer)));
+  // Refused mid-question like the jumps (`Controls.goTo`), and asks first.
+  const resetScores = () => run(confirmAction(t, t("resetScoresConfirm")).then((yes) => yes && dispatch({ type: "resetScores" })));
 
   const addPlayer = () => {
     const buzzer = Number(newBuzzer);
@@ -92,6 +96,10 @@ function ShowTeams({ view, lost }: { view: GameView; lost: SettingsLost | null }
         </button>
         <button disabled={selected.size === 0} onClick={() => forSelected((buzzer) => ({ type: "setPlayerEnabled", buzzer, enabled: true }))}>
           {t("enable")}
+        </button>
+        <span className="toolbar-separator" />
+        <button disabled={!view.controls.goTo} onClick={resetScores}>
+          {t("resetScores")}
         </button>
         <span className="spacer" />
         <input
