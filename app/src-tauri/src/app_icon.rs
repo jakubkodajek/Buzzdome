@@ -55,7 +55,8 @@ struct IconFile {
 }
 
 pub struct AppIcon {
-    /// Held while the colour is written, so the last colour chosen is kept.
+    /// Held while a colour is written and given to the windows, so the last
+    /// colour chosen is the one kept and shown.
     file: Mutex<AppFile>,
     /// Never held while the disk works: windows read it as they open.
     color: Mutex<IconColor>,
@@ -106,11 +107,9 @@ pub async fn set_app_icon(app: AppHandle, color: IconColor) -> CmdResult<()> {
     let image = color.image()?;
     off_ui(move || {
         let state = app.state::<AppIcon>();
-        {
-            let file = state.file.lock().unwrap();
-            file.store(&IconFile { color })?;
-            *state.color.lock().unwrap() = color;
-        }
+        let file = state.file.lock().unwrap();
+        file.store(&IconFile { color })?;
+        *state.color.lock().unwrap() = color;
         for window in app.webview_windows().values() {
             set_icon(window, image.clone());
         }
