@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { NO_CONTROLS, previewView } from "../host/preview";
 import { translator } from "../i18n";
 import type { GameView, PlayerView, ReceiverInfo, ReceiverStatus } from "../types";
-import { launchCheck, type CheckItem, type LaunchFacts } from "./launch-check";
+import { launchCheck, projectorScreen, type CheckItem, type LaunchFacts } from "./launch-check";
 
 const t = translator("en");
 
@@ -97,6 +97,15 @@ describe("launchCheck", () => {
     expect(item("projector", { projector: { onDirectorMonitor: true, monitors: 2, fullscreen: true } })).toMatchObject({ state: "warn", fixes: ["placeProjector"] });
     expect(item("projector", { projector: { onDirectorMonitor: false, monitors: 2, fullscreen: false } })).toMatchObject({ state: "warn", fixes: ["placeProjector"] });
     expect(item("projector", { projector: undefined })?.state).toBe("todo");
+  });
+
+  it("puts the projector full screen on the chosen screen only while the Director is not on it", () => {
+    const monitor = (id: string, director: boolean) => ({ id, name: null, width: 1920, height: 1080, director });
+    const monitors = [monitor("laptop", false), monitor("projector", true)];
+    expect(projectorScreen(monitors, "laptop")).toBe("laptop");
+    expect(projectorScreen(monitors, "projector")).toBeNull();
+    expect(projectorScreen(monitors, "unplugged")).toBeNull();
+    expect(projectorScreen(monitors, null)).toBeNull();
   });
 
   it("asks for a test sound until the quizmaster heard it, and says where the sound is turned down", () => {

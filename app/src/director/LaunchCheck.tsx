@@ -9,7 +9,7 @@ import type { StringKey } from "../i18n";
 import { CheckIcon, CrossIcon, QuestionIcon, WarningIcon } from "../icons";
 import { soundsOf } from "../quiz";
 import type { GameView, Quiz } from "../types";
-import { launchCheck, type CheckFix, type CheckPart, type CheckState, type Muted, type SoundTry } from "./launch-check";
+import { launchCheck, projectorScreen, type CheckFix, type CheckPart, type CheckState, type Muted, type SoundTry } from "./launch-check";
 import type { ProjectorSettings } from "./SettingsTab";
 
 /** The Director's tabs a fix opens. */
@@ -85,9 +85,9 @@ function LaunchCheckPanel({ view, quiz, projector, onTab, onHide }: LaunchCheckP
       case "openProjector":
         return run(api.openHostWindow(projector.monitor, projector.fullscreen));
       case "placeProjector":
-        // Onto a screen the Director is not on, unless the quizmaster chose one, and full screen.
+        // Full screen on a screen the Director is not on: the monitors as they are now, as the Director may have moved.
         projector.setFullscreen(true);
-        return run(api.openHostWindow(projector.monitor, true));
+        return run(api.listMonitors().then((monitors) => api.openHostWindow(projectorScreen(monitors, projector.monitor), true)));
       case "playSound":
         // The app's own sound, so a quiz whose sound for the moment is missing still tests the speakers.
         preview.play("correct", defaultChoice("correct"));

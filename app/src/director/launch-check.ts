@@ -7,7 +7,7 @@ import { diskSize } from "../format";
 import type { Translate } from "../i18n";
 import { awaitsAnswer, receiverStatusText } from "../messages";
 import { readPreference, writePreference } from "../preferences";
-import type { GameView, ProjectorWindow, ReceiverInfo } from "../types";
+import type { GameView, MonitorInfo, ProjectorWindow, ReceiverInfo } from "../types";
 
 export type CheckPart = "receiver" | "buzzers" | "projector" | "sound" | "disk";
 
@@ -130,6 +130,16 @@ function diskCheck(t: Translate, bytes: number | null | undefined): CheckItem | 
   if (bytes < DISK_PROBLEM_BYTES) return { part: "disk", state: "problem", text: t("launchDiskFull", { size }), fixes: [] };
   if (bytes < DISK_WARN_BYTES) return { part: "disk", state: "warn", text: t("launchDiskLow", { size }), fixes: [] };
   return { part: "disk", state: "ok", text: t("launchDiskFree", { size }), fixes: [] };
+}
+
+/**
+ * The monitor the fix "full screen on its screen" opens the projector on:
+ * the chosen one, unless the Director is on it, as it is when it was moved
+ * there or the system opened it there; else none, so the backend picks one
+ * the Director is not on (`projector_place`).
+ */
+export function projectorScreen(monitors: readonly MonitorInfo[], chosen: string | null): string | null {
+  return monitors.some((monitor) => monitor.id === chosen && !monitor.director) ? chosen : null;
 }
 
 const LAUNCH_CHECK_KEY = "quiz-show.launch-check";
