@@ -11,6 +11,7 @@ import { SlideMedia, type ScreenMode } from "../slide-media";
 import { styleOf, textStyleCss, type StyledText } from "../theme/slide-style";
 import type { AnswerResults, ClockView, GameView, PlayerView, QuestionSlide, Slide } from "../types";
 import { podiumBlocks } from "./podium";
+import { chartShares } from "./answer-chart";
 import { Timer } from "./Timer";
 import "./slide.css";
 
@@ -198,6 +199,7 @@ function QuestionScreen(props: {
   // In the show the quiz's settings can keep the answer and a buzz's points off the screen (spec QZ-11).
   const show = mode === "show";
   const marksAnswer = step === "revealed" && !(show && view.settings.hideAnswer);
+  const chart = chartShares(view);
   const buzzPoints = barPlayer?.delta ?? 0;
   const jokers = enabled.filter((p) => p.joker.on);
   const buzzBar = question.mode === "fastestFinger" && step !== "ready";
@@ -237,13 +239,14 @@ function QuestionScreen(props: {
             return (
               <div
                 key={i}
-                className={["answer", `answer-${i}`, marksAnswer ? (isCorrect ? "is-correct" : "is-dim") : ""].join(" ")}
+                className={["answer", `answer-${i}`, marksAnswer ? (isCorrect ? "is-correct" : "is-dim") : "", chart ? "has-chart" : ""].join(" ")}
                 data-element={`answer-${i}`}
                 style={answerStyle}
               >
                 <span className="letter">{ANSWER_LETTERS[i]}</span>
                 <span className="answer-text">{placeholder(answer, t("answerPlaceholder", { letter: ANSWER_LETTERS[i] }))}</span>
                 {closed && view.answerCounts && <span className="answer-count">{view.answerCounts[i]}</span>}
+                {chart && <span className="answer-bar" style={{ "--share": `${chart[i] * 100}%` } as CSSProperties} />}
                 {(marksAnswer || !show) && isCorrect && <CorrectMark share={share} />}
               </div>
             );

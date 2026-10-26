@@ -820,8 +820,11 @@ packages users will install are read the same way.
   in it was judged wrong (`Game::sits_out`), which leaves nobody to
   answer. `noAnswerPenalty` gives the players an everyone-answers question
   counts and who did not answer the question's penalty, as a wrong
-  answer. `hideAnswer` and `hideBuzzPoints` change only what the projector
-  shows (`GameView::settings`); the Director and the scores stay the same.
+  answer. `hideAnswer`, `hideBuzzPoints` and `answerChart` change only
+  what the projector shows (`GameView::settings`); the Director and the
+  scores stay the same. The answer chart's bars come from the view's
+  `answer_counts` over the players the question counted (`results`), so
+  they show what the counts on the answers already say, as shares.
   None needs a rules version: the settings travel with the quiz in the
   session, and a quiz without them plays as before.
 - **Jokers (SF-8).** `Game::jokers` keeps the questions players play

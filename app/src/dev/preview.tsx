@@ -213,6 +213,15 @@ const SCENES: Record<string, GameView | null> = {
     answeredCount: 4,
     answerCounts: [1, 2, 1, 0],
   }),
+  // The same with the answer chart on (quiz setting answerChart).
+  chart: view({
+    phase: { phase: "question", step: "revealed", winner: null },
+    results: { right: 2, wrong: 2, none: 1 },
+    players: players(answered.map((a, i) => ({ ...a, delta: [84, 80, 0, 0, 0][i] || null }))),
+    answeredCount: 4,
+    answerCounts: [1, 2, 1, 0],
+    settings: { ...DEFAULT_QUIZ_SETTINGS, answerChart: true },
+  }),
   buzzed: view({
     phase: { phase: "question", step: "buzzed", buzzer: 3, button: "big", clock: { limitMs: 30000, elapsedBeforeMs: 4300, runningSinceMs: null, pressesFromMs: 0 } },
     slideIndex: 7,
