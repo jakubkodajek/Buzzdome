@@ -191,8 +191,7 @@ export function commandForAction(action: ShowAction, view: GameView): Command | 
     case "next":
       return controls.next ? { type: "next" } : null;
     case "previous":
-      // From the final ranking past the last slide, back to the last slide.
-      return controls.goTo && view.slideIndex > 0 ? { type: "goTo", slide: Math.min(view.slideIndex, view.slideCount) - 1 } : null;
+      return view.previousSlide === null ? null : { type: "goTo", slide: view.previousSlide };
     case "clock":
       if (controls.pauseClock) return { type: "pauseClock" };
       return controls.resumeClock ? { type: "resumeClock" } : null;

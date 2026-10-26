@@ -7,8 +7,8 @@ import type { Controls, GameView } from "./types";
 
 const slide = { id: "q1", type: "billboard", title: "Round 1", text: "", notes: "", picture: null, video: null, sound: null, background: null } as const;
 
-function viewWith(controls: Partial<Controls>, leaderboardVisible = false, slideIndex = 0, slideCount = 1): GameView {
-  return { ...previewView({ ...slide }, slideIndex, slideCount, "Quiz"), controls: { ...NO_CONTROLS, ...controls }, leaderboardVisible };
+function viewWith(controls: Partial<Controls>, leaderboardVisible = false): GameView {
+  return { ...previewView({ ...slide }, 0, 1, "Quiz"), controls: { ...NO_CONTROLS, ...controls }, leaderboardVisible };
 }
 
 describe("commandForKey", () => {
@@ -66,12 +66,9 @@ describe("commandForAction", () => {
     for (const [action, key] of pairs) expect(commandForAction(action, viewWith(all))).toEqual(commandForKey(key, viewWith(all)));
   });
 
-  it("goes back a slide only between questions", () => {
-    expect(commandForAction("previous", viewWith({ goTo: true }, false, 3, 5))).toEqual({ type: "goTo", slide: 2 });
-    expect(commandForAction("previous", viewWith({ next: true }, false, 3, 5))).toBeNull();
-    expect(commandForAction("previous", viewWith({ goTo: true }, false, 0, 5))).toBeNull();
-    // The final ranking past the last slide goes back to the last slide.
-    expect(commandForAction("previous", viewWith({ goTo: true }, false, 5, 5))).toEqual({ type: "goTo", slide: 4 });
+  it("goes back to the slide the show says Back goes to, if any", () => {
+    expect(commandForAction("previous", { ...viewWith({ goTo: true }), previousSlide: 2 })).toEqual({ type: "goTo", slide: 2 });
+    expect(commandForAction("previous", { ...viewWith({ goTo: true }), previousSlide: null })).toBeNull();
   });
 
   it("ends the question and plays the video only when the step takes it", () => {

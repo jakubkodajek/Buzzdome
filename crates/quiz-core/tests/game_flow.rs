@@ -1634,3 +1634,62 @@ fn a_closed_question_waits_on_its_own_stage_until_the_answer_shows() {
     show.run(2_000, Command::Next).unwrap();
     assert_eq!(show.game.stage(2_000), Stage::Revealed);
 }
+
+#[test]
+fn going_back_to_a_scored_question_shows_its_answer_and_never_asks_it_again() {
+    let slides = vec![question("q1", AnswerMode::Everyone), question("q2", AnswerMode::Everyone)];
+    let mut show = everyone_answered(running(Show::new(slides)));
+    show.run(5_000, Command::Next).unwrap();
+    show.run(6_000, Command::Next).unwrap();
+    let scores = (show.score(1), show.score(2));
+    assert_eq!(scores, (95, -20));
+
+    // Back, as the remote's back arrow: q1 shows its answer and takes none.
+    assert_eq!(show.game.previous(), Some(0));
+    let effects = show.run(7_000, Command::GoTo { slide: 0 }).unwrap();
+    assert_eq!(step(&show.game), QuestionStep::Revealed { winner: None });
+    assert_eq!(effects, [Effect::Lights { lights: vec![(1, Light::Off), (2, Light::Off)] }]);
+    assert_eq!(show.game.buzzer_mode(), BuzzerMode::Off);
+    assert!(show.game.ignores(&Stamped { at_ms: 8_000, command: Command::Press { buzzer: 2, button: Button::B } }));
+    let view = show.game.view(8_000);
+    assert_eq!((view.results, view.answer_counts), (None, None), "this show's results of it are gone");
+    assert!(!view.controls.restart_question);
+
+    // Forward leaves it, its scores as they were.
+    show.run(9_000, Command::Next).unwrap();
+    assert_eq!((show.game.slide_index(), step(&show.game)), (1, QuestionStep::Ready));
+    assert_eq!((show.score(1), show.score(2)), scores);
+
+    // A question skipped before it closed is asked when the show comes back to it.
+    show.run(10_000, Command::GoTo { slide: 0 }).unwrap();
+    show.run(11_000, Command::GoTo { slide: 1 }).unwrap();
+    show.run(12_000, Command::GoTo { slide: 0 }).unwrap();
+    show.run(13_000, Command::Next).unwrap();
+    show.run(14_000, Command::GoTo { slide: 1 }).unwrap();
+    assert_eq!(step(&show.game), QuestionStep::Ready, "q2 never closed");
+
+    // A show begun under rules version 5 asks it again on Back and Forward, as it did.
+    let old = Game::replay(show.game.quiz().clone(), &show.journal[..10], 5);
+    assert!(matches!((old.slide_index(), step(&old)), (0, QuestionStep::Running { .. })), "{:?}", old.phase());
+}
+
+#[test]
+fn back_goes_to_the_slide_before_but_not_out_of_a_question_in_play() {
+    let mut show = Show::new(vec![question("q1", AnswerMode::Everyone), question("q2", AnswerMode::FastestFinger)]);
+    assert_eq!(show.game.previous(), None, "the lobby");
+    show.press(0, 1, Button::Big);
+    show.press(0, 2, Button::Big);
+    show.run(1_000, Command::Next).unwrap();
+    assert_eq!(show.game.previous(), None, "the first slide");
+    show.run(2_000, Command::GoTo { slide: 1 }).unwrap();
+    assert_eq!(show.game.view(2_000).previous_slide, Some(0));
+    show.run(3_000, Command::Next).unwrap();
+    assert_eq!(show.game.previous(), None, "the clock runs");
+    show.press(4_000, 1, Button::Big);
+    assert_eq!(show.game.previous(), None, "a buzz waits for judgement");
+    show.run(5_000, Command::JudgeRight).unwrap();
+    assert_eq!(show.game.previous(), Some(0));
+    show.run(6_000, Command::Next).unwrap();
+    assert_eq!(show.game.phase(), &Phase::Final { step: 0 });
+    assert_eq!(show.game.previous(), Some(1), "from the final ranking back to the last slide");
+}

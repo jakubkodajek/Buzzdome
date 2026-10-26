@@ -76,7 +76,7 @@ impl RemoteKeys {
         }
     }
 
-    /// Every key with what it does, in the order of the remote's codes.
+    /// Every key with what it does, in `RemoteKey::ALL` order.
     pub fn all(&self) -> Vec<RemoteKeyAction> {
         RemoteKey::ALL.into_iter().map(|key| RemoteKeyAction { key, action: self.action(key) }).collect()
     }

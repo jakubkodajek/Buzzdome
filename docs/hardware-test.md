@@ -163,7 +163,8 @@ not go as expected; whatever happens, go on and export the log at the end
     `cargo run -p buzzers --example hid-monitor -- 10c4:1819` (end of this
     file), press A a few times on it and on a full one, and note it if
     that digit, or any byte but the buzzer and the timers, differs.
-11. **The remote's keys.** Open the Receiver tab and press each key of the
+11. **The remote's keys.** Before you start a show (in an open show a key
+    also does its action), open the Receiver tab and press each key of the
     quizmaster's remote once, slowly. Expected: under "Quizmaster's
     remote" the row of the key pressed lights up, and "Last pressed" names
     it. The three arrows were named over chat on 2026-10-25: check
@@ -341,7 +342,9 @@ press that leaves no line under "Raw data", and what came before it.
     pause the clock and go on, trophy for the leaderboard, back arrow
     between questions to go back a slide, colour bars to play a video
     again. Expected: each key does what the Receiver tab says, once per
-    press. Note from how far away and through what the remote still
+    press. Back arrow after a question, then forward arrow: the question
+    comes back with its answer shown, takes no presses, and forward goes
+    on with the scores unchanged. Note from how far away and through what the remote still
     works.
 
 ## 7. Failures

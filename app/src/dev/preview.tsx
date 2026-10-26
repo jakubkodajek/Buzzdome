@@ -144,6 +144,7 @@ function view(partial: Partial<GameView>): GameView {
     phase: { phase: "question", step: "ready" },
     slide: quiz.slides[1],
     nextSlide: 2,
+    previousSlide: 0,
     clock: null,
     players: players(),
     teams: [],

@@ -178,7 +178,7 @@ function QuestionScreen(props: {
   let middle: ReactNode = null;
   if (view.results) {
     middle = <ResultBars results={view.results} />;
-  } else if (question.mode === "everyone") {
+  } else if (question.mode === "everyone" && !closed) {
     middle = (
       <div className="responders">
         {waiting.slice(0, 40).map((p) => (

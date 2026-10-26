@@ -32,8 +32,10 @@ pub type BuzzerId = u16;
 /// shows its results. 5: a fastest-finger question takes buzzes from the
 /// answer buttons where every answer has one, else from the big button
 /// (`Button::buzzes_in`), and a player switched on while one is under way
-/// joins at the next question.
-pub const RULES_VERSION: u32 = 5;
+/// joins at the next question. 6: a question that closed earlier in the
+/// show comes back with its answer shown when the show goes to it again
+/// (`Game::closed_questions`), so it is never asked and scored twice.
+pub const RULES_VERSION: u32 = 6;
 
 /// The oldest `RULES_VERSION` whose shows replay today as they were played:
 /// every later change applies only to shows begun under it
@@ -491,6 +493,10 @@ pub struct Game {
     joins_next: BTreeSet<BuzzerId>,
     /// What the current question gave each player (`credit`).
     gains: BTreeMap<BuzzerId, Gain>,
+    /// The slides whose question closed in this show. Going to one again
+    /// shows its answer (rules version 6): its scores stand, and asking it
+    /// again would score it twice.
+    closed_questions: BTreeSet<usize>,
     /// When the current question closed for having nobody left to answer,
     /// for the step the quiz's settings then take (`pending_step`); none
     /// once the quizmaster holds it.
@@ -526,6 +532,7 @@ impl Game {
             locked_out: BTreeSet::new(),
             joins_next: BTreeSet::new(),
             gains: BTreeMap::new(),
+            closed_questions: BTreeSet::new(),
             all_answered_at: None,
             leaderboard_visible: false,
             teams: Vec::new(),
@@ -605,6 +612,16 @@ impl Game {
         };
         let count = self.quiz.slides.len();
         (next < count || (next == count && self.quiz.final_slide().is_none())).then_some(next)
+    }
+
+    /// The slide the quizmaster's Back goes to (`GoTo`): the one before
+    /// the slide on screen, the last one from the final ranking after it.
+    /// None on the first slide, before it and while a question is in play.
+    pub fn previous(&self) -> Option<usize> {
+        if self.phase == Phase::Lobby || !self.can_jump() {
+            return None;
+        }
+        self.slide.checked_sub(1)
     }
 
     /// The next `Next` leaves the current slide (rather than moving on within it).
@@ -709,7 +726,7 @@ impl Game {
             resume_clock: running.is_some_and(|clock| !clock.is_running()),
             close_question: running.is_some(),
             play_video: self.shows_video(),
-            go_to: self.jumps_out_of_a_question() || !self.question_in_play(),
+            go_to: self.can_jump(),
             restart_question: self.question_restartable(),
         }
     }
@@ -1101,6 +1118,7 @@ impl Game {
             return vec![];
         };
         self.phase = Phase::Question(QuestionStep::Closed);
+        self.closed_questions.insert(self.slide);
         if q.mode == AnswerMode::Everyone {
             self.counted = self.enabled_buzzers().collect();
             for buzzer in self.counted.clone() {
@@ -1198,10 +1216,15 @@ impl Game {
     }
 
     fn jump_to(&mut self, index: usize) -> Result<Vec<Effect>, GameError> {
-        if self.question_in_play() && !self.jumps_out_of_a_question() {
+        if !self.can_jump() {
             return Err(GameError::NotNow);
         }
         Ok(self.enter_slide(index))
+    }
+
+    /// Whether `GoTo` and `GoToFinal` apply: not while a question is in play.
+    fn can_jump(&self) -> bool {
+        self.jumps_out_of_a_question() || !self.question_in_play()
     }
 
     /// Whether a jump may leave a question in play, as before rules version
@@ -1226,6 +1249,9 @@ impl Game {
             Some(SlideContent::Explanation { .. }) => Phase::Explanation,
             Some(SlideContent::EndOfRound { .. }) => Phase::EndOfRound,
             Some(SlideContent::Final { .. }) => Phase::Final { step: 0 },
+            Some(SlideContent::Question(_)) if self.rules_version >= 6 && self.closed_questions.contains(&index) => {
+                Phase::Question(QuestionStep::Revealed { winner: None })
+            }
             Some(SlideContent::Question(_)) => Phase::Question(QuestionStep::Ready),
         };
         vec![self.lights_now()]

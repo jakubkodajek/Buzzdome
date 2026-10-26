@@ -14,7 +14,12 @@ export type GameView = { quizTitle: string, slideIndex: number, slideCount: numb
  * (`Game::following`), for the quizmaster: past the last slide for the
  * final ranking, none once the show is over.
  */
-nextSlide: number | null, clock: ClockView | null, players: Array<PlayerView>, 
+nextSlide: number | null, 
+/**
+ * The slide the quizmaster's Back goes to (`Game::previous`), none
+ * where it goes nowhere.
+ */
+previousSlide: number | null, clock: ClockView | null, players: Array<PlayerView>, 
 /**
  * The team names prepared for the show, in order, with their buzzers.
  */
@@ -25,7 +30,8 @@ teams: Array<TeamView>, enabledCount: number,
 answeredCount: number, 
 /**
  * Everyone-answers: how many of the players it counted gave each
- * answer, in order, once the question is closed.
+ * answer, in order, once the question is closed; none when it counted
+ * nobody, as when the show came back to it (`Game::previous`).
  */
 answerCounts: Array<number> | null, 
 /**
@@ -35,7 +41,8 @@ answerCounts: Array<number> | null,
  */
 answerShares: Array<number | null>, 
 /**
- * Everyone-answers: how the players it counted did, once the question is closed.
+ * Everyone-answers: how the players it counted did, once the question
+ * is closed; none when it counted nobody, as `answer_counts`.
  */
 results: AnswerResults | null, buzzed: number | null, leaderboardVisible: boolean, 
 /**

@@ -366,8 +366,9 @@ and the game keeps that version to the show's end (`Game::replay`), so
 what is journaled after a resume replays the same way at the next one: a
 show begun before version 2 jumps out of a question in play, as the app
 then restarted a question after a crash with a `GoTo` to it, one begun
-before version 3 switches a player off without closing the question, and
-one begun before version 4 restarts a closed question. Version 3 also
+before version 3 switches a player off without closing the question,
+one begun before version 4 restarts a closed question, and one begun
+before version 6 asks a question it goes back to again. Version 3 also
 changed what is not kept so (ties, accents in names), so a show begun
 before it, or under a newer app's rules, resumes with a warning that its
 scores may differ (`RulesChanged`); from version 3 on
@@ -1498,8 +1499,14 @@ never go into the game themselves:
 - The Director does a key's action exactly as the keyboard key for that
   action (`commandForAction` in `keyboard.ts`): only when the step takes
   it, one step per press through the window's step guard, and journaled
-  like any command. Previous slide goes to the slide before, between
-  questions only (`GoTo`). Projector opens or closes the projector window,
+  like any command. Previous slide goes where `Game::previous` says
+  (`GameView.previousSlide`, `GoTo`): the slide before, or from the final
+  ranking the last slide, and only between questions. A question that
+  closed earlier in the show comes back with its answer shown
+  (`Game::closed_questions`, rules version 6): it takes no presses, shows
+  no results (they are not kept), and its scores stand, so Back then
+  Forward, as on a presenter's clicker, never asks it and scores it twice.
+  The Director's Go to does the same. Projector opens or closes the projector window,
   as M does. The projector window does not listen, so no key acts twice.
 
 | key | default action |
