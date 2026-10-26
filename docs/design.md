@@ -249,9 +249,11 @@ draws slides without a show.
   root takes the class `dark` while it shows dark. Every colour of
   `director.css` is a custom property of `.director`, which `.director.dark`
   sets again, so the two looks cannot drift apart; the command panel,
-  toolbars and sound board are dark in both. The editor's controls the
-  Director borrows (menus, dialogs, colour picker, switches) are light in
-  `editor.css`, so `director.css` gives them the dark look's colours.
+  toolbars and sound board are dark in both. The editor's popups the
+  Director borrows (menus, dialogs, colour, gradient and font pickers)
+  read `--popup-*` properties with their light colours as fallbacks, which
+  `.director.dark` sets, as the editor's dark properties panel does; the
+  light switches get their dark colours in `director.css`.
   While the dark look is on screen the window's title bar is set dark
   (`setTheme`, which draws it on Windows), and left to the system again
   otherwise, so the light look changes nothing there.

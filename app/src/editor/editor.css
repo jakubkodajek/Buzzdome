@@ -1029,6 +1029,9 @@
   --accent-soft: #23395a;
   --hover: #2d3b4d;
   --hover-line: #4f7bb5;
+  --popup-line: var(--line);
+  --popup-text: var(--text);
+  --popup-bg: #262626;
 
   color: var(--text);
   background: #1f1f1f;
@@ -1255,14 +1258,16 @@
   text-transform: none;
 }
 
+/* The popups below are light unless a dark place sets their --popup-*
+   colours: the editor's dark properties panel and the Director's dark look. */
 .color-picker,
 .gradient-picker,
 .font-picker {
   position: fixed;
   z-index: 21;
-  border: 1px solid #c6c6c6;
-  color: #222;
-  background: #fff;
+  border: 1px solid var(--popup-line, #c6c6c6);
+  color: var(--popup-text, #222);
+  background: var(--popup-bg, #fff);
   box-shadow: 2px 4px 14px rgba(0, 0, 0, 0.22);
   outline: none;
 }
@@ -1555,14 +1560,6 @@
   padding-left: 16px;
 }
 
-.properties-panel.dark .color-picker,
-.properties-panel.dark .gradient-picker,
-.properties-panel.dark .font-picker {
-  border-color: var(--line);
-  color: var(--text);
-  background: #262626;
-}
-
 .studio .properties-panel.dark .swatch,
 .studio .properties-panel.dark .gradient-preview,
 .studio .properties-panel.dark .font-name,
@@ -1609,7 +1606,7 @@
   width: min(640px, 92vw);
   max-height: 90vh;
   border: 1px solid var(--accent);
-  background: #fff;
+  background: var(--popup-bg, #fff);
   box-shadow: 0 10px 40px rgba(0, 0, 0, 0.35);
 }
 
@@ -1643,8 +1640,8 @@
   justify-content: flex-end;
   gap: 8px;
   padding: 10px 18px;
-  border-top: 1px solid #e6e6e6;
-  background: #f7f7f7;
+  border-top: 1px solid var(--popup-separator, #e6e6e6);
+  background: var(--popup-footer, #f7f7f7);
 }
 
 .edit-form {
@@ -1714,8 +1711,8 @@
 .context-menu,
 .layout-gallery {
   position: fixed;
-  border: 1px solid #c6c6c6;
-  background: #fff;
+  border: 1px solid var(--popup-line, #c6c6c6);
+  background: var(--popup-bg, #fff);
   box-shadow: 2px 4px 14px rgba(0, 0, 0, 0.22);
   outline: none;
 }
@@ -1763,7 +1760,7 @@
 .menu-separator {
   height: 1px;
   margin: 3px 4px 3px 32px;
-  background: #e2e2e2;
+  background: var(--popup-separator, #e2e2e2);
 }
 
 /* Layout gallery: sketches of the slides to insert */

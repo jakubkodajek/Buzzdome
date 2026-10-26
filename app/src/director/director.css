@@ -80,6 +80,10 @@
   --right-soft: #1f3b2a;
   --note: #3a3320;
   --popup-line: #4a4a4a;
+  --popup-text: var(--text);
+  --popup-bg: var(--surface);
+  --popup-separator: var(--line);
+  --popup-footer: var(--chrome);
   --menu-hover: #2d3b4d;
   --menu-hover-line: #4f7bb5;
 }
@@ -1454,26 +1458,8 @@
 }
 
 /* The editor's controls the Director borrows (editor/controls.tsx,
-   ColorPicker.tsx) are light on their own: in the dark look they take its colours. */
-
-.director.dark .context-menu,
-.director.dark .dialog,
-.director.dark .color-picker,
-.director.dark .gradient-picker,
-.director.dark .font-picker {
-  border-color: var(--popup-line);
-  color: var(--text);
-  background: var(--surface);
-}
-
-.director.dark .dialog-footer {
-  border-top-color: var(--line);
-  background: var(--chrome);
-}
-
-.director.dark .menu-separator {
-  background: var(--line);
-}
+   ColorPicker.tsx) take the dark look's colours from the --popup-* tokens;
+   the light switches need their own. */
 
 .director.dark .lights {
   --chequer: repeating-conic-gradient(#3a3a3a 0 25%, #2a2a2a 0 50%);
