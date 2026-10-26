@@ -56,11 +56,12 @@ fn effect_level(effect: LookEffect, phase: f32) -> f32 {
 /// a dimmer takes the level there and the colour at full; one without
 /// takes the colour dimmed.
 fn light(universe: &mut Universe, fixture: &Fixture, [red, green, blue]: [u8; 3], level: f32, strobe: u8) {
-    let has_dimmer = fixture.channels.contains(&Channel::Dimmer);
+    let has_dimmer = fixture.channels.iter().any(|channel| matches!(channel, Channel::Dimmer | Channel::DimmerUpTo { .. }));
     let scaled = |value: u8| if has_dimmer && level > 0.0 { value } else { (f32::from(value) * level).round() as u8 };
     for (offset, channel) in fixture.channels.iter().enumerate() {
         let value = match *channel {
             Channel::Dimmer => (255.0 * level).round() as u8,
+            Channel::DimmerUpTo { max } => (f32::from(max) * level).round() as u8,
             Channel::Red => scaled(red),
             Channel::Green => scaled(green),
             Channel::Blue => scaled(blue),
@@ -188,5 +189,15 @@ mod tests {
         let look = setup.looks[1].clone();
         assert_eq!(draw(&setup, &look, 0, 100).get(2), 8);
         assert_eq!(draw(&setup, &look, 0, 0).get(2), 2);
+    }
+
+    #[test]
+    fn a_dimmer_up_to_a_value_dims_below_it_and_counts_as_the_fixtures_dimmer() {
+        let setup = LightsSetup { fixtures: vec![fixture(1, 1, vec![Channel::DimmerUpTo { max: 200 }, Channel::Red])], ..LightsSetup::default() };
+        assert_eq!(dark(&setup).get(1), 0);
+        let mut red = look(&["#ff0000"], LookEffect::Static);
+        assert_eq!([draw(&setup, &red, 0, 100).get(1), draw(&setup, &red, 0, 100).get(2)], [200, 255]);
+        red.intensity = 50;
+        assert_eq!([draw(&setup, &red, 0, 100).get(1), draw(&setup, &red, 0, 100).get(2)], [100, 255]);
     }
 }

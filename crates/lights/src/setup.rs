@@ -60,6 +60,9 @@ pub enum Channel {
     /// The fixture's own dimmer: the look's intensity. A fixture with one
     /// gets its colour at full.
     Dimmer,
+    /// A dimmer that does something else above `max`, such as strobe or run
+    /// a program: the look's intensity, from 0 up to `max`.
+    DimmerUpTo { max: u8 },
     Red,
     Green,
     Blue,

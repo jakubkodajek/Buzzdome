@@ -11,4 +11,8 @@ name: string, copyright: string, url: string,
 /**
  * The source's commit the library was made from.
  */
-commit: string, };
+commit: string, 
+/**
+ * The source's licence, in full (MIT: it goes with every copy).
+ */
+licence: string, };

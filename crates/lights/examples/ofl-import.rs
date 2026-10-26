@@ -7,11 +7,12 @@
 //! ```
 //!
 //! Each definition goes through `lights::library::ofl::convert`; the
-//! library is sorted by manufacturer and model, and records the commit it
-//! was made from. The source's licence is kept next to it
-//! (`data/OPEN-FIXTURE-LIBRARY-LICENSE`).
+//! library is sorted by manufacturer and model, one model per line, and
+//! records the commit it was made from and the source's licence, which is
+//! also kept next to it (`data/OPEN-FIXTURE-LIBRARY-LICENSE`).
 
-use lights::library::{ofl, Library, LibrarySource};
+use lights::library::ofl::{self, Converted};
+use lights::library::LibrarySource;
 use serde_json::Value;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -21,7 +22,7 @@ fn main() {
     let fixtures_dir = checkout.join("fixtures");
     let manufacturers: Value = read(&fixtures_dir.join("manufacturers.json"));
     let mut fixtures = Vec::new();
-    let mut left_out = 0;
+    let (mut redirects, mut lasers, mut without_modes) = (0, 0, 0);
     let mut makers: Vec<PathBuf> = dirs(&fixtures_dir);
     makers.sort();
     for maker in makers {
@@ -31,9 +32,12 @@ fn main() {
         files.sort();
         for file in files {
             let model = file.file_stem().unwrap().to_string_lossy();
-            match ofl::convert(&name, &format!("{key}/{model}"), &read(&file)) {
-                Some(fixture) => fixtures.push(fixture),
-                None => left_out += 1,
+            let text = std::fs::read_to_string(&file).unwrap();
+            match ofl::convert(&name, &format!("{key}/{model}"), &text).unwrap_or_else(|e| panic!("{}: {e}", file.display())) {
+                Converted::Fixture(fixture) => fixtures.push(fixture),
+                Converted::Redirect => redirects += 1,
+                Converted::Laser => lasers += 1,
+                Converted::NoModes => without_modes += 1,
             }
         }
     }
@@ -44,13 +48,20 @@ fn main() {
         copyright: "Copyright (c) 2017 Florian & Felix Edelmann".into(),
         url: "https://open-fixture-library.org".into(),
         commit: String::from_utf8_lossy(&commit.stdout).trim().to_owned(),
+        licence: std::fs::read_to_string(checkout.join("LICENSE")).expect("the checkout's LICENSE"),
     };
     let modes: usize = fixtures.iter().map(|f| f.modes.len()).sum();
-    let count = fixtures.len();
-    let library = Library { source, fixtures };
-    let out = Path::new(env!("CARGO_MANIFEST_DIR")).join("data/fixture-library.json");
-    std::fs::write(&out, serde_json::to_string(&library).unwrap() + "\n").unwrap();
-    println!("{count} models, {modes} modes, {left_out} redirects or without modes left out -> {}", out.display());
+    let to_check = fixtures.iter().filter(|f| f.modes.iter().any(|m| !m.check.is_empty())).count();
+    let data = Path::new(env!("CARGO_MANIFEST_DIR")).join("data");
+    std::fs::write(data.join("OPEN-FIXTURE-LIBRARY-LICENSE"), &source.licence).unwrap();
+    // The same JSON as one `Library` value, a model per line, so a new
+    // import's diff shows which models changed.
+    let lines: Vec<String> = fixtures.iter().map(|fixture| serde_json::to_string(fixture).unwrap()).collect();
+    let json = format!("{{\"source\":{},\"fixtures\":[\n{}\n]}}\n", serde_json::to_string(&source).unwrap(), lines.join(",\n"));
+    let out = data.join("fixture-library.json");
+    std::fs::write(&out, json).unwrap();
+    println!("{} models ({to_check} with channels to check), {modes} modes -> {}", fixtures.len(), out.display());
+    println!("left out: {redirects} redirects, {lasers} lasers, {without_modes} without modes");
 }
 
 fn read(path: &Path) -> Value {

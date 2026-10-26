@@ -16,6 +16,7 @@ import type {
   LearnProgress,
   LightsDevices,
   LibraryMatches,
+  LibrarySource,
   LightsInfo,
   LightsSetup,
   LightsStatus,
@@ -128,6 +129,7 @@ export const api = {
   lightsDevices: () => invoke<LightsDevices>("lights_devices"),
   /** The fixture models of the built-in library whose names hold every word of `query`. */
   lightsLibrary: (query: string) => invoke<LibraryMatches>("lights_library", { query }),
+  lightsLibrarySource: () => invoke<LibrarySource>("lights_library_source"),
   /** Holds a look whatever the show does, or lets go with null. */
   lightsHold: (look: number | null) => invoke<void>("lights_hold", { look }),
   lightsBlackout: (on: boolean) => invoke<void>("lights_blackout", { on }),

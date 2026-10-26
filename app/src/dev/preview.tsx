@@ -691,13 +691,25 @@ mockIPC(
               name: "LED Par 7",
               key: "example/led-par-7",
               modes: [
-                { name: "3-channel", channels: [{ kind: "red" }, { kind: "green" }, { kind: "blue" }], labels: ["Red", "Green", "Blue"] },
-                { name: "7-channel", channels: [{ kind: "dimmer" }, { kind: "red" }, { kind: "green" }, { kind: "blue" }, { kind: "shutter", open: 10, closed: 0 }, { kind: "unused" }, { kind: "unused" }], labels: ["Dimmer", "Red", "Green", "Blue", "Shutter", "Program", "Speed"] },
+                { name: "3-channel", channels: [{ kind: "red" }, { kind: "green" }, { kind: "blue" }], labels: ["Red", "Green", "Blue"], check: [] },
+                {
+                  name: "7-channel",
+                  channels: [{ kind: "dimmerUpTo", max: 240 }, { kind: "red" }, { kind: "green" }, { kind: "blue" }, { kind: "shutter", open: 10, closed: 0 }, { kind: "unused" }, { kind: "unused" }],
+                  labels: ["Dimmer / Strobe", "Red", "Green", "Blue", "Shutter", "Program", "Strobe Speed"],
+                  check: ["Strobe Speed"],
+                },
               ],
             },
           ],
           total: 1,
-          source: { name: "Open Fixture Library (MIT)", copyright: "Copyright (c) 2017 Florian & Felix Edelmann", url: "https://open-fixture-library.org", commit: "" },
+        };
+      case "lights_library_source":
+        return {
+          name: "Open Fixture Library (MIT)",
+          copyright: "Copyright (c) 2017 Florian & Felix Edelmann",
+          url: "https://open-fixture-library.org",
+          commit: "",
+          licence: "MIT License\n\nCopyright (c) 2017 Florian & Felix Edelmann\n\nPermission is hereby granted, free of charge, …",
         };
       case "lights_devices":
         return { outputs: [{ choice: { kind: "enttecPro", port: "COM4" }, label: "COM4 (FTDI)" }], midiPorts: ["loopMIDI Port"] };

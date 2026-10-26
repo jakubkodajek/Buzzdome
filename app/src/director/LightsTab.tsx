@@ -28,7 +28,7 @@ import { NumberBox, Select, Switch } from "../editor/controls";
 import { useLightsStatus } from "../hooks";
 import type { StringKey, Translate } from "../i18n";
 import { errorText, outputErrorText, settingsLostText, setupErrorText } from "../messages";
-import type { Channel, Cue, Fixture, LibraryFixture, LibraryMatches, LibraryMode, LightsDevices, LightsInfo, LightsSetup, Look, LookEffect, OutputChoice, Stage } from "../types";
+import type { Channel, Cue, Fixture, LibraryFixture, LibraryMatches, LibraryMode, LibrarySource, LightsDevices, LightsInfo, LightsSetup, Look, LookEffect, OutputChoice, Stage } from "../types";
 import {
   addFixture,
   addLook,
@@ -63,6 +63,7 @@ const OUTPUT_KINDS: [OutputChoice["kind"], StringKey][] = [
 
 const CHANNEL_KEYS: Record<Channel["kind"], StringKey> = {
   dimmer: "lightsChannelDimmer",
+  dimmerUpTo: "lightsChannelDimmerUpTo",
   red: "lightsChannelRed",
   green: "lightsChannelGreen",
   blue: "lightsChannelBlue",
@@ -407,6 +408,12 @@ function FixtureRow(props: { fixture: Fixture; clash: boolean; onChange: (edit: 
             {channel.kind === "fixed" && (
               <NumberBox label={t("lightsFixedValue")} value={channel.value} min={0} max={255} onChange={(value) => setChannel(i, { kind: "fixed", value })} />
             )}
+            {channel.kind === "dimmerUpTo" && (
+              <>
+                <span className="lights-label">{t("lightsDimmerUpToMax")}</span>
+                <NumberBox label={t("lightsDimmerUpToMax")} value={channel.max} min={0} max={255} onChange={(max) => setChannel(i, { kind: "dimmerUpTo", max })} />
+              </>
+            )}
             {channel.kind === "shutter" && (
               <>
                 <span className="lights-label">{t("lightsShutterOpen")}</span>
@@ -447,12 +454,29 @@ function LibraryPicker({ disabled, onAdd }: { disabled: boolean; onAdd: (name: s
   const run = useRun();
   const [query, setQuery] = useState("");
   const [found, setFound] = useState<LibraryMatches | null>(null);
+  const [source, setSource] = useState<LibrarySource | null>(null);
   const [model, setModel] = useState<LibraryFixture | null>(null);
   const [mode, setMode] = useState(0);
   useEffect(() => {
+    run(api.lightsLibrarySource().then(setSource));
+  }, [run]);
+  useEffect(() => {
     if (query.trim() === "") return;
-    const timer = window.setTimeout(() => run(api.lightsLibrary(query).then(setFound)), SEARCH_AFTER_MS);
-    return () => window.clearTimeout(timer);
+    // Searches run side by side: one that ends after the query changed is not shown.
+    let current = true;
+    const timer = window.setTimeout(
+      () =>
+        run(
+          api.lightsLibrary(query).then((matches) => {
+            if (current) setFound(matches);
+          }),
+        ),
+      SEARCH_AFTER_MS,
+    );
+    return () => {
+      current = false;
+      window.clearTimeout(timer);
+    };
   }, [query, run]);
   const shown = query.trim() === "" ? null : found;
   const chosen = model?.modes[mode];
@@ -489,6 +513,7 @@ function LibraryPicker({ disabled, onAdd }: { disabled: boolean; onAdd: (name: s
           </>
         )}
       </div>
+      {chosen && chosen.check.length > 0 && <p className="receiver-state error">{t("lightsLibraryCheck", { labels: chosen.check.join(", ") })}</p>}
       {shown && !model && (
         <>
           {shown.total === 0 ? (
@@ -513,9 +538,13 @@ function LibraryPicker({ disabled, onAdd }: { disabled: boolean; onAdd: (name: s
           {shown.total > shown.fixtures.length && <p className="muted">{t("lightsLibraryMore", { shown: shown.fixtures.length, total: shown.total })}</p>}
         </>
       )}
-      <p className="muted">
-        {t("lightsLibraryHint")} {found && t("lightsLibraryCredit", { source: found.source.name, copyright: found.source.copyright, url: found.source.url })}
-      </p>
+      <p className="muted">{t("lightsLibraryHint")}</p>
+      {source && (
+        <details className="muted lights-licence">
+          <summary>{t("lightsLibraryCredit", { source: source.name, copyright: source.copyright, url: source.url })}</summary>
+          <pre aria-label={t("lightsLibraryLicence")}>{source.licence}</pre>
+        </details>
+      )}
     </div>
   );
 }

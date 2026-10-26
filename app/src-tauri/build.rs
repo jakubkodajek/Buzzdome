@@ -67,6 +67,7 @@ const COMMANDS: &[&str] = &[
     "lights_store",
     "lights_devices",
     "lights_library",
+    "lights_library_source",
     "lights_hold",
     "lights_blackout",
     "lights_universe",

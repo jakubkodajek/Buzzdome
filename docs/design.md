@@ -1559,16 +1559,40 @@ in `data/OPEN-FIXTURE-LIBRARY-LICENSE`) by
 its JSON format as one that "may introduce breaking, not-backwards-compatible
 changes at any time" and asks programs to transform it into a stable format
 (`docs/fixture-format.md` there), so the app only reads ours; refreshing
-the library is rerunning the import. `library::ofl` maps each channel
-(rules in its module docs, unit-tested): `Intensity` over the whole range is
-a dimmer, `ColorIntensity` red, green, blue or white (warm and cold too)
-that colour, a `ShutterStrobe` channel with an `Open` range a `Shutter`
-(open while the fixture is lit, closed otherwise), a dimmer that strobes at
-its top is held at its brightest value below the strobe, fine channels and
-anything else rest at their default value. Matrix channels are expanded
-per pixel or group. A test builds a fixture from every mode and runs the
-setup's checks on it. The library is read on first use (`OnceLock`) and
-searched off the windows' thread (`lights_library`).
+the library is rerunning the import, which writes one model per line so
+its diff shows which models changed. `library::ofl` maps each definition
+(rules in its module docs, unit-tested, after the OFL's
+`docs/capability-types.md`):
+
+- Fixtures in the OFL "Laser" category are left out (spec LT-9), with
+  combined effects that have a laser.
+- `Intensity` over the whole range is a dimmer, `ColorIntensity` red,
+  green, blue or white (warm and cold too) that colour.
+- A `ShutterStrobe` channel with an `Open` range and a dark value (a
+  `Closed` range, or an `Intensity` range starting dark) is a `Shutter`,
+  open while the fixture is lit, closed otherwise.
+- A dimmer that does something else at its top (strobe, a program) is a
+  `DimmerUpTo` its brightest value below that, so fades, the master and
+  blackout still work on it.
+- Fine channels (also a template channel's, "Dimmer 1 fine") rest at 0.
+- Anything else rests at its default value, unless by the data that
+  value strobes (a shutter effect at a speed that is not stopped), runs a
+  program (an `Effect` that is a preset, follows the sound or by its name
+  runs on its own) or lights the fixture; then at the first value of the
+  channel that does none of these. A held value other than 0 counts as
+  dark only where the definition says so, since it is sent in a blackout
+  too. A channel with no such value stays at its default and is listed in
+  the mode's `check`, which the tab shows when the mode is picked.
+
+Matrix channels are expanded per pixel or group, with the OFL's own keys
+(`pixelKeys`, or the default keys of `pixelCount`; groups in file order),
+so labels match the manual. A test builds a fixture from every mode and
+runs the setup's checks on it; the guardian's
+`ofl-library-audit.py` compares every resting value with the OFL data.
+The library is read on first use (`OnceLock`) and searched off the
+windows' thread (`lights_library`); its source and full MIT licence
+(`LibrarySource.licence`, copied from the checkout by the import) are
+shown in the tab before any search (`lights_library_source`).
 
 ### 7.4 Outputs
 

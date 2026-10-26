@@ -27,6 +27,8 @@ pub struct LibrarySource {
     pub url: String,
     /// The source's commit the library was made from.
     pub commit: String,
+    /// The source's licence, in full (MIT: it goes with every copy).
+    pub licence: String,
 }
 
 /// The library file (`data/fixture-library.json`).
@@ -58,6 +60,10 @@ pub struct LibraryMode {
     pub name: String,
     pub channels: Vec<Channel>,
     pub labels: Vec<String>,
+    /// The labels of channels to check on the fixture before a show: by
+    /// the source, every value of theirs strobes, runs a program or lights
+    /// the fixture, also the one they rest at.
+    pub check: Vec<String>,
 }
 
 /// The fixture models that match a search, and how many did in all.
@@ -67,7 +73,6 @@ pub struct LibraryMode {
 pub struct LibraryMatches {
     pub fixtures: Vec<LibraryFixture>,
     pub total: usize,
-    pub source: LibrarySource,
 }
 
 /// Most models a search returns.
@@ -94,7 +99,7 @@ pub fn search(library: &Library, query: &str) -> LibraryMatches {
         }
         total += 1;
     }
-    LibraryMatches { fixtures, total, source: library.source.clone() }
+    LibraryMatches { fixtures, total }
 }
 
 #[cfg(test)]
@@ -110,12 +115,19 @@ mod tests {
             assert!(!model.modes.is_empty(), "{}", model.key);
             for mode in &model.modes {
                 assert_eq!(mode.channels.len(), mode.labels.len(), "{} {}", model.key, mode.name);
+                assert!(mode.check.iter().all(|label| mode.labels.contains(label)), "{} {}", model.key, mode.name);
                 assert!(mode.channels.len() <= MAX_FIXTURE_CHANNELS, "{} {}", model.key, mode.name);
                 let fixture = Fixture { id: 1, name: model.name.clone(), address: 1, channels: mode.channels.clone(), labels: mode.labels.clone() };
                 let setup = LightsSetup { fixtures: vec![fixture], ..LightsSetup::default() };
                 assert_eq!(setup.check(), Ok(()), "{} {}", model.key, mode.name);
             }
         }
+    }
+
+    #[test]
+    fn the_library_carries_its_sources_licence_in_full() {
+        assert_eq!(library().source.licence, include_str!("../data/OPEN-FIXTURE-LIBRARY-LICENSE"));
+        assert!(library().source.licence.contains("Permission is hereby granted"));
     }
 
     #[test]

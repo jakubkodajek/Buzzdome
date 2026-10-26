@@ -1480,3 +1480,13 @@
 .lights-library input[type="search"] {
   width: 280px;
 }
+
+.lights-licence summary {
+  cursor: pointer;
+}
+
+.lights-licence pre {
+  max-width: 72ch;
+  white-space: pre-wrap;
+  font-size: 0.85em;
+}
