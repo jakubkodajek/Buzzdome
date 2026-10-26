@@ -6,6 +6,7 @@ import {
   addLook,
   changeFixture,
   fixtureColor,
+  followsLooks,
   FIXTURE_PRESETS,
   formatChannelValues,
   freeAddress,
@@ -97,9 +98,15 @@ describe("lights setup", () => {
 });
 
 describe("channels", () => {
-  it("starts a shutter open at 255 and closed at 0, a dimmer up to 255, and a fixed one at 0", () => {
+  it("tells whether a look can light a fixture", () => {
+    expect(followsLooks([{ kind: "fixed", value: 10 }, { kind: "shutter", open: 8, closed: 0 }])).toBe(true);
+    expect(followsLooks([{ kind: "dimmerRange", dark: 255, bright: 0 }])).toBe(true);
+    expect(followsLooks([{ kind: "fixed", value: 10 }, { kind: "unused" }, { kind: "strobe" }])).toBe(false);
+  });
+
+  it("starts a shutter open at 255 and closed at 0, a dimmer range from 0 to 255, and a fixed one at 0", () => {
     expect(channelOf("shutter")).toEqual({ kind: "shutter", open: 255, closed: 0 });
-    expect(channelOf("dimmerUpTo")).toEqual({ kind: "dimmerUpTo", max: 255 });
+    expect(channelOf("dimmerRange")).toEqual({ kind: "dimmerRange", dark: 0, bright: 255 });
     expect(channelOf("fixed")).toEqual({ kind: "fixed", value: 0 });
     expect(channelOf("red")).toEqual({ kind: "red" });
   });

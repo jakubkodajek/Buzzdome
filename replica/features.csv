@@ -118,7 +118,7 @@ QuizXpress Solo trade-show kiosk,other,could,yes,skip,lead capture for trade sho
 Spotify import,studio,could,yes,skip,depends on Spotify API terms
 PowerPoint toggle on the presenter remote,other,could,yes,skip,Windows-only integration
 DMX stage lights that follow the show (message broker add-on),other,could,yes,yes,spec section 12 LT-1..LT-6: Enttec Pro / Open DMX / Art-Net / sACN / SoundSwitch Micro (experimental); fixtures looks stages flashes; not tried on real fixtures yet
-Fixture library: add a light by its model and DMX mode,other,could,no,yes,spec LT-9; generated from the Open Fixture Library (MIT); 623 models, lasers left out
+Fixture library: add a light by its model and DMX mode,other,could,no,yes,spec LT-9; generated from the Open Fixture Library (MIT); 623 models, lasers left out; can be updated from the internet in the Lights tab
 Show events to outside programs over OSC and MIDI,other,could,yes,yes,spec LT-7; OSC over UDP and MIDI notes; the original's broker also speaks other protocols not built here
 Runs in any browser on any OS for host director and editor,platform,must,no,no,the reason this project exists
 Czech user interface,platform,should,no,no,original UI languages not checked; our audience is Czech

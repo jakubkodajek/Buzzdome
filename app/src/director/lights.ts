@@ -31,12 +31,20 @@ export const FIXTURE_PRESETS: { id: string; label: StringKey; channels: Channel[
 ];
 
 /** The kinds of channel, in the order the channel picker lists them. */
-export const CHANNEL_KINDS: Channel["kind"][] = ["dimmer", "dimmerUpTo", "red", "green", "blue", "white", "strobe", "shutter", "fixed", "unused"];
+export const CHANNEL_KINDS: Channel["kind"][] = ["dimmer", "dimmerRange", "red", "green", "blue", "white", "strobe", "shutter", "fixed", "unused"];
 
-/** A channel of `kind`; a fixed one at 0, a dimmer up to 255, a shutter open at 255 and closed at 0. */
+/** The kinds of channel a look lights a fixture through. */
+const LIT_BY_LOOKS: Channel["kind"][] = ["dimmer", "dimmerRange", "red", "green", "blue", "white", "shutter"];
+
+/** Whether a look can light a fixture with `channels`: one of them follows the look's colour or intensity. */
+export function followsLooks(channels: Channel[]): boolean {
+  return channels.some((channel) => LIT_BY_LOOKS.includes(channel.kind));
+}
+
+/** A channel of `kind`; a fixed one at 0, a dimmer range from 0 to 255, a shutter open at 255 and closed at 0. */
 export function channelOf(kind: Channel["kind"]): Channel {
   if (kind === "fixed") return { kind, value: 0 };
-  if (kind === "dimmerUpTo") return { kind, max: 255 };
+  if (kind === "dimmerRange") return { kind, dark: 0, bright: 255 };
   if (kind === "shutter") return { kind, open: 255, closed: 0 };
   return { kind };
 }

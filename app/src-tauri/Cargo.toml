@@ -31,6 +31,8 @@ serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 ts-rs.workspace = true
+# Downloads the Open Fixture Library for the fixture library (fixture_library.rs).
+ureq = "3"
 
 # Read how much memory the sheet reader process holds, and on Windows cap it
 # (sheet_reader.rs).

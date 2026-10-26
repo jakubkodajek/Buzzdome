@@ -9,9 +9,14 @@ export type LibrarySource = {
  */
 name: string, copyright: string, url: string, 
 /**
- * The source's commit the library was made from.
+ * The source's commit the library was made from; empty for a download.
  */
 commit: string, 
+/**
+ * When the source's data is from (its commit, or the download), in
+ * ms since the Unix epoch.
+ */
+dateMs: number, 
 /**
  * The source's licence, in full (MIT: it goes with every copy).
  */

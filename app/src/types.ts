@@ -41,6 +41,7 @@ export type { FoundOutput } from "./bindings/FoundOutput";
 export type { LightsDevices } from "./bindings/LightsDevices";
 export type { LibraryFixture } from "./bindings/LibraryFixture";
 export type { LibraryMatches } from "./bindings/LibraryMatches";
+export type { LibraryInfo } from "./bindings/LibraryInfo";
 export type { LibraryMode } from "./bindings/LibraryMode";
 export type { LibrarySource } from "./bindings/LibrarySource";
 export type { LightsInfo } from "./bindings/LightsInfo";

@@ -60,9 +60,11 @@ pub enum Channel {
     /// The fixture's own dimmer: the look's intensity. A fixture with one
     /// gets its colour at full.
     Dimmer,
-    /// A dimmer that does something else above `max`, such as strobe or run
-    /// a program: the look's intensity, from 0 up to `max`.
-    DimmerUpTo { max: u8 },
+    /// A dimmer over part of its range, or the other way round: the look's
+    /// intensity from `dark` (none) to `bright` (full). For one that does
+    /// something else above its dimming range, such as strobe or run a
+    /// program, or one that gets darker as its value rises.
+    DimmerRange { dark: u8, bright: u8 },
     Red,
     Green,
     Blue,

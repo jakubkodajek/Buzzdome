@@ -11,6 +11,7 @@ mod crash_drill;
 mod dialogs;
 mod editor;
 mod error;
+mod fixture_library;
 mod fonts;
 mod hardware;
 mod media_player;
@@ -617,6 +618,7 @@ pub fn run() {
             }
             app.manage(hardware);
             app.manage(stage_lights::StageLights::start(app.handle(), stage_lights::lights_path(app.handle())?));
+            app.manage(fixture_library::FixtureLibrary::new(fixture_library::library_path(app.handle())?));
             show_thread::start(app.handle(), queue, events);
             // The windows load theme pictures and fonts from the built-in
             // packages, and a show's media from where they can be.
@@ -705,8 +707,10 @@ pub fn run() {
             stage_lights::lights_info,
             stage_lights::lights_store,
             stage_lights::lights_devices,
-            stage_lights::lights_library,
-            stage_lights::lights_library_source,
+            fixture_library::lights_library,
+            fixture_library::lights_library_info,
+            fixture_library::lights_library_update,
+            fixture_library::lights_library_reset,
             stage_lights::lights_hold,
             stage_lights::lights_blackout,
             stage_lights::lights_universe,

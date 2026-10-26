@@ -5,10 +5,13 @@
 //! The library is generated from the Open Fixture Library
 //! (<https://open-fixture-library.org>, MIT licence, see
 //! `data/OPEN-FIXTURE-LIBRARY-LICENSE`) by `examples/ofl-import.rs`, which
-//! turns each mode into our own channels ([`ofl`]). It is ours and stable:
-//! the Open Fixture Library's own format may change at any time, as its
-//! documentation warns, so the app never reads that format.
+//! turns each mode into our own channels ([`ofl`]), and built into the app.
+//! The app can bring it up to date from the Open Fixture Library's download
+//! ([`archive`]), through the same conversion. Our format is stable; the
+//! Open Fixture Library's own may change at any time, as its documentation
+//! warns, so a download in another major version of it is refused.
 
+pub mod archive;
 pub mod ofl;
 
 use crate::setup::Channel;
@@ -25,8 +28,12 @@ pub struct LibrarySource {
     pub name: String,
     pub copyright: String,
     pub url: String,
-    /// The source's commit the library was made from.
+    /// The source's commit the library was made from; empty for a download.
     pub commit: String,
+    /// When the source's data is from (its commit, or the download), in
+    /// ms since the Unix epoch.
+    #[ts(type = "number")]
+    pub date_ms: u64,
     /// The source's licence, in full (MIT: it goes with every copy).
     pub licence: String,
 }
@@ -79,9 +86,24 @@ pub struct LibraryMatches {
 pub const MAX_MATCHES: usize = 40;
 
 /// The library built into the app, read the first time it is asked for.
-pub fn library() -> &'static Library {
+pub fn built_in() -> &'static Library {
     static LIBRARY: OnceLock<Library> = OnceLock::new();
     LIBRARY.get_or_init(|| serde_json::from_str(include_str!("../data/fixture-library.json")).expect("the built-in fixture library reads"))
+}
+
+impl Library {
+    /// The library as JSON, one model per line, so a new import's diff
+    /// shows which models changed.
+    pub fn to_json(&self) -> String {
+        let source = serde_json::to_string(&self.source).expect("a library source is JSON");
+        let models: Vec<String> = self.fixtures.iter().map(|fixture| serde_json::to_string(fixture).expect("a fixture model is JSON")).collect();
+        format!("{{\"source\":{source},\"fixtures\":[\n{}\n]}}\n", models.join(",\n"))
+    }
+
+    /// How many modes its models have in all.
+    pub fn modes(&self) -> usize {
+        self.fixtures.iter().map(|fixture| fixture.modes.len()).sum()
+    }
 }
 
 /// The models whose manufacturer, name or key hold every word of `query`,
@@ -109,7 +131,7 @@ mod tests {
 
     #[test]
     fn every_mode_in_the_built_in_library_makes_a_fixture_that_passes_its_checks() {
-        let library = library();
+        let library = built_in();
         assert!(library.fixtures.len() > 500, "{} models", library.fixtures.len());
         for model in &library.fixtures {
             assert!(!model.modes.is_empty(), "{}", model.key);
@@ -125,14 +147,23 @@ mod tests {
     }
 
     #[test]
+    fn a_library_reads_back_from_its_json() {
+        let library = built_in();
+        let json = library.to_json();
+        assert_eq!(json.lines().count(), library.fixtures.len() + 2);
+        assert_eq!(&serde_json::from_str::<Library>(&json).unwrap(), library);
+        assert_eq!(json, include_str!("../data/fixture-library.json"));
+    }
+
+    #[test]
     fn the_library_carries_its_sources_licence_in_full() {
-        assert_eq!(library().source.licence, include_str!("../data/OPEN-FIXTURE-LIBRARY-LICENSE"));
-        assert!(library().source.licence.contains("Permission is hereby granted"));
+        assert_eq!(built_in().source.licence, include_str!("../data/OPEN-FIXTURE-LIBRARY-LICENSE"));
+        assert!(built_in().source.licence.contains("Permission is hereby granted"));
     }
 
     #[test]
     fn a_search_needs_every_word_and_ignores_case() {
-        let library = library();
+        let library = built_in();
         let found = search(library, "stairville LED");
         assert!(found.total > 0);
         assert!(found.fixtures.iter().all(|f| f.manufacturer == "Stairville" && f.name.to_lowercase().contains("led")));

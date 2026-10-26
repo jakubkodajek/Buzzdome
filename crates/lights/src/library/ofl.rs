@@ -9,13 +9,16 @@
 //!
 //! Every other channel becomes one of ours:
 //!
-//! - one whose whole range dims (`Intensity`) is a dimmer, and one whose
-//!   whole range is red, green, blue or white (`ColorIntensity`) that colour;
+//! - one whose whole range dims (`Intensity`) is a dimmer, the other way
+//!   round when it gets darker as its value rises (`DimmerRange`), and one
+//!   whose whole range is red, green, blue or white (`ColorIntensity`) that
+//!   colour;
 //! - a shutter opens while a look lights the fixture and closes otherwise
-//!   (`Shutter`, never its strobe range); it needs an open value and a dark
-//!   one, a "Closed" range or an `Intensity` range that starts dark;
+//!   (`Shutter`, never its strobe range); it needs an open value (an "Open"
+//!   range, or a lamp switch's "bright" one) and a dark one (a "Closed"
+//!   range, or an `Intensity` range that starts dark);
 //! - a dimmer whose top range does something else (strobe, a program)
-//!   dims only below it (`DimmerUpTo`): the app strobes only through a
+//!   dims only below it (`DimmerRange`): the app strobes only through a
 //!   look's strobe effect, which is limited (`MIN_EFFECT_MS`);
 //! - the finer byte of a 16-bit channel is not driven;
 //! - anything else (pan, tilt, gobos, programs, fog, maintenance) rests at
@@ -28,6 +31,10 @@
 //!
 //! The manual's name for each channel goes along as its label, so the
 //! quizmaster can still set it by hand in a look's extra channels.
+//!
+//! A definition comes from a download too, so any input gives a result or
+//! an error, never a panic or an endless loop: values are shifted with
+//! checks, matrices and modes are capped.
 
 use super::{LibraryFixture, LibraryMode};
 use crate::setup::{Channel, MAX_FIXTURE_CHANNELS, MAX_LIGHTS_NAME_CHARS};
@@ -151,23 +158,26 @@ impl<'a> Definition<'a> {
     /// it cannot be read.
     fn mode(&self, mode: &Value, name: String) -> Option<LibraryMode> {
         let mut out = LibraryMode { name, channels: Vec::new(), labels: Vec::new(), check: Vec::new() };
-        let mut add = |key: &str| {
-            let (channel, check) = self.channel(key);
-            out.channels.push(channel);
-            out.labels.push(fitted(key));
-            if check {
-                out.check.push(fitted(key));
-            }
-        };
         for entry in mode.get("channels")?.as_array()? {
-            match entry {
-                Value::String(key) => add(key),
-                Value::Object(insert) => self.matrix_channels(insert)?.iter().for_each(|key| add(key)),
+            let keys = match entry {
+                Value::String(key) => vec![key.clone()],
+                Value::Object(insert) => self.matrix_channels(insert)?,
                 // A channel the mode leaves out.
-                _ => add(""),
+                _ => vec![String::new()],
+            };
+            if out.channels.len() + keys.len() > UNIVERSE_SIZE {
+                return None;
+            }
+            for key in keys {
+                let (channel, check) = self.channel(&key);
+                out.channels.push(channel);
+                if check {
+                    out.check.push(fitted(&key));
+                }
+                out.labels.push(fitted(&key));
             }
         }
-        (out.channels.len() <= UNIVERSE_SIZE).then_some(out)
+        Some(out)
     }
 
     /// The channels a matrix insert stands for, in order: each template
@@ -175,6 +185,9 @@ impl<'a> Definition<'a> {
     fn matrix_channels(&self, insert: &Map<String, Value>) -> Option<Vec<String>> {
         let templates: Vec<&str> = insert.get("templateChannels")?.as_array()?.iter().filter_map(Value::as_str).collect();
         let keys = self.matrix.repeat_for(insert.get("repeatFor")?)?;
+        if keys.len().saturating_mul(templates.len()) > UNIVERSE_SIZE {
+            return None;
+        }
         let per_pixel = insert.get("channelOrder").and_then(Value::as_str) != Some("perChannel");
         let name = |template: &str, key: &str| template.replace("$pixelKey", key);
         Some(if per_pixel {
@@ -208,7 +221,7 @@ impl<'a> Definition<'a> {
         };
         let shift = resolution_shift(channel);
         let capabilities = capabilities(channel, shift);
-        if let Some(kind) = whole_range(&capabilities).or_else(|| shutter(&capabilities)).or_else(|| dimmer_up_to(&capabilities)) {
+        if let Some(kind) = whole_range(&capabilities).or_else(|| shutter(&capabilities)).or_else(|| dimmer_below_the_top(&capabilities)) {
             return (kind, false);
         }
         let default = default_value(channel, shift);
@@ -238,6 +251,10 @@ fn held(value: u8) -> Channel {
     }
 }
 
+/// Most pixels a matrix may have: each takes a channel at least, and a
+/// mode no more than a universe's.
+const MAX_PIXELS: usize = UNIVERSE_SIZE;
+
 /// A fixture's pixels and pixel groups, by the keys its matrix channels use.
 #[derive(Default)]
 struct Matrix {
@@ -254,8 +271,11 @@ impl Matrix {
         let structure: Vec<Vec<Vec<Option<String>>>> = match (matrix.get("pixelKeys"), matrix.get("pixelCount").and_then(Value::as_array)) {
             (Some(keys), _) => serde_json::from_value(keys.clone()).unwrap_or_default(),
             (None, Some(count)) => {
-                let count: Vec<usize> = count.iter().map(|n| n.as_u64().map_or(1, |n| n as usize)).collect();
+                let count: Vec<usize> = count.iter().map(|n| n.as_u64().map_or(1, |n| usize::try_from(n).unwrap_or(usize::MAX))).collect();
                 let size = [0, 1, 2].map(|axis| count.get(axis).copied().unwrap_or(1));
+                if size.iter().try_fold(1usize, |all, &n| all.checked_mul(n)).is_none_or(|all| all > MAX_PIXELS) {
+                    return Matrix { pixels: Vec::new(), groups };
+                }
                 let [x, y, z] = size;
                 (1..=z).map(|z_at| (1..=y).map(|y_at| (1..=x).map(|x_at| Some(default_key(size, [x_at, y_at, z_at]))).collect()).collect()).collect()
             }
@@ -422,11 +442,11 @@ fn resolution_shift(channel: &Value) -> u32 {
         Some(resolution) => resolution.trim_end_matches("bit").parse::<u32>().map_or(1, |bits| bits / 8),
         None => 1 + fine,
     };
-    8 * bytes.saturating_sub(1)
+    8 * bytes.saturating_sub(1).min(7)
 }
 
 fn capabilities(channel: &Value, shift: u32) -> Vec<Capability<'_>> {
-    let eight_bit = |value: &Value| u8::try_from(value.as_u64().unwrap_or(0) >> shift).unwrap_or(u8::MAX);
+    let eight_bit = |value: &Value| u8::try_from(value.as_u64().unwrap_or(0).checked_shr(shift).unwrap_or(0)).unwrap_or(u8::MAX);
     fn read(json: &Value, eight_bit: impl Fn(&Value) -> u8) -> Option<Capability<'_>> {
         let (from, to) = match json.get("dmxRange").and_then(Value::as_array) {
             Some(range) if range.len() == 2 => (eight_bit(&range[0]), eight_bit(&range[1])),
@@ -441,10 +461,15 @@ fn capabilities(channel: &Value, shift: u32) -> Vec<Capability<'_>> {
     }
 }
 
-/// Our channel for one that dims from dark, or shows one colour, over its
-/// whole range.
+/// Our channel for one that dims, or shows one colour, over its whole
+/// range: from dark, or for a dimmer also to dark.
 fn whole_range(capabilities: &[Capability]) -> Option<Channel> {
     let first = capabilities.first()?;
+    let whole = first.from == 0 && capabilities.last()?.to == u8::MAX;
+    let inverted = capabilities.iter().all(|c| c.kind == "Intensity" && c.falling());
+    if whole && inverted && capabilities.last()?.dark_at(u8::MAX) {
+        return Some(Channel::DimmerRange { dark: u8::MAX, bright: 0 });
+    }
     let kind = match (first.kind, first.color()) {
         ("Intensity", _) => Channel::Dimmer,
         ("ColorIntensity", Some("Red")) => Channel::Red,
@@ -454,15 +479,17 @@ fn whole_range(capabilities: &[Capability]) -> Option<Channel> {
         _ => return None,
     };
     let same = capabilities.iter().all(|c| c.kind == first.kind && c.color() == first.color() && !c.falling());
-    let whole = first.from == 0 && capabilities.last()?.to == u8::MAX;
     (same && whole && first.dark_at(0)).then_some(kind)
 }
 
-/// A shutter: its first "Open" value, and its first "Closed" one, or else
-/// the start of a range that dims from dark.
+/// A shutter: its first "Open" value, or a lamp switch's "bright" one, and
+/// its first "Closed" one, or else the start of a range that dims from dark.
+/// A lamp switch only switches: a channel that also dims is a dimmer.
 fn shutter(capabilities: &[Capability]) -> Option<Channel> {
     let effect = |name: &str| capabilities.iter().find(|c| c.kind == "ShutterStrobe" && c.text("shutterEffect") == Some(name));
-    let open = effect("Open")?.from;
+    let only_switches = capabilities.iter().filter(|c| c.kind == "Intensity").all(|c| c.text("brightness").is_some());
+    let switched_on = || capabilities.iter().find(|c| only_switches && c.kind == "Intensity" && c.text("brightness").is_some_and(|b| b == "bright" || b == "100%"));
+    let open = effect("Open").or_else(switched_on)?.from;
     let dims_from_dark = || capabilities.iter().find(|c| c.kind == "Intensity" && c.dark_at(c.from));
     let closed = effect("Closed").or_else(dims_from_dark)?.from;
     Some(Channel::Shutter { open, closed })
@@ -470,18 +497,18 @@ fn shutter(capabilities: &[Capability]) -> Option<Channel> {
 
 /// A channel that dims from dark at 0 and does something else above: our
 /// dimmer, up to its brightest value before that.
-fn dimmer_up_to(capabilities: &[Capability]) -> Option<Channel> {
+fn dimmer_below_the_top(capabilities: &[Capability]) -> Option<Channel> {
     let dims: Vec<&Capability> = capabilities.iter().take_while(|c| c.kind == "Intensity" && !c.falling()).collect();
     let (first, last) = (dims.first()?, dims.last()?);
     let lit = dims.iter().any(|c| c.lights(c.to));
-    (first.from == 0 && first.dark_at(0) && lit).then_some(Channel::DimmerUpTo { max: last.to })
+    (first.from == 0 && first.dark_at(0) && lit).then_some(Channel::DimmerRange { dark: 0, bright: last.to })
 }
 
 /// The value a channel rests at when nothing drives it: a number, or a
 /// percentage of its range.
 fn default_value(channel: &Value, shift: u32) -> u8 {
     match channel.get("defaultValue") {
-        Some(Value::Number(n)) => u8::try_from(n.as_u64().unwrap_or(0) >> shift).unwrap_or(u8::MAX),
+        Some(Value::Number(n)) => u8::try_from(n.as_u64().unwrap_or(0).checked_shr(shift).unwrap_or(0)).unwrap_or(u8::MAX),
         Some(Value::String(percent)) => {
             let share = percent.trim_end_matches('%').trim().parse::<f64>().unwrap_or(0.0).clamp(0.0, 100.0);
             (share / 100.0 * 255.0).round() as u8
@@ -580,7 +607,7 @@ mod tests {
                 Channel::Unused,
                 Channel::Fixed { value: 128 },
                 Channel::Unused,
-                Channel::DimmerUpTo { max: 189 },
+                Channel::DimmerRange { dark: 0, bright: 189 },
                 Channel::Unused,
                 Channel::Unused,
                 Channel::Unused
@@ -678,6 +705,46 @@ mod tests {
         assert_eq!(keys(json!([1, 1, 2]), "eachPixelABC"), ["1", "2"]);
         let holes = Matrix::new(Some(&json!({ "pixelKeys": [[["b", null, "a10"]], [["a9"]]] })), Vec::new());
         assert_eq!(holes.repeat_for(&json!("eachPixelABC")).unwrap(), ["a9", "a10", "b"]);
+    }
+
+    #[test]
+    fn an_inverted_dimmer_dims_the_other_way_and_a_lamp_switch_is_a_shutter() {
+        let definition = json!({
+            "name": "Scanner",
+            "availableChannels": {
+                "Dimmer": { "capability": { "type": "Intensity", "brightnessStart": "bright", "brightnessEnd": "off" } },
+                "Lamp": { "capabilities": [
+                    { "dmxRange": [0, 0], "type": "Intensity", "brightness": "off" },
+                    { "dmxRange": [1, 254], "type": "NoFunction" },
+                    { "dmxRange": [255, 255], "type": "Intensity", "brightness": "bright" }
+                ] }
+            },
+            "modes": [{ "name": "2-channel", "channels": ["Dimmer", "Lamp"] }]
+        });
+        assert_eq!(channels(definition), [Channel::DimmerRange { dark: 255, bright: 0 }, Channel::Shutter { open: 255, closed: 0 }]);
+    }
+
+    #[test]
+    fn any_definition_gives_a_result_or_none_and_never_panics() {
+        let odd = json!({
+            "name": "Odd",
+            "matrix": { "pixelCount": [100000, 100000, 100000] },
+            "availableChannels": {
+                "Wide": { "dmxValueResolution": "4096bit", "defaultValue": 18446744073709551615u64, "capability": { "type": "Intensity" } },
+                "Many": { "fineChannelAliases": ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j"], "capability": { "type": "Pan" } }
+            },
+            "templateChannels": { "Red $pixelKey": { "capability": { "type": "ColorIntensity", "color": "Red" } } },
+            "modes": [
+                { "name": "Plain", "channels": ["Wide", "Many"] },
+                { "name": "Huge", "channels": [{ "insert": "matrixChannels", "repeatFor": "eachPixelXYZ", "channelOrder": "perPixel", "templateChannels": ["Red $pixelKey"] }] },
+                { "name": "Too many", "channels": [{ "insert": "matrixChannels", "repeatFor": (0..600).map(|n| n.to_string()).collect::<Vec<_>>(), "channelOrder": "perPixel", "templateChannels": ["Red $pixelKey"] }] }
+            ]
+        });
+        let modes = fixture(&odd).modes;
+        assert_eq!(modes.iter().map(|m| m.name.as_str()).collect::<Vec<_>>(), ["Plain"]);
+        for text in ["[1, 2", "[1, 2]", r#"{ "name": "x", "matrix": 5, "modes": [] }"#, &"[".repeat(10_000)] {
+            assert!(convert("Test", "test/x", text).is_err(), "{text:.20}");
+        }
     }
 
     #[test]

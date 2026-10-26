@@ -71,7 +71,9 @@
     "allow-lights-store",
     "allow-lights-devices",
     "allow-lights-library",
-    "allow-lights-library-source",
+    "allow-lights-library-info",
+    "allow-lights-library-update",
+    "allow-lights-library-reset",
     "allow-lights-hold",
     "allow-lights-blackout",
     "allow-lights-universe"

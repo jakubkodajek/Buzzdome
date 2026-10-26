@@ -56,12 +56,12 @@ fn effect_level(effect: LookEffect, phase: f32) -> f32 {
 /// a dimmer takes the level there and the colour at full; one without
 /// takes the colour dimmed.
 fn light(universe: &mut Universe, fixture: &Fixture, [red, green, blue]: [u8; 3], level: f32, strobe: u8) {
-    let has_dimmer = fixture.channels.iter().any(|channel| matches!(channel, Channel::Dimmer | Channel::DimmerUpTo { .. }));
+    let has_dimmer = fixture.channels.iter().any(|channel| matches!(channel, Channel::Dimmer | Channel::DimmerRange { .. }));
     let scaled = |value: u8| if has_dimmer && level > 0.0 { value } else { (f32::from(value) * level).round() as u8 };
     for (offset, channel) in fixture.channels.iter().enumerate() {
         let value = match *channel {
             Channel::Dimmer => (255.0 * level).round() as u8,
-            Channel::DimmerUpTo { max } => (f32::from(max) * level).round() as u8,
+            Channel::DimmerRange { dark, bright } => (f32::from(dark) + (f32::from(bright) - f32::from(dark)) * level).round() as u8,
             Channel::Red => scaled(red),
             Channel::Green => scaled(green),
             Channel::Blue => scaled(blue),
@@ -192,12 +192,20 @@ mod tests {
     }
 
     #[test]
-    fn a_dimmer_up_to_a_value_dims_below_it_and_counts_as_the_fixtures_dimmer() {
-        let setup = LightsSetup { fixtures: vec![fixture(1, 1, vec![Channel::DimmerUpTo { max: 200 }, Channel::Red])], ..LightsSetup::default() };
-        assert_eq!(dark(&setup).get(1), 0);
+    fn a_dimmer_over_a_range_dims_within_it_either_way_and_counts_as_the_fixtures_dimmer() {
+        let up_to = Channel::DimmerRange { dark: 0, bright: 200 };
+        let inverted = Channel::DimmerRange { dark: 255, bright: 0 };
+        let setup = LightsSetup { fixtures: vec![fixture(1, 1, vec![up_to, Channel::Red, inverted])], ..LightsSetup::default() };
+        assert_eq!([dark(&setup).get(1), dark(&setup).get(3)], [0, 255]);
         let mut red = look(&["#ff0000"], LookEffect::Static);
-        assert_eq!([draw(&setup, &red, 0, 100).get(1), draw(&setup, &red, 0, 100).get(2)], [200, 255]);
+        let channels = |look: &Look| {
+            let u = draw(&setup, look, 0, 100);
+            [u.get(1), u.get(2), u.get(3)]
+        };
+        assert_eq!(channels(&red), [200, 255, 0]);
         red.intensity = 50;
-        assert_eq!([draw(&setup, &red, 0, 100).get(1), draw(&setup, &red, 0, 100).get(2)], [100, 255]);
+        assert_eq!(channels(&red), [100, 255, 128]);
+        red.intensity = 0;
+        assert_eq!(channels(&red), [0, 0, 255]);
     }
 }

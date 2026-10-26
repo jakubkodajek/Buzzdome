@@ -1572,8 +1572,11 @@ its diff shows which models changed. `library::ofl` maps each definition
   `Closed` range, or an `Intensity` range starting dark) is a `Shutter`,
   open while the fixture is lit, closed otherwise.
 - A dimmer that does something else at its top (strobe, a program) is a
-  `DimmerUpTo` its brightest value below that, so fades, the master and
-  blackout still work on it.
+  `DimmerRange` from 0 to its brightest value below that, so fades, the
+  master and blackout still work on it; one that gets darker as its value
+  rises is a `DimmerRange` from 255 to 0.
+- A lamp switch (`Intensity` ranges that are only "off" or "bright") is a
+  `Shutter` too.
 - Fine channels (also a template channel's, "Dimmer 1 fine") rest at 0.
 - Anything else rests at its default value, unless by the data that
   value strobes (a shutter effect at a speed that is not stopped), runs a
@@ -1592,7 +1595,29 @@ runs the setup's checks on it; the guardian's
 The library is read on first use (`OnceLock`) and searched off the
 windows' thread (`lights_library`); its source and full MIT licence
 (`LibrarySource.licence`, copied from the checkout by the import) are
-shown in the tab before any search (`lights_library_source`).
+shown in the tab before any search (`lights_library_info`).
+
+The tab can bring the library up to date (`app/src-tauri/src/fixture_library.rs`,
+`lights_library_update`): off the windows' thread it downloads
+<https://open-fixture-library.org/download.ofl> (the site's "ofl" export
+of every fixture as `<manufacturer>/<model>.json` plus
+`manufacturers.json`, per `ui/api/download.js` and `plugins/ofl/export.js`
+in the OFL repository) over HTTPS from that one host, with a 64 MB cap and
+a 3-minute timeout, and converts it with `library::archive::from_zip`
+through the same `Import` the built-in library is made with. Each
+definition is capped at 4 MB unpacked and the zip at 256 MB; a definition
+whose `$schema` names a major format version other than 12 refuses the
+whole download (`ArchiveError::FormatChanged`), one that does not read is
+skipped and counted; serde_json's nesting limit and the converter's caps
+(16-bit shifts checked, at most 512 pixels, modes of at most 512 channels)
+keep any input from panicking or running away. Fewer than 300 models are
+refused as a cut-short download. The result is written atomically to
+`fixture-library.json` in the app's data and used from then on, unless the
+built-in library is newer (by `LibrarySource.date_ms`: the OFL commit's
+time, or the download's) or the file does not read. A download keeps the
+built-in library's source name, copyright and licence, with an empty
+commit. `lights_library_reset` removes it. The show never touches any of
+this.
 
 ### 7.4 Outputs
 

@@ -694,7 +694,7 @@ mockIPC(
                 { name: "3-channel", channels: [{ kind: "red" }, { kind: "green" }, { kind: "blue" }], labels: ["Red", "Green", "Blue"], check: [] },
                 {
                   name: "7-channel",
-                  channels: [{ kind: "dimmerUpTo", max: 240 }, { kind: "red" }, { kind: "green" }, { kind: "blue" }, { kind: "shutter", open: 10, closed: 0 }, { kind: "unused" }, { kind: "unused" }],
+                  channels: [{ kind: "dimmerRange", dark: 0, bright: 240 }, { kind: "red" }, { kind: "green" }, { kind: "blue" }, { kind: "shutter", open: 10, closed: 0 }, { kind: "unused" }, { kind: "unused" }],
                   labels: ["Dimmer / Strobe", "Red", "Green", "Blue", "Shutter", "Program", "Strobe Speed"],
                   check: ["Strobe Speed"],
                 },
@@ -703,13 +703,21 @@ mockIPC(
           ],
           total: 1,
         };
-      case "lights_library_source":
+      case "lights_library_info":
+      case "lights_library_update":
+      case "lights_library_reset":
         return {
-          name: "Open Fixture Library (MIT)",
-          copyright: "Copyright (c) 2017 Florian & Felix Edelmann",
-          url: "https://open-fixture-library.org",
-          commit: "",
-          licence: "MIT License\n\nCopyright (c) 2017 Florian & Felix Edelmann\n\nPermission is hereby granted, free of charge, …",
+          source: {
+            name: "Open Fixture Library (MIT)",
+            copyright: "Copyright (c) 2017 Florian & Felix Edelmann",
+            url: "https://open-fixture-library.org",
+            commit: cmd === "lights_library_update" ? "" : "66a6843",
+            dateMs: Date.UTC(2026, 9, 20),
+            licence: "MIT License\n\nCopyright (c) 2017 Florian & Felix Edelmann\n\nPermission is hereby granted, free of charge, …",
+          },
+          models: 623,
+          modes: 2828,
+          downloaded: cmd === "lights_library_update",
         };
       case "lights_devices":
         return { outputs: [{ choice: { kind: "enttecPro", port: "COM4" }, label: "COM4 (FTDI)" }], midiPorts: ["loopMIDI Port"] };

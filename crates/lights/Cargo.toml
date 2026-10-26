@@ -16,6 +16,8 @@ serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 ts-rs.workspace = true
+# The Open Fixture Library's download (library::archive).
+zip = { version = "9", default-features = false, features = ["deflate-flate2-zlib-rs"] }
 serialport = { version = "4", optional = true }
 # libusb built from source, so the app needs no libusb on the computer.
 rusb = { version = "0.9", features = ["vendored"], optional = true }

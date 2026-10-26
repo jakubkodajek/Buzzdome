@@ -1,7 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { decibels, minutesAndSeconds, parseTrackTime, scoreDigits, signed, trackTime } from "./format";
+import { calendarDay, decibels, minutesAndSeconds, parseTrackTime, scoreDigits, signed, trackTime } from "./format";
 
 describe("format", () => {
+  it("writes a day as each language does", () => {
+    const day = Date.UTC(2026, 9, 26, 12);
+    expect(calendarDay(day, "cs")).toBe("26. 10. 2026");
+    expect(calendarDay(day, "en")).toBe("26/10/2026");
+  });
+
   it("writes scores", () => {
     expect([signed(10), signed(0), signed(-5)]).toEqual(["+10", "0", "-5"]);
     expect([scoreDigits(42), scoreDigits(-5), scoreDigits(1234)]).toEqual(["042", "-05", "1234"]);

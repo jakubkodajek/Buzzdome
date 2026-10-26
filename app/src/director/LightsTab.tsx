@@ -25,10 +25,11 @@ import {
 } from "../bindings/LightsConstants";
 import { ColorBox } from "../editor/ColorPicker";
 import { NumberBox, Select, Switch } from "../editor/controls";
+import { calendarDay } from "../format";
 import { useLightsStatus } from "../hooks";
 import type { StringKey, Translate } from "../i18n";
 import { errorText, outputErrorText, settingsLostText, setupErrorText } from "../messages";
-import type { Channel, Cue, Fixture, LibraryFixture, LibraryMatches, LibraryMode, LibrarySource, LightsDevices, LightsInfo, LightsSetup, Look, LookEffect, OutputChoice, Stage } from "../types";
+import type { Channel, Cue, Fixture, LibraryFixture, LibraryInfo, LibraryMatches, LibraryMode, LightsDevices, LightsInfo, LightsSetup, Look, LookEffect, OutputChoice, Stage } from "../types";
 import {
   addFixture,
   addLook,
@@ -38,6 +39,7 @@ import {
   CHANNEL_KINDS,
   FIXTURE_PRESETS,
   fixtureColor,
+  followsLooks,
   formatChannelValues,
   outputOfKind,
   overlapping,
@@ -63,7 +65,7 @@ const OUTPUT_KINDS: [OutputChoice["kind"], StringKey][] = [
 
 const CHANNEL_KEYS: Record<Channel["kind"], StringKey> = {
   dimmer: "lightsChannelDimmer",
-  dimmerUpTo: "lightsChannelDimmerUpTo",
+  dimmerRange: "lightsChannelDimmerRange",
   red: "lightsChannelRed",
   green: "lightsChannelGreen",
   blue: "lightsChannelBlue",
@@ -408,10 +410,12 @@ function FixtureRow(props: { fixture: Fixture; clash: boolean; onChange: (edit: 
             {channel.kind === "fixed" && (
               <NumberBox label={t("lightsFixedValue")} value={channel.value} min={0} max={255} onChange={(value) => setChannel(i, { kind: "fixed", value })} />
             )}
-            {channel.kind === "dimmerUpTo" && (
+            {channel.kind === "dimmerRange" && (
               <>
-                <span className="lights-label">{t("lightsDimmerUpToMax")}</span>
-                <NumberBox label={t("lightsDimmerUpToMax")} value={channel.max} min={0} max={255} onChange={(max) => setChannel(i, { kind: "dimmerUpTo", max })} />
+                <span className="lights-label">{t("lightsDimmerDark")}</span>
+                <NumberBox label={t("lightsDimmerDark")} value={channel.dark} min={0} max={255} onChange={(dark) => setChannel(i, { ...channel, dark })} />
+                <span className="lights-label">{t("lightsDimmerBright")}</span>
+                <NumberBox label={t("lightsDimmerBright")} value={channel.bright} min={0} max={255} onChange={(bright) => setChannel(i, { ...channel, bright })} />
               </>
             )}
             {channel.kind === "shutter" && (
@@ -448,18 +452,37 @@ function FixtureRow(props: { fixture: Fixture; clash: boolean; onChange: (edit: 
 /** How long the library search waits after the last key. */
 const SEARCH_AFTER_MS = 250;
 
-/** Adds a fixture from the built-in fixture library: find the model, pick its DMX mode. */
+/**
+ * Adds a fixture from the fixture library: find the model, pick its DMX mode.
+ * The library can be brought up to date from the internet, or set back to the built-in one.
+ */
 function LibraryPicker({ disabled, onAdd }: { disabled: boolean; onAdd: (name: string, mode: LibraryMode) => void }) {
-  const { t } = useApp();
+  const { t, lang } = useApp();
   const run = useRun();
   const [query, setQuery] = useState("");
   const [found, setFound] = useState<LibraryMatches | null>(null);
-  const [source, setSource] = useState<LibrarySource | null>(null);
+  const [info, setInfo] = useState<LibraryInfo | null>(null);
+  const [updating, setUpdating] = useState(false);
+  /** How many models the library had before the last update, to say what it changed. */
+  const [before, setBefore] = useState<number | null>(null);
   const [model, setModel] = useState<LibraryFixture | null>(null);
   const [mode, setMode] = useState(0);
   useEffect(() => {
-    run(api.lightsLibrarySource().then(setSource));
+    run(api.lightsLibraryInfo().then(setInfo));
   }, [run]);
+  const replace = (call: () => Promise<LibraryInfo>, update: boolean) => {
+    const models = info?.models ?? null;
+    setUpdating(true);
+    run(
+      call()
+        .then((next) => {
+          setInfo(next);
+          setModel(null);
+          setBefore(update ? models : null);
+        })
+        .finally(() => setUpdating(false)),
+    );
+  };
   useEffect(() => {
     if (query.trim() === "") return;
     // Searches run side by side: one that ends after the query changed is not shown.
@@ -477,7 +500,8 @@ function LibraryPicker({ disabled, onAdd }: { disabled: boolean; onAdd: (name: s
       current = false;
       window.clearTimeout(timer);
     };
-  }, [query, run]);
+    // A new library searches again.
+  }, [query, run, info]);
   const shown = query.trim() === "" ? null : found;
   const chosen = model?.modes[mode];
   return (
@@ -514,6 +538,7 @@ function LibraryPicker({ disabled, onAdd }: { disabled: boolean; onAdd: (name: s
         )}
       </div>
       {chosen && chosen.check.length > 0 && <p className="receiver-state error">{t("lightsLibraryCheck", { labels: chosen.check.join(", ") })}</p>}
+      {chosen && !followsLooks(chosen.channels) && <p className="muted">{t("lightsLibraryNoLook")}</p>}
       {shown && !model && (
         <>
           {shown.total === 0 ? (
@@ -539,11 +564,27 @@ function LibraryPicker({ disabled, onAdd }: { disabled: boolean; onAdd: (name: s
         </>
       )}
       <p className="muted">{t("lightsLibraryHint")}</p>
-      {source && (
-        <details className="muted lights-licence">
-          <summary>{t("lightsLibraryCredit", { source: source.name, copyright: source.copyright, url: source.url })}</summary>
-          <pre aria-label={t("lightsLibraryLicence")}>{source.licence}</pre>
-        </details>
+      {info && (
+        <>
+          <div className="row">
+            <span className="muted">
+              {t(info.downloaded ? "lightsLibraryDownloaded" : "lightsLibraryBuiltIn", { models: info.models, date: calendarDay(info.source.dateMs, lang) })}
+              {before !== null && ` ${t("lightsLibraryUpdated", { before })}`}
+            </span>
+            <button disabled={updating} title={t("lightsLibraryUpdateHint")} onClick={() => replace(api.lightsLibraryUpdate, true)}>
+              {t(updating ? "lightsLibraryUpdating" : "lightsLibraryUpdate")}
+            </button>
+            {info.downloaded && (
+              <button disabled={updating} onClick={() => replace(api.lightsLibraryReset, false)}>
+                {t("lightsLibraryReset")}
+              </button>
+            )}
+          </div>
+          <details className="muted lights-licence">
+            <summary>{t("lightsLibraryCredit", { source: info.source.name, copyright: info.source.copyright, url: info.source.url })}</summary>
+            <pre aria-label={t("lightsLibraryLicence")}>{info.source.licence}</pre>
+          </details>
+        </>
       )}
     </div>
   );

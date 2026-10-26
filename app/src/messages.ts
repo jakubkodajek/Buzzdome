@@ -80,6 +80,10 @@ const ERROR_KEYS: Record<Exclude<AppError["code"], WordedApart>, StringKey> = {
   learnInconsistent: "errLearnInconsistent",
   noDataFolder: "errNoDataFolder",
   system: "errSystem",
+  libraryDownload: "errLibraryDownload",
+  libraryNotRead: "errLibraryNotRead",
+  libraryFormatChanged: "errLibraryFormatChanged",
+  libraryTooSmall: "errLibraryTooSmall",
 };
 
 const FILE_ACTION_KEYS: Record<FileAction, StringKey> = {
