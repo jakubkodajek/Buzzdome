@@ -244,11 +244,12 @@ draws slides without a show.
   loads (`useBackendEvent`, `useGameView`, `useClock`, `useQuiz`,
   `useLastSession`). Small shared helpers live in `answers.ts`, `format.ts`,
   `quiz.ts`, `keyboard.ts` and `messages.ts`. ESLint with the React hooks rules runs in CI.
-- **Sound.** The Director window plays the cues and the slides' sound
-  clips, because it stays open for the whole show and the projector window
-  may not. Spec SN-5 moves playback into the Rust shell later. The code is in
-  `app/src/audio/`: `context.ts` (one shared `AudioContext`), `cues.ts` (game
-  effects), `clip-player.ts` (`PartPlayer` plays a part of any media
+- **Sound.** The Director window plays the show's sounds and the slides'
+  sound clips, because it stays open for the whole show and the projector
+  window may not. Spec SN-5 moves playback into the Rust shell later. The
+  code is in `app/src/audio/`: `context.ts` (one shared `AudioContext`),
+  `library.ts` (the app's sounds and what each moment plays),
+  `show-audio.ts` and `show-sounds.ts` (playing them), `clip-player.ts` (`PartPlayer` plays a part of any media
   element, looping or stopping at its end; `ClipPlayer` adds a sound file
   at volume × loudness gain), `slide-sound.ts` (when a slide's sound plays),
   `replay.ts` (the replay part after the reveal, for a slide's sound and
@@ -272,6 +273,30 @@ draws slides without a show.
   - Files are decoded for measuring with an `OfflineAudioContext` at 48 kHz,
     because `decodeAudioData` resamples to its context's rate (W3C Web Audio
     API) and BS.1770-4 gives the K-weighting filter for 48 kHz.
+  - The show's sounds (spec SN-1 to SN-4) are in the quiz's `sounds`
+    (`quiz_core::QuizSounds`, docs/quiz-format.md): a choice per moment
+    (`SoundSlot`), kept only where it is not the default, and two volumes.
+    The core says when: an effect comes as `Effect::Sound` with its `Cue`
+    (the `sound-cue` event), and the music as `GameView.music`, the moment
+    the show is at (`Game::music`), so a resumed show plays what it played.
+    The countdown is the one effect the clock plays: `useCountdown` starts
+    it from the clock's latest reading so that it ends as the time is up.
+  - The app's sounds (`app/src/audio/library/`) are read whole and play
+    from `AudioBuffer`s, to the sample; the last 20 read stay read (a piece
+    of music takes up to 18 MB once decoded, an effect about 1 MB). A piece of
+    music loops by starting each round `loopMs` after the one before, set
+    on the audio clock up to 2 s ahead, while the file's tail (a reverb, a
+    last chord) rings on under the next round: no seam and no gap. A quiz's
+    own files may be long, so they stream through `ClipPlayer` into the
+    same nodes; a file an effect plays stays open, so it starts at once.
+  - Music fades in (0.4 s), out (1.2 s) when the moment changes, and away
+    (0.3 s) while other sound plays (`otherSoundPlays`: the slide's sound,
+    a slide video with sound, a sound or video in the media player). Volumes: the quiz's
+    effects or music volume times the player volume.
+  - The library is made by `make_sounds.py` with NumPy alone, from
+    oscillators, noise and filters, at 48 kHz, each sound at -16 LUFS
+    (BS.1770-4, as SN-9), lowered where its decoded peak would pass
+    -1 dBFS, as MP3 by FFmpeg's LAME encoder.
   - The editor's Trim windows (`TrimDialog.tsx` with the waveform maths in
     `waveform.ts`, and `VideoTrimDialog.tsx`, sharing the part state, keys
     and controls in `part-editing.tsx`) and Normalize volume window
@@ -1836,7 +1861,7 @@ map each to a button; triggers carry the float 1.0.
 | --- | --- | --- |
 | Show started / ended | `/buzzdome/show/start`, `/buzzdome/show/end` | notes 70 / 71 |
 | Stage | `/buzzdome/stage/<stage>` (`noShow`, `lobby`, `billboard`, `explanation`, `endOfRound`, `questionReady`, `answering`, `lastSeconds`, `buzzed`, `closed`, `revealed`, `leaderboard`, `finalBuildUp`, `winner`) | notes 36 to 49 in that order |
-| Cue | `/buzzdome/cue/<cue>` (`clockStart`, `buzz`, `correct`, `wrong`, `timeUp`, `reveal`) | notes 60 to 65 in that order |
+| Cue | `/buzzdome/cue/<cue>` (`clockStart`, `buzz`, `correct`, `wrong`, `timeUp`, `reveal`, `leaderboard`, `place`, `winner`) | notes 60 to 68 in that order |
 | Slide | `/buzzdome/slide` with the slide number (int) | program change number − 1 (slides 1 to 128) |
 | Buzz | `/buzzdome/buzz` with the buzzer number (int) | note 72 |
 

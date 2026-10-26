@@ -174,17 +174,34 @@ export function TimeBox(props: { value: number; onChange: (ms: number) => void; 
 /** The value of the Mixed entry of a select; no option has it. */
 const MIXED_OPTION = "\u0000mixed";
 
-export function Select<T extends string | number>(props: { value: T; options: [T, string][]; onChange: (value: T) => void; label: string; disabled?: boolean }) {
+/** Options of a select under a heading of their own. */
+export interface OptionGroup<T> {
+  group: string;
+  options: [T, string][];
+}
+
+export function Select<T extends string | number>(props: {
+  value: T;
+  options: ([T, string] | OptionGroup<T>)[];
+  onChange: (value: T) => void;
+  label: string;
+  disabled?: boolean;
+}) {
   const { value, options, onChange, label, disabled } = props;
   const { t } = useApp();
   const mixed = useContext(MixedContext);
+  const option = ([value, text]: [T, string]) => (
+    <option key={String(value)} value={String(value)}>
+      {text}
+    </option>
+  );
   return (
     <select
       aria-label={label}
       value={mixed ? MIXED_OPTION : String(value)}
       disabled={disabled}
       onChange={(e) => {
-        const picked = options.find(([option]) => String(option) === e.target.value);
+        const picked = options.flatMap((entry) => (Array.isArray(entry) ? [entry] : entry.options)).find(([option]) => String(option) === e.target.value);
         if (picked) onChange(picked[0]);
       }}
     >
@@ -193,11 +210,15 @@ export function Select<T extends string | number>(props: { value: T; options: [T
           {t("mixedValues")}
         </option>
       )}
-      {options.map(([option, text]) => (
-        <option key={String(option)} value={String(option)}>
-          {text}
-        </option>
-      ))}
+      {options.map((entry) =>
+        Array.isArray(entry) ? (
+          option(entry)
+        ) : (
+          <optgroup key={entry.group} label={entry.group}>
+            {entry.options.map(option)}
+          </optgroup>
+        ),
+      )}
     </select>
   );
 }

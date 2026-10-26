@@ -2,15 +2,12 @@
 //! coarser view of the game than its phase, one name per look the room
 //! can take (spec LT-4).
 
-use crate::game::{Game, Phase, QuestionStep, FINAL_LAST_STEP};
+use crate::game::{Game, Phase, QuestionStep, WINNER_STEP};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 /// How long before time up a running question counts as its last seconds.
 pub const LAST_SECONDS_MS: u64 = 5_000;
-
-/// The step of the final ranking from which the winner is on screen.
-const WINNER_STEP: u8 = FINAL_LAST_STEP - 1;
 
 /// The show's moment for the stage lights (`Game::stage`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, TS)]

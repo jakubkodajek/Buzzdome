@@ -45,6 +45,8 @@ pub const REPLAYS_AS_PLAYED_FROM: u32 = 3;
 
 /// Steps of the final score reveal: drum roll, 3rd, 2nd, 1st, full ranking.
 pub const FINAL_LAST_STEP: u8 = 4;
+/// The step of the final ranking from which the winner is on screen.
+pub(crate) const WINNER_STEP: u8 = FINAL_LAST_STEP - 1;
 
 /// How long after time up a question stays open, so that presses made in
 /// time but still on their way from the receiver are counted. A press counts
@@ -148,10 +150,18 @@ pub enum Cue {
     Wrong,
     TimeUp,
     Reveal,
+    /// The leaderboard opens.
+    Leaderboard,
+    /// The final ranking shows a place before the winner's, one a player holds.
+    Place,
+    /// The final ranking shows the winner.
+    Winner,
 }
 
 impl Cue {
-    pub const ALL: [Cue; 6] = [Cue::ClockStart, Cue::Buzz, Cue::Correct, Cue::Wrong, Cue::TimeUp, Cue::Reveal];
+    /// In the order outside programs number them (`lights::signals`), so a
+    /// new cue goes last.
+    pub const ALL: [Cue; 9] = [Cue::ClockStart, Cue::Buzz, Cue::Correct, Cue::Wrong, Cue::TimeUp, Cue::Reveal, Cue::Leaderboard, Cue::Place, Cue::Winner];
 }
 
 /// Side effects for the app to carry out after a command.
@@ -713,6 +723,14 @@ impl Game {
         ranking
     }
 
+    /// What the final ranking's `step` sounds: its place, from the third,
+    /// when a player holds it, and the winner as the first.
+    fn final_cue(&self, step: u8) -> Option<Cue> {
+        let place = usize::from(FINAL_LAST_STEP.checked_sub(step)?);
+        let held = (1..FINAL_LAST_STEP).contains(&step) && self.ranking().iter().any(|&(at, _)| at == place);
+        held.then_some(if step == WINNER_STEP { Cue::Winner } else { Cue::Place })
+    }
+
     pub fn clock(&self) -> Option<&Clock> {
         match &self.phase {
             Phase::Question(QuestionStep::Running { clock } | QuestionStep::Buzzed { clock, .. }) => Some(clock),
@@ -1040,11 +1058,12 @@ impl Game {
                 Ok(vec![])
             }
             Command::ShowLeaderboard { visible } => {
+                let opens = *visible && !self.leaderboard_visible;
                 self.leaderboard_visible = *visible;
                 if *visible {
                     self.hold_pending_step();
                 }
-                Ok(vec![])
+                Ok(if opens { vec![Effect::Sound { cue: Cue::Leaderboard }] } else { vec![] })
             }
             Command::PlayVideo => {
                 if !self.shows_video() {
@@ -1295,8 +1314,9 @@ impl Game {
                 QuestionStep::Revealed { .. } => Err(GameError::NotNow),
             },
             Phase::Final { step } => {
-                self.phase = Phase::Final { step: step + 1 };
-                Ok(vec![])
+                let step = step + 1;
+                self.phase = Phase::Final { step };
+                Ok(self.final_cue(step).map(|cue| Effect::Sound { cue }).into_iter().collect())
             }
         }
     }

@@ -60,7 +60,7 @@ Keyboard shortcuts on the host screen (Space next S scores P pause),host screen,
 Show settings: show correct answer and allow revising answers,settings,should,yes,yes,§4.6; clone: quiz settings (spec QZ-11)
 Show settings: run the clock for the full time,settings,should,yes,yes,§4.6; clone: quiz settings (spec QZ-11)
 Configurable end-of-question steps,settings,should,yes,partial,"§4.7; clone: when everyone answered wait, reveal or go on, and go on a while after the answer (spec QZ-11)"
-Sounds for countdown correct incorrect and background music,settings,should,yes,partial,§4.4; we need our own royalty-free sounds; clone: placeholder tones for six events; our own sound library planned (spec section 10)
+Sounds for countdown correct incorrect and background music,settings,should,yes,yes,"§4.4; we need our own royalty-free sounds; clone: our own synthesized library (31 effects for ten moments, six music loops) or the quiz's own files, chosen per quiz (spec SN-1 to SN-3)"
 Play in groups or teams with group scoring,settings,should,yes,no,§4.2.2.1 and §4.3.2.1 lockout and first/sum/average
 Round scores and round winners,host screen,should,yes,no,§5.4.6 Ctrl+S and §5.4.7 Ctrl+E
 Works without internet on a local network,reliability,should,yes,yes,§4.2.1 local Wi-Fi mode; decide in /replica-architect; clone: a desktop app; needs no network

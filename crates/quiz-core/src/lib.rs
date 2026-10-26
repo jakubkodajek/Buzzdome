@@ -9,6 +9,7 @@ pub mod model;
 pub mod settings;
 pub mod sheet;
 pub mod sound_board;
+pub mod sounds;
 pub mod stage;
 pub mod style;
 mod text;
@@ -39,6 +40,7 @@ pub use sheet::{export_table, import_tables, ImportIssue, ImportNote, ImportedRo
 pub use text::file_key;
 pub use stage::{Stage, LAST_SECONDS_MS};
 pub use sound_board::{BoardChange, BoardError, Pad, PadClick, PadColor, PadSource, SoundBoard};
+pub use sounds::{is_sound_id, QuizSounds, SoundChoice, SoundSlot, DEFAULT_EFFECTS_VOLUME, DEFAULT_MUSIC_VOLUME, MAX_SOUND_ID_LEN, MAX_SOUND_VOLUME};
 pub use style::{
     Color, FontName, Gradient, GradientKind, SlideStyle, TextAlign, TextSize, TextStyle, TimerDesign, Transparency, MAX_FONT_NAME_CHARS, MAX_TEXT_SIZE,
     MAX_TRANSPARENCY, MIN_TEXT_SIZE,
@@ -95,6 +97,9 @@ mod ui_constants {
             ("MAX_AFTER_REVEAL_DELAY_S", crate::MAX_AFTER_REVEAL_DELAY_S.to_string()),
             ("MAX_JOKERS", crate::MAX_JOKERS.to_string()),
             ("LAST_SECONDS_MS", crate::LAST_SECONDS_MS.to_string()),
+            ("DEFAULT_QUIZ_SOUNDS", format!("{} as const", serde_json::to_string(&crate::QuizSounds::default()).unwrap())),
+            ("MAX_SOUND_VOLUME", crate::MAX_SOUND_VOLUME.to_string()),
+            ("SOUND_SLOTS", format!("{} as const", serde_json::to_string(&crate::SoundSlot::ALL).unwrap())),
             ("STAGES", format!("{} as const", serde_json::to_string(&crate::Stage::ALL).unwrap())),
             ("ANSWER_BUTTONS", format!("{} as const", serde_json::to_string(&crate::game::ANSWER_BUTTONS).unwrap())),
         ];

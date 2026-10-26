@@ -7,6 +7,7 @@ use crate::media::{
     MAX_INTRO_PAUSE_MS, MAX_REPLAY_DELAY_MS, MAX_VIDEO_SPEED, MIN_GAIN_DB, MIN_VIDEO_SPEED,
 };
 use crate::settings::QuizSettings;
+use crate::sounds::{QuizSounds, SoundSlot};
 use crate::style::SlideStyle;
 use crate::text::file_key;
 use schemars::JsonSchema;
@@ -73,6 +74,12 @@ pub struct Quiz {
     #[schemars(with = "QuizSettings")]
     #[ts(as = "Option<QuizSettings>", optional)]
     pub settings: QuizSettings,
+    /// What the show sounds like (spec SN-1 to SN-4). Left out when it
+    /// sounds as the app does.
+    #[serde(default, skip_serializing_if = "QuizSounds::is_default", with = "crate::style::lenient_or_default")]
+    #[schemars(with = "QuizSounds")]
+    #[ts(as = "Option<QuizSounds>", optional)]
+    pub sounds: QuizSounds,
 }
 
 /// A `theme` that is not a theme id (see `is_theme_id`), a text or not,
@@ -571,6 +578,9 @@ pub enum Problem {
     CategoryNameTaken { name: String },
     #[error("media file {file} of category {name}: {issue}")]
     CategoryMedia { name: String, file: String, issue: MediaIssue },
+    /// A file the quiz chose for a moment of its show (`Quiz::sounds`).
+    #[error("sound file {file} for {slot:?}: {issue}")]
+    SoundMedia { slot: SoundSlot, file: String, issue: MediaIssue },
     /// Two media files whose names differ only in case or in how their
     /// accents are encoded (`file_key`): one file on macOS, and on Windows
     /// when only case differs, so one would take the other's place.
@@ -683,7 +693,7 @@ fn migrate(quiz: &mut serde_json::Value, version: u64) {
 impl Quiz {
     /// A quiz of the current schema version in the default look.
     pub fn new(title: impl Into<String>, slides: Vec<Slide>) -> Quiz {
-        Quiz { schema_version: SCHEMA_VERSION, title: title.into(), theme: None, slides, categories: Vec::new(), settings: QuizSettings::default() }
+        Quiz { schema_version: SCHEMA_VERSION, title: title.into(), theme: None, slides, categories: Vec::new(), settings: QuizSettings::default(), sounds: QuizSounds::default() }
     }
 
     /// Reads a quiz, leaving out what it cannot keep (see `ReadQuiz::dropped`).
@@ -740,14 +750,15 @@ impl Quiz {
         self.slides.iter().rposition(|slide| matches!(slide.content, SlideContent::Final { .. }))
     }
 
-    /// Every media file the quiz uses, its categories' too, each once.
+    /// Every media file the quiz uses, its categories' and its sounds' too, each once.
     pub fn media_files(&self) -> BTreeSet<&str> {
         let slides = self.slides.iter().flat_map(|s| s.media()).map(|(file, _)| file);
-        slides.chain(self.categories.iter().filter_map(Category::media)).collect()
+        let categories = self.categories.iter().filter_map(Category::media);
+        slides.chain(categories).chain(self.sounds.files().map(|(_, file)| file)).collect()
     }
 
     /// Points the media references in `renamed` (old reference to new one)
-    /// to their new names, in the slides and the categories.
+    /// to their new names, in the slides, the categories and the sounds.
     pub fn rename_media(&mut self, renamed: &BTreeMap<String, String>) {
         for slide in &mut self.slides {
             slide.rename_media(renamed);
@@ -757,6 +768,7 @@ impl Quiz {
                 file.clone_from(new);
             }
         }
+        self.sounds.rename_media(renamed);
     }
 
     pub fn validate(&self) -> Result<(), Vec<ValidationError>> {
@@ -809,6 +821,9 @@ impl Quiz {
             if let SlideContent::Question(q) = &slide.content {
                 q.problems(&mut found);
             }
+        }
+        for (slot, file, issue) in self.sounds.problems() {
+            errors.push(ValidationError { slide_id: None, problem: Problem::SoundMedia { slot, file: file.to_string(), issue } });
         }
         let mut by_key: HashMap<String, &str> = HashMap::new();
         for file in self.media_files() {

@@ -7,6 +7,7 @@ import type { Phase } from "./Phase";
 import type { PlayerView } from "./PlayerView";
 import type { QuizSettings } from "./QuizSettings";
 import type { Slide } from "./Slide";
+import type { SoundSlot } from "./SoundSlot";
 import type { TeamView } from "./TeamView";
 
 export type GameView = { quizTitle: string, slideIndex: number, slideCount: number, phase: Phase, slide: Slide | null, 
@@ -71,4 +72,8 @@ autoStep: AutoStepView | null,
  * The quiz's settings, for what the windows show: the projector hides
  * what they say it hides.
  */
-settings: QuizSettings, };
+settings: QuizSettings, 
+/**
+ * The music the show's moment takes (`Game::music`).
+ */
+music: SoundSlot | null, };

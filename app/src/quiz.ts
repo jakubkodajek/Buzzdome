@@ -1,6 +1,6 @@
-import { DEFAULT_QUIZ_SETTINGS, FULL_SHARE, SLIDE_PLAYS } from "./bindings/Constants";
+import { DEFAULT_QUIZ_SETTINGS, DEFAULT_QUIZ_SOUNDS, FULL_SHARE, SLIDE_PLAYS } from "./bindings/Constants";
 import type { StringKey, Translate } from "./i18n";
-import type { Picker, Plays, QuestionSlide, Quiz, QuizSettings, Slide, SlideType, TitledSlide } from "./types";
+import type { Picker, Plays, QuestionSlide, Quiz, QuizSettings, QuizSounds, Slide, SlideType, TitledSlide } from "./types";
 
 /** The wording of a picker for quiz files (a quiz file, or a plain quiz JSON to open), offering `fileName` (without the extension) to save as. */
 export function quizPicker(t: Translate, fileName?: string): Picker {
@@ -10,6 +10,11 @@ export function quizPicker(t: Translate, fileName?: string): Picker {
 /** The quiz's settings: those of its file, the defaults where it has none. */
 export function settingsOf(quiz: Quiz): QuizSettings {
   return quiz.settings ?? DEFAULT_QUIZ_SETTINGS;
+}
+
+/** What the quiz's show sounds like: as its file says, the defaults where it says nothing. */
+export function soundsOf(quiz: Quiz): QuizSounds {
+  return quiz.sounds ?? DEFAULT_QUIZ_SOUNDS;
 }
 
 /** How each kind of slide is named in the UI. */

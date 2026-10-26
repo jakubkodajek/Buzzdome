@@ -4,12 +4,13 @@ import { keyHint, KEYS } from "../keyboard";
 import { problemText } from "../messages";
 import { MAX_AFTER_REVEAL_DELAY_S, MAX_ALL_ANSWERED_DELAY_S, MAX_JOKERS } from "../bindings/Constants";
 import type { StringKey } from "../i18n";
-import { questionCount, settingsOf } from "../quiz";
+import { questionCount, settingsOf, soundsOf } from "../quiz";
 import { RecentFileList } from "../recent-files";
-import type { AllAnswered, Quiz, QuizSettings, ValidationError } from "../types";
+import type { AllAnswered, Quiz, QuizSettings, QuizSounds, ValidationError } from "../types";
 import type { Action, Actions } from "./actions";
 import { NumberBox, Select, Switch } from "./controls";
 import type { OpenQuiz } from "./editor-state";
+import { SoundsSettings } from "./SoundsSettings";
 
 export type BackstagePage = "info" | "settings" | "open" | "import" | "export" | "ai";
 
@@ -34,6 +35,9 @@ interface BackstageProps {
   onOpenFile: (recent?: string) => void;
   onTitle: (title: string) => void;
   onSettings: (settings: QuizSettings) => void;
+  onSounds: (sounds: QuizSounds) => void;
+  /** Lets the quizmaster pick a sound file, added to the quiz's media; null when none is picked. */
+  onPickSound: () => Promise<string | null>;
   /** Shows a slide (by id) in the editor. */
   onShowSlide: (id: string) => void;
 }
@@ -146,9 +150,10 @@ const ALL_ANSWERED_LABEL: Record<AllAnswered, StringKey> = {
 };
 
 /** How the show runs, for the whole quiz (spec QZ-11); each question has its own time, points and answers. */
-function SettingsPage({ open, onSettings }: BackstageProps & { open: OpenQuiz }) {
+function SettingsPage({ open, onSettings, onSounds, onPickSound }: BackstageProps & { open: OpenQuiz }) {
   const { t } = useApp();
-  const settings = settingsOf(open.history.present);
+  const quiz = open.history.present;
+  const settings = settingsOf(quiz);
   const set = (change: Partial<QuizSettings>) => onSettings({ ...settings, ...change });
   const options = (Object.keys(ALL_ANSWERED_LABEL) as AllAnswered[]).map((value): [AllAnswered, string] => [value, t(ALL_ANSWERED_LABEL[value])]);
   const hold = { key: keyHint(t, KEYS.clock) };
@@ -218,6 +223,7 @@ function SettingsPage({ open, onSettings }: BackstageProps & { open: OpenQuiz })
         checked={!settings.hideBuzzPoints}
         onChange={(show) => set({ hideBuzzPoints: !show })}
       />
+      <SoundsSettings sounds={soundsOf(quiz)} onSounds={onSounds} onPickFile={onPickSound} />
     </>
   );
 }
