@@ -268,9 +268,10 @@ export class App {
    * Waits until the Director shows the show's current step, then for the
    * step pause: the guard counts the pause from when the window shows a step
    * (`StepGuard.shown`), which on a busy machine can be well after the
-   * backend took it.
+   * backend took it. Before a step that does not come from the Director's
+   * buttons or keys too, such as a key of the receiver's remote.
    */
-  private async stepPause(): Promise<void> {
+  async stepPause(): Promise<void> {
     const view = await this.view();
     if (view) {
       await waitFor(`the Director to show step ${view.stepNo}`, async () => {

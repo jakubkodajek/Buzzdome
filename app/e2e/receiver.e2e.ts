@@ -3,13 +3,17 @@
 // test serves over TCP (`BUZZDOME_FAKE_RECEIVER`). Everything above the USB
 // device is real: automatic detection, the receiver thread, the 303S
 // protocol, the show. The test plugs the receiver in and out, presses
-// buttons with the buzzers' own timers, and reads the colours the app sends.
+// buttons with the buzzers' own timers, presses the quizmaster's remote, and
+// reads the colours the app sends.
 
 import { createServer, type Server, type Socket } from "node:net";
 import { createInterface } from "node:readline";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
-import type { Button, GameView, ReceiverInfo } from "../src/types";
-import { App, waitFor } from "./harness";
+import type { Button, GameView, ReceiverInfo, RemoteKey } from "../src/types";
+import { App, sleep, waitFor } from "./harness";
+
+/** How long a key of the remote sent again counts as the same press (crates/buzzers/src/edge.rs). */
+const REMOTE_REPEAT_MS = 700;
 
 /** The fake receiver's other end: commands to it, and the colours the app wrote. */
 class FakeReceiver {
@@ -53,6 +57,11 @@ class FakeReceiver {
   /** A press of `button` on `buzzer`, `timer` being the buzzer's own response time. */
   press(buzzer: number, button: Button, timer = 0): Promise<void> {
     return this.send({ press: { buzzer, button, timer } });
+  }
+
+  /** A press of `key` on the quizmaster's remote (`RemoteKey`). */
+  remote(key: RemoteKey): Promise<void> {
+    return this.send({ remote: key });
   }
 
   close(): Promise<void> {
@@ -165,6 +174,65 @@ describe("a simulated buzzer receiver", () => {
     expect((await app.view())!.players.length).toBe(players);
     await app.step("next");
     await app.waitView("the show going on", (v) => v.slideIndex > 7);
+    expect(fake.errors).toEqual([]);
+    await app.assertHealthy();
+  });
+
+  test("the quizmaster's remote steps the show, judges a fastest finger and shows the leaderboard", async () => {
+    // Back from the slide after the fastest finger: it comes back answered, keeps its scores and takes no presses.
+    const before = await app.waitView("a way back to slide 8", (v) => v.previousSlide === 7);
+    const scores = before.players.map((p) => [p.buzzer, p.score]);
+    await app.stepPause();
+    await fake.remote("back");
+    const back = await app.waitView("slide 8 again, answered", (v) => v.slideIndex === 7 && v.phase.phase === "question" && v.phase.step === "revealed");
+    expect(back.players.map((p) => [p.buzzer, p.score])).toEqual(scores);
+    await fake.press(12, "big", 100);
+    // Power does nothing unless the quizmaster chooses otherwise.
+    await fake.remote("power");
+    await app.stepPause();
+    expect(await app.view()).toMatchObject({ slideIndex: 7, buzzed: back.buzzed, phase: { phase: "question", step: "revealed" } });
+    await fake.remote("forward");
+    await app.waitView("slide 9 again", (v) => v.slideIndex === 8);
+
+    // A new show, for a fastest finger nobody has answered yet.
+    await app.press("endShow");
+    await waitFor("the show ended", async () => (await app.view()) === null);
+    await app.press("demoQuiz");
+    await app.waitView("the lobby", (v) => v.phase.phase === "lobby");
+    for (const buzzer of [3, 7]) await fake.press(buzzer, "big");
+    await app.waitView("two players from the receiver", (v) => [3, 7].every((buzzer) => player(v, buzzer)));
+    await app.stepPause();
+    await fake.remote("forward");
+    await app.waitView("the first slide", (v) => v.slideIndex === 0);
+    await app.tab("tabQuestions");
+    await app.page.click(await app.$(".slide-grid tbody tr:nth-child(8) td:nth-child(1)"));
+    await app.step("goToSelected");
+    await app.waitView("slide 8", (v) => v.slideIndex === 7);
+    await app.stepPause();
+    await fake.remote("forward");
+    await app.waitView("the clock running", (v) => v.phase.phase === "question" && v.phase.step === "running");
+
+    await fake.press(7, "big", 150);
+    await app.waitView("buzzer 7 buzzed", (v) => v.phase.phase === "question" && v.phase.step === "buzzed" && v.buzzed === 7);
+    await app.stepPause();
+    await fake.remote("cross");
+    await app.waitView("the clock running again", (v) => v.phase.phase === "question" && v.phase.step === "running");
+    await waitFor("buzzer 7 shown wrong", async () => fake.lights.get(7) === "wrong");
+    await fake.press(3, "big", 300);
+    await app.waitView("buzzer 3 buzzed", (v) => v.phase.phase === "question" && v.phase.step === "buzzed" && v.buzzed === 3);
+    await app.stepPause();
+    await fake.remote("tick");
+    const judged = await app.waitView("the answer revealed", (v) => v.phase.phase === "question" && v.phase.step === "revealed");
+    expect(player(judged, 3)!.score).toBeGreaterThan(0);
+    await waitFor("buzzer 3 shown correct", async () => fake.lights.get(3) === "correct");
+
+    await app.stepPause();
+    await fake.remote("trophy");
+    await app.waitView("the leaderboard shown", (v) => v.leaderboardVisible);
+    // The same key again within REMOTE_REPEAT_MS counts once, as the receiver resends keys.
+    await sleep(REMOTE_REPEAT_MS + 100);
+    await fake.remote("trophy");
+    await app.waitView("the leaderboard hidden", (v) => !v.leaderboardVisible);
     expect(fake.errors).toEqual([]);
     await app.assertHealthy();
   });
