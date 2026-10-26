@@ -8,8 +8,8 @@ affiliated with it. Goal: behave like the reference app for the formats we use.
 ## Status
 
 Scope changed on 2026-10-05 from a browser app with phones to a desktop app
-with hardware buzzers. Target: first live event in about four weeks
-(early November 2026). Plan and progress: `ROADMAP.md`.
+with hardware buzzers. Target: first live event in
+November 2026. Plan and progress: `ROADMAP.md`.
 
 ## Product shape
 

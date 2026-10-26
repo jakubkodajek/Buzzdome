@@ -1442,9 +1442,9 @@ The 303S shows them as colours: ready blue, locked dim white (Jakub's
 choice, told apart from the red of a wrong answer next to it), first
 white, right green, wrong red, off dark (`enjoy303s.rs`); no two share a
 colour byte. Locked and first are both white, told apart by brightness
-alone; on the 303S's lights both come out purple, dim white the lighter
-one, told apart at arm's length in the 2026-10-25 test, and Jakub kept
-dim white for locked after it. A light that goes to all buzzers at once reaches spare
+alone, told apart at arm's length in the 2026-10-25 test, and Jakub kept
+dim white for locked after it (both read as white on the hardware;
+an early note of them as purple was a misreading, 2026-10-26). A light that goes to all buzzers at once reaches spare
 buzzers too, which the app never lit and so show whatever went to all
 last: in a fastest-finger round they light ready, so a spare's press
 registers a late team, which plays from the next question as any player
