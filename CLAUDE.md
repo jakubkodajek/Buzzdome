@@ -126,6 +126,10 @@ UI conventions (keep one way of doing each thing):
 
 ## Where things live
 
+- `.claude/ARCHITECTURE.md`: the architecture in one page, its invariants
+  and where to change what. `.claude/skills/buzzdome-*`: task checklists
+  (verify, backend command, game rules, UI change, hardware, quiz
+  authoring). `AGENTS.md` points other assistants here.
 - `ROADMAP.md`: phases, milestones and what is done.
 - `docs/specification.md`: requirements with IDs (buzzer link, themes, plugins).
   `docs/design.md`: architecture, buzzer stack. `docs/quiz-format.md`: the quiz
