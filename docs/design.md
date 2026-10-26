@@ -244,6 +244,20 @@ draws slides without a show.
   loads (`useBackendEvent`, `useGameView`, `useClock`, `useQuiz`,
   `useLastSession`). Small shared helpers live in `answers.ts`, `format.ts`,
   `quiz.ts`, `keyboard.ts` and `messages.ts`. ESLint with the React hooks rules runs in CI.
+- **Director look (SF-10).** `director/look.ts` keeps the choice (light,
+  dark or as the system) in the window's preferences, and the Director's
+  root takes the class `dark` while it shows dark. Every colour of
+  `director.css` is a custom property of `.director`, which `.director.dark`
+  sets again, so the two looks cannot drift apart; the command panel,
+  toolbars and sound board are dark in both. `.director.dark` applies on
+  screen only, so what the Director prints (the results, SF-11) is light. The editor's popups the
+  Director borrows (menus, dialogs, colour, gradient and font pickers)
+  read `--popup-*` properties with their light colours as fallbacks, which
+  `.director.dark` sets, as the editor's dark properties panel does; the
+  light switches get their dark colours in `director.css`.
+  While the dark look is on screen the window's title bar is set dark
+  (`setTheme`, which draws it on Windows), and left to the system again
+  otherwise, so the light look changes nothing there.
 - **Sound.** The Director window plays the show's sounds and the slides'
   sound clips, because it stays open for the whole show and the projector
   window may not. Spec SN-5 moves playback into the Rust shell later. The
@@ -793,6 +807,11 @@ packages users will install are read the same way.
   `nextAfterRevealDelayS` the show takes the next slide's step the same
   way, held the same way. A question shown again with its answer on a
   revisit (rules version 6) does not count, as the quizmaster went there.
+  The settings come with the quiz the session keeps, so a resumed show
+  goes on with them; no rules version is needed, as a quiz without them
+  plays as before. Space pressed as the reveal comes is meant for the step
+  before and is dropped (one step per press, above), so it does not also
+  leave the slide.
 - **Other quiz settings (QZ-11).** `runClockOut` keeps a timed question
   running once nobody is left to answer (`Game::closes_as_answered`); its
   time up then closes it as everyone answered, so `allAnswered` applies.
@@ -860,11 +879,6 @@ packages users will install are read the same way.
   Director's window (`Webview::print`), which can also save a PDF; the
   print style leaves the results alone on the page, under the quiz's
   title, on as many pages as they take.
-  The settings come with the quiz the session keeps, so a resumed show
-  goes on with them; no rules version is needed, as a quiz without them
-  plays as before. Space pressed as the reveal comes is meant for the step
-  before and is dropped (one step per press, above), so it does not also
-  leave the slide.
 - **Ranking.** `Game::ranking` orders the players switched on by score,
   then by the time their right answers took together (`total_answer_ms`,
   less first); wrong answers add no time, so not answering never helps.

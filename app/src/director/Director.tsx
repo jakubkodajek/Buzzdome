@@ -46,6 +46,7 @@ import { isThemeMissing } from "../theme/themes";
 import type { AutoStepView, GameView, Quiz } from "../types";
 import { QuestionsTab } from "./QuestionsTab";
 import { LightsTab } from "./LightsTab";
+import { useDirectorLook, type DirectorLook } from "./look";
 import { ReceiverTab } from "./ReceiverTab";
 import { MediaPlayerTab } from "./MediaPlayerTab";
 import { ResponsesTab } from "./ResponsesTab";
@@ -132,6 +133,7 @@ function DirectorLayout({ testRun, onEditor }: { testRun: boolean; onEditor: () 
   const quiz = useQuiz();
   const theme = useResolvedTheme(quiz?.theme ?? null);
   const projector = useProjectorSettings();
+  const look = useDirectorLook();
   const [tab, setTab] = useState<Tab>("questions");
   useStepShown(view);
   useShortcuts(view, projector.toggle);
@@ -157,7 +159,7 @@ function DirectorLayout({ testRun, onEditor }: { testRun: boolean; onEditor: () 
 
   return (
     // `data-step`: the step on screen, which the E2E tests wait for before a step press (StepGuard.shown).
-    <div className="director" data-step={view?.stepNo}>
+    <div className={look.dark ? "director dark" : "director"} data-step={view?.stepNo}>
       <CommandPanel view={view} projector={projector} sound={sound} showStart={showStart} testRun={testRun} onEditor={onEditor} />
       <div className="workspace">
         <nav className="tabs" role="tablist">
@@ -173,7 +175,7 @@ function DirectorLayout({ testRun, onEditor }: { testRun: boolean; onEditor: () 
           <ThemeContext value={theme}>
             {/* A tab that fails to render keeps the rest of the window, and its keys, working. */}
             <ErrorBoundary key={tab} fallback={(message, retry) => <RenderFailed t={t} text={t("partFailed", { message })} retry={retry} />}>
-              <TabBody tab={tab} view={view} quiz={quiz} projector={projector} player={player} sound={sound} showStart={showStart} />
+              <TabBody tab={tab} view={view} quiz={quiz} projector={projector} look={look} player={player} sound={sound} showStart={showStart} />
             </ErrorBoundary>
           </ThemeContext>
         </div>
@@ -215,14 +217,15 @@ interface TabBodyProps {
   view: GameView | null;
   quiz: Quiz | null;
   projector: ProjectorSettings;
+  look: DirectorLook;
   player: MediaPlayer;
   sound: SlideSound;
   showStart: ShowStart;
 }
 
-function TabBody({ tab, view, quiz, projector, player, sound, showStart }: TabBodyProps) {
+function TabBody({ tab, view, quiz, projector, look, player, sound, showStart }: TabBodyProps) {
   // Setup tabs work without a show; the others need one.
-  if (tab === "settings") return <SettingsTab projector={projector} />;
+  if (tab === "settings") return <SettingsTab projector={projector} look={look} />;
   if (tab === "receiver") return <ReceiverTab />;
   if (tab === "lights") return <LightsTab />;
   // Team names can be prepared before a show, and the media player plays without one.
