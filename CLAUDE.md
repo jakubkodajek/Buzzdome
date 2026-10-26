@@ -47,7 +47,7 @@ on `PATH` first (macOS dev machine).
 
 | task | command (from the repo root unless noted) |
 | --- | --- |
-| install UI deps | `cd app && npm install` |
+| install UI deps (as locked; `npm install <pkg>` only to add or upgrade one) | `cd app && npm ci` |
 | run the app (dev) | `cd app && npm run tauri dev` |
 | core + driver tests (also regenerates `app/src/bindings`) | `cargo test --workspace` |
 | lint Rust | `cargo clippy --workspace --all-targets` |
@@ -145,7 +145,12 @@ UI conventions (keep one way of doing each thing):
 - Clean room. Rebuild behaviour from the recon map and manuals. Never copy the
   reference app's code, text, screenshots, sounds, skins, icons or example quizzes.
   Never use decompiled code or vendor SDKs obtained from unofficial reposts; the
-  buzzer SDK comes from the manufacturer or not at all.
+  buzzer SDK comes from the manufacturer or not at all. One exception, Jakub's
+  decision of 2026-10-20 for this private, non-distributed app: Enjoy's
+  protocol may be read from an unofficial copy of its SDK too. The Enjoy 303S
+  driver implements a description written in our own words from Enjoy's
+  official 303S kit (Jakub's, 2026-10-21) and that copy (`docs/design.md`
+  2.4). No file or code from either goes into the repository.
 - No trademarked names in the product or UI: not QuizXpress, Jeopardy!, Who Wants to
   Be a Millionaire?, Family Feud or Wheel of Fortune. Use generic names
   ("topic board", "ladder round", "survey round").

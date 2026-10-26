@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { translator } from "./i18n";
-import { errorText, importIssueText, placesText, problemText, protocolText, receiverProblemText, settingsLostText, thrownText } from "./messages";
+import { awaitsAnswer, errorText, importIssueText, placesText, problemText, protocolText, receiverProblemText, settingsLostText, thrownText } from "./messages";
 
 const cs = translator("cs");
 const en = translator("en");
@@ -96,6 +96,11 @@ describe("receiver texts", () => {
   it("names the protocol", () => {
     expect(protocolText(cs, { type: "learned", buttons: 5 })).toBe("naučená tlačítka (5)");
     expect(protocolText(en, { type: "rawOnly" })).toBe("raw reports only");
+    expect(protocolText(en, { type: "enjoy303s", answered: true })).toBe("Enjoy 303S");
+    expect(protocolText(cs, { type: "enjoy303s", answered: false })).toBe("Enjoy 303S");
+    expect(awaitsAnswer({ type: "enjoy303s", answered: false })).toBe(true);
+    expect(awaitsAnswer({ type: "enjoy303s", answered: true })).toBe(false);
+    expect(awaitsAnswer({ type: "rawOnly" })).toBe(false);
   });
 
   it("says where a file that was not read went, or that it was left alone", () => {

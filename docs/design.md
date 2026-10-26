@@ -79,15 +79,27 @@ draws slides without a show.
   command (`step-guard.ts`) while the last one is unanswered and for
   `STEP_PAUSE_MS` (300 ms) after its answer, less than a person takes to
   see the new step, so a double press never runs the step after the one on
-  screen, however long the journal write took. Presses and score changes are never dropped.
+  screen, however long the journal write took. Presses and score changes are never dropped,
+  nor is Restart question, which the quizmaster confirms first.
+  A step command also carries the step the window shows (`GameView.stepNo`,
+  `Game::step_no`, counted in `Game::apply` by `same_step`), and `dispatch`
+  drops it, as the guard would, when the show has taken another step since:
+  a press made as time ran out, a player buzzed in, the show took a step
+  by itself or another window took one, before this window showed it, is
+  not run on the step after. Pausing or resuming the clock and the
+  leaderboard are no steps; another buzzer buzzing in is. A dropped
+  command also sends that window the show as it stands, so a window that
+  missed a view is not left sending stale steps; and a window loads its
+  first view only once it listens for the next (`useReceivedValue`), so a
+  step taken as it opens is not missed.
   Show keys count as typing only in text fields: after the quizmaster
   touched a slider, checkbox or list, the keys still work, and a slider
   lets go of the focus when released.
 - **Where Next goes.** `Game::following` decides it: the next slide, or
   after the last slide the final ranking, unless the quiz has a final slide
   of its own (`Quiz::final_slide`), which then is the ranking and the show
-  ends with the last slide. `controls` and `GameView.next_slide_title` use
-  the same function.
+  ends with the last slide. `controls` and `GameView.next_slide` use the
+  same function.
 - **Commands** (UI to Rust) are the `api` object in `app/src/api.ts`, one
   entry per `#[tauri::command]`. Game actions all go through one command,
   `dispatch(Command)`, the same for buttons, keys, virtual and real buzzers.
@@ -114,8 +126,9 @@ draws slides without a show.
   the wall clock once when the app starts and counts on from a monotonic
   clock, so the system setting its clock mid-show (say, on joining the
   venue's network) neither freezes the countdown nor ends a question early.
-  The show thread (`show_thread.rs`) applies due timer commands (time up)
-  and otherwise sends `clock-tick` with the core's `ClockView`. The UI never
+  The show thread (`show_thread.rs`) applies due timer commands (time up,
+  and the step the quiz's settings take once everyone answered) and
+  otherwise sends `clock-tick` with the core's `ClockView`. The UI never
   reads the wall clock: what plays counts on from the show clock it heard,
   by one monotonic clock (`showClockNow` and `msSinceHeard` in
   `media-player.ts`; ESLint refuses other clock reads anywhere in the UI,
@@ -136,7 +149,10 @@ draws slides without a show.
   or ends (an unanswered request is forgotten then), and holds no other.
   Those that write `receiver.json` run off the windows' thread too: it is in
   the app's data folder with the journal, so a disk that does not answer
-  holds both.
+  holds both. They change it one at a time (`SettingsChange`, whose lock is
+  never taken under the show state), so two quick clicks cannot lose either
+  change; and every atomic write has a temporary file of its own
+  (`quiz_file::write_atomic`).
 - **Saving problems.** When the journal refuses a write (the disk is full,
   say), the change is not made, and the Director shows why in a banner until
   a write works again (`show-not-saved`, `show_not_saved`). A due command
@@ -193,17 +209,22 @@ draws slides without a show.
   lists the app's commands so Tauri checks them, and a test in
   `app_windows.rs` keeps the three lists in step). The projector can read
   the show and its media, but not open, save or pick files, and `dispatch`
-  takes from it only what its keys stand for (`PROJECTOR_COMMANDS` in
-  `lib.rs`, written to `bindings/ProjectorCommands.ts`; a test in
-  `keyboard.test.ts` checks that every command a key gives is in it).
+  takes from it only what its keys stand for (`may_give` in `lib.rs`: the
+  `PROJECTOR_COMMANDS`, written to `bindings/ProjectorCommands.ts`, where a
+  test in `keyboard.test.ts` checks that every command a key gives is in
+  it, and presses of the big button of buzzers 1 to 10 only); a window the
+  app does not know may give none.
   A content security policy (`tauri.conf.json`) lets the pages load only
   the app's own scripts and styles and media through the asset protocol.
   Tauri sets it only on the pages a release build serves, not on the dev
   server's, so the release smoke check in `docs/hardware-test.md` runs
-  under it. Files the quizmaster opens, saves, imports or exports are
-  picked by the backend (`dialogs.rs`, worded by the UI's `Picker`), never
-  named by a page: the editor's recent files are kept by the backend
-  (`recent_files.rs`) and the page opens one by its place in the list. The
+  under it; what it blocks goes in the log (`csp-report.ts`). Files the
+  quizmaster opens, saves, imports or exports are picked by the backend
+  (`dialogs.rs`, worded by the UI's `Picker`, whose offered name, a quiz
+  title, the backend turns into a portable file name), never named by a
+  page: the editor's recent files are kept by the backend
+  (`recent_files.rs`), and the page opens one by its path, which has to be
+  in that list; a file leaves the list once it is gone from its folder. The
   pages confirm through the dialog plugin's `ask`
   (`confirm.ts`, with Yes and No in the UI's language); ESLint refuses `alert`, `confirm`, `prompt` and the
   plugin's file pickers.
@@ -290,10 +311,12 @@ A `.quiz` entry with a name that is not portable is stored under the
 closest portable one (`quiz_core::portable_reference`, numbered if taken)
 and the quiz's references are renamed with it (the draft then counts as
 unsaved). So is an entry whose name is one file with an entry before it on
-Windows and macOS (`quiz_core::file_key`: the names differ only in letter
-case, or in how accents are encoded, which macOS ignores too), which would
-take its place there; a show refuses such a quiz (`MediaNameClash`), as it
-does a name it would have to rename. Media added in the editor, and media
+Windows or macOS (`quiz_core::file_key`: the names differ only in letter
+case, which Windows compares in upper case and macOS in lower case, or in
+how accents are encoded, which macOS ignores too), which would take its
+place there; a show refuses a quiz that uses such a name
+(`MediaNameClash`), whether or not it uses the entry before it, as it does
+a name it would have to rename. Media added in the editor, and media
 an export copies beside a sheet, take no name that is one file with a name
 in the folder, also on Linux. A plain `quiz.json` reads
 only safe names from the disk (no device names on Windows), nor any
@@ -301,7 +324,9 @@ through a link that leads out of its folder, and the show path keeps such
 a file refused.
 A `.quiz` file of more than 10,000 entries (`MAX_ENTRIES`) is refused. Its
 ZIP64 end records are checked before the archive is opened (`zip_end.rs`),
-as opening reads every entry header the record it takes counts.
+as opening reads every entry header the record it takes counts, and a file
+of more than 64 end records (`MAX_END_RECORDS`) is refused as not a quiz
+file, as the reader would read the entry headers again for each one.
 A `quiz.json` over 16 MB (`MAX_QUIZ_JSON_BYTES`) is refused before it is
 parsed, whether read from a package, from the disk or about to be saved, so
 a small packed file cannot unpack into a huge quiz.
@@ -328,15 +353,19 @@ show finds its media even if the original file was moved. When a show
 starts, every other unpacked quiz is deleted, because only the latest show can
 be resumed. If the folder is gone on resume, the show still resumes and the
 Director shows a warning. `meta.json` also records `RULES_VERSION`, which
-quiz-core bumps whenever the same journal would replay into another show;
-a show begun under another version still resumes with today's rules, and
-the Director says its scores may differ. What would put the replay a step
-off is kept from the show's own version, and the game keeps that version
-to the show's end (`Game::replay`), so what is journaled after a resume
-replays the same way at the next one: a show begun before version 2 jumps
-out of a question in play, as the app then restarted a question after a
-crash with a `GoTo` to it, and one begun before version 3 switches a
-player off without closing the question.
+quiz-core bumps whenever the same journal would replay into another show.
+What would put the replay a step off is kept from the show's own version,
+and the game keeps that version to the show's end (`Game::replay`), so
+what is journaled after a resume replays the same way at the next one: a
+show begun before version 2 jumps out of a question in play, as the app
+then restarted a question after a crash with a `GoTo` to it, one begun
+before version 3 switches a player off without closing the question, and
+one begun before version 4 restarts a closed question. Version 3 also
+changed what is not kept so (ties, accents in names), so a show begun
+before it, or under a newer app's rules, resumes with a warning that its
+scores may differ (`RulesChanged`); from version 3 on
+(`REPLAYS_AS_PLAYED_FROM`) a show replays as it was played and resumes
+without one.
 
 The windows load media through Tauri's asset protocol. Its scope is empty
 in `tauri.conf.json`; at startup the shell allows the folder of unpacked
@@ -525,8 +554,11 @@ table view toggle. It edits a quiz; it never touches a running show.
   language and the sample sheet.
 - **Test run.** F5 (from the start) and Shift+F5 (from the selected slide)
   start a show of the draft with keyboard and on-screen buzzers. The
-  Director shows a test run badge and "Back to the editor" ends the show
-  and returns. A quiz with problems opens the File page instead.
+  backend begins it at the selected slide in the same call
+  (`editor_test_run`), as no window has seen the new show yet to send the
+  jump for (one step per press). The Director shows a test run badge and
+  "Back to the editor" ends the show and returns. A quiz with problems
+  opens the File page instead.
 
 ### 1.4 Themes
 
@@ -708,11 +740,40 @@ packages users will install are read the same way.
   not answered closes the question. A player switched off cannot answer;
   one switched on mid-question can, unless they already answered or were
   locked out.
+- **Everyone answered (QZ-11).** A question that closed for having nobody
+  left to answer notes when (`Game::all_answered_at`), and the quiz's
+  `settings.allAnswered` decides what follows: wait for Next, as before,
+  or after `allAnsweredDelayS` the step Next would take (the reveal) or the
+  jump to the slide Next would go on to (`GoTo`, or `GoToFinal` past the
+  last). `Game::pending_step` says which and when; `due_command` issues it
+  through the show thread like time up, so it is journaled and a replay
+  ends where the show did, and `GameView::auto_step` shows it coming in the
+  Director with a bar that runs out in CSS. The quizmaster's Next leaves
+  the closed step first, and `PauseClock` holds the step (the Director
+  calls it Hold): the question then waits for Next. Opening the
+  leaderboard and playing the slide's video again hold it as well, since
+  the quizmaster has taken over, and a show resumed after a crash holds it
+  (`recovery_command`), so the quizmaster first sees where it stands. A question closed by
+  time up or by the quizmaster has no `all_answered_at` and always waits.
+  The settings come with the quiz the session keeps, so a resumed show
+  goes on with them; no rules version is needed, as a quiz without them
+  plays as before. Space pressed as the reveal comes is meant for the step
+  before and is dropped (one step per press, above), so it does not also
+  leave the slide.
 - **Ranking.** `Game::ranking` orders the players switched on by score,
   then by the time their right answers took together (`total_answer_ms`,
   less first); wrong answers add no time, so not answering never helps.
   Players equal in both share a place and the places after them are
-  skipped (1, 1, 3); the podium shows the shared number.
+  skipped (1, 1, 3). On the final podium (`host/podium.ts`) players who
+  share a place stand on its block (more than three: two named, the rest
+  counted), and a place the game skips leaves its block empty.
+  The original breaks ties on total answering time (`replica/recon.md`);
+  counting only right answers is a choice made on purpose, with its price:
+  at equal score, a player whose extra right answers were cancelled by
+  penalties has spent more time and ranks below one with fewer right
+  answers. The rule came with rules version 3 and has no older variant, so
+  in a show begun before it, which resumes with the Director's warning
+  that scores may differ (`RulesChanged`), tied players may swap places.
 
 ### 1.6 Media player and sound board
 
@@ -773,17 +834,20 @@ USB HID device ──► HidBackend / HidDevice      crates/buzzers/src/hid.rs
                     a fake in tests)
                 ──► receiver thread             receiver.rs
                     open, read, reconnect,
-                    write lights
-                ──► Protocol                    protocol.rs, learned.rs
-                    report bytes → presses,
-                    lights → report bytes
+                    write the mode and lights
+                ──► Protocol                    protocol.rs, learned.rs,
+                    report bytes → presses,     enjoy303s.rs (over cp2110.rs)
+                    mode and lights → reports
                 ──► EdgeFilter                  edge.rs
                     held button = one press
+                ──► TimerOrder                  timer_order.rs
+                    fastest finger in the
+                    buzzers' own timer order
                 ──► show queue (with commands)  app/src-tauri/src/show_thread.rs
                 ──► show thread (app)           show_thread.rs, pump.rs, hardware.rs
                     learn mode, raw log, UI events, time up
                 ──► execute(Command::Press)     app/src-tauri/src/lib.rs
-                    journal, then game state, then lights
+                    journal, then game state, then lights and mode
 ```
 
 Each layer is replaceable on its own: the protocol does not know about USB,
@@ -803,26 +867,78 @@ where a press came from (keyboard, on-screen button or receiver are the same
   they are never stored.
 - `hidapi::HidDevice` may be used from one thread at a time, so a single
   thread owns the open device. Everyone else talks to it through a
-  `ReceiverHandle` (a channel): select a device, set lights, reload the
-  protocol, shut down.
+  `ReceiverHandle` (a channel): select a device, set the buzzer mode and
+  lights, reload the protocol, shut down.
+- Besides input and output reports, a receiver may need feature reports to
+  be set up (the Enjoy receivers' cable is a USB-to-serial bridge set up
+  that way, 2.4). `HidDevice::send_feature_report` sends them, and each report a
+  protocol gives says which kind it is (`hid::Report`).
 
 ### 2.3 Receiver thread
 
 Loop, every iteration:
 
-1. Drain control messages (select, lights, reload, shutdown).
-2. If connected: `read_timeout(20 ms)`. A report goes through the protocol
-   and the edge filter; the thread sends `Raw` (bytes, time, decoded presses)
-   and then one `Press` event per press, in the order the protocol returned
-   them. A read error closes the device and reports `Error`
-   (`ConnectionLost`; the thread reconnects).
-3. If not connected and a receiver is selected: every 2 seconds list devices,
-   open the first match, send the protocol's init reports, then report
-   `Connected` (init goes first so lights work as soon as the UI says
-   "connected").
+1. Drain control messages (select, mode, lights, reset lights, reload,
+   shutdown). The thread keeps the buzzer mode and each buzzer's light as
+   the app last set them; only what changed is encoded with the active
+   protocol and queued for writing. A reset (`BuzzerDriver::reset_lights`,
+   as a show begins or ends, 2.7) replaces every light: the protocol
+   darkens every buzzer and then sends the lights it names
+   (`Protocol::reset_lights`, which a protocol with lights overrides), as
+   nothing says what the buzzers show before it, such as colours another
+   program left. A buzzer it does not name stays dark unless a light then
+   goes to all at once (2.4).
+2. If connected: write the next queued report if it is due, then
+   `read_timeout` (20 ms, or less when the next report or a held buzz is
+   due sooner). A report goes through the protocol and the edge filter; the
+   thread sends `Raw` (bytes, time, decoded presses, and those the protocol
+   dropped as unable to count, `Protocol::take_dropped`) and then one `Press`
+   event per press, in the order the protocol returned them, except that in
+   a fastest-finger round presses with the buzzer's own timer wait for the
+   timer order (2.6). The edge filter starts afresh as a fastest-finger
+   round begins, so a press made just before it cannot hide the first one
+   in it as a held button's repeat. A press that carries its buzzer's
+   timer and repeats that buzzer's last one, timer and all, within two
+   seconds is dropped as well, also after such a fresh start: it is the
+   receiver sending it again, which the 303S did 180 and 541 ms later,
+   twice in about 90 presses, in the hardware test of 2026-10-25 (a
+   buzzer's timer moves on every millisecond). After every read, a report or a timeout, it queues
+   what the protocol has to write now (`Protocol::follow_up`): what the
+   receiver's messages call for, or a step again whose answer is overdue.
+   A read or write error
+   closes the device and reports `Error` (`ConnectionLost` or
+   `WriteFailed`; the thread reconnects).
+3. If not connected and the receiver is not closed: every 2 seconds list
+   devices, open the first match and set it up: write the protocol's init reports,
+   queue the mode and, as a reset, the lights the buzzers should show, then report
+   `Connected` (init goes first so the receiver is set up as soon as the UI
+   says "connected"). So a receiver unplugged mid-show gets the round and
+   the lights it missed once it is back.
 
-Statuses: `Off` (nothing selected), `Searching` (selected, not plugged in),
-`Connected` (with the `ProtocolKind` and whether it drives lights), `Error`
+Writes go out one at a time, at least `write_gap` (10 ms) apart, as the
+vendor's SDK paces them, so a slow receiver is not flooded; a report the
+same as the one queued just before it is not queued twice. A protocol that
+must hear from the receiver before it takes orders (the 303S, 2.4) keeps
+the lights and mode it is given until then, and gives them as follow-up
+reports with the answer, so however slowly the receiver answers, nothing
+is sent too soon or lost; a set-up step left unanswered is asked again
+until the receiver answers (2.4). A lost connection drops the queue; the
+next set-up queues what is current.
+
+What matches is the `ReceiverChoice`: a device chosen in the Receiver tab
+(`Device`, by vendor and product ID, usage page and interface), or with
+none chosen the first device a built-in protocol knows (`Automatic`,
+`protocol::is_known`: today the 303S's cable), so the 303S needs no click
+and a receiver plugged in later, also mid-show, is taken by the next
+retry. A raw or learned receiver is used only once chosen, as any HID
+device could be it. The app keeps the choice in `receiver.json` (none:
+automatic); choosing again, also the same, opens the receiver anew, which
+is the Receiver tab's Reconnect.
+
+Statuses: `Off` (closed), `Looking` (automatic, nothing known plugged
+in), `Searching` (chosen, not plugged in),
+`Connected` (with the `ProtocolKind`, which for the 303S says whether the
+receiver answered its set-up, and whether it drives lights), `Error`
 (a `ReceiverProblem` and the system's message; for `CannotOpen` the
 Director adds what to check: the udev rule on Linux, Input Monitoring on
 macOS, another program holding the receiver on Windows).
@@ -833,23 +949,168 @@ macOS, another program holding the receiver on Windows).
 trait Protocol: Send {
     fn kind(&self) -> ProtocolKind;
     fn decode(&mut self, report: &[u8]) -> Vec<Press>;
-    fn init_reports(&self) -> Vec<Vec<u8>>;                        // default: none
-    fn encode_lights(&self, lights: &[(BuzzerId, Light)]) -> Vec<Vec<u8>>; // default: none
-    fn has_lights(&self) -> bool;                                  // default: false
+    fn take_dropped(&mut self) -> Vec<Press>;                             // default: none
+    fn init_reports(&self) -> Vec<Report>;                                // default: none
+    fn follow_up(&mut self, now_ms: u64) -> Vec<Report>;                  // default: none
+    fn encode_lights(&mut self, lights: &[(BuzzerId, Light)]) -> Vec<Report>; // default: none
+    fn reset_lights(&mut self, lights: &[(BuzzerId, Light)]) -> Vec<Report>;  // default: encode_lights
+    fn encode_mode(&mut self, mode: BuzzerMode) -> Vec<Report>;              // default: none
+    fn has_lights(&self) -> bool;                                             // default: false
+    fn learnable(&self) -> bool;                                              // default: false
 }
 ```
 
-A resolver picks the protocol when a device opens, in this order:
+The encoders take `&mut self`, so a protocol can keep what it told the
+receiver (the 303S keeps each buzzer's colour, below). `follow_up`, taken
+after every read or read timeout, gives what the reports decoded last call
+for: the 303S's next set-up step, then the lights it kept until the
+receiver opened, or a step again whose answer is overdue. `take_dropped`
+gives the presses `decode` read but did not pass on, for the raw log.
 
-1. **Vendor protocol** for the device's vendor and product ID. Empty slot
-   today, marked in `hardware.rs`; filled once the SDK documentation arrives
-   (dome and RGB get separate implementations, since the vendor says their
-   protocols differ). `decode` is stateful so it can track sequence numbers
-   or multi-report frames.
+`protocol::for_device` picks the protocol when a device opens, in this
+order:
+
+1. **Vendor protocol** for the device's vendor and product ID: the Enjoy
+   303S (below). `decode` is stateful, so it can read messages split over
+   reports.
 2. **Learned protocol** if the user taught buttons for this vendor and
-   product ID.
+   product ID. Only the learned and the raw protocol are `learnable`: the
+   Receiver tab offers learn mode, and `receiver_learn_start` starts it,
+   only for those (`receiverNotLearnable` otherwise), as buttons taught
+   for a receiver with a vendor protocol would never be used.
 3. **Raw only**: decodes nothing, but every report still appears in the raw
    log, which is how the real protocol gets worked out.
+
+#### Enjoy 303S
+
+Jakub's set is the Enjoy 303S (RGB buzzers, sold as the Galaxy RGB set) with
+the half-dome REC-A receiver. Enjoy does not publish its SDK. On 2026-10-21
+Jakub got Enjoy's official SDK kit for the 303S (a C# demo, a usage guide
+and prebuilt Windows libraries, no source); a project thread read it with
+the unofficial copy of the SDK Jakub approved on 2026-10-20, whose RF219
+driver carries the 303S's commands one to one as the guide lists them, and
+wrote the protocol down in its own words. `enjoy303s.rs`, `cp2110.rs` and
+this description come from that write-up. No file or code from the kit or
+the copy is in the repository. The first test on a real receiver, on
+Windows 11 with buzzers 1 and 2 on 2026-10-25
+([`hardware-test.md`](hardware-test.md)), confirmed the cable, the
+set-up, the buttons, the colours and the timer as written below; what it
+could not check is marked **unverified**.
+
+The older Enjoy RF215 dome buzzers use the same cable with another
+protocol. Their driver was dropped once Jakub's set turned out to be the
+303S: the cable cannot tell which buzzers are behind it, and a guess
+between the two could go wrong mid-show.
+
+- The USB-HID cable (VID:PID `10C4:1819`) is a Silicon Labs CP2110-type
+  HID-to-UART bridge to the receiver's serial line (`cp2110.rs`, report
+  layout from Silicon Labs AN434). Three feature reports open the UART:
+  `50` with the settings (750000 baud as a big-endian u32, no parity, no
+  flow control, 8 data bits, one stop bit), `43 03` to purge both FIFOs,
+  `41 01` to enable it. Serial bytes go both ways in 64-byte reports whose
+  ID is the number of bytes they carry (1 to 63), so a message can be split
+  over reports and is read from a byte stream. The vendor's SDK purges the
+  FIFOs before every command; the app purges them only on connect, as a
+  purge also drops presses the receiver has just sent.
+- A message is two header bytes, the payload's length, the payload and the
+  XOR of the payload's bytes: `35 96` from the PC, `27 A5` from the
+  receiver. A stream that does not line up, or a message whose check fails,
+  is read on a byte at a time; the start of a message that cannot be whole
+  is skipped when a whole one follows it, so a spoiled length byte holds up
+  no press.
+- Set-up: connect `10 00` (the answer starts `10`; it was `10 82`), take
+  buzzers 1 to 64 (`14 3F`: radio IDs 0 to 63, answer `14 01`), open the
+  receiver `12 00` (answer `12 01`). Each step waits for the answer to the
+  one before (`follow_up`), and the lights wait for the last; in the test
+  the whole set-up was answered within about 50 ms. A step not answered within 500 ms (the SDK
+  waits 200 ms) is sent again, connect with the cable's settings before it
+  as after plugging in, so a lost or spoiled answer, or a receiver powered
+  after the cable connected, only delays the set-up. Open unanswered four
+  times, the set-up starts again from connect, as a receiver that answered
+  connect and then lost its power needs. Until the receiver answers, the
+  Receiver tab shows it as still being looked for (blue, as the search)
+  and says to check the receiver's power adapter and RJ45 cable, and else
+  to unplug its power for a moment. The guide says fewer
+  buzzers make the lights quicker; the app takes all 64, so any buzzer's ID
+  works (the lag is to check on the hardware, `hardware-test.md` 6).
+- An answer to connect while the receiver is open says it started again
+  (**unverified** that a receiver powered again says so): it is set up
+  again and every buzzer's light sent again, as it forgot them; the app
+  never asks to connect while open. An answer to open counts only while
+  open is asked: a late one, to an open asked again, would otherwise light
+  the ready buzzers again and start their timers anew. A press while the
+  set-up is unanswered says the receiver is open already: it stayed
+  powered while the app started again (a crash, Reconnect, a reloaded
+  protocol) and may not answer connect then (**unverified**), so the app
+  starts it and sends every light, as after its answer to open. A
+  receiver that loses power or its RJ45 plug while the USB side stays in,
+  and says nothing, is not noticed: the cable gives no sign of it, and no
+  message the app could ask for is known to be safe mid-show. The Receiver
+  tab's Reconnect sets it up again as a replug would. A heartbeat (connect
+  sent again every few seconds, the receiver lost after two unanswered) is
+  for after the hardware test, if it shows that connect while open is
+  answered and changes no colour, timer or press taking.
+- The receiver takes presses after start `85`, which it echoes. Start, or
+  the set-up again, makes every buzzer blink once and changes neither its
+  colour nor its timer; what stop `87` does is **unverified**. The app
+  starts it once it is open and never
+  stops it, so a late team still registers between questions and the
+  Receiver tab sees presses at any time; the game ignores the presses that
+  do not count, and in fastest finger the colour a press shows tells a
+  stale one (below). The mode goes before the lights (2.7).
+- A colour is one byte: bit 6 bright, then red, green and blue at 0 to 3
+  each (bit 7, which stores a colour without showing it, the app never
+  sets). One buzzer's is `2D id%4 id/4 colour`, every buzzer's `74 colour`;
+  the receiver answers the second with `74` and the first with nothing,
+  and the app waits for neither. The protocol keeps the colour each buzzer
+  should show and the one it was told, and sends only changes
+  (`Enjoy303s::paint`). When the receiver opens, and on a reset (2.3), it
+  first turns every buzzer dark with one order and then lights those the
+  app names (`Enjoy303s::repaint`), so no buzzer keeps a colour from
+  another program, show or set-up, and a round under way when the
+  receiver came back starts its buzzers' timers anew together. Buzzers that turn
+  ready together get it all at once, as their timers count from that
+  moment (2.6); any other colour goes to all at once when that takes fewer
+  orders, but not while a buzzer should show ready, which would then be
+  lit again one by one; then each buzzer that should show another colour
+  gets its own. A buzzer out of the round may so show ready for a moment,
+  which counts for nothing: one judged wrong as the round goes on, say. No
+  buzzer turns ready alone while others already count: a player who joins
+  mid-round plays from the next question (2.7).
+- A press, `32 id code colour t0 t1 t2` and three more bytes the app does
+  not use (a second millisecond count, the same on every buzzer, most
+  likely the receiver's clock): buzzer `id + 1`; button `code >> 4`, 1 to
+  4 for A to D and 5 the big button (the low four bits were `C` on every
+  press); the colour the buzzer showed; and its timer, little-endian,
+  which counts milliseconds from the moment the buzzer's colour last
+  changed (`Press::timer`). An order that repeats the colour a buzzer
+  shows leaves its timer counting; 24 bits last 4.6 hours. A buzzer has
+  no other key and no power switch, and a held button sends one press.
+  Any other button code, a message too short to hold all
+  that, and a buzzer outside 1 to 64 give no press (they show in the raw
+  log only), so nothing unknown ever buzzes (code 6, a key F the buzzers
+  do not have, included). In fastest finger, and while
+  its buzz is judged, a press from a buzzer that was not ready is dropped
+  too, by the colour it showed: dark, locked, first, right or wrong,
+  brightness aside. It was pressed when the game would not take it, and
+  arriving just after the step changed, before the receiver thread heard
+  of it, it must not count in the next step either: a team hammering its
+  locked buzzer while another team's answer is judged must not win as the
+  round goes on. Its timer also counts from another moment than the
+  others'. The raw log shows it as dropped. The byte was the colour shown
+  in every press of the test (`43` in every buzz that counted, `00`
+  before a question started, `7F` while a buzz was judged), and the drop
+  worked in the app. A colour the app never sets, as another program
+  might leave, lets the press through. Elsewhere the game
+  alone decides, so any buzzer can register. The quizmaster's remote (`34`) and
+  the answers to setting a buzzer's ID (`17`, `24`) are skipped.
+- The receiver runs no round itself and locks nobody out: the app lights
+  every buzzer (2.7) and decides who buzzed first (2.6).
+- No battery level: the 303S's SDK has none, and in the test no byte of a
+  press differed between buzzers but the ID and the two counts, and the
+  receiver sent nothing unasked in 7.5 idle minutes.
+- The quizmaster's remote sends `34 key` with bit 7 set, keys 0 to 11, one
+  message per press, none while held or at the release.
 
 ### 2.5 Learn mode
 
@@ -870,6 +1131,10 @@ button, presses it at least twice, and saves.
   and used only once written: if the write fails, the receiver keeps its
   previous settings, the Receiver tab says why, and learn mode ends all the
   same, so presses play again.
+
+Not for the Enjoy cable: it passes nothing until the app opens its serial
+line and sets the receiver up, which only the 303S driver does, so learn
+mode would never see a press there (2.4).
 
 Limits: learned mode cannot drive lights (the light commands are unknown) and
 it assumes one press per report. If the receiver packs several presses into
@@ -896,8 +1161,11 @@ the windows (`dispatch`: keyboard and on-screen buzzers, the quizmaster's
 buttons) are timed the same way: the time is read before the press or
 command joins the show queue (`show_thread::press`, `show_thread::run`),
 so a keyboard press made during a burst of buzzer presses counts as on
-time. A press or command stamped before the running show began, while it
-started, was meant for no show or the one before, and does not reach it.
+time. A press or show command (`execute_at`) stamped before the running
+show began, while it started, was meant for no show or the one before, and
+does not reach it; neither does an end of the show (`end_show`). Team name
+edits skip that check: they are about the names prepared for any show, and
+one made while a show starts reaches it.
 
 Resuming (`resume_show`) reads the latest session folder: the one with the
 highest number, as a folder is named by its show's start in milliseconds,
@@ -906,9 +1174,13 @@ never share one. The journal is read as bytes (a byte order mark and CRLF
 line ends, which an editor may add, are taken as they come). Each line is
 synced before the next is written, so only the last line can be one the app
 never accepted: one without its newline, which was being written when the
-app stopped, or a whole one that is not JSON at all or holds a NUL, which a
-power cut leaves when the disk kept the newline but not the bytes before
-it. Resume cuts such a line off, after keeping the journal as it was in
+app stopped, or a whole one that is no journal line at all, which a power
+cut leaves when the disk kept the newline but not the bytes before it. A
+journal line, as every version of the app writes it and every later one
+must keep writing it, is a JSON object with `atMs` and `command`, and
+never holds a NUL (`is_journal_line`); so a last line that is that, but
+whose command this version does not know, was accepted by a newer app and
+is not cut. Resume cuts a torn line off, after keeping the journal as it was in
 `torn/journal-<n>.jsonl` (a copy per cut; when the copy fails, as on a full
 disk, the log says so and the show resumes all the same). Any other line
 that does not read as a command (one from a newer app, or one the disk
@@ -918,13 +1190,19 @@ A show that stopped mid-question has its question restarted
 (`Game::recovery_command` gives `RestartQuestion`, which takes the
 question's score changes back, so a wrong answer before the crash is not
 charged twice), and that command is journaled before `show-changed`
-reaches the windows, so no window shows the stopped question. The
+reaches the windows, so no window shows the stopped question. One that
+stopped while a step was coming by itself (QZ-11) has the step held
+(`PauseClock`): the clock reads later after a restart, so the step would
+otherwise come at once, before the quizmaster saw where the show stands. The
 quizmaster can restart a question in play too (Restart question, after a
 confirmation): it is the way to leave a question without scoring it, since
-a jump is refused then. It also works once the question closed, until its
-answer is shown, taking its scores and answering times back, so a restart
-confirmed just after time ran out still works. Score changes made by hand
-(`AdjustScore`) are not the question's and stay.
+a jump is refused then. Its score changes and answering times are taken
+back; score changes made by hand (`AdjustScore`) are not the question's and
+stay. A closed question does not restart: the projector shows its results
+then, which would give the answer away. So the Director pauses the clock
+while the quizmaster confirms, and resumes it if they decline; a question
+that closed meanwhile anyway (everyone answered) is not restarted, and the
+Director says why.
 The Director keeps a resume problem on screen, under the Resume button,
 until another show loads. When a failed journal write cannot be taken back,
 the session refuses every later command (`journalBroken`) until the show is
@@ -948,16 +1226,61 @@ handles the events received up to then and ticks at that moment; events
 that come in meanwhile wait for the next round, so a burst of presses never
 holds the clock or time up back.
 
-Fastest-finger order is therefore the receiver's order. When the vendor
-protocol provides press times, `Command::Press` gets an optional
-`pressed_at` from the receiver and the game ranks presses that arrive close
-together by that time; the PC clock is never used for ranking. A keyboard
-or on-screen buzzer press competes with the buzzers by the order the
-presses are applied in, so one received a moment before a buzzer press but
-applied after it loses (`at_ms` only decides whether a press is on time).
+Fastest-finger order is therefore the order the receiver thread passes
+presses on in. For presses that carry the buzzer's own timer (the 303S's),
+that is the timers' order: each timer counts from the moment its buzzer's
+light last changed, and a round's lights turn ready on every buzzer with one
+order (2.4), so the timers say who pressed first however the radio delivered
+the presses. A timer starts again only when the colour really changes, so
+every fastest-finger round starts with a change on every buzzer that can
+buzz in it: a question always opens dark (`QuestionStep::Ready`, also when
+it is restarted) and turns ready from there, a round that goes on after a
+wrong answer turns ready from locked, and when the receiver comes back or
+a show begins or resumes every buzzer goes dark before it lights (2.4,
+2.7). A guard test in `quiz-core` and a check in every simulated show
+(`show-sim`) hold the game to it. A buzzer that missed an order to all
+would keep counting from its earlier change and lose a near tie; the
+receiver confirms such an order, not each buzzer's taking it, and the test
+saw none missed. The receiver reports on a 36 ms tick, lower IDs first,
+so presses made at almost the same moment can reach the PC a
+little apart and in either order (0 to 36 ms for buzzers 1 and 2 in the
+test), so in a fastest-finger round the receiver
+thread holds the first timed press for `timer_window` (100 ms, kept until
+a test with buzzers far apart in ID measures their gap; a test keeps it
+under `PRESS_GRACE_MS`), takes in those that arrive meanwhile, and then
+passes them all on, the lowest timer first, equal timers in arrival order
+(`timer_order.rs`). They are all stamped with the first one's arrival, the
+earliest the app knew of a buzz, and the window is well under
+`PRESS_GRACE_MS`, so a buzz on time is still applied before the question
+closes. The window ends early when the round does (the buzzer mode changes)
+or the receiver goes. That is the hardware's order, as BZ-5 asks; the PC
+clock is never used for ranking. A keyboard or on-screen buzzer press
+competes with the buzzers by the order the presses are applied in, so one
+received a moment before a buzzer press but applied after it loses, and one
+made while buzzer presses wait for the window wins (`at_ms` only decides
+whether a press is on time). So does a quizmaster's command: a buzz still
+waiting for the window when the quizmaster closes or restarts the question
+is applied after that and does not count, though it arrived first.
 Ranking across sources by `at_ms` would mean holding every buzz open for a
-while and re-ordering presses on the PC, which BZ-5 rules out; keyboard and
-on-screen buzzers are for shows without the hardware and for testing.
+while and re-ordering presses on the PC, which BZ-5 rules out. So a
+keyboard or on-screen buzzer standing in for a missing buzzer mid-show
+(BZ-12) can win against a buzzer pressed up to `timer_window` before it,
+and a quizmaster's Next inside the window comes before a buzz made just
+earlier: one more reason to keep the window as short as the hardware
+allows.
+
+Which buttons buzz in depends on the question (`Button::buzzes_in`, rules
+version 5, Jakub's choice): where every answer of a fastest-finger
+question has its button (one to four answers, A to D), those buttons buzz
+and the big button does not, so the first press is also the player's
+answer; with no answers, or with E and F, which are read out, the big
+button buzzes and A to D do not. The buzz keeps its button, and the
+Director's status and the projector's buzz bar show the letter pressed;
+the quizmaster still judges it. Shows begun under an older rules version
+take any button, as they did. The keyboard keys `1`-`0` stand for the big
+button, so they do not buzz where A to D do; the on-screen buzzers have
+every button. Only the buzzers vote at Jakub's events, and the keys are a
+stand-in when one fails (Jakub, 2026-10-21).
 
 While learn mode is active, presses are shown in the Receiver tab but not
 sent to the game. So that it can never mute the buzzers in a show, learn
@@ -973,30 +1296,103 @@ neither can slip in between the other's check and its start.
 buzzer, from one function (`Game::light_of`): ready while a player can press,
 locked once they answered or another player buzzed, first for the buzz being
 judged, dark while a question is closed, and the result from the reveal. A
-wrong buzz shows wrong as it is judged, then the lights of the step that
-follows. A player switched on gets the light of the step at once, one
-switched off shows locked. The shell passes it to `BuzzerDriver::set_lights`; for the hardware
+buzz judged wrong shows wrong while the others get the lights of the step
+that follows (ready again, or dark when it closed the question), until the
+next step's lights: another buzz, the question's close or its reveal. A
+player who joins (switched on, or new to the show by a press or by being
+added in the Teams tab) gets the light of the step at once; but one who
+joins while a fastest-finger question is under way plays from the next
+question and shows locked until then, and the Teams tab says so (rules
+version 5, BZ-19): the others' buzzer timers count from when they lit
+ready (2.6). Switching on a player who is on changes nothing, so Enable
+on every selected team brings back only those switched off. One switched
+off shows locked. The lights of one show change go to the driver at once,
+a buzzer's last light winning (`Effect::lights`), so the driver is never
+told the round's light for a buzzer judged wrong (an order to all may
+still show it for a moment on the 303S, 2.4). When a show begins, resumes
+or ends, the shell resets the lights (`BuzzerDriver::reset_lights`): every
+buzzer dark, then each as the show then stands (`Game::lights`), so no
+light is left from another show or another program, also after the app
+restarted (the 2026-10-25 test found the lobby still lit blue by an
+earlier program). A spare buzzer stays dark then, unless two or more
+buzzers turn ready with that reset (a resume in the lobby or mid-round):
+the order to all that lights them reaches it too, as in any round. Otherwise the shell passes the lights to `BuzzerDriver::set_lights`; for the hardware
 driver that is a message to the receiver thread, which encodes it with the
 active protocol and writes the reports. Light failures are logged and never
 block the show. With the learned or raw protocol, `has_lights()` is false and
 the Director says "this receiver does not light the buzzers yet".
 
+The 303S shows them as colours: ready blue, locked dim white (Jakub's
+choice, told apart from the red of a wrong answer next to it), first
+white, right green, wrong red, off dark (`enjoy303s.rs`); no two share a
+colour byte. Locked and first are both white, told apart by brightness
+alone; on the 303S's lights both come out purple, dim white the lighter
+one, told apart at arm's length in the 2026-10-25 test, and Jakub kept
+dim white for locked after it. A light that goes to all buzzers at once reaches spare
+buzzers too, which the app never lit and so show whatever went to all
+last: in a fastest-finger round they light ready, so a spare's press
+registers a late team, which plays from the next question as any player
+who joins then.
+
+The driver also gets what the buzzers take as a whole. `Game::buzzer_mode`
+derives it from the same phase as the lights: `BuzzerMode` is off, register
+(the lobby), answers (everyone answers), fastest finger, buzzed (a buzz is
+judged) or results. The shell sends it with `BuzzerDriver::set_mode` before
+the lights of every show change and when a show begins or ends; with no
+show the buzzers register, so the Receiver tab sees their presses. Before
+the lights, so that by the time the buzzers light ready the receiver
+thread holds a round's presses for the buzzers' timers (2.6), and the 303S
+tells a press made in the step before by the light it showed (2.4). As the 303S runs no round
+itself, a press the app ignores (from a player switched off or out for the
+question, or just after time up) needs nothing sent back, and a keyboard or
+on-screen buzzer stands in for a buzzer (BZ-12) in fastest finger as well:
+the buzzers' lights are the app's either way.
+
 ### 2.8 Diagnostics
 
+- The Receiver tab lists each buzzer heard since the receiver connected,
+  with its last press, counted or not, and when, so a press of the big
+  button on each buzzer shows which work and are in range (BZ-16). The
+  list starts again whenever the receiver goes.
 - The app keeps the last 2000 raw reports in memory; the Receiver tab shows the
   latest ones and can export all of them as text
-  (`unix-ms <tab> hex bytes <tab> decoded presses`).
+  (`unix-ms <tab> hex bytes <tab> decoded presses <tab> dropped presses`,
+  such as `3A@500` for buzzer 3, button A, with its timer at 500; dropped
+  ones came from a buzzer that was not ready, 2.4).
 - `cargo run -p buzzers --example hid-monitor` lists HID devices and, with a
-  `VID:PID` argument, prints reports with timestamps, without the app.
+  `VID:PID` argument, runs the app's receiver thread and protocol on that
+  receiver without the app, printing the status, every report with its
+  timestamp, the presses decoded, with the buzzer's timer, and those
+  dropped as not ready. The buzzers
+  show ready and take answers A to D; with a further `rush` argument they
+  are in a fastest-finger round, whose presses come in the timers' order.
+  With `lights` every buzzer shows each light of a show in turn, two
+  seconds each, and a second into each, buzzers 2 and 6 alone take the
+  next: an order to all, then one each. Every press is taken then.
 
 ### 2.9 Testing
 
 `crates/buzzers/tests/receiver.rs` runs the real receiver thread against a
 fake HID backend: connect and init, decode order, held-button repeats,
-unknown reports, light commands, unplug and replug, open failure and retry,
-deselect. Unit tests cover the edge filter, signatures, the recorder and
-conflict detection. None of this proves the real receiver's format: see
-[`hardware-test.md`](hardware-test.md).
+unknown reports, light and mode commands, the lights and mode replayed on
+connect and after replugging, follow-up writes, the 303S's lights kept
+until it answers its set-up, which is asked again from the cable's
+settings while unanswered, the write gap, a fastest-finger buzz in the
+timers' order, one passed on when the round ends, the receiver is lost or
+deselected, a buzz from a buzzer that was not ready dropped and logged
+while the next press after it counts, the timer window under the grace
+after time up, unplug and replug, open failure and retry, deselect. Unit
+tests cover the edge filter, signatures, the recorder, conflict
+detection, the CP2110 reports, the 303S's set-up, its steps asked again
+and a receiver started again, orders, colours, when one goes to all, that
+no two differ in brightness alone, its presses with timer and shown
+colour, in fastest finger only from buzzers that were ready, button
+codes, short messages, buzzer ID range, messages split, spoiled and after
+noise, and the timer order; `quiz-core`'s `game_flow.rs` follows the
+buzzer mode through a show, which buttons buzz in on which question, a
+player switched on mid-question and the merged lights of a wrong
+judgement. None of this proves the real
+receiver's format: see [`hardware-test.md`](hardware-test.md).
 
 ## 3. OS specifics
 
@@ -1100,5 +1496,6 @@ them.
 | The real app end to end: show, crash and resume, every Director and editor button, file picker | `app/e2e` on Linux (WebKitGTK) and Windows (WebView2, no file picker), Linux on every push and five times nightly, Windows on main and once nightly | Linux pass; Windows see the PR's checks |
 | Media through the asset protocol, autoplay of video and sound | needs the installed app on each OS | **not tested** |
 | Windows and macOS installers | CI | see the PR's checks |
-| Real receiver: detection, raw reports, learn mode, presses in a show | needs the hardware | **not tested** |
-| Lights, press times, battery | need the vendor protocol | **not built** |
+| Real receiver: detection, raw reports, presses in a show | Enjoy 303S on Windows 11, buzzers 1 and 2, `hardware-test.md` sections 2 to 6 in part (2026-10-25) | pass; macOS, high IDs, two at once in the app, failures (section 7) **not tested** |
+| Enjoy 303S protocol: set-up, presses, timers, colours | `cargo test -p buzzers` against fakes; the receiver with `hid-monitor` and the app (2026-10-25) | pass; lights read from the back of a room **not tested** |
+| Battery level | not in the 303S's SDK, and no press or other message carried one (2026-10-25) | **not buildable** for the 303S |

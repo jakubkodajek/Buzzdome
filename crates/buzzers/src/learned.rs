@@ -8,7 +8,7 @@
 //! counter, are ignored when matching.
 
 use crate::hid::DeviceInfo;
-use crate::protocol::{Protocol, ProtocolKind, RawOnly};
+use crate::protocol::{Protocol, ProtocolKind};
 use crate::Press;
 use quiz_core::{BuzzerId, Button};
 use serde::{Deserialize, Serialize};
@@ -88,15 +88,6 @@ impl LearnedProtocol {
     }
 }
 
-/// The protocol for `device`: its learned buttons, or raw reports only.
-/// Vendor protocols go first here once the receiver protocol is documented.
-pub fn protocol_for(mappings: &[LearnedMapping], device: &DeviceInfo) -> Box<dyn Protocol> {
-    match mappings.iter().find(|m| m.for_device(device) && !m.signatures.is_empty()) {
-        Some(mapping) => Box::new(LearnedProtocol::new(mapping.clone())),
-        None => Box::new(RawOnly),
-    }
-}
-
 impl Protocol for LearnedProtocol {
     fn kind(&self) -> ProtocolKind {
         ProtocolKind::Learned { buttons: self.mapping.signatures.len() }
@@ -108,8 +99,12 @@ impl Protocol for LearnedProtocol {
             .iter()
             .filter(|s| s.matches(report))
             .max_by_key(|s| s.specificity())
-            .map(|s| vec![Press { buzzer: s.buzzer, button: s.button }])
+            .map(|s| vec![Press::new(s.buzzer, s.button)])
             .unwrap_or_default()
+    }
+
+    fn learnable(&self) -> bool {
+        true
     }
 }
 
@@ -202,6 +197,7 @@ impl Recorder {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::protocol::for_device;
 
     fn sig(buzzer: BuzzerId, button: Button, bytes: &[u8], mask: &[bool]) -> Signature {
         Signature { buzzer, button, bytes: bytes.to_vec(), mask: mask.to_vec() }
@@ -253,8 +249,11 @@ mod tests {
         // Another model gets a mapping of its own.
         r.save_into(&mut mappings, &device(9)).unwrap();
         assert_eq!(mappings.len(), 2);
-        assert_eq!(protocol_for(&mappings, &device(1)).kind(), ProtocolKind::Learned { buttons: 1 });
-        assert_eq!(protocol_for(&[], &device(1)).kind(), ProtocolKind::RawOnly);
+        assert_eq!(for_device(&mappings, &device(1)).kind(), ProtocolKind::Learned { buttons: 1 });
+        assert_eq!(for_device(&[], &device(1)).kind(), ProtocolKind::RawOnly);
+        // Buttons can be taught again, or for the first time.
+        assert!(for_device(&mappings, &device(1)).learnable());
+        assert!(for_device(&[], &device(1)).learnable());
 
         let mut same = Recorder::new(2, Button::B);
         same.feed(&[1, 1, 0x12], 0);
@@ -267,8 +266,8 @@ mod tests {
         let generic = sig(1, Button::A, &[1, 0, 0], &[true, false, false]);
         let specific = sig(2, Button::B, &[1, 2, 0], &[true, true, false]);
         let mut p = LearnedProtocol::new(LearnedMapping { vendor_id: 1, product_id: 2, signatures: vec![generic, specific] });
-        assert_eq!(p.decode(&[1, 2, 9]), vec![Press { buzzer: 2, button: Button::B }]);
-        assert_eq!(p.decode(&[1, 7, 9]), vec![Press { buzzer: 1, button: Button::A }]);
+        assert_eq!(p.decode(&[1, 2, 9]), vec![Press::new(2, Button::B)]);
+        assert_eq!(p.decode(&[1, 7, 9]), vec![Press::new(1, Button::A)]);
         assert!(p.decode(&[2, 2, 9]).is_empty());
     }
 

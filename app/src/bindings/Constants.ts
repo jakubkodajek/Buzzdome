@@ -33,3 +33,6 @@ export const MAX_FONT_NAME_CHARS = 64;
 export const MAX_TRANSPARENCY = 100;
 export const MAX_CATEGORY_NAME_CHARS = 40;
 export const FULL_SHARE = 100;
+export const DEFAULT_QUIZ_SETTINGS = {"allAnswered":"wait","allAnsweredDelayS":3} as const;
+export const MAX_ALL_ANSWERED_DELAY_S = 10;
+export const ANSWER_BUTTONS = ["a","b","c","d"] as const;

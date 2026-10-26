@@ -1,8 +1,8 @@
-//! The order in which the show thread handles what happens (architecture
-//! review N2): every event received by a moment comes before the
+//! The order in which the show thread handles what happens: every event
+//! received by a moment comes before the
 //! time-driven commands of that moment, so "time is up" never beats a press
 //! that arrived in time, however far behind the thread has fallen. And a
-//! burst of events never holds time up (A8): the thread takes the events
+//! burst of events never holds time up: the thread takes the events
 //! received up to the moment it reads the clock, then ticks at that moment,
 //! and leaves the later ones for the next round.
 

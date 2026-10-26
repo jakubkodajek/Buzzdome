@@ -4,6 +4,7 @@ import type {
   BoardChange,
   Button,
   BuzzerId,
+  BuzzerSeen,
   Category,
   ClockView,
   Command,
@@ -47,7 +48,7 @@ export const api = {
   mediaRoot: () => invoke<string | null>("media_root"),
   /** Why the running show's journal cannot be written, if so. */
   showNotSaved: () => invoke<AppError | null>("show_not_saved"),
-  // The backend opens the file pickers (A21): a window names no file to write.
+  // The backend opens the file pickers: a window names no file to write.
   /** Starts a show of a quiz file the quizmaster picks; false when they cancel. */
   startShowFromFile: (picker: Picker) => invoke<boolean>("start_show_from_file", { picker }),
   startDemoShow: () => invoke<void>("start_demo_show"),
@@ -55,7 +56,8 @@ export const api = {
   /** Resumes the last show; returns warnings when it runs but not quite as before (its media are missing, other rules). */
   resumeLastSession: () => invoke<AppError[]>("resume_last_session"),
   endShow: () => invoke<void>("end_show"),
-  dispatch: (command: Command) => invoke<void>("dispatch", { command }),
+  /** `seen`: the step the window shows, for a command that moves the show on (`StepGuard`). */
+  dispatch: (command: Command, seen: number | null = null) => invoke<void>("dispatch", { command, seen }),
   listMonitors: () => invoke<MonitorInfo[]>("list_monitors"),
   /** Opens the projector on the monitor with this `MonitorInfo.id`, or on one the Director is not on (null). */
   openHostWindow: (monitor: string | null, fullscreen: boolean) =>
@@ -114,12 +116,12 @@ export const api = {
   receiverExportLog: (picker: Picker) => invoke<boolean>("receiver_export_log", { picker }),
   receiverUdevRule: () => invoke<string>("receiver_udev_rule"),
   // The editor's commands on a draft name it (`EditorDraft.id`): one that
-  // another draft has replaced since is refused with `draftChanged` (A16).
+  // another draft has replaced since is refused with `draftChanged`.
   /** The quiz editor's draft left from last time, if any. */
   editorLoad: () => invoke<EditorDraft | null>("editor_load"),
   editorNew: (title: string) => invoke<EditorDraft>("editor_new", { title }),
-  /** Opens the file at `recent` in `editorRecentFiles`, or a quiz file the quizmaster picks; null when they cancel. */
-  editorOpen: (recent: number | null, picker: Picker) => invoke<EditorDraft | null>("editor_open", { recent, picker }),
+  /** Opens `recent`, a file in `editorRecentFiles`, or a quiz file the quizmaster picks; null when they cancel. */
+  editorOpen: (recent: string | null, picker: Picker) => invoke<EditorDraft | null>("editor_open", { recent, picker }),
   /** Quiz files the editor opened or saved lately, latest first. */
   editorRecentFiles: () => invoke<string[]>("editor_recent_files"),
   /** Stores the edited quiz; returns what keeps it from being played. */
@@ -140,8 +142,8 @@ export const api = {
     invoke<SheetExport | null>("editor_export_sheet", { draft, quiz, separator, picker }),
   /** Discards the draft, also one that cannot be read. */
   editorClose: () => invoke<void>("editor_close"),
-  /** Plays the editor's quiz as a show that is not kept for resuming. */
-  editorTestRun: (draft: string, quiz: Quiz) => invoke<void>("editor_test_run", { draft, quiz }),
+  /** Plays the editor's quiz as a show that is not kept for resuming, from the slide `from` if given. */
+  editorTestRun: (draft: string, quiz: Quiz, from: number | null = null) => invoke<void>("editor_test_run", { draft, quiz, from }),
 };
 
 /** Events the backend emits (`app.emit` in app/src-tauri), with their payloads. */
@@ -158,6 +160,8 @@ export interface BackendEvents {
   "receiver-status": ReceiverStatus;
   "receiver-raw": RawReport;
   "receiver-press": PressEvent;
+  /** A buzzer the receiver heard, as it now stands. */
+  "receiver-buzzer": BuzzerSeen;
   "receiver-learn": LearnProgress;
   /** The projector window opened (true) or closed (false). */
   "host-window": boolean;

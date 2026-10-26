@@ -1,13 +1,16 @@
 // The quiz being edited, with undo and redo. Pure: time and new slide ids
 // come in with the actions, and slide updates are pure functions.
 
-import type { Category, Quiz, Slide } from "../types";
+import { settingsOf } from "../quiz";
+import type { Category, Quiz, QuizSettings, Slide } from "../types";
 import { forgetCategory, formatLike } from "./slides";
 
 export type Edit =
   | { type: "setTitle"; title: string }
   /** The look of the quiz's screens: a theme id (`Quiz.theme`). */
   | { type: "setTheme"; theme: string }
+  /** How the show runs (`Quiz.settings`). */
+  | { type: "setSettings"; settings: QuizSettings }
   | { type: "insertSlide"; index: number; slide: Slide }
   /** Applies `update` to the slide with this id as it is when the edit lands. */
   | { type: "updateSlide"; id: string; update: (slide: Slide) => Slide }
@@ -55,6 +58,11 @@ export function applyEdit(quiz: Quiz, edit: Edit): Quiz {
       return edit.title === quiz.title ? quiz : { ...quiz, title: edit.title };
     case "setTheme":
       return edit.theme === quiz.theme ? quiz : { ...quiz, theme: edit.theme };
+    case "setSettings": {
+      const settings = settingsOf(quiz);
+      const same = (Object.keys(edit.settings) as (keyof QuizSettings)[]).every((key) => edit.settings[key] === settings[key]);
+      return same ? quiz : { ...quiz, settings: edit.settings };
+    }
     case "insertSlide": {
       if (!inRange(edit.index, count + 1)) return quiz;
       const slides = [...quiz.slides];

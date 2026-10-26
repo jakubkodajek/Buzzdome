@@ -1,4 +1,4 @@
-// Keeps the windows from acting as a web browser during a show (A11). A
+// Keeps the windows from acting as a web browser during a show. A
 // stray F5 or Ctrl+R would reload the Director (cues and the sound board
 // stop), Alt+Left would leave the page, Ctrl+P or Ctrl+F would open browser
 // dialogs, a right click a browser menu, and a file dropped where nothing
@@ -45,7 +45,7 @@ export function isBrowserKey(event: Pick<KeyboardEvent, "key" | "ctrlKey" | "met
 /**
  * Turns the browser behaviour off in `target`, a window. The guard listens
  * as the event comes down to its target (capture), so a part that stops the
- * event on its way back up, as a popup menu does, cannot skip it (G4).
+ * event on its way back up, as a popup menu does, cannot skip it.
  */
 export function installBrowserGuard(target: Pick<Window, "addEventListener">) {
   const capture = { capture: true };

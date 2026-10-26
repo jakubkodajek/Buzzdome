@@ -1,6 +1,6 @@
 //! Lists every command the windows can call, so that each window gets only
 //! the commands its capability allows (`capabilities/`): the projector
-//! needs few (A21). A test (`the_windows_get_exactly_the_commands_there_are`)
+//! needs few. A test (`the_windows_get_exactly_the_commands_there_are`)
 //! keeps the list in step with `generate_handler!` in `src/lib.rs`.
 
 const COMMANDS: &[&str] = &[

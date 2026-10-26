@@ -8,14 +8,19 @@ export type Controls = { next: boolean,
 /**
  * `JudgeRight` and `JudgeWrong`.
  */
-judge: boolean, pauseClock: boolean, resumeClock: boolean, closeQuestion: boolean, playVideo: boolean, 
+judge: boolean, 
+/**
+ * `PauseClock`: also while the show waits to take a step by itself.
+ */
+pauseClock: boolean, resumeClock: boolean, closeQuestion: boolean, playVideo: boolean, 
 /**
  * `GoTo` and `GoToFinal`: not while a question is in play.
  */
 goTo: boolean, 
 /**
  * `RestartQuestion`: while a question is in play, the way to leave it
- * without scoring it, and once it closed, until its answer is shown,
- * the way to take its scores back and ask it again.
+ * without scoring it and ask it again. Not once it closed, as its
+ * results are on screen; a show begun before rules version 4 also
+ * restarts it closed, until its answer is shown.
  */
 restartQuestion: boolean, };

@@ -45,6 +45,7 @@ const ERROR_KEYS: Record<Exclude<AppError["code"], WordedApart>, StringKey> = {
   tooLarge: "errTooLarge",
   quizJsonTooLarge: "errQuizJsonTooLarge",
   tooManyFiles: "errTooManyFiles",
+  tooManyEndRecords: "errTooManyEndRecords",
   noDraft: "errNoDraft",
   notRecent: "errNotRecent",
   draftChanged: "errDraftChanged",
@@ -59,6 +60,7 @@ const ERROR_KEYS: Record<Exclude<AppError["code"], WordedApart>, StringKey> = {
   usbUnavailable: "errUsbUnavailable",
   usbListFailed: "errUsbListFailed",
   receiverNotConnected: "errReceiverNotConnected",
+  receiverNotLearnable: "errReceiverNotLearnable",
   learnNotStarted: "errLearnNotStarted",
   learnTooFewPresses: "errLearnTooFewPresses",
   learnInconsistent: "errLearnInconsistent",
@@ -222,8 +224,21 @@ export function settingsLostText(t: Translate, lost: SettingsLost): string {
 
 /** Which protocol reads the receiver. */
 export function protocolText(t: Translate, protocol: ProtocolKind): string {
-  return protocol.type === "learned" ? t("protocolLearned", { buttons: protocol.buttons }) : t("protocolRawOnly");
+  switch (protocol.type) {
+    case "rawOnly":
+      return t("protocolRawOnly");
+    case "learned":
+      return t("protocolLearned", { buttons: protocol.buttons });
+    case "enjoy303s":
+      return t("protocolEnjoy303s");
+  }
 }
+
+/** Whether the receiver has yet to answer its set-up: shown as still being looked for, not as connected. */
+export function awaitsAnswer(protocol: ProtocolKind): boolean {
+  return protocol.type === "enjoy303s" && !protocol.answered;
+}
+
 
 const IMPORT_ISSUE_KEYS: Record<ImportIssue["code"], StringKey> = {
   noQuestionColumn: "importNoQuestionColumn",

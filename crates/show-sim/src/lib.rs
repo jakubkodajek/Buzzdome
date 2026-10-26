@@ -10,8 +10,9 @@
 //! edits with odd names, score changes, and crashes followed by a resume.
 
 use quiz_core::{
-    AnswerMode, Button, Command, CorrectAnswer, Effect, Game, GameError, Phase, Question, QuestionStep, Quiz, Slide, SlideContent, Stamped,
-    VideoClip, FULL_SHARE, MAX_ANSWERS, MAX_EVERYONE_ANSWERS, MAX_POINTS, MAX_TEAMS, MIN_EVERYONE_ANSWERS, RULES_VERSION,
+    AllAnswered, AnswerMode, Button, BuzzerMode, Command, CorrectAnswer, Effect, Game, GameError, Light, Phase, Question, QuestionStep, Quiz,
+    QuizSettings, Slide, SlideContent, Stamped, VideoClip, FULL_SHARE, MAX_ALL_ANSWERED_DELAY_S, MAX_ANSWERS, MAX_EVERYONE_ANSWERS, MAX_POINTS,
+    MAX_TEAMS, MIN_EVERYONE_ANSWERS, RULES_VERSION,
 };
 use std::collections::BTreeMap;
 
@@ -70,7 +71,8 @@ fn random_name(rng: &mut Rng) -> String {
 
 /// A random quiz the editor could save: every slide type, both answer
 /// modes, 0 to `MAX_ANSWERS` answers, part shares, untimed and timed
-/// clocks, rising and falling points, videos, and a final slide or none.
+/// clocks, rising and falling points, videos, a final slide or none, and
+/// every step the show can take once everyone answered.
 pub fn random_quiz(rng: &mut Rng) -> Quiz {
     let count = rng.between(1, 14) as usize;
     let mut slides = Vec::with_capacity(count + 1);
@@ -93,7 +95,11 @@ pub fn random_quiz(rng: &mut Rng) -> Quiz {
     if rng.chance(25) {
         slides.push(Slide::new("final", SlideContent::Final { title: "Výsledky".into() }));
     }
-    let quiz = Quiz::new("Simulace", slides);
+    let mut quiz = Quiz::new("Simulace", slides);
+    quiz.settings = QuizSettings {
+        all_answered: *rng.pick(&[AllAnswered::Wait, AllAnswered::Reveal, AllAnswered::NextSlide]),
+        all_answered_delay_s: rng.between(0, u64::from(MAX_ALL_ANSWERED_DELAY_S)) as u8,
+    };
     if let Err(errors) = quiz.validate() {
         panic!("the generator wrote a quiz the editor would refuse: {errors:?}");
     }
@@ -246,7 +252,8 @@ impl Show {
         Stepped { stamped, result }
     }
 
-    /// What the show thread does on its tick: time up, if due.
+    /// What the show thread does on its tick: time up, or the step the
+    /// quiz's settings take once everyone answered, if due.
     pub fn tick(&mut self) {
         if let Some(command) = self.game.due_command(self.now) {
             let stepped = self.apply(command);
@@ -255,7 +262,8 @@ impl Show {
     }
 
     /// The show as the app rebuilds it after a crash: replayed from the
-    /// journal, with a question that was in play restarted (journaled too).
+    /// journal, with a question that was in play restarted and a step
+    /// coming by itself held (journaled too).
     pub fn crash_and_resume(&mut self) {
         let replayed = Game::replay(self.game.quiz().clone(), &self.journal, RULES_VERSION);
         assert_eq!(replayed, self.game, "the journal does not rebuild the show the windows saw");
@@ -268,6 +276,7 @@ impl Show {
             assert!(stepped.result.is_ok(), "the recovery command was refused: {:?}", stepped.result);
             assert!(!self.game.controls().restart_question, "a question is still in play after the recovery");
         }
+        assert_eq!(self.game.view(self.now).auto_step, None, "a step comes by itself right after the recovery");
     }
 
     /// Asserts that the whole journal rebuilds the current game.
@@ -298,6 +307,16 @@ impl Show {
                         assert!(after.players().any(|p| p.buzzer == *buzzer), "a light for buzzer {buzzer}, which is not in the show");
                     }
                 }
+            }
+        }
+        // Every buzzer ready in a fastest-finger round that begins showed
+        // another light just before: the buzzes are ordered by the buzzers'
+        // timers, and an Enjoy 303S buzzer's starts again only when its
+        // colour changes (docs/design.md, 2.6).
+        if after.buzzer_mode() == BuzzerMode::FastestFinger && before.buzzer_mode() != BuzzerMode::FastestFinger {
+            let was: BTreeMap<_, _> = before.lights().into_iter().collect();
+            for (buzzer, light) in after.lights() {
+                assert!(light != Light::Ready || was.get(&buzzer) != Some(&Light::Ready), "buzzer {buzzer} was ready already as a round began: {stamped:?}");
             }
         }
         self.check_view(after);

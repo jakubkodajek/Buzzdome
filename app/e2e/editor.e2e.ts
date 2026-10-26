@@ -1,6 +1,7 @@
 // The quiz editor in the real app: a quiz written with the keys and the
-// ribbon, every ribbon button clicked, a test run, saving through the
-// system's file picker, and the draft surviving a crash.
+// ribbon, every ribbon button clicked, a test run, the quiz's settings in
+// one, saving through the system's file picker, and the draft surviving a
+// crash.
 
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -130,8 +131,36 @@ describe("the quiz editor", () => {
     expect(await app.view()).toBeNull();
   });
 
+  test("the quiz's settings show the right answer by itself once everyone answered", async () => {
+    await app.press("ribbonFile");
+    await app.press("quizSettings");
+    await app.page.click(await app.$(`select[aria-label="${t("allAnswered")}"] option[value="reveal"]`));
+    const delay = await app.$(`input[aria-label="${t("allAnsweredDelay")}"]`);
+    await app.page.clear(delay);
+    await app.page.type(delay, "1");
+    await app.page.click(await app.$(".backstage-back"));
+    // A test run from the question added last (`ctrl+m` above), which is selected.
+    await app.page.keys([Key.F5], [Key.Shift]);
+    await app.seeText(t("testRunActive"));
+    await app.waitView("the question", (v) => v.phase.phase === "question" && v.phase.step === "ready");
+    // A press registers a buzzer whenever it comes.
+    await app.tab("tabBuzzers");
+    for (const buzzer of [1, 2]) await app.page.click(await app.$(`.buzzer-grid .buzzer:nth-child(${buzzer}) .key-big`));
+    await app.waitView("two players", (v) => v.players.length === 2);
+    await app.step("next");
+    await app.waitView("the clock running", (v) => v.phase.phase === "question" && v.phase.step === "running");
+    for (const buzzer of [1, 2]) await app.page.click(await app.$(`.buzzer-grid .buzzer:nth-child(${buzzer}) .key-a`));
+    const closed = await app.waitView("the question closed", (v) => v.phase.phase === "question" && v.phase.step === "closed");
+    expect(closed.autoStep?.action).toBe("reveal");
+    await app.seeText(t("autoStepReveal"));
+    await app.waitView("the answer shown by itself", (v) => v.phase.phase === "question" && v.phase.step === "revealed");
+    await app.press("backToEditor");
+    await app.$(".studio");
+  });
+
   test("the draft survives a crash", async () => {
-    const slides = await slideCount();
+    // Back from a test run, the editor shows the slides once it has read its draft.
+    const slides = await waitFor("the slides", async () => (await slideCount()) || null);
     // The draft is written a moment after each change: wait until it is on disk.
     await waitFor("the draft on disk", async () => draftSlides().includes(slides));
     await app.crash();

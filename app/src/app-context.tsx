@@ -1,9 +1,9 @@
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { api } from "./api";
 import { translator, useLang, type Lang, type Translate } from "./i18n";
 import { errorText } from "./messages";
 import { createStepGuard, type StepGuard } from "./step-guard";
-import type { Command } from "./types";
+import type { Command, GameView } from "./types";
 
 interface AppContextValue {
   lang: Lang;
@@ -43,6 +43,15 @@ export function useRun(): (call: Promise<unknown>) => void {
   return useCallback((call) => void call.catch(report), [report]);
 }
 
+/** Tells the window's step guard whenever the show's step changes (`StepGuard.shown`). */
+export function useStepShown(view: GameView | null) {
+  const { steps } = useApp();
+  const step = view?.stepNo ?? null;
+  useEffect(() => {
+    if (step !== null) steps.shown(step);
+  }, [step, steps]);
+}
+
 /**
  * Sends a game command, the same way for every button, key and buzzer. A
  * command that moves the show on is dropped when it comes too soon after
@@ -53,7 +62,7 @@ export function useDispatch(): (command: Command) => void {
   const { steps } = useApp();
   return useCallback(
     (command) => {
-      const sent = steps.send(command, () => api.dispatch(command));
+      const sent = steps.send(command, (seen) => api.dispatch(command, seen));
       if (sent) run(sent);
     },
     [run, steps],

@@ -13,8 +13,10 @@ not affiliated with or endorsed by QuizXpress or its makers.
 First playable version: demo quiz, everyone-answers and fastest-finger
 questions, scores, leaderboard, final scores, crash recovery, keyboard and
 on-screen buzzers. The wireless buzzer receiver connects through its USB-HID
-cable (Director > Receiver tab); until the vendor protocol is in, buttons are
-taught once in learn mode and the buzzer lights stay off. Plan and progress:
+cable (Director > Receiver tab). Jakub's Enjoy 303S (RGB) set is driven with
+its own protocol, presses ordered by each buzzer's timer and lights in
+colour, though not yet checked on the hardware. For other receivers, buttons
+are taught once in learn mode and the buzzer lights stay off. Plan and progress:
 [`ROADMAP.md`](ROADMAP.md).
 
 What the app must do: [`docs/specification.md`](docs/specification.md).
@@ -39,11 +41,22 @@ not code-signed yet:
 
 ## Development
 
-Needs Rust (stable) and Node.js.
+Needs Rust (the release in `rust-toolchain.toml`, which rustup fetches by
+itself) and Node.js 22.
+
+On Windows, install first: Git for Windows, Rust with rustup (the MSVC
+toolchain), Node.js 22 and the Microsoft C++ Build Tools with "Desktop
+development with C++". WebView2 comes with Windows 11 and with Windows 10
+from version 1803. The buzzer receiver's USB cable is a HID device and
+needs no driver.
+`npm run tauri build` makes both an `.exe` (NSIS) and an `.msi` installer;
+if the MSI step fails with `light.exe`, turn on VBSCRIPT under Settings >
+Apps > Optional features, or build only the `.exe` with
+`npm run tauri build -- --bundles nsis`.
 
 ```sh
 cd app
-npm install
+npm ci
 npm run tauri dev      # run the app
 cd .. && cargo test --workspace
 cargo run -p buzzers --example hid-monitor   # list HID devices, print receiver reports

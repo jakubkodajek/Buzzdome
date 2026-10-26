@@ -4,4 +4,4 @@ import type { DeviceSelector } from "./DeviceSelector";
 import type { ProtocolKind } from "./ProtocolKind";
 import type { ReceiverProblem } from "./ReceiverProblem";
 
-export type ReceiverStatus = { "kind": "off" } | { "kind": "searching", selector: DeviceSelector, } | { "kind": "connected", device: DeviceInfo, protocol: ProtocolKind, hasLights: boolean, } | { "kind": "error", problem: ReceiverProblem, detail: string, };
+export type ReceiverStatus = { "kind": "off" } | { "kind": "looking" } | { "kind": "searching", selector: DeviceSelector, } | { "kind": "connected", device: DeviceInfo, protocol: ProtocolKind, hasLights: boolean, learnable: boolean, } | { "kind": "error", problem: ReceiverProblem, detail: string, };

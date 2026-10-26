@@ -2,6 +2,7 @@
 
 use crate::game::{same_name, BuzzerId, Button, Controls, Game, Phase, QuestionStep, Response};
 use crate::model::{AnswerMode, Slide};
+use crate::settings::AutoStep;
 use serde::Serialize;
 use std::collections::BTreeMap;
 use ts_rs::TS;
@@ -43,6 +44,22 @@ pub struct GameView {
     pub on_hold: bool,
     /// See `Game::video_plays`.
     pub video_plays: u32,
+    /// See `Game::step_no`.
+    pub step_no: u32,
+    /// The step the show takes by itself once everyone answered
+    /// (`Game::pending_step`); none while it waits for the quizmaster.
+    pub auto_step: Option<AutoStepView>,
+}
+
+/// A step the show takes by itself, for the Director to show coming.
+#[derive(Debug, Clone, PartialEq, Serialize, TS)]
+#[ts(export)]
+#[serde(rename_all = "camelCase")]
+pub struct AutoStepView {
+    /// What the step does.
+    pub action: AutoStep,
+    /// How long until it does it.
+    pub in_ms: u64,
 }
 
 /// The players a closed everyone-answers question counted, by outcome.
@@ -98,6 +115,9 @@ pub struct PlayerView {
     pub answer_correct: Option<bool>,
     pub answer_ms: Option<u64>,
     pub locked_out: bool,
+    /// Switched on or registered while the current fastest-finger question
+    /// was under way, so plays from the next question (`Game::joins_next`).
+    pub joins_next: bool,
     /// Score change from the current question.
     pub delta: Option<i32>,
 }
@@ -160,6 +180,7 @@ impl Game {
                 answer_correct: self.responses().get(&p.buzzer).map(|r| question.is_some_and(|q| r.is_right(q))),
                 answer_ms: self.responses().get(&p.buzzer).map(|r| r.elapsed_ms),
                 locked_out: self.locked_out().contains(&p.buzzer),
+                joins_next: self.joins_next().contains(&p.buzzer),
                 delta: self.delta(p.buzzer),
             })
             .collect();
@@ -187,6 +208,8 @@ impl Game {
             controls: self.controls(),
             on_hold: self.on_hold(),
             video_plays: self.video_plays(),
+            step_no: self.step_no(),
+            auto_step: self.pending_step().map(|(action, _, at)| AutoStepView { action, in_ms: at.saturating_sub(now) }),
             teams: self
                 .teams()
                 .iter()

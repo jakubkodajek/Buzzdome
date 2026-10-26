@@ -482,6 +482,20 @@
   font-weight: 900;
 }
 
+.buzz-answer {
+  margin: 0 auto 0 48px;
+  min-width: 112px;
+  height: 112px;
+  display: grid;
+  place-items: center;
+  border-radius: calc(50% * var(--theme-roundness));
+  font-size: 64px;
+  font-weight: 900;
+  color: var(--answer-text);
+  background: var(--answer);
+  border: 4px solid #fff;
+}
+
 .buzz-delta {
   font-size: 84px;
   font-weight: 900;
@@ -592,6 +606,10 @@
   font-size: 58px;
   font-weight: 900;
 }
+
+/* Players sharing a place stand on one block: smaller names, so they fit. */
+.podium-name.lines-2 .name { font-size: 44px; }
+.podium-name.lines-3 .name { font-size: 34px; }
 
 .podium-name .score {
   font-size: 50px;

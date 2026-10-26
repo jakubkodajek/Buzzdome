@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { DEFAULT_QUIZ_SETTINGS } from "../bindings/Constants";
 import type { Category, Quiz } from "../types";
 import { applyEdit, historyReducer, MERGE_MS, startHistory, UNDO_LIMIT, type History } from "./history";
 import { newSlide, setTextStyle } from "./slides";
@@ -60,6 +61,16 @@ describe("history", () => {
     expect(h.present.theme).toBe("builtin.neon");
     h = historyReducer(h, { type: "undo" });
     expect(h.present.theme).toBe("builtin.night");
+  });
+
+  it("changes the quiz's settings as one undo step, and the defaults of a quiz without them change nothing", () => {
+    let h = startHistory(quiz);
+    const defaults = { ...DEFAULT_QUIZ_SETTINGS };
+    expect(historyReducer(h, { type: "edit", edit: { type: "setSettings", settings: defaults }, at: 0 })).toBe(h);
+    h = historyReducer(h, { type: "edit", edit: { type: "setSettings", settings: { ...defaults, allAnswered: "reveal" } }, at: 0 });
+    expect(h.present.settings).toEqual({ allAnswered: "reveal", allAnsweredDelayS: DEFAULT_QUIZ_SETTINGS.allAnsweredDelayS });
+    h = historyReducer(h, { type: "undo" });
+    expect(h.present.settings).toBeUndefined();
   });
 
   it("applies a batch of edits as one undo step", () => {

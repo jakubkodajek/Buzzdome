@@ -134,7 +134,7 @@ fn memory_in_use(child: &Child) -> Option<u64> {
 /// Polling sees an allocation only once it is committed, and Windows counts
 /// a commit against the system's limit at once, so for that moment the
 /// reader could take what the show needs; in the job the allocation fails
-/// in the reader instead, and the reader ends (Z6).
+/// in the reader instead, and the reader ends.
 #[cfg(windows)]
 struct MemoryCap {
     job: windows_sys::Win32::Foundation::HANDLE,

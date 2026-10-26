@@ -14,22 +14,35 @@ export function useLatest<T>(value: T): { readonly current: T } {
   return ref;
 }
 
-/** Calls `handler` for every `event` from the backend while mounted. */
-export function useBackendEvent<E extends keyof BackendEvents>(event: E, handler: (payload: BackendEvents[E]) => void) {
-  // The latest handler runs without re-subscribing on every render.
+/**
+ * Calls `handler` for every `event` from the backend while mounted, and
+ * `listening` once it is registered: no event after that is missed. If it
+ * cannot be registered, the error is logged and `listening` runs anyway.
+ */
+export function useBackendEvent<E extends keyof BackendEvents>(event: E, handler: (payload: BackendEvents[E]) => void, listening?: () => void) {
+  // The latest handlers run without re-subscribing on every render.
   const latest = useLatest(handler);
+  const latestListening = useLatest(listening);
   useEffect(() => {
     let alive = true;
     let stop: (() => void) | null = null;
-    listen<BackendEvents[E]>(event, (e) => latest.current(e.payload)).then((unlisten) => {
-      if (alive) stop = unlisten;
-      else unlisten();
-    });
+    listen<BackendEvents[E]>(event, (e) => latest.current(e.payload)).then(
+      (unlisten) => {
+        if (alive) {
+          stop = unlisten;
+          latestListening.current?.();
+        } else unlisten();
+      },
+      (e) => {
+        console.error(e);
+        if (alive) latestListening.current?.();
+      },
+    );
     return () => {
       alive = false;
       stop?.();
     };
-  }, [event, latest]);
+  }, [event, latest, latestListening]);
 }
 
 /**
@@ -59,7 +72,8 @@ function useBackendValue<T>(load: () => Promise<T>, initial: T, refreshOn: keyof
 
 /**
  * A value the backend sends with `event` whenever it changes. The first value
- * comes from `load`, unless a push already arrived; null until then.
+ * comes from `load`, unless a push already arrived; null until then. It loads
+ * once the push is listened to, so a change made meanwhile is not missed.
  */
 function usePushedValue<E extends keyof BackendEvents>(event: E, load: () => Promise<BackendEvents[E]>): BackendEvents[E] | null {
   return useReceivedValue(event, load, (value) => value);
@@ -71,18 +85,21 @@ function useReceivedValue<E extends keyof BackendEvents, T>(event: E, load: () =
   const pushed = useRef(false);
   const initial = useRef(load);
   const latestReceive = useLatest(receive);
-  useBackendEvent(event, (next) => {
-    pushed.current = true;
-    setValue(latestReceive.current(next));
-  });
-  useEffect(() => {
-    initial
-      .current()
-      .then((first) => {
-        if (!pushed.current) setValue(latestReceive.current(first));
-      })
-      .catch((e) => console.error(e));
-  }, [latestReceive]);
+  useBackendEvent(
+    event,
+    (next) => {
+      pushed.current = true;
+      setValue(latestReceive.current(next));
+    },
+    () => {
+      initial
+        .current()
+        .then((first) => {
+          if (!pushed.current) setValue(latestReceive.current(first));
+        })
+        .catch((e) => console.error(e));
+    },
+  );
   return value;
 }
 

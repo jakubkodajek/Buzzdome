@@ -9,4 +9,9 @@ export type RawReport = {
  * When it arrived, on the show clock (`ReceiverConfig::clock`), as
  * the presses decoded from it.
  */
-atMs: number, bytes: Array<number>, decoded: Array<Press>, };
+atMs: number, bytes: Array<number>, decoded: Array<Press>, 
+/**
+ * Presses read but dropped as ones that cannot count now, such as a
+ * buzz from a buzzer that was not ready (`Protocol::take_dropped`).
+ */
+dropped: Array<Press>, };

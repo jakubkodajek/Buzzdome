@@ -18,5 +18,5 @@ csv = "1.4"
 encoding_rs = "0.8"
 # Deflate only: quiz.json is compressed, media files are stored as they are.
 zip = { version = "9", default-features = false, features = ["deflate-flate2-zlib-rs"] }
-# Finding ZIP64 end records in a whole quiz file before it is opened (A20).
+# Finding ZIP64 end records in a whole quiz file before it is opened (zip_end.rs).
 memchr = "2.8"

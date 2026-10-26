@@ -7,6 +7,7 @@ use crate::style::is_hex_color;
 use serde::de::{DeserializeOwned, IgnoredAny};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashSet};
+use std::fmt;
 use ts_rs::TS;
 
 /// The `format` of `theme.json` this app reads (TH-1).
@@ -256,6 +257,20 @@ pub struct Ignored {
     /// The value, when the key is known but not its value, such as a
     /// `corners` style of a newer version; the parent's value is used.
     pub value: Option<String>,
+}
+
+/// As a log says it: `backgrounds.lobby`, or `corners = "blob"`.
+impl fmt::Display for Ignored {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if let Some(section) = self.section {
+            write!(f, "{section}.")?;
+        }
+        f.write_str(&self.key)?;
+        match &self.value {
+            Some(value) => write!(f, " = {value:?}"),
+            None => Ok(()),
+        }
+    }
 }
 
 /// Why a theme cannot be used. The wording is for logs: today only a broken
@@ -624,8 +639,8 @@ mod tests {
         json["colors"]["sparkle"] = "#ffffff".into();
         json["sounds"] = serde_json::json!({ "correct": "sounds/yes.ogg" });
         let (theme, ignored) = ThemeManifest::from_json(&json.to_string()).unwrap();
-        let found: Vec<(Option<&str>, &str)> = ignored.iter().map(|u| (u.section, u.key.as_str())).collect();
-        assert_eq!(found, [(None, "sounds"), (Some("colors"), "sparkle"), (Some("backgrounds"), "lobby")]);
+        let found: Vec<String> = ignored.iter().map(ToString::to_string).collect();
+        assert_eq!(found, ["sounds", "colors.sparkle", "backgrounds.lobby"]);
         assert_eq!(theme.backgrounds.len(), 2);
     }
 
@@ -636,8 +651,8 @@ mod tests {
         json["headings"] = "Uppercase".into();
         let (theme, ignored) = ThemeManifest::from_json(&json.to_string()).unwrap();
         assert_eq!((theme.corners, theme.headings), (None, None));
-        let found: Vec<(&str, Option<&str>)> = ignored.iter().map(|u| (u.key.as_str(), u.value.as_deref())).collect();
-        assert_eq!(found, [("corners", Some("oval")), ("headings", Some("Uppercase"))]);
+        let found: Vec<String> = ignored.iter().map(ToString::to_string).collect();
+        assert_eq!(found, [r#"corners = "oval""#, r#"headings = "Uppercase""#]);
     }
 
     #[test]

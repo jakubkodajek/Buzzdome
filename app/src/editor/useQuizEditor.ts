@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useReducer, useRef, useState, useSyncExternalStore } from "react";
 import { api } from "../api";
-import { useApp, useDispatch, useReport } from "../app-context";
+import { useApp, useReport } from "../app-context";
 import { useLatest } from "../hooks";
 import { mediaPicker, type MediaKind } from "../media";
 import { quizPicker } from "../quiz";
@@ -27,12 +27,12 @@ export interface QuizEditor {
   // failed, not refused while another one was under way).
   newQuiz: () => Promise<boolean>;
   /**
-   * Opens the file at `recent` in `recentFiles`, or a file the user picks.
+   * Opens `recent`, a file in `recentFiles`, or a file the user picks.
    * Resolves to the draft opened (a file from an older version may break
    * newer rules, or have what this version leaves out), or false when
    * nothing was opened.
    */
-  openQuiz: (recent?: number) => Promise<EditorDraft | false>;
+  openQuiz: (recent?: string) => Promise<EditorDraft | false>;
   /** Quiz files opened or saved lately, newest first. */
   recentFiles: string[];
   save: () => Promise<boolean>;
@@ -62,8 +62,7 @@ export function useQuizEditor(onTestRun: () => void): QuizEditor {
   const [state, dispatch] = useReducer(editorReducer, LOADING);
   const status = useSyncExternalStore(drafts.subscribe, drafts.getStatus);
   const report = useLatest(useReport());
-  const dispatchCommand = useDispatch();
-  // Kept by the backend, which opens a recent file by its place in the list.
+  // Kept by the backend, which opens only a recent file in its list.
   const [recentFiles, setRecentFiles] = useState<string[]>([]);
   const readRecentFiles = useCallback(
     () => api.editorRecentFiles().then(setRecentFiles, (error: unknown) => report.current(error)),
@@ -84,7 +83,7 @@ export function useQuizEditor(onTestRun: () => void): QuizEditor {
         written.current = draft?.quiz ?? null;
         dispatch({ type: "loaded", draft });
       },
-      // Not "no draft": the quizmaster chooses what becomes of it (A17).
+      // Not "no draft": the quizmaster chooses what becomes of it.
       (error: unknown) => {
         if (alive) dispatch({ type: "unreadable", error });
       },
@@ -105,9 +104,9 @@ export function useQuizEditor(onTestRun: () => void): QuizEditor {
   }, [draftId, present, unsaved]);
 
   /**
-   * Runs a file operation as the only one (A16); a failure is shown, not
+   * Runs a file operation as the only one; a failure is shown, not
    * thrown, and gives false, as does one refused while another runs: the
-   * quizmaster is told why nothing happened (G28).
+   * quizmaster is told why nothing happened.
    */
   const attempt = <T>(operation: DraftOperation, task: (draftApi: DraftApi) => Promise<T | false>): Promise<T | false> =>
     drafts.exclusive(operation, task).then(
@@ -138,7 +137,7 @@ export function useQuizEditor(onTestRun: () => void): QuizEditor {
     attempt("save", async (draftApi) => {
       if (!open) return false;
       const quiz = open.history.present;
-      const picker = quizPicker(t, fileStem(quiz.title || t("untitledQuiz")));
+      const picker = quizPicker(t, quiz.title || t("untitledQuiz"));
       const path = await draftApi.editorSave(open.draftId, quiz, saveAs, picker);
       if (path === null) return false;
       dispatch({ type: "saved", quiz, path });
@@ -180,10 +179,10 @@ export function useQuizEditor(onTestRun: () => void): QuizEditor {
     openQuiz: (recent) =>
       attempt("open", async (draftApi) => {
         if (!(await mayDiscard())) return false;
-        const draft = await draftApi.editorOpen(recent ?? null, quizPicker(t));
+        // The list changes when a file opens, and when a recent one is gone.
+        const draft = await draftApi.editorOpen(recent ?? null, quizPicker(t)).finally(() => void readRecentFiles());
         if (!draft) return false;
         load(draft);
-        void readRecentFiles();
         return draft;
       }),
     recentFiles,
@@ -210,16 +209,15 @@ export function useQuizEditor(onTestRun: () => void): QuizEditor {
     exportSheet: (quiz, name) =>
       attempt("export", async (draftApi) => {
         if (!open) return false;
-        const picker = { filter: t("csvFile"), fileName: fileStem(name) };
+        const picker = { filter: t("csvFile"), fileName: name };
         return (await draftApi.editorExportSheet(open.draftId, quiz, listSeparator(lang), picker)) ?? false;
       }),
     testRun: (from) =>
       attempt("testRun", async (draftApi) => {
         if (!open) return false;
-        await draftApi.editorTestRun(open.draftId, open.history.present);
-        // The show runs now, whatever happens next: the Director shows it.
+        await draftApi.editorTestRun(open.draftId, open.history.present, from ?? null);
+        // The show runs now: the Director shows it.
         onTestRun();
-        if (from !== undefined) dispatchCommand({ type: "goTo", slide: from });
         return true;
       }),
   };
@@ -228,7 +226,7 @@ export function useQuizEditor(onTestRun: () => void): QuizEditor {
 /**
  * State that belongs to the open draft, such as a clipboard: once another
  * draft is open it reads as null, so nothing of one quiz (the name of one
- * of its media files) lands in another (A18).
+ * of its media files) lands in another.
  */
 export function useDraftState<T>(draftId: string | null): [T | null, (value: T | null) => void] {
   const [held, setHeld] = useState<DraftHeld<T>>({ draftId, value: null });
@@ -239,10 +237,4 @@ export function useDraftState<T>(draftId: string | null): [T | null, (value: T |
 /** The id of the draft open in `editor`, if one is. */
 export function openDraftId(editor: QuizEditor): string | null {
   return editor.state.status === "open" ? editor.state.draftId : null;
-}
-
-/** A quiz title as a file name, for the backend to add the extension to. */
-function fileStem(title: string): string {
-  const stem = title.replace(/[\\/:*?"<>|\p{Cc}]/gu, "_").trim();
-  return stem.replace(/^\.+|\.+$/g, "") || "quiz";
 }

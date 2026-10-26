@@ -1,17 +1,20 @@
 // One step of the show per key press or click. A double press, a double
 // click or a press made before the new step is on screen must not run the
-// step after it unseen (A4): a Space too many on a question starts its clock
+// step after it unseen: a Space too many on a question starts its clock
 // and closes it with no answers.
 
 import type { Command } from "./types";
 
-/** Commands that move the show on, each meant for the step the quizmaster saw. */
+/**
+ * Commands that move the show on, each meant for the step the quizmaster
+ * saw. Not `restartQuestion`: the quizmaster confirms it first, so no press
+ * runs it unseen, and the clock paused just before it does not hold it up.
+ */
 const STEP_COMMANDS: ReadonlySet<Command["type"]> = new Set([
   "next",
   "goTo",
   "goToFinal",
   "closeQuestion",
-  "restartQuestion",
   "judgeRight",
   "judgeWrong",
   "pauseClock",
@@ -23,7 +26,7 @@ const STEP_COMMANDS: ReadonlySet<Command["type"]> = new Set([
 /**
  * How long after a step command is answered another one is dropped: less
  * than a person takes to see the new step and react to it. Counted from the
- * answer, so a slow journal write does not use it up (G12).
+ * answer, so a slow journal write does not use it up.
  */
 export const STEP_PAUSE_MS = 300;
 
@@ -31,9 +34,18 @@ export interface StepGuard {
   /**
    * Sends `command` with `send`, unless it moves the show on while the last
    * such command is unanswered or less than `STEP_PAUSE_MS` after its
-   * answer: it is dropped then, and the result is null.
+   * answer: it is dropped then, and the result is null. A command that
+   * moves the show on is sent with the step on screen (`seen`), so the show
+   * drops it if it took another step before the window showed it.
    */
-  send(command: Command, send: () => Promise<void>): Promise<void> | null;
+  send(command: Command, send: (seen: number | null) => Promise<void>): Promise<void> | null;
+  /**
+   * A new step (`GameView.stepNo`) is on screen, whoever took it: a step
+   * command less than `STEP_PAUSE_MS` after it was meant for the step
+   * before, as when the show took a step by itself (time up, or everyone
+   * answered).
+   */
+  shown(step: number): void;
 }
 
 // eslint-disable-next-line no-restricted-properties -- the spacing of this window's own presses, not the show clock
@@ -41,15 +53,21 @@ export function createStepGuard(now: () => number = () => performance.now()): St
   let unanswered = false;
   /** When the last step command was answered. */
   let lastMs = -Infinity;
+  /** The step on screen; null until the first view. */
+  let seen: number | null = null;
   return {
     send(command, send) {
-      if (!STEP_COMMANDS.has(command.type)) return send();
+      if (!STEP_COMMANDS.has(command.type)) return send(null);
       if (unanswered || now() - lastMs < STEP_PAUSE_MS) return null;
       unanswered = true;
-      return send().finally(() => {
+      return send(seen).finally(() => {
         unanswered = false;
         lastMs = now();
       });
+    },
+    shown(step) {
+      seen = step;
+      lastMs = Math.max(lastMs, now());
     },
   };
 }

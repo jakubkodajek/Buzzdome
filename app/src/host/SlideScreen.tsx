@@ -1,6 +1,6 @@
 import type { CSSProperties, ReactNode } from "react";
 import { timeLeft } from "../answer-time";
-import { ANSWER_LETTERS } from "../answers";
+import { ANSWER_LETTERS, answerIndex } from "../answers";
 import { useApp } from "../app-context";
 import { FINAL_LAST_STEP, FULL_SHARE, MAX_EVERYONE_ANSWERS } from "../bindings/Constants";
 import { scoreDigits, signed } from "../format";
@@ -10,6 +10,7 @@ import type { QuestionPosition, SlideContext } from "../quiz";
 import { SlideMedia, type ScreenMode } from "../slide-media";
 import { styleOf, textStyleCss, type StyledText } from "../theme/slide-style";
 import type { AnswerResults, ClockView, GameView, PlayerView, QuestionSlide, Slide } from "../types";
+import { podiumBlocks } from "./podium";
 import { Timer } from "./Timer";
 import "./slide.css";
 
@@ -191,6 +192,7 @@ function QuestionScreen(props: {
   const winnerId = view.phase.phase === "question" && view.phase.step === "revealed" ? view.phase.winner : null;
   const winner = view.players.find((p) => p.buzzer === winnerId);
   const barPlayer = buzzed ?? winner;
+  const buzzedAnswer = view.phase.phase === "question" && view.phase.step === "buzzed" ? answerIndex(view.phase.button) : null;
   const hasMedia = question.picture !== null || question.video !== null;
   const answerStyle = styledText(question, "answer");
 
@@ -247,6 +249,7 @@ function QuestionScreen(props: {
       {question.mode === "fastestFinger" && barPlayer && (
         <div className="buzz-bar">
           <span className="buzz-name">{playerName(t, barPlayer)}</span>
+          {buzzedAnswer !== null && <span className={`buzz-answer answer-${buzzedAnswer}`}>{ANSWER_LETTERS[buzzedAnswer]}</span>}
           {barPlayer.delta !== null && barPlayer.delta !== 0 && (
             <span className={`buzz-delta ${barPlayer.delta > 0 ? "plus" : "minus"}`}>{signed(barPlayer.delta)}</span>
           )}
@@ -331,28 +334,33 @@ function FinalScores({ players, step, title, titled, titleStyle, sample }: Final
       </div>
     );
   }
-  // Steps 1..3 reveal third, second, then first place on a podium; players
-  // equal in score and time share a place, so its number is theirs.
-  const places = [2, 1, 3];
+  // Steps 1..3 reveal third, second, then first place on a podium. Players
+  // who share a place stand on its block with the score they share.
   return (
     <div className="center-slide">
       {heading(step === 0 ? t("drumroll") : title)}
       <div className="podium">
-        {places.map((place) => {
-          const p = players[place - 1];
+        {podiumBlocks(players).map(({ place, named, more }) => {
           const shown = step >= FINAL_LAST_STEP - place;
+          const first: PlayerView | undefined = named[0];
+          const lines = named.length + (more > 0 ? 1 : 0);
           return (
             <div key={place} className={`podium-step place-${place}`}>
-              <div className={`podium-name ${shown && (p || sample) ? "shown" : ""}`}>
-                {shown && p && (
+              <div className={`podium-name lines-${lines} ${shown && (first || sample) ? "shown" : ""}`}>
+                {shown && first && (
                   <>
-                    <span className="name">{playerName(t, p)}</span>
-                    <span className="score">{scoreDigits(p.score)}</span>
+                    {named.map((p) => (
+                      <span key={p.buzzer} className="name">
+                        {playerName(t, p)}
+                      </span>
+                    ))}
+                    {more > 0 && <span className="name">{t("podiumMore", { n: more })}</span>}
+                    <span className="score">{scoreDigits(first.score)}</span>
                   </>
                 )}
-                {shown && !p && sample && <span className="name placeholder">{t("place", { n: place })}</span>}
+                {shown && !first && sample && <span className="name placeholder">{t("place", { n: place })}</span>}
               </div>
-              <div className="podium-block">{p?.rank ?? place}</div>
+              <div className="podium-block">{place}</div>
             </div>
           );
         })}

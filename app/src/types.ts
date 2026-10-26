@@ -3,12 +3,15 @@
 
 import type { Slide } from "./bindings/Slide";
 
+export type { AllAnswered } from "./bindings/AllAnswered";
 export type { AnswerMode } from "./bindings/AnswerMode";
 export type { AppError } from "./bindings/AppError";
 export type { BoardChange } from "./bindings/BoardChange";
 export type { Background } from "./bindings/Background";
 export type { AnswerResults } from "./bindings/AnswerResults";
+export type { AutoStepView } from "./bindings/AutoStepView";
 export type { Button } from "./bindings/Button";
+export type { BuzzerSeen } from "./bindings/BuzzerSeen";
 export type { Category } from "./bindings/Category";
 export type { ClockView } from "./bindings/ClockView";
 export type { Color } from "./bindings/Color";
@@ -56,6 +59,7 @@ export type { Problem } from "./bindings/Problem";
 export type { ProtocolKind } from "./bindings/ProtocolKind";
 export type { Question } from "./bindings/Question";
 export type { Quiz } from "./bindings/Quiz";
+export type { QuizSettings } from "./bindings/QuizSettings";
 export type { RawReport } from "./bindings/RawReport";
 export type { ReceiverInfo } from "./bindings/ReceiverInfo";
 export type { ReceiverProblem } from "./bindings/ReceiverProblem";

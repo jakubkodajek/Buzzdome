@@ -27,12 +27,20 @@ Rules for readers and writers (implemented in `crates/quiz-file`):
   `LPT0`-`LPT9`, with any extension). The editor renames imported files to
   fit, and so it does when it opens a `.quiz` file an older version wrote
   with such names (see Versioning).
+- Two media files must not have names that differ only in letter case or
+  in how their accents are encoded (`Flag.png` and `flag.png`, or `kůň`
+  with `ů` as one character or as `u` and a ring): macOS takes them for
+  one file, and Windows does when the case differs. A quiz that uses both
+  is refused; when it uses only one, a show refuses it too if the other
+  comes first in the archive, as its name would find that file, and the
+  editor opens the used one under a numbered name (`flag-2.png`).
 - ZIP entry names written with backslashes (some Windows tools do that) are
   read with `/` in their place.
 - Entries outside `quiz.json` and `media/` (for example the `__MACOSX/`
   folder some ZIP tools add) are ignored.
 - A file does not open at all if it unpacks to more than 4 GB or has more
-  than 10,000 entries, if `quiz.json` is missing or is not JSON of this
+  than 10,000 entries, if it holds more than 64 ZIP end records (a quiz
+  file holds one), if `quiz.json` is missing or is not JSON of this
   format, or if its `schemaVersion` is newer than the app's.
 - The show also refuses a file that breaks any other rule in this
   document, for example a slide referring to a media file that is not in
@@ -87,6 +95,7 @@ was moved or deleted.
 | `theme` | text or `null` | Id of the look of the screens (`builtin.classic`, `builtin.studio`, `builtin.night`, `builtin.showtime`, `builtin.neon`, `builtin.daylight`, `builtin.aurora`, `builtin.sunset`, `builtin.chalkboard`, `builtin.gala`, `builtin.bakchus`, `builtin.bakchus-contours`, later installed themes, spec 5.2). Missing, `null` or not installed: the default look, so a quiz never fails to open or play over it. A value that is not a theme id (dot-separated parts of lower-case letters, digits, `-` and `_`, at least two parts, at most 100 bytes) reads as missing. |
 | `slides` | list | The show in order. |
 | `categories` | list | Named looks the slides can take on; see [Categories](#categories). Left out when there are none. |
+| `settings` | object | How the show runs; see [Settings](#settings). Left out when every setting is its default. |
 
 ### Every slide
 
@@ -196,7 +205,7 @@ right) or `radial` (middle out); `from` and `to` alike make a plain colour.
 | --- | --- | --- | --- |
 | `text` | text | required | The question. |
 | `mode` | `everyone`, `fastestFinger` | required | Everyone answers with A-D; or the first to buzz answers and the quizmaster judges. |
-| `answers` | list of text | `[]` | 2 to 4 for `everyone` (one per answer button A-D). Up to 6 (A-F) for `fastestFinger`, which the player answers aloud; it may be empty. |
+| `answers` | list of text | `[]` | 2 to 4 for `everyone` (one per answer button A-D). Up to 6 (A-F) for `fastestFinger`; it may be empty. With 1 to 4 the player buzzes in with the answer's button, A-D, so the first press is the answer; with none, 5 or 6 the big button buzzes in and the player answers aloud (specification BZ-19). |
 | `correct` | list of objects | `[]` | The right answers, each once: `answer` is an index into `answers` from 0, `share` the percent of the points it gives, 1 to 100 (default `100`). At least one for `everyone`; a `fastestFinger` question may have none, and then the quizmaster judges. Only `everyone` may give a share below 100: the quizmaster judges a `fastestFinger` answer without saying which one it was, so a right one gives all of the points. A `fastestFinger` share below 100 in a file saved before this was checked reads as 100, and the editor says so. |
 | `timeLimitS` | number | `20` | Seconds, at most 3600; `0` means no clock (the quizmaster ends the question). |
 | `points` | number | `10` | Points for a right answer with a `share` of 100 at the start of the clock, -100000 to 100000. Another share gives that percent of them, rounded half away from zero. |
@@ -260,7 +269,7 @@ stored once in `media/`, however many slides use it.
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `id` | text | 1 to 64 characters, unique among the quiz's categories. |
-| `name` | text | 1 to 40 characters, unique regardless of case and of spaces around it, as a spreadsheet's `CAT` names it. |
+| `name` | text | 1 to 40 characters, unique regardless of case, of spaces around it and of how its accents are encoded, as a spreadsheet's `CAT` names it. |
 | `background` | object or `null` | As a slide's `background`. |
 | `style` | object | As a slide's `style`, read the same way (a value that does not read is left out and listed). Left out when nothing is set. |
 
@@ -269,6 +278,22 @@ and a background that is not a picture or video in `media/` are problems
 that keep the quiz from being saved. They do not keep it from being
 played: a show reads only the slides, which got the category's look when
 it was applied (`Problem::keeps_from_playing`).
+
+### Settings
+
+```json
+"settings": { "allAnswered": "reveal", "allAnsweredDelayS": 3 }
+```
+
+The quiz's advanced settings (spec QZ-11), for its whole show; each
+question keeps its own time, points and answers. Every default keeps the
+show as it ran before there were settings, and a value that does not read
+reads as its default, so a quiz always opens and plays.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `allAnswered` | text | What the show does once a question has nobody left to answer (every player switched on answered it, or in fastest finger answered it wrong): `wait` for the quizmaster's Next (default), `reveal` the right answer, or go on to the `nextSlide` without showing it. A question ended by its time or by the quizmaster always waits. |
+| `allAnsweredDelayS` | number | Whole seconds the show waits before it does it, 0 to 10 (default 3; more reads as 10). The quizmaster can press Next meanwhile, or hold the step (Hold, key P), and the question then waits for Next. |
 
 ## Spreadsheets
 
@@ -375,7 +400,7 @@ the rows it came up in.
 | 2 | Adds `explanation` slides and, later within version 2, the quiz `theme` (builds from before that drop it when they save). Version 1 files read as version 2 unchanged. |
 | 3 | `background` becomes an object with video options; sounds get `part`, `gainDb` and `replay`. Version 1 and 2 files read as version 3 unchanged. Later within version 3, a `fastestFinger` question may have up to 6 answers instead of 4; earlier builds list such a question as a problem. |
 | 4 | Adds `final` slides. Version 1 to 3 files read as version 4 unchanged. Later within version 4, videos get `introPauseMs`, `volume`, `speed`, `part`, `effect` and `replay`; a video without them plays as before. Later still, slides get `style`; builds before it show the theme's look and drop the style when they save. |
-| 5 | A question's `correct` becomes a list of right answers, each with a `share` of the points. A version 1 to 4 question with `correct: n` reads as `[{ "answer": n, "share": 100 }]`, and one without as `[]`. Later within version 5, the quiz gets `categories` and slides `category`; builds before it drop them when they save, and the slides keep the look they took on. Later still, a slide's `style` gets `timer`; builds before it draw a ring and drop it when they save. |
+| 5 | A question's `correct` becomes a list of right answers, each with a `share` of the points. A version 1 to 4 question with `correct: n` reads as `[{ "answer": n, "share": 100 }]`, and one without as `[]`. Later within version 5, the quiz gets `categories` and slides `category`; builds before it drop them when they save, and the slides keep the look they took on. Later still, a slide's `style` gets `timer`; builds before it draw a ring and drop it when they save. Later still, the quiz gets `settings`; builds before it play as with the defaults and drop them when they save. |
 
 Fields may be added within a version as long as older files keep their
 meaning; readers ignore fields they do not know. Anything else (a new slide

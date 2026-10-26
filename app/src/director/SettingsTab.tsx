@@ -52,7 +52,7 @@ export function useProjectorSettings(): ProjectorSettings {
   }, [run]);
   useEffect(() => refreshMonitors(), [refreshMonitors]);
 
-  // The backend lists the monitors again when it opens the projector (A13).
+  // The backend lists the monitors again when it opens the projector.
   const toggle = useCallback(() => {
     run(isOpen ? api.closeHostWindow() : api.openHostWindow(monitor, fullscreen));
   }, [isOpen, monitor, fullscreen, run]);

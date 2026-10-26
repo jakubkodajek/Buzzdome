@@ -1,12 +1,16 @@
 import { useApp } from "../app-context";
 import { BackIcon } from "../icons";
+import { keyHint, KEYS } from "../keyboard";
 import { problemText } from "../messages";
-import { questionCount } from "../quiz";
-import type { Quiz, ValidationError } from "../types";
+import { MAX_ALL_ANSWERED_DELAY_S } from "../bindings/Constants";
+import type { StringKey } from "../i18n";
+import { questionCount, settingsOf } from "../quiz";
+import type { AllAnswered, Quiz, QuizSettings, ValidationError } from "../types";
 import type { Action, Actions } from "./actions";
+import { NumberBox, Select } from "./controls";
 import type { OpenQuiz } from "./editor-state";
 
-export type BackstagePage = "info" | "open" | "import" | "export";
+export type BackstagePage = "info" | "settings" | "open" | "import" | "export";
 
 interface BackstageProps {
   /** The open quiz; null when none is open. */
@@ -19,9 +23,10 @@ interface BackstageProps {
   /** The file's actions, and questions from a spreadsheet, the template for one, and the quiz as one (spec QZ-8). */
   actions: Pick<Actions, "newQuiz" | "save" | "saveAs" | "closeQuiz" | "exit" | "importSheet" | "sheetTemplate" | "exportSheet">;
   recentFiles: string[];
-  /** Opens the file at `recent` in `recentFiles`, or one the quizmaster picks. */
-  onOpenFile: (recent?: number) => void;
+  /** Opens `recent`, a file in `recentFiles`, or one the quizmaster picks. */
+  onOpenFile: (recent?: string) => void;
   onTitle: (title: string) => void;
+  onSettings: (settings: QuizSettings) => void;
   /** Shows a slide (by id) in the editor. */
   onShowSlide: (id: string) => void;
 }
@@ -51,6 +56,7 @@ export function Backstage(props: BackstageProps) {
           </button>
         )}
         {pageItem("info", t("info"))}
+        {pageItem("settings", t("quizSettings"))}
         {item(actions.newQuiz)}
         {pageItem("open", t("openFile"))}
         {item(actions.save)}
@@ -70,6 +76,8 @@ function pageFor(page: BackstagePage, props: BackstageProps, open: OpenQuiz) {
   switch (page) {
     case "info":
       return <InfoPage {...props} open={open} />;
+    case "settings":
+      return <SettingsPage {...props} open={open} />;
     case "open":
       return <OpenPage {...props} />;
     case "import":
@@ -113,6 +121,46 @@ function InfoPage({ open, unsaved, onTitle, onShowSlide }: BackstageProps & { op
           <ProblemList problems={open.dropped} quiz={quiz} onShowSlide={onShowSlide} />
         </>
       )}
+    </>
+  );
+}
+
+/** What each step the show can take once everyone answered is called. */
+const ALL_ANSWERED_LABEL: Record<AllAnswered, StringKey> = {
+  wait: "allAnsweredWait",
+  reveal: "allAnsweredReveal",
+  nextSlide: "allAnsweredNextSlide",
+};
+
+/** How the show runs, for the whole quiz (spec QZ-11); each question has its own time, points and answers. */
+function SettingsPage({ open, onSettings }: BackstageProps & { open: OpenQuiz }) {
+  const { t } = useApp();
+  const settings = settingsOf(open.history.present);
+  const set = (change: Partial<QuizSettings>) => onSettings({ ...settings, ...change });
+  const options = (Object.keys(ALL_ANSWERED_LABEL) as AllAnswered[]).map((value): [AllAnswered, string] => [value, t(ALL_ANSWERED_LABEL[value])]);
+  return (
+    <>
+      <h1>{t("quizSettings")}</h1>
+      <p className="backstage-hint">{t("quizSettingsHint")}</p>
+      <h2>{t("advancedSettings")}</h2>
+      <div className="field">
+        <span>{t("allAnswered")}</span>
+        <Select label={t("allAnswered")} value={settings.allAnswered} options={options} onChange={(allAnswered) => set({ allAnswered })} />
+      </div>
+      {settings.allAnswered !== "wait" && (
+        <div className="field">
+          <span>{t("allAnsweredDelay")}</span>
+          <NumberBox
+            label={t("allAnsweredDelay")}
+            value={settings.allAnsweredDelayS}
+            min={0}
+            max={MAX_ALL_ANSWERED_DELAY_S}
+            unit="s"
+            onChange={(allAnsweredDelayS) => set({ allAnsweredDelayS })}
+          />
+        </div>
+      )}
+      <p className="backstage-hint">{t("allAnsweredHint", { key: keyHint(t, KEYS.clock) })}</p>
     </>
   );
 }
@@ -192,9 +240,9 @@ function OpenPage({ recentFiles, onOpenFile }: BackstageProps) {
         <p className="muted">{t("noRecentFiles")}</p>
       ) : (
         <ul className="recent-list">
-          {recentFiles.map((path, recent) => (
+          {recentFiles.map((path) => (
             <li key={path}>
-              <button type="button" onClick={() => onOpenFile(recent)}>
+              <button type="button" onClick={() => onOpenFile(path)}>
                 <b>{fileName(path)}</b>
                 <small>{path}</small>
               </button>

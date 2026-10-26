@@ -49,8 +49,8 @@ Status keys: `[x]` done, `[~]` in progress, `[ ]` not started.
 - [x] Learn mode: teach each button when the protocol is unknown (no lights)
 - [x] Receiver tab with live presses, raw reports and log export; `hid-monitor` CLI
 - [ ] First test with the real receiver (`docs/hardware-test.md`)
-- [ ] Vendor protocol from the SDK: buzzer ID, press time, lights, battery (dome and RGB)
-- [~] Buzzer lights: ready, locked out, first, correct, wrong; game sends them, encoding waits for the protocol
+- [~] Vendor protocol: Enjoy 303S (RGB, Jakub's set) from Enjoy's SDK in `crates/buzzers/src/enjoy303s.rs`: presses with each buzzer's timer, fastest finger in the timers' order; waiting for the hardware test. Its SDK has no battery level. The RF215 (dome) driver was dropped, as Jakub's set is the 303S
+- [~] Buzzer lights: ready, locked out, first, correct, wrong, in colour on the 303S; waiting for the hardware test
 - [~] Buzzer registration (any press registers in the lobby) and a buzzer test grid (list view done)
 - [ ] Fallback: vendor keystroke mode through the keyboard driver
 

@@ -3,6 +3,7 @@
 //! compiled in, so the app always has its complete default theme; their
 //! pictures and fonts are served to the windows from the resource folder.
 
+use crate::app_log;
 use quiz_core::{resolve_themes, Theme, ThemeError, ThemeManifest, ThemeSource};
 use tauri::State;
 
@@ -36,11 +37,19 @@ const BUILTIN: [(&str, &str); 12] = [
 pub struct Themes(pub Vec<Theme>);
 
 /// The built-in themes with every value filled in. `folder_of` gives a
-/// theme's package folder from its id, ending with a path separator.
+/// theme's package folder from its id, ending with a path separator. What
+/// a package has that the app does not know goes in the log, so a typo
+/// that falls back to the parent's value is found.
 pub fn builtin_themes(folder_of: impl Fn(&str) -> String) -> Result<Vec<Theme>, ThemeError> {
     let sources = BUILTIN
         .iter()
-        .map(|(id, json)| Ok(ThemeSource { manifest: ThemeManifest::from_json(json)?.0, root: folder_of(id) }))
+        .map(|(id, json)| {
+            let (manifest, ignored) = ThemeManifest::from_json(json)?;
+            if !ignored.is_empty() {
+                app_log::note(&format!("the theme {id} has what the app does not know: {}", ignored.iter().map(ToString::to_string).collect::<Vec<_>>().join(", ")));
+            }
+            Ok(ThemeSource { manifest, root: folder_of(id) })
+        })
         .collect::<Result<Vec<_>, ThemeError>>()?;
     // No other themes yet: importing them (TH-1) shows the Director the ones `resolve_themes` leaves out.
     resolve_themes(&sources, &[]).map(|resolved| resolved.themes)
@@ -99,7 +108,7 @@ mod tests {
     /// The browser preview and the UI tests use the built-in themes as
     /// `list_themes` returns them, with the files served by Vite. Written as
     /// TypeScript typed as `Theme`, so the compiler checks the named values
-    /// (`corners`, `headings`) that JSON would type as any string (G32).
+    /// (`corners`, `headings`) that JSON would type as any string.
     #[test]
     fn export_built_in_themes_for_the_preview() {
         let Ok(dir) = std::env::var("TS_RS_EXPORT_DIR") else { return };

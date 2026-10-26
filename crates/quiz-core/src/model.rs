@@ -6,6 +6,7 @@ use crate::media::{
     check_reference, Background, MediaIssue, MediaKind, Playback, SoundClip, SoundStart, VideoClip, BACKGROUND_KINDS, MAX_GAIN_DB,
     MAX_INTRO_PAUSE_MS, MAX_REPLAY_DELAY_MS, MAX_VIDEO_SPEED, MIN_GAIN_DB, MIN_VIDEO_SPEED,
 };
+use crate::settings::QuizSettings;
 use crate::style::SlideStyle;
 use crate::text::file_key;
 use crate::theme::is_theme_id;
@@ -21,13 +22,16 @@ use ts_rs::TS;
 /// later within 4, video options and slide styles (builds before drop them
 /// when they save). 5: a question may have several correct answers, each
 /// with its share of the points (`correct` becomes a list); later within 5,
-/// categories (builds before drop them when they save). Older files read
-/// unchanged (`migrate`).
+/// categories (builds before drop them when they save), and later still the
+/// quiz's settings (builds before play as with the defaults and drop them
+/// when they save). Older files read unchanged (`migrate`).
 pub const SCHEMA_VERSION: u32 = 5;
 
 /// Most answers a question can show (A-F, as many as the reference app's
-/// keypads have). A fastest finger question is answered aloud, so it may use
-/// them all.
+/// keypads have). A fastest finger question is judged by the quizmaster, so
+/// it may use them all: with one to four the first press of A to D is the
+/// answer, otherwise the big button buzzes and the answer is said aloud
+/// (`Button::buzzes_in`).
 pub const MAX_ANSWERS: usize = 6;
 /// Most answers an everyone-answers question can have: one per answer button
 /// of a buzzer (A-D).
@@ -61,6 +65,10 @@ pub struct Quiz {
     /// Named looks the slides can take on (spec QZ-10).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub categories: Vec<Category>,
+    /// How the show runs (spec QZ-11). Left out when every setting is its default.
+    #[serde(default, skip_serializing_if = "QuizSettings::is_default", with = "crate::style::lenient_or_default")]
+    #[ts(as = "Option<QuizSettings>", optional)]
+    pub settings: QuizSettings,
 }
 
 /// A `theme` that is not a theme id (see `is_theme_id`), a text or not,
@@ -322,7 +330,8 @@ impl AnswerMode {
     pub const ALL: [AnswerMode; 2] = [AnswerMode::Everyone, AnswerMode::FastestFinger];
 
     /// Everyone answers with a button, so 2 to 4; a fastest finger question
-    /// is answered aloud, so none to all six letters.
+    /// is judged by the quizmaster, so none to all six letters
+    /// (`MAX_ANSWERS`).
     pub fn answer_limits(self) -> AnswerLimits {
         match self {
             AnswerMode::Everyone => AnswerLimits { fewest: MIN_EVERYONE_ANSWERS, most: MAX_EVERYONE_ANSWERS },
@@ -547,9 +556,9 @@ pub enum Problem {
     #[error("media file {file} of category {name}: {issue}")]
     CategoryMedia { name: String, file: String, issue: MediaIssue },
     /// Two media files whose names differ only in case or in how their
-    /// accents are encoded (`file_key`): one file on Windows and macOS, so
-    /// one would take the other's place.
-    #[error("media file {file} has the name of {other} to Windows and macOS")]
+    /// accents are encoded (`file_key`): one file on macOS, and on Windows
+    /// when only case differs, so one would take the other's place.
+    #[error("media file {file} has the name of {other} to macOS or Windows")]
     MediaNameClash { file: String, other: String },
     #[error("more than {max} answers")]
     TooManyAnswers { max: usize },
@@ -658,7 +667,7 @@ fn migrate(quiz: &mut serde_json::Value, version: u64) {
 impl Quiz {
     /// A quiz of the current schema version in the default look.
     pub fn new(title: impl Into<String>, slides: Vec<Slide>) -> Quiz {
-        Quiz { schema_version: SCHEMA_VERSION, title: title.into(), theme: None, slides, categories: Vec::new() }
+        Quiz { schema_version: SCHEMA_VERSION, title: title.into(), theme: None, slides, categories: Vec::new(), settings: QuizSettings::default() }
     }
 
     /// Reads a quiz, leaving out what it cannot keep (see `ReadQuiz::dropped`).
@@ -1231,8 +1240,10 @@ mod tests {
     #[test]
     fn an_everyone_answers_question_has_at_most_one_answer_per_button() {
         // Every answer must be one a buzzer button can choose.
+        assert_eq!(MAX_EVERYONE_ANSWERS, crate::game::ANSWER_BUTTONS.len());
         let buttons = [Button::A, Button::B, Button::C, Button::D, Button::Big];
         assert!((0..MAX_EVERYONE_ANSWERS).all(|i| buttons.iter().any(|b| b.answer_index() == Some(i))));
+        assert_eq!(Button::Big.answer_index(), None);
     }
 
     #[test]
