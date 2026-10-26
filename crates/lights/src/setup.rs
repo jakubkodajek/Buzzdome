@@ -83,7 +83,8 @@ pub enum Channel {
 }
 
 impl Channel {
-    /// Every kind of channel, with sample values.
+    /// Every kind of channel, with sample values, in the order the Director
+    /// offers them (a test checks that none is missing).
     pub const KINDS: [Channel; 10] = [
         Channel::Dimmer,
         Channel::DimmerRange { dark: 0, bright: 255 },
@@ -472,6 +473,18 @@ fn check_messages(messages: &MessageSetup) -> Result<(), SetupError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_kinds_of_channel_are_every_kind_once() {
+        let kind = |channel: &Channel| serde_json::to_value(channel).unwrap()["kind"].as_str().unwrap().to_owned();
+        let listed: Vec<String> = Channel::KINDS.iter().map(kind).collect();
+        let declared: Vec<String> = <Channel as ts_rs::TS>::inline(&ts_rs::Config::default())
+            .split(r#""kind": ""#)
+            .skip(1)
+            .map(|rest| rest.split('"').next().unwrap().to_owned())
+            .collect();
+        assert_eq!(listed, declared);
+    }
 
     fn par(id: FixtureId, address: u16) -> Fixture {
         Fixture { id, name: format!("Par {id}"), address, channels: vec![Channel::Dimmer, Channel::Red, Channel::Green, Channel::Blue], labels: Vec::new() }

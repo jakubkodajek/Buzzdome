@@ -3,7 +3,7 @@
 // naming a fixture or a stage naming a look that is gone. The backend
 // checks every setup again when it is kept (`LightsSetup::check`).
 
-import { LIT_BY_LOOKS, UNIVERSE_SIZE } from "../bindings/LightsConstants";
+import { CHANNEL_KINDS, LIT_BY_LOOKS, UNIVERSE_SIZE } from "../bindings/LightsConstants";
 import type { StringKey } from "../i18n";
 import type { Channel, ChannelValue, Fixture, LightsSetup, Look, OutputChoice } from "../types";
 
@@ -31,7 +31,8 @@ export const FIXTURE_PRESETS: { id: string; label: StringKey; channels: Channel[
 ];
 
 /** The kinds of channel, in the order the channel picker lists them. */
-export const CHANNEL_KINDS: Channel["kind"][] = ["dimmer", "dimmerRange", "red", "green", "blue", "white", "strobe", "shutter", "fixed", "unused"];
+/** Every kind of channel, in the order the Director offers them (`Channel::KINDS`). */
+export { CHANNEL_KINDS };
 
 /** Whether a look can light a fixture with `channels`: one of them follows the look's colour or intensity (`LIT_BY_LOOKS`, from `Channel::follows_looks`). */
 export function followsLooks(channels: Channel[]): boolean {

@@ -87,6 +87,18 @@ mod tests {
     use crate::setup::ChannelValue;
     use quiz_core::Color;
 
+    #[test]
+    fn a_look_changes_a_channel_exactly_when_the_channel_follows_looks() {
+        for channel in Channel::KINDS {
+            let at = |level: f32| {
+                let mut universe = Universe::default();
+                light(&mut universe, &fixture(1, 1, vec![channel]), [255, 255, 255], level, 0);
+                universe.get(1)
+            };
+            assert_eq!(at(0.0) != at(1.0), channel.follows_looks(), "{channel:?}");
+        }
+    }
+
     fn fixture(id: u32, address: u16, channels: Vec<Channel>) -> Fixture {
         Fixture { id, name: format!("F{id}"), address, channels, labels: Vec::new() }
     }
