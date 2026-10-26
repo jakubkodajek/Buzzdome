@@ -231,6 +231,7 @@ const strings = {
     selectedPlayers: "Vybráno: {n}",
     noResponses: "Zatím žádné odpovědi.",
     welcome: "Otevřete kvíz nebo pokračujte v poslední show.",
+    quizOpening: "Otevírám kvíz…",
     quizFiles: "Kvízy",
     playSound: "Přehrát zvuk",
     playVideo: "Přehrát video",
@@ -711,6 +712,7 @@ const strings = {
     layoutWithVideo: "{layout} + video",
     // Backend errors (AppError), in messages.ts.
     errShowRunning: "Show už běží. Nejdřív ji ukončete.",
+    errShowStarting: "Show se právě spouští.",
     errNoShowToResume: "Není žádná show, ve které by šlo pokračovat.",
     errNotNow: "V tomto kroku to nejde.",
     errUnknownBuzzer: "Bzučák {buzzer} ve hře není.",
@@ -1087,6 +1089,7 @@ const strings = {
     selectedPlayers: "Selected: {n}",
     noResponses: "No responses yet.",
     welcome: "Open a quiz or resume the last show.",
+    quizOpening: "Opening the quiz…",
     quizFiles: "Quizzes",
     playSound: "Play sound",
     playVideo: "Play video",
@@ -1566,6 +1569,7 @@ const strings = {
     layoutWithVideo: "{layout} + video",
     // Backend errors (AppError), in messages.ts.
     errShowRunning: "A show is running. End it first.",
+    errShowStarting: "A show is starting.",
     errNoShowToResume: "There is no show to resume.",
     errNotNow: "That does not apply in this step.",
     errUnknownBuzzer: "Buzzer {buzzer} is not in the show.",

@@ -1,0 +1,22 @@
+/* The recent quiz files, in the editor's FILE tab and the Director's
+   start. Each screen gives the buttons its own look. */
+
+.recent-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.recent-list button {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  width: 100%;
+  max-width: 620px;
+  text-align: left;
+}
+
+.recent-list small {
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}

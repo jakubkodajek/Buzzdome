@@ -228,9 +228,10 @@ draws slides without a show.
   quizmaster opens, saves, imports or exports are picked by the backend
   (`dialogs.rs`, worded by the UI's `Picker`, whose offered name, a quiz
   title, the backend turns into a portable file name), never named by a
-  page: the editor's recent files are kept by the backend
-  (`recent_files.rs`), and the page opens one by its path, which has to be
-  in that list; a file leaves the list once it is gone from its folder. The
+  page: the recent quiz files, which the editor opens and the Director
+  plays, are kept by the backend (`recent_files.rs`), and the page opens
+  one by its path, which has to be in that list; a file leaves the list
+  once it is gone from its folder. The
   pages confirm through the dialog plugin's `ask`
   (`confirm.ts`, with Yes and No in the UI's language); ESLint refuses `alert`, `confirm`, `prompt` and the
   plugin's file pickers.

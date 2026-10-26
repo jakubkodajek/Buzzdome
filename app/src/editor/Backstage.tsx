@@ -5,6 +5,7 @@ import { problemText } from "../messages";
 import { MAX_ALL_ANSWERED_DELAY_S } from "../bindings/Constants";
 import type { StringKey } from "../i18n";
 import { questionCount, settingsOf } from "../quiz";
+import { RecentFileList } from "../recent-files";
 import type { AllAnswered, Quiz, QuizSettings, ValidationError } from "../types";
 import type { Action, Actions } from "./actions";
 import { NumberBox, Select } from "./controls";
@@ -239,21 +240,8 @@ function OpenPage({ recentFiles, onOpenFile }: BackstageProps) {
       {recentFiles.length === 0 ? (
         <p className="muted">{t("noRecentFiles")}</p>
       ) : (
-        <ul className="recent-list">
-          {recentFiles.map((path) => (
-            <li key={path}>
-              <button type="button" onClick={() => onOpenFile(path)}>
-                <b>{fileName(path)}</b>
-                <small>{path}</small>
-              </button>
-            </li>
-          ))}
-        </ul>
+        <RecentFileList files={recentFiles} onOpen={onOpenFile} />
       )}
     </>
   );
-}
-
-function fileName(path: string): string {
-  return path.slice(Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\")) + 1);
 }

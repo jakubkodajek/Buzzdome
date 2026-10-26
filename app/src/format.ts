@@ -48,3 +48,8 @@ export function parseTrackTime(text: string): number | null {
   const valid = parts.length <= 3 && parts.every((part, i) => (i === parts.length - 1 ? /^\d+(\.\d+)?$/ : /^\d+$/).test(part));
   return valid ? Math.round(parts.reduce((total, part) => total * 60 + Number(part), 0) * 1000) : null;
 }
+
+/** The file name at the end of `path`, whether it is separated by "/" or "\\". */
+export function fileName(path: string): string {
+  return path.slice(Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\")) + 1);
+}

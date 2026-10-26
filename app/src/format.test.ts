@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { decibels, minutesAndSeconds, parseTrackTime, scoreDigits, signed, trackTime } from "./format";
+import { decibels, fileName, minutesAndSeconds, parseTrackTime, scoreDigits, signed, trackTime } from "./format";
 
 describe("format", () => {
   it("writes scores", () => {
@@ -25,5 +25,9 @@ describe("format", () => {
     expect(parseTrackTime("1:15.5")).toBe(75_500);
     expect(parseTrackTime(trackTime(3_723_400))).toBe(3_723_400);
     for (const text of ["", "abc", "1:2:3:4", "-5", "1.5:00", "1:", ":15"]) expect(parseTrackTime(text), text).toBeNull();
+  });
+
+  it("takes a file's name from its path on any system", () => {
+    expect([fileName("C:\\Kvizy\\pub.quiz"), fileName("/home/q/pub.quiz"), fileName("\\\\server\\q/pub.quiz"), fileName("pub.quiz")]).toEqual(Array(4).fill("pub.quiz"));
   });
 });

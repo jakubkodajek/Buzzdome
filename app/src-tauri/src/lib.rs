@@ -30,10 +30,11 @@ use error::CmdResult;
 pub use error::AppError;
 use hardware::Hardware;
 use quiz_core::{BuzzerId, BuzzerMode, Command, Effect, Game, GameView, Light, Quiz, Stamped};
+use recent_files::RecentFiles;
 use session::{Resumed, Session, SessionMeta, SessionSummary};
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::{mpsc, LazyLock, Mutex, MutexGuard};
+use std::sync::{mpsc, LazyLock, Mutex, MutexGuard, TryLockError};
 use tauri::{AppHandle, Emitter, Manager, Window};
 
 const DEMO_QUIZ: &str = include_str!("../../../samples/demo-quiz.json");
@@ -156,6 +157,9 @@ fn quizzes_cache(app: &AppHandle) -> CmdResult<PathBuf> {
 /// Held while a quiz is unpacked into `quizzes_cache` or old ones are
 /// deleted from it, so neither runs during the other.
 static QUIZZES_CACHE: Mutex<()> = Mutex::new(());
+
+/// Held while a quiz file opens and its show starts (`one_start`).
+static STARTING: Mutex<()> = Mutex::new(());
 
 /// The folders a show's media can be in, unpacked quizzes and editor
 /// drafts: the windows may load files from these, allowed once at start,
@@ -399,16 +403,49 @@ async fn show_not_saved(app: AppHandle) -> CmdResult<Option<AppError>> {
 #[tauri::command]
 async fn start_show_from_file(app: AppHandle, window: Window, picker: Picker) -> CmdResult<bool> {
     let Some(path) = dialogs::pick_file(window, picker, quiz_file::OPEN_EXTENSIONS.to_vec()).await? else { return Ok(false) };
+    off_ui(move || start_show_from(&app, &path).map(|()| true)).await
+}
+
+/// Starts a show with the `recent` quiz file, which has to be in the list
+/// (`RecentFiles`). A file that is no longer there leaves the list.
+#[tauri::command]
+async fn start_show_from_recent(app: AppHandle, recent: String) -> CmdResult<()> {
     off_ui(move || {
-        // Unpacking big media takes a moment: it runs before the show is locked.
-        let package = {
-            let _cache = QUIZZES_CACHE.lock().unwrap();
-            quiz_file::open(&path, &quizzes_cache(&app)?)?
-        };
-        start_show(&app, package.quiz, Some(path.to_string_lossy().into_owned()), Some(package.root))?;
-        Ok(true)
+        let path = app.state::<RecentFiles>().get(&recent)?;
+        start_show_from(&app, &path)
     })
     .await
+}
+
+/// Opens the quiz file `path` and starts a show with it, one start at a
+/// time (`one_start`). The file goes first in the recent list once it
+/// opens, and leaves it once it is gone.
+fn start_show_from(app: &AppHandle, path: &Path) -> CmdResult<()> {
+    one_start(&STARTING, || {
+        let source_path = path.to_string_lossy().into_owned();
+        let recent = app.state::<RecentFiles>();
+        // Unpacking big media takes a moment: it runs before the show is locked.
+        let opened = {
+            let _cache = QUIZZES_CACHE.lock().unwrap();
+            quiz_file::open(path, &quizzes_cache(app)?)
+        };
+        let package = opened.inspect_err(|_| recent.forget_if_gone(&source_path))?;
+        recent.remember(&source_path);
+        start_show(app, package.quiz, Some(source_path), Some(package.root))
+    })
+}
+
+/// Runs `start` unless another start holds `starting`, so a second click
+/// does not unpack the quiz again while the first show begins: it is
+/// refused with `ShowStarting`, which the Director does not report.
+fn one_start(starting: &Mutex<()>, start: impl FnOnce() -> CmdResult<()>) -> CmdResult<()> {
+    let _starting = match starting.try_lock() {
+        Ok(guard) => guard,
+        // A start that panicked leaves nothing half done that this one needs.
+        Err(TryLockError::Poisoned(poisoned)) => poisoned.into_inner(),
+        Err(TryLockError::WouldBlock) => return Err(AppError::ShowStarting),
+    };
+    start()
 }
 
 /// Plays the editor's quiz without a journal, so the last real show stays
@@ -649,6 +686,7 @@ pub fn run() {
             media_root,
             show_not_saved,
             start_show_from_file,
+            start_show_from_recent,
             start_demo_show,
             last_session,
             resume_last_session,
@@ -685,7 +723,7 @@ pub fn run() {
             editor::editor_load,
             editor::editor_new,
             editor::editor_open,
-            recent_files::editor_recent_files,
+            recent_files::recent_files,
             editor::editor_update,
             editor::editor_save,
             editor::editor_add_media,
@@ -712,8 +750,45 @@ pub fn run() {
 mod tests {
     use super::*;
     use app_windows::{CloseAnswer, CLOSE_ANSWER_WAIT};
+    use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Arc;
     use std::time::Instant;
+
+    #[test]
+    fn a_second_start_meanwhile_is_refused_and_unpacks_nothing() {
+        let (starting, unpacked) = (Mutex::new(()), AtomicUsize::new(0));
+        let (begun, has_begun) = mpsc::channel();
+        let (finish, may_finish) = mpsc::channel();
+        std::thread::scope(|scope| {
+            let (starting, unpacked) = (&starting, &unpacked);
+            let first = scope.spawn(move || {
+                one_start(starting, || {
+                    unpacked.fetch_add(1, Ordering::SeqCst);
+                    begun.send(()).unwrap();
+                    may_finish.recv().unwrap();
+                    Ok(())
+                })
+            });
+            has_begun.recv().unwrap();
+            let second = one_start(starting, || {
+                unpacked.fetch_add(1, Ordering::SeqCst);
+                Ok(())
+            });
+            assert_eq!(second, Err(AppError::ShowStarting));
+            finish.send(()).unwrap();
+            assert_eq!(first.join().unwrap(), Ok(()));
+        });
+        assert_eq!(unpacked.load(Ordering::SeqCst), 1, "only the first start unpacked");
+        assert_eq!(one_start(&starting, || Ok(())), Ok(()), "the next start runs once the first is done");
+    }
+
+    #[test]
+    fn a_start_runs_after_one_that_panicked() {
+        let starting = Mutex::new(());
+        let panicked = std::panic::catch_unwind(|| one_start(&starting, || panic!("the unpacking failed")));
+        assert!(panicked.is_err());
+        assert_eq!(one_start(&starting, || Ok(())), Ok(()));
+    }
 
     #[test]
     fn the_demo_quiz_is_current_and_plays() {
