@@ -11,6 +11,7 @@ mod crash_drill;
 mod dialogs;
 mod editor;
 mod error;
+mod fixture_library;
 mod fonts;
 mod hardware;
 mod media_player;
@@ -19,6 +20,7 @@ mod recent_files;
 mod session;
 pub mod sheet_reader;
 mod show_thread;
+mod stage_lights;
 mod teams;
 mod themes;
 
@@ -92,7 +94,8 @@ struct AppState(Mutex<Inner>);
 /// (`Hardware::change_settings`) is never taken under this one, and is
 /// taken before the learn lock. The close request
 /// (`app_windows::CloseRequest`) is taken under this one when a show begins
-/// or ends, and holds no other lock.
+/// or ends, and holds no other lock; so does what the stage lights were
+/// last told (`stage_lights`), taken under this one with every change.
 fn lock_show(app: &AppHandle) -> MutexGuard<'_, Inner> {
     app.state::<AppState>().inner().0.lock().unwrap()
 }
@@ -267,9 +270,11 @@ fn deliver(app: &AppHandle, inner: &mut Inner, effects: Vec<Effect>) {
     emit_state(app, inner.game.as_ref());
 }
 
-/// Sends a show change's effects to the buzzer lights and the windows' sound.
+/// Sends a show change's effects to the buzzer lights, the stage lights and
+/// the windows' sound.
 fn send_effects(app: &AppHandle, inner: &mut Inner, effects: Vec<Effect>) {
     light_buzzers(inner, &effects);
+    stage_lights::follow(app, inner.game.as_ref(), &effects, now_ms());
     for effect in effects {
         if let Effect::Sound { cue } = effect {
             let _ = app.emit("sound-cue", cue);
@@ -655,6 +660,8 @@ pub fn run() {
                 send_mode(&mut inner);
             }
             app.manage(hardware);
+            app.manage(stage_lights::StageLights::start(app.handle(), stage_lights::lights_path(app.handle())?));
+            app.manage(fixture_library::FixtureLibrary::new(fixture_library::library_path(app.handle())?));
             show_thread::start(app.handle(), queue, events);
             // The windows load theme pictures and fonts from the built-in
             // packages, and a show's media from where they can be.
@@ -741,6 +748,16 @@ pub fn run() {
             hardware::receiver_forget_learned,
             hardware::receiver_export_log,
             hardware::receiver_udev_rule,
+            stage_lights::lights_info,
+            stage_lights::lights_store,
+            stage_lights::lights_devices,
+            fixture_library::lights_library,
+            fixture_library::lights_library_info,
+            fixture_library::lights_library_update,
+            fixture_library::lights_library_reset,
+            stage_lights::lights_hold,
+            stage_lights::lights_blackout,
+            stage_lights::lights_universe,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

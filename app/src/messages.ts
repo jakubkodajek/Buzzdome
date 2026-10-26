@@ -6,7 +6,21 @@ import { buttonLabel } from "./answers";
 import { MEDIA_EXTENSIONS } from "./bindings/MediaExtensions";
 import type { StringKey, Translate } from "./i18n";
 import { mediaFileName } from "./media";
-import type { AppError, FileAction, ImportIssue, MediaIssue, MediaKind, Place, Problem, ProtocolKind, ReceiverProblem, SettingsLost } from "./types";
+import type {
+  AppError,
+  FileAction,
+  ImportIssue,
+  MediaIssue,
+  MediaKind,
+  OutputError,
+  Part,
+  Place,
+  Problem,
+  ProtocolKind,
+  ReceiverProblem,
+  SettingsLost,
+  SetupError,
+} from "./types";
 
 type Params = Record<string, string | number>;
 
@@ -18,7 +32,7 @@ function params(fields: object): Params {
 }
 
 /** Codes worded with their own parameters, see `errorText`. */
-type WordedApart = "file" | "noSuchSlide" | "noSuchPad" | "notInLibrary" | "learnConflict" | "quizInvalid" | "journalBroken";
+type WordedApart = "file" | "noSuchSlide" | "noSuchPad" | "notInLibrary" | "learnConflict" | "quizInvalid" | "journalBroken" | "lightsRefused";
 
 const ERROR_KEYS: Record<Exclude<AppError["code"], WordedApart>, StringKey> = {
   noShow: "noShow",
@@ -67,6 +81,10 @@ const ERROR_KEYS: Record<Exclude<AppError["code"], WordedApart>, StringKey> = {
   learnInconsistent: "errLearnInconsistent",
   noDataFolder: "errNoDataFolder",
   system: "errSystem",
+  libraryDownload: "errLibraryDownload",
+  libraryNotRead: "errLibraryNotRead",
+  libraryFormatChanged: "errLibraryFormatChanged",
+  libraryTooSmall: "errLibraryTooSmall",
 };
 
 const FILE_ACTION_KEYS: Record<FileAction, StringKey> = {
@@ -117,6 +135,8 @@ export function errorText(t: Translate, error: unknown): string {
       return t("errLearnConflict", { buzzer: error.buzzer, button: buttonLabel(error.button) });
     case "journalBroken":
       return t("errJournalBroken", { resume: t("resume") });
+    case "lightsRefused":
+      return t("errLightsRefused", { problem: setupErrorText(t, error.refused) });
     case "quizInvalid": {
       const first = error.problems[0];
       return t("errQuizInvalid", { n: error.problems.length, first: first ? problemText(t, first.problem) : "" });
@@ -285,4 +305,45 @@ export function placesText(t: Translate, places: Place[]): string {
   });
   const more = places.length - PLACES_SHOWN;
   return more > 0 ? `${parts.join("; ")} ${t("importMore", { n: more })}` : parts.join("; ");
+}
+
+const PART_KEYS: Record<Part, StringKey> = {
+  fixture: "lightsPartFixture",
+  channel: "lightsPartChannel",
+  look: "lightsPartLook",
+  color: "lightsPartColor",
+  flash: "lightsPartFlash",
+  output: "lightsPartOutput",
+  message: "lightsPartMessage",
+  master: "lightsPartMaster",
+};
+
+/** Why a lights setup was refused. */
+export function setupErrorText(t: Translate, error: SetupError): string {
+  switch (error.problem) {
+    case "tooMany":
+      return t("lightsProblemTooMany", { what: t(PART_KEYS[error.what]) });
+    case "outOfRange":
+      return t("lightsProblemOutOfRange", { what: t(PART_KEYS[error.what]) });
+    case "sameId":
+      return t("lightsProblemSameId", { what: t(PART_KEYS[error.what]) });
+    case "missing":
+      return t("lightsProblemMissing");
+    case "pastUniverse":
+      return t("lightsProblemPastUniverse", { name: error.name });
+    case "notIpv4":
+      return t("lightsProblemNotIpv4", { host: error.host });
+  }
+}
+
+const OUTPUT_ERROR_KEYS: Record<OutputError["problem"], StringKey> = {
+  notAvailable: "lightsOutputNotAvailable",
+  unknownHost: "lightsOutputUnknownHost",
+  sendFailed: "lightsOutputSendFailed",
+  notSupported: "lightsOutputNotSupported",
+};
+
+/** Why a lights output or message target does not work. */
+export function outputErrorText(t: Translate, error: OutputError): string {
+  return t(OUTPUT_ERROR_KEYS[error.problem], params(error));
 }

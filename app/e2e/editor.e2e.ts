@@ -125,7 +125,8 @@ describe("the quiz editor", () => {
     await app.step("next");
     await app.waitView("the first slide", (v) => v.phase.phase !== "lobby");
     await app.press("backToEditor");
-    // The editor shows the slides once it has read its draft again.
+    await app.$(".studio");
+    // The thumbnails draw a moment after the editor opens: wait, never read once.
     await waitFor(`${slides} slides back`, async () => (await slideCount()) === slides);
     expect(await app.view()).toBeNull();
   });

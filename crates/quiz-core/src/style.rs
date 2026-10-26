@@ -55,6 +55,13 @@ impl Color {
     pub fn as_str(&self) -> &str {
         &self.0
     }
+
+    /// Red, green and blue, without the opacity.
+    pub fn rgb(&self) -> [u8; 3] {
+        // A colour is checked hex when made, so every pair reads.
+        let channel = |i: usize| u8::from_str_radix(&self.0[1 + 2 * i..3 + 2 * i], 16).unwrap_or(0);
+        [channel(0), channel(1), channel(2)]
+    }
 }
 
 /// The name of a font installed on the computer that shows the quiz. One
@@ -322,6 +329,12 @@ mod tests {
         for wrong in ["1E4A6B", "#fff", "#1E4A6", "#1E4A6BC", "#GGGGGG", "red", ""] {
             assert!(!is_hex_color(wrong), "{wrong}");
         }
+    }
+
+    #[test]
+    fn a_colour_gives_its_red_green_and_blue_without_the_opacity() {
+        assert_eq!(color("#1E4A6B").rgb(), [0x1E, 0x4A, 0x6B]);
+        assert_eq!(color("#ff8000cc").rgb(), [255, 128, 0]);
     }
 
     #[test]

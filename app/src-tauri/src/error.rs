@@ -5,6 +5,7 @@
 
 use crate::session::{NotSaved, ResumeError};
 use buzzers::learned::LearnError;
+use lights::setup::SetupError;
 use quiz_core::{BoardError, BuzzerId, Button, GameError, QuizJsonError, SheetError, ValidationError, MAX_TEAMS};
 use quiz_file::{FileAction, QuizFileError};
 use serde::Serialize;
@@ -159,6 +160,24 @@ pub enum AppError {
     LearnInconsistent,
     #[error("these presses look the same as buzzer {buzzer} button {button:?}")]
     LearnConflict { buzzer: BuzzerId, button: Button },
+
+    // The stage lights.
+    /// A lights setup that does not pass its checks (`LightsSetup::check`).
+    #[error("the lights setup was refused: {refused}")]
+    LightsRefused { refused: SetupError },
+    /// The fixture library could not be downloaded (no connection, the
+    /// site did not answer); the one in use stays.
+    #[error("the fixture library cannot be downloaded: {detail}")]
+    LibraryDownload { detail: String },
+    #[error("the downloaded fixture library cannot be read: {detail}")]
+    LibraryNotRead { detail: String },
+    /// The download is in another major version of the Open Fixture
+    /// Library's format, which this version of the app does not know.
+    #[error("the downloaded fixture library is in format {version}, which this app does not know")]
+    LibraryFormatChanged { version: String },
+    /// The download gave fewer models than a whole library has.
+    #[error("the downloaded fixture library has only {models} models")]
+    LibraryTooSmall { models: usize, least: usize },
 
     // Windows and the operating system.
     /// The system gave the app no folder for its data (team names, sessions, the media library).

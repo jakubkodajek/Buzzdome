@@ -1,3 +1,5 @@
+import type { Lang } from "./i18n";
+
 /** Whole seconds left on a countdown, rounded up as clocks show them. */
 export function clockSeconds(ms: number): string {
   return String(Math.ceil(ms / 1000));
@@ -22,6 +24,11 @@ export function signed(n: number): string {
 export function decibels(value: number, sign = true): string {
   const text = value.toFixed(1);
   return sign && value > 0 ? `+${text}` : text === "-0.0" ? "0.0" : text;
+}
+
+/** A day, as the quizmaster's language writes dates: "26. 10. 2026", "26/10/2026". */
+export function calendarDay(ms: number, lang: Lang): string {
+  return new Date(ms).toLocaleDateString(lang === "cs" ? "cs-CZ" : "en-GB", { timeZone: "UTC" });
 }
 
 /** A score padded to three digits for the score boards, e.g. "042". */

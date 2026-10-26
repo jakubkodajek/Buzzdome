@@ -1506,3 +1506,178 @@ them.
 | Real receiver: detection, raw reports, presses in a show | Enjoy 303S on Windows 11, buzzers 1 and 2, `hardware-test.md` sections 2 to 6 in part (2026-10-25) | pass; macOS, high IDs, two at once in the app, failures (section 7) **not tested** |
 | Enjoy 303S protocol: set-up, presses, timers, colours | `cargo test -p buzzers` against fakes; the receiver with `hid-monitor` and the app (2026-10-25) | pass; lights read from the back of a room **not tested** |
 | Battery level | not in the 303S's SDK, and no press or other message carried one (2026-10-25) | **not buildable** for the 303S |
+| Stage lights: stages from the game, setup checks, looks and effects, desk priority and fades, Art-Net, sACN, Enttec and SoundSwitch frames byte for byte, OSC and MIDI encoding, lights thread with fake outputs; Lights tab | `cargo test` (`quiz_core::stage`, `game_flow`, `lights`, shell `stage_lights`), `npm test` (`lights`), the tab in headless Chromium against the preview | pass |
+| Stage lights on real interfaces and fixtures, OSC and MIDI into a real program | needs the hardware | **not tested** |
+
+## 7. Stage lights and show messages
+
+Spec section 12. The lights are a view of the show, like the projector: they
+follow its state and are never journaled, so they cannot hold up a show or
+change what a replay does.
+
+### 7.1 Layers
+
+- `quiz_core::stage` maps a game at a moment to a `Stage` (spec LT-4). Time
+  matters only for the last seconds of the clock (`LAST_SECONDS_MS`).
+- `crates/lights` is an I/O adapter that knows quiz-core's `Stage` and `Cue`
+  but not the game: `setup` (the venue's setup and its checks), `look`
+  (draws a look into a universe at a moment), `desk` (blackout > hold >
+  flash > stage look, and fades as a blend of the old and new universe),
+  `dmx` (frame formats as pure functions, tested byte for byte, and the
+  outputs that move them), `signals` (OSC and MIDI) and `engine` (the
+  lights thread). Serial and USB outputs sit behind the `devices` feature,
+  so the crate's tests need no device libraries.
+- `app/src-tauri/src/stage_lights.rs` keeps the setup in `lights.json`
+  (`AppFile`, checked with `LightsSetup::check` before it is kept or used;
+  `lights_store` writes off the windows' thread under a lock of its own
+  held until the lights have the setup, so the last kept is the one used)
+  and tells the lights thread what the show did: after every show change and
+  every tick of the show thread it queues the cues of the change's effects,
+  then the stage, slide and buzz, only when they changed. Sending is a
+  channel push; the show thread never waits.
+- The Director's Lights tab (`app/src/director/LightsTab.tsx`, changes as
+  pure functions in `lights.ts`) keeps a change 400 ms after the last one
+  and polls the universe for its preview four times a second.
+
+### 7.2 Lights thread
+
+Sends a frame every 25 ms (the output's `frame_every`), as fixtures expect
+a steady signal. An output that fails is dropped and opened again a second
+later; the status (`off`, `connected`, `lost` with why) goes to the Director
+as the `lights-status` event. A frame's status and universe are shared
+before it is sent, so the preview never lags what fixtures show. Messages
+to OSC and MIDI go out on the same thread as they arrive; each target opens
+and retries on its own. Nothing on the thread looks up a name: network
+outputs and OSC take IPv4 addresses only (`SetupError::NotIpv4`), as a
+lookup can block for seconds (glibc's `RES_TIMEOUT` 5 s, `RES_DFLRETRY`
+2 tries, `<resolv.h>`), and an Open DMX signal, which the computer times,
+would stop meanwhile.
+
+Effects step at least every 500 ms (`MIN_EFFECT_MS`), at most 2 flashes a
+second; sources in spec LT-3.
+
+### 7.3 Fixture library
+
+`crates/lights/data/fixture-library.json` is our own format (`library::Library`),
+generated from a checkout of the Open Fixture Library
+(<https://github.com/OpenLightingProject/open-fixture-library>, MIT, licence
+in `data/OPEN-FIXTURE-LIBRARY-LICENSE`) by
+`cargo run -p lights --example ofl-import -- <checkout>`. The OFL documents
+its JSON format as one that "may introduce breaking, not-backwards-compatible
+changes at any time" and asks programs to transform it into a stable format
+(`docs/fixture-format.md` there), so the app only reads ours; refreshing
+the library is rerunning the import, which writes one model per line so
+its diff shows which models changed. `library::ofl` maps each definition
+(rules in its module docs, unit-tested, after the OFL's
+`docs/capability-types.md`):
+
+- Fixtures in the OFL "Laser" category are left out (spec LT-9), with
+  combined effects that have a laser.
+- `Intensity` over the whole range is a dimmer, `ColorIntensity` red,
+  green, blue or white (warm and cold too) that colour.
+- A `ShutterStrobe` channel with an `Open` range and a dark value (a
+  `Closed` range, or an `Intensity` range starting dark) is a `Shutter`,
+  open while the fixture is lit, closed otherwise.
+- A dimmer that does something else at its top (strobe, a program) is a
+  `DimmerRange` from 0 to its brightest value below that, so fades, the
+  master and blackout still work on it; one that gets darker as its value
+  rises is a `DimmerRange` from 255 to 0.
+- A lamp switch (`Intensity` ranges that are only "off" or "bright") is a
+  `Shutter` too.
+- Fine channels (also a template channel's, "Dimmer 1 fine") rest at 0.
+- Anything else rests at its default value, unless by the data that
+  value strobes (a shutter effect at a speed that is not stopped), runs a
+  program (an `Effect` that is a preset, follows the sound or by its name
+  runs on its own) or lights the fixture; then at the first value of the
+  channel that does none of these. A held value other than 0 counts as
+  dark only where the definition says so, since it is sent in a blackout
+  too. A channel with no such value stays at its default and is listed in
+  the mode's `check`, which the tab shows when the mode is picked.
+
+Matrix channels are expanded per pixel or group, with the OFL's own keys
+(`pixelKeys`, or the default keys of `pixelCount`; groups in file order),
+so labels match the manual. A test builds a fixture from every mode and
+runs the setup's checks on it; the guardian's
+`ofl-library-audit.py` compares every resting value with the OFL data.
+The library is read on first use (`OnceLock`) and searched off the
+windows' thread (`lights_library`); its source and full MIT licence
+(`LibrarySource.licence`, copied from the checkout by the import) are
+shown in the tab before any search (`lights_library_info`). When a picked
+mode has no channel a look can light (`Channel::follows_looks`, written to
+`LightsConstants.ts` as `LIT_BY_LOOKS`), the tab says so.
+
+The tab can bring the library up to date (`app/src-tauri/src/fixture_library.rs`,
+`lights_library_update`): off the windows' thread it downloads
+<https://open-fixture-library.org/download.ofl> (the site's "ofl" export
+of every fixture as `<manufacturer>/<model>.json` plus
+`manufacturers.json`, per `ui/api/download.js` and `plugins/ofl/export.js`
+in the OFL repository) over HTTPS only, redirects included (at most 3),
+and takes it only when it ends at that host, with a 64 MB cap and a
+3-minute timeout, and converts it with `library::archive::from_zip`
+through the same `Import` the built-in library is made with. Each
+definition is capped at 4 MB unpacked and the zip at 256 MB. The export
+links every file to the format version it was made with
+(`$schema` ".../schema-12.6.0/..."), so `manufacturers.json` or a
+definition that names a major version other than 12, or none, refuses the
+whole download (`ArchiveError::FormatChanged`, "none" for no version); a
+definition that does not read is skipped and counted; serde_json's nesting limit and the converter's caps
+(16-bit shifts checked, at most 512 pixels, modes of at most 512 channels)
+keep any input from panicking or running away. Fewer than 300 models are
+refused as a cut-short download. The result is written atomically to
+`fixture-library.json` in the app's data and used from then on, unless the
+built-in library is newer (by `LibrarySource.date_ms`: the OFL commit's
+time, or the download's) or the file does not read. A download keeps the
+built-in library's source name, copyright and licence, with the origin
+`Downloaded` instead of `BuiltIn { commit }`. `lights_library_reset` removes it. The show never touches any of
+this.
+
+### 7.4 Outputs
+
+| Output | Transport | Frame |
+| --- | --- | --- |
+| Enttec DMX USB Pro | USB serial | 0x7E, label 6, length (513, low byte first), start code 0, 512 channels, 0xE7 (Enttec DMX USB Pro API) |
+| Enttec Open DMX USB | FTDI serial at 250 kbit/s, 8N2 | break (about 150 µs), mark after break, start code 0, 512 channels; the computer times it, so jitter on a busy computer is possible |
+| Art-Net | UDP 6454 | ArtDmx, protocol 14, 15-bit port address, sequence 1 to 255 (Art-Net 4) |
+| sACN | UDP 5568, multicast 239.255.hi.lo or one host | E1.31 data packet, 638 bytes, priority 100, a CID from the computer's name |
+| SoundSwitch Micro | USB bulk endpoint 0x01 (VID 0x15E4, PID 0x0053) | see 7.5 |
+
+### 7.5 SoundSwitch Micro DMX Interface
+
+SoundSwitch publishes no protocol. Ours is written, in our own words and
+code, from the description in the independent Apache-2.0 QLC+ plug-in
+qlcplus-soundswitch-integration
+(<https://github.com/jloops412/qlcplus-soundswitch-integration>), and is
+unverified on the hardware, so the Director calls it experimental:
+
+1. Two 12-byte start packets, both starting with the tag `sTRt`
+   (`crates/lights/src/dmx/soundswitch.rs`), then a 200 ms wait.
+2. 50 frames of the setup's dark look. The output only says how many
+   (`DmxOutput::warm_up_frames`); the lights thread sends `look::dark`, so
+   a reversed dimmer, where 0 is full, stays dark.
+3. A 522-byte frame every 25 ms: `sTRt`, 01 00 02 02, the port (0), a
+   zero, then the 512 channels.
+4. On close, three frames of the setup's dark look, which the lights
+   thread sends before it lets the output go (`dark_frames_at_release`).
+   The plug-in warms up with frames of zeros.
+
+On Windows, libusb opens only a device bound to a driver it supports, such
+as WinUSB (libusb wiki, Windows, <https://github.com/libusb/libusb/wiki/Windows>);
+whether SoundSwitch's own driver allows that, or WinUSB has to be bound
+(for example with Zadig), is to check with the hardware. Only one program
+can hold the interface, so the SoundSwitch program must be closed.
+
+### 7.6 Show messages
+
+OSC 1.0 over UDP. Every event has an address of its own, so a program can
+map each to a button; triggers carry the float 1.0.
+
+| Event | OSC | MIDI (channel as set) |
+| --- | --- | --- |
+| Show started / ended | `/buzzdome/show/start`, `/buzzdome/show/end` | notes 70 / 71 |
+| Stage | `/buzzdome/stage/<stage>` (`noShow`, `lobby`, `billboard`, `explanation`, `endOfRound`, `questionReady`, `answering`, `lastSeconds`, `buzzed`, `closed`, `revealed`, `leaderboard`, `finalBuildUp`, `winner`) | notes 36 to 49 in that order |
+| Cue | `/buzzdome/cue/<cue>` (`clockStart`, `buzz`, `correct`, `wrong`, `timeUp`, `reveal`) | notes 60 to 65 in that order |
+| Slide | `/buzzdome/slide` with the slide number (int) | program change number − 1 (slides 1 to 128) |
+| Buzz | `/buzzdome/buzz` with the buzzer number (int) | note 72 |
+
+A note is a note on at velocity 127 followed at once by its note off. Each
+message has its MIDI 1.0 length: 3 bytes for a note, 2 for a program change.

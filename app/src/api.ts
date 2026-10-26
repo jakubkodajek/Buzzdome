@@ -14,6 +14,12 @@ import type {
   GameView,
   IconColor,
   LearnProgress,
+  LightsDevices,
+  LibraryMatches,
+  LibraryInfo,
+  LightsInfo,
+  LightsSetup,
+  LightsStatus,
   ListSeparator,
   MediaKind,
   MediaLibrary,
@@ -119,6 +125,22 @@ export const api = {
   /** Writes the receiver's recent reports to a file the quizmaster picks; false when they cancel. */
   receiverExportLog: (picker: Picker) => invoke<boolean>("receiver_export_log", { picker }),
   receiverUdevRule: () => invoke<string>("receiver_udev_rule"),
+  /** The venue's lights setup, how its output does, and why a kept setup was not used. */
+  lightsInfo: () => invoke<LightsInfo>("lights_info"),
+  /** Checks and keeps the lights setup, then the lights take it. */
+  lightsStore: (setup: LightsSetup) => invoke<void>("lights_store", { setup }),
+  /** The USB-DMX interfaces and MIDI outputs on this computer. */
+  lightsDevices: () => invoke<LightsDevices>("lights_devices"),
+  /** The fixture models of the built-in library whose names hold every word of `query`. */
+  lightsLibrary: (query: string) => invoke<LibraryMatches>("lights_library", { query }),
+  lightsLibraryInfo: () => invoke<LibraryInfo>("lights_library_info"),
+  lightsLibraryUpdate: () => invoke<LibraryInfo>("lights_library_update"),
+  lightsLibraryReset: () => invoke<LibraryInfo>("lights_library_reset"),
+  /** Holds a look whatever the show does, or lets go with null. */
+  lightsHold: (look: number | null) => invoke<void>("lights_hold", { look }),
+  lightsBlackout: (on: boolean) => invoke<void>("lights_blackout", { on }),
+  /** The 512 channel values the lights show now. */
+  lightsUniverse: () => invoke<number[]>("lights_universe"),
   // The editor's commands on a draft name it (`EditorDraft.id`): one that
   // another draft has replaced since is refused with `draftChanged`.
   /** The quiz editor's draft left from last time, if any. */
@@ -165,6 +187,8 @@ export interface BackendEvents {
   /** A buzzer the receiver heard, as it now stands. */
   "receiver-buzzer": BuzzerSeen;
   "receiver-learn": LearnProgress;
+  /** The stage lights' output, look, hold and blackout, whenever one changes. */
+  "lights-status": LightsStatus;
   /** The projector window opened (true) or closed (false). */
   "host-window": boolean;
   /** A problem the projector met, worded for the Director to show. */

@@ -15,7 +15,7 @@
 
 use crate::error::{AppError, CmdResult};
 use crate::pump::{Pump, Timed};
-use crate::{execute_at, hardware, lock_show, now_ms, off_ui, play_press, Inner};
+use crate::{execute_at, hardware, lock_show, now_ms, off_ui, play_press, stage_lights, Inner};
 use buzzers::receiver::ReceiverEvent;
 use buzzers::Press;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -313,6 +313,8 @@ impl Ticker {
                 }
             }
         }
+        // The stage lights follow a stage that time changes, such as the last seconds.
+        stage_lights::follow(app, inner.game.as_ref(), &[], now);
         self.watch.tell(inner.save_problem.clone());
     }
 }

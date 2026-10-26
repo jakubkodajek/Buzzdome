@@ -76,6 +76,7 @@ Status keys: `[x]` done, `[~]` in progress, `[ ]` not started.
 ### M5: Extensions (after the first event)
 - [ ] Theme packages, background gallery, round and quiz backgrounds (`docs/specification.md` section 5)
 - [ ] Plugins: mini games and integrations (`docs/specification.md` section 6)
+- [x] Stage lights over DMX (USB interfaces, Art-Net, sACN) and show messages over OSC and MIDI (`docs/specification.md` section 12); to try with real fixtures
 
 ## Phase 4: Test
 

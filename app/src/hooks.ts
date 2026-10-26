@@ -3,7 +3,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import { api, type BackendEvents } from "./api";
 import { MAX_PLAYER_VOLUME } from "./bindings/Constants";
 import { heardNow, type HeardMedia } from "./media-player";
-import type { AppError, ClockView, GameView, IconColor, LearnProgress, MediaLibrary, Quiz, SessionSummary, SettingsLost, SoundBoard } from "./types";
+import type { AppError, ClockView, GameView, IconColor, LearnProgress, LightsStatus, MediaLibrary, Quiz, SessionSummary, SettingsLost, SoundBoard } from "./types";
 
 /** A ref that always holds the latest `value`, for callbacks that outlive a render. */
 export function useLatest<T>(value: T): { readonly current: T } {
@@ -129,6 +129,11 @@ export function useShowNotSaved(): AppError | null {
 /** Whether a buzzer button is being learned; presses do not play meanwhile. */
 export function useLearnProgress(): LearnProgress | null {
   return usePushedValue("receiver-learn", () => api.receiverInfo().then((info) => info.learn));
+}
+
+/** The stage lights' status; null until loaded. */
+export function useLightsStatus(): LightsStatus | null {
+  return usePushedValue("lights-status", () => api.lightsInfo().then((info) => info.status));
 }
 
 /** The team names prepared for shows, kept between them; empty until loaded. */

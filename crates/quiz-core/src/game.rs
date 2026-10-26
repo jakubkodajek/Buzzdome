@@ -125,7 +125,9 @@ pub enum BuzzerMode {
     Results,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+/// A moment of the show that plays a sound, flashes the stage lights and
+/// is sent to outside programs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, TS)]
 #[ts(export)]
 #[serde(rename_all = "camelCase")]
 pub enum Cue {
@@ -135,6 +137,10 @@ pub enum Cue {
     Wrong,
     TimeUp,
     Reveal,
+}
+
+impl Cue {
+    pub const ALL: [Cue; 6] = [Cue::ClockStart, Cue::Buzz, Cue::Correct, Cue::Wrong, Cue::TimeUp, Cue::Reveal];
 }
 
 /// Side effects for the app to carry out after a command.

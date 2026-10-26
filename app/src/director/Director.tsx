@@ -47,6 +47,7 @@ import { ThemeContext, ThemesProvider, useResolvedTheme, useThemes } from "../th
 import { isThemeMissing } from "../theme/themes";
 import type { AutoStepView, GameView, Quiz } from "../types";
 import { QuestionsTab } from "./QuestionsTab";
+import { LightsTab } from "./LightsTab";
 import { ReceiverTab } from "./ReceiverTab";
 import { MediaPlayerTab } from "./MediaPlayerTab";
 import { ResponsesTab } from "./ResponsesTab";
@@ -58,7 +59,7 @@ import { restartOutcome } from "./restart";
 import { VirtualBuzzers } from "./VirtualBuzzers";
 import "./director.css";
 
-type Tab = "questions" | "teams" | "responses" | "buzzers" | "media" | "receiver" | "settings";
+type Tab = "questions" | "teams" | "responses" | "buzzers" | "media" | "receiver" | "lights" | "settings";
 
 /** The show controls, the quiz editor, or the show controls for a test run of the edited quiz. */
 type Screen = "show" | "editor" | "testRun";
@@ -150,11 +151,13 @@ function DirectorLayout({ testRun, onEditor }: { testRun: boolean; onEditor: () 
     ["buzzers", t("tabBuzzers")],
     ["media", t("tabMedia")],
     ["receiver", t("tabReceiver")],
+    ["lights", t("tabLights")],
     ["settings", t("tabSettings")],
   ];
 
   return (
-    <div className="director">
+    // `data-step`: the step on screen, which the E2E tests wait for before a step press (StepGuard.shown).
+    <div className="director" data-step={view?.stepNo}>
       <CommandPanel view={view} projector={projector} sound={sound} showStart={showStart} testRun={testRun} onEditor={onEditor} />
       <div className="workspace">
         <nav className="tabs" role="tablist">
@@ -221,6 +224,7 @@ function TabBody({ tab, view, quiz, projector, player, sound, showStart }: TabBo
   // Setup tabs work without a show; the others need one.
   if (tab === "settings") return <SettingsTab projector={projector} />;
   if (tab === "receiver") return <ReceiverTab />;
+  if (tab === "lights") return <LightsTab />;
   // Team names can be prepared before a show, and the media player plays without one.
   if (tab === "teams") return <TeamsTab view={view} />;
   if (tab === "media") return <MediaPlayerTab player={player} sound={sound} view={view} />;

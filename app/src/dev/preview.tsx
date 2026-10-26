@@ -16,6 +16,7 @@ import type {
   BoardChange,
   GameView,
   IconColor,
+  LightsSetup,
   MediaLibrary,
   MediaNow,
   NowPlaying,
@@ -361,6 +362,30 @@ const SHEET_IMPORT: SheetImport = {
 /** Other backend calls that change something, as `{ cmd, ...payload }`, for the same checks. */
 const called: unknown[] = [];
 (window as unknown as { called: unknown[] }).called = called;
+/** A venue's lights for the Lights tab: two fixtures, three looks. */
+const LIGHTS_SETUP: LightsSetup = {
+  output: { kind: "artNet", host: "255.255.255.255", universe: 0 },
+  fixtures: [
+    { id: 1, name: "PAR vlevo", address: 1, channels: [{ kind: "red" }, { kind: "green" }, { kind: "blue" }, { kind: "white" }], labels: [] },
+    {
+      id: 2,
+      name: "PAR vpravo",
+      address: 9,
+      channels: [{ kind: "dimmer" }, { kind: "red" }, { kind: "green" }, { kind: "blue" }, { kind: "shutter", open: 10, closed: 0 }, { kind: "fixed", value: 0 }, { kind: "unused" }],
+      labels: ["Dimmer", "Red", "Green", "Blue", "Shutter", "Mode", "Speed"],
+    },
+  ],
+  looks: [
+    { id: 1, name: "Uvítání", colors: ["#FF8800", "#AA00FF"], intensity: 80, effect: "chase", stepMs: 1500, fadeMs: 1000, fixtures: [], strobe: 0, channels: [] },
+    { id: 2, name: "Otázka", colors: ["#0050FF"], intensity: 100, effect: "static", stepMs: 1000, fadeMs: 500, fixtures: [], strobe: 0, channels: [] },
+    { id: 3, name: "Správně", colors: ["#00FF40"], intensity: 100, effect: "pulse", stepMs: 500, fadeMs: 0, fixtures: [2], strobe: 0, channels: [{ address: 100, value: 255 }] },
+  ],
+  stages: { lobby: 1, questionReady: 2, answering: 2 },
+  flashes: { correct: { look: 3, ms: 1500 } },
+  master: 100,
+  messages: { osc: { host: "127.0.0.1", port: 7700 }, midi: null },
+};
+
 /** The team names prepared before a show (the running show's in a show scene). */
 const PREPARED_TEAMS = ["Kvízožrouti", "Pivní rytíři", "U Tří Lvů"];
 
@@ -652,6 +677,52 @@ mockIPC(
           ],
           platform: "linux",
         };
+      case "lights_info":
+        return { setup: LIGHTS_SETUP, status: { output: { kind: "connected", name: "Art-Net 255.255.255.255" }, messages: null, look: 2, hold: null, blackout: false }, settingsError: null, refused: null };
+      case "lights_universe": {
+        // The first fixture in the "Question" blue, the second in red.
+        const slots = new Array<number>(512).fill(0);
+        slots.splice(0, 4, 255, 0, 80, 255);
+        slots.splice(8, 7, 200, 255, 0, 0, 0, 0, 0);
+        return slots;
+      }
+      case "lights_library":
+        return {
+          fixtures: [
+            {
+              manufacturer: "Example",
+              name: "LED Par 7",
+              key: "example/led-par-7",
+              modes: [
+                { name: "3-channel", channels: [{ kind: "red" }, { kind: "green" }, { kind: "blue" }], labels: ["Red", "Green", "Blue"], check: [] },
+                {
+                  name: "7-channel",
+                  channels: [{ kind: "dimmerRange", dark: 0, bright: 240 }, { kind: "red" }, { kind: "green" }, { kind: "blue" }, { kind: "shutter", open: 10, closed: 0 }, { kind: "unused" }, { kind: "unused" }],
+                  labels: ["Dimmer / Strobe", "Red", "Green", "Blue", "Shutter", "Program", "Strobe Speed"],
+                  check: ["Strobe Speed"],
+                },
+              ],
+            },
+          ],
+          total: 1,
+        };
+      case "lights_library_info":
+      case "lights_library_update":
+      case "lights_library_reset":
+        return {
+          source: {
+            name: "Open Fixture Library (MIT)",
+            copyright: "Copyright (c) 2017 Florian & Felix Edelmann",
+            url: "https://open-fixture-library.org",
+            origin: cmd === "lights_library_update" ? { kind: "downloaded" } : { kind: "builtIn", commit: "66a6843" },
+            dateMs: Date.UTC(2026, 9, 20),
+            licence: "MIT License\n\nCopyright (c) 2017 Florian & Felix Edelmann\n\nPermission is hereby granted, free of charge, …",
+          },
+          models: 623,
+          modes: 2828,
+        };
+      case "lights_devices":
+        return { outputs: [{ choice: { kind: "enttecPro", port: "COM4" }, label: "COM4 (FTDI)" }], midiPorts: ["loopMIDI Port"] };
       case "receiver_devices":
         return [];
       case "receiver_udev_rule":

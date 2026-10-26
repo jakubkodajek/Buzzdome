@@ -67,6 +67,16 @@
     "allow-receiver-learn-finish",
     "allow-receiver-forget-learned",
     "allow-receiver-export-log",
-    "allow-receiver-udev-rule"
+    "allow-receiver-udev-rule",
+    "allow-lights-info",
+    "allow-lights-store",
+    "allow-lights-devices",
+    "allow-lights-library",
+    "allow-lights-library-info",
+    "allow-lights-library-update",
+    "allow-lights-library-reset",
+    "allow-lights-hold",
+    "allow-lights-blackout",
+    "allow-lights-universe"
   ]
 }
