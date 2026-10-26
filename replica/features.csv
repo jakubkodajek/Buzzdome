@@ -56,6 +56,7 @@ Question list with current and visited state and jump to a question,director,sho
 Undo the score changes of the last question,director,should,yes,partial,§5.7.2; clone: Restart question takes them back while the question is in play
 Live responses view showing who has not answered,director,should,yes,yes,§5.7.4
 Disable enable and remove a player,director,should,yes,partial,§5.7.2; clone: enable and disable; no remove
+Dark mode for the Director,director,could,yes,yes,"§5.7 right-click the command panel; clone: the Settings tab chooses light, dark or as the system (spec SF-10)"
 Keyboard shortcuts on the host screen (Space next S scores P pause),host screen,should,yes,yes,§5.5.1
 Show settings: show correct answer and allow revising answers,settings,should,yes,yes,§4.6; clone: quiz settings (spec QZ-11)
 Show settings: run the clock for the full time,settings,should,yes,yes,§4.6; clone: quiz settings (spec QZ-11)

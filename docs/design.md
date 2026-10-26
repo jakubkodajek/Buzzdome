@@ -244,6 +244,17 @@ draws slides without a show.
   loads (`useBackendEvent`, `useGameView`, `useClock`, `useQuiz`,
   `useLastSession`). Small shared helpers live in `answers.ts`, `format.ts`,
   `quiz.ts`, `keyboard.ts` and `messages.ts`. ESLint with the React hooks rules runs in CI.
+- **Director look (SF-10).** `director/look.ts` keeps the choice (light,
+  dark or as the system) in the window's preferences, and the Director's
+  root takes the class `dark` while it shows dark. Every colour of
+  `director.css` is a custom property of `.director`, which `.director.dark`
+  sets again, so the two looks cannot drift apart; the command panel,
+  toolbars and sound board are dark in both. The editor's controls the
+  Director borrows (menus, dialogs, colour picker, switches) are light in
+  `editor.css`, so `director.css` gives them the dark look's colours.
+  While the dark look is on screen the window's title bar is set dark
+  (`setTheme`, which draws it on Windows), and left to the system again
+  otherwise, so the light look changes nothing there.
 - **Sound.** The Director window plays the show's sounds and the slides'
   sound clips, because it stays open for the whole show and the projector
   window may not. Spec SN-5 moves playback into the Rust shell later. The
