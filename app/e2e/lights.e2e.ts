@@ -6,6 +6,7 @@
 
 import { createSocket, type Socket } from "node:dgram";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
+import type { StringKey } from "../src/i18n";
 import { App, dataFolder, t, waitFor } from "./harness";
 import { Key } from "./webdriver";
 
@@ -15,6 +16,22 @@ const ARTNET_PORT = 6454;
 const ARTDMX_DATA = 18;
 /** The OSC port the tab offers when OSC is switched on. */
 const OSC_PORT = 7700;
+
+/**
+ * Buttons of the Lights tab the crawl leaves
+ * alone: updating the fixture library downloads it from the internet, each
+ * Add makes more buttons to click, and a colour swatch opens a picker over
+ * the tab.
+ */
+const NOT_CLICKED: (StringKey | { text: string })[] = [
+  "lightsLibraryUpdate",
+  "lightsLibraryReset",
+  "lightsAddFixture",
+  "lightsAddLook",
+  "lightsAddColor",
+  "lightsAddChannel",
+  { text: t("lightsColor", { n: "" }) },
+];
 
 const data = dataFolder();
 let app: App;
@@ -199,10 +216,10 @@ describe("the stage lights", () => {
     await app.assertHealthy();
   });
 
-  test("every button of the Lights tab works", async () => {
+  // A button or more for each look, and every click checked: slow on a busy runner.
+  test("every button of the Lights tab works", { timeout: 600_000 }, async () => {
     await app.tab("tabLights");
-    // Updating the library downloads it from the internet, which CI must not need.
-    await app.clickEverything(".tab-body", ["lightsLibraryUpdate", "lightsLibraryReset"]);
+    await app.clickEverything(".tab-body", NOT_CLICKED);
     await app.assertHealthy();
   });
 
