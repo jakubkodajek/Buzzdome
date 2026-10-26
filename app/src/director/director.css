@@ -451,7 +451,8 @@
 /* Questions tab */
 
 .questions-tab,
-.teams-tab {
+.teams-tab,
+.responses-tab {
   flex: 1;
   min-height: 0;
   display: flex;
@@ -949,6 +950,51 @@
 
 .pre-line {
   white-space: pre-line;
+}
+
+/* Responses tab: how a closed question's players did (ResultStrip) */
+
+.result-strip {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.result-strip-bar {
+  flex: 0 1 320px;
+  display: flex;
+  height: 12px;
+  overflow: hidden;
+  border-radius: 6px;
+  background: var(--well);
+}
+
+.result-strip-bar .right,
+.result-strip-count.right strong {
+  background: var(--good);
+}
+
+.result-strip-bar .wrong,
+.result-strip-count.wrong strong {
+  background: var(--bad);
+}
+
+.result-strip-bar .none,
+.result-strip-count.none strong {
+  background: var(--muted);
+}
+
+.result-strip-count strong {
+  display: inline-block;
+  min-width: 26px;
+  margin-left: 4px;
+  padding: 0 6px;
+  border-radius: 9px;
+  text-align: center;
+  color: #fff;
+  font-variant-numeric: tabular-nums;
 }
 
 /* Teams tab: players beside the team names their buzzers are paired with */
