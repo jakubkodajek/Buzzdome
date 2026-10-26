@@ -3,7 +3,21 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import { api, type BackendEvents } from "./api";
 import { MAX_PLAYER_VOLUME } from "./bindings/Constants";
 import { heardNow, type HeardMedia } from "./media-player";
-import type { AppError, ClockView, GameView, IconColor, LearnProgress, LightsStatus, MediaLibrary, Quiz, SessionSummary, SettingsLost, SoundBoard } from "./types";
+import type {
+  AppError,
+  ClockView,
+  GameView,
+  IconColor,
+  LearnProgress,
+  LightsStatus,
+  MediaLibrary,
+  ProjectorWindow,
+  Quiz,
+  ReceiverInfo,
+  SessionSummary,
+  SettingsLost,
+  SoundBoard,
+} from "./types";
 
 /** A ref that always holds the latest `value`, for callbacks that outlive a render. */
 export function useLatest<T>(value: T): { readonly current: T } {
@@ -78,6 +92,16 @@ function useBackendValue<T>(load: () => Promise<T>, initial: T, refreshOn: keyof
   return value;
 }
 
+/** `useLoadedValue`, loading again every `everyMs`: for what the backend does not push. */
+function usePolledValue<T>(load: () => Promise<T>, initial: T, everyMs: number): [T, () => void] {
+  const [value, reload] = useLoadedValue(load, initial);
+  useEffect(() => {
+    const timer = setInterval(reload, everyMs);
+    return () => clearInterval(timer);
+  }, [reload, everyMs]);
+  return [value, reload];
+}
+
 /**
  * A value the backend sends with `event` whenever it changes. The first value
  * comes from `load`, unless a push already arrived; null until then. It loads
@@ -119,6 +143,29 @@ export function useGameView(): GameView | null {
 /** Whether the projector window is open, however it was opened or closed. */
 export function useHostWindowOpen(): boolean {
   return usePushedValue("host-window", api.hostWindowOpen) ?? false;
+}
+
+/** How often the projector window is read again: it can be dragged to another screen, or leave full screen. */
+const PROJECTOR_WINDOW_POLL_MS = 2000;
+
+/** Where the projector window is, null while it is closed; undefined until loaded. Read while in use. */
+export function useProjectorWindow(): ProjectorWindow | null | undefined {
+  const [projector, reload] = usePolledValue<ProjectorWindow | null | undefined>(api.projectorWindow, undefined, PROJECTOR_WINDOW_POLL_MS);
+  useBackendEvent("host-window", reload);
+  return projector;
+}
+
+/** How often the free space on the shows' disk gets read again. */
+const DISK_SPACE_POLL_MS = 10_000;
+
+/** Free space in bytes on the disk the shows are saved to, null when the system does not say; undefined until loaded. Read while in use. */
+export function useShowDiskSpace(): number | null | undefined {
+  return usePolledValue<number | null | undefined>(api.showDiskSpace, undefined, DISK_SPACE_POLL_MS)[0];
+}
+
+/** The receiver's state and set-up, loaded again whenever its state changes; null until loaded. */
+export function useReceiverInfo(): ReceiverInfo | null {
+  return useBackendValue<ReceiverInfo | null>(api.receiverInfo, null, "receiver-status");
 }
 
 /** Why the running show cannot be saved, while that lasts; null when it can. */

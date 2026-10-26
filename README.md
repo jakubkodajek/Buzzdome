@@ -20,7 +20,8 @@ Windows first, with macOS and Linux too. Built with [Tauri 2](https://tauri.app)
 
 - **Two windows.** The **Director** on the laptop runs the show, edits
   scores and shows each buzzer's state. The **projector** window shows the
-  slides full screen on a second monitor.
+  slides full screen on a second monitor. Before a show the Director
+  checks the receiver, buzzers, projector, sound and disk space.
 - **Question types.** In *everyone answers* questions each team picks A-D
   against the clock. In *fastest finger* questions the first buzz answers
   aloud and the quizmaster judges it. Correct answers can carry shares of

@@ -28,6 +28,8 @@ tauri-plugin-single-instance = "2"
 percent-encoding = "2"
 # Lists the installed fonts for the editor's font picker.
 fontdb = "0.23"
+# Free space on the disk the shows are saved to, for the check before a show.
+fs4 = "1.1"
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true

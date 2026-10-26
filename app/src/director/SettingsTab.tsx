@@ -10,6 +10,7 @@ import { useApp, useRun } from "../app-context";
 import { useAppIcon, useHostWindowOpen } from "../hooks";
 import type { Lang, StringKey } from "../i18n";
 import type { IconColor, MonitorInfo } from "../types";
+import type { LaunchCheckSetting } from "./launch-check";
 import { LOOKS, readLook, type DirectorLook, type Look } from "./look";
 
 /** The app's icons, as the windows take them (`app_icon.rs`), in the order the picker shows them. */
@@ -66,7 +67,7 @@ export function useProjectorSettings(): ProjectorSettings {
   );
 }
 
-export function SettingsTab({ projector, look }: { projector: ProjectorSettings; look: DirectorLook }) {
+export function SettingsTab({ projector, look, launch }: { projector: ProjectorSettings; look: DirectorLook; launch: LaunchCheckSetting }) {
   const { t, lang, setLang } = useApp();
   return (
     <div className="settings">
@@ -111,6 +112,14 @@ export function SettingsTab({ projector, look }: { projector: ProjectorSettings;
           ))}
         </select>
         <p className="muted">{t("directorLookHint")}</p>
+      </fieldset>
+      <fieldset>
+        <legend>{t("launchCheck")}</legend>
+        <label>
+          <span>{t("launchCheckShow")}</span>
+          <input type="checkbox" checked={launch.on} onChange={(e) => launch.setOn(e.target.checked)} />
+        </label>
+        <p className="muted">{t("launchCheckHint")}</p>
       </fieldset>
       <p className="muted">{t("keyboardHint")}</p>
     </div>

@@ -66,9 +66,29 @@ describe("the Director", () => {
     expect(await app.view()).toBeNull();
   });
 
-  test("every tab and button works during a show", async () => {
+  test("the check before the show: what is not ready, a fix for each, then hidden", async () => {
     await app.press("demoQuiz");
-    await app.waitView("the show", () => true);
+    await app.waitView("the lobby", (v) => v.phase.phase === "lobby");
+    await app.seeText(t("launchCheck"));
+    // The receiver, the buzzers, the projector, the sound and the disk, whose free space the system tells.
+    expect(await app.count(".launch-item")).toBe(5);
+    await app.seeText(t("launchNoBuzzers"));
+    await app.tab("tabBuzzers");
+    await app.page.click(await app.$(".buzzer-grid .buzzer:nth-child(1) .key-big"));
+    await app.seeText(t("launchBuzzersRegistered", { players: 1 }));
+    await app.seeText(t("launchProjectorClosed"));
+    await app.press("launchOpenProjector");
+    await waitFor("the projector open", async () => !(await app.bodyText()).includes(t("launchProjectorClosed")));
+    await app.press("launchPlaySound");
+    await app.press("launchSoundHeardButton");
+    await app.seeText(t("launchSoundHeard"));
+    await app.assertHealthy();
+    await app.press("launchHide");
+    await waitFor("the check hidden", async () => (await app.count(".launch-check")) === 0);
+  });
+
+  test("every tab and button works during a show", async () => {
+    // The show the check before it started, still in the lobby.
     await app.tab("tabBuzzers");
     for (const buzzer of [1, 2, 3]) await app.page.click(await app.$(`.buzzer-grid .buzzer:nth-child(${buzzer}) .key-big`));
     for (const tab of TABS) {

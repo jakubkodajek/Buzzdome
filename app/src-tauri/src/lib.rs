@@ -405,6 +405,17 @@ async fn show_not_saved(app: AppHandle) -> CmdResult<Option<AppError>> {
     Ok(show_thread::not_saved(&app))
 }
 
+/// Free space in bytes on the disk the shows' journals are written to
+/// (`sessions_root`), for the check before a show (spec SF-2); none when
+/// the system does not say. Read off the windows' thread: a disk that does
+/// not answer freezes no window.
+#[tauri::command]
+async fn show_disk_space(app: AppHandle) -> CmdResult<Option<u64>> {
+    let root = sessions_root(&app)?;
+    // A folder not made yet will be on the disk of its nearest parent that is.
+    off_ui(move || Ok(root.ancestors().find(|dir| dir.is_dir()).and_then(|dir| fs4::available_space(dir).ok()))).await
+}
+
 /// Opens a quiz file the quizmaster picks (`.quiz` or a plain quiz JSON)
 /// and starts a show with it; false when they cancel.
 #[tauri::command]
@@ -696,6 +707,7 @@ pub fn run() {
             get_quiz,
             media_root,
             show_not_saved,
+            show_disk_space,
             start_show_from_file,
             start_show_from_recent,
             start_demo_show,
@@ -707,6 +719,7 @@ pub fn run() {
             app_windows::open_host_window,
             app_windows::close_host_window,
             app_windows::host_window_open,
+            app_windows::projector_window,
             app_windows::report_host_problem,
             app_windows::quit_app,
             app_windows::close_declined,

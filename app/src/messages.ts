@@ -21,6 +21,7 @@ import type {
   Problem,
   ProtocolKind,
   ReceiverProblem,
+  ReceiverStatus,
   RemoteAction,
   RemoteKey,
   SettingsLost,
@@ -245,6 +246,31 @@ export function receiverProblemText(t: Translate, problem: ReceiverProblem, deta
   if (problem !== "cannotOpen") return text;
   const hint = platform === "linux" ? "receiverOpenHintLinux" : platform === "macos" ? "receiverOpenHintMacos" : "receiverOpenHintOther";
   return `${text} ${t(hint)}`;
+}
+
+/** A USB number as four hex digits, as the system lists devices: "10c4". */
+export const hex4 = (n: number) => n.toString(16).padStart(4, "0");
+/** A USB device's vendor and product numbers: "10c4:1819". */
+export const vidPid = (d: { vendorId: number; productId: number }) => `${hex4(d.vendorId)}:${hex4(d.productId)}`;
+
+/** The receiver's state, as the Receiver tab's status line says it (`platform` as for `receiverProblemText`). */
+export function receiverStatusText(t: Translate, status: ReceiverStatus, platform: string): string {
+  switch (status.kind) {
+    case "connected":
+      return t(awaitsAnswer(status.protocol) ? "receiverNotReady" : "receiverConnected", {
+        name: status.device.product ?? "HID",
+        id: vidPid(status.device),
+        protocol: protocolText(t, status.protocol),
+      });
+    case "looking":
+      return t("receiverLooking");
+    case "searching":
+      return t("receiverSearching", { id: vidPid(status.selector) });
+    case "error":
+      return receiverProblemText(t, status.problem, status.detail, platform);
+    case "off":
+      return t("receiverOff");
+  }
 }
 
 /** Why a file the app keeps was not read, and what became of the file. */
