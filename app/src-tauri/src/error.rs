@@ -5,6 +5,7 @@
 
 use crate::session::{NotSaved, ResumeError};
 use buzzers::learned::LearnError;
+use lights::setup::SetupError;
 use quiz_core::{BoardError, BuzzerId, Button, GameError, QuizJsonError, SheetError, ValidationError, MAX_TEAMS};
 use quiz_file::{FileAction, QuizFileError};
 use serde::Serialize;
@@ -157,6 +158,11 @@ pub enum AppError {
     LearnInconsistent,
     #[error("these presses look the same as buzzer {buzzer} button {button:?}")]
     LearnConflict { buzzer: BuzzerId, button: Button },
+
+    // The stage lights.
+    /// A lights setup that does not pass its checks (`LightsSetup::check`).
+    #[error("the lights setup was refused: {refused}")]
+    LightsRefused { refused: SetupError },
 
     // Windows and the operating system.
     /// The system gave the app no folder for its data (team names, sessions, the media library).

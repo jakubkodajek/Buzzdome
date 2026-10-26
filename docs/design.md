@@ -1499,3 +1499,87 @@ them.
 | Real receiver: detection, raw reports, presses in a show | Enjoy 303S on Windows 11, buzzers 1 and 2, `hardware-test.md` sections 2 to 6 in part (2026-10-25) | pass; macOS, high IDs, two at once in the app, failures (section 7) **not tested** |
 | Enjoy 303S protocol: set-up, presses, timers, colours | `cargo test -p buzzers` against fakes; the receiver with `hid-monitor` and the app (2026-10-25) | pass; lights read from the back of a room **not tested** |
 | Battery level | not in the 303S's SDK, and no press or other message carried one (2026-10-25) | **not buildable** for the 303S |
+| Stage lights: stages from the game, setup checks, looks and effects, desk priority and fades, Art-Net, sACN, Enttec and SoundSwitch frames byte for byte, OSC and MIDI encoding, lights thread with fake outputs; Lights tab | `cargo test` (`quiz_core::stage`, `game_flow`, `lights`, shell `stage_lights`), `npm test` (`lights`), the tab in headless Chromium against the preview | pass |
+| Stage lights on real interfaces and fixtures, OSC and MIDI into a real program | needs the hardware | **not tested** |
+
+## 7. Stage lights and show messages
+
+Spec section 12. The lights are a view of the show, like the projector: they
+follow its state and are never journaled, so they cannot hold up a show or
+change what a replay does.
+
+### 7.1 Layers
+
+- `quiz_core::stage` maps a game at a moment to a `Stage` (spec LT-4). Time
+  matters only for the last seconds of the clock (`LAST_SECONDS_MS`).
+- `crates/lights` is an I/O adapter that knows quiz-core's `Stage` and `Cue`
+  but not the game: `setup` (the venue's setup and its checks), `look`
+  (draws a look into a universe at a moment), `desk` (blackout > hold >
+  flash > stage look, and fades as a blend of the old and new universe),
+  `dmx` (frame formats as pure functions, tested byte for byte, and the
+  outputs that move them), `signals` (OSC and MIDI) and `engine` (the
+  lights thread). Serial and USB outputs sit behind the `devices` feature,
+  so the crate's tests need no device libraries.
+- `app/src-tauri/src/stage_lights.rs` keeps the setup in `lights.json`
+  (`AppFile`, checked with `LightsSetup::check` before it is kept or used)
+  and tells the lights thread what the show did: after every show change and
+  every tick of the show thread it queues the cues of the change's effects,
+  then the stage, slide and buzz, only when they changed. Sending is a
+  channel push; the show thread never waits.
+- The Director's Lights tab (`app/src/director/LightsTab.tsx`, changes as
+  pure functions in `lights.ts`) keeps a change 400 ms after the last one
+  and polls the universe for its preview four times a second.
+
+### 7.2 Lights thread
+
+Sends a frame every 25 ms (the output's `frame_every`), as fixtures expect
+a steady signal. An output that fails is dropped and opened again a second
+later; the status (`off`, `connected`, `lost` with why) goes to the Director
+as the `lights-status` event. Messages to OSC and MIDI go out on the same
+thread as they arrive.
+
+### 7.3 Outputs
+
+| Output | Transport | Frame |
+| --- | --- | --- |
+| Enttec DMX USB Pro | USB serial | 0x7E, label 6, length (513, low byte first), start code 0, 512 channels, 0xE7 (Enttec DMX USB Pro API) |
+| Enttec Open DMX USB | FTDI serial at 250 kbit/s, 8N2 | break (about 150 µs), mark after break, start code 0, 512 channels; the computer times it, so jitter on a busy computer is possible |
+| Art-Net | UDP 6454 | ArtDmx, protocol 14, 15-bit port address, sequence 1 to 255 (Art-Net 4) |
+| sACN | UDP 5568, multicast 239.255.hi.lo or one host | E1.31 data packet, 638 bytes, priority 100, a CID from the computer's name |
+| SoundSwitch Micro | USB bulk endpoint 0x01 (VID 0x15E4, PID 0x0053) | see 7.4 |
+
+### 7.4 SoundSwitch Micro DMX Interface
+
+SoundSwitch publishes no protocol. Ours is written, in our own words and
+code, from the description in the independent Apache-2.0 QLC+ plug-in
+qlcplus-soundswitch-integration
+(<https://github.com/jloops412/qlcplus-soundswitch-integration>), and is
+unverified on the hardware, so the Director calls it experimental:
+
+1. Two 12-byte start packets, both starting with the tag `sTRt`
+   (`crates/lights/src/dmx/soundswitch.rs`), then a 200 ms wait.
+2. 50 frames of zeros.
+3. A 522-byte frame every 25 ms: `sTRt`, 01 00 02 02, the port (0), a
+   zero, then the 512 channels.
+4. On close, three dark frames.
+
+On Windows, libusb opens only a device bound to a driver it supports, such
+as WinUSB (libusb wiki, Windows, <https://github.com/libusb/libusb/wiki/Windows>);
+whether SoundSwitch's own driver allows that, or WinUSB has to be bound
+(for example with Zadig), is to check with the hardware. Only one program
+can hold the interface, so the SoundSwitch program must be closed.
+
+### 7.5 Show messages
+
+OSC 1.0 over UDP. Every event has an address of its own, so a program can
+map each to a button; triggers carry the float 1.0.
+
+| Event | OSC | MIDI (channel as set) |
+| --- | --- | --- |
+| Show started / ended | `/buzzdome/show/start`, `/buzzdome/show/end` | notes 70 / 71 |
+| Stage | `/buzzdome/stage/<stage>` (`noShow`, `lobby`, `billboard`, `explanation`, `endOfRound`, `questionReady`, `answering`, `lastSeconds`, `buzzed`, `closed`, `revealed`, `leaderboard`, `finalBuildUp`, `winner`) | notes 36 to 49 in that order |
+| Cue | `/buzzdome/cue/<cue>` (`clockStart`, `buzz`, `correct`, `wrong`, `timeUp`, `reveal`) | notes 60 to 65 in that order |
+| Slide | `/buzzdome/slide` with the slide number (int) | program change number − 1 (slides 1 to 128) |
+| Buzz | `/buzzdome/buzz` with the buzzer number (int) | note 72 |
+
+A note is a note on at velocity 127 followed at once by its note off.

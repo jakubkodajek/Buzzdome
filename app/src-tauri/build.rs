@@ -63,6 +63,12 @@ const COMMANDS: &[&str] = &[
     "receiver_forget_learned",
     "receiver_export_log",
     "receiver_udev_rule",
+    "lights_info",
+    "lights_store",
+    "lights_devices",
+    "lights_hold",
+    "lights_blackout",
+    "lights_universe",
 ];
 
 fn main() {

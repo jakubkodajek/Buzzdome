@@ -424,3 +424,23 @@ the Host screen.
 | SDK terms for using it in this app. Decided 2026-10-09: the app is a private copy for Jakub, not open source and not distributed, so publishing the protocol is no longer a question; Enjoy is asked for the SDK for personal use. | Jakub, from Enjoy | The vendor protocol may then live in this (private) repository. |
 | Does the receiver report one press per USB report, or several? | hardware test | Affects how ties within one report are ordered. |
 | Does the receiver know which buzzers are switched on and in range before anyone presses, and their battery level? Not asked in the October email; worth a follow-up if the SDK does not say. | Jakub, from Enjoy | Shows connected buzzers before registration (BZ-18). |
+
+## 12. Stage lights and show messages
+
+The venue's DMX lights follow the show, and outside programs (a lighting
+program, a DJ program, a sound desk) are told what happens in it, as the
+reference app's separate message broker does. Asked for by Jakub on
+2026-10-25 for a colleague's DJ lights and SoundSwitch Micro DMX
+interface. Set up in the Director's Lights tab; kept on the computer in
+`lights.json`, not in the quiz, as it belongs to the venue.
+
+| ID | Requirement | Status |
+| --- | --- | --- |
+| LT-1 | DMX outputs: Enttec DMX USB Pro and compatible interfaces (USB serial), Enttec Open DMX USB and compatible FTDI cables, Art-Net (to a node's address or broadcast), sACN (E1.31, multicast or to one host), and the SoundSwitch Micro DMX Interface. One universe of 512 channels, 40 frames a second. Find interfaces lists the ones on this computer. An output that fails is reopened every second, and the Director shows it at once; the show never waits for it. | done; the SoundSwitch interface is written from an independent open-source driver's description and is experimental until tried on the hardware (`docs/design.md` 7.4); no output tried on real fixtures yet |
+| LT-2 | Fixtures: each has a name, a DMX start address and its channels in order (dimmer, red, green, blue, white, strobe, a fixed value, unused), started from a preset (RGB, RGBW, dimmer + RGB, dimmer + RGB + strobe, 7-channel PAR, dimmer + RGBW + strobe, dimmer). Fixtures that share channels are marked. | done |
+| LT-3 | Looks: a name, one or more colours, intensity, an effect (static, chase across the fixtures, pulse, strobe) with its step, a fade into it, which fixtures (all by default), a strobe channel value, and extra channels set by address (for a smoke machine or a fixture's mode channel). A look can be held from its row to try it. Twelve looks come ready (welcome, question, answering, last seconds, buzz, correct, wrong, reveal, leaderboard, drum roll, winner, dim). | done |
+| LT-4 | Stages: each moment of the show (no show, registration, title slide, explanation, end of round, question shown, answering, the last 5 seconds, a player buzzed in, answers closed, answer shown, leaderboard, final ranking building up, winner) takes a look, or keeps the one before. The stage comes from the game state (`Game::stage`), so a show resumed after a crash shows its stage's look again; lights are never journaled. | done |
+| LT-5 | Flashes: the show's cues (clock start, buzz, correct, wrong, time up, reveal) can each flash a look for a set time, then the stage's look comes back. | done |
+| LT-6 | Live control in the Lights tab: blackout, hold a look whatever the show does, a master intensity, which look shows, and a preview of each fixture's colour and of the 512 channels. Blackout wins over a hold, a hold over a flash, a flash over the stage's look. | done |
+| LT-7 | Show messages: every show start and end, stage, cue, slide and buzz goes out as an OSC message over UDP (to an address and port) and as MIDI (a note per stage and cue, a program change per slide) to a MIDI output, as the setup says (addresses and notes in `docs/design.md` 7.5). | done; not tried with a receiving program yet |
+| LT-8 | Without any light hardware the app works as before: no output is the default, and nothing of the lights can stop or slow the show. | done |

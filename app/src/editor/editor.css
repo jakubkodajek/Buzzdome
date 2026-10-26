@@ -1091,7 +1091,8 @@
 
 /* Small controls (controls.tsx) */
 
-.studio .switch {
+.studio .switch,
+.lights .switch {
   position: relative;
   flex: none;
   width: 36px;
@@ -1113,7 +1114,8 @@
   transition: left 0.12s;
 }
 
-.studio .switch.on {
+.studio .switch.on,
+.lights .switch.on {
   border-color: var(--accent);
   background: var(--accent);
 }
@@ -1123,12 +1125,14 @@
   background: #fff;
 }
 
-.studio .switch:disabled {
+.studio .switch:disabled,
+.lights .switch:disabled {
   opacity: 0.45;
 }
 
 /* The selected slides differ: neither on nor off. */
-.studio .switch.mixed {
+.studio .switch.mixed,
+.lights .switch.mixed {
   border-style: dashed;
 }
 
@@ -1143,7 +1147,8 @@
   gap: 4px;
 }
 
-.studio .number-box input {
+.studio .number-box input,
+.lights .number-box input {
   width: 72px;
   text-align: right;
 }
@@ -1161,7 +1166,8 @@
   min-width: 50px;
 }
 
-.studio .number-box.with-slider input:not([type="range"]) {
+.studio .number-box.with-slider input:not([type="range"]),
+.lights .number-box.with-slider input:not([type="range"]) {
   width: 58px;
 }
 
@@ -1193,7 +1199,8 @@
 
 /* Colour, gradient and font properties (ColorPicker.tsx, GradientPicker.tsx, FontPicker.tsx) */
 
-.studio {
+.studio,
+.lights {
   /* Behind a colour, so its transparency shows; tiles of 10 px. */
   --chequer: repeating-conic-gradient(#d6d6d6 0 25%, #fff 0 50%);
 }
@@ -1208,7 +1215,8 @@
   justify-content: flex-end;
 }
 
-.studio .swatch {
+.studio .swatch,
+.lights .swatch {
   flex: none;
   width: 26px;
   height: 22px;
@@ -1235,13 +1243,15 @@
   background: linear-gradient(to top right, transparent calc(50% - 1px), #d33 calc(50% - 1px), #d33 calc(50% + 1px), transparent calc(50% + 1px)), #fff;
 }
 
-.studio .hex-field {
+.studio .hex-field,
+.lights .hex-field {
   width: 88px;
   font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
   text-transform: uppercase;
 }
 
-.studio .hex-field::placeholder {
+.studio .hex-field::placeholder,
+.lights .hex-field::placeholder {
   text-transform: none;
 }
 
@@ -1266,7 +1276,8 @@
   padding: 8px;
 }
 
-.studio .color-none {
+.studio .color-none,
+.lights .color-none {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -1283,7 +1294,9 @@
 }
 
 .studio .color-none:hover,
-.studio .color-none.selected {
+.lights .color-none:hover,
+.studio .color-none.selected,
+.lights .color-none.selected {
   border-color: var(--hover-line);
   background: var(--hover);
 }
@@ -1304,7 +1317,8 @@
   gap: 1px 3px;
 }
 
-.studio .color-tile {
+.studio .color-tile,
+.lights .color-tile {
   aspect-ratio: 1;
   padding: 0;
   border: 1px solid rgba(0, 0, 0, 0.18);
@@ -1312,7 +1326,9 @@
 }
 
 .studio .color-tile:hover,
-.studio .color-tile.selected {
+.lights .color-tile:hover,
+.studio .color-tile.selected,
+.lights .color-tile.selected {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
 }

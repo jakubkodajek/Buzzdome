@@ -16,6 +16,7 @@ import type {
   BoardChange,
   GameView,
   IconColor,
+  LightsSetup,
   MediaLibrary,
   MediaNow,
   NowPlaying,
@@ -361,6 +362,29 @@ const SHEET_IMPORT: SheetImport = {
 /** Other backend calls that change something, as `{ cmd, ...payload }`, for the same checks. */
 const called: unknown[] = [];
 (window as unknown as { called: unknown[] }).called = called;
+/** A venue's lights for the Lights tab: two fixtures, three looks. */
+const LIGHTS_SETUP: LightsSetup = {
+  output: { kind: "artNet", host: "255.255.255.255", universe: 0 },
+  fixtures: [
+    { id: 1, name: "PAR vlevo", address: 1, channels: [{ kind: "red" }, { kind: "green" }, { kind: "blue" }, { kind: "white" }] },
+    {
+      id: 2,
+      name: "PAR vpravo",
+      address: 9,
+      channels: [{ kind: "dimmer" }, { kind: "red" }, { kind: "green" }, { kind: "blue" }, { kind: "strobe" }, { kind: "fixed", value: 0 }, { kind: "unused" }],
+    },
+  ],
+  looks: [
+    { id: 1, name: "Uvítání", colors: ["#FF8800", "#AA00FF"], intensity: 80, effect: "chase", stepMs: 1500, fadeMs: 1000, fixtures: [], strobe: 0, channels: [] },
+    { id: 2, name: "Otázka", colors: ["#0050FF"], intensity: 100, effect: "static", stepMs: 1000, fadeMs: 500, fixtures: [], strobe: 0, channels: [] },
+    { id: 3, name: "Správně", colors: ["#00FF40"], intensity: 100, effect: "pulse", stepMs: 400, fadeMs: 0, fixtures: [2], strobe: 0, channels: [{ address: 100, value: 255 }] },
+  ],
+  stages: { lobby: 1, questionReady: 2, answering: 2 },
+  flashes: { correct: { look: 3, ms: 1500 } },
+  master: 100,
+  messages: { osc: { host: "127.0.0.1", port: 7700 }, midi: null },
+};
+
 /** The team names prepared before a show (the running show's in a show scene). */
 const PREPARED_TEAMS = ["Kvízožrouti", "Pivní rytíři", "U Tří Lvů"];
 
@@ -649,6 +673,17 @@ mockIPC(
           ],
           platform: "linux",
         };
+      case "lights_info":
+        return { setup: LIGHTS_SETUP, status: { output: { kind: "connected", name: "Art-Net 255.255.255.255" }, messages: null, look: 2, hold: null, blackout: false }, settingsError: null, refused: null };
+      case "lights_universe": {
+        // The first fixture in the "Question" blue, the second in red.
+        const slots = new Array<number>(512).fill(0);
+        slots.splice(0, 4, 255, 0, 80, 255);
+        slots.splice(8, 7, 200, 255, 0, 0, 0, 0, 0);
+        return slots;
+      }
+      case "lights_devices":
+        return { outputs: [{ choice: { kind: "enttecPro", port: "COM4" }, label: "COM4 (FTDI)" }], midiPorts: ["loopMIDI Port"] };
       case "receiver_devices":
         return [];
       case "receiver_udev_rule":
