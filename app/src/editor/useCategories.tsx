@@ -83,7 +83,7 @@ export function useCategories(editor: QuizEditor, quiz: Quiz | null): CategoryEd
     // it from the same quiz, as a twin with the same id.
     if (!quiz || creating.current) return;
     creating.current = true;
-    // The backend tells category names apart (Z9).
+    // The backend tells category names apart.
     api
       .editorCategoryName(categories, t("categoryDefaultName"))
       .then((name) => {

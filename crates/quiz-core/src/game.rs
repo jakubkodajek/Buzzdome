@@ -21,14 +21,21 @@ pub type BuzzerId = u16;
 /// before and is taken now needs no bump, as a refused command is never
 /// journaled.
 ///
-/// 1: refused presses that were journaled count (N3), and renaming a player
-/// takes the name from another buzzer (R17). 2: a question in play restarts
+/// 1: refused presses that were journaled count, and renaming a player
+/// takes the name from another buzzer. 2: a question in play restarts
 /// with `RestartQuestion`, which takes its score changes back, and refuses
-/// `GoTo` and `GoToFinal` (A3). 3: only the time of right answers breaks
+/// `GoTo` and `GoToFinal`. 3: only the time of right answers breaks
 /// ties, switching a player on or off in a running question closes it when
 /// nobody is left to answer, and names are the same however their accents
-/// are encoded.
-pub const RULES_VERSION: u32 = 3;
+/// are encoded. 4: a closed question no longer restarts, as the projector
+/// shows its results.
+pub const RULES_VERSION: u32 = 4;
+
+/// The oldest `RULES_VERSION` whose shows replay today as they were played:
+/// every later change applies only to shows begun under it
+/// (`Game::rules_version`). A change that cannot be kept to newer shows
+/// raises this to its version.
+pub const REPLAYS_AS_PLAYED_FROM: u32 = 3;
 
 /// Steps of the final score reveal: drum roll, 3rd, 2nd, 1st, full ranking.
 pub const FINAL_LAST_STEP: u8 = 4;
@@ -123,7 +130,7 @@ pub enum Command {
     CloseQuestion,
     /// Start the question in play again, as after a crash
     /// (`Game::recovery_command`): its score changes are taken back, and it
-    /// waits for `Next` to start its clock.
+    /// waits for `Next` to start its clock. Refused once it closed.
     RestartQuestion,
     JudgeRight,
     JudgeWrong,
@@ -193,8 +200,9 @@ pub struct Controls {
     /// `GoTo` and `GoToFinal`: not while a question is in play.
     pub go_to: bool,
     /// `RestartQuestion`: while a question is in play, the way to leave it
-    /// without scoring it, and once it closed, until its answer is shown,
-    /// the way to take its scores back and ask it again.
+    /// without scoring it and ask it again. Not once it closed, as its
+    /// results are on screen; a show begun before rules version 4 also
+    /// restarts it closed, until its answer is shown.
     pub restart_question: bool,
 }
 
@@ -453,11 +461,12 @@ impl Game {
         matches!(self.phase, Phase::Question(QuestionStep::Running { .. } | QuestionStep::Buzzed { .. }))
     }
 
-    /// The question can start again: it is in play, or it closed and its
-    /// answer is not shown yet. So a restart the quizmaster asked for still
-    /// works when time ran out while they confirmed it (J20).
+    /// The question can start again: it is in play. Once it closed the
+    /// projector shows its results, which would give the answer away.
+    /// Before rules version 4 it also restarted closed, until the reveal.
     fn question_restartable(&self) -> bool {
-        self.question_in_play() || self.phase == Phase::Question(QuestionStep::Closed)
+        let closed = self.phase == Phase::Question(QuestionStep::Closed);
+        self.question_in_play() || (self.rules_version < 4 && closed)
     }
 
     pub fn quiz(&self) -> &Quiz {
@@ -635,7 +644,7 @@ impl Game {
     /// for the players an everyone-answers question counted, right for the
     /// fastest finger judged right. Dark otherwise, also once a question
     /// closed, until its reveal. A switched-off buzzer shows locked. A
-    /// wrong answer shows wrong only as it is judged (`judge`).
+    /// buzz judged wrong shows wrong until the step after it (`judge`).
     fn light_of(&self, buzzer: BuzzerId) -> Light {
         match &self.phase {
             Phase::Lobby => Light::Ready,
@@ -836,7 +845,7 @@ impl Game {
 
     /// Whether applying `stamped` would leave the show as it is: a press that
     /// does not play, such as a second answer or one after time up. The app
-    /// neither journals nor shows such a press (A8), so a burst of them
+    /// neither journals nor shows such a press, so a burst of them
     /// cannot hold up the show. A press of a new buzzer always counts, as it
     /// registers the buzzer.
     pub fn ignores(&self, stamped: &Stamped) -> bool {
@@ -913,11 +922,16 @@ impl Game {
             Effect::Lights { lights: vec![(buzzer, Light::Wrong)] },
             Effect::Sound { cue: Cue::Wrong },
         ];
-        if self.nobody_left_to_answer() {
-            effects.extend(self.close_question());
-        } else {
-            effects.push(self.lights_now());
-        }
+        let follow = if self.nobody_left_to_answer() { self.close_question() } else { vec![self.lights_now()] };
+        // The others get the lights of the step that follows; the judged
+        // buzzer shows wrong until the next step's lights.
+        effects.extend(follow.into_iter().map(|effect| match effect {
+            Effect::Lights { mut lights } => {
+                lights.retain(|&(lit, _)| lit != buzzer);
+                Effect::Lights { lights }
+            }
+            other => other,
+        }));
         Ok(effects)
     }
 
@@ -938,12 +952,9 @@ impl Game {
                 QuestionStep::Buzzed { .. } => Err(GameError::NotNow),
                 QuestionStep::Closed => {
                     self.phase = Phase::Question(QuestionStep::Revealed { winner: None });
-                    let mut effects = vec![Effect::Sound { cue: Cue::Reveal }];
-                    // The lights stay dark after a fastest-finger question nobody won.
-                    if !self.counted.is_empty() {
-                        effects.insert(0, self.lights_now());
-                    }
-                    Ok(effects)
+                    // Dark after a fastest-finger question nobody won, also
+                    // the last buzz judged wrong (`judge`).
+                    Ok(vec![self.lights_now(), Effect::Sound { cue: Cue::Reveal }])
                 }
                 QuestionStep::Revealed { .. } => Err(GameError::NotNow),
             },

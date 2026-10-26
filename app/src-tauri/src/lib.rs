@@ -50,7 +50,7 @@ struct Inner {
     /// so (for the Teams tab). Known once the app has started.
     teams_file: Option<app_file::AppFile>,
     /// Why the running show's last journal write failed, if it did; none
-    /// once one works again. The Director shows it (A9).
+    /// once one works again. The Director shows it.
     save_problem: Option<AppError>,
     /// When the running show began on the show clock (`before_show`).
     began_ms: u64,
@@ -76,7 +76,7 @@ impl Inner {
 
     /// Whether a command or press given at `at_ms` came before the running
     /// show began, while it started: it was meant for no show or the one
-    /// before, and does not reach this one (J24).
+    /// before, and does not reach this one.
     fn before_show(&self, at_ms: u64) -> bool {
         at_ms < self.began_ms
     }
@@ -87,7 +87,9 @@ struct AppState(Mutex<Inner>);
 /// The show state. The app's locks are taken in one order: the editor's
 /// (`editor::lock`), then this one, then the learn lock (`hardware`). So
 /// code holding the learn lock never waits for this one, which a journal
-/// write can hold for a while (G16). The close request
+/// write can hold for a while. A settings change
+/// (`Hardware::change_settings`) is never taken under this one, and is
+/// taken before the learn lock. The close request
 /// (`app_windows::CloseRequest`) is taken under this one when a show begins
 /// or ends, and holds no other lock.
 fn lock_show(app: &AppHandle) -> MutexGuard<'_, Inner> {
@@ -95,7 +97,7 @@ fn lock_show(app: &AppHandle) -> MutexGuard<'_, Inner> {
 }
 
 /// The clock every command and press is stamped with, shared with the
-/// receiver thread (A6, `Stamped::at_ms`).
+/// receiver thread (`Stamped::at_ms`).
 static SHOW_CLOCK: LazyLock<ShowClock> = LazyLock::new(ShowClock::start);
 
 fn now_ms() -> u64 {
@@ -104,7 +106,7 @@ fn now_ms() -> u64 {
 
 /// Runs `work` on a thread that may wait, never the windows' thread: Tauri
 /// runs synchronous commands there, so one that waits for the show state,
-/// which a journal write holds, would freeze both windows (A7).
+/// which a journal write holds, would freeze both windows.
 async fn off_ui<T: Send + 'static>(work: impl FnOnce() -> CmdResult<T> + Send + 'static) -> CmdResult<T> {
     tauri::async_runtime::spawn_blocking(work).await?
 }
@@ -150,18 +152,18 @@ fn quizzes_cache(app: &AppHandle) -> CmdResult<PathBuf> {
 static QUIZZES_CACHE: Mutex<()> = Mutex::new(());
 
 /// The folders a show's media can be in, unpacked quizzes and editor
-/// drafts: the windows may load files from these, allowed once at start
-/// (A21), and from no other folder of the disk.
+/// drafts: the windows may load files from these, allowed once at start,
+/// and from no other folder of the disk.
 fn media_folders(app: &AppHandle) -> CmdResult<[PathBuf; 2]> {
     Ok([quizzes_cache(app)?, editor::editor_dir(app)?])
 }
 
 /// Whether the media folder `root` is outside the `folders` the windows may
-/// load from (`media_folders`). One that is gone is missing, not refused.
+/// load from (`media_folders`), with links followed (`leads_inside`). One
+/// that is gone is missing, not refused.
 fn refused(root: &Path, folders: &[PathBuf]) -> bool {
-    // Canonical, so neither `..` nor a link leads out of a folder.
-    let Ok(root) = root.canonicalize() else { return false };
-    !folders.iter().filter_map(|folder| folder.canonicalize().ok()).any(|folder| root.starts_with(folder))
+    let inside: std::io::Result<Vec<bool>> = folders.iter().map(|folder| quiz_file::leads_inside(root, folder)).collect();
+    inside.is_ok_and(|inside| !inside.contains(&true))
 }
 
 fn emit_state(app: &AppHandle, game: Option<&Game>) {
@@ -194,8 +196,8 @@ fn execute_at(app: &AppHandle, inner: &mut Inner, command: Command, at_ms: u64) 
 /// Applies `command` to a copy of the running show and journals it; only
 /// then does the copy replace the show (S1). Gives the effects, for
 /// `deliver`, or none for a press that changes nothing (`Game::ignores`):
-/// a burst of those costs no journal write (A8). Keeps whether the journal
-/// write failed, for the Director (A9).
+/// a burst of those costs no journal write. Keeps whether the journal
+/// write failed, for the Director.
 fn apply_journaled(inner: &mut Inner, command: Command, at_ms: u64) -> CmdResult<Option<Vec<Effect>>> {
     let game = inner.game.as_ref().ok_or(AppError::NoShow)?;
     let stamped = Stamped { at_ms, command };
@@ -326,7 +328,7 @@ fn show_running(app: &AppHandle) -> bool {
 
 // The commands that read or start the show are async, so Tauri runs them
 // off the windows' thread, and they take the show state on a thread that
-// may wait (`off_ui`, A7). Those that change or end a running show run on
+// may wait (`off_ui`). Those that change or end a running show run on
 // the show thread (`show_thread::run`).
 
 #[tauri::command]
@@ -348,8 +350,7 @@ async fn media_root(app: AppHandle) -> CmdResult<Option<String>> {
 }
 
 /// Why the running show's journal cannot be written, or that a write does
-/// not finish, if so; also sent with `show-not-saved` whenever it changes
-/// (A9, G17).
+/// not finish, if so; also sent with `show-not-saved` whenever it changes.
 #[tauri::command]
 async fn show_not_saved(app: AppHandle) -> CmdResult<Option<AppError>> {
     Ok(show_thread::not_saved(&app))
@@ -421,7 +422,7 @@ struct ResumedShow {
 
 /// Rebuilds the latest show under `root` from its journal. A show that
 /// stopped mid-question has the question restarted, journaled at `at_ms`,
-/// before anything is shown: no window sees the stopped question (A2). Its
+/// before anything is shown: no window sees the stopped question. Its
 /// media are served only from the `media_folders`.
 fn resume_show(root: &Path, at_ms: u64, media_folders: &[PathBuf]) -> CmdResult<ResumedShow> {
     let Resumed { mut session, quiz, journal, meta } = Session::resume_latest(root)?.ok_or(AppError::NoShowToResume)?;
@@ -460,7 +461,7 @@ async fn resume_last_session(app: AppHandle) -> CmdResult<Vec<AppError>> {
 
 /// Closes the running show. Its journal stays on disk, so it can be
 /// resumed. In order with the show's commands, so a step given before it
-/// still counts and none given after it reaches the show (G18).
+/// still counts and none given after it reaches the show.
 #[tauri::command]
 async fn end_show(app: AppHandle) -> CmdResult<()> {
     show_thread::run(&app, |app, inner, at_ms| {
@@ -480,10 +481,25 @@ async fn end_show(app: AppHandle) -> CmdResult<()> {
 /// bindings). Scores, names and jumps are the Director's alone.
 const PROJECTOR_COMMANDS: [&str; 7] = ["press", "next", "judgeRight", "judgeWrong", "pauseClock", "resumeClock", "showLeaderboard"];
 
-/// Whether the window labelled `window` may give `command`.
+/// The buzzers the projector's keys press, 1 to 9 and 0 for 10, always
+/// with the big button (`commandForKey`).
+const KEY_BUZZERS: std::ops::RangeInclusive<quiz_core::BuzzerId> = 1..=10;
+
+/// Whether the window labelled `window` may give `command`: the Director
+/// any, the projector only what its keys stand for, and a window the app
+/// does not know none.
 fn may_give(window: &str, command: &Command) -> bool {
-    let tag = || serde_json::to_value(command).ok()?.get("type")?.as_str().map(str::to_owned);
-    window != app_windows::HOST_LABEL || tag().is_some_and(|tag| PROJECTOR_COMMANDS.contains(&tag.as_str()))
+    match window {
+        app_windows::DIRECTOR_LABEL => true,
+        app_windows::HOST_LABEL => match command {
+            Command::Press { buzzer, button } => *button == quiz_core::Button::Big && KEY_BUZZERS.contains(buzzer),
+            command => {
+                let tag = || serde_json::to_value(command).ok()?.get("type")?.as_str().map(str::to_owned);
+                tag().is_some_and(|tag| PROJECTOR_COMMANDS.contains(&tag.as_str()))
+            }
+        },
+        _ => false,
+    }
 }
 
 #[tauri::command]
@@ -514,11 +530,11 @@ pub(crate) fn play_press(app: &AppHandle, press: Press, at_ms: u64) -> bool {
 pub fn run() {
     let builder = tauri::Builder::default()
         // First, so a second start ends before it touches the show: it brings
-        // the running app's Director forward instead (Z2).
+        // the running app's Director forward instead.
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| app_windows::show_director(app)))
         .plugin(tauri_plugin_dialog::init())
         .plugin(app_windows::navigation_guard());
-    // Only macOS has an app menu, whose Quit asks during a show (G21).
+    // Only macOS has an app menu, whose Quit asks during a show.
     #[cfg(target_os = "macos")]
     let builder = builder.menu(app_windows::app_menu);
     let inner = Inner::new();
@@ -531,7 +547,7 @@ pub fn run() {
         .setup(|app| {
             app_log::start(app.path().app_log_dir()?);
             editor::move_roaming_drafts(app.handle());
-            // One queue for the receiver's events and the quizmaster's commands (A7).
+            // One queue for the receiver's events and the quizmaster's commands.
             let (queue, events) = mpsc::channel();
             let hardware = Hardware::start(app.handle(), queue.clone(), *SHOW_CLOCK);
             if let Some(handle) = hardware.handle() {
@@ -741,7 +757,7 @@ mod tests {
         let root = sessions_dir("rules-1");
         let mut inner = journaled_show_under(1, &root, up_to_the_first_question());
         let slide = inner.game.as_ref().unwrap().slide_index();
-        // Version 1 restarted the question after a crash with a jump to it (G11);
+        // Version 1 restarted the question after a crash with a jump to it;
         // today's rules refuse that jump, so it is written as it was.
         let session = inner.session.as_mut().unwrap();
         session.append(&Stamped { at_ms: 60_000, command: Command::GoTo { slide } }).unwrap();
@@ -870,22 +886,30 @@ mod tests {
         for command in &directors {
             assert!(!may_give(app_windows::HOST_LABEL, command), "{command:?}");
         }
+        for (buzzer, button) in [(11, quiz_core::Button::Big), (0, quiz_core::Button::Big), (3, quiz_core::Button::A)] {
+            assert!(!may_give(app_windows::HOST_LABEL, &Command::Press { buzzer, button }), "a press no key gives: {buzzer} {button:?}");
+        }
         for command in keys.iter().chain(&directors) {
             assert!(may_give(app_windows::DIRECTOR_LABEL, command), "{command:?}");
+            assert!(!may_give("editor", command), "a window the app does not know: {command:?}");
         }
     }
 
-    /// For the tests of the projector's keys, typed as command tags, so a
-    /// tag that is not one does not compile.
+    /// For the tests of the projector's keys: the commands typed as command
+    /// tags, so a tag that is not one does not compile, and the buzzers its
+    /// keys may press.
     #[test]
     fn export_projector_commands() {
         let Ok(dir) = std::env::var("TS_RS_EXPORT_DIR") else { return };
         let ts = format!(
-            "// Generated by `cargo test` from PROJECTOR_COMMANDS in src-tauri/src/lib.rs. Do not edit this file manually.\n\n\
+            "// Generated by `cargo test` from PROJECTOR_COMMANDS and KEY_BUZZERS in src-tauri/src/lib.rs. Do not edit this file manually.\n\n\
              import type {{ Command }} from \"./Command\";\n\n\
              /** The commands the projector window may give. */\n\
-             export const PROJECTOR_COMMANDS: readonly Command[\"type\"][] = {};\n",
+             export const PROJECTOR_COMMANDS: readonly Command[\"type\"][] = {};\n\n\
+             /** The buzzers the projector's keys may press, always with the big button. */\n\
+             export const KEY_BUZZERS: readonly number[] = {};\n",
             serde_json::to_string(&PROJECTOR_COMMANDS).unwrap(),
+            serde_json::to_string(&KEY_BUZZERS.collect::<Vec<_>>()).unwrap(),
         );
         fs::write(Path::new(&dir).join("ProjectorCommands.ts"), ts).unwrap();
     }

@@ -14,6 +14,7 @@ pub use sheet::{
     export_sheet, import_sheet, read_tables, SheetExport, SheetImport, SheetRead, CSV_EXTENSION, MAX_SHEET_BYTES, MAX_SHEET_COLUMNS, MAX_SHEET_REPORT_BYTES,
     MAX_SHEET_ROWS, MAX_SHEET_TEXT_BYTES, SHEET_EXTENSIONS,
 };
+pub use zip_end::MAX_END_RECORDS;
 
 use quiz_core::{
     file_key, is_safe_reference, portable_name, portable_reference, MediaIssue, Problem, Quiz, QuizJsonError, ReadQuiz, SheetError,
@@ -25,8 +26,9 @@ use std::collections::hash_map::Entry;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fs::{self, File};
 use std::io::{self, Read, Write};
-use std::path::{Path, PathBuf};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::path::{Component, Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use ts_rs::TS;
 use zip::write::SimpleFileOptions;
 use zip::{CompressionMethod, ZipArchive, ZipWriter};
@@ -42,7 +44,7 @@ pub const MAX_UNPACKED_BYTES: u64 = 4 << 30;
 pub const MAX_ENTRIES: usize = 10_000;
 /// `quiz.json` is parsed whole, into many times its size, so it gets far
 /// less room than media: a small file must not unpack to one that takes the
-/// app's memory (A20). Text-only quizzes stay well under it.
+/// app's memory. Text-only quizzes stay well under it.
 pub const MAX_QUIZ_JSON_BYTES: u64 = 16 << 20;
 
 const ZIP_MAGIC: &[u8; 4] = b"PK\x03\x04";
@@ -75,6 +77,8 @@ pub enum QuizFileError {
     TooLarge,
     #[error("the quiz file has more than {MAX_ENTRIES} files")]
     TooManyFiles,
+    #[error("the file has more than {MAX_END_RECORDS} ZIP end records")]
+    TooManyEndRecords,
     #[error("{QUIZ_JSON} is larger than {} MB", MAX_QUIZ_JSON_BYTES >> 20)]
     QuizJsonTooLarge,
     #[error("the quiz has problems: {}", .0.iter().map(ToString::to_string).collect::<Vec<_>>().join("; "))]
@@ -123,7 +127,9 @@ pub fn open(path: &Path, cache: &Path) -> Result<Package> {
     let result = unpack(path, &incoming).and_then(|unpacked| {
         // The show plays the file as it is: a media name it would have to
         // rename is a problem to fix in the editor.
-        let quiz = read_playable(&incoming)?;
+        let quiz = read_quiz_json(&incoming)?;
+        refuse(clashing_media(&quiz, &unpacked.renames.clashes))?;
+        check_playable(&quiz, &incoming)?;
         let root = place_package(cache, &unpacked.hash, &incoming)?;
         Ok(Package { quiz, root })
     });
@@ -181,9 +187,9 @@ pub fn open_into(path: &Path, dest: &Path) -> Result<Opened> {
     let incoming = incoming_dir(parent)?;
     let result = unpack(path, &incoming).and_then(|unpacked| {
         let ReadQuiz { mut quiz, dropped } = read_quiz(&incoming)?;
-        quiz.rename_media(&unpacked.renamed);
+        quiz.rename_media(&unpacked.renames.new);
         // The draft holds the quiz as the editor has it.
-        let changed = !unpacked.renamed.is_empty() || !dropped.is_empty();
+        let changed = !unpacked.renames.new.is_empty() || !dropped.is_empty();
         if changed {
             write_quiz_json(&incoming, &quiz)?;
         }
@@ -200,8 +206,16 @@ pub fn open_into(path: &Path, dest: &Path) -> Result<Opened> {
 struct Unpacked {
     /// Hash of the names and contents of the files written.
     hash: String,
-    /// Media stored under another name than the quiz uses (see `renames`).
-    renamed: BTreeMap<String, String>,
+    /// Media stored under another name than the quiz uses.
+    renames: Renames,
+}
+
+/// Media that a show would find under another file than the one stored
+/// for it (`Renames::clashes`): on Windows or macOS the name the quiz uses
+/// finds the earlier file, which is another picture or sound, or none.
+fn clashing_media(quiz: &Quiz, clashes: &BTreeMap<String, String>) -> Vec<ValidationError> {
+    let clash = |file: &str| clashes.get(file).map(|other| Problem::MediaNameClash { file: file.to_string(), other: other.clone() });
+    quiz.media_files().into_iter().filter_map(clash).map(|problem| ValidationError { slide_id: None, problem }).collect()
 }
 
 /// Unpacks a quiz file into `dest` without checking the quiz.
@@ -340,11 +354,24 @@ pub fn write_atomic(dest: &Path, contents: &[u8]) -> Result<()> {
     })
 }
 
+/// How long a temporary twin of a file (`replace_file`) has to be left
+/// untouched before a write removes it. No write takes that long, so the
+/// twin was left by a process that stopped mid-write (a crash or power cut),
+/// never by one still writing, such as another computer saving into a
+/// shared folder.
+const STALE_TWIN_AFTER: Duration = Duration::from_secs(60 * 60);
+
 /// Writes `dest` through a temporary file next to it, renamed over `dest`
-/// only once `write` has finished.
+/// only once `write` has finished. Each write has a temporary file of its
+/// own, so two writes of one file at once cannot write into each other's:
+/// the last renamed wins, whole. The twins a stopped process left are
+/// removed first (`remove_stale_twins`), so crashes do not pile hidden
+/// copies up next to the file.
 fn replace_file(dest: &Path, write: impl FnOnce(&Path) -> Result<()>) -> Result<()> {
+    static WRITES: AtomicU64 = AtomicU64::new(0);
     let name = dest.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
-    let temp = dest.with_file_name(format!(".{name}.saving"));
+    remove_stale_twins(dest, &name);
+    let temp = dest.with_file_name(twin_name(&name, std::process::id(), WRITES.fetch_add(1, Ordering::Relaxed)));
     let written = write(&temp).and_then(|()| fs::rename(&temp, dest).context(FileAction::Write, dest));
     if written.is_err() {
         let _ = fs::remove_file(&temp);
@@ -355,6 +382,34 @@ fn replace_file(dest: &Path, write: impl FnOnce(&Path) -> Result<()>) -> Result<
         other => other,
     })?;
     sync_dir(dest.parent().unwrap_or(Path::new(".")))
+}
+
+/// The temporary twin of the file `name` for write `n` of process `pid`.
+fn twin_name(name: &str, pid: u32, n: u64) -> String {
+    format!(".{name}.{pid}-{n}.saving")
+}
+
+/// Removes the temporary twins of `dest` (named `name`) that another
+/// process left untouched for `STALE_TWIN_AFTER`. Best effort: a twin that
+/// cannot be read or removed stays, and this process's own are never
+/// touched, whatever their age.
+fn remove_stale_twins(dest: &Path, name: &str) {
+    let folder = dest.parent().filter(|folder| !folder.as_os_str().is_empty()).unwrap_or(Path::new("."));
+    let Ok(entries) = fs::read_dir(folder) else { return };
+    let prefix = format!(".{name}.");
+    for entry in entries.flatten() {
+        let file_name = entry.file_name();
+        let Some(writer) = file_name.to_str().and_then(|f| f.strip_prefix(&prefix)).and_then(|rest| rest.strip_suffix(".saving")) else {
+            continue;
+        };
+        let foreign = writer.split_once('-').is_some_and(|(pid, n)| {
+            pid.parse::<u32>().is_ok_and(|pid| pid != std::process::id()) && n.parse::<u64>().is_ok()
+        });
+        let stale = entry.metadata().and_then(|meta| meta.modified()).is_ok_and(|at| at.elapsed().is_ok_and(|age| age >= STALE_TWIN_AFTER));
+        if foreign && stale {
+            let _ = fs::remove_file(entry.path());
+        }
+    }
 }
 
 /// Makes the files created, renamed or deleted in `dir` durable. Only Unix
@@ -415,7 +470,7 @@ pub fn import_media(root: &Path, source: MediaSource) -> Result<String> {
 /// Copies `source` to `folder/name` and returns the name. A file with that
 /// name and the same contents is reused; a different one keeps its place
 /// and the copy gets a number added (see `numbered`). A name is taken by
-/// a file whose name is one file with it on Windows and macOS
+/// a file whose name is one file with it on Windows or macOS
 /// (`quiz_core::file_key`), so a folder made on Linux opens on them. A copy
 /// that fails leaves nothing behind: it is written under a name no media
 /// file has (`.part`) and renamed when complete.
@@ -478,19 +533,28 @@ fn numbered(name: &str, n: u32) -> String {
     }
 }
 
-/// New names for the media references among `names`, old name to new: for
-/// those that are not safe but can be made so (see
-/// `quiz_core::portable_reference`), and for safe ones that are one file
-/// with a name before them on Windows and macOS (`quiz_core::file_key`),
-/// which would take its place there. A new name is one file with none of
-/// `names` nor another new one.
-fn renames<'a>(names: impl Iterator<Item = &'a str> + Clone) -> BTreeMap<String, String> {
+/// New names for media, from `renames`.
+#[derive(Debug, Default)]
+struct Renames {
+    /// Old name to new.
+    new: BTreeMap<String, String>,
+    /// The safe names among them, each to the name before it that is one
+    /// file with it on Windows or macOS.
+    clashes: BTreeMap<String, String>,
+}
+
+/// New names for the media references among `names`: for those that are
+/// not safe but can be made so (see `quiz_core::portable_reference`), and
+/// for safe ones that are one file with a name before them on Windows or
+/// macOS (`quiz_core::file_key`), which would take its place there. A new
+/// name is one file with none of `names` nor another new one.
+fn renames<'a>(names: impl Iterator<Item = &'a str> + Clone) -> Renames {
     let mut taken: HashSet<String> = names.clone().map(file_key).collect();
     // The safe names kept as they are, by `file_key`.
     let mut kept: HashMap<String, &str> = HashMap::new();
-    let mut renamed = BTreeMap::new();
+    let mut renames = Renames::default();
     for name in names {
-        if renamed.contains_key(name) {
+        if renames.new.contains_key(name) {
             continue;
         }
         let wanted = if is_safe_reference(name) {
@@ -501,16 +565,19 @@ fn renames<'a>(names: impl Iterator<Item = &'a str> + Clone) -> BTreeMap<String,
                 }
                 // The same name again is the same file.
                 Entry::Occupied(first) if *first.get() == name => continue,
-                Entry::Occupied(_) => name.to_string(),
+                Entry::Occupied(first) => {
+                    renames.clashes.insert(name.to_string(), first.get().to_string());
+                    name.to_string()
+                }
             }
         } else {
             let Some(portable) = portable_reference(name) else { continue };
             portable
         };
         let new = (1..).map(|n| numbered(&wanted, n)).find(|new| taken.insert(file_key(new))).expect("a free name");
-        renamed.insert(name.to_string(), new);
+        renames.new.insert(name.to_string(), new);
     }
-    renamed
+    renames
 }
 
 /// Compares a file with `bytes` without reading the file whole into memory.
@@ -661,15 +728,17 @@ fn is_zip(path: &Path) -> Result<bool> {
 /// names that would leave the media folder) are skipped.
 fn unpack_zip(path: &Path, dest: &Path) -> Result<Unpacked> {
     let mut file = File::open(path).context(FileAction::Read, path)?;
-    if zip_end::counts_more_than(&mut file, MAX_ENTRIES as u64).context(FileAction::Read, path)? {
-        return Err(QuizFileError::TooManyFiles);
+    match zip_end::check(&mut file, MAX_ENTRIES as u64).context(FileAction::Read, path)? {
+        zip_end::Verdict::Opens => {}
+        zip_end::Verdict::CountsTooMany => return Err(QuizFileError::TooManyFiles),
+        zip_end::Verdict::TooManyEndRecords => return Err(QuizFileError::TooManyEndRecords),
     }
     let mut archive = ZipArchive::new(file)?;
     if archive.len() > MAX_ENTRIES {
         return Err(QuizFileError::TooManyFiles);
     }
     let names = archive.file_names().map(|name| name.map(|name| entry_name(&name))).collect::<std::result::Result<Vec<_>, _>>()?;
-    let renamed = renames(names.iter().map(String::as_str));
+    let renames = renames(names.iter().map(String::as_str));
     let mut hasher = Sha256::new();
     let mut budget = MAX_UNPACKED_BYTES;
     for i in 0..archive.len() {
@@ -678,14 +747,14 @@ fn unpack_zip(path: &Path, dest: &Path) -> Result<Unpacked> {
             continue;
         }
         let name = entry_name(&entry.name()?);
-        let stored = match renamed.get(&name) {
+        let stored = match renames.new.get(&name) {
             Some(new) => Some(new.as_str()),
             None => (name == QUIZ_JSON || is_safe_reference(&name)).then_some(name.as_str()),
         };
         let Some(stored) = stored else { continue };
         budget -= write_file(dest, stored, &mut entry, path, budget, &mut hasher)?;
     }
-    Ok(Unpacked { hash: finish(hasher), renamed })
+    Ok(Unpacked { hash: finish(hasher), renames })
 }
 
 /// A ZIP entry's name with `/` between folders, as some ZIP tools on Windows
@@ -701,7 +770,6 @@ fn copy_json(path: &Path, dest: &Path) -> Result<Unpacked> {
     let json = read_json(path)?;
     let quiz = Quiz::from_json(&json)?;
     let source_root = path.parent().unwrap_or(Path::new("."));
-    let real_root = fs::canonicalize(source_root).context(FileAction::Read, source_root)?;
     let mut hasher = Sha256::new();
     let mut budget = MAX_UNPACKED_BYTES;
     budget -= write_file(dest, QUIZ_JSON, &mut json.as_bytes(), path, budget, &mut hasher)?;
@@ -714,12 +782,38 @@ fn copy_json(path: &Path, dest: &Path) -> Result<Unpacked> {
             continue;
         }
         let source = source_root.join(reference);
-        let inside = fs::canonicalize(&source).is_ok_and(|real| real.starts_with(&real_root));
+        let inside = leads_inside(&source, source_root).unwrap_or(false);
         // `problems` reports one not read as missing.
         let Some(mut media) = inside.then(|| File::open(&source).ok()).flatten() else { continue };
         budget -= write_file(dest, reference, &mut media, &source, budget, &mut hasher)?;
     }
-    Ok(Unpacked { hash: finish(hasher), renamed: BTreeMap::new() })
+    Ok(Unpacked { hash: finish(hasher), renames: Renames::default() })
+}
+
+/// Whether `path` is `folder`, or a file or folder in it, once links are
+/// followed: neither `..` nor a link or junction leads out. Canonical paths
+/// are compared where the system gives them. Windows gives none on a volume
+/// without a drive letter (`canonicalize` fails there), so then `path` has
+/// to be `folder` and plain names, none of them a link: a link inside the
+/// folder that would stay in it is refused too. Fails when `path` is not
+/// there.
+pub fn leads_inside(path: &Path, folder: &Path) -> io::Result<bool> {
+    fs::metadata(path)?;
+    Ok(match (fs::canonicalize(path), fs::canonicalize(folder)) {
+        (Ok(real), Ok(real_folder)) => real.starts_with(real_folder),
+        _ => path.strip_prefix(folder).is_ok_and(|names| no_links_along(folder, names)),
+    })
+}
+
+/// Whether each of `names`, joined one by one onto `folder`, is a plain name
+/// of a file or folder that is there and is not a link or junction (which
+/// Rust counts as a link on Windows).
+fn no_links_along(folder: &Path, names: &Path) -> bool {
+    let mut path = folder.to_path_buf();
+    names.components().all(|name| {
+        path.push(name);
+        matches!(name, Component::Normal(_)) && fs::symlink_metadata(&path).is_ok_and(|found| !found.file_type().is_symlink())
+    })
 }
 
 /// Writes one file of a package from `contents` (read from the file
@@ -858,6 +952,10 @@ mod tests {
         zip.write_all(&zip_end::tests::zip64_end(3_000_000, 0)).unwrap();
         zip.finish().unwrap();
         assert!(matches!(open(&hidden, &temp("hidden-cache")), Err(QuizFileError::TooManyFiles)));
+        // A file of many end records is refused for them, not for what they count.
+        let ends = temp("ends").join("ends.quiz");
+        fs::write(&ends, [&b"PK\x03\x04"[..], &b"PK\x05\x06".repeat(MAX_END_RECORDS + 1)].concat()).unwrap();
+        assert!(matches!(open(&ends, &temp("ends-cache")), Err(QuizFileError::TooManyEndRecords)));
         // Bytes with no end record are not a quiz file, whatever they start with.
         let bare = temp("bare").join("bare.quiz");
         fs::write(&bare, b"PK\x03\x04 and nothing after").unwrap();
@@ -946,12 +1044,47 @@ mod tests {
 
     #[test]
     fn a_failed_save_names_the_file_not_its_temporary_copy() {
-        let folder = temp("save-blocked");
-        let dest = folder.join("test.quiz");
-        // A folder where the temporary file would go makes creating it fail.
-        fs::create_dir_all(folder.join(".test.quiz.saving")).unwrap();
+        // The temporary file cannot be created in a folder that is not there.
+        let dest = temp("save-blocked").join("gone").join("test.quiz");
         let err = write_atomic(&dest, b"x").unwrap_err();
         assert!(matches!(err, QuizFileError::Io { action: FileAction::Write, ref path, .. } if *path == dest), "{err}");
+    }
+
+    #[test]
+    fn a_write_begun_during_another_of_the_same_file_has_a_temporary_file_of_its_own() {
+        let folder = temp("save-overlapping");
+        let dest = folder.join("receiver.json");
+        replace_file(&dest, |temp| {
+            fs::write(temp, b"first").context(FileAction::Write, temp)?;
+            write_atomic(&dest, b"second")
+        })
+        .unwrap();
+        assert_eq!(fs::read(&dest).unwrap(), b"first", "the last renamed wins, whole");
+        let names: Vec<String> = fs::read_dir(&folder).unwrap().map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned()).collect();
+        assert_eq!(names, ["receiver.json"], "no temporary file is left");
+    }
+
+    #[test]
+    fn a_write_removes_only_the_twins_a_stopped_process_left() {
+        let folder = temp("save-stale-twins");
+        let dest = folder.join("round.quiz");
+        let long_ago = SystemTime::now() - STALE_TWIN_AFTER - Duration::from_secs(60);
+        let leave = |name: String, modified: SystemTime| {
+            let path = folder.join(name);
+            File::create(&path).and_then(|file| file.set_modified(modified)).unwrap();
+            path
+        };
+        let crashed = leave(twin_name("round.quiz", u32::MAX, 7), long_ago);
+        let still_writing = leave(twin_name("round.quiz", u32::MAX, 8), SystemTime::now());
+        let ours = leave(twin_name("round.quiz", std::process::id(), u64::MAX), long_ago);
+        let other_file = leave(twin_name("other.quiz", u32::MAX, 7), long_ago);
+        let unrelated = leave(".round.quiz.backup.saving".into(), long_ago);
+        write_atomic(&dest, b"quiz").unwrap();
+        assert!(!crashed.exists(), "a twin another process left long ago goes");
+        for kept in [still_writing, ours, other_file, unrelated] {
+            assert!(kept.exists(), "{kept:?} stays");
+        }
+        assert_eq!(fs::read(&dest).unwrap(), b"quiz");
     }
 
     #[test]
@@ -1044,6 +1177,38 @@ mod tests {
         assert!(!draft.join("media/linked.png").exists());
         // A link that stays inside the folder is read as the file it names.
         assert_eq!(fs::read(draft.join("media/alias.png")).unwrap(), b"png bytes");
+
+        // Where the system names no canonical path, no link is followed at all.
+        assert!(no_links_along(&folder, Path::new("media/inside.png")));
+        for through_a_link in ["media/up/secret.png", "media/alias.png", "media/../media/inside.png", "media/gone.png"] {
+            assert!(!no_links_along(&folder, Path::new(through_a_link)), "{through_a_link}");
+        }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn a_plain_json_quiz_cannot_reach_outside_its_folder_through_a_junction() {
+        let outer = temp("json-junction");
+        fs::write(outer.join("secret.png"), b"secret").unwrap();
+        let folder = outer.join("quiz");
+        fs::create_dir_all(folder.join("media")).unwrap();
+        fs::write(folder.join("media/inside.png"), b"png bytes").unwrap();
+        // A junction needs no rights to make, unlike a link.
+        let made = std::process::Command::new("cmd").arg("/C").arg("mklink").arg("/J").arg(folder.join("media").join("up")).arg(&outer).output().unwrap();
+        assert!(made.status.success(), "{}", String::from_utf8_lossy(&made.stdout));
+        let mut quiz = quiz_with_picture("media/up/secret.png");
+        let mut slide = quiz.slides[0].clone();
+        slide.id = "inside".into();
+        slide.picture = Some("media/inside.png".into());
+        quiz.slides.push(slide);
+        fs::write(folder.join("quiz.json"), serde_json::to_vec(&quiz).unwrap()).unwrap();
+
+        let draft = temp("json-junction-draft").join("draft");
+        open_into(&folder.join("quiz.json"), &draft).unwrap();
+        assert!(!draft.join("media/up/secret.png").exists());
+        assert_eq!(fs::read(draft.join("media/inside.png")).unwrap(), b"png bytes");
+        assert!(!no_links_along(&folder, Path::new("media/up/secret.png")), "a junction counts as a link");
+        assert!(no_links_along(&folder, Path::new("media/inside.png")));
     }
 
     /// A quiz file made before the answer and points limits: an
@@ -1148,13 +1313,33 @@ mod tests {
     }
 
     #[test]
+    fn a_show_refuses_media_stored_apart_from_an_unused_file_before_it() {
+        // Only the second file is used; on Windows or macOS its name would find the first.
+        let quiz = quiz_with_picture("media/flag.png");
+        let json = serde_json::to_vec(&quiz).unwrap();
+        let file = zip_of("unused-clash", &[(QUIZ_JSON, &json), ("media/Flag.png", b"unused"), ("media/flag.png", b"used")]);
+
+        let err = open(&file, &temp("unused-clash-cache")).unwrap_err();
+        let clash = Problem::MediaNameClash { file: "media/flag.png".into(), other: "media/Flag.png".into() };
+        assert!(matches!(err, QuizFileError::Invalid(ref p) if p.iter().map(|e| &e.problem).eq([&clash])), "{err}");
+
+        let draft = temp("unused-clash-draft").join("draft");
+        let Opened { quiz: opened, .. } = open_into(&file, &draft).unwrap();
+        assert_eq!(opened.slides[0].picture.as_deref(), Some("media/flag-2.png"));
+        assert_eq!(fs::read(draft.join("media/flag-2.png")).unwrap(), b"used");
+        assert_eq!(problems(&opened, &draft), []);
+    }
+
+    #[test]
     fn renaming_ignores_letter_case_and_numbers_before_the_extension() {
         let renamed = renames(["media/A_.png", "media/a?.png", "media/a*.png", "media/x/../y.png"].into_iter());
         let expected = [("media/a*.png", "media/a_-3.png"), ("media/a?.png", "media/a_-2.png")];
-        assert_eq!(renamed, expected.map(|(old, new)| (old.to_string(), new.to_string())).into());
+        assert_eq!(renamed.new, expected.map(|(old, new)| (old.to_string(), new.to_string())).into());
+        assert_eq!(renamed.clashes, [].into());
         // A safe name that is one file with one before it is renamed; the same name twice is one file.
         let renamed = renames(["media/Flag.png", "media/flag.png", "media/flag.png", "media/flag-2.png", "quiz.json"].into_iter());
-        assert_eq!(renamed, [("media/flag.png".to_string(), "media/flag-3.png".to_string())].into());
+        assert_eq!(renamed.new, [("media/flag.png".to_string(), "media/flag-3.png".to_string())].into());
+        assert_eq!(renamed.clashes, [("media/flag.png".to_string(), "media/Flag.png".to_string())].into());
         assert_eq!(numbered("media/round.1/a.b.png", 2), "media/round.1/a.b-2.png");
         assert_eq!(numbered("media/round.1/noext", 3), "media/round.1/noext-3");
         assert_eq!(numbered("media/.hidden", 2), "media/.hidden-2");
@@ -1242,7 +1427,7 @@ mod tests {
         let root = temp("import-case");
         let dropped = |name: &str, bytes: &[u8]| import_media(&root, MediaSource::Bytes { name, bytes }).unwrap();
         assert_eq!(dropped("Flag.png", b"one"), "media/Flag.png");
-        // On Linux these are other files; on Windows and macOS the same one.
+        // On Linux these are other files; on Windows or macOS the same one.
         assert_eq!(dropped("flag.png", b"two"), "media/flag-2.png");
         assert_eq!(dropped("FLAG.png", b"one"), "media/Flag.png");
         assert_eq!(dropped("Ku\u{30a}n\u{30c}.png", b"horse"), "media/Ku\u{30a}n\u{30c}.png");

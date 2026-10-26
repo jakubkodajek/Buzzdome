@@ -76,7 +76,7 @@ export function EditorScreen({ onTestRun, onExit }: { onTestRun: () => void; onE
   return <Studio editor={editor} open={state.status === "open" ? state : null} onExit={onExit} />;
 }
 
-/** The draft left from last time does not read: it stays until the quizmaster discards it (A17). */
+/** The draft left from last time does not read: it stays until the quizmaster discards it. */
 function UnreadableDraft({ editor, error, onExit }: { editor: QuizEditor; error: unknown; onExit: () => void }) {
   const { t } = useApp();
   return (
@@ -291,7 +291,7 @@ function Studio({ editor, open, onExit }: { editor: QuizEditor; open: OpenQuiz |
   return (
     <MediaRootContext value={open?.mediaRoot ?? null}>
       <ThemeContext value={theme}>
-        {/* A file operation under way takes no other; while another quiz opens, no edits either (A16). */}
+        {/* A file operation under way takes no other; while another quiz opens, no edits either. */}
         <div className={editor.status.busy ? "studio studio-busy" : "studio"} aria-busy={editor.status.busy !== null}>
           <header className="studio-titlebar">
             <div className="quick-access">

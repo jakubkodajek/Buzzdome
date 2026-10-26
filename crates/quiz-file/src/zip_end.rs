@@ -1,14 +1,17 @@
 //! Whether a ZIP file counts more entries than a quiz may have, read before
-//! the archive is opened: opening reads every entry header the end record
+//! the archive is opened (`check`): opening reads every entry header the end record
 //! it takes counts, so a file of millions of empty entries would take all
-//! memory before `MAX_ENTRIES` could be checked (A20).
+//! memory before `MAX_ENTRIES` could be checked.
 //!
 //! A plain end record counts at most 65,535 entries, which opening reads at
 //! a bounded cost and the count after it refuses. A ZIP64 end record can
 //! count billions. The reader takes the last end record of the file that
 //! reads and goes further back when one does not (`zip` 9:
 //! `find_central_directory_end`, `ZipArchive::get_metadata`), so every
-//! ZIP64 end record in the file is checked, not only the last.
+//! ZIP64 end record in the file is checked, not only the last. For the same
+//! reason a file of more than `MAX_END_RECORDS` end records is refused: the
+//! reader would read the entry headers again for each one that fails, up to
+//! 65,535 every time.
 
 use memchr::memmem;
 use std::collections::HashSet;
@@ -25,24 +28,41 @@ const ZIP64_END_COUNTS: usize = 40;
 /// What a ZIP64 end record's size leaves out: its signature and the size.
 const ZIP64_END_OVERHEAD: u64 = 12;
 const ZIP64_LOCATOR_LEN: usize = 20;
+/// How many end records a file may hold before it is refused: a quiz file
+/// holds one and chance matches in media are rare, so more is a file made
+/// to be opened slowly.
+pub const MAX_END_RECORDS: usize = 64;
 /// How many ZIP64 end records counting too many a file may hold before it
-/// is refused: a quiz file holds one at most and chance matches in media
-/// are rare, so more is a file made to be checked slowly.
+/// is refused without checking which the reader could take, for the same
+/// reason: a quiz file holds none.
 const MAX_SUSPECTS: usize = 64;
 /// How much of the file is read at a time.
 const CHUNK: usize = 1 << 20;
 
-/// Whether `file` holds a ZIP64 end record counting more than `limit`
-/// entries that a ZIP reader could take: one followed, where its size says
-/// it ends, by its locator and then an end record, which is how the reader
-/// finds it.
-pub fn counts_more_than(file: &mut (impl Read + Seek), limit: u64) -> io::Result<bool> {
+/// What the end records of a ZIP file say about opening it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Verdict {
+    /// No end record the reader could take counts too many entries.
+    Opens,
+    /// A ZIP64 end record the reader could take counts too many entries:
+    /// one followed, where its size says it ends, by its locator and then an
+    /// end record, which is how the reader finds it. Also a file of more
+    /// than `MAX_SUSPECTS` ZIP64 end records counting too many.
+    CountsTooMany,
+    /// More than `MAX_END_RECORDS` end records, whatever they count.
+    TooManyEndRecords,
+}
+
+/// Reads the end records of `file` for whether it may be opened as an
+/// archive of at most `limit` entries.
+pub fn check(file: &mut (impl Read + Seek), limit: u64) -> io::Result<Verdict> {
     scan(file, limit, CHUNK)
 }
 
-fn scan(file: &mut (impl Read + Seek), limit: u64, chunk_len: usize) -> io::Result<bool> {
+fn scan(file: &mut (impl Read + Seek), limit: u64, chunk_len: usize) -> io::Result<Verdict> {
     // Where the ZIP64 end records counting too many say they end.
     let mut suspects = HashSet::new();
+    let mut ends = 0;
     let mut chunk = Vec::with_capacity(chunk_len + ZIP64_END_COUNTS);
     // The file offset of `chunk[0]`.
     let mut start = 0;
@@ -54,6 +74,10 @@ fn scan(file: &mut (impl Read + Seek), limit: u64, chunk_len: usize) -> io::Resu
         // A record is read where all its fields are in this chunk; the
         // bytes after `done` come again at the start of the next one.
         let done = if last { chunk.len() } else { chunk.len() - ZIP64_END_COUNTS };
+        ends += memmem::find_iter(&chunk, END).take_while(|&at| at < done).count();
+        if ends > MAX_END_RECORDS {
+            return Ok(Verdict::TooManyEndRecords);
+        }
         for at in memmem::find_iter(&chunk, SIGNATURE).take_while(|&at| at < done) {
             let offset = start + at as u64;
             match chunk.get(at + 3) {
@@ -66,28 +90,29 @@ fn scan(file: &mut (impl Read + Seek), limit: u64, chunk_len: usize) -> io::Resu
                         suspects.insert(end);
                     }
                     if suspects.len() > MAX_SUSPECTS {
-                        return Ok(true);
+                        return Ok(Verdict::CountsTooMany);
                     }
                 }
                 Some(&ZIP64_LOCATOR) => {
                     let followed_by_end = chunk.get(at + ZIP64_LOCATOR_LEN..).is_some_and(|after| after.starts_with(END));
                     if followed_by_end && suspects.contains(&offset) {
-                        return Ok(true);
+                        return Ok(Verdict::CountsTooMany);
                     }
                 }
                 _ => {}
             }
         }
         if last {
-            return Ok(false);
+            return Ok(Verdict::Opens);
         }
         chunk.drain(..done);
         start += done as u64;
     }
 }
 
+/// The little-endian number at `at` in `bytes`; 0 where they end before it.
 fn u64_at(bytes: &[u8], at: usize) -> u64 {
-    u64::from_le_bytes(bytes[at..at + 8].try_into().unwrap())
+    bytes.get(at..at + 8).and_then(|number| number.try_into().ok()).map_or(0, u64::from_le_bytes)
 }
 
 #[cfg(test)]
@@ -95,7 +120,7 @@ pub(crate) mod tests {
     use super::*;
     use std::io::{Cursor, Write};
     use zip::write::SimpleFileOptions;
-    use zip::ZipWriter;
+    use zip::{ZipArchive, ZipWriter};
 
     /// A ZIP64 end record counting `count` entries at offset `at`, its
     /// locator and an end record that defers to it.
@@ -115,8 +140,12 @@ pub(crate) mod tests {
         [&record[..], &locator, &end].concat()
     }
 
-    fn counts_too_many(bytes: Vec<u8>, chunk_len: usize) -> bool {
+    fn verdict(bytes: Vec<u8>, chunk_len: usize) -> Verdict {
         scan(&mut Cursor::new(bytes), 10_000, chunk_len).unwrap()
+    }
+
+    fn counts_too_many(bytes: Vec<u8>, chunk_len: usize) -> bool {
+        verdict(bytes, chunk_len) == Verdict::CountsTooMany
     }
 
     #[test]
@@ -158,12 +187,13 @@ pub(crate) mod tests {
 
     #[test]
     fn a_file_of_many_such_records_is_refused_unchecked() {
-        // Records that each say they end somewhere else, so none is followed by its locator.
+        // Records that each say they end somewhere else, so none is followed
+        // by its locator, and with no end record after them.
         let records = |n| {
             let mut bytes = Vec::new();
             for _ in 0..n {
                 let size_at = bytes.len() + 4;
-                bytes.extend(zip64_end(3_000_000, 0));
+                bytes.extend(&zip64_end(3_000_000, 0)[..56 + ZIP64_LOCATOR_LEN]);
                 let elsewhere = bytes.len() as u64;
                 bytes[size_at..size_at + 8].copy_from_slice(&elsewhere.to_le_bytes());
             }
@@ -171,5 +201,57 @@ pub(crate) mod tests {
         };
         assert!(!counts_too_many(records(MAX_SUSPECTS), CHUNK));
         assert!(counts_too_many(records(MAX_SUSPECTS + 1), CHUNK));
+    }
+
+    #[test]
+    fn a_file_of_many_end_records_is_refused_whatever_they_count() {
+        let ends = |n| [b"PK\x05\x06".repeat(n), vec![b'.'; 50]].concat();
+        for chunk_len in [64, 100, CHUNK] {
+            assert_eq!(verdict(ends(MAX_END_RECORDS), chunk_len), Verdict::Opens, "chunks of {chunk_len}");
+            assert_eq!(verdict(ends(MAX_END_RECORDS + 1), chunk_len), Verdict::TooManyEndRecords, "chunks of {chunk_len}");
+        }
+    }
+
+    #[test]
+    fn the_reader_falls_back_to_an_earlier_zip64_end_record_and_the_check_finds_it() {
+        let mut zip = ZipWriter::new(Cursor::new(Vec::new()));
+        for n in 0..10_001 {
+            zip.start_file(n.to_string(), SimpleFileOptions::default()).unwrap();
+        }
+        let mut bytes = zip.finish().unwrap().into_inner();
+        // The end record, which has no comment, gives way to a ZIP64 one counting as much.
+        let end = bytes.split_off(bytes.len() - 22);
+        let directory = u64_at(&[&end[12..20], &[0; 4]].concat(), 0);
+        let (directory_len, directory_at) = (directory & 0xFFFF_FFFF, directory >> 32);
+        let mut records = zip64_end(10_001, bytes.len() as u64);
+        records[40..48].copy_from_slice(&directory_len.to_le_bytes());
+        records[48..56].copy_from_slice(&directory_at.to_le_bytes());
+        bytes.extend(records);
+        // A last end record that reads but counts one entry header too many,
+        // so reading the headers fails at the ZIP64 record after them.
+        let mut broken = end.clone();
+        broken[8..12].copy_from_slice(&[0x12, 0x27, 0x12, 0x27]);
+        bytes.extend(broken);
+
+        let archive = ZipArchive::new(Cursor::new(bytes.clone())).unwrap();
+        assert_eq!(archive.len(), 10_001, "the reader takes the earlier record");
+        assert!(counts_too_many(bytes, CHUNK));
+    }
+
+    #[test]
+    fn a_cut_or_overflowing_record_is_read_without_panicking() {
+        let whole = zip64_end(3_000_000, 0);
+        // The record counts once its locator is followed by an end record's signature.
+        let counted_from = 56 + ZIP64_LOCATOR_LEN + END.len();
+        for len in 0..=whole.len() {
+            for chunk_len in [64, 100, CHUNK] {
+                assert_eq!(counts_too_many(whole[..len].to_vec(), chunk_len), len >= counted_from, "{len} bytes in chunks of {chunk_len}");
+            }
+        }
+        for at in [0, 5] {
+            let mut bytes = [vec![b'.'; at], zip64_end(3_000_000, 0)].concat();
+            bytes[at + 4..at + 12].copy_from_slice(&u64::MAX.to_le_bytes());
+            assert!(!counts_too_many(bytes, CHUNK), "a size past the end of any file, at {at}");
+        }
     }
 }

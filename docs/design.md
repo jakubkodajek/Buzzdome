@@ -79,15 +79,16 @@ draws slides without a show.
   command (`step-guard.ts`) while the last one is unanswered and for
   `STEP_PAUSE_MS` (300 ms) after its answer, less than a person takes to
   see the new step, so a double press never runs the step after the one on
-  screen, however long the journal write took. Presses and score changes are never dropped.
+  screen, however long the journal write took. Presses and score changes are never dropped,
+  nor is Restart question, which the quizmaster confirms first.
   Show keys count as typing only in text fields: after the quizmaster
   touched a slider, checkbox or list, the keys still work, and a slider
   lets go of the focus when released.
 - **Where Next goes.** `Game::following` decides it: the next slide, or
   after the last slide the final ranking, unless the quiz has a final slide
   of its own (`Quiz::final_slide`), which then is the ranking and the show
-  ends with the last slide. `controls` and `GameView.next_slide_title` use
-  the same function.
+  ends with the last slide. `controls` and `GameView.next_slide` use the
+  same function.
 - **Commands** (UI to Rust) are the `api` object in `app/src/api.ts`, one
   entry per `#[tauri::command]`. Game actions all go through one command,
   `dispatch(Command)`, the same for buttons, keys, virtual and real buzzers.
@@ -136,7 +137,10 @@ draws slides without a show.
   or ends (an unanswered request is forgotten then), and holds no other.
   Those that write `receiver.json` run off the windows' thread too: it is in
   the app's data folder with the journal, so a disk that does not answer
-  holds both.
+  holds both. They change it one at a time (`SettingsChange`, whose lock is
+  never taken under the show state), so two quick clicks cannot lose either
+  change; and every atomic write has a temporary file of its own
+  (`quiz_file::write_atomic`).
 - **Saving problems.** When the journal refuses a write (the disk is full,
   say), the change is not made, and the Director shows why in a banner until
   a write works again (`show-not-saved`, `show_not_saved`). A due command
@@ -193,17 +197,22 @@ draws slides without a show.
   lists the app's commands so Tauri checks them, and a test in
   `app_windows.rs` keeps the three lists in step). The projector can read
   the show and its media, but not open, save or pick files, and `dispatch`
-  takes from it only what its keys stand for (`PROJECTOR_COMMANDS` in
-  `lib.rs`, written to `bindings/ProjectorCommands.ts`; a test in
-  `keyboard.test.ts` checks that every command a key gives is in it).
+  takes from it only what its keys stand for (`may_give` in `lib.rs`: the
+  `PROJECTOR_COMMANDS`, written to `bindings/ProjectorCommands.ts`, where a
+  test in `keyboard.test.ts` checks that every command a key gives is in
+  it, and presses of the big button of buzzers 1 to 10 only); a window the
+  app does not know may give none.
   A content security policy (`tauri.conf.json`) lets the pages load only
   the app's own scripts and styles and media through the asset protocol.
   Tauri sets it only on the pages a release build serves, not on the dev
   server's, so the release smoke check in `docs/hardware-test.md` runs
-  under it. Files the quizmaster opens, saves, imports or exports are
-  picked by the backend (`dialogs.rs`, worded by the UI's `Picker`), never
-  named by a page: the editor's recent files are kept by the backend
-  (`recent_files.rs`) and the page opens one by its place in the list. The
+  under it; what it blocks goes in the log (`csp-report.ts`). Files the
+  quizmaster opens, saves, imports or exports are picked by the backend
+  (`dialogs.rs`, worded by the UI's `Picker`, whose offered name, a quiz
+  title, the backend turns into a portable file name), never named by a
+  page: the editor's recent files are kept by the backend
+  (`recent_files.rs`), and the page opens one by its path, which has to be
+  in that list; a file leaves the list once it is gone from its folder. The
   pages confirm through the dialog plugin's `ask`
   (`confirm.ts`, with Yes and No in the UI's language); ESLint refuses `alert`, `confirm`, `prompt` and the
   plugin's file pickers.
@@ -290,10 +299,12 @@ A `.quiz` entry with a name that is not portable is stored under the
 closest portable one (`quiz_core::portable_reference`, numbered if taken)
 and the quiz's references are renamed with it (the draft then counts as
 unsaved). So is an entry whose name is one file with an entry before it on
-Windows and macOS (`quiz_core::file_key`: the names differ only in letter
-case, or in how accents are encoded, which macOS ignores too), which would
-take its place there; a show refuses such a quiz (`MediaNameClash`), as it
-does a name it would have to rename. Media added in the editor, and media
+Windows or macOS (`quiz_core::file_key`: the names differ only in letter
+case, which Windows compares in upper case and macOS in lower case, or in
+how accents are encoded, which macOS ignores too), which would take its
+place there; a show refuses a quiz that uses such a name
+(`MediaNameClash`), whether or not it uses the entry before it, as it does
+a name it would have to rename. Media added in the editor, and media
 an export copies beside a sheet, take no name that is one file with a name
 in the folder, also on Linux. A plain `quiz.json` reads
 only safe names from the disk (no device names on Windows), nor any
@@ -301,7 +312,9 @@ through a link that leads out of its folder, and the show path keeps such
 a file refused.
 A `.quiz` file of more than 10,000 entries (`MAX_ENTRIES`) is refused. Its
 ZIP64 end records are checked before the archive is opened (`zip_end.rs`),
-as opening reads every entry header the record it takes counts.
+as opening reads every entry header the record it takes counts, and a file
+of more than 64 end records (`MAX_END_RECORDS`) is refused as not a quiz
+file, as the reader would read the entry headers again for each one.
 A `quiz.json` over 16 MB (`MAX_QUIZ_JSON_BYTES`) is refused before it is
 parsed, whether read from a package, from the disk or about to be saved, so
 a small packed file cannot unpack into a huge quiz.
@@ -328,15 +341,19 @@ show finds its media even if the original file was moved. When a show
 starts, every other unpacked quiz is deleted, because only the latest show can
 be resumed. If the folder is gone on resume, the show still resumes and the
 Director shows a warning. `meta.json` also records `RULES_VERSION`, which
-quiz-core bumps whenever the same journal would replay into another show;
-a show begun under another version still resumes with today's rules, and
-the Director says its scores may differ. What would put the replay a step
-off is kept from the show's own version, and the game keeps that version
-to the show's end (`Game::replay`), so what is journaled after a resume
-replays the same way at the next one: a show begun before version 2 jumps
-out of a question in play, as the app then restarted a question after a
-crash with a `GoTo` to it, and one begun before version 3 switches a
-player off without closing the question.
+quiz-core bumps whenever the same journal would replay into another show.
+What would put the replay a step off is kept from the show's own version,
+and the game keeps that version to the show's end (`Game::replay`), so
+what is journaled after a resume replays the same way at the next one: a
+show begun before version 2 jumps out of a question in play, as the app
+then restarted a question after a crash with a `GoTo` to it, one begun
+before version 3 switches a player off without closing the question, and
+one begun before version 4 restarts a closed question. Version 3 also
+changed what is not kept so (ties, accents in names), so a show begun
+before it, or under a newer app's rules, resumes with a warning that its
+scores may differ (`RulesChanged`); from version 3 on
+(`REPLAYS_AS_PLAYED_FROM`) a show replays as it was played and resumes
+without one.
 
 The windows load media through Tauri's asset protocol. Its scope is empty
 in `tauri.conf.json`; at startup the shell allows the folder of unpacked
@@ -712,7 +729,16 @@ packages users will install are read the same way.
   then by the time their right answers took together (`total_answer_ms`,
   less first); wrong answers add no time, so not answering never helps.
   Players equal in both share a place and the places after them are
-  skipped (1, 1, 3); the podium shows the shared number.
+  skipped (1, 1, 3). On the final podium (`host/podium.ts`) players who
+  share a place stand on its block (more than three: two named, the rest
+  counted), and a place the game skips leaves its block empty.
+  The original breaks ties on total answering time (`replica/recon.md`);
+  counting only right answers is a choice made on purpose, with its price:
+  at equal score, a player whose extra right answers were cancelled by
+  penalties has spent more time and ranks below one with fewer right
+  answers. The rule came with rules version 3 and has no older variant, so
+  in a show begun before it, which resumes with the Director's warning
+  that scores may differ (`RulesChanged`), tied players may swap places.
 
 ### 1.6 Media player and sound board
 
@@ -896,8 +922,11 @@ the windows (`dispatch`: keyboard and on-screen buzzers, the quizmaster's
 buttons) are timed the same way: the time is read before the press or
 command joins the show queue (`show_thread::press`, `show_thread::run`),
 so a keyboard press made during a burst of buzzer presses counts as on
-time. A press or command stamped before the running show began, while it
-started, was meant for no show or the one before, and does not reach it.
+time. A press or show command (`execute_at`) stamped before the running
+show began, while it started, was meant for no show or the one before, and
+does not reach it; neither does an end of the show (`end_show`). Team name
+edits skip that check: they are about the names prepared for any show, and
+one made while a show starts reaches it.
 
 Resuming (`resume_show`) reads the latest session folder: the one with the
 highest number, as a folder is named by its show's start in milliseconds,
@@ -906,9 +935,13 @@ never share one. The journal is read as bytes (a byte order mark and CRLF
 line ends, which an editor may add, are taken as they come). Each line is
 synced before the next is written, so only the last line can be one the app
 never accepted: one without its newline, which was being written when the
-app stopped, or a whole one that is not JSON at all or holds a NUL, which a
-power cut leaves when the disk kept the newline but not the bytes before
-it. Resume cuts such a line off, after keeping the journal as it was in
+app stopped, or a whole one that is no journal line at all, which a power
+cut leaves when the disk kept the newline but not the bytes before it. A
+journal line, as every version of the app writes it and every later one
+must keep writing it, is a JSON object with `atMs` and `command`, and
+never holds a NUL (`is_journal_line`); so a last line that is that, but
+whose command this version does not know, was accepted by a newer app and
+is not cut. Resume cuts a torn line off, after keeping the journal as it was in
 `torn/journal-<n>.jsonl` (a copy per cut; when the copy fails, as on a full
 disk, the log says so and the show resumes all the same). Any other line
 that does not read as a command (one from a newer app, or one the disk
@@ -921,10 +954,13 @@ charged twice), and that command is journaled before `show-changed`
 reaches the windows, so no window shows the stopped question. The
 quizmaster can restart a question in play too (Restart question, after a
 confirmation): it is the way to leave a question without scoring it, since
-a jump is refused then. It also works once the question closed, until its
-answer is shown, taking its scores and answering times back, so a restart
-confirmed just after time ran out still works. Score changes made by hand
-(`AdjustScore`) are not the question's and stay.
+a jump is refused then. Its score changes and answering times are taken
+back; score changes made by hand (`AdjustScore`) are not the question's and
+stay. A closed question does not restart: the projector shows its results
+then, which would give the answer away. So the Director pauses the clock
+while the quizmaster confirms, and resumes it if they decline; a question
+that closed meanwhile anyway (everyone answered) is not restarted, and the
+Director says why.
 The Director keeps a resume problem on screen, under the Resume button,
 until another show loads. When a failed journal write cannot be taken back,
 the session refuses every later command (`journalBroken`) until the show is
@@ -973,8 +1009,10 @@ neither can slip in between the other's check and its start.
 buzzer, from one function (`Game::light_of`): ready while a player can press,
 locked once they answered or another player buzzed, first for the buzz being
 judged, dark while a question is closed, and the result from the reveal. A
-wrong buzz shows wrong as it is judged, then the lights of the step that
-follows. A player switched on gets the light of the step at once, one
+buzz judged wrong shows wrong while the others get the lights of the step
+that follows (ready again, or dark when it closed the question), until the
+next step's lights: another buzz, the question's close or its reveal. A
+player switched on gets the light of the step at once, one
 switched off shows locked. The shell passes it to `BuzzerDriver::set_lights`; for the hardware
 driver that is a message to the receiver thread, which encodes it with the
 active protocol and writes the reports. Light failures are logged and never

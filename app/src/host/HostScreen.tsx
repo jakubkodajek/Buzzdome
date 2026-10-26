@@ -47,7 +47,7 @@ function HostLayout() {
         <Stage className="host-viewport" screen={view ? screenOf(view) : "default"} slide={view?.slide ?? null} onHold={view?.onHold}>
           {view && (
             <>
-              {/* A slide that fails to render leaves the stage as it is and tells the Director; the next slide tries afresh (A12). */}
+              {/* A slide that fails to render leaves the stage as it is and tells the Director; the next slide tries afresh. */}
               <ErrorBoundary key={view.slideIndex} fallback={() => null} onError={(message) => reportToDirector(t("slideNotShown", { message }))}>
                 <SlideScreen view={view} context={slideContext(quiz, view.slideIndex)} clock={clock} />
               </ErrorBoundary>

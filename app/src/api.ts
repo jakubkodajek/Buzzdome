@@ -47,7 +47,7 @@ export const api = {
   mediaRoot: () => invoke<string | null>("media_root"),
   /** Why the running show's journal cannot be written, if so. */
   showNotSaved: () => invoke<AppError | null>("show_not_saved"),
-  // The backend opens the file pickers (A21): a window names no file to write.
+  // The backend opens the file pickers: a window names no file to write.
   /** Starts a show of a quiz file the quizmaster picks; false when they cancel. */
   startShowFromFile: (picker: Picker) => invoke<boolean>("start_show_from_file", { picker }),
   startDemoShow: () => invoke<void>("start_demo_show"),
@@ -114,12 +114,12 @@ export const api = {
   receiverExportLog: (picker: Picker) => invoke<boolean>("receiver_export_log", { picker }),
   receiverUdevRule: () => invoke<string>("receiver_udev_rule"),
   // The editor's commands on a draft name it (`EditorDraft.id`): one that
-  // another draft has replaced since is refused with `draftChanged` (A16).
+  // another draft has replaced since is refused with `draftChanged`.
   /** The quiz editor's draft left from last time, if any. */
   editorLoad: () => invoke<EditorDraft | null>("editor_load"),
   editorNew: (title: string) => invoke<EditorDraft>("editor_new", { title }),
-  /** Opens the file at `recent` in `editorRecentFiles`, or a quiz file the quizmaster picks; null when they cancel. */
-  editorOpen: (recent: number | null, picker: Picker) => invoke<EditorDraft | null>("editor_open", { recent, picker }),
+  /** Opens `recent`, a file in `editorRecentFiles`, or a quiz file the quizmaster picks; null when they cancel. */
+  editorOpen: (recent: string | null, picker: Picker) => invoke<EditorDraft | null>("editor_open", { recent, picker }),
   /** Quiz files the editor opened or saved lately, latest first. */
   editorRecentFiles: () => invoke<string[]>("editor_recent_files"),
   /** Stores the edited quiz; returns what keeps it from being played. */

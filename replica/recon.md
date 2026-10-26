@@ -225,7 +225,8 @@ the bottom; Ctrl+S shows the current round (§5.4.6).
 - Teams right-click: add/subtract points with remembered presets, "add and
   animate" (big check on screen), "subtract and animate" (big cross), enter
   a vote, AI roast (§5.7.2).
-- Ranking ties are broken by total answering time (§5.7.2).
+- Ranking ties are broken by total answering time (§5.7.2). Buzzdome
+  counts only the time of right answers (`docs/design.md`, Ranking).
 
 ### S35 Mobile Director app (§5.2.4.4, PDF pp. 189 to 190)
 
@@ -449,7 +450,8 @@ Rounds are derived: the slides between end-of-round slides (§5.4.5.3).
   question (§5.4.5.8).
 - Groups: fastest finger with or without group lockout; voting counts first
   answer only, sums or averages (§4.3.2.1).
-- Ties in the ranking break on total answering time (§5.7.2).
+- Ties in the ranking break on total answering time (§5.7.2); Buzzdome
+  counts only right answers' time (`docs/design.md`, Ranking).
 
 ## Feature matrix
 

@@ -40,7 +40,8 @@ pub enum AppError {
     #[error("the show's journal could not be repaired after a failed write")]
     JournalBroken,
     /// The projector window gave a command its keys do not stand for, which
-    /// only the Director may give (`PROJECTOR_COMMANDS`).
+    /// only the Director may give (`may_give`); or a window the app does not
+    /// know gave one.
     #[error("the projector cannot give this command")]
     NotFromProjector,
     /// The show thread stopped (a bug), so the show takes no more commands;
@@ -49,12 +50,12 @@ pub enum AppError {
     ShowStopped,
     /// The show thread got stuck on something earlier (a journal write that
     /// does not finish, `SaveHangs`) before it began the command, so the
-    /// command was given up: it is never made (G17, J18).
+    /// command was given up: it is never made.
     #[error("the show is still busy with an earlier step; this one was not made")]
     ShowBusy,
     /// The show thread has been busy with one thing for
     /// `show_thread::STUCK_AFTER`: a journal write that does not finish,
-    /// as when the disk does not answer. Presses wait for it (G17, J17).
+    /// as when the disk does not answer. Presses wait for it.
     #[error("saving the show does not finish")]
     SaveHangs,
     #[error("the last show cannot be read: {detail}")]
@@ -67,11 +68,12 @@ pub enum AppError {
     /// started, so it is not written over until the app reads it again.
     #[error("{path} could not be read, so it is not written over")]
     FileLeftUnread { path: String },
-    /// A resumed show began under other rules (`RULES_VERSION`); it runs.
+    /// A resumed show began under rules its journal may not replay the same
+    /// under (`SessionMeta::rules_changed`); it runs.
     #[error("the show began in another version of the app; its scores may differ")]
     RulesChanged,
     /// A resumed show's media are in a folder the windows may not load
-    /// from (A21); it runs without them.
+    /// from; it runs without them.
     #[error("the show's media are in {folder}, which the windows may not load from")]
     MediaFolderRefused { folder: String },
 
@@ -91,6 +93,11 @@ pub enum AppError {
     TooLarge { max_mb: u64 },
     #[error("the quiz file has more than {max} files")]
     TooManyFiles { max: usize },
+    /// A file of more ZIP end records than a quiz file holds
+    /// (`quiz_file::MAX_END_RECORDS`): not a quiz file, and refused before
+    /// it is opened, which would read its entries again for each of them.
+    #[error("the file has more than {max} ZIP end records")]
+    TooManyEndRecords { max: usize },
     #[error("quiz.json is larger than {max_mb} MB")]
     #[serde(rename_all = "camelCase")]
     QuizJsonTooLarge { max_mb: u64 },
@@ -98,13 +105,13 @@ pub enum AppError {
     QuizInvalid { problems: Vec<ValidationError> },
     #[error("no quiz is open in the editor")]
     NoDraft,
-    /// The recent file the editor was asked to open is no longer in the list.
+    /// The recent file the editor was asked to open is not in the list.
     #[error("the file is no longer in the recent files")]
     NotRecent,
-    /// The editor opened another quiz since the command was given (A16).
+    /// The editor opened another quiz since the command was given.
     #[error("another quiz was opened in the editor meanwhile")]
     DraftChanged,
-    /// The editor's `draft.json` does not hold what it should (A17).
+    /// The editor's `draft.json` does not hold what it should.
     #[error("the editor's draft cannot be read: {detail}")]
     DraftNotRead { detail: String },
     #[error("the spreadsheet cannot be read: {detail}")]
@@ -171,7 +178,7 @@ impl AppError {
         AppError::System { detail: error.to_string() }
     }
 
-    /// Whether the running show's journal refused a write (A9).
+    /// Whether the running show's journal refused a write.
     pub fn is_not_saved(&self) -> bool {
         matches!(self, AppError::ShowNotSaved { .. } | AppError::JournalBroken)
     }
@@ -236,6 +243,7 @@ impl From<QuizFileError> for AppError {
             QuizFileError::MissingQuizJson => AppError::MissingQuizJson,
             QuizFileError::TooLarge => AppError::TooLarge { max_mb: quiz_file::MAX_UNPACKED_BYTES >> 20 },
             QuizFileError::TooManyFiles => AppError::TooManyFiles { max: quiz_file::MAX_ENTRIES },
+            QuizFileError::TooManyEndRecords => AppError::TooManyEndRecords { max: quiz_file::MAX_END_RECORDS },
             QuizFileError::QuizJsonTooLarge => AppError::QuizJsonTooLarge { max_mb: quiz_file::MAX_QUIZ_JSON_BYTES >> 20 },
             QuizFileError::Invalid(problems) => AppError::QuizInvalid { problems },
             QuizFileError::Spreadsheet(detail) => AppError::NotASpreadsheet { detail },

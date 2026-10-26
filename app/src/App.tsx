@@ -21,7 +21,7 @@ const logProblem = (error: unknown) => {
 
 /**
  * The window's screen. Should it fail to render, the projector goes black
- * and tells the Director, and the Director offers to try again (A12).
+ * and tells the Director, and the Director offers to try again.
  */
 export default function App() {
   const [lang] = useLang();
@@ -38,11 +38,11 @@ export default function App() {
 
 /**
  * The Director, which can be closed during a show even once its screen
- * failed to render (G3): the close request is answered here, above the
+ * failed to render: the close request is answered here, above the
  * screen's boundary, and the fallback can close the app itself.
  */
 function DirectorWindow({ lang, t }: { lang: Lang; t: Translate }) {
-  // Closing this window during a show asks first; the app ends with it (A10).
+  // Closing this window during a show asks first; the app ends with it.
   useBackendEvent("close-requested", () => {
     // A dialog that does not open leaves the request unanswered, so a close in the next minute goes through.
     confirmAction(t, t("quitDuringShow"))
@@ -71,7 +71,7 @@ const closeFailedHost = () => {
   api.closeHostWindow().catch(logProblem);
 };
 
-/** The projector after its screen failed to render: black, and M or Esc still closes it (G24). */
+/** The projector after its screen failed to render: black, and M or Esc still closes it. */
 function HostFailed() {
   useProjectorCloseKeys(closeFailedHost);
   return <div className="host-failed" />;

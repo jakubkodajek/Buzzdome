@@ -93,7 +93,7 @@ pub fn set(app: &AppHandle, inner: &mut Inner, names: Vec<String>, at_ms: u64) -
 }
 
 // Like the show's commands, these run off the windows' thread, and the
-// edits on the show thread, in order with the show's commands (A7).
+// edits on the show thread, in order with the show's commands.
 
 /// The team names prepared for shows.
 #[tauri::command]

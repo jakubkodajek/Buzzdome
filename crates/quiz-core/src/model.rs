@@ -547,9 +547,9 @@ pub enum Problem {
     #[error("media file {file} of category {name}: {issue}")]
     CategoryMedia { name: String, file: String, issue: MediaIssue },
     /// Two media files whose names differ only in case or in how their
-    /// accents are encoded (`file_key`): one file on Windows and macOS, so
-    /// one would take the other's place.
-    #[error("media file {file} has the name of {other} to Windows and macOS")]
+    /// accents are encoded (`file_key`): one file on macOS, and on Windows
+    /// when only case differs, so one would take the other's place.
+    #[error("media file {file} has the name of {other} to macOS or Windows")]
     MediaNameClash { file: String, other: String },
     #[error("more than {max} answers")]
     TooManyAnswers { max: usize },

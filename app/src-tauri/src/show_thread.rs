@@ -1,16 +1,16 @@
-//! The show thread (A7): the one thread that changes a running show. The
+//! The show thread: the one thread that changes a running show. The
 //! receiver's events, the quizmaster's commands and the passing of time
 //! reach it through one queue, so they are handled one at a time in the
 //! order they came (`pump`), and a command waits for a journal write here,
 //! never on the windows' thread. Ending a show is one of those commands, so
-//! one given before it still counts in the show (G18). Starting a show
+//! one given before it still counts in the show. Starting a show
 //! takes the show state from a worker thread instead: it waits for files,
 //! and no show runs whose order it could break.
 //!
 //! A journal write that does not finish (the disk does not answer) holds
 //! the thread up: a watchdog tells the Director, and a command the thread
-//! has not begun when it gets stuck is given up, never made later (G17,
-//! J18). A press is never given up (J17): it waits in the queue, as a
+//! has not begun when it gets stuck is given up, never made later. A
+//! press is never given up: it waits in the queue, as a
 //! receiver's does, and counts by its time once the write finishes.
 
 use crate::error::{AppError, CmdResult};
@@ -28,11 +28,11 @@ use tauri::{AppHandle, Emitter, Manager};
 const TICK: Duration = Duration::from_millis(50);
 /// How often the windows get the running clock (seconds and points on screen).
 const CLOCK_EVENT_EVERY: Duration = Duration::from_millis(250);
-/// How long a due command that failed waits before it is tried again (A9).
+/// How long a due command that failed waits before it is tried again.
 const RETRY_DUE_AFTER: Duration = Duration::from_secs(1);
 /// How long the thread may take over one thing before it counts as stuck,
 /// and the commands waiting for it are given up. A journal write takes
-/// milliseconds; one to a disk that does not answer may never finish (G17).
+/// milliseconds; one to a disk that does not answer may never finish.
 pub const STUCK_AFTER: Duration = Duration::from_secs(3);
 /// How often the watchdog, and a command waiting for the thread, look
 /// whether it is stuck.
@@ -115,7 +115,7 @@ fn queue(app: &AppHandle, event: ShowEvent) -> CmdResult<()> {
 }
 
 /// Queues a keyboard or on-screen buzzer's press, made now, to count as a
-/// receiver's does: in order with them, never given up (J17).
+/// receiver's does: in order with them, never given up.
 pub fn press(app: &AppHandle, press: Press) -> CmdResult<()> {
     queue(app, ShowEvent::Press { press, at_ms: now_ms() })
 }
@@ -164,7 +164,7 @@ enum Outcome<T> {
 /// The work runs the job only if the caller has not given it up, and the
 /// caller gives it up only if the work has not begun it, so the job runs
 /// once or never: the quizmaster may give it again, and it must not happen
-/// twice (G17).
+/// twice.
 fn hand_over<C, T: Send + 'static>(job: impl FnOnce(&C) -> T + Send + 'static) -> (Work<C>, Handed<T>) {
     let (reply, answer) = mpsc::sync_channel(1);
     let taken = Arc::new(AtomicBool::new(false));
@@ -184,7 +184,7 @@ impl<T> Handed<T> {
     /// Waits for the job's result. Until the thread begins it, looks whether
     /// the thread is `stuck` each time `every` passes, and gives it up then.
     /// A thread busy with a burst of quick writes queued before it is waited
-    /// for, however long they take together (J18); a job begun is waited
+    /// for, however long they take together; a job begun is waited
     /// for, as it may change the show.
     fn wait(self, every: Duration, stuck: impl Fn() -> bool) -> Outcome<T> {
         loop {
@@ -226,7 +226,7 @@ type Notify = dyn Fn(&Option<AppError>) + Send + Sync;
 struct Watched {
     /// Since when the thread is on what it is doing, if anything.
     busy_since: Option<Instant>,
-    /// What the Director was last told about saving the show (A9).
+    /// What the Director was last told about saving the show.
     told: Option<AppError>,
 }
 
@@ -280,7 +280,7 @@ impl Watched {
 /// The show thread's bookkeeping between rounds.
 struct Ticker {
     last_clock_event: Instant,
-    /// A due command that failed is tried again from then on, not 20 times a second (A9).
+    /// A due command that failed is tried again from then on, not 20 times a second.
     retry_due_at: Option<Instant>,
     watch: Watch,
 }
@@ -379,7 +379,7 @@ mod tests {
 
     #[test]
     fn jobs_run_in_the_order_they_were_queued() {
-        // As a step given just before `end_show`, which still counts in the show (G18).
+        // As a step given just before `end_show`, which still counts in the show.
         let (queue, events) = mpsc::channel();
         let order = Arc::new(Mutex::new(Vec::new()));
         let handed: Vec<Handed<()>> = ["step", "end"]

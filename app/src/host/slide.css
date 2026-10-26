@@ -593,6 +593,10 @@
   font-weight: 900;
 }
 
+/* Players sharing a place stand on one block: smaller names, so they fit. */
+.podium-name.lines-2 .name { font-size: 44px; }
+.podium-name.lines-3 .name { font-size: 34px; }
+
 .podium-name .score {
   font-size: 50px;
   font-weight: 800;

@@ -24,7 +24,7 @@ use ts_rs::TS;
 use std::collections::VecDeque;
 use std::path::Path;
 use std::sync::mpsc::Sender;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, MutexGuard};
 use tauri::{AppHandle, Emitter, Manager, Window};
 
 const SETTINGS_FILE: &str = "receiver.json";
@@ -85,6 +85,8 @@ pub struct Hardware {
     settings: Arc<Mutex<ReceiverSettings>>,
     /// Where they are kept, and why they were not read, if so.
     settings_file: AppFile,
+    /// Held while a command changes the settings (`SettingsChange`).
+    changing: Mutex<()>,
     learn: Mutex<Option<Recorder>>,
     raw_log: Mutex<VecDeque<RawReport>>,
 }
@@ -102,17 +104,7 @@ impl Hardware {
 
         let backend = match HidapiBackend::new() {
             Ok(b) => Arc::new(b),
-            Err(e) => {
-                return Hardware {
-                    backend: None,
-                    handle: None,
-                    init_error: Some(e.to_string()),
-                    settings,
-                    settings_file,
-                    learn: Mutex::new(None),
-                    raw_log: Mutex::new(VecDeque::new()),
-                };
-            }
+            Err(e) => return Hardware::without_usb(settings_file, settings, Some(e.to_string())),
         };
 
         let resolver_settings = settings.clone();
@@ -121,13 +113,19 @@ impl Hardware {
         });
         let (handle, _join) = receiver::spawn(backend.clone(), resolver, events, ReceiverConfig::new(clock));
         handle.select(remembered);
+        Hardware { backend: Some(backend), handle: Some(handle), ..Hardware::without_usb(settings_file, settings, None) }
+    }
 
+    /// The receiver's settings with no USB-HID, which failed with
+    /// `init_error` if it did.
+    fn without_usb(settings_file: AppFile, settings: Arc<Mutex<ReceiverSettings>>, init_error: Option<String>) -> Hardware {
         Hardware {
-            backend: Some(backend),
-            handle: Some(handle),
-            init_error: None,
+            backend: None,
+            handle: None,
+            init_error,
             settings,
             settings_file,
+            changing: Mutex::new(()),
             learn: Mutex::new(None),
             raw_log: Mutex::new(VecDeque::new()),
         }
@@ -137,19 +135,12 @@ impl Hardware {
         self.handle.clone()
     }
 
-    /// A copy of the settings to change and pass to `store_settings`.
-    fn settings(&self) -> ReceiverSettings {
-        self.settings.lock().unwrap().clone()
-    }
-
-    /// Writes `settings` to disk and only then uses them, so the app never
-    /// works with settings that a restart would lose. Only off the windows'
-    /// thread (`off_ui`): the file is in the app's data folder with the
-    /// show's journal, so a disk that does not answer holds both (J23).
-    fn store_settings(&self, settings: ReceiverSettings) -> CmdResult<()> {
-        self.settings_file.store(&settings)?;
-        *self.settings.lock().unwrap() = settings;
-        Ok(())
+    /// Begins a change of the settings, once no other command is changing
+    /// them. Only off the windows' thread (`off_ui`), and never under the
+    /// show's lock: the file is in the app's data folder with the show's
+    /// journal, so a disk that does not answer holds both.
+    fn change_settings(&self) -> SettingsChange<'_> {
+        SettingsChange { hw: self, _changing: self.changing.lock().unwrap() }
     }
 
     /// Ends learn mode, if on, so presses play again.
@@ -166,6 +157,30 @@ impl Hardware {
             ReceiverStatus::Connected { device, .. } => Some(device),
             _ => None,
         }
+    }
+}
+
+/// One command's change of the settings: read, changed and stored while no
+/// other command changes them, so two quick clicks cannot lose either
+/// change. The receiver thread reads the settings meanwhile, never waiting
+/// for the disk.
+struct SettingsChange<'a> {
+    hw: &'a Hardware,
+    _changing: MutexGuard<'a, ()>,
+}
+
+impl SettingsChange<'_> {
+    /// A copy of the settings to change and pass to `store`.
+    fn settings(&self) -> ReceiverSettings {
+        self.hw.settings.lock().unwrap().clone()
+    }
+
+    /// Writes `settings` to disk and only then uses them, so the app never
+    /// works with settings that a restart would lose.
+    fn store(&self, settings: ReceiverSettings) -> CmdResult<()> {
+        self.hw.settings_file.store(&settings)?;
+        *self.hw.settings.lock().unwrap() = settings;
+        Ok(())
     }
 }
 
@@ -191,7 +206,7 @@ fn stop_learning(learn: &mut Option<Recorder>, app: &AppHandle) {
 }
 
 /// Starts learning `button` of `buzzer` in `learn`, unless a show runs: in
-/// a show every press must play, and learn mode drops them (A14).
+/// a show every press must play, and learn mode drops them.
 fn start_learning(learn: &mut Option<Recorder>, show_running: bool, buzzer: BuzzerId, button: Button) -> CmdResult<()> {
     if show_running {
         return Err(AppError::ShowRunning);
@@ -270,7 +285,9 @@ pub async fn receiver_select(app: AppHandle, device: Option<DeviceInfo>) -> CmdR
     off_ui(move || {
         let hw = app.state::<Hardware>();
         let selector = device.as_ref().map(DeviceSelector::for_device);
-        hw.store_settings(ReceiverSettings { receiver: selector.clone(), ..hw.settings() })?;
+        // Selected in the change too, so the receiver used is the one stored.
+        let change = hw.change_settings();
+        change.store(ReceiverSettings { receiver: selector.clone(), ..change.settings() })?;
         hw.handle.as_ref().ok_or(AppError::UsbUnavailable)?.select(selector);
         Ok(())
     })
@@ -309,10 +326,11 @@ pub async fn receiver_learn_finish(app: AppHandle) -> CmdResult<Press> {
         let hw = app.state::<Hardware>();
         let device = hw.connected_device().ok_or(AppError::ReceiverNotConnected)?;
         let recorder = hw.learn.lock().unwrap().clone().ok_or(AppError::LearnNotStarted)?;
-        let mut settings = hw.settings();
+        let change = hw.change_settings();
+        let mut settings = change.settings();
         // Too few presses or a clash with another button: learn mode stays on to fix it.
         recorder.save_into(&mut settings.learned, &device)?;
-        let stored = hw.store_settings(settings);
+        let stored = change.store(settings);
         // Stored or not, learn mode ends, so presses play again.
         hw.end_learning(&app);
         stored?;
@@ -328,7 +346,8 @@ pub async fn receiver_learn_finish(app: AppHandle) -> CmdResult<Press> {
 pub async fn receiver_forget_learned(app: AppHandle) -> CmdResult<()> {
     off_ui(move || {
         let hw = app.state::<Hardware>();
-        hw.store_settings(ReceiverSettings { learned: Vec::new(), ..hw.settings() })?;
+        let change = hw.change_settings();
+        change.store(ReceiverSettings { learned: Vec::new(), ..change.settings() })?;
         if let Some(handle) = hw.handle.as_ref() {
             handle.reload_protocol();
         }
@@ -386,15 +405,12 @@ mod tests {
 
     fn hardware(settings_path: std::path::PathBuf) -> Hardware {
         let (settings_file, settings) = AppFile::load(settings_path);
-        Hardware {
-            backend: None,
-            handle: None,
-            init_error: None,
-            settings: Arc::new(Mutex::new(settings)),
-            settings_file,
-            learn: Mutex::new(None),
-            raw_log: Mutex::new(VecDeque::new()),
-        }
+        Hardware::without_usb(settings_file, Arc::new(Mutex::new(settings)), None)
+    }
+
+    fn stored(hw: &Hardware, settings: ReceiverSettings) -> CmdResult<()> {
+        let change = hw.change_settings();
+        change.store(settings)
     }
 
     fn receiver() -> Option<DeviceSelector> {
@@ -407,13 +423,35 @@ mod tests {
         // A folder where the file should be: writing it fails.
         let blocked = hardware(dir.join("blocked"));
         std::fs::create_dir_all(dir.join("blocked")).unwrap();
-        assert!(blocked.store_settings(ReceiverSettings { receiver: receiver(), ..blocked.settings() }).is_err());
-        assert!(blocked.settings().receiver.is_none());
+        assert!(stored(&blocked, ReceiverSettings { receiver: receiver(), ..Default::default() }).is_err());
+        assert!(blocked.change_settings().settings().receiver.is_none());
 
         let fine = hardware(dir.join(SETTINGS_FILE));
-        fine.store_settings(ReceiverSettings { receiver: receiver(), ..fine.settings() }).unwrap();
-        assert_eq!(fine.settings().receiver, receiver());
-        assert_eq!(hardware(dir.join(SETTINGS_FILE)).settings().receiver, receiver());
+        stored(&fine, ReceiverSettings { receiver: receiver(), ..Default::default() }).unwrap();
+        assert_eq!(fine.change_settings().settings().receiver, receiver());
+        assert_eq!(hardware(dir.join(SETTINGS_FILE)).change_settings().settings().receiver, receiver());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn settings_changed_at_once_keep_every_change() {
+        let dir = std::env::temp_dir().join(format!("receiver-settings-at-once-{}", std::process::id()));
+        let hw = hardware(dir.join(SETTINGS_FILE));
+        std::thread::scope(|scope| {
+            for vendor_id in 0..8 {
+                let hw = &hw;
+                scope.spawn(move || {
+                    let change = hw.change_settings();
+                    let mut settings = change.settings();
+                    std::thread::yield_now();
+                    settings.learned.push(LearnedMapping { vendor_id, product_id: 1, signatures: Vec::new() });
+                    change.store(settings).unwrap();
+                });
+            }
+        });
+        let mut kept: Vec<u16> = hardware(dir.join(SETTINGS_FILE)).change_settings().settings().learned.iter().map(|m| m.vendor_id).collect();
+        kept.sort_unstable();
+        assert_eq!(kept, (0..8).collect::<Vec<_>>());
         std::fs::remove_dir_all(&dir).unwrap();
     }
 }

@@ -48,7 +48,7 @@ export function QuestionsTab({ view, quiz }: { view: GameView; quiz: Quiz | null
   const contexts = slideContexts(quiz);
   const preview = quiz.slides[shown];
   const nextSlide = view.nextSlide === null ? undefined : quiz.slides[view.nextSlide];
-  // Jumps only with the buttons, never mid-question, and the final asks first (A3).
+  // Jumps only with the buttons, never mid-question, and the final asks first.
   const jumps = view.controls.goTo;
   const goToFinal = () => run(confirmAction(t, t("goToFinalConfirm")).then((yes) => yes && dispatch({ type: "goToFinal" })));
 

@@ -8,7 +8,18 @@ import { clockSeconds } from "../format";
 import { EditorScreen } from "../editor/EditorScreen";
 import { ErrorBoundary, RenderFailed } from "../error-boundary";
 import { errorText } from "../messages";
-import { useBackendEvent, useClock, useGameView, useLastSession, useLearnProgress, useMediaRoot, usePlayerVolume, useQuiz, useShowNotSaved } from "../hooks";
+import {
+  useBackendEvent,
+  useClock,
+  useGameView,
+  useLastSession,
+  useLatest,
+  useLearnProgress,
+  useMediaRoot,
+  usePlayerVolume,
+  useQuiz,
+  useShowNotSaved,
+} from "../hooks";
 import {
   BackIcon,
   CheckIcon,
@@ -41,6 +52,7 @@ import { SettingsTab, useProjectorSettings, type ProjectorSettings } from "./Set
 import { TeamsTab } from "./TeamsTab";
 import { confirmAction } from "../confirm";
 import { useMediaPlayer, type MediaPlayer } from "./useMediaPlayer";
+import { restartOutcome } from "./restart";
 import { VirtualBuzzers } from "./VirtualBuzzers";
 import "./director.css";
 
@@ -89,7 +101,7 @@ function DirectorScreens() {
   const mediaRoot = useMediaRoot();
   if (screen === "editor") {
     return (
-      // An editor that fails to render keeps the way back to the show (G23).
+      // An editor that fails to render keeps the way back to the show.
       <ErrorBoundary
         fallback={(message, retry) => (
           <RenderFailed t={t} text={t("partFailed", { message })} retry={retry}>
@@ -152,7 +164,7 @@ function DirectorLayout({ testRun, onEditor }: { testRun: boolean; onEditor: () 
         <LearnBanner />
         <div className="tab-body" role="tabpanel">
           <ThemeContext value={theme}>
-            {/* A tab that fails to render keeps the rest of the window, and its keys, working (A12). */}
+            {/* A tab that fails to render keeps the rest of the window, and its keys, working. */}
             <ErrorBoundary key={tab} fallback={(message, retry) => <RenderFailed t={t} text={t("partFailed", { message })} retry={retry} />}>
               <TabBody tab={tab} view={view} quiz={quiz} projector={projector} player={player} sound={sound} />
             </ErrorBoundary>
@@ -239,7 +251,7 @@ function CommandPanel(props: { view: GameView | null; projector: ProjectorSettin
   const run = useRun();
   const last = useLastSession();
   // Why Resume failed, kept on screen until another show loads: the show
-  // waits on it (A1).
+  // waits on it.
   const [resumeProblem, setResumeProblem] = useState<unknown>(null);
   useBackendEvent("show-changed", () => setResumeProblem(null));
   const resume = () => {
@@ -251,7 +263,22 @@ function CommandPanel(props: { view: GameView | null; projector: ProjectorSettin
   const openQuiz = () => run(api.startShowFromFile(quizPicker(t)));
 
   const controls = view?.controls;
+  const latestView = useLatest(view);
   const hint = (key: string) => keyHint(t, key);
+  // Asked first, with the clock paused meanwhile so time cannot run out
+  // while the quizmaster decides; the answer acts on the show as it is by
+  // then (`restartOutcome`).
+  const restartQuestion = () => {
+    if (!view) return;
+    const asked = { slideIndex: view.slideIndex, pausedClock: view.controls.pauseClock };
+    if (asked.pausedClock) dispatch({ type: "pauseClock" });
+    const answered = (yes: boolean) => {
+      const outcome = restartOutcome(yes, asked, latestView.current);
+      if (outcome && "command" in outcome) dispatch(outcome.command);
+      else if (outcome) notify(t(outcome.notice));
+    };
+    run(confirmAction(t, t("restartQuestionConfirm")).then(answered));
+  };
 
   return (
     <aside className="command-panel">
@@ -296,7 +323,7 @@ function CommandPanel(props: { view: GameView | null; projector: ProjectorSettin
             <CommandButton
               icon={<RewindIcon />}
               label={t("restartQuestion")}
-              onClick={() => run(confirmAction(t, t("restartQuestionConfirm")).then((yes) => yes && dispatch({ type: "restartQuestion" })))}
+              onClick={restartQuestion}
             />
           )}
           {sound.available &&

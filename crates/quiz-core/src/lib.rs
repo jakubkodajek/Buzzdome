@@ -16,7 +16,7 @@ pub mod view;
 pub use category::{category_named, fresh_category_name, Category, MAX_CATEGORY_NAME_CHARS};
 pub use game::{
     team_names, BuzzerId, Button, Clock, Command, Controls, Cue, Effect, Game, GameError, Light, Phase, QuestionStep, Stamped,
-    MAX_NAME_CHARS, MAX_TEAMS, PRESS_GRACE_MS, RULES_VERSION,
+    MAX_NAME_CHARS, MAX_TEAMS, PRESS_GRACE_MS, REPLAYS_AS_PLAYED_FROM, RULES_VERSION,
 };
 pub use media::{
     is_safe_reference, portable_name, portable_reference, Background, MediaIssue, MediaKind, Playback, Replay, SoundClip, SoundStart, Span,
