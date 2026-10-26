@@ -3,6 +3,7 @@
 // as codes with parameters (generated types), worded here from `i18n.ts`.
 
 import { buttonLabel } from "./answers";
+import { slotLabel } from "./audio/library";
 import { MEDIA_EXTENSIONS } from "./bindings/MediaExtensions";
 import type { StringKey, Translate } from "./i18n";
 import { mediaFileName } from "./media";
@@ -154,7 +155,7 @@ export function errorText(t: Translate, error: unknown): string {
 }
 
 /** Problems worded with their own parameters, see `problemText`. */
-type ProblemApart = "media" | "categoryMedia" | "volume" | "partEmpty" | "replayNotOnQuestion";
+type ProblemApart = "media" | "categoryMedia" | "soundMedia" | "volume" | "partEmpty" | "replayNotOnQuestion";
 
 const PROBLEM_KEYS: Record<Exclude<Problem["code"], ProblemApart>, StringKey> = {
   duplicateSlideId: "problemDuplicateSlideId",
@@ -208,6 +209,8 @@ export function problemText(t: Translate, problem: Problem): string {
       return t("problemMedia", { file: problem.file, issue: mediaIssueText(t, problem.issue) });
     case "categoryMedia":
       return t("problemCategoryMedia", { name: problem.name, file: problem.file, issue: mediaIssueText(t, problem.issue) });
+    case "soundMedia":
+      return t("problemSoundMedia", { moment: slotLabel(t, problem.slot), file: problem.file, issue: mediaIssueText(t, problem.issue) });
     // Rules a sound and a video share, said of the one that breaks them.
     case "volume":
       return t(problem.media === "audio" ? "problemSoundVolume" : "problemVideoVolume");

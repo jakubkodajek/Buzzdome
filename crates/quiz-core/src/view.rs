@@ -3,6 +3,7 @@
 use crate::game::{same_name, BuzzerId, Button, Controls, Game, Phase, QuestionStep, Response};
 use crate::model::{AnswerMode, Slide};
 use crate::settings::{AutoStep, QuizSettings};
+use crate::sounds::SoundSlot;
 use serde::Serialize;
 use std::collections::BTreeMap;
 use ts_rs::TS;
@@ -57,6 +58,8 @@ pub struct GameView {
     /// The quiz's settings, for what the windows show: the projector hides
     /// what they say it hides.
     pub settings: QuizSettings,
+    /// The music the show's moment takes (`Game::music`).
+    pub music: Option<SoundSlot>,
 }
 
 /// A step the show takes by itself, for the Director to show coming.
@@ -240,6 +243,7 @@ impl Game {
             step_no: self.step_no(),
             auto_step: self.pending_step().map(|(action, _, at)| AutoStepView { action, in_ms: at.saturating_sub(now) }),
             settings: self.quiz().settings,
+            music: self.music(),
             teams: self
                 .teams()
                 .iter()

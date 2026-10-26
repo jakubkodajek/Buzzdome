@@ -1,8 +1,9 @@
 // The quiz being edited, with undo and redo. Pure: time and new slide ids
 // come in with the actions, and slide updates are pure functions.
 
-import { settingsOf } from "../quiz";
-import type { Category, Quiz, QuizSettings, Slide } from "../types";
+import { sameSounds } from "../audio/library";
+import { settingsOf, soundsOf } from "../quiz";
+import type { Category, Quiz, QuizSettings, QuizSounds, Slide } from "../types";
 import { forgetCategory, formatLike } from "./slides";
 
 export type Edit =
@@ -11,6 +12,8 @@ export type Edit =
   | { type: "setTheme"; theme: string }
   /** How the show runs (`Quiz.settings`). */
   | { type: "setSettings"; settings: QuizSettings }
+  /** What the show sounds like (`Quiz.sounds`). */
+  | { type: "setSounds"; sounds: QuizSounds }
   | { type: "insertSlide"; index: number; slide: Slide }
   /** Applies `update` to the slide with this id as it is when the edit lands. */
   | { type: "updateSlide"; id: string; update: (slide: Slide) => Slide }
@@ -63,6 +66,8 @@ export function applyEdit(quiz: Quiz, edit: Edit): Quiz {
       const same = (Object.keys(edit.settings) as (keyof QuizSettings)[]).every((key) => edit.settings[key] === settings[key]);
       return same ? quiz : { ...quiz, settings: edit.settings };
     }
+    case "setSounds":
+      return sameSounds(soundsOf(quiz), edit.sounds) ? quiz : { ...quiz, sounds: edit.sounds };
     case "insertSlide": {
       if (!inRange(edit.index, count + 1)) return quiz;
       const slides = [...quiz.slides];

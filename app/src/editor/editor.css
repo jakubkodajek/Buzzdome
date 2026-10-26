@@ -2150,6 +2150,15 @@
   font-size: 13px;
 }
 
+.sound-rows {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(200px, 260px) auto;
+  align-items: center;
+  gap: 6px 12px;
+  max-width: 640px;
+  margin: 8px 0 14px;
+}
+
 .backstage-task {
   display: flex;
   align-items: flex-start;

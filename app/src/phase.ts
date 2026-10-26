@@ -1,6 +1,19 @@
 import { ANSWER_LETTERS, answerIndex } from "./answers";
-import { playerName, type Translate } from "./i18n";
-import type { GameView } from "./types";
+import { playerName, type StringKey, type Translate } from "./i18n";
+import type { Cue, GameView } from "./types";
+
+/** What each moment the show has a sound and a light flash for is called. */
+export const CUE_LABEL: Record<Cue, StringKey> = {
+  clockStart: "cueClockStart",
+  buzz: "cueBuzz",
+  correct: "cueCorrect",
+  wrong: "cueWrong",
+  timeUp: "cueTimeUp",
+  reveal: "cueReveal",
+  leaderboard: "cueLeaderboard",
+  place: "cuePlace",
+  winner: "cueWinner",
+};
 
 /** Short status of the show for the Director header. */
 export function phaseLabel(t: Translate, view: GameView): string {

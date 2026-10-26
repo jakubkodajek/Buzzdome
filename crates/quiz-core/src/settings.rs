@@ -166,13 +166,13 @@ pub enum AutoStep {
 
 /// A whole number, such as a wait in seconds: one larger than `max` reads
 /// as `max`, and one that is not a whole number as `default`.
-fn count_up_to<'de, D: Deserializer<'de>>(deserializer: D, default: u8, max: u8) -> Result<u8, D::Error> {
+pub(crate) fn read_count_up_to<'de, D: Deserializer<'de>>(deserializer: D, default: u8, max: u8) -> Result<u8, D::Error> {
     let value = Option::<serde_json::Value>::deserialize(deserializer)?;
     let count = value.as_ref().and_then(serde_json::Value::as_u64);
     Ok(count.map_or(default, |n| u8::try_from(n).unwrap_or(u8::MAX).min(max)))
 }
 
-/// A module for `#[serde(with)]` that reads a number with `count_up_to`.
+/// A module for `#[serde(with)]` that reads a number with `read_count_up_to`.
 macro_rules! count_up_to {
     ($module:ident, $default:expr, $max:expr) => {
         mod $module {
@@ -183,11 +183,12 @@ macro_rules! count_up_to {
             }
 
             pub fn deserialize<'de, D: Deserializer<'de>>(deserializer: D) -> Result<u8, D::Error> {
-                super::count_up_to(deserializer, $default, $max)
+                $crate::settings::read_count_up_to(deserializer, $default, $max)
             }
         }
     };
 }
+pub(crate) use count_up_to;
 
 count_up_to!(all_answered_delay, super::DEFAULT_ALL_ANSWERED_DELAY_S, super::MAX_ALL_ANSWERED_DELAY_S);
 count_up_to!(after_reveal_delay, super::DEFAULT_AFTER_REVEAL_DELAY_S, super::MAX_AFTER_REVEAL_DELAY_S);

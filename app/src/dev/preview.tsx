@@ -161,6 +161,7 @@ function view(partial: Partial<GameView>): GameView {
     stepNo: 0,
     autoStep: null,
     settings: DEFAULT_QUIZ_SETTINGS,
+    music: null,
     ...partial,
   };
   return { ...shown, answerShares: answerShares(shown.slide) };

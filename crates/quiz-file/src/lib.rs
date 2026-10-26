@@ -381,9 +381,13 @@ fn problems_where(quiz: &Quiz, has: impl Fn(&str) -> bool, counts: impl Fn(&Prob
         let problem = Problem::CategoryMedia { name: category.name.clone(), file: file.to_string(), issue: MediaIssue::Missing };
         Some((file, ValidationError { slide_id: None, problem }))
     });
+    let sounds = quiz.sounds.files().map(|(slot, file)| {
+        let problem = Problem::SoundMedia { slot, file: file.to_string(), issue: MediaIssue::Missing };
+        (file, ValidationError { slide_id: None, problem })
+    });
     // Only the references that count are known to be safe paths now, so
     // only they are looked up, which keeps a join to a folder inside it.
-    slides.chain(categories).filter(|(file, e)| counts(&e.problem) && !has(file)).map(|(_, e)| e).collect()
+    slides.chain(categories).chain(sounds).filter(|(file, e)| counts(&e.problem) && !has(file)).map(|(_, e)| e).collect()
 }
 
 /// Writes `quiz.json` into the package folder `root` (see `write_atomic`).
@@ -395,7 +399,7 @@ pub fn write_quiz_json(root: &Path, quiz: &Quiz) -> Result<()> {
 /// The quiz as `quiz.json`, refused when no reader would read it back
 /// (`MAX_QUIZ_JSON_BYTES`).
 fn quiz_json(quiz: &Quiz) -> Result<String> {
-    let json = serde_json::to_string_pretty(quiz).expect("a quiz serializes: it has no maps and no custom serializers that can fail");
+    let json = serde_json::to_string_pretty(quiz).expect("a quiz serializes: its maps have text keys and no custom serializer can fail");
     if json.len() as u64 > MAX_QUIZ_JSON_BYTES {
         return Err(QuizFileError::QuizJsonTooLarge);
     }
@@ -938,7 +942,7 @@ fn remove_dir(path: &Path) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use quiz_core::{AnswerMode, Background, Category, CorrectAnswer, Question, Slide, SlideContent, MAX_EVERYONE_ANSWERS, MAX_POINTS};
+    use quiz_core::{AnswerMode, Background, Category, CorrectAnswer, Question, Slide, SlideContent, SoundChoice, SoundSlot, MAX_EVERYONE_ANSWERS, MAX_POINTS};
 
     /// The problem `check` reports when the quiz's flag picture is missing.
     fn flag_missing() -> Vec<ValidationError> {
@@ -1547,6 +1551,23 @@ mod tests {
         fs::remove_file(package.root.join("media/flag.png")).unwrap();
         let missing = Problem::Media { file: "media/flag.png".into(), issue: MediaIssue::Missing };
         assert!(matches!(check_playable(&quiz, &package.root), Err(QuizFileError::Invalid(found)) if found == [ValidationError { slide_id: Some("intro".into()), problem: missing }]));
+    }
+
+    #[test]
+    fn a_sound_file_is_saved_with_the_quiz_and_a_missing_one_keeps_it_from_playing() {
+        let mut quiz = quiz_with_picture("media/flag.png");
+        quiz.sounds.slots.insert(SoundSlot::LobbyMusic, SoundChoice::File("media/intro.mp3".into()));
+        let media = media_folder("sound-media", &[("media/flag.png", b"png"), ("media/intro.mp3", b"mp3")]);
+        let file = temp("sound-out").join("test.quiz");
+        save(&quiz, &media, &file).unwrap();
+        let package = open(&file, &temp("sound-cache")).unwrap();
+        assert_eq!(package.quiz.sounds, quiz.sounds);
+        assert_eq!(fs::read(package.root.join("media/intro.mp3")).unwrap(), b"mp3");
+
+        fs::remove_file(package.root.join("media/intro.mp3")).unwrap();
+        let problem = Problem::SoundMedia { slot: SoundSlot::LobbyMusic, file: "media/intro.mp3".into(), issue: MediaIssue::Missing };
+        assert_eq!(problems(&package.quiz, &package.root), [ValidationError { slide_id: None, problem }]);
+        assert!(check_playable(&package.quiz, &package.root).is_err());
     }
 
     #[test]

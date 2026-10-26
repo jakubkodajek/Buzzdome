@@ -168,25 +168,31 @@ export class PartPlayer {
 
 /**
  * One audio file, played a part at a time. A gain above 1 (louder than the
- * file) goes through the window's audio context, which needs the file's
- * server to allow it; Tauri's asset protocol does (CORS header).
+ * file), or a node of its own to play into, goes through the window's audio
+ * context, which needs the file's server to allow it; Tauri's asset
+ * protocol does (CORS header).
  */
 export class ClipPlayer extends PartPlayer {
   private readonly source: MediaElementAudioSourceNode | null = null;
   private readonly amplifier: GainNode | null = null;
 
-  /** `gain` is the most it plays at: above 1 only when made with a gain above 1. */
-  constructor(url: string, gain = 1) {
+  /**
+   * `gain` is the most it plays at: above 1 only when made with a gain
+   * above 1. It plays into `output`, a node of the window's audio context,
+   * or else to the speakers.
+   */
+  constructor(url: string, gain = 1, output: AudioNode | null = null) {
     const audio = new Audio();
     super(audio);
     audio.preload = "auto";
-    if (gain > 1) audio.crossOrigin = "anonymous";
+    const throughContext = gain > 1 || output !== null;
+    if (throughContext) audio.crossOrigin = "anonymous";
     audio.src = url;
-    if (gain > 1) {
+    if (throughContext) {
       const context = audioContext();
       this.source = context.createMediaElementSource(audio);
       this.amplifier = new GainNode(context, { gain });
-      this.source.connect(this.amplifier).connect(context.destination);
+      this.source.connect(this.amplifier).connect(output ?? context.destination);
     }
     this.setGain(gain);
   }

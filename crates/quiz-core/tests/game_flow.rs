@@ -4,7 +4,7 @@ use quiz_core::{
 };
 use quiz_core::game::FINAL_LAST_STEP;
 use quiz_core::view::{AnswerResults, AutoStepView};
-use quiz_core::{AllAnswered, AutoStep, QuizSettings};
+use quiz_core::{AllAnswered, AutoStep, QuizSettings, SoundSlot};
 
 /// A question; a fastest-finger one is answered aloud, so the big button
 /// buzzes in (`a_fastest_finger_question_with_answers_a_to_d_buzzes_with_them`).
@@ -910,6 +910,70 @@ fn final_scores_reveal_step_by_step() {
         assert_eq!(show.game.phase(), &Phase::Final { step: expected });
     }
     assert_eq!(show.run(0, Command::Next), Err(GameError::NotNow));
+}
+
+#[test]
+fn the_final_ranking_sounds_each_place_a_player_holds_and_then_the_winner() {
+    let sound = |cue| vec![Effect::Sound { cue }];
+    // Second place is shared by two players, so third is held by nobody.
+    let mut show = Show::new(vec![]);
+    for buzzer in 1..=3 {
+        show.press(0, buzzer, Button::Big);
+    }
+    show.run(0, Command::AdjustScore { buzzer: 1, delta: 50 }).unwrap();
+    show.run(0, Command::Next).unwrap();
+    assert_eq!(show.game.phase(), &Phase::Final { step: 0 });
+    let steps: Vec<Vec<Effect>> = (1..=FINAL_LAST_STEP).map(|_| show.run(0, Command::Next).unwrap()).collect();
+    assert_eq!(steps, [vec![], sound(Cue::Place), sound(Cue::Winner), vec![]]);
+    // With nobody switched on, no place is held and nothing sounds.
+    let mut empty = Show::new(vec![]);
+    empty.run(0, Command::Next).unwrap();
+    assert!((1..=FINAL_LAST_STEP).all(|_| empty.run(0, Command::Next).unwrap().is_empty()));
+}
+
+#[test]
+fn the_leaderboard_sounds_when_it_opens_only() {
+    let mut show = Show::new(vec![billboard("intro")]);
+    show.run(0, Command::Next).unwrap();
+    let open = Command::ShowLeaderboard { visible: true };
+    assert_eq!(show.run(0, open.clone()).unwrap(), [Effect::Sound { cue: Cue::Leaderboard }]);
+    assert_eq!(show.run(0, open).unwrap(), [], "already open");
+    assert_eq!(show.run(0, Command::ShowLeaderboard { visible: false }).unwrap(), []);
+}
+
+#[test]
+fn the_music_follows_the_shows_moment() {
+    let mut show = Show::new(vec![billboard("intro"), question("q", AnswerMode::FastestFinger), question("e", AnswerMode::Everyone)]);
+    let music = |show: &Show| show.game.view(0).music;
+    assert_eq!(music(&show), Some(SoundSlot::LobbyMusic));
+    show.press(0, 1, Button::Big);
+    show.run(0, Command::Next).unwrap();
+    assert_eq!(music(&show), Some(SoundSlot::BetweenMusic));
+    show.run(0, Command::Next).unwrap();
+    assert_eq!(music(&show), None, "a question on screen waits in silence");
+    show.run(0, Command::Next).unwrap();
+    assert_eq!(music(&show), Some(SoundSlot::ClockMusic));
+    show.run(10, Command::PauseClock).unwrap();
+    assert_eq!(music(&show), None, "the music pauses with the clock");
+    show.run(20, Command::ResumeClock).unwrap();
+    show.press(30, 1, Button::Big);
+    assert_eq!(music(&show), None, "a buzz is judged in silence");
+    show.run(40, Command::ShowLeaderboard { visible: true }).unwrap();
+    assert_eq!(music(&show), Some(SoundSlot::BetweenMusic));
+    show.run(50, Command::ShowLeaderboard { visible: false }).unwrap();
+    show.run(60, Command::JudgeRight).unwrap();
+    assert_eq!(music(&show), Some(SoundSlot::BetweenMusic), "back once the answer is shown");
+    show.run(70, Command::Next).unwrap();
+    show.run(80, Command::Next).unwrap();
+    show.run(90, Command::CloseQuestion).unwrap();
+    assert_eq!(music(&show), None, "the answers are in, not shown");
+    show.run(100, Command::GoToFinal).unwrap();
+    assert_eq!(music(&show), Some(SoundSlot::BuildUpMusic));
+    for _ in 0..3 {
+        show.run(110, Command::Next).unwrap();
+    }
+    assert_eq!(show.game.phase(), &Phase::Final { step: 3 });
+    assert_eq!(music(&show), Some(SoundSlot::WinnerMusic));
 }
 
 fn final_slide(id: &str) -> Slide {

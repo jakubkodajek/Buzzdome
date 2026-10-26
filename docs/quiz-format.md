@@ -1,4 +1,4 @@
-# Quiz file format (version 4)
+# Quiz file format (version 5)
 
 A quiz travels as one file with the extension `.quiz`. It is a ZIP archive:
 
@@ -102,6 +102,7 @@ app.
 | `slides` | list | The show in order. |
 | `categories` | list | Named looks the slides can take on; see [Categories](#categories). Left out when there are none. |
 | `settings` | object | How the show runs; see [Settings](#settings). Left out when every setting is its default. |
+| `sounds` | object | What the show sounds like; see [Sounds](#sounds). Left out when every moment plays its default at the default volumes. |
 
 ### Every slide
 
@@ -310,6 +311,65 @@ reads as its default, so a quiz always opens and plays.
 | `hideBuzzPoints` | true/false | The projector does not show the points a fastest-finger buzz won or lost; the leaderboard still shows the scores (default false). |
 | `jokers` | number | Jokers each player has for the show, 0 to 5 (default 0: none; more reads as 5). A joker doubles what one question gives the player, the penalty too (spec SF-8). |
 
+### Sounds
+
+```json
+"sounds": { "slots": { "buzz": { "builtIn": "buzz.horn" }, "wrong": "none", "lobbyMusic": { "file": "media/intro.mp3" } }, "effectsVolume": 100, "musicVolume": 40 }
+```
+
+What the show sounds like (spec SN-1 to SN-4). The Director plays it. Each
+moment of the show in `slots` plays one of the app's own sounds
+(`{ "builtIn": "<id>" }`), a sound file of the quiz
+(`{ "file": "media/<name>" }`, an MP3, WAV, OGG or M4A in the media
+folder), or nothing (`"none"`). A moment left out plays its default. A
+moment, a choice or an id that a build does not know reads as left out, as
+does one of the app's effects chosen for music or the other way round, so a
+quiz always opens and plays.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `slots` | object | Moment to choice, for the moments that do not play their default. |
+| `effectsVolume` | number | Percent of the effect files' own level, 0 to 100 (default 100; more reads as 100). |
+| `musicVolume` | number | Percent of the music files' own level, 0 to 100 (default 50, under the quizmaster's voice; more reads as 100). |
+
+Both volumes are multiplied by the player's volume in the Director.
+
+Effects play once when their moment comes. The first of the app's sounds
+listed for an effect is its default; each effect can also play any of the
+app's other effects.
+
+| Moment | When | The app's sounds made for it |
+| --- | --- | --- |
+| `clockStart` | A question's clock starts. | `start.chime`, `start.gong`, `start.go` |
+| `countdown` | Over a timed question's last 5 seconds, so it ends as the time is up. A pause or a buzz stops it, and the clock going on starts it where the clock is. | `countdown.ticks`, `countdown.beeps`, `countdown.pulse` |
+| `buzz` | A player buzzes in on a fastest-finger question. | `buzz.classic`, `buzz.bell`, `buzz.laser`, `buzz.horn` |
+| `correct` | A buzz is judged right. | `correct.chime`, `correct.dings`, `correct.fanfare` |
+| `wrong` | A buzz is judged wrong. | `wrong.buzzer`, `wrong.trombone`, `wrong.bonk` |
+| `timeUp` | A question's time is up. | `timeup.horn`, `timeup.gong`, `timeup.alarm` |
+| `reveal` | A question's right answer is shown. | `reveal.whoosh`, `reveal.sparkle`, `reveal.sting` |
+| `leaderboard` | The leaderboard opens. | `leaderboard.rise`, `leaderboard.drums`, `leaderboard.chord` |
+| `place` | The final ranking shows a place before the winner's that a player holds. | `place.cymbal`, `place.stab`, `place.boom` |
+| `winner` | The final ranking shows the winner. | `winner.fanfare`, `winner.applause`, `winner.party` |
+
+Music plays over and over while the show is at its moment, and fades from
+one piece to the next; a moment that plays the same file as the one before
+goes on with it. It makes way while the slide's sound, a slide video with
+sound or the media player plays, and stops while the clock is paused, while
+a buzz waits for its verdict and while a question's answers are in but not
+shown. Music plays nothing by default; each moment can play any of the
+app's music.
+
+| Moment | When | The app's music made for it |
+| --- | --- | --- |
+| `lobbyMusic` | Before the first slide, while the buzzers register. | `music.lobby`, `music.lounge` |
+| `betweenMusic` | On billboards, explanations, the ends of rounds and the leaderboard, and once a question's answer is shown. | `music.lounge`, `music.lobby` |
+| `clockMusic` | While a question's clock runs. | `music.thinking`, `music.race` |
+| `buildUpMusic` | While the final ranking builds up to the winner. | `music.drumroll` |
+| `winnerMusic` | Once the final ranking shows the winner. | `music.victory` |
+
+A quiz file whose sound file is not a sound in its media folder does not
+play, and the editor lists the problem (`soundMedia`).
+
 ## Spreadsheets
 
 Questions can also be written in a spreadsheet and imported into a quiz
@@ -415,7 +475,7 @@ the rows it came up in.
 | 2 | Adds `explanation` slides and, later within version 2, the quiz `theme` (builds from before that drop it when they save). Version 1 files read as version 2 unchanged. |
 | 3 | `background` becomes an object with video options; sounds get `part`, `gainDb` and `replay`. Version 1 and 2 files read as version 3 unchanged. Later within version 3, a `fastestFinger` question may have up to 6 answers instead of 4; earlier builds list such a question as a problem. |
 | 4 | Adds `final` slides. Version 1 to 3 files read as version 4 unchanged. Later within version 4, videos get `introPauseMs`, `volume`, `speed`, `part`, `effect` and `replay`; a video without them plays as before. Later still, slides get `style`; builds before it show the theme's look and drop the style when they save. |
-| 5 | A question's `correct` becomes a list of right answers, each with a `share` of the points. A version 1 to 4 question with `correct: n` reads as `[{ "answer": n, "share": 100 }]`, and one without as `[]`. Later within version 5, the quiz gets `categories` and slides `category`; builds before it drop them when they save, and the slides keep the look they took on. Later still, a slide's `style` gets `timer`; builds before it draw a ring and drop it when they save. Later still, the quiz gets `settings`; builds before it play as with the defaults and drop them when they save. Later still, `settings` gets `nextAfterReveal`, `nextAfterRevealDelayS`, `runClockOut`, `changeAnswer`, `oneBuzz`, `noAnswerPenalty`, `hideAnswer`, `hideBuzzPoints` and `jokers`; builds before it play as with the defaults and drop them when they save. |
+| 5 | A question's `correct` becomes a list of right answers, each with a `share` of the points. A version 1 to 4 question with `correct: n` reads as `[{ "answer": n, "share": 100 }]`, and one without as `[]`. Later within version 5, the quiz gets `categories` and slides `category`; builds before it drop them when they save, and the slides keep the look they took on. Later still, a slide's `style` gets `timer`; builds before it draw a ring and drop it when they save. Later still, the quiz gets `settings`; builds before it play as with the defaults and drop them when they save. Later still, `settings` gets `nextAfterReveal`, `nextAfterRevealDelayS`, `runClockOut`, `changeAnswer`, `oneBuzz`, `noAnswerPenalty`, `hideAnswer`, `hideBuzzPoints` and `jokers`; builds before it play as with the defaults and drop them when they save. Later still, the quiz gets `sounds`; builds before it play their own sounds and drop it when they save. |
 
 Fields may be added within a version as long as older files keep their
 meaning; readers ignore fields they do not know. Anything else (a new slide

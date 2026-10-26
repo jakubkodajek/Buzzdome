@@ -355,6 +355,13 @@ press that leaves no line under "Raw data", and what came before it.
     right answer on the projector" and reveal a question: the projector
     marks nothing, but each buzzer still lights green or red. Note whether
     that should wait for the quizmaster too.
+24. **Sounds in the room.** Run part of a show through the venue's
+    speakers with the default sounds, and in File › Quiz settings › Sounds
+    and music pick a piece of music for "While the clock runs". Expected:
+    each moment sounds once; the ticking of the last 5 seconds ends as the
+    time is up, and stops while the clock is paused; the music fades away
+    while a buzz waits for its verdict. Note whether the effects and the
+    music are too loud or too soft against the quizmaster's voice.
 
 ## 7. Failures
 
@@ -411,6 +418,9 @@ installer, then on the Mac, that nothing it should allow is blocked:
    the app's language.
 4. In the **Media player** tab, add a sound and a video and play each.
    Expected: both play.
+5. In File › Quiz settings › Sounds and music, pick one of the app's
+   effects, one of its pieces of music and a sound file of your own, and
+   play each with its play button. Expected: all three play.
 
 A step that fails here and not in a dev build is the policy blocking it:
 note the step and attach `buzzdome.log`, where each window notes what the

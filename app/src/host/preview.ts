@@ -34,6 +34,7 @@ export function previewView(slide: Slide, slideIndex: number, slideCount: number
     stepNo: 0,
     autoStep: null,
     settings: DEFAULT_QUIZ_SETTINGS,
+    music: null,
   };
 }
 
