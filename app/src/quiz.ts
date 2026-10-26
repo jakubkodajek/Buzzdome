@@ -49,6 +49,23 @@ export function shareOf(question: Pick<QuestionSlide, "correct" | "mode">, index
   return share !== null && question.mode === "fastestFinger" ? FULL_SHARE : share;
 }
 
+/** A right answer of a question, by its index, with its share of the points in percent. */
+export interface RightAnswer {
+  answer: number;
+  share: number;
+}
+
+/**
+ * The question's right answers in their order, each with the share it
+ * gives (`shareOf`); a marked answer the question does not have is none.
+ */
+export function rightAnswers(question: Pick<QuestionSlide, "answers" | "correct" | "mode">): RightAnswer[] {
+  return question.answers.flatMap((_, answer) => {
+    const share = shareOf(question, answer);
+    return share === null ? [] : [{ answer, share }];
+  });
+}
+
 export function isCorrect(question: Pick<QuestionSlide, "correct">, index: number): boolean {
   return question.correct.some((c) => c.answer === index);
 }
