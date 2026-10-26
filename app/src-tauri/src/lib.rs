@@ -116,6 +116,12 @@ async fn read_show<T: Send + 'static>(app: AppHandle, read: impl FnOnce(&Inner) 
     off_ui(move || Ok(read(&lock_show(&app)))).await
 }
 
+/// `folder` as text ending with a path separator, so the windows can
+/// append a media reference to it.
+pub(crate) fn folder_prefix(folder: &Path) -> String {
+    folder.join("").to_string_lossy().into_owned()
+}
+
 /// A folder of the app's data, which a roaming profile on Windows takes
 /// along to the user's other computers: settings, sessions, the media library.
 pub(crate) fn app_data(app: &AppHandle, folder: &str) -> CmdResult<PathBuf> {
@@ -378,7 +384,7 @@ async fn get_quiz(app: AppHandle) -> CmdResult<Option<Quiz>> {
 /// windows can append a media reference to it.
 #[tauri::command]
 async fn media_root(app: AppHandle) -> CmdResult<Option<String>> {
-    read_show(app, |inner| inner.media_root.as_ref().map(|root| root.join("").to_string_lossy().into_owned())).await
+    read_show(app, |inner| inner.media_root.as_deref().map(folder_prefix)).await
 }
 
 /// Why the running show's journal cannot be written, or that a write does
@@ -601,7 +607,7 @@ pub fn run() {
         .manage(editor::EditorLock::default())
         .manage(AppState(Mutex::new(inner)))
         .setup(|app| {
-            app_log::start(app.path().app_log_dir()?);
+            app_log::start(app.path().app_log_dir()?, &app.package_info().version.to_string());
             editor::move_roaming_drafts(app.handle());
             // One queue for the receiver's events and the quizmaster's commands.
             let (queue, events) = mpsc::channel();
@@ -620,7 +626,7 @@ pub fn run() {
             for folder in media_folders(app.handle())? {
                 app.asset_protocol_scope().allow_directory(&folder, true)?;
             }
-            let builtin = themes::builtin_themes(|id| packages.join(id).join("").to_string_lossy().into_owned())?;
+            let builtin = themes::builtin_themes(|id| folder_prefix(&packages.join(id)))?;
             app.manage(themes::Themes(builtin));
             if let Ok(path) = teams::teams_path(app.handle()) {
                 let mut inner = lock_show(app.handle());

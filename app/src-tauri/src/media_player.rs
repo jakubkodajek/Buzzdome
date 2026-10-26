@@ -15,7 +15,7 @@
 use crate::app_file::AppFile;
 use crate::error::{AppError, CmdResult};
 use crate::dialogs::{self, Picker};
-use crate::{app_log, now_ms, off_ui};
+use crate::{app_log, folder_prefix, now_ms, off_ui};
 use quiz_core::{
     is_safe_reference, BoardChange, MediaKind, MediaPlayer, NowPlaying, PlayerCommand, SoundBoard, MAX_DROPPED_MB, MAX_PLAYER_VOLUME, MEDIA_PREFIX,
 };
@@ -42,13 +42,17 @@ const KEEP_VOLUME_AFTER: Duration = Duration::from_millis(250);
 
 pub struct MediaState {
     root: PathBuf,
-    /// Where the sound board is kept.
-    board_file: AppFile,
+    /// Where the sound board is kept; held while it is written.
+    board_file: Mutex<AppFile>,
     /// Where the player's volume is kept; held while it is written.
     player_file: Mutex<AppFile>,
     /// The volume changed since it was last kept.
     volume_changed: AtomicBool,
-    imports: Mutex<()>,
+    /// Held while files come into the library or leave it, so each change
+    /// lists the folder after the one before.
+    file_changes: Mutex<()>,
+    /// Never held while the disk works, so the commands that only read or
+    /// play it run on the windows' thread. Taken after the files above.
     library: Mutex<Library>,
 }
 
@@ -111,7 +115,14 @@ impl MediaState {
         let board = board.normalized(&files);
         let settings = PlayerSettings { volume: settings.volume.min(MAX_PLAYER_VOLUME) };
         let library = Mutex::new(Library { files, board, player: MediaPlayer::default(), settings });
-        MediaState { root, board_file, player_file: Mutex::new(player_file), volume_changed: AtomicBool::new(false), imports: Mutex::new(()), library }
+        MediaState {
+            root,
+            board_file: Mutex::new(board_file),
+            player_file: Mutex::new(player_file),
+            volume_changed: AtomicBool::new(false),
+            file_changes: Mutex::new(()),
+            library,
+        }
     }
 
     pub fn root(&self) -> &Path {
@@ -120,22 +131,32 @@ impl MediaState {
 
     fn view(&self, library: &Library) -> MediaLibrary {
         let files = library.files.iter().filter_map(|reference| Some(LibraryFile { reference: reference.clone(), kind: MediaKind::of(reference)? })).collect();
-        MediaLibrary { root: self.root.join("").to_string_lossy().into_owned(), files }
+        MediaLibrary { root: folder_prefix(&self.root), files }
     }
 
-    /// Reads the library's files again after some came or went, and tells the windows.
-    fn files_changed(&self, app: &AppHandle, library: &mut Library) -> CmdResult<()> {
-        library.files = media_files(&self.root);
-        library.board.library_changed(&library.files);
-        library.player.library_changed(&library.files);
-        let _ = app.emit("media-library", self.view(library));
-        let _ = app.emit("media-playing", MediaNow::of(&library.player));
-        self.board_changed(app, library)
+    /// Lists the library's files again after some came or went, tells the
+    /// windows and keeps the board. The caller holds `file_changes`.
+    fn files_changed(&self, app: &AppHandle) -> CmdResult<()> {
+        let listed = media_files(&self.root);
+        {
+            let mut library = self.library.lock().unwrap();
+            let Library { files, board, player, .. } = &mut *library;
+            *files = listed;
+            board.library_changed(files);
+            player.library_changed(files);
+            let _ = app.emit("media-library", self.view(&library));
+            let _ = app.emit("media-playing", MediaNow::of(&library.player));
+            let _ = app.emit("sound-board", &library.board);
+        }
+        self.keep_board()
     }
 
-    fn board_changed(&self, app: &AppHandle, library: &Library) -> CmdResult<()> {
-        let _ = app.emit("sound-board", &library.board);
-        self.board_file.store(&library.board)
+    /// Writes the board as it is now. Each write reads the board once the
+    /// file is its own, so the last one keeps the newest.
+    fn keep_board(&self) -> CmdResult<()> {
+        let file = self.board_file.lock().unwrap();
+        let board = self.library.lock().unwrap().board.clone();
+        file.store(&board)
     }
 
     /// Sets the player's volume, at most `MAX_PLAYER_VOLUME` percent, and
@@ -213,7 +234,7 @@ pub async fn media_add(app: AppHandle, window: Window, picker: Picker) -> CmdRes
     }
     off_ui(move || {
         let state = app.state::<MediaState>();
-        let _one_at_a_time = state.imports.lock().unwrap();
+        let _one_at_a_time = state.file_changes.lock().unwrap();
         let mut added = Vec::new();
         let mut failed = None;
         for path in &paths {
@@ -224,7 +245,7 @@ pub async fn media_add(app: AppHandle, window: Window, picker: Picker) -> CmdRes
                 }
             }
         }
-        state.files_changed(&app, &mut state.library.lock().unwrap())?;
+        state.files_changed(&app)?;
         failed.map_or(Ok(added), Err)
     })
     .await
@@ -233,31 +254,43 @@ pub async fn media_add(app: AppHandle, window: Window, picker: Picker) -> CmdRes
 /// Copies a file dropped into the window, sent as its bytes with its name
 /// in a header, into the library and returns its reference.
 #[tauri::command]
-pub async fn media_add_dropped(app: AppHandle, state: State<'_, MediaState>, request: Request<'_>) -> CmdResult<String> {
+pub async fn media_add_dropped(app: AppHandle, request: Request<'_>) -> CmdResult<String> {
     let InvokeBody::Raw(bytes) = request.body() else { return Err(AppError::system("a dropped file comes as its bytes")) };
     let encoded = request.headers().get(DROPPED_NAME_HEADER).and_then(|value| value.to_str().ok()).unwrap_or_default();
-    let name = percent_encoding::percent_decode_str(encoded).decode_utf8_lossy();
+    let name = percent_encoding::percent_decode_str(encoded).decode_utf8_lossy().into_owned();
     if bytes.len() as u64 > MAX_DROPPED_MB << 20 {
-        return Err(AppError::DroppedFileTooLarge { name: name.into_owned(), mb: MAX_DROPPED_MB });
+        return Err(AppError::DroppedFileTooLarge { name, mb: MAX_DROPPED_MB });
     }
-    let _one_at_a_time = state.imports.lock().unwrap();
-    let reference = import(&state.root, &name, MediaSource::Bytes { name: &name, bytes })?;
-    state.files_changed(&app, &mut state.library.lock().unwrap())?;
-    Ok(reference)
+    // The request only lends its bytes, and the import may wait for another
+    // one copying a large file (`file_changes`): a copy waits off the
+    // async runtime, which the show's commands use too.
+    let bytes = bytes.clone();
+    off_ui(move || {
+        let state = app.state::<MediaState>();
+        let _one_at_a_time = state.file_changes.lock().unwrap();
+        let reference = import(&state.root, &name, MediaSource::Bytes { name: &name, bytes: &bytes })?;
+        state.files_changed(&app)?;
+        Ok(reference)
+    })
+    .await
 }
 
 /// Removes a file from the library, deleting its copy, and from its pads.
 #[tauri::command]
-pub fn media_remove(app: AppHandle, state: State<MediaState>, reference: String) -> CmdResult<()> {
-    let mut library = state.library.lock().unwrap();
-    if !library.files.contains(&reference) {
-        return Err(AppError::NotInLibrary { reference });
-    }
-    let path = state.root.join(&reference);
-    let removed = std::fs::remove_file(&path).map_err(|e| AppError::file(FileAction::Delete, &path, e));
-    // Whatever happened to the file, the list shows what is there.
-    state.files_changed(&app, &mut library)?;
-    removed
+pub async fn media_remove(app: AppHandle, reference: String) -> CmdResult<()> {
+    off_ui(move || {
+        let state = app.state::<MediaState>();
+        let _one_at_a_time = state.file_changes.lock().unwrap();
+        if !state.library.lock().unwrap().files.contains(&reference) {
+            return Err(AppError::NotInLibrary { reference });
+        }
+        let path = state.root.join(&reference);
+        let removed = std::fs::remove_file(&path).map_err(|e| AppError::file(FileAction::Delete, &path, e));
+        // Whatever happened to the file, the list shows what is there.
+        state.files_changed(&app)?;
+        removed
+    })
+    .await
 }
 
 #[tauri::command]
@@ -265,12 +298,20 @@ pub fn sound_board(state: State<MediaState>) -> SoundBoard {
     state.library.lock().unwrap().board.clone()
 }
 
+/// Changes the sound board and keeps it, off the windows' thread.
 #[tauri::command]
-pub fn sound_board_change(app: AppHandle, state: State<MediaState>, change: BoardChange) -> CmdResult<()> {
-    let mut library = state.library.lock().unwrap();
-    let Library { files, board, .. } = &mut *library;
-    board.apply(change, files)?;
-    state.board_changed(&app, &library)
+pub async fn sound_board_change(app: AppHandle, change: BoardChange) -> CmdResult<()> {
+    off_ui(move || {
+        let state = app.state::<MediaState>();
+        {
+            let mut library = state.library.lock().unwrap();
+            let Library { files, board, .. } = &mut *library;
+            board.apply(change, files)?;
+            let _ = app.emit("sound-board", &*board);
+        }
+        state.keep_board()
+    })
+    .await
 }
 
 /// What the media player plays, read on the show clock at `at_ms`. A window
@@ -387,6 +428,16 @@ mod tests {
         assert!(set(20));
         state.keep_volume().unwrap();
         assert_eq!(library_volume(&root), 20);
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn the_board_is_kept_as_it_is_when_written() {
+        let root = std::env::temp_dir().join(format!("media-board-{}", std::process::id()));
+        let state = MediaState::open(root.clone());
+        state.library.lock().unwrap().board.click = quiz_core::PadClick::Pause;
+        state.keep_board().unwrap();
+        assert_eq!(MediaState::open(root.clone()).library.lock().unwrap().board.click, quiz_core::PadClick::Pause);
         std::fs::remove_dir_all(&root).unwrap();
     }
 

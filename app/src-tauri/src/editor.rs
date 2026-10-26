@@ -17,7 +17,7 @@
 use crate::dialogs::{self, Picker};
 use crate::error::{AppError, CmdResult};
 use crate::recent_files::RecentFiles;
-use crate::{app_local_data, app_log, lock_show, media_player, off_ui, roaming_leftover, show_running};
+use crate::{app_local_data, app_log, folder_prefix, lock_show, media_player, off_ui, roaming_leftover, show_running};
 use quiz_core::{Category, MediaKind, Quiz, ValidationError};
 use quiz_file::{FileAction, SheetExport, SheetImport};
 use serde::de::{Error as _, Unexpected};
@@ -172,10 +172,25 @@ fn prune(app: &AppHandle, dir: &Path, keep: Option<&Path>) {
     }
 }
 
+/// Refuses work that reads or writes much on the disk (opening or saving a
+/// quiz file, copying a video, reading a sheet) during a show, whose journal
+/// must not wait for the disk behind it. The Director offers the editor
+/// only when no show runs; this holds also for a command already on its way.
+fn refuse_during_show(app: &AppHandle) -> CmdResult<()> {
+    if show_running(app) {
+        return Err(AppError::ShowRunning);
+    }
+    Ok(())
+}
+
+/// Nanoseconds since 1970 on the system clock; 0 on a clock set before it.
+fn nanos_now() -> u128 {
+    SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| d.as_nanos())
+}
+
 /// A name for a new draft folder that is not taken.
 fn new_folder(dir: &Path) -> String {
-    let now = SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| d.as_nanos());
-    (now..).map(|n| format!("{FOLDER_PREFIX}{n}")).find(|name| !dir.join(name).exists()).expect("a free name")
+    (nanos_now()..).map(|n| format!("{FOLDER_PREFIX}{n}")).find(|name| !dir.join(name).exists()).expect("a free name")
 }
 
 /// Makes `pointer` the current draft, then deletes the other folders.
@@ -205,7 +220,7 @@ fn describe(root: &Path, pointer: Pointer, quiz: Quiz) -> EditorDraft {
         quiz,
         source_path: pointer.source_path,
         unsaved: pointer.unsaved,
-        media_root: root.join("").to_string_lossy().into_owned(),
+        media_root: folder_prefix(root),
         dropped: pointer.dropped,
     }
 }
@@ -240,8 +255,7 @@ pub async fn editor_new(app: AppHandle, title: String) -> CmdResult<EditorDraft>
 /// Opens a quiz file in place of the draft: the `recent` file, which has to
 /// be in the list (`RecentFiles`), or one the quizmaster picks (none when
 /// they cancel). A recent file that is no longer there leaves the list.
-/// Refused during a show, whose journal must not wait for the disk while a
-/// large file unpacks.
+/// Refused during a show (`refuse_during_show`).
 #[tauri::command]
 pub async fn editor_open(app: AppHandle, window: Window, recent: Option<String>, picker: Picker) -> CmdResult<Option<EditorDraft>> {
     let path = match recent {
@@ -252,9 +266,7 @@ pub async fn editor_open(app: AppHandle, window: Window, recent: Option<String>,
         },
     };
     with_drafts(app, move |app, dir| {
-        if show_running(app) {
-            return Err(AppError::ShowRunning);
-        }
+        refuse_during_show(app)?;
         let (folder, root) = new_draft_folder(dir)?;
         let source_path = path.to_string_lossy().into_owned();
         let opened = quiz_file::open_into(&path, &root).inspect_err(|_| app.state::<RecentFiles>().forget_if_gone(&source_path))?;
@@ -284,7 +296,7 @@ pub async fn editor_update(app: AppHandle, draft: String, quiz: Quiz, unsaved: b
 /// Saves the quiz of the draft `draft` with its media as a quiz file: over
 /// the quiz file it came from, unless `save_as`, else where the quizmaster
 /// picks (none when they cancel; a plain JSON quiz is never written over).
-/// Gives the file's path.
+/// Gives the file's path. Refused during a show (`refuse_during_show`).
 #[tauri::command]
 pub async fn editor_save(app: AppHandle, window: Window, draft: String, quiz: Quiz, save_as: bool, picker: Picker) -> CmdResult<Option<String>> {
     let source = on_draft(app.clone(), draft.clone(), |_, _, _, pointer| Ok(pointer.source_path.map(PathBuf::from))).await?;
@@ -296,6 +308,7 @@ pub async fn editor_save(app: AppHandle, window: Window, draft: String, quiz: Qu
         },
     };
     on_draft(app, draft, move |app, dir, root, pointer| {
+        refuse_during_show(app)?;
         quiz_file::write_quiz_json(&root, &quiz)?;
         quiz_file::save(&quiz, &root, &path)?;
         let saved = path.to_string_lossy().into_owned();
@@ -313,11 +326,16 @@ fn is_quiz_file(path: &Path) -> bool {
 
 /// Copies a picture, sound or video of `kinds` that the quizmaster picks
 /// into the draft `draft` and returns its reference (none when they cancel).
+/// Refused during a show (`refuse_during_show`).
 #[tauri::command]
 pub async fn editor_add_media(app: AppHandle, window: Window, draft: String, kinds: Vec<MediaKind>, picker: Picker) -> CmdResult<Option<String>> {
     let Some(path) = dialogs::pick_file(window, picker, media_player::extensions(&kinds)).await? else { return Ok(None) };
     media_player::of_kind(&media_player::file_name(&path), &kinds)?;
-    on_draft(app, draft, move |_, _, root, _| Ok(Some(quiz_file::import_media(&root, quiz_file::MediaSource::File(&path))?))).await
+    on_draft(app, draft, move |app, _, root, _| {
+        refuse_during_show(app)?;
+        Ok(Some(quiz_file::import_media(&root, quiz_file::MediaSource::File(&path))?))
+    })
+    .await
 }
 
 /// A name for a new category that none of `categories` has (spec QZ-10).
@@ -329,18 +347,24 @@ pub fn editor_category_name(categories: Vec<Category>, base: String) -> String {
 /// Reads questions from a spreadsheet the quizmaster picks (none when they
 /// cancel) and copies the media they use into the draft; the editor
 /// inserts the slides as one change (spec QZ-8), giving a row that names
-/// one of the draft's categories its look.
+/// one of the draft's categories its look. Refused during a show
+/// (`refuse_during_show`).
 #[tauri::command]
 pub async fn editor_import_sheet(app: AppHandle, window: Window, draft: String, picker: Picker) -> CmdResult<Option<SheetImport>> {
     let Some(path) = dialogs::pick_file(window, picker, quiz_file::SHEET_EXTENSIONS.to_vec()).await? else { return Ok(None) };
     // The sheet reader may take until its time limit: the draft stays free
     // for other commands meanwhile.
-    let read = path.clone();
-    let tables = off_ui(move || crate::sheet_reader::read_tables(&read)).await?;
-    on_draft(app, draft, move |_, _, root, _| {
+    let (read, reader) = (path.clone(), app.clone());
+    let tables = off_ui(move || {
+        refuse_during_show(&reader)?;
+        crate::sheet_reader::read_tables(&read)
+    })
+    .await?;
+    on_draft(app, draft, move |app, _, root, _| {
+        refuse_during_show(app)?;
         let categories = quiz_file::read_quiz_json(&root)?.categories;
         // Shuffles the answers of a question with none marked right.
-        let seed = SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| d.as_nanos() as u64);
+        let seed = nanos_now() as u64;
         Ok(Some(quiz_file::import_sheet(&path, &tables, &categories, &root, seed)?))
     })
     .await

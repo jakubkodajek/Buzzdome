@@ -9,8 +9,7 @@ use crate::media::{
 use crate::settings::QuizSettings;
 use crate::style::SlideStyle;
 use crate::text::file_key;
-use crate::theme::is_theme_id;
-use serde::{Deserialize, Deserializer, Serialize};
+use serde::{Deserialize, Serialize};
 use std::collections::hash_map::Entry;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use ts_rs::TS;
@@ -58,7 +57,8 @@ pub struct Quiz {
     pub title: String,
     /// Id of the look the screens use (spec section 5.2); the app's default
     /// when missing or not installed.
-    #[serde(default, deserialize_with = "theme_id_or_none")]
+    #[serde(default, with = "theme_id_or_none")]
+    #[ts(as = "Option<String>")]
     pub theme: Option<String>,
     #[serde(default)]
     pub slides: Vec<Slide>,
@@ -75,9 +75,18 @@ pub struct Quiz {
 /// can name no installed theme, so it reads as none: the default look it
 /// would show anyway (`ReadQuiz::dropped` says so). That also keeps an
 /// unbounded value out of the quiz.
-fn theme_id_or_none<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Option<String>, D::Error> {
-    let value = Option::<serde_json::Value>::deserialize(deserializer)?;
-    Ok(value.as_ref().and_then(serde_json::Value::as_str).filter(|id| is_theme_id(id)).map(str::to_owned))
+mod theme_id_or_none {
+    use crate::theme::is_theme_id;
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+    pub fn serialize<S: Serializer>(theme: &Option<String>, serializer: S) -> Result<S::Ok, S::Error> {
+        theme.serialize(serializer)
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Option<String>, D::Error> {
+        let value = Option::<serde_json::Value>::deserialize(deserializer)?;
+        Ok(value.as_ref().and_then(serde_json::Value::as_str).filter(|id| is_theme_id(id)).map(str::to_owned))
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]

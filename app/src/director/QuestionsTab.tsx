@@ -8,7 +8,7 @@ import type { StringKey } from "../i18n";
 import { NextIcon, TrophyIcon } from "../icons";
 import { mediaFileName } from "../media";
 import { readPreference, writePreference } from "../preferences";
-import { shareOf, SLIDE_TYPE_LABEL, slideContexts, slideTitle, type SlideContext } from "../quiz";
+import { rightAnswers, shareOf, SLIDE_TYPE_LABEL, slideContexts, slideTitle, type SlideContext } from "../quiz";
 import { SlideMedia } from "../slide-media";
 import type { GameView, Quiz, Slide } from "../types";
 import { confirmAction } from "../confirm";
@@ -159,6 +159,7 @@ function LayoutIcon({ vertical }: { vertical: boolean }) {
 function SlidePreview({ slide, context, counts }: { slide: Slide; context: SlideContext; counts: number[] | null }) {
   const { t } = useApp();
   const explained = context.explains;
+  const explainedRight = explained ? rightAnswers(explained.question) : [];
   return (
     <>
       <div className="preview-card">
@@ -197,9 +198,9 @@ function SlidePreview({ slide, context, counts }: { slide: Slide; context: Slide
             <p className="muted center">
               {explained ? `${t("questionNumber", { n: explained.position.n })}: ${explained.question.text}` : t("noQuestionToExplain")}
             </p>
-            {explained && explained.question.correct.length > 0 && (
+            {explained && explainedRight.length > 0 && (
               <div className="preview-answers">
-                {explained.question.correct.map(({ answer }) => (
+                {explainedRight.map(({ answer }) => (
                   <div key={answer} className="preview-answer correct">
                     <span className={`dot dot-${answer}`}>{ANSWER_LETTERS[answer]}</span>
                     <span className="answer-label">{explained.question.answers[answer]}</span>

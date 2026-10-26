@@ -147,12 +147,18 @@ draws slides without a show.
   mode's lock, as the Receiver tab's commands do, waits for a journal write.
   The close request's lock is taken under the show state when a show begins
   or ends (an unanswered request is forgotten then), and holds no other.
-  Those that write `receiver.json` run off the windows' thread too: it is in
-  the app's data folder with the journal, so a disk that does not answer
-  holds both. They change it one at a time (`SettingsChange`, whose lock is
+  Every command that writes a file, or lists the USB devices (slow on
+  Windows), runs off the windows' thread too: the app's files are in its
+  data folder with the journal, so a disk that does not answer holds both.
+  A lock that a command on the windows' thread takes (the media library,
+  the icon colour) is never held while the disk works: their files (the
+  sound board, the volume, the icon) each have a lock of their own, held
+  while written, so the last change is the one kept.
+  `receiver.json` changes one at a time (`SettingsChange`, whose lock is
   never taken under the show state), so two quick clicks cannot lose either
   change; and every atomic write has a temporary file of its own
-  (`quiz_file::write_atomic`).
+  (`quiz_file::write_atomic`). The editor's commands that open, save or
+  copy large files, or read a sheet, are refused during a show.
 - **Saving problems.** When the journal refuses a write (the disk is full,
   say), the change is not made, and the Director shows why in a banner until
   a write works again (`show-not-saved`, `show_not_saved`). A due command

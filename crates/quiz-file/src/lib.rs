@@ -864,12 +864,11 @@ fn unique_suffix() -> u128 {
     SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| d.as_nanos())
 }
 
+/// Deletes the folder `path`, if there. Every folder this crate deletes is
+/// in a folder the app `prune`s, so one that cannot be deleted now is
+/// deleted then, and `prune` returns why not for the app to log.
 fn remove_dir(path: &Path) {
-    if let Err(e) = fs::remove_dir_all(path) {
-        if e.kind() != io::ErrorKind::NotFound {
-            eprintln!("cannot remove {}: {e}", path.display());
-        }
-    }
+    let _ = fs::remove_dir_all(path);
 }
 
 #[cfg(test)]
