@@ -54,6 +54,7 @@ Pause and resume the countdown,director,should,yes,yes,§5.5.1 key P
 Stop a paused question,director,should,yes,yes,§5.2.4.4 Stop
 Question list with current and visited state and jump to a question,director,should,yes,partial,"§5.7.1; clone: the current slide is highlighted, Go to jumps; no visited mark"
 Undo the score changes of the last question,director,should,yes,partial,§5.7.2; clone: Restart question takes them back while the question is in play
+Reset scores and start the show over with the same players,director,should,yes,yes,"§5.7.2 reset scores; clone: Reset scores in the Teams tab, Start over in the Questions tab (spec SF-9)"
 Live responses view showing who has not answered,director,should,yes,yes,§5.7.4
 Disable enable and remove a player,director,should,yes,partial,§5.7.2; clone: enable and disable; no remove
 Dark mode for the Director,director,could,yes,yes,"§5.7 right-click the command panel; clone: the Settings tab chooses light, dark or as the system (spec SF-10)"

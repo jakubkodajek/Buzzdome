@@ -517,6 +517,8 @@ fn assert_controls_match_apply(game: &Game, at_ms: u64) {
         (controls.play_video, Command::PlayVideo),
         (controls.go_to, Command::GoTo { slide: 0 }),
         (controls.go_to, Command::GoToFinal),
+        (controls.go_to, Command::StartOver),
+        (controls.go_to, Command::ResetScores),
         (controls.restart_question, Command::RestartQuestion),
     ];
     for (allowed, command) in offered {
@@ -2005,4 +2007,68 @@ fn a_joker_on_a_question_left_before_it_ended_is_not_spent_but_one_restarted_kee
     show.press(8_000, 1, Button::B);
     show.press(8_000, 2, Button::B);
     assert_eq!((show.score(1), show.score(2)), (190, 95));
+}
+
+#[test]
+fn reset_scores_zeroes_scores_and_times_and_leaves_the_show_where_it_is() {
+    let slides = vec![question("q1", AnswerMode::Everyone), question("q2", AnswerMode::Everyone)];
+    let mut show = ready(with_jokers(slides, 1));
+    show.run(1_500, Command::SetJoker { buzzer: 1, on: true }).unwrap();
+    show.run(2_000, Command::Next).unwrap();
+    assert_eq!(show.run(2_500, Command::ResetScores), Err(GameError::NotNow), "not while the question is in play");
+    show = everyone_answered(show);
+    show.run(4_500, Command::AdjustScore { buzzer: 2, delta: 5 }).unwrap();
+    assert_eq!((show.score(1), show.score(2)), (190, -15));
+    let (phase, step_no) = (show.game.phase().clone(), show.game.step_no());
+
+    assert_eq!(show.run(5_000, Command::ResetScores), Ok(vec![]));
+    assert_eq!((show.score(1), show.score(2)), (0, 0));
+    assert!(show.game.players().all(|p| p.total_answer_ms == 0));
+    assert_eq!(show.game.delta(1), None, "nothing of the question is left to take back");
+    assert_eq!((show.game.phase(), show.game.step_no()), (&phase, step_no));
+    assert_eq!(show.game.jokers_left(1), 0, "the joker stays played");
+
+    // The question that ended stays answered: going to it again shows its answer.
+    show.run(6_000, Command::Next).unwrap();
+    show.run(7_000, Command::Next).unwrap();
+    show.run(8_000, Command::GoTo { slide: 0 }).unwrap();
+    assert_eq!(step(&show.game), QuestionStep::Revealed { winner: None });
+    assert_eq!((show.score(1), show.score(2)), (0, 0));
+}
+
+#[test]
+fn starting_over_keeps_the_players_and_team_names_and_asks_every_question_again() {
+    let slides = vec![question("q1", AnswerMode::Everyone), question("q2", AnswerMode::Everyone)];
+    let mut show = with_jokers(slides, 1);
+    show.run(0, Command::SetTeams { names: names(&["Hawks", "Owls"]) }).unwrap();
+    show.press(0, 3, Button::Big);
+    show = ready(show);
+    show.run(1_100, Command::PairTeam { buzzer: 1, name: "Hawks".into() }).unwrap();
+    show.run(1_200, Command::SetPlayerEnabled { buzzer: 3, enabled: false }).unwrap();
+    show.run(1_500, Command::SetJoker { buzzer: 1, on: true }).unwrap();
+    show.run(2_000, Command::Next).unwrap();
+    assert_eq!(show.run(2_500, Command::StartOver), Err(GameError::NotNow), "not while the question is in play");
+    show = everyone_answered(show);
+    show.run(5_000, Command::Next).unwrap();
+    show.run(6_000, Command::Next).unwrap();
+    assert_eq!((show.game.slide_index(), show.score(1)), (1, 190));
+    let players = |game: &Game| game.players().map(|p| (p.buzzer, p.name.clone(), p.enabled)).collect::<Vec<_>>();
+    let before = players(&show.game);
+
+    let effects = show.run(7_000, Command::StartOver).unwrap();
+    assert!(matches!(effects.as_slice(), [Effect::Lights { .. }]), "{effects:?}");
+    assert_eq!((show.game.phase(), show.game.slide_index()), (&Phase::Lobby, 0));
+    assert_eq!(players(&show.game), before);
+    assert!(show.game.players().all(|p| p.score == 0 && p.total_answer_ms == 0));
+    assert_eq!(teams(&show.game), vec![("Hawks".into(), Some(1)), ("Owls".into(), None)]);
+    assert_eq!(show.game.jokers_left(1), 1, "the joker comes back");
+
+    // The first question is asked again, and scores again.
+    show.run(8_000, Command::Next).unwrap();
+    assert_eq!(step(&show.game), QuestionStep::Ready);
+    show.run(9_000, Command::Next).unwrap();
+    show.press(10_000, 1, Button::B);
+    show.press(11_000, 2, Button::A);
+    assert_eq!((show.score(1), show.score(2)), (95, -20));
+    assert_eq!(Game::replay(show.game.quiz().clone(), &show.journal, RULES_VERSION), show.game);
 }

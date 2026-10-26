@@ -202,6 +202,11 @@ pub enum Command {
     GoTo { slide: usize },
     /// Skip the remaining slides and show the final scores; refused as `GoTo` is.
     GoToFinal,
+    /// Begin the show again in the lobby, as after a rehearsal, with the
+    /// same players, their names and the team names: the scores reset
+    /// (`ResetScores`), every joker played comes back and every question
+    /// is asked again. Refused as `GoTo` is.
+    StartOver,
     /// Pause the question clock, or hold the step the quiz's settings take
     /// by themselves once everyone answered (`Game::pending_step`).
     PauseClock,
@@ -230,6 +235,11 @@ pub enum Command {
     SetPlayerEnabled { buzzer: BuzzerId, enabled: bool },
     #[serde(rename_all = "camelCase")]
     AdjustScore { buzzer: BuzzerId, delta: i32 },
+    /// Every player's score and answering time go back to zero, as after a
+    /// trial round or for a round scored on its own; the show stays where
+    /// it is, with the jokers played and the questions that ended. Refused
+    /// as `GoTo` is.
+    ResetScores,
     /// The player plays their joker on the current question (`on`), or
     /// takes it back (`QuizSettings::jokers`, `Game::can_set_joker`).
     #[serde(rename_all = "camelCase")]
@@ -282,7 +292,8 @@ pub struct Controls {
     pub resume_clock: bool,
     pub close_question: bool,
     pub play_video: bool,
-    /// `GoTo` and `GoToFinal`: not while a question is in play.
+    /// `GoTo`, `GoToFinal`, `StartOver` and `ResetScores`: not while a
+    /// question is in play, whose score changes would go with it.
     pub go_to: bool,
     /// `RestartQuestion`: while a question is in play, the way to leave it
     /// without scoring it and ask it again. Not once it closed, as its
@@ -974,6 +985,15 @@ impl Game {
                 self.jump_to(*slide)
             }
             Command::GoToFinal => self.jump_to(self.final_index()),
+            Command::StartOver => {
+                if !self.can_jump() {
+                    return Err(GameError::NotNow);
+                }
+                self.reset_scores();
+                self.jokers.clear();
+                self.closed_questions.clear();
+                Ok(self.enter(0, Phase::Lobby))
+            }
             Command::PauseClock if self.pending_step().is_some() => {
                 self.hold_pending_step();
                 Ok(vec![])
@@ -1045,6 +1065,13 @@ impl Game {
                 self.player_mut(*buzzer)?.add_score(*delta);
                 Ok(vec![])
             }
+            Command::ResetScores => {
+                if !self.can_jump() {
+                    return Err(GameError::NotNow);
+                }
+                self.reset_scores();
+                Ok(vec![])
+            }
             Command::SetJoker { buzzer, on } => {
                 self.player_mut(*buzzer)?;
                 if !self.can_set_joker(*buzzer, *on) {
@@ -1074,6 +1101,16 @@ impl Game {
                 Ok(vec![])
             }
         }
+    }
+
+    /// Every player's score and answering time back to zero, and nothing
+    /// of the current question's left to take back (`gains`).
+    fn reset_scores(&mut self) {
+        for player in self.players.values_mut() {
+            player.score = 0;
+            player.total_answer_ms = 0;
+        }
+        self.gains.clear();
     }
 
     fn player_mut(&mut self, buzzer: BuzzerId) -> Result<&mut Player, GameError> {
@@ -1333,7 +1370,8 @@ impl Game {
         Ok(self.enter_slide(index))
     }
 
-    /// Whether `GoTo` and `GoToFinal` apply: not while a question is in play.
+    /// Whether `GoTo`, `GoToFinal`, `StartOver` and `ResetScores` apply: not
+    /// while a question is in play.
     fn can_jump(&self) -> bool {
         self.jumps_out_of_a_question() || !self.question_in_play()
     }
@@ -1345,6 +1383,24 @@ impl Game {
     }
 
     fn enter_slide(&mut self, index: usize) -> Vec<Effect> {
+        let phase = match self.quiz.slides.get(index).map(|s| &s.content) {
+            None => Phase::Final { step: 0 },
+            Some(SlideContent::Billboard { .. }) => Phase::Billboard,
+            Some(SlideContent::Explanation { .. }) => Phase::Explanation,
+            Some(SlideContent::EndOfRound { .. }) => Phase::EndOfRound,
+            Some(SlideContent::Final { .. }) => Phase::Final { step: 0 },
+            Some(SlideContent::Question(_)) if self.rules_version >= 6 && self.closed_questions.contains(&index) => {
+                Phase::Question(QuestionStep::Revealed { winner: None })
+            }
+            Some(SlideContent::Question(_)) => Phase::Question(QuestionStep::Ready),
+        };
+        self.enter(index, phase)
+    }
+
+    /// Leaves the current slide for slide `index` in `phase`, with nothing
+    /// kept of the slide left: its answers, score changes, waiting step,
+    /// leaderboard and video plays.
+    fn enter(&mut self, index: usize, phase: Phase) -> Vec<Effect> {
         // A joker stays on a question that ended, and on one asked again
         // from its start (`RestartQuestion`); one left before it ended is
         // not spent.
@@ -1361,17 +1417,7 @@ impl Game {
         self.leaderboard_visible = false;
         self.video_plays = 0;
         self.slide = index;
-        self.phase = match self.quiz.slides.get(index).map(|s| &s.content) {
-            None => Phase::Final { step: 0 },
-            Some(SlideContent::Billboard { .. }) => Phase::Billboard,
-            Some(SlideContent::Explanation { .. }) => Phase::Explanation,
-            Some(SlideContent::EndOfRound { .. }) => Phase::EndOfRound,
-            Some(SlideContent::Final { .. }) => Phase::Final { step: 0 },
-            Some(SlideContent::Question(_)) if self.rules_version >= 6 && self.closed_questions.contains(&index) => {
-                Phase::Question(QuestionStep::Revealed { winner: None })
-            }
-            Some(SlideContent::Question(_)) => Phase::Question(QuestionStep::Ready),
-        };
+        self.phase = phase;
         vec![self.lights_now()]
     }
 }

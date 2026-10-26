@@ -14,6 +14,7 @@ const STEP_COMMANDS: ReadonlySet<Command["type"]> = new Set([
   "next",
   "goTo",
   "goToFinal",
+  "startOver",
   "closeQuestion",
   "judgeRight",
   "judgeWrong",

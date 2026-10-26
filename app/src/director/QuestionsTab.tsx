@@ -5,7 +5,7 @@ import { useApp, useDispatch, useRun } from "../app-context";
 import { SlideBoundary } from "../host/SlideBoundary";
 import { SlideThumbnail } from "../host/SlideThumbnail";
 import type { StringKey } from "../i18n";
-import { NextIcon, TrophyIcon } from "../icons";
+import { NextIcon, TrophyIcon, UndoIcon } from "../icons";
 import { mediaFileName } from "../media";
 import { readPreference, writePreference } from "../preferences";
 import { rightAnswers, shareOf, SLIDE_TYPE_LABEL, slideContexts, slideTitle, type SlideContext } from "../quiz";
@@ -48,9 +48,10 @@ export function QuestionsTab({ view, quiz }: { view: GameView; quiz: Quiz | null
   const contexts = slideContexts(quiz);
   const preview = quiz.slides[shown];
   const nextSlide = view.nextSlide === null ? undefined : quiz.slides[view.nextSlide];
-  // Jumps only with the buttons, never mid-question, and the final asks first.
+  // Jumps only with the buttons, never mid-question; the final and starting over ask first.
   const jumps = view.controls.goTo;
   const goToFinal = () => run(confirmAction(t, t("goToFinalConfirm")).then((yes) => yes && dispatch({ type: "goToFinal" })));
+  const startOver = () => run(confirmAction(t, t("startOverConfirm")).then((yes) => yes && dispatch({ type: "startOver" })));
 
   return (
     <div className="questions-tab">
@@ -64,6 +65,9 @@ export function QuestionsTab({ view, quiz }: { view: GameView; quiz: Quiz | null
         </ToolButton>
         <ToolButton icon={<TrophyIcon />} disabled={!jumps || view.phase.phase === "final"} onClick={goToFinal}>
           {t("goToFinal")}
+        </ToolButton>
+        <ToolButton icon={<UndoIcon />} disabled={!jumps || view.phase.phase === "lobby"} onClick={startOver}>
+          {t("startOver")}
         </ToolButton>
         <span className="toolbar-separator" />
         <span>{t("layout")}</span>
