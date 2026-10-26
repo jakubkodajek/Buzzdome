@@ -173,3 +173,13 @@ UI conventions (keep one way of doing each thing):
   virtual buzzers are always available.
 - UI in Czech (default) and English. Text-answer matching must handle diacritics.
 - English for all code, comments, commit messages, docs and identifiers.
+- Installed apps update themselves from GitHub releases of this repository, so
+  only a release reaches them. To release: raise `version` in
+  `app/src-tauri/tauri.conf.json`, merge to main, wait for `check` and
+  `windows-tests`, then push an annotated tag of that commit,
+  `git tag -a v<version> -m "<notes in Czech>" origin/main && git push origin v<version>`,
+  and Jakub approves the run (Review deployments, environment `release`).
+  The tag's message is what the quizmaster reads before updating.
+  `release.yml` builds, signs and publishes; never make the release or the
+  tag on GitHub's Releases page, and never push a tag without Jakub's
+  go-ahead (`docs/releasing.md`).

@@ -206,6 +206,9 @@ pub enum AppError {
     /// `detail` is the updater's message.
     #[error("updating the app failed: {detail}")]
     UpdateFailed { detail: String },
+    /// A new version of the app is being installed, which ends the app.
+    #[error("a new version of the app is being installed")]
+    UpdateInstalling,
 
     // Windows and the operating system.
     /// The system gave the app no folder for its data (team names, sessions, the media library).

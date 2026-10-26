@@ -153,4 +153,16 @@ buzzdome-quiz skill <file.zip>
 buzzdome-quiz mcp [--root <folder>]...
 ```
 
-It is not in the installer yet; the app's `--mcp` is.
+A release installs it beside the app: `C:\Program Files\Buzzdome\buzzdome-quiz.exe`
+on Windows (or the folder the app was installed in) and
+`/Applications/Buzzdome.app/Contents/MacOS/buzzdome-quiz` on macOS. The
+test installers of `build.yml` leave it out.
+
+## After an update
+
+The app's updates bring the MCP server and the command line with them,
+since both are installed with the app (`docs/releasing.md`, "The AI
+tools"). Claude Desktop runs the old server until it is closed and opened
+again. A skill uploaded to an assistant stays as it was saved: when an
+update changes it, the Director says so and offers to save it again, to
+upload in place of the old one.

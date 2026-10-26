@@ -50,10 +50,15 @@ jobs:
           git -C source checkout -q --detach "refs/tags/$TAG"
 
       # The apps compare the version their build declares; the tag must name it.
+      # The builds take the pushed commit, so the tag read here must still be on it.
       - id: source
         name: Read the version the commit declares
         working-directory: source
         run: |
+          if [ "$(git rev-parse "refs/tags/$TAG^{commit}")" != "$GITHUB_SHA" ]; then
+            echo "::error::$TAG has moved since it was pushed. Push the tag again to release."
+            exit 1
+          fi
           version=$(jq -r .version app/src-tauri/tauri.conf.json)
           if ! [[ $version =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             echo "::error::The version in app/src-tauri/tauri.conf.json, $version, is not of the form 1.2.3."
@@ -165,6 +170,31 @@ jobs:
         run: |
           node --version
           npm ci --ignore-scripts --engine-strict
+
+      # buzzdome-quiz, the command line for quiz files and AI assistants, goes in
+      # beside the app (externalBin in tauri.release.conf.json), so updates bring it too.
+      - name: Build the command line
+        working-directory: source/app
+        env:
+          RUST_TARGETS: ${{ matrix.rust-targets }}
+        run: |
+          bins=src-tauri/binaries
+          mkdir -p "$bins"
+          read -ra targets <<< "$RUST_TARGETS"
+          if [ ${#targets[@]} = 0 ]; then
+            host=$(rustc --print host-tuple)
+            cargo build --release --locked -p quiz-ai --bin buzzdome-quiz
+            ext=$([ "$RUNNER_OS" = Windows ] && echo .exe || true)
+            cp "../target/release/buzzdome-quiz$ext" "$bins/buzzdome-quiz-$host$ext"
+          else
+            for target in "${targets[@]}"; do
+              cargo build --release --locked -p quiz-ai --bin buzzdome-quiz --target "$target"
+              cp "../target/$target/release/buzzdome-quiz" "$bins/buzzdome-quiz-$target"
+            done
+            # Each architecture's build takes its own; the universal bundle takes both in one.
+            lipo -create -output "$bins/buzzdome-quiz-universal-apple-darwin" "${targets[@]/#/$bins/buzzdome-quiz-}"
+          fi
+          ls -l "$bins"
 
       - name: Build and sign
         working-directory: source/app

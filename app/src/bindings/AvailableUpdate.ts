@@ -8,4 +8,9 @@ export type AvailableUpdate = { version: string,
  * What the release says changed, cut after `MAX_NOTES_CHARS`; empty
  * when it says nothing.
  */
-notes: string, };
+notes: string, 
+/**
+ * Claude Desktop runs this app's AI tools (`--mcp`), which it keeps
+ * running in the old version until it is opened again.
+ */
+claudeDesktop: boolean, };

@@ -61,6 +61,7 @@ const COMMANDS: &[&str] = &[
     "editor_close",
     "editor_test_run",
     "ai_save_skill",
+    "ai_skill_outdated",
     "ai_connect_claude",
     "receiver_info",
     "receiver_devices",

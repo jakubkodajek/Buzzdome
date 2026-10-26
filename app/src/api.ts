@@ -204,6 +204,8 @@ export const api = {
   editorTestRun: (draft: string, quiz: Quiz, from: number | null = null) => invoke<void>("editor_test_run", { draft, quiz, from }),
   /** Writes the skill package for chat assistants where the quizmaster picks; false when they cancel. */
   aiSaveSkill: (picker: Picker) => invoke<boolean>("ai_save_skill", { picker }),
+  /** Whether the skill package saved last differs from this version's, so it should be saved and uploaded again. */
+  aiSkillOutdated: () => invoke<boolean>("ai_skill_outdated"),
   /**
    * Adds the app to Claude Desktop as the MCP server it writes quizzes with, working in the Buzzdome folder of the
    * quizmaster's documents, or with `choose` in a folder they pick; says what changed, null when they cancel.

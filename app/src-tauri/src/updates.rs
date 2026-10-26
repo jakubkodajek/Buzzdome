@@ -7,6 +7,7 @@
 
 use crate::error::{AppError, CmdResult};
 use crate::{app_log, lock_show, off_ui, read_show};
+use quiz_ai::claude_desktop;
 use serde::Serialize;
 use std::time::Duration;
 use tauri::async_runtime::Mutex;
@@ -35,6 +36,9 @@ pub struct AvailableUpdate {
     /// What the release says changed, cut after `MAX_NOTES_CHARS`; empty
     /// when it says nothing.
     pub notes: String,
+    /// Claude Desktop runs this app's AI tools (`--mcp`), which it keeps
+    /// running in the old version until it is opened again.
+    pub claude_desktop: bool,
 }
 
 /// How much of an update has been downloaded.
@@ -86,7 +90,8 @@ async fn check(app: &AppHandle) -> tauri_plugin_updater::Result<Checked> {
 /// What the Director is told of `update`.
 fn available(update: &Update) -> AvailableUpdate {
     let notes = update.body.as_deref().unwrap_or_default().trim();
-    AvailableUpdate { version: update.version.clone(), notes: notes.chars().take(MAX_NOTES_CHARS).collect() }
+    let claude_desktop = claude_desktop::config_path().is_some_and(|config| claude_desktop::is_connected(&config));
+    AvailableUpdate { version: update.version.clone(), notes: notes.chars().take(MAX_NOTES_CHARS).collect(), claude_desktop }
 }
 
 /// Downloads the update the check found, verifies its signature and
@@ -134,16 +139,23 @@ fn progress_step_crossed(before: u64, after: u64, total: Option<u64>) -> bool {
 
 /// Installs `bytes`, the verified download of `update`, unless a show began
 /// during the download. No show can begin while it installs: the show state
-/// stays locked until the new version is in place.
+/// is marked as updating until the new version is in place. It is not held
+/// meanwhile, as on macOS installing may wait for a password dialog on the
+/// windows' thread.
 fn install(app: &AppHandle, update: &Update, bytes: &[u8]) -> CmdResult<()> {
     {
-        let inner = lock_show(app);
+        let mut inner = lock_show(app);
         if inner.game.is_some() {
             return Err(AppError::ShowRunning);
         }
-        app_log::note(&format!("installing version {} over {}", update.version, update.current_version));
-        // On Windows the installer takes over and the app ends here.
-        update.install(bytes).inspect_err(|e| app_log::note(&format!("installing version {} failed: {e}", update.version)))?;
+        inner.updating = true;
+    }
+    app_log::note(&format!("installing version {} over {}", update.version, update.current_version));
+    // On Windows the installer takes over and the app ends here.
+    if let Err(e) = update.install(bytes) {
+        app_log::note(&format!("installing version {} failed: {e}", update.version));
+        lock_show(app).updating = false;
+        return Err(e.into());
     }
     app.restart()
 }

@@ -6,9 +6,15 @@ const t = translator("en");
 
 describe("installQuestion", () => {
   it("adds the release notes when the release has some", () => {
-    expect(installQuestion(t, { version: "0.2.0", notes: "" })).toBe(t("updateConfirm", { version: "0.2.0" }));
-    expect(installQuestion(t, { version: "0.2.0", notes: "Fixes the podium." })).toBe(
+    expect(installQuestion(t, { version: "0.2.0", notes: "", claudeDesktop: false })).toBe(t("updateConfirm", { version: "0.2.0" }));
+    expect(installQuestion(t, { version: "0.2.0", notes: "Fixes the podium.", claudeDesktop: false })).toBe(
       `${t("updateConfirm", { version: "0.2.0" })}\n\n${t("updateNotes")}\nFixes the podium.`,
+    );
+  });
+
+  it("says to open Claude Desktop again when it runs the app's AI tools", () => {
+    expect(installQuestion(t, { version: "0.2.0", notes: "Fixes the podium.", claudeDesktop: true })).toBe(
+      `${t("updateConfirm", { version: "0.2.0" })} ${t("updateRestartClaude")}\n\n${t("updateNotes")}\nFixes the podium.`,
     );
   });
 });

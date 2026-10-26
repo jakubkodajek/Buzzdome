@@ -63,6 +63,9 @@ struct Inner {
     began_ms: u64,
     /// The windows' close request, forgotten when a show begins or ends.
     close_request: app_windows::CloseRequest,
+    /// A new version of the app is being installed, which ends the app, so
+    /// no show may begin (`updates::install`).
+    updating: bool,
 }
 
 impl Inner {
@@ -78,7 +81,20 @@ impl Inner {
             save_problem: None,
             began_ms: 0,
             close_request: app_windows::CloseRequest::default(),
+            updating: false,
         }
+    }
+
+    /// Refuses a new show while one runs or a new version of the app is
+    /// being installed.
+    fn may_start_show(&self) -> CmdResult<()> {
+        if self.game.is_some() {
+            return Err(AppError::ShowRunning);
+        }
+        if self.updating {
+            return Err(AppError::UpdateInstalling);
+        }
+        Ok(())
     }
 
     /// Whether a command or press given at `at_ms` came before the running
@@ -101,7 +117,8 @@ struct AppState(Mutex<Inner>);
 /// or ends, and holds no other lock; so does what the stage lights were
 /// last told (`stage_lights`), taken under this one with every change.
 /// The updates lock (`updates::Updates`) is taken before this one and
-/// never under it.
+/// never under it; installing an update does not hold this one, but marks
+/// it (`Inner::updating`) so that no show begins meanwhile.
 fn lock_show(app: &AppHandle) -> MutexGuard<'_, Inner> {
     app.state::<AppState>().inner().0.lock().unwrap()
 }
@@ -313,15 +330,14 @@ fn noted(lit: Result<(), buzzers::DriverError>) {
     }
 }
 
-/// Locks the show state to start a show, refusing while one runs. Learn
+/// Locks the show state to start a show, refusing while one runs or the
+/// app is being updated (`Inner::may_start_show`). Learn
 /// mode ends, because in a show every press must play; learn mode starts
 /// only while holding the show state (`hardware::receiver_learn_start`),
 /// so it cannot start again until the show has.
 fn lock_for_new_show(app: &AppHandle) -> CmdResult<MutexGuard<'_, Inner>> {
     let inner = lock_show(app);
-    if inner.game.is_some() {
-        return Err(AppError::ShowRunning);
-    }
+    inner.may_start_show()?;
     hardware::end_learning(app);
     Ok(inner)
 }
@@ -720,6 +736,7 @@ pub fn run() {
             app.asset_protocol_scope().allow_directory(library.root(), true)?;
             app.manage(library);
             app.manage(app_icon::AppIcon::load(app_data(app.handle(), app_icon::ICON_FILE)?));
+            app.manage(ai::SavedSkill::load(app_data(app.handle(), ai::SKILL_FILE)?));
             app.manage(recent_files::RecentFiles::load(app_local_data(app.handle(), recent_files::RECENT_FILES)?));
             for window in app.webview_windows().values() {
                 app_icon::apply(app.handle(), window);
@@ -784,6 +801,7 @@ pub fn run() {
             editor::editor_close,
             editor_test_run,
             ai::ai_save_skill,
+            ai::ai_skill_outdated,
             ai::ai_connect_claude,
             hardware::receiver_info,
             hardware::receiver_devices,
@@ -820,6 +838,17 @@ mod tests {
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Arc;
     use std::time::Instant;
+
+    #[test]
+    fn no_show_begins_while_one_runs_or_an_update_installs() {
+        let mut inner = Inner::new();
+        assert_eq!(inner.may_start_show(), Ok(()));
+        inner.updating = true;
+        assert_eq!(inner.may_start_show(), Err(AppError::UpdateInstalling));
+        inner.updating = false;
+        inner.game = Some(Game::new(Quiz::new("Quiz", Vec::new())));
+        assert_eq!(inner.may_start_show(), Err(AppError::ShowRunning));
+    }
 
     #[test]
     fn a_second_start_meanwhile_is_refused_and_unpacks_nothing() {

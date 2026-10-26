@@ -71,6 +71,8 @@ const saving = params.get("saving");
 const draft = params.get("draft");
 /** `available`: the update server offers a newer version; `installing`: it also downloads without end once asked. */
 const update = params.get("update");
+/** `outdated`: the AI skill saved before differs from this version's. */
+const skillOutdated = params.get("skill") === "outdated";
 /** `slide`: the fourth slide has no answers list, so it fails to render; `view`: the show's view has no players, so the Director's screen does. */
 const broken = params.get("broken");
 /** The slides, the fourth broken when asked (`broken`). */
@@ -764,6 +766,8 @@ mockIPC(
       case "ai_save_skill":
         called.push({ cmd, ...(payload as object) });
         return true;
+      case "ai_skill_outdated":
+        return skillOutdated;
       case "ai_connect_claude":
         called.push({ cmd, ...(payload as object) });
         return { connection: "added", folders: ["C:\\Users\\Eva\\Documents\\Buzzdome"] };
@@ -845,7 +849,7 @@ mockIPC(
       case "receiver_devices":
         return [];
       case "update_check":
-        return update ? { version: "0.2.0", notes: "Fixes the podium for shared places.\nThe Director offers newer versions." } : null;
+        return update ? { version: "0.2.0", notes: "Fixes the podium for shared places.\nThe Director offers newer versions.", claudeDesktop: true } : null;
       case "update_install":
         called.push({ cmd });
         return update === "installing" ? new Promise(() => undefined) : Promise.reject({ code: "updateFailed", detail: "error sending request" });
