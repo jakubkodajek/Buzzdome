@@ -4,7 +4,7 @@
 //! Director plays them; the game says when, by its cues (`Cue`) and by the
 //! music its moment takes (`Game::music`).
 
-use crate::game::{Cue, Game, Phase, QuestionStep, WINNER_STEP};
+use crate::game::{Game, Phase, QuestionStep, WINNER_STEP};
 use crate::media::{check_reference, MediaIssue, MediaKind};
 use crate::settings::count_up_to;
 use schemars::JsonSchema;
@@ -80,21 +80,6 @@ impl SoundSlot {
     /// Music plays over and over and fades in and out; an effect plays once.
     pub fn is_music(self) -> bool {
         matches!(self, SoundSlot::LobbyMusic | SoundSlot::BetweenMusic | SoundSlot::ClockMusic | SoundSlot::BuildUpMusic | SoundSlot::WinnerMusic)
-    }
-
-    /// The slot a game effect's sound plays from.
-    pub fn of_cue(cue: Cue) -> SoundSlot {
-        match cue {
-            Cue::ClockStart => SoundSlot::ClockStart,
-            Cue::Buzz => SoundSlot::Buzz,
-            Cue::Correct => SoundSlot::Correct,
-            Cue::Wrong => SoundSlot::Wrong,
-            Cue::TimeUp => SoundSlot::TimeUp,
-            Cue::Reveal => SoundSlot::Reveal,
-            Cue::Leaderboard => SoundSlot::Leaderboard,
-            Cue::Place => SoundSlot::Place,
-            Cue::Winner => SoundSlot::Winner,
-        }
     }
 }
 
@@ -235,6 +220,7 @@ impl Game {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::game::Cue;
 
     fn read(json: &str) -> QuizSounds {
         serde_json::from_str(json).unwrap()
@@ -304,9 +290,12 @@ mod tests {
     }
 
     #[test]
-    fn every_cue_has_an_effect_slot_and_music_slots_are_not_cues() {
-        let cue_slots: Vec<SoundSlot> = Cue::ALL.iter().map(|&cue| SoundSlot::of_cue(cue)).collect();
-        assert!(cue_slots.iter().all(|slot| !slot.is_music()));
+    fn each_cue_plays_the_effect_slot_of_its_name() {
+        // The Director plays a cue's sound from the slot named as the cue is.
+        for cue in Cue::ALL {
+            let slot: SoundSlot = serde_json::from_value(serde_json::to_value(cue).unwrap()).unwrap();
+            assert!(!slot.is_music(), "{slot:?}");
+        }
         let effects = SoundSlot::ALL.iter().filter(|slot| !slot.is_music()).count();
         assert_eq!(effects, Cue::ALL.len() + 1, "the countdown is the one effect the clock plays, not a cue");
     }

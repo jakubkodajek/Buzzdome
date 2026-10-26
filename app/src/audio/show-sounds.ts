@@ -4,14 +4,14 @@
 // trying a moment's sound out in the editor.
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from "react";
-import { DEFAULT_QUIZ_SOUNDS, LAST_SECONDS_MS, SOUND_SLOTS } from "../bindings/Constants";
+import { DEFAULT_QUIZ_SOUNDS, EFFECT_SLOTS, LAST_SECONDS_MS, MUSIC_SLOTS, SOUND_SLOTS } from "../bindings/Constants";
 import { useBackendEvent, useClock, usePlayerVolume } from "../hooks";
 import { useMediaUrl } from "../media";
 import { heardAtNow, msSinceHeard } from "../media-player";
 import { soundsOf } from "../quiz";
 import type { GameView, NowPlaying, Quiz, QuizSounds, SoundChoice, SoundSlot } from "../types";
 import { linearGain, playerLevel } from "./clip-player";
-import { choiceOf, EFFECT_SLOTS, MUSIC_SLOTS, SLOT_SOUNDS, soundSource, type SoundSource } from "./library";
+import { choiceOf, isMusic, soundSource, type SoundSource } from "./library";
 import { ShowAudio, type Playing } from "./show-audio";
 
 type SlotSources = Record<SoundSlot, SoundSource | null>;
@@ -147,7 +147,7 @@ export function useSoundPreview(sounds: QuizSounds): SoundPreview {
       const source = soundSource(slot, choice, fileUrl);
       if (!player || !source) return;
       setPlaying(slot);
-      if (SLOT_SOUNDS[slot].music) {
+      if (isMusic(slot)) {
         player.music(source);
         return;
       }

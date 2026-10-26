@@ -2,11 +2,11 @@
 // plays, tried out here as loud as the show plays it.
 
 import { useApp } from "../app-context";
-import { MAX_SOUND_VOLUME } from "../bindings/Constants";
+import { EFFECT_SLOTS, MAX_SOUND_VOLUME, MUSIC_SLOTS } from "../bindings/Constants";
 import type { Translate } from "../i18n";
 import { PlayIcon, StopIcon } from "../icons";
 import { mediaFileName } from "../media";
-import { choiceKey, choiceOf, defaultChoice, EFFECT_SLOTS, LIBRARY, MUSIC_SLOTS, sameChoice, SLOT_SOUNDS, SOUND_NAME, slotLabel, withChoice } from "../audio/library";
+import { choiceKey, choiceOf, defaultChoice, isMusic, LIBRARY, sameChoice, SLOT_SOUNDS, SOUND_NAME, slotLabel, withChoice } from "../audio/library";
 import { useSoundPreview, type SoundPreview } from "../audio/show-sounds";
 import type { QuizSounds, SoundChoice, SoundSlot } from "../types";
 import { NumberBox, Select, type OptionGroup } from "./controls";
@@ -110,7 +110,7 @@ function soundName(t: Translate, slot: SoundSlot, id: string): string {
  * those made for each other effect; for music, all the other music.
  */
 function otherSounds(t: Translate, slot: SoundSlot): { group: string; ids: readonly string[] }[] {
-  const { music, madeFor } = SLOT_SOUNDS[slot];
-  if (music) return [{ group: t("soundOtherMusic"), ids: LIBRARY.filter((sound) => sound.kind === "music" && !madeFor.includes(sound.id)).map((sound) => sound.id) }];
+  const { madeFor } = SLOT_SOUNDS[slot];
+  if (isMusic(slot)) return [{ group: t("soundOtherMusic"), ids: LIBRARY.filter((sound) => sound.kind === "music" && !madeFor.includes(sound.id)).map((sound) => sound.id) }];
   return EFFECT_SLOTS.filter((other) => other !== slot).map((other) => ({ group: slotLabel(t, other), ids: SLOT_SOUNDS[other].madeFor }));
 }

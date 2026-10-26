@@ -100,6 +100,8 @@ mod ui_constants {
             ("DEFAULT_QUIZ_SOUNDS", format!("{} as const", serde_json::to_string(&crate::QuizSounds::default()).unwrap())),
             ("MAX_SOUND_VOLUME", crate::MAX_SOUND_VOLUME.to_string()),
             ("SOUND_SLOTS", format!("{} as const", serde_json::to_string(&crate::SoundSlot::ALL).unwrap())),
+            ("EFFECT_SLOTS", sound_slots(false)),
+            ("MUSIC_SLOTS", sound_slots(true)),
             ("STAGES", format!("{} as const", serde_json::to_string(&crate::Stage::ALL).unwrap())),
             ("ANSWER_BUTTONS", format!("{} as const", serde_json::to_string(&crate::game::ANSWER_BUTTONS).unwrap())),
         ];
@@ -108,6 +110,12 @@ mod ui_constants {
             ts.push_str(&format!("export const {name} = {value};\n"));
         }
         std::fs::write(std::path::Path::new(&dir).join("Constants.ts"), ts).unwrap();
+    }
+
+    /// The moments of the show that play music, or those that play effects.
+    fn sound_slots(music: bool) -> String {
+        let slots: Vec<_> = crate::SoundSlot::ALL.into_iter().filter(|slot| slot.is_music() == music).collect();
+        format!("{} as const", serde_json::to_string(&slots).unwrap())
     }
 
     /// What each slide type can play, by the type's name in the quiz file.

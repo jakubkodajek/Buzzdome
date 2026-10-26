@@ -2,7 +2,7 @@
 // from the app's own library (made by `library/make_sounds.py`), from a
 // sound file of the quiz, or nothing.
 
-import { LAST_SECONDS_MS, SOUND_SLOTS } from "../bindings/Constants";
+import { LAST_SECONDS_MS, MUSIC_SLOTS, SOUND_SLOTS } from "../bindings/Constants";
 import type { StringKey, Translate } from "../i18n";
 import { CUE_LABEL } from "../phase";
 import type { QuizSounds, SoundChoice, SoundSlot } from "../types";
@@ -34,7 +34,6 @@ export function libraryUrl(id: string): string | undefined {
 
 interface SlotSounds {
   label: StringKey;
-  music: boolean;
   /**
    * The app's sounds made for the moment. An effect's first one is its
    * default; music plays none unless the quiz says.
@@ -44,21 +43,21 @@ interface SlotSounds {
 
 /** Each moment of the show: its name and the app's sounds made for it. */
 export const SLOT_SOUNDS: Record<SoundSlot, SlotSounds> = {
-  clockStart: { label: CUE_LABEL.clockStart, music: false, madeFor: ["start.chime", "start.gong", "start.go"] },
-  countdown: { label: "soundCountdown", music: false, madeFor: ["countdown.ticks", "countdown.beeps", "countdown.pulse"] },
-  buzz: { label: CUE_LABEL.buzz, music: false, madeFor: ["buzz.classic", "buzz.bell", "buzz.laser", "buzz.horn"] },
-  correct: { label: CUE_LABEL.correct, music: false, madeFor: ["correct.chime", "correct.dings", "correct.fanfare"] },
-  wrong: { label: CUE_LABEL.wrong, music: false, madeFor: ["wrong.buzzer", "wrong.trombone", "wrong.bonk"] },
-  timeUp: { label: CUE_LABEL.timeUp, music: false, madeFor: ["timeup.horn", "timeup.gong", "timeup.alarm"] },
-  reveal: { label: CUE_LABEL.reveal, music: false, madeFor: ["reveal.whoosh", "reveal.sparkle", "reveal.sting"] },
-  leaderboard: { label: CUE_LABEL.leaderboard, music: false, madeFor: ["leaderboard.rise", "leaderboard.drums", "leaderboard.chord"] },
-  place: { label: CUE_LABEL.place, music: false, madeFor: ["place.cymbal", "place.stab", "place.boom"] },
-  winner: { label: CUE_LABEL.winner, music: false, madeFor: ["winner.fanfare", "winner.applause", "winner.party"] },
-  lobbyMusic: { label: "soundLobbyMusic", music: true, madeFor: ["music.lobby", "music.lounge"] },
-  betweenMusic: { label: "soundBetweenMusic", music: true, madeFor: ["music.lounge", "music.lobby"] },
-  clockMusic: { label: "soundClockMusic", music: true, madeFor: ["music.thinking", "music.race"] },
-  buildUpMusic: { label: "soundBuildUpMusic", music: true, madeFor: ["music.drumroll"] },
-  winnerMusic: { label: "soundWinnerMusic", music: true, madeFor: ["music.victory"] },
+  clockStart: { label: CUE_LABEL.clockStart, madeFor: ["start.chime", "start.gong", "start.go"] },
+  countdown: { label: "soundCountdown", madeFor: ["countdown.ticks", "countdown.beeps", "countdown.pulse"] },
+  buzz: { label: CUE_LABEL.buzz, madeFor: ["buzz.classic", "buzz.bell", "buzz.laser", "buzz.horn"] },
+  correct: { label: CUE_LABEL.correct, madeFor: ["correct.chime", "correct.dings", "correct.fanfare"] },
+  wrong: { label: CUE_LABEL.wrong, madeFor: ["wrong.buzzer", "wrong.trombone", "wrong.bonk"] },
+  timeUp: { label: CUE_LABEL.timeUp, madeFor: ["timeup.horn", "timeup.gong", "timeup.alarm"] },
+  reveal: { label: CUE_LABEL.reveal, madeFor: ["reveal.whoosh", "reveal.sparkle", "reveal.sting"] },
+  leaderboard: { label: CUE_LABEL.leaderboard, madeFor: ["leaderboard.rise", "leaderboard.drums", "leaderboard.chord"] },
+  place: { label: CUE_LABEL.place, madeFor: ["place.cymbal", "place.stab", "place.boom"] },
+  winner: { label: CUE_LABEL.winner, madeFor: ["winner.fanfare", "winner.applause", "winner.party"] },
+  lobbyMusic: { label: "soundLobbyMusic", madeFor: ["music.lobby", "music.lounge"] },
+  betweenMusic: { label: "soundBetweenMusic", madeFor: ["music.lounge", "music.lobby"] },
+  clockMusic: { label: "soundClockMusic", madeFor: ["music.thinking", "music.race"] },
+  buildUpMusic: { label: "soundBuildUpMusic", madeFor: ["music.drumroll"] },
+  winnerMusic: { label: "soundWinnerMusic", madeFor: ["music.victory"] },
 };
 
 /** What `slot` is called. */
@@ -66,8 +65,12 @@ export function slotLabel(t: Translate, slot: SoundSlot): string {
   return t(SLOT_SOUNDS[slot].label, { s: LAST_SECONDS_MS / 1000 });
 }
 
-export const EFFECT_SLOTS: readonly SoundSlot[] = SOUND_SLOTS.filter((slot) => !SLOT_SOUNDS[slot].music);
-export const MUSIC_SLOTS: readonly SoundSlot[] = SOUND_SLOTS.filter((slot) => SLOT_SOUNDS[slot].music);
+const MUSIC: ReadonlySet<SoundSlot> = new Set(MUSIC_SLOTS);
+
+/** Music plays over and over and fades in and out; an effect plays once. */
+export function isMusic(slot: SoundSlot): boolean {
+  return MUSIC.has(slot);
+}
 
 /** The name of each of the app's sounds. */
 export const SOUND_NAME: Record<string, StringKey> = {
@@ -112,14 +115,13 @@ export const SOUND_NAME: Record<string, StringKey> = {
 
 /** What a moment plays when the quiz does not say. */
 export function defaultChoice(slot: SoundSlot): SoundChoice {
-  const { music, madeFor } = SLOT_SOUNDS[slot];
-  return music ? "none" : { builtIn: madeFor[0] };
+  return isMusic(slot) ? "none" : { builtIn: SLOT_SOUNDS[slot].madeFor[0] };
 }
 
 /** The app's sound with `id`, if it has one that fits the moment: an effect for an effect, music for music. */
 export function librarySoundFor(slot: SoundSlot, id: string): LibrarySound | undefined {
   const sound = BY_ID.get(id);
-  return sound && (sound.kind === "music") === SLOT_SOUNDS[slot].music ? sound : undefined;
+  return sound && (sound.kind === "music") === isMusic(slot) ? sound : undefined;
 }
 
 /**

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_QUIZ_SOUNDS, SOUND_SLOTS } from "../bindings/Constants";
+import { DEFAULT_QUIZ_SOUNDS, EFFECT_SLOTS, MUSIC_SLOTS, SOUND_SLOTS } from "../bindings/Constants";
 import type { QuizSounds } from "../types";
-import { choiceOf, defaultChoice, EFFECT_SLOTS, LIBRARY, libraryUrl, MUSIC_SLOTS, sameSounds, SLOT_SOUNDS, SOUND_NAME, soundSource, withChoice } from "./library";
+import { choiceOf, defaultChoice, isMusic, LIBRARY, libraryUrl, sameSounds, SLOT_SOUNDS, SOUND_NAME, soundSource, withChoice } from "./library";
 import { roundsDue } from "./show-audio";
 
 const sounds = (slots: QuizSounds["slots"]): QuizSounds => ({ ...DEFAULT_QUIZ_SOUNDS, slots });
@@ -29,7 +29,7 @@ describe("sound library", () => {
       }
     }
     for (const slot of SOUND_SLOTS) {
-      for (const id of SLOT_SOUNDS[slot].madeFor) expect(LIBRARY.find((sound) => sound.id === id)?.kind, id).toBe(SLOT_SOUNDS[slot].music ? "music" : "effect");
+      for (const id of SLOT_SOUNDS[slot].madeFor) expect(LIBRARY.find((sound) => sound.id === id)?.kind, id).toBe(isMusic(slot) ? "music" : "effect");
     }
     expect([...EFFECT_SLOTS, ...MUSIC_SLOTS].sort()).toEqual([...SOUND_SLOTS].sort());
   });
