@@ -427,6 +427,9 @@ pub struct Player {
     /// How long the player took for their right answers, together; breaks
     /// ties in the ranking (`Game::ranking`).
     pub total_answer_ms: u64,
+    /// What the quizmaster added to the score by hand (`Command::AdjustScore`):
+    /// the score is this and what the questions asked gave (`Game::asked`).
+    pub adjusted: i32,
 }
 
 impl Player {
@@ -484,7 +487,11 @@ fn same_step(a: &Phase, b: &Phase) -> bool {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// A player's answer, or their buzz in a fastest-finger question: the
+/// button, and when it was pressed on the question's clock.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
+#[serde(rename_all = "camelCase")]
 pub struct Response {
     pub button: Button,
     pub elapsed_ms: u64,
@@ -497,11 +504,38 @@ impl Response {
     }
 }
 
-/// What the current question gave a player, which `RestartQuestion` takes back.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-struct Gain {
-    points: i32,
-    answer_ms: u64,
+/// What a question gave a player: what they answered or buzzed with, if
+/// anything (a penalty for no answer gives none), whether it was right, and
+/// the points, a joker's doubling included.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
+#[serde(rename_all = "camelCase")]
+pub struct Mark {
+    pub answer: Option<Response>,
+    /// One of the question's right answers, or a buzz judged right.
+    pub right: bool,
+    pub points: i32,
+    /// The player played their joker on the question (`QuizSettings::jokers`).
+    pub joker: bool,
+}
+
+impl Mark {
+    /// The answering time the question added to the player's: a right
+    /// answer's time (`Player::total_answer_ms`).
+    pub fn answer_ms(&self) -> u64 {
+        match self.answer {
+            Some(answer) if self.right => answer.elapsed_ms,
+            _ => 0,
+        }
+    }
+}
+
+/// A question as the show asked it: its slide, and what it gave the
+/// players it scored, by buzzer (`Game::asked`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Asked {
+    pub slide: usize,
+    pub marks: BTreeMap<BuzzerId, Mark>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -523,8 +557,13 @@ pub struct Game {
     /// count from when they lit ready, by which a buzz is ordered (BZ-5):
     /// theirs would count from later, so they play from the next question.
     joins_next: BTreeSet<BuzzerId>,
-    /// What the current question gave each player (`credit`).
-    gains: BTreeMap<BuzzerId, Gain>,
+    /// The questions asked in the show that the show left, in order, with
+    /// what each gave the players (`Game::asked`).
+    asked: Vec<Asked>,
+    /// The current question as asked, once it gave anything or ended: what
+    /// `RestartQuestion` takes back, and the show's last asked question
+    /// once it moves on.
+    asking: Option<Asked>,
     /// The slides whose question ended in this show (`end_question`). Going to one again
     /// shows its answer (rules version 6): its scores stand, and asking it
     /// again would score it twice.
@@ -568,7 +607,8 @@ impl Game {
             counted: BTreeSet::new(),
             locked_out: BTreeSet::new(),
             joins_next: BTreeSet::new(),
-            gains: BTreeMap::new(),
+            asked: Vec::new(),
+            asking: None,
             closed_questions: BTreeSet::new(),
             jokers: BTreeSet::new(),
             auto_step_from: None,
@@ -722,7 +762,23 @@ impl Game {
 
     /// The points the current question gave `buzzer`'s player, for feedback on screen.
     pub fn delta(&self, buzzer: BuzzerId) -> Option<i32> {
-        self.gains.get(&buzzer).map(|gain| gain.points)
+        self.mark(buzzer).map(|mark| mark.points)
+    }
+
+    /// What the current question gave `buzzer`'s player, if anything.
+    fn mark(&self, buzzer: BuzzerId) -> Option<&Mark> {
+        self.asking.as_ref()?.marks.get(&buzzer)
+    }
+
+    /// The questions the show asked, in order, with what each gave the
+    /// players: every point they won or lost in a question is in it, so a
+    /// player's score is what these gave them and what the quizmaster
+    /// added by hand (`Player::adjusted`). The current question is the
+    /// last once it gave anything or ended. A question asked again from its
+    /// start (`RestartQuestion`) counts once, and none are kept from before
+    /// the scores were reset (`ResetScores`).
+    pub fn asked(&self) -> impl Iterator<Item = &Asked> {
+        self.asked.iter().chain(&self.asking)
     }
 
     pub fn leaderboard_visible(&self) -> bool {
@@ -745,6 +801,13 @@ impl Game {
             ranking.push((place, player));
         }
         ranking
+    }
+
+    /// Every player with their place: those switched on in the ranking's
+    /// order (`ranking`), then the others, without one, by buzzer.
+    pub fn standings(&self) -> Vec<(Option<usize>, &Player)> {
+        let ranked = self.ranking().into_iter().map(|(place, player)| (Some(place), player));
+        ranked.chain(self.players.values().filter(|p| !p.enabled).map(|player| (None, player))).collect()
     }
 
     /// What the final ranking's `step` sounds: its place, from the third,
@@ -799,7 +862,7 @@ impl Game {
     /// while jokers can be played (`jokers_open`), as long as the question
     /// gave the player nothing yet, and to play it, with one left.
     pub fn can_set_joker(&self, buzzer: BuzzerId, on: bool) -> bool {
-        let open = self.jokers_open() && self.players.contains_key(&buzzer) && !self.gains.contains_key(&buzzer);
+        let open = self.jokers_open() && self.players.contains_key(&buzzer) && self.mark(buzzer).is_none();
         open && (!on || self.plays_joker(buzzer) || self.jokers_left(buzzer) > 0)
     }
 
@@ -1042,10 +1105,10 @@ impl Game {
                 if !self.question_restartable() {
                     return Err(GameError::NotNow);
                 }
-                for (buzzer, gain) in std::mem::take(&mut self.gains) {
+                for (buzzer, mark) in self.asking.take().map(|asked| asked.marks).unwrap_or_default() {
                     if let Some(player) = self.players.get_mut(&buzzer) {
-                        player.add_score(gain.points.saturating_neg());
-                        player.total_answer_ms = player.total_answer_ms.saturating_sub(gain.answer_ms);
+                        player.add_score(mark.points.saturating_neg());
+                        player.total_answer_ms = player.total_answer_ms.saturating_sub(mark.answer_ms());
                     }
                 }
                 Ok(self.enter_slide(self.slide))
@@ -1075,7 +1138,9 @@ impl Game {
             }
             Command::SetPlayerEnabled { buzzer, enabled } => self.set_enabled(*buzzer, *enabled, now),
             Command::AdjustScore { buzzer, delta } => {
-                self.player_mut(*buzzer)?.add_score(*delta);
+                let player = self.player_mut(*buzzer)?;
+                player.add_score(*delta);
+                player.adjusted = player.adjusted.saturating_add(*delta);
                 Ok(vec![])
             }
             Command::ResetScores => {
@@ -1116,14 +1181,17 @@ impl Game {
         }
     }
 
-    /// Every player's score and answering time back to zero, and nothing
-    /// of the current question's left to take back (`gains`).
+    /// Every player's score, answering time and changes by hand back to
+    /// zero, with no question asked so far counting for them (`asked`),
+    /// the current one neither.
     fn reset_scores(&mut self) {
         for player in self.players.values_mut() {
             player.score = 0;
             player.total_answer_ms = 0;
+            player.adjusted = 0;
         }
-        self.gains.clear();
+        self.asked.clear();
+        self.asking = None;
     }
 
     fn player_mut(&mut self, buzzer: BuzzerId) -> Result<&mut Player, GameError> {
@@ -1160,6 +1228,7 @@ impl Game {
             score: 0,
             enabled: true,
             total_answer_ms: 0,
+            adjusted: 0,
         });
         if self.joins_at_next_question() {
             self.joins_next.insert(buzzer);
@@ -1262,10 +1331,10 @@ impl Game {
             for buzzer in self.counted.clone() {
                 match self.responses.get(&buzzer).copied() {
                     Some(response) => {
-                        let answer_ms = if response.is_right(&q) { response.elapsed_ms } else { 0 };
-                        self.credit(buzzer, q.points_for(response.button.answer_index(), response.elapsed_ms), answer_ms);
+                        let points = q.points_for(response.button.answer_index(), response.elapsed_ms);
+                        self.credit(buzzer, Some(response), response.is_right(&q), points);
                     }
-                    None if self.quiz.settings.no_answer_penalty => self.credit(buzzer, q.points_for(None, 0), 0),
+                    None if self.quiz.settings.no_answer_penalty => self.credit(buzzer, None, false, q.points_for(None, 0)),
                     None => {}
                 }
             }
@@ -1275,40 +1344,57 @@ impl Game {
 
     /// Ends the current question at `step`: closed, or won by a fastest
     /// finger judged right. Either way it counts as asked from now on
-    /// (`closed_questions`).
+    /// (`closed_questions`). Ended from play, it is in the show's results
+    /// (`asked`) also when it gave nobody anything; the reveal of a closed
+    /// question adds it to them no more, so a reset of the scores
+    /// (`ResetScores`) between the two leaves it out.
     fn end_question(&mut self, step: QuestionStep) {
+        let from_play = self.question_in_play();
         self.phase = Phase::Question(step);
         self.closed_questions.insert(self.slide);
+        if from_play {
+            self.asking();
+        }
     }
 
-    /// Gives `buzzer`'s player `points`, doubled by their joker
-    /// (`plays_joker`), and `answer_ms` of answering time from the current
-    /// question, kept in `gains` for `RestartQuestion`.
-    fn credit(&mut self, buzzer: BuzzerId, points: i32, answer_ms: u64) {
-        let points = if self.plays_joker(buzzer) { points.saturating_mul(2) } else { points };
+    /// The current question as asked (`asking`), from now on if not yet.
+    fn asking(&mut self) -> &mut Asked {
+        let slide = self.slide;
+        self.asking.get_or_insert_with(|| Asked { slide, marks: BTreeMap::new() })
+    }
+
+    /// Gives `buzzer`'s player what the current question scores for
+    /// `answer` (none for no answer), `right` or not: `points`, doubled by
+    /// their joker (`plays_joker`), and a right answer's time added to their
+    /// answering time. Marked in the current question as asked, which
+    /// `RestartQuestion` takes back.
+    fn credit(&mut self, buzzer: BuzzerId, answer: Option<Response>, right: bool, points: i32) {
+        let joker = self.plays_joker(buzzer);
+        let points = if joker { points.saturating_mul(2) } else { points };
         let Some(player) = self.players.get_mut(&buzzer) else { return };
+        let mark = Mark { answer, right, points, joker };
         player.add_score(points);
-        player.total_answer_ms += answer_ms;
-        let gain = self.gains.entry(buzzer).or_default();
-        gain.points = gain.points.saturating_add(points);
-        gain.answer_ms += answer_ms;
+        player.total_answer_ms += mark.answer_ms();
+        // A player is scored once a question: they answer once, or are locked out once judged.
+        self.asking().marks.insert(buzzer, mark);
     }
 
     fn judge(&mut self, right: bool, now: u64) -> Result<Vec<Effect>, GameError> {
-        let Phase::Question(QuestionStep::Buzzed { buzzer, clock, .. }) = self.phase else {
+        let Phase::Question(QuestionStep::Buzzed { buzzer, button, clock }) = self.phase else {
             return Err(GameError::NotNow);
         };
         let q = self.question().cloned().ok_or(GameError::NotNow)?;
         let elapsed = clock.elapsed_ms(now);
+        let buzz = Some(Response { button, elapsed_ms: elapsed });
         if right {
-            self.credit(buzzer, q.points_at(elapsed), elapsed);
+            self.credit(buzzer, buzz, true, q.points_at(elapsed));
             self.reveal(Some(buzzer), now);
             return Ok(vec![
                 Effect::Lights { lights: vec![(buzzer, self.light_of(buzzer))] },
                 Effect::Sound { cue: Cue::Correct },
             ]);
         }
-        self.credit(buzzer, -q.penalty, 0);
+        self.credit(buzzer, buzz, false, -q.penalty);
         self.locked_out.insert(buzzer);
         // The buzz paused the clock before time up (`Clock::takes_press_at`),
         // so time is left for the others.
@@ -1425,11 +1511,12 @@ impl Game {
         if index != left && !self.closed_questions.contains(&left) {
             self.jokers.retain(|&(slide, _)| slide != left);
         }
+        // The question left stands as asked; one asked again from its start was taken back.
+        self.asked.extend(self.asking.take());
         self.responses.clear();
         self.counted.clear();
         self.locked_out.clear();
         self.joins_next.clear();
-        self.gains.clear();
         self.auto_step_from = None;
         self.leaderboard_visible = false;
         self.video_plays = 0;

@@ -11,7 +11,7 @@ mod sheet;
 mod zip_end;
 
 pub use sheet::{
-    export_sheet, import_sheet, read_tables, SheetExport, SheetImport, SheetRead, CSV_EXTENSION, MAX_SHEET_BYTES, MAX_SHEET_COLUMNS, MAX_SHEET_REPORT_BYTES,
+    export_results, export_sheet, import_sheet, read_tables, SheetExport, SheetImport, SheetRead, CSV_EXTENSION, MAX_SHEET_BYTES, MAX_SHEET_COLUMNS, MAX_SHEET_REPORT_BYTES,
     MAX_SHEET_ROWS, MAX_SHEET_TEXT_BYTES, SHEET_EXTENSIONS,
 };
 pub use zip_end::MAX_END_RECORDS;

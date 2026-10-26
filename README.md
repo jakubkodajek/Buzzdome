@@ -19,8 +19,11 @@ Windows first, with macOS and Linux too. Built with [Tauri 2](https://tauri.app)
 ## Features
 
 - **Two windows.** The **Director** on the laptop runs the show, edits
-  scores and shows each buzzer's state. The **projector** window shows the
-  slides full screen on a second monitor.
+  scores and shows each buzzer's state, in a light or a dark look. The
+  **projector** window shows the slides full screen on a second monitor.
+- **Results.** After the show, or during it, the Director lists the
+  ranking with each round's points and every question's answers, exports
+  them to CSV and prints them or saves a PDF.
 - **Question types.** In *everyone answers* questions each team picks A-D
   against the clock. In *fastest finger* questions the first buzz answers
   aloud and the quizmaster judges it. Correct answers can carry shares of

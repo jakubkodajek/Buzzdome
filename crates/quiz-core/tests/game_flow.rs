@@ -1,6 +1,6 @@
 use quiz_core::{
-    AnswerMode, BuzzerMode, Button, Command, CorrectAnswer, Cue, Effect, Game, GameError, Light, Phase, Question, QuestionStep, Quiz, Slide,
-    SlideContent, Stamped, VideoClip, team_names, FULL_SHARE, MAX_NAME_CHARS, MAX_TEAMS, PRESS_GRACE_MS, RULES_VERSION,
+    AnswerMode, BuzzerMode, Button, Command, CorrectAnswer, Cue, Effect, Game, GameError, Light, Mark, Phase, Question, QuestionStep, Quiz,
+    Response, Slide, SlideContent, Stamped, VideoClip, team_names, FULL_SHARE, MAX_NAME_CHARS, MAX_TEAMS, PRESS_GRACE_MS, RULES_VERSION,
 };
 use quiz_core::game::FINAL_LAST_STEP;
 use quiz_core::view::{AnswerResults, AutoStepView};
@@ -2104,4 +2104,108 @@ fn starting_over_keeps_the_players_and_team_names_and_asks_every_question_again(
     show.press(11_000, 2, Button::A);
     assert_eq!((show.score(1), show.score(2)), (95, -20));
     assert_eq!(Game::replay(show.game.quiz().clone(), &show.journal, RULES_VERSION), show.game);
+}
+
+/// A mark in the results: (buzzer, button, right, points, joker).
+type MarkRow = (u16, Option<Button>, bool, i32, bool);
+
+/// A player in the results: (buzzer, place, points by round, changes by hand, score).
+type StandingRow = (u16, Option<usize>, Vec<i32>, i32, i32);
+
+/// What the results say each question asked gave, by slide.
+fn marks(game: &Game) -> Vec<(usize, Vec<MarkRow>)> {
+    let results = game.show_results();
+    let mark = |&(buzzer, m): &(u16, Mark)| (buzzer, m.answer.map(|a| a.button), m.right, m.points, m.joker);
+    results.questions.iter().map(|q| (q.slide, q.marks.iter().map(mark).collect())).collect()
+}
+
+/// Each player's place, points by round, changes by hand and score, from the results.
+fn standings(game: &Game) -> Vec<StandingRow> {
+    let results = game.show_results();
+    results.players.into_iter().map(|p| (p.buzzer, p.rank, p.rounds, p.adjusted, p.score)).collect()
+}
+
+#[test]
+fn the_results_hold_what_each_question_asked_gave_whom_and_each_round_in_total() {
+    let mut show = running(Show::new(vec![
+        question("q1", AnswerMode::Everyone),
+        Slide::new("end", SlideContent::EndOfRound { title: "End".into() }),
+        question("q2", AnswerMode::FastestFinger),
+        question("q3", AnswerMode::Everyone),
+        Slide::new("end2", SlideContent::EndOfRound { title: "End".into() }),
+    ]));
+    assert!(marks(&show.game).is_empty(), "nothing asked yet");
+    show = everyone_answered(show);
+    let q1 = |game: &Game| game.show_results().questions[0].marks.clone();
+    assert_eq!(
+        q1(&show.game),
+        [
+            (1, Mark { answer: Some(Response { button: Button::B, elapsed_ms: 1_000 }), right: true, points: 95, joker: false }),
+            (2, Mark { answer: Some(Response { button: Button::A, elapsed_ms: 2_000 }), right: false, points: -20, joker: false }),
+        ]
+    );
+
+    show.run(5_000, Command::Next).unwrap(); // revealed
+    show.run(6_000, Command::Next).unwrap(); // end of round
+    show.run(7_000, Command::Next).unwrap(); // q2 ready
+    show.run(8_000, Command::Next).unwrap(); // running
+    show.press(9_000, 2, Button::Big);
+    show.run(9_500, Command::JudgeWrong).unwrap();
+    assert_eq!(marks(&show.game)[1], (2, vec![(2, Some(Button::Big), false, -20, false)]), "in the results as soon as it gives anything");
+    show.press(10_000, 1, Button::Big);
+    show.run(10_500, Command::JudgeRight).unwrap();
+    let buzz = show.game.show_results().questions[1].marks[0].1;
+    assert_eq!(buzz.answer, Some(Response { button: Button::Big, elapsed_ms: 1_500 }), "the clock stood while 2 answered");
+    show.run(11_000, Command::AdjustScore { buzzer: 2, delta: 5 }).unwrap();
+    assert_eq!(standings(&show.game), [(1, Some(1), vec![95, 92], 0, 187), (2, Some(2), vec![-20, -20], 5, -35)]);
+
+    // A question that gave nobody anything is asked all the same; an end of round after the last question opens no round.
+    show.run(12_000, Command::Next).unwrap(); // q3 ready
+    show.run(13_000, Command::Next).unwrap(); // running
+    show.run(14_000, Command::CloseQuestion).unwrap();
+    assert_eq!(
+        marks(&show.game),
+        [
+            (0, vec![(1, Some(Button::B), true, 95, false), (2, Some(Button::A), false, -20, false)]),
+            (2, vec![(1, Some(Button::Big), true, 92, false), (2, Some(Button::Big), false, -20, false)]),
+            (3, vec![]),
+        ]
+    );
+    assert_eq!(show.game.show_results().rounds, 2);
+    assert_eq!(Game::replay(show.game.quiz().clone(), &show.journal, RULES_VERSION).show_results(), show.game.show_results());
+}
+
+#[test]
+fn a_question_asked_again_from_its_start_counts_once_and_a_reset_starts_the_results_afresh() {
+    let slides = vec![question("q1", AnswerMode::FastestFinger), question("q2", AnswerMode::Everyone), billboard("end")];
+    let mut show = running(with_jokers(slides, 1));
+    show.press(3_000, 2, Button::Big);
+    show.run(3_500, Command::JudgeWrong).unwrap();
+    show.run(4_000, Command::RestartQuestion).unwrap();
+    assert!(marks(&show.game).is_empty(), "the restart took the penalty back");
+    show.run(4_500, Command::SetJoker { buzzer: 1, on: true }).unwrap();
+    show.run(5_000, Command::Next).unwrap();
+    show.press(6_000, 1, Button::Big);
+    show.run(6_500, Command::JudgeRight).unwrap();
+    assert_eq!(marks(&show.game), [(0, vec![(1, Some(Button::Big), true, 190, true)])], "the joker doubled 95");
+    assert_eq!(standings(&show.game), [(1, Some(1), vec![190], 0, 190), (2, Some(2), vec![0], 0, 0)]);
+
+    show.run(7_000, Command::AdjustScore { buzzer: 2, delta: 3 }).unwrap();
+    show.run(7_500, Command::ResetScores).unwrap();
+    assert!(marks(&show.game).is_empty());
+    assert_eq!(standings(&show.game), [(1, Some(1), vec![0], 0, 0), (2, Some(1), vec![0], 0, 0)]);
+    // The next question counts from zero.
+    show.run(8_000, Command::Next).unwrap();
+    show.run(9_000, Command::Next).unwrap();
+    show.press(10_000, 2, Button::B);
+    show.press(10_000, 1, Button::C);
+    assert_eq!(marks(&show.game), [(1, vec![(1, Some(Button::C), false, -20, false), (2, Some(Button::B), true, 95, false)])]);
+    // A reset once the question closed leaves it out: its reveal does not bring it back.
+    show.run(10_500, Command::ResetScores).unwrap();
+    show.run(11_000, Command::Next).unwrap();
+    show.run(11_500, Command::Next).unwrap();
+    assert!(marks(&show.game).is_empty(), "the reveal after the reset gave nobody anything");
+    show.run(12_000, Command::AdjustScore { buzzer: 1, delta: 5 }).unwrap();
+    show.run(12_500, Command::StartOver).unwrap();
+    assert!(marks(&show.game).is_empty() && standings(&show.game).iter().all(|p| p.3 == 0 && p.4 == 0));
 }

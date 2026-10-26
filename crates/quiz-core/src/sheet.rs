@@ -926,7 +926,7 @@ fn needs_quote(cell: &str) -> bool {
 
 /// A cell for export: one that looks like a formula gets a leading `'`, so
 /// a spreadsheet program shows it as text; the import takes it off again.
-fn defused(cell: String) -> String {
+pub fn defused(cell: String) -> String {
     if needs_quote(&cell) { format!("'{cell}") } else { cell }
 }
 
