@@ -2143,6 +2143,14 @@
   padding: 8px 14px;
 }
 
+/* Two ways to do one task, one above the other. */
+.backstage-buttons {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: 8px;
+}
+
 .backstage-task p {
   margin: 2px 0 0;
   color: var(--muted);

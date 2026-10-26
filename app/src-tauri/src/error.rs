@@ -133,6 +133,17 @@ pub enum AppError {
     #[error("no sheet has a Q column")]
     NoQuestionColumn,
 
+    // AI assistants.
+    /// Claude Desktop is not installed for this user, or not made for this system.
+    #[error("Claude Desktop is not installed")]
+    ClaudeDesktopMissing,
+    /// Claude Desktop's configuration file holds something else than its settings, so it is left as it is.
+    #[error("{path} is not a Claude Desktop configuration")]
+    ClaudeConfigUnreadable { path: String },
+    /// The folder chosen for an assistant holds or is inside the app's own data (shows, drafts, settings).
+    #[error("{path} holds or is inside Buzzdome's own data")]
+    AiFolderNotAllowed { path: String },
+
     // The media player.
     #[error("{name} is not a picture, sound or video")]
     NotAMediaFile { name: String },

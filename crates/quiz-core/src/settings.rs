@@ -3,6 +3,7 @@
 //! and a value a build cannot read reads as its default, so a quiz always
 //! opens and plays.
 
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
@@ -11,17 +12,19 @@ pub const DEFAULT_ALL_ANSWERED_DELAY_S: u8 = 3;
 /// Longest wait, in seconds, before the show acts on everyone having answered.
 pub const MAX_ALL_ANSWERED_DELAY_S: u8 = 10;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS, JsonSchema)]
 #[ts(export)]
 #[serde(rename_all = "camelCase", default)]
 pub struct QuizSettings {
     /// What the show does once a question has nobody left to answer.
     #[serde(with = "crate::style::lenient_or_default")]
+    #[schemars(with = "AllAnswered")]
     #[ts(as = "AllAnswered")]
     pub all_answered: AllAnswered,
     /// Seconds it waits before it does it, up to `MAX_ALL_ANSWERED_DELAY_S`;
     /// the quizmaster can step in meanwhile.
     #[serde(with = "delay_in_range")]
+    #[schemars(with = "u8")]
     #[ts(as = "u8")]
     pub all_answered_delay_s: u8,
 }
@@ -45,7 +48,7 @@ impl QuizSettings {
 
 /// What the show does once a question has nobody left to answer: every
 /// player switched on answered it, or in fastest finger answered it wrong.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, TS, JsonSchema)]
 #[ts(export)]
 #[serde(rename_all = "camelCase")]
 pub enum AllAnswered {

@@ -62,6 +62,9 @@ export type ActionId =
   | "importSheet"
   | "sheetTemplate"
   | "exportSheet"
+  | "saveAiSkill"
+  | "connectClaude"
+  | "connectClaudeFolder"
   | "notes"
   | "testRun"
   | "testRunHere";

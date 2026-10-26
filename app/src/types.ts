@@ -13,6 +13,8 @@ export type { AutoStepView } from "./bindings/AutoStepView";
 export type { Button } from "./bindings/Button";
 export type { BuzzerSeen } from "./bindings/BuzzerSeen";
 export type { Category } from "./bindings/Category";
+export type { ClaudeConnected } from "./bindings/ClaudeConnected";
+export type { ClaudeConnection } from "./bindings/ClaudeConnection";
 export type { ClockView } from "./bindings/ClockView";
 export type { Color } from "./bindings/Color";
 export type { ColorKey } from "./bindings/ColorKey";

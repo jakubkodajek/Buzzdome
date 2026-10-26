@@ -662,6 +662,12 @@ mockIPC(
       case "editor_export_sheet":
         called.push({ cmd, ...(payload as object) });
         return { media: 2, missing: ["media/gone.mp3"], refused: [] };
+      case "ai_save_skill":
+        called.push({ cmd, ...(payload as object) });
+        return true;
+      case "ai_connect_claude":
+        called.push({ cmd, ...(payload as object) });
+        return { connection: "added", folders: ["C:\\Users\\Eva\\Documents\\Buzzdome"] };
       case "receiver_info":
         return {
           status: { kind: "error", problem: "cannotOpen", detail: "access denied" },

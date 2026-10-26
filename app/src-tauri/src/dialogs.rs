@@ -57,6 +57,18 @@ pub async fn pick_save(window: Window, picker: Picker, extension: &'static str, 
     .await
 }
 
+/// Picks a folder, starting in `start` if given; none when the quizmaster cancels.
+pub async fn pick_folder(window: Window, start: Option<PathBuf>) -> CmdResult<Option<PathBuf>> {
+    off_ui(move || {
+        let mut dialog = window.dialog().file().set_parent(&window);
+        if let Some(start) = start {
+            dialog = dialog.set_directory(start);
+        }
+        Ok(dialog.blocking_pick_folder().and_then(local))
+    })
+    .await
+}
+
 /// A picker over the window that asked, offering files with `extensions`.
 fn dialog(window: &Window, picker: &Picker, extensions: &[&str]) -> FileDialogBuilder<tauri::Wry> {
     // Upper case too: some systems match file names case-sensitively.

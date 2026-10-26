@@ -8,6 +8,8 @@ import type { StringKey, Translate } from "./i18n";
 import { mediaFileName } from "./media";
 import type {
   AppError,
+  ClaudeConnected,
+  ClaudeConnection,
   FileAction,
   ImportIssue,
   MediaIssue,
@@ -71,6 +73,9 @@ const ERROR_KEYS: Record<Exclude<AppError["code"], WordedApart>, StringKey> = {
   spreadsheetTooComplex: "errSpreadsheetTooComplex",
   spreadsheetReaderFailed: "errSpreadsheetReaderFailed",
   noQuestionColumn: "errNoQuestionColumn",
+  claudeDesktopMissing: "errClaudeDesktopMissing",
+  claudeConfigUnreadable: "errClaudeConfigUnreadable",
+  aiFolderNotAllowed: "errAiFolderNotAllowed",
   notAMediaFile: "errNotAMediaFile",
   usbUnavailable: "errUsbUnavailable",
   usbListFailed: "errUsbListFailed",
@@ -346,4 +351,15 @@ const OUTPUT_ERROR_KEYS: Record<OutputError["problem"], StringKey> = {
 /** Why a lights output or message target does not work. */
 export function outputErrorText(t: Translate, error: OutputError): string {
   return t(OUTPUT_ERROR_KEYS[error.problem], params(error));
+}
+
+const CLAUDE_CONNECTION_KEYS: Record<ClaudeConnection, StringKey> = {
+  added: "claudeConnected",
+  updated: "claudeReconnected",
+  unchanged: "claudeAlreadyConnected",
+};
+
+/** What connecting Claude Desktop changed, where it may work, and what the quizmaster does next. */
+export function claudeConnectionText(t: Translate, connected: ClaudeConnected): string {
+  return t(CLAUDE_CONNECTION_KEYS[connected.connection], { folder: connected.folders.join(", ") });
 }
