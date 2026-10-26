@@ -7,7 +7,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import type { StringKey } from "../src/i18n";
-import { App, dataFolder, t, waitFor } from "./harness";
+import { App, dataFolder, sleep, t, waitFor } from "./harness";
 import { Key } from "./webdriver";
 
 const data = dataFolder();
@@ -171,7 +171,7 @@ describe("the quiz editor", () => {
   });
 
   // The system's file picker is driven through the X server (`App.pickFile`).
-  test.skipIf(process.platform !== "linux")("Save as writes a quiz file through the system's picker, and the Director plays it", async () => {
+  test.skipIf(process.platform !== "linux")("Save as writes a quiz file through the system's picker, and the Director plays it, again from its recent quizzes", async () => {
     const file = join(data, "saved-quiz.quiz");
     await ctrl("s", true);
     await app.pickFile(file);
@@ -184,6 +184,16 @@ describe("the quiz editor", () => {
     await app.pickFile(file);
     const view = await app.waitView("the saved quiz's show", () => true);
     expect(view.slideCount).toBe(slides);
+    await app.answerQuestions(true);
+    await app.press("endShow");
+    await waitFor("the show to end", async () => (await app.view()) === null);
+    // Opened as files often are, with a double click: it starts one show.
+    await app.page.doubleClick(await app.button({ text: "saved-quiz.quiz" }));
+    const again = await app.waitView("the show of the recent quiz", () => true);
+    expect(again.slideCount).toBe(slides);
+    // A second start would end in a message once the first show began.
+    await sleep(1_000);
+    expect(await app.count(".toast")).toBe(0);
     await app.assertHealthy();
   });
 });

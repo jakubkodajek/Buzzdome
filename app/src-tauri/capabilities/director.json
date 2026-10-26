@@ -13,6 +13,7 @@
     "allow-media-root",
     "allow-show-not-saved",
     "allow-start-show-from-file",
+    "allow-start-show-from-recent",
     "allow-start-demo-show",
     "allow-last-session",
     "allow-resume-last-session",
@@ -49,7 +50,7 @@
     "allow-editor-load",
     "allow-editor-new",
     "allow-editor-open",
-    "allow-editor-recent-files",
+    "allow-recent-files",
     "allow-editor-update",
     "allow-editor-save",
     "allow-editor-add-media",
@@ -58,6 +59,8 @@
     "allow-editor-export-sheet",
     "allow-editor-close",
     "allow-editor-test-run",
+    "allow-ai-save-skill",
+    "allow-ai-connect-claude",
     "allow-receiver-info",
     "allow-receiver-devices",
     "allow-receiver-select",
@@ -66,6 +69,16 @@
     "allow-receiver-learn-finish",
     "allow-receiver-forget-learned",
     "allow-receiver-export-log",
-    "allow-receiver-udev-rule"
+    "allow-receiver-udev-rule",
+    "allow-lights-info",
+    "allow-lights-store",
+    "allow-lights-devices",
+    "allow-lights-library",
+    "allow-lights-library-info",
+    "allow-lights-library-update",
+    "allow-lights-library-reset",
+    "allow-lights-hold",
+    "allow-lights-blackout",
+    "allow-lights-universe"
   ]
 }

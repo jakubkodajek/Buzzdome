@@ -35,4 +35,6 @@ export const MAX_CATEGORY_NAME_CHARS = 40;
 export const FULL_SHARE = 100;
 export const DEFAULT_QUIZ_SETTINGS = {"allAnswered":"wait","allAnsweredDelayS":3} as const;
 export const MAX_ALL_ANSWERED_DELAY_S = 10;
+export const LAST_SECONDS_MS = 5000;
+export const STAGES = ["noShow","lobby","billboard","explanation","endOfRound","questionReady","answering","lastSeconds","buzzed","closed","revealed","leaderboard","finalBuildUp","winner"] as const;
 export const ANSWER_BUTTONS = ["a","b","c","d"] as const;

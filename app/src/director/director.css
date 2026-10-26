@@ -79,6 +79,30 @@
   color: var(--muted);
 }
 
+/* Before a show: the recent quiz files */
+
+.start-pane {
+  padding: 30px;
+}
+
+.start-pane p {
+  margin: 0;
+}
+
+.start-pane h2 {
+  margin: 24px 0 8px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.director .recent-list li + li {
+  margin-top: 4px;
+}
+
+.director .recent-list button {
+  padding: 6px 12px;
+}
+
 /* Command panel */
 
 .command-panel {
@@ -106,6 +130,10 @@
 .director .command:hover:not(:disabled) {
   background: var(--panel-hover);
   border: none;
+}
+
+.director .command:disabled {
+  opacity: 0.5;
 }
 
 .command-icon {
@@ -716,7 +744,8 @@
 
 /* Receiver tab */
 
-.receiver {
+.receiver,
+.lights {
   padding: 12px 16px;
   display: flex;
   flex-direction: column;
@@ -724,12 +753,14 @@
   overflow: auto;
 }
 
-.receiver fieldset {
+.receiver fieldset,
+.lights fieldset {
   border: 1px solid var(--line);
   border-radius: 4px;
 }
 
-.receiver .row {
+.receiver .row,
+.lights .row {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
@@ -737,7 +768,8 @@
   margin: 6px 0;
 }
 
-.receiver .inline {
+.receiver .inline,
+.lights .inline {
   display: inline-flex;
   gap: 6px;
   align-items: center;
@@ -1349,4 +1381,140 @@
 .director .context-menu button:hover:not(:disabled) {
   border-color: #9cc3ec;
   background: #dcebfb;
+}
+
+/* Lights tab */
+
+.lights .muted {
+  color: var(--muted);
+}
+
+.lights h4 {
+  margin: 12px 0 4px;
+}
+
+.lights .blackout.on {
+  background: var(--bad);
+  color: #fff;
+}
+
+.lights button.held {
+  outline: 2px solid var(--accent);
+}
+
+.lights input.invalid {
+  outline: 2px solid var(--bad);
+}
+
+.lights-found {
+  margin: 4px 0;
+  padding-left: 18px;
+}
+
+.lights-found li {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin: 2px 0;
+}
+
+.lights-item {
+  padding: 4px 8px;
+  margin: 8px 0;
+  border-left: 3px solid var(--line);
+}
+
+.lights-item.clash {
+  border-left-color: var(--bad);
+}
+
+.lights-channels {
+  gap: 6px;
+}
+
+.lights-channel {
+  padding: 2px 4px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+}
+
+.lights-when {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  gap: 6px 16px;
+}
+
+.lights-when .inline {
+  flex-wrap: wrap;
+}
+
+.lights-when .inline > span:first-child {
+  min-width: 150px;
+}
+
+.lights-swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.lights-swatch {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.lights-swatch > span {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+}
+
+.lights-universe {
+  display: grid;
+  grid-template-columns: repeat(64, 1fr);
+  gap: 1px;
+  max-width: 768px;
+}
+
+.lights-universe > span {
+  aspect-ratio: 1;
+  background: var(--accent);
+}
+
+.lights .color-box {
+  width: auto;
+}
+
+.lights .number-box input:not([type="range"]) {
+  width: 70px;
+}
+
+.lights-label {
+  font-size: 0.85em;
+  color: var(--muted);
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lights-library {
+  margin: 6px 0 10px;
+}
+
+.lights-library input[type="search"] {
+  width: 280px;
+}
+
+.lights-licence summary {
+  cursor: pointer;
+}
+
+.lights-licence pre {
+  max-width: 72ch;
+  white-space: pre-wrap;
+  font-size: 0.85em;
 }

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useReducer, useRef, useState, useSyncExternalStore } from "react";
 import { api } from "../api";
 import { useApp, useReport } from "../app-context";
-import { useLatest } from "../hooks";
+import { useLatest, useRecentFiles } from "../hooks";
 import { mediaPicker, type MediaKind } from "../media";
 import { quizPicker } from "../quiz";
 import type { EditorDraft, Quiz, SheetExport, SheetImport } from "../types";
@@ -33,7 +33,7 @@ export interface QuizEditor {
    * nothing was opened.
    */
   openQuiz: (recent?: string) => Promise<EditorDraft | false>;
-  /** Quiz files opened or saved lately, newest first. */
+  /** Quiz files opened, saved or played lately, newest first. */
   recentFiles: string[];
   save: () => Promise<boolean>;
   saveAs: () => Promise<boolean>;
@@ -63,14 +63,7 @@ export function useQuizEditor(onTestRun: () => void): QuizEditor {
   const status = useSyncExternalStore(drafts.subscribe, drafts.getStatus);
   const report = useLatest(useReport());
   // Kept by the backend, which opens only a recent file in its list.
-  const [recentFiles, setRecentFiles] = useState<string[]>([]);
-  const readRecentFiles = useCallback(
-    () => api.editorRecentFiles().then(setRecentFiles, (error: unknown) => report.current(error)),
-    [report],
-  );
-  useEffect(() => {
-    void readRecentFiles();
-  }, [readRecentFiles]);
+  const { files: recentFiles, reload: readRecentFiles } = useRecentFiles();
   // The quiz the backend has; nothing is written back that came from it.
   const written = useRef<Quiz | null>(null);
   const [loads, setLoads] = useState(0);
@@ -141,7 +134,7 @@ export function useQuizEditor(onTestRun: () => void): QuizEditor {
       const path = await draftApi.editorSave(open.draftId, quiz, saveAs, picker);
       if (path === null) return false;
       dispatch({ type: "saved", quiz, path });
-      void readRecentFiles();
+      readRecentFiles();
       return true;
     });
 
@@ -180,7 +173,7 @@ export function useQuizEditor(onTestRun: () => void): QuizEditor {
       attempt("open", async (draftApi) => {
         if (!(await mayDiscard())) return false;
         // The list changes when a file opens, and when a recent one is gone.
-        const draft = await draftApi.editorOpen(recent ?? null, quizPicker(t)).finally(() => void readRecentFiles());
+        const draft = await draftApi.editorOpen(recent ?? null, quizPicker(t)).finally(readRecentFiles);
         if (!draft) return false;
         load(draft);
         return draft;

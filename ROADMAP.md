@@ -48,9 +48,9 @@ Status keys: `[x]` done, `[~]` in progress, `[ ]` not started.
 - [x] Presses in receiver order through the journal, held buttons count once
 - [x] Learn mode: teach each button when the protocol is unknown (no lights)
 - [x] Receiver tab with live presses, raw reports and log export; `hid-monitor` CLI
-- [ ] First test with the real receiver (`docs/hardware-test.md`)
-- [~] Vendor protocol: Enjoy 303S (RGB, Jakub's set) from Enjoy's SDK in `crates/buzzers/src/enjoy303s.rs`: presses with each buzzer's timer, fastest finger in the timers' order; waiting for the hardware test. Its SDK has no battery level. The RF215 (dome) driver was dropped, as Jakub's set is the 303S
-- [~] Buzzer lights: ready, locked out, first, correct, wrong, in colour on the 303S; waiting for the hardware test
+- [x] First test with the real receiver: Enjoy 303S on Windows 11, buzzers 1 and 2, 2026-10-25 (`docs/hardware-test.md`, `docs/design.md` section 6)
+- [~] Vendor protocol: Enjoy 303S (RGB, Jakub's set) from Enjoy's SDK in `crates/buzzers/src/enjoy303s.rs`: presses with each buzzer's timer, fastest finger in the timers' order; passed the first test, still to test with every buzzer in a room, high buzzer numbers and on macOS. Its SDK has no battery level, and no message in the test carried one. The RF215 (dome) driver was dropped, as Jakub's set is the 303S
+- [~] Buzzer lights: ready, locked out, first, correct, wrong, in colour on the 303S; seen in the first test, still to read from the back of a room
 - [~] Buzzer registration (any press registers in the lobby) and a buzzer test grid (list view done)
 - [ ] Fallback: vendor keystroke mode through the keyboard driver
 
@@ -64,6 +64,7 @@ Status keys: `[x]` done, `[~]` in progress, `[ ]` not started.
 - [x] Colour, gradient and font pickers with per-slide styles (QZ-9): docs gap item 7
 - [x] Several right answers per question, each with a share of the points: quiz format v5
 - [x] Categories with a background video, applied from the Design tab and named by a spreadsheet's `CAT` (QZ-10): docs gap item 6
+- [x] Quizzes written by AI assistants: MCP server for Claude Desktop, skill package for chat assistants, `buzzdome-quiz` command line (QZ-12)
 - [ ] Show settings: team names, sounds, welcome screen, end-of-question actions
 
 ### M4: Show polish (week 3-4)
@@ -76,6 +77,7 @@ Status keys: `[x]` done, `[~]` in progress, `[ ]` not started.
 ### M5: Extensions (after the first event)
 - [ ] Theme packages, background gallery, round and quiz backgrounds (`docs/specification.md` section 5)
 - [ ] Plugins: mini games and integrations (`docs/specification.md` section 6)
+- [x] Stage lights over DMX (USB interfaces, Art-Net, sACN) and show messages over OSC and MIDI (`docs/specification.md` section 12); to try with real fixtures
 
 ## Phase 4: Test
 

@@ -2,6 +2,7 @@
 //! the windows see it and drives the buzzer lights. `app_windows` keeps the
 //! Director and projector windows.
 
+mod ai;
 mod app_file;
 mod app_icon;
 mod app_log;
@@ -11,6 +12,7 @@ mod crash_drill;
 mod dialogs;
 mod editor;
 mod error;
+mod fixture_library;
 mod fonts;
 mod hardware;
 mod media_player;
@@ -19,6 +21,7 @@ mod recent_files;
 mod session;
 pub mod sheet_reader;
 mod show_thread;
+mod stage_lights;
 mod teams;
 mod themes;
 
@@ -30,10 +33,11 @@ use error::CmdResult;
 pub use error::AppError;
 use hardware::Hardware;
 use quiz_core::{BuzzerId, BuzzerMode, Command, Effect, Game, GameView, Light, Quiz, Stamped};
+use recent_files::RecentFiles;
 use session::{Resumed, Session, SessionMeta, SessionSummary};
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::{mpsc, LazyLock, Mutex, MutexGuard};
+use std::sync::{mpsc, LazyLock, Mutex, MutexGuard, TryLockError};
 use tauri::{AppHandle, Emitter, Manager, Window};
 
 const DEMO_QUIZ: &str = include_str!("../../../samples/demo-quiz.json");
@@ -91,7 +95,8 @@ struct AppState(Mutex<Inner>);
 /// (`Hardware::change_settings`) is never taken under this one, and is
 /// taken before the learn lock. The close request
 /// (`app_windows::CloseRequest`) is taken under this one when a show begins
-/// or ends, and holds no other lock.
+/// or ends, and holds no other lock; so does what the stage lights were
+/// last told (`stage_lights`), taken under this one with every change.
 fn lock_show(app: &AppHandle) -> MutexGuard<'_, Inner> {
     app.state::<AppState>().inner().0.lock().unwrap()
 }
@@ -114,6 +119,12 @@ async fn off_ui<T: Send + 'static>(work: impl FnOnce() -> CmdResult<T> + Send + 
 /// Reads the show state off the windows' thread (`off_ui`).
 async fn read_show<T: Send + 'static>(app: AppHandle, read: impl FnOnce(&Inner) -> T + Send + 'static) -> CmdResult<T> {
     off_ui(move || Ok(read(&lock_show(&app)))).await
+}
+
+/// `folder` as text ending with a path separator, so the windows can
+/// append a media reference to it.
+pub(crate) fn folder_prefix(folder: &Path) -> String {
+    folder.join("").to_string_lossy().into_owned()
 }
 
 /// A folder of the app's data, which a roaming profile on Windows takes
@@ -150,6 +161,9 @@ fn quizzes_cache(app: &AppHandle) -> CmdResult<PathBuf> {
 /// Held while a quiz is unpacked into `quizzes_cache` or old ones are
 /// deleted from it, so neither runs during the other.
 static QUIZZES_CACHE: Mutex<()> = Mutex::new(());
+
+/// Held while a quiz file opens and its show starts (`one_start`).
+static STARTING: Mutex<()> = Mutex::new(());
 
 /// The folders a show's media can be in, unpacked quizzes and editor
 /// drafts: the windows may load files from these, allowed once at start,
@@ -257,9 +271,11 @@ fn deliver(app: &AppHandle, inner: &mut Inner, effects: Vec<Effect>) {
     emit_state(app, inner.game.as_ref());
 }
 
-/// Sends a show change's effects to the buzzer lights and the windows' sound.
+/// Sends a show change's effects to the buzzer lights, the stage lights and
+/// the windows' sound.
 fn send_effects(app: &AppHandle, inner: &mut Inner, effects: Vec<Effect>) {
     light_buzzers(inner, &effects);
+    stage_lights::follow(app, inner.game.as_ref(), &effects, now_ms());
     for effect in effects {
         if let Effect::Sound { cue } = effect {
             let _ = app.emit("sound-cue", cue);
@@ -378,7 +394,7 @@ async fn get_quiz(app: AppHandle) -> CmdResult<Option<Quiz>> {
 /// windows can append a media reference to it.
 #[tauri::command]
 async fn media_root(app: AppHandle) -> CmdResult<Option<String>> {
-    read_show(app, |inner| inner.media_root.as_ref().map(|root| root.join("").to_string_lossy().into_owned())).await
+    read_show(app, |inner| inner.media_root.as_deref().map(folder_prefix)).await
 }
 
 /// Why the running show's journal cannot be written, or that a write does
@@ -393,16 +409,49 @@ async fn show_not_saved(app: AppHandle) -> CmdResult<Option<AppError>> {
 #[tauri::command]
 async fn start_show_from_file(app: AppHandle, window: Window, picker: Picker) -> CmdResult<bool> {
     let Some(path) = dialogs::pick_file(window, picker, quiz_file::OPEN_EXTENSIONS.to_vec()).await? else { return Ok(false) };
+    off_ui(move || start_show_from(&app, &path).map(|()| true)).await
+}
+
+/// Starts a show with the `recent` quiz file, which has to be in the list
+/// (`RecentFiles`). A file that is no longer there leaves the list.
+#[tauri::command]
+async fn start_show_from_recent(app: AppHandle, recent: String) -> CmdResult<()> {
     off_ui(move || {
-        // Unpacking big media takes a moment: it runs before the show is locked.
-        let package = {
-            let _cache = QUIZZES_CACHE.lock().unwrap();
-            quiz_file::open(&path, &quizzes_cache(&app)?)?
-        };
-        start_show(&app, package.quiz, Some(path.to_string_lossy().into_owned()), Some(package.root))?;
-        Ok(true)
+        let path = app.state::<RecentFiles>().get(&recent)?;
+        start_show_from(&app, &path)
     })
     .await
+}
+
+/// Opens the quiz file `path` and starts a show with it, one start at a
+/// time (`one_start`). The file goes first in the recent list once it
+/// opens, and leaves it once it is gone.
+fn start_show_from(app: &AppHandle, path: &Path) -> CmdResult<()> {
+    one_start(&STARTING, || {
+        let source_path = path.to_string_lossy().into_owned();
+        let recent = app.state::<RecentFiles>();
+        // Unpacking big media takes a moment: it runs before the show is locked.
+        let opened = {
+            let _cache = QUIZZES_CACHE.lock().unwrap();
+            quiz_file::open(path, &quizzes_cache(app)?)
+        };
+        let package = opened.inspect_err(|_| recent.forget_if_gone(&source_path))?;
+        recent.remember(&source_path);
+        start_show(app, package.quiz, Some(source_path), Some(package.root))
+    })
+}
+
+/// Runs `start` unless another start holds `starting`, so a second click
+/// does not unpack the quiz again while the first show begins: it is
+/// refused with `ShowStarting`, which the Director does not report.
+fn one_start(starting: &Mutex<()>, start: impl FnOnce() -> CmdResult<()>) -> CmdResult<()> {
+    let _starting = match starting.try_lock() {
+        Ok(guard) => guard,
+        // A start that panicked leaves nothing half done that this one needs.
+        Err(TryLockError::Poisoned(poisoned)) => poisoned.into_inner(),
+        Err(TryLockError::WouldBlock) => return Err(AppError::ShowStarting),
+    };
+    start()
 }
 
 /// Plays the editor's quiz without a journal, so the last real show stays
@@ -584,6 +633,8 @@ pub(crate) fn play_press(app: &AppHandle, press: Press, at_ms: u64) -> bool {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let context = tauri::generate_context!();
+    ai::serve_mcp_if_asked(&context.package_info().version.to_string(), &context.config().identifier);
     let builder = tauri::Builder::default()
         // First, so a second start ends before it touches the show: it brings
         // the running app's Director forward instead.
@@ -601,7 +652,7 @@ pub fn run() {
         .manage(editor::EditorLock::default())
         .manage(AppState(Mutex::new(inner)))
         .setup(|app| {
-            app_log::start(app.path().app_log_dir()?);
+            app_log::start(app.path().app_log_dir()?, &app.package_info().version.to_string());
             editor::move_roaming_drafts(app.handle());
             // One queue for the receiver's events and the quizmaster's commands.
             let (queue, events) = mpsc::channel();
@@ -612,6 +663,8 @@ pub fn run() {
                 send_mode(&mut inner);
             }
             app.manage(hardware);
+            app.manage(stage_lights::StageLights::start(app.handle(), stage_lights::lights_path(app.handle())?));
+            app.manage(fixture_library::FixtureLibrary::new(fixture_library::library_path(app.handle())?));
             show_thread::start(app.handle(), queue, events);
             // The windows load theme pictures and fonts from the built-in
             // packages, and a show's media from where they can be.
@@ -620,7 +673,7 @@ pub fn run() {
             for folder in media_folders(app.handle())? {
                 app.asset_protocol_scope().allow_directory(&folder, true)?;
             }
-            let builtin = themes::builtin_themes(|id| packages.join(id).join("").to_string_lossy().into_owned())?;
+            let builtin = themes::builtin_themes(|id| folder_prefix(&packages.join(id)))?;
             app.manage(themes::Themes(builtin));
             if let Ok(path) = teams::teams_path(app.handle()) {
                 let mut inner = lock_show(app.handle());
@@ -643,6 +696,7 @@ pub fn run() {
             media_root,
             show_not_saved,
             start_show_from_file,
+            start_show_from_recent,
             start_demo_show,
             last_session,
             resume_last_session,
@@ -679,7 +733,7 @@ pub fn run() {
             editor::editor_load,
             editor::editor_new,
             editor::editor_open,
-            recent_files::editor_recent_files,
+            recent_files::recent_files,
             editor::editor_update,
             editor::editor_save,
             editor::editor_add_media,
@@ -688,6 +742,8 @@ pub fn run() {
             editor::editor_export_sheet,
             editor::editor_close,
             editor_test_run,
+            ai::ai_save_skill,
+            ai::ai_connect_claude,
             hardware::receiver_info,
             hardware::receiver_devices,
             hardware::receiver_select,
@@ -697,8 +753,18 @@ pub fn run() {
             hardware::receiver_forget_learned,
             hardware::receiver_export_log,
             hardware::receiver_udev_rule,
+            stage_lights::lights_info,
+            stage_lights::lights_store,
+            stage_lights::lights_devices,
+            fixture_library::lights_library,
+            fixture_library::lights_library_info,
+            fixture_library::lights_library_update,
+            fixture_library::lights_library_reset,
+            stage_lights::lights_hold,
+            stage_lights::lights_blackout,
+            stage_lights::lights_universe,
         ])
-        .run(tauri::generate_context!())
+        .run(context)
         .expect("error while running tauri application");
 }
 
@@ -706,8 +772,45 @@ pub fn run() {
 mod tests {
     use super::*;
     use app_windows::{CloseAnswer, CLOSE_ANSWER_WAIT};
+    use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Arc;
     use std::time::Instant;
+
+    #[test]
+    fn a_second_start_meanwhile_is_refused_and_unpacks_nothing() {
+        let (starting, unpacked) = (Mutex::new(()), AtomicUsize::new(0));
+        let (begun, has_begun) = mpsc::channel();
+        let (finish, may_finish) = mpsc::channel();
+        std::thread::scope(|scope| {
+            let (starting, unpacked) = (&starting, &unpacked);
+            let first = scope.spawn(move || {
+                one_start(starting, || {
+                    unpacked.fetch_add(1, Ordering::SeqCst);
+                    begun.send(()).unwrap();
+                    may_finish.recv().unwrap();
+                    Ok(())
+                })
+            });
+            has_begun.recv().unwrap();
+            let second = one_start(starting, || {
+                unpacked.fetch_add(1, Ordering::SeqCst);
+                Ok(())
+            });
+            assert_eq!(second, Err(AppError::ShowStarting));
+            finish.send(()).unwrap();
+            assert_eq!(first.join().unwrap(), Ok(()));
+        });
+        assert_eq!(unpacked.load(Ordering::SeqCst), 1, "only the first start unpacked");
+        assert_eq!(one_start(&starting, || Ok(())), Ok(()), "the next start runs once the first is done");
+    }
+
+    #[test]
+    fn a_start_runs_after_one_that_panicked() {
+        let starting = Mutex::new(());
+        let panicked = std::panic::catch_unwind(|| one_start(&starting, || panic!("the unpacking failed")));
+        assert!(panicked.is_err());
+        assert_eq!(one_start(&starting, || Ok(())), Ok(()));
+    }
 
     #[test]
     fn the_demo_quiz_is_current_and_plays() {

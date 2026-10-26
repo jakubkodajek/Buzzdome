@@ -6,7 +6,7 @@ import { FINAL_LAST_STEP, FULL_SHARE, MAX_EVERYONE_ANSWERS } from "../bindings/C
 import { scoreDigits, signed } from "../format";
 import { playerName } from "../i18n";
 import { CheckIcon, CrossIcon, PeopleIcon, QuestionIcon, TrophyIcon } from "../icons";
-import type { QuestionPosition, SlideContext } from "../quiz";
+import { rightAnswers, type QuestionPosition, type SlideContext } from "../quiz";
 import { SlideMedia, type ScreenMode } from "../slide-media";
 import { styleOf, textStyleCss, type StyledText } from "../theme/slide-style";
 import type { AnswerResults, ClockView, GameView, PlayerView, QuestionSlide, Slide } from "../types";
@@ -129,7 +129,7 @@ function Welcome({ view }: { view: GameView }) {
 /** The question an explanation slide explains, with its right answers. */
 function ExplainedHeader({ explained, n }: { explained: QuestionSlide; n: number }) {
   const { t } = useApp();
-  const correct = explained.correct.filter((c) => c.answer < explained.answers.length);
+  const correct = rightAnswers(explained);
   return (
     <header className="explained">
       <span className="explained-number">{t("questionNumber", { n })}</span>

@@ -154,12 +154,13 @@ impl Session {
         Ok(Some(SessionSummary { meta, command_count }))
     }
 
-    /// Makes every later append fail, as after a write that could not be taken back.
+    /// Lets appends work again after `break_for_test`.
     #[cfg(test)]
     pub fn repair_for_test(&mut self) {
         self.broken = false;
     }
 
+    /// Makes every later append fail, as after a write that could not be taken back.
     #[cfg(test)]
     pub fn break_for_test(&mut self) {
         self.broken = true;

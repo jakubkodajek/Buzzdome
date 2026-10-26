@@ -1590,3 +1590,47 @@ fn the_show_counts_its_steps_as_the_quizmaster_sees_them() {
     let replayed = Game::replay(show.game.quiz().clone(), &show.journal, RULES_VERSION);
     assert_eq!(replayed.step_no(), show.game.step_no());
 }
+
+#[test]
+fn the_stage_follows_the_show_for_the_lights() {
+    use quiz_core::{Stage, LAST_SECONDS_MS};
+    let mut show = Show::new(vec![question("q1", AnswerMode::FastestFinger), final_slide("end")]);
+    show.press(0, 1, Button::Big);
+    assert_eq!(show.game.stage(0), Stage::Lobby);
+    show.run(0, Command::Next).unwrap();
+    assert_eq!(show.game.stage(0), Stage::QuestionReady);
+    show.run(1_000, Command::Next).unwrap();
+    assert_eq!(show.game.stage(1_000), Stage::Answering);
+    // 10 s to answer: the last seconds start 5 s before time up, paused or not.
+    assert_eq!(show.game.stage(11_000 - LAST_SECONDS_MS - 1), Stage::Answering);
+    assert_eq!(show.game.stage(11_000 - LAST_SECONDS_MS), Stage::LastSeconds);
+    show.press(7_000, 1, Button::Big);
+    assert_eq!(show.game.stage(7_000), Stage::Buzzed);
+    show.run(8_000, Command::JudgeRight).unwrap();
+    assert_eq!(show.game.stage(8_000), Stage::Revealed);
+    // The leaderboard covers the slide under it.
+    show.run(9_000, Command::ShowLeaderboard { visible: true }).unwrap();
+    assert_eq!(show.game.stage(9_000), Stage::Leaderboard);
+    show.run(9_500, Command::ShowLeaderboard { visible: false }).unwrap();
+    show.run(10_000, Command::Next).unwrap();
+    let mut stages = vec![show.game.stage(10_000)];
+    for _ in 0..FINAL_LAST_STEP {
+        show.run(10_000, Command::Next).unwrap();
+        stages.push(show.game.stage(10_000));
+    }
+    // Drum roll, third and second place build up; the winner shows from first place on.
+    assert_eq!(stages, [Stage::FinalBuildUp, Stage::FinalBuildUp, Stage::FinalBuildUp, Stage::Winner, Stage::Winner]);
+}
+
+#[test]
+fn a_closed_question_waits_on_its_own_stage_until_the_answer_shows() {
+    use quiz_core::Stage;
+    let mut show = Show::new(vec![question("q1", AnswerMode::Everyone)]);
+    show.press(0, 1, Button::Big);
+    show.run(0, Command::Next).unwrap();
+    show.run(0, Command::Next).unwrap();
+    show.press(1_000, 1, Button::B);
+    assert_eq!(show.game.stage(1_000), Stage::Closed);
+    show.run(2_000, Command::Next).unwrap();
+    assert_eq!(show.game.stage(2_000), Stage::Revealed);
+}

@@ -43,3 +43,6 @@ app/src/dev/media/*.mp3
 app/src/dev/media/*.mp4
 app/src/dev/media/*.webm
 app/src/dev/media/*.wav
+
+# ts-rs default output when a test binary runs outside cargo; bindings go to app/src/bindings
+/bindings/

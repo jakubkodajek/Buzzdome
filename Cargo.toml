@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/quiz-core", "crates/quiz-file", "crates/buzzers", "crates/show-sim", "app/src-tauri"]
+members = ["crates/quiz-core", "crates/quiz-file", "crates/buzzers", "crates/lights", "crates/show-sim", "crates/quiz-ai", "app/src-tauri"]
 resolver = "2"
 
 [workspace.package]
@@ -12,6 +12,8 @@ serde_json = "1"
 thiserror = "2"
 # TypeScript bindings for the UI, written by `cargo test` (see .cargo/config.toml).
 ts-rs = "12"
+# JSON Schema of the quiz file, for AI assistants and other writers (crates/quiz-ai).
+schemars = "1"
 
 # See https://tauri.app/concept/size/#cargo-configuration
 [profile.release]

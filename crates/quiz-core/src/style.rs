@@ -4,6 +4,7 @@
 //! wrong (a colour that is not hex, a size out of range) reads as missing, so
 //! a hand-edited style never keeps a quiz from opening.
 
+use schemars::JsonSchema;
 use serde::{Deserialize, Deserializer, Serialize};
 use ts_rs::TS;
 
@@ -39,7 +40,7 @@ pub fn is_hex_color(color: &str) -> bool {
 }
 
 /// A colour as `#RRGGBB`, or `#RRGGBBAA` with its opacity.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS, JsonSchema)]
 #[ts(export)]
 pub struct Color(String);
 
@@ -55,11 +56,18 @@ impl Color {
     pub fn as_str(&self) -> &str {
         &self.0
     }
+
+    /// Red, green and blue, without the opacity.
+    pub fn rgb(&self) -> [u8; 3] {
+        // A colour is checked hex when made, so every pair reads.
+        let channel = |i: usize| u8::from_str_radix(&self.0[1 + 2 * i..3 + 2 * i], 16).unwrap_or(0);
+        [channel(0), channel(1), channel(2)]
+    }
 }
 
 /// The name of a font installed on the computer that shows the quiz. One
 /// that is not installed there falls back to the theme's font.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS, JsonSchema)]
 #[ts(export)]
 pub struct FontName(String);
 
@@ -77,9 +85,9 @@ impl TryFrom<String> for FontName {
 }
 
 /// A text's size in percent of the theme's size for it.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS, JsonSchema)]
 #[ts(export)]
-pub struct TextSize(u16);
+pub struct TextSize(#[schemars(range(min = MIN_TEXT_SIZE, max = MAX_TEXT_SIZE))] u16);
 
 impl TryFrom<u16> for TextSize {
     type Error = &'static str;
@@ -90,9 +98,9 @@ impl TryFrom<u16> for TextSize {
 }
 
 /// How much of a fill shows through, in percent: 0 is solid, `MAX_TRANSPARENCY` invisible.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS, JsonSchema)]
 #[ts(export)]
-pub struct Transparency(u8);
+pub struct Transparency(#[schemars(range(max = MAX_TRANSPARENCY))] u8);
 
 impl TryFrom<u8> for Transparency {
     type Error = &'static str;
@@ -102,7 +110,7 @@ impl TryFrom<u8> for Transparency {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS, JsonSchema)]
 #[ts(export)]
 #[serde(rename_all = "camelCase")]
 pub enum GradientKind {
@@ -119,7 +127,7 @@ pub enum GradientKind {
 }
 
 /// A fill from one colour to another; both the same is a plain colour.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS, JsonSchema)]
 #[ts(export)]
 #[serde(rename_all = "camelCase")]
 pub struct Gradient {
@@ -128,7 +136,7 @@ pub struct Gradient {
     pub kind: GradientKind,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS, JsonSchema)]
 #[ts(export)]
 #[serde(rename_all = "camelCase")]
 pub enum TextAlign {
@@ -139,7 +147,7 @@ pub enum TextAlign {
 
 /// How the projector draws a question's clock: the time left and the
 /// question's place in the quiz.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS, JsonSchema)]
 #[ts(export)]
 #[serde(rename_all = "camelCase")]
 pub enum TimerDesign {
@@ -156,45 +164,56 @@ pub enum TimerDesign {
 }
 
 /// The look of a text on a slide. What is missing is the theme's.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, TS, JsonSchema)]
 #[ts(export)]
 #[serde(rename_all = "camelCase")]
 pub struct TextStyle {
     #[serde(default, skip_serializing_if = "Option::is_none", with = "lenient")]
+    #[schemars(with = "Option<Color>")]
     #[ts(as = "Option<Color>", optional)]
     pub color: Option<Color>,
     #[serde(default, skip_serializing_if = "Option::is_none", with = "lenient")]
+    #[schemars(with = "Option<FontName>")]
     #[ts(as = "Option<FontName>", optional)]
     pub font: Option<FontName>,
     #[serde(default, skip_serializing_if = "Option::is_none", with = "lenient")]
+    #[schemars(with = "Option<TextSize>")]
     #[ts(as = "Option<TextSize>", optional)]
     pub size: Option<TextSize>,
     #[serde(default, skip_serializing_if = "Option::is_none", with = "lenient")]
+    #[schemars(with = "Option<bool>")]
     #[ts(as = "Option<bool>", optional)]
     pub bold: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none", with = "lenient")]
+    #[schemars(with = "Option<bool>")]
     #[ts(as = "Option<bool>", optional)]
     pub italic: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none", with = "lenient")]
+    #[schemars(with = "Option<bool>")]
     #[ts(as = "Option<bool>", optional)]
     pub underline: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none", with = "lenient")]
+    #[schemars(with = "Option<TextAlign>")]
     #[ts(as = "Option<TextAlign>", optional)]
     pub align: Option<TextAlign>,
     /// A drop shadow under the text (a title and a question have one in
     /// every built-in theme).
     #[serde(default, skip_serializing_if = "Option::is_none", with = "lenient")]
+    #[schemars(with = "Option<bool>")]
     #[ts(as = "Option<bool>", optional)]
     pub shadow: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none", with = "lenient")]
+    #[schemars(with = "Option<Color>")]
     #[ts(as = "Option<Color>", optional)]
     pub shadow_color: Option<Color>,
     /// Behind the text: an answer's panel, or a box around a title or text.
     #[serde(default, skip_serializing_if = "Option::is_none", with = "lenient")]
+    #[schemars(with = "Option<Gradient>")]
     #[ts(as = "Option<Gradient>", optional)]
     pub fill: Option<Gradient>,
     /// Of the fill, the theme's or `fill`.
     #[serde(default, skip_serializing_if = "Option::is_none", with = "lenient")]
+    #[schemars(with = "Option<Transparency>")]
     #[ts(as = "Option<Transparency>", optional)]
     pub transparency: Option<Transparency>,
 }
@@ -207,30 +226,35 @@ impl TextStyle {
 }
 
 /// A slide's own look on top of its theme.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, TS, JsonSchema)]
 #[ts(export)]
 #[serde(rename_all = "camelCase")]
 pub struct SlideStyle {
     /// Behind the slide, unless it has a background picture or video.
     #[serde(default, skip_serializing_if = "Option::is_none", with = "lenient")]
+    #[schemars(with = "Option<Gradient>")]
     #[ts(as = "Option<Gradient>", optional)]
     pub fill: Option<Gradient>,
     /// The question, or the title of another slide: the headline, whose
     /// look a change of type keeps (an explanation's headline is its text).
     #[serde(default, skip_serializing_if = "TextStyle::is_empty", with = "lenient_or_default")]
+    #[schemars(with = "TextStyle")]
     #[ts(as = "TextStyle")]
     pub headline: TextStyle,
     /// A billboard's or an explanation's text.
     #[serde(default, skip_serializing_if = "TextStyle::is_empty", with = "lenient_or_default")]
+    #[schemars(with = "TextStyle")]
     #[ts(as = "TextStyle")]
     pub text: TextStyle,
     /// Every answer of a question alike.
     #[serde(default, skip_serializing_if = "TextStyle::is_empty", with = "lenient_or_default")]
+    #[schemars(with = "TextStyle")]
     #[ts(as = "TextStyle")]
     pub answers: TextStyle,
     /// A question's clock; kept on other slides, which have none, for a
     /// change of type. None is a ring.
     #[serde(default, skip_serializing_if = "Option::is_none", with = "lenient")]
+    #[schemars(with = "Option<TimerDesign>")]
     #[ts(as = "Option<TimerDesign>", optional)]
     pub timer: Option<TimerDesign>,
 }
@@ -322,6 +346,12 @@ mod tests {
         for wrong in ["1E4A6B", "#fff", "#1E4A6", "#1E4A6BC", "#GGGGGG", "red", ""] {
             assert!(!is_hex_color(wrong), "{wrong}");
         }
+    }
+
+    #[test]
+    fn a_colour_gives_its_red_green_and_blue_without_the_opacity() {
+        assert_eq!(color("#1E4A6B").rgb(), [0x1E, 0x4A, 0x6B]);
+        assert_eq!(color("#ff8000cc").rgb(), [255, 128, 0]);
     }
 
     #[test]

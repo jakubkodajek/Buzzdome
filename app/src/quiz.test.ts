@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { FULL_SHARE } from "./bindings/Constants";
 import { newSlide } from "./editor/slides";
-import { hasTitle, isCorrect, plays, sameContext, shareOf, slideContexts, slideTitle } from "./quiz";
+import { hasTitle, isCorrect, plays, rightAnswers, sameContext, shareOf, slideContexts, slideTitle } from "./quiz";
 import type { Quiz, SlideType } from "./types";
 
 const quizOf = (...types: SlideType[]): Quiz => ({
@@ -41,6 +41,26 @@ describe("shareOf", () => {
     const question = { mode: "everyone" as const, correct: [{ answer: 1, share: 50 }] };
     expect([shareOf(question, 0), shareOf(question, 1), isCorrect(question, 1)]).toEqual([null, 50, true]);
     expect(shareOf({ ...question, mode: "fastestFinger" }, 1)).toBe(FULL_SHARE);
+  });
+});
+
+describe("rightAnswers", () => {
+  it("lists the right answers the question has in their order, with the share each gives", () => {
+    const question = {
+      mode: "everyone" as const,
+      answers: ["a", "b", "c"],
+      correct: [
+        { answer: 2, share: FULL_SHARE },
+        { answer: 0, share: 50 },
+        { answer: 3, share: FULL_SHARE },
+      ],
+    };
+    expect(rightAnswers(question)).toEqual([
+      { answer: 0, share: 50 },
+      { answer: 2, share: FULL_SHARE },
+    ]);
+    expect(rightAnswers({ ...question, mode: "fastestFinger" }).map((r) => r.share)).toEqual([FULL_SHARE, FULL_SHARE]);
+    expect(rightAnswers({ ...question, correct: [] })).toEqual([]);
   });
 });
 

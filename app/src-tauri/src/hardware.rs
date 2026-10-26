@@ -321,12 +321,17 @@ pub fn receiver_info(hw: tauri::State<Hardware>) -> ReceiverInfo {
     }
 }
 
+/// The USB-HID devices plugged in, receivers first; listed off the windows'
+/// thread, as listing can take a while (on Windows it goes through SetupAPI).
 #[tauri::command]
-pub fn receiver_devices(hw: tauri::State<Hardware>) -> CmdResult<Vec<DeviceInfo>> {
-    let backend = hw.backend.as_ref().ok_or(AppError::UsbUnavailable)?;
-    let mut devices = backend.list().map_err(|e| AppError::UsbListFailed { detail: e.to_string() })?;
-    devices.sort_by_key(|d| (d.is_keyboard_or_mouse(), d.vendor_id, d.product_id, d.interface_number));
-    Ok(devices)
+pub async fn receiver_devices(app: AppHandle) -> CmdResult<Vec<DeviceInfo>> {
+    off_ui(move || {
+        let backend = app.state::<Hardware>().backend.clone().ok_or(AppError::UsbUnavailable)?;
+        let mut devices = backend.list().map_err(|e| AppError::UsbListFailed { detail: e.to_string() })?;
+        devices.sort_by_key(|d| (d.is_keyboard_or_mouse(), d.vendor_id, d.product_id, d.interface_number));
+        Ok(devices)
+    })
+    .await
 }
 
 /// Uses this receiver from now on (also after restarts), or with none the
@@ -416,14 +421,16 @@ pub async fn receiver_forget_learned(app: AppHandle) -> CmdResult<()> {
 #[tauri::command]
 pub async fn receiver_export_log(app: AppHandle, window: Window, picker: Picker) -> CmdResult<bool> {
     let Some(path) = dialogs::pick_save(window, picker, "txt", None).await? else { return Ok(false) };
-    off_ui(move || write_log(&app.state::<Hardware>(), &path).map(|()| true)).await
+    let version = app.package_info().version.to_string();
+    off_ui(move || write_log(&app.state::<Hardware>(), &version, &path).map(|()| true)).await
 }
 
-fn write_log(hw: &Hardware, path: &Path) -> CmdResult<()> {
+/// Writes the recent raw reports to `path`, under a header naming the app's `version`.
+fn write_log(hw: &Hardware, version: &str, path: &Path) -> CmdResult<()> {
     let status = hw.handle.as_ref().map(ReceiverHandle::status);
     let mut out = format!(
         "# Receiver log, app {} on {}\n# status: {}\n# unix-ms\tbytes (hex)\tdecoded (buzzer, button, @ the buzzer's timer)\tdropped as not ready\n",
-        env!("CARGO_PKG_VERSION"),
+        version,
         std::env::consts::OS,
         serde_json::to_string(&status).unwrap_or_default()
     );
@@ -438,16 +445,21 @@ fn write_log(hw: &Hardware, path: &Path) -> CmdResult<()> {
     std::fs::write(path, out).map_err(|e| AppError::file(FileAction::Write, path, e))
 }
 
+/// Off the windows' thread: it may list the devices (`receiver_devices`).
 #[tauri::command]
-pub fn receiver_udev_rule(hw: tauri::State<Hardware>) -> String {
-    // The rule matters most when opening fails, so fall back to the chosen
-    // receiver, or with none to the known one plugged in.
-    let ids = hw
-        .connected_device()
-        .map(|d| (d.vendor_id, d.product_id))
-        .or_else(|| hw.settings.lock().unwrap().receiver.as_ref().map(|s| (s.vendor_id, s.product_id)))
-        .or_else(|| hw.backend.as_ref()?.list().ok()?.into_iter().find(protocol::is_known).map(|d| (d.vendor_id, d.product_id)));
-    udev_rule(ids.map(|i| i.0), ids.map(|i| i.1))
+pub async fn receiver_udev_rule(app: AppHandle) -> CmdResult<String> {
+    off_ui(move || {
+        let hw = app.state::<Hardware>();
+        // The rule matters most when opening fails, so fall back to the chosen
+        // receiver, or with none to the known one plugged in.
+        let ids = hw
+            .connected_device()
+            .map(|d| (d.vendor_id, d.product_id))
+            .or_else(|| hw.settings.lock().unwrap().receiver.as_ref().map(|s| (s.vendor_id, s.product_id)))
+            .or_else(|| hw.backend.as_ref()?.list().ok()?.into_iter().find(protocol::is_known).map(|d| (d.vendor_id, d.product_id)));
+        Ok(udev_rule(ids.map(|i| i.0), ids.map(|i| i.1)))
+    })
+    .await
 }
 
 #[cfg(test)]

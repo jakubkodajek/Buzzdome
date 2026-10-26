@@ -1,0 +1,25 @@
+[package]
+name = "lights"
+description = "Stage lights and show messages: DMX looks that follow the show, sent through USB-DMX interfaces or the network, and OSC/MIDI messages for outside programs."
+version.workspace = true
+edition.workspace = true
+
+[features]
+default = ["devices"]
+# Real serial, USB and MIDI access. Without it the crate builds with the
+# network outputs and test fakes only.
+devices = ["dep:serialport", "dep:rusb", "dep:midir"]
+
+[dependencies]
+quiz-core = { path = "../quiz-core" }
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+ts-rs.workspace = true
+# The Open Fixture Library's download (library::archive).
+zip = { version = "9", default-features = false, features = ["deflate-flate2-zlib-rs"] }
+serialport = { version = "4", optional = true }
+# libusb built from source, so the app needs no libusb on the computer.
+rusb = { version = "0.9", features = ["vendored"], optional = true }
+midir = { version = "0.10", optional = true }
+

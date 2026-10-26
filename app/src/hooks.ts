@@ -1,9 +1,9 @@
 import { listen } from "@tauri-apps/api/event";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { api, type BackendEvents } from "./api";
 import { MAX_PLAYER_VOLUME } from "./bindings/Constants";
 import { heardNow, type HeardMedia } from "./media-player";
-import type { AppError, ClockView, GameView, IconColor, LearnProgress, MediaLibrary, Quiz, SessionSummary, SettingsLost, SoundBoard } from "./types";
+import type { AppError, ClockView, GameView, IconColor, LearnProgress, LightsStatus, MediaLibrary, Quiz, SessionSummary, SettingsLost, SoundBoard } from "./types";
 
 /** A ref that always holds the latest `value`, for callbacks that outlive a render. */
 export function useLatest<T>(value: T): { readonly current: T } {
@@ -46,27 +46,35 @@ export function useBackendEvent<E extends keyof BackendEvents>(event: E, handler
 }
 
 /**
- * Loads a value once on mount and again on every `refreshOn` event. A load
- * that finishes after a newer one started is dropped.
+ * Loads a value once on mount and again whenever the returned `reload` is
+ * called. A load that finishes after a newer one started is dropped.
  */
-function useBackendValue<T>(load: () => Promise<T>, initial: T, refreshOn: keyof BackendEvents): T {
+function useLoadedValue<T>(load: () => Promise<T>, initial: T): [T, () => void] {
   const [value, setValue] = useState<T>(initial);
   const generation = useRef(0);
-  const reload = useRef(() => {
+  const latestLoad = useLatest(load);
+  const reload = useCallback(() => {
     const mine = ++generation.current;
-    load()
+    latestLoad
+      .current()
       .then((v) => {
         if (generation.current === mine) setValue(v);
       })
       .catch((e) => console.error(e));
-  });
+  }, [latestLoad]);
   useEffect(() => {
-    reload.current();
+    reload();
     return () => {
       generation.current += 1;
     };
-  }, []);
-  useBackendEvent(refreshOn, () => reload.current());
+  }, [reload]);
+  return [value, reload];
+}
+
+/** `useLoadedValue`, loading again on every `refreshOn` event. */
+function useBackendValue<T>(load: () => Promise<T>, initial: T, refreshOn: keyof BackendEvents): T {
+  const [value, reload] = useLoadedValue(load, initial);
+  useBackendEvent(refreshOn, reload);
   return value;
 }
 
@@ -121,6 +129,11 @@ export function useShowNotSaved(): AppError | null {
 /** Whether a buzzer button is being learned; presses do not play meanwhile. */
 export function useLearnProgress(): LearnProgress | null {
   return usePushedValue("receiver-learn", () => api.receiverInfo().then((info) => info.learn));
+}
+
+/** The stage lights' status; null until loaded. */
+export function useLightsStatus(): LightsStatus | null {
+  return usePushedValue("lights-status", () => api.lightsInfo().then((info) => info.status));
 }
 
 /** The team names prepared for shows, kept between them; empty until loaded. */
@@ -192,4 +205,14 @@ export function useLastSession(): LastSession {
     (problem: unknown): LastSession => ({ session: null, problem }),
   );
   return useBackendValue(load, NO_SESSION, "show-changed");
+}
+
+/**
+ * The quiz files opened, saved or played lately, latest first, as the
+ * backend keeps them (`RecentFiles`). `reload` reads them again after a
+ * call that may have changed them.
+ */
+export function useRecentFiles(): { files: string[]; reload: () => void } {
+  const [files, reload] = useLoadedValue(api.recentFiles, []);
+  return { files, reload };
 }

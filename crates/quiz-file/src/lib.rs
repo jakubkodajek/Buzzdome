@@ -262,7 +262,7 @@ pub fn read_quiz_json(root: &Path) -> Result<Quiz> {
 }
 
 /// `read_quiz_json`, with what reading left out.
-fn read_quiz(root: &Path) -> Result<ReadQuiz> {
+pub fn read_quiz(root: &Path) -> Result<ReadQuiz> {
     let json = read_json(&root.join(QUIZ_JSON)).map_err(|e| match e {
         QuizFileError::Io { source, .. } if source.kind() == io::ErrorKind::NotFound => QuizFileError::MissingQuizJson,
         e => e,
@@ -272,13 +272,71 @@ fn read_quiz(root: &Path) -> Result<ReadQuiz> {
 
 /// Reads the quiz JSON file `path`, refusing one larger than
 /// `MAX_QUIZ_JSON_BYTES` without reading past it.
-fn read_json(path: &Path) -> Result<String> {
+pub fn read_json(path: &Path) -> Result<String> {
+    File::open(path).context(FileAction::Read, path).and_then(|file| read_bounded_json(file, path))
+}
+
+/// Reads quiz JSON from `from` (the file `path`, or an entry of it) up to
+/// `MAX_QUIZ_JSON_BYTES`.
+fn read_bounded_json(from: impl Read, path: &Path) -> Result<String> {
     let mut bytes = Vec::new();
-    File::open(path).and_then(|file| file.take(MAX_QUIZ_JSON_BYTES + 1).read_to_end(&mut bytes)).context(FileAction::Read, path)?;
+    from.take(MAX_QUIZ_JSON_BYTES + 1).read_to_end(&mut bytes).context(FileAction::Read, path)?;
     if bytes.len() as u64 > MAX_QUIZ_JSON_BYTES {
         return Err(QuizFileError::QuizJsonTooLarge);
     }
     String::from_utf8(bytes).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e)).context(FileAction::Read, path)
+}
+
+/// A quiz file as `open_into` would unpack it, read without unpacking it.
+#[derive(Debug, Clone)]
+pub struct Inspected {
+    /// The quiz as `open_into` gives it, media renamed.
+    pub read: ReadQuiz,
+    /// The media files `open_into` would unpack, by the names the quiz uses.
+    pub media: HashSet<String>,
+}
+
+impl Inspected {
+    /// `problems`, with the media looked up in the file.
+    pub fn problems(&self) -> Vec<ValidationError> {
+        problems_where(&self.read.quiz, |file| self.media.contains(file), |_| true)
+    }
+}
+
+/// Reads the quiz file `path` (`.quiz`, or a plain quiz JSON with its media
+/// next to it) as `open_into` would unpack it, without writing anything or
+/// reading its media: only `quiz.json` and the names of the files are read.
+pub fn inspect(path: &Path) -> Result<Inspected> {
+    if !is_zip(path)? {
+        let read = Quiz::read_json(&read_json(path)?)?;
+        let source_root = path.parent().unwrap_or(Path::new("."));
+        // The media `copy_json` copies.
+        let copied = |reference: &&str| is_safe_reference(reference) && leads_inside(&source_root.join(reference), source_root).unwrap_or(false);
+        let media = read.quiz.media_files().into_iter().filter(copied).map(str::to_owned).collect();
+        return Ok(Inspected { read, media });
+    }
+    let mut archive = open_archive(path)?;
+    let names = archive.file_names().map(|name| name.map(|name| entry_name(&name))).collect::<std::result::Result<Vec<_>, _>>()?;
+    let renames = renames(names.iter().map(String::as_str));
+    let mut media = HashSet::new();
+    let mut json = None;
+    for i in 0..archive.len() {
+        let entry = archive.by_index(i)?;
+        if entry.is_dir() || entry.is_symlink() {
+            continue;
+        }
+        let name = entry_name(&entry.name()?);
+        if name == QUIZ_JSON {
+            json = Some(read_bounded_json(entry, path)?);
+        } else if let Some(new) = renames.new.get(&name) {
+            media.insert(new.clone());
+        } else if is_safe_reference(&name) {
+            media.insert(name);
+        }
+    }
+    let mut read = Quiz::read_json(&json.ok_or(QuizFileError::MissingQuizJson)?)?;
+    read.quiz.rename_media(&renames.new);
+    Ok(Inspected { read, media })
 }
 
 /// Checks the quiz and that every media file it uses exists under `root`.
@@ -289,7 +347,7 @@ pub fn check(quiz: &Quiz, root: &Path) -> Result<()> {
 /// Refuses a quiz a show cannot play: one with the `problems` that keep it
 /// from playing (`Problem::keeps_from_playing`). A show reads no categories.
 pub fn check_playable(quiz: &Quiz, root: &Path) -> Result<()> {
-    refuse(problems_where(quiz, root, Problem::keeps_from_playing))
+    refuse(problems_where(quiz, |file| root.join(file).is_file(), Problem::keeps_from_playing))
 }
 
 fn refuse(found: Vec<ValidationError>) -> Result<()> {
@@ -303,11 +361,11 @@ fn refuse(found: Vec<ValidationError>) -> Result<()> {
 /// Everything that keeps the quiz from being saved: the core's rules, then
 /// media files missing under `root`.
 pub fn problems(quiz: &Quiz, root: &Path) -> Vec<ValidationError> {
-    problems_where(quiz, root, |_| true)
+    problems_where(quiz, |file| root.join(file).is_file(), |_| true)
 }
 
-/// The `problems` that `counts`.
-fn problems_where(quiz: &Quiz, root: &Path, counts: impl Fn(&Problem) -> bool) -> Vec<ValidationError> {
+/// The `problems` that `counts`, with the media files there when `has` them.
+fn problems_where(quiz: &Quiz, has: impl Fn(&str) -> bool, counts: impl Fn(&Problem) -> bool) -> Vec<ValidationError> {
     let rules: Vec<ValidationError> = quiz.validate().err().unwrap_or_default().into_iter().filter(|e| counts(&e.problem)).collect();
     if !rules.is_empty() {
         return rules;
@@ -324,8 +382,8 @@ fn problems_where(quiz: &Quiz, root: &Path, counts: impl Fn(&Problem) -> bool) -
         Some((file, ValidationError { slide_id: None, problem }))
     });
     // Only the references that count are known to be safe paths now, so
-    // only they are joined to `root`, which keeps the join inside it.
-    slides.chain(categories).filter(|(file, e)| counts(&e.problem) && !root.join(file).is_file()).map(|(_, e)| e).collect()
+    // only they are looked up, which keeps a join to a folder inside it.
+    slides.chain(categories).filter(|(file, e)| counts(&e.problem) && !has(file)).map(|(_, e)| e).collect()
 }
 
 /// Writes `quiz.json` into the package folder `root` (see `write_atomic`).
@@ -727,16 +785,7 @@ fn is_zip(path: &Path) -> Result<bool> {
 /// (see `renames`). Other entries (folders, links, files some ZIP tools add,
 /// names that would leave the media folder) are skipped.
 fn unpack_zip(path: &Path, dest: &Path) -> Result<Unpacked> {
-    let mut file = File::open(path).context(FileAction::Read, path)?;
-    match zip_end::check(&mut file, MAX_ENTRIES as u64).context(FileAction::Read, path)? {
-        zip_end::Verdict::Opens => {}
-        zip_end::Verdict::CountsTooMany => return Err(QuizFileError::TooManyFiles),
-        zip_end::Verdict::TooManyEndRecords => return Err(QuizFileError::TooManyEndRecords),
-    }
-    let mut archive = ZipArchive::new(file)?;
-    if archive.len() > MAX_ENTRIES {
-        return Err(QuizFileError::TooManyFiles);
-    }
+    let mut archive = open_archive(path)?;
     let names = archive.file_names().map(|name| name.map(|name| entry_name(&name))).collect::<std::result::Result<Vec<_>, _>>()?;
     let renames = renames(names.iter().map(String::as_str));
     let mut hasher = Sha256::new();
@@ -755,6 +804,21 @@ fn unpack_zip(path: &Path, dest: &Path) -> Result<Unpacked> {
         budget -= write_file(dest, stored, &mut entry, path, budget, &mut hasher)?;
     }
     Ok(Unpacked { hash: finish(hasher), renames })
+}
+
+/// Opens the ZIP file `path` within the limits on its entries.
+fn open_archive(path: &Path) -> Result<ZipArchive<File>> {
+    let mut file = File::open(path).context(FileAction::Read, path)?;
+    match zip_end::check(&mut file, MAX_ENTRIES as u64).context(FileAction::Read, path)? {
+        zip_end::Verdict::Opens => {}
+        zip_end::Verdict::CountsTooMany => return Err(QuizFileError::TooManyFiles),
+        zip_end::Verdict::TooManyEndRecords => return Err(QuizFileError::TooManyEndRecords),
+    }
+    let archive = ZipArchive::new(file)?;
+    if archive.len() > MAX_ENTRIES {
+        return Err(QuizFileError::TooManyFiles);
+    }
+    Ok(archive)
 }
 
 /// A ZIP entry's name with `/` between folders, as some ZIP tools on Windows
@@ -864,12 +928,11 @@ fn unique_suffix() -> u128 {
     SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| d.as_nanos())
 }
 
+/// Deletes the folder `path`, if there. Every folder this crate deletes is
+/// in a folder the app `prune`s, so one that cannot be deleted now is
+/// deleted then, and `prune` returns why not for the app to log.
 fn remove_dir(path: &Path) {
-    if let Err(e) = fs::remove_dir_all(path) {
-        if e.kind() != io::ErrorKind::NotFound {
-            eprintln!("cannot remove {}: {e}", path.display());
-        }
-    }
+    let _ = fs::remove_dir_all(path);
 }
 
 #[cfg(test)]

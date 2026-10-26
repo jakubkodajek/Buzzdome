@@ -76,6 +76,17 @@ export class Session {
     await this.send("POST", `/element/${element[ELEMENT]}/click`, {});
   }
 
+  /** Clicks `element` twice at once with the mouse, as a double click does. */
+  async doubleClick(element: ElementRef): Promise<void> {
+    const press = [
+      { type: "pointerDown", button: 0 },
+      { type: "pointerUp", button: 0 },
+    ];
+    const actions = [{ type: "pointerMove", origin: element, x: 0, y: 0 }, ...press, ...press];
+    await this.send("POST", "/actions", { actions: [{ type: "pointer", id: "mouse", parameters: { pointerType: "mouse" }, actions }] });
+    await this.send("DELETE", "/actions");
+  }
+
   text(element: ElementRef): Promise<string> {
     return this.send("GET", `/element/${element[ELEMENT]}/text`);
   }

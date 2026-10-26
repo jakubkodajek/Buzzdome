@@ -1,3 +1,5 @@
+import type { Lang } from "./i18n";
+
 /** Whole seconds left on a countdown, rounded up as clocks show them. */
 export function clockSeconds(ms: number): string {
   return String(Math.ceil(ms / 1000));
@@ -24,6 +26,11 @@ export function decibels(value: number, sign = true): string {
   return sign && value > 0 ? `+${text}` : text === "-0.0" ? "0.0" : text;
 }
 
+/** A day, as the quizmaster's language writes dates: "26. 10. 2026", "26/10/2026". */
+export function calendarDay(ms: number, lang: Lang): string {
+  return new Date(ms).toLocaleDateString(lang === "cs" ? "cs-CZ" : "en-GB", { timeZone: "UTC" });
+}
+
 /** A score padded to three digits for the score boards, e.g. "042". */
 export function scoreDigits(n: number): string {
   return n < 0 ? `-${String(-n).padStart(2, "0")}` : String(n).padStart(3, "0");
@@ -47,4 +54,9 @@ export function parseTrackTime(text: string): number | null {
   const parts = text.trim().replace(",", ".").split(":");
   const valid = parts.length <= 3 && parts.every((part, i) => (i === parts.length - 1 ? /^\d+(\.\d+)?$/ : /^\d+$/).test(part));
   return valid ? Math.round(parts.reduce((total, part) => total * 60 + Number(part), 0) * 1000) : null;
+}
+
+/** The file name at the end of `path`, whether it is separated by "/" or "\\". */
+export function fileName(path: string): string {
+  return path.slice(Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\")) + 1);
 }

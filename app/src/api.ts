@@ -6,6 +6,7 @@ import type {
   BuzzerId,
   BuzzerSeen,
   Category,
+  ClaudeConnected,
   ClockView,
   Command,
   Cue,
@@ -14,6 +15,12 @@ import type {
   GameView,
   IconColor,
   LearnProgress,
+  LightsDevices,
+  LibraryMatches,
+  LibraryInfo,
+  LightsInfo,
+  LightsSetup,
+  LightsStatus,
   ListSeparator,
   MediaKind,
   MediaLibrary,
@@ -51,6 +58,10 @@ export const api = {
   // The backend opens the file pickers: a window names no file to write.
   /** Starts a show of a quiz file the quizmaster picks; false when they cancel. */
   startShowFromFile: (picker: Picker) => invoke<boolean>("start_show_from_file", { picker }),
+  /** Starts a show of `recent`, a file in `recentFiles`. */
+  startShowFromRecent: (recent: string) => invoke<void>("start_show_from_recent", { recent }),
+  /** Quiz files opened, saved or played lately, latest first. */
+  recentFiles: () => invoke<string[]>("recent_files"),
   startDemoShow: () => invoke<void>("start_demo_show"),
   lastSession: () => invoke<SessionSummary | null>("last_session"),
   /** Resumes the last show; returns warnings when it runs but not quite as before (its media are missing, other rules). */
@@ -115,15 +126,29 @@ export const api = {
   /** Writes the receiver's recent reports to a file the quizmaster picks; false when they cancel. */
   receiverExportLog: (picker: Picker) => invoke<boolean>("receiver_export_log", { picker }),
   receiverUdevRule: () => invoke<string>("receiver_udev_rule"),
+  /** The venue's lights setup, how its output does, and why a kept setup was not used. */
+  lightsInfo: () => invoke<LightsInfo>("lights_info"),
+  /** Checks and keeps the lights setup, then the lights take it. */
+  lightsStore: (setup: LightsSetup) => invoke<void>("lights_store", { setup }),
+  /** The USB-DMX interfaces and MIDI outputs on this computer. */
+  lightsDevices: () => invoke<LightsDevices>("lights_devices"),
+  /** The fixture models of the built-in library whose names hold every word of `query`. */
+  lightsLibrary: (query: string) => invoke<LibraryMatches>("lights_library", { query }),
+  lightsLibraryInfo: () => invoke<LibraryInfo>("lights_library_info"),
+  lightsLibraryUpdate: () => invoke<LibraryInfo>("lights_library_update"),
+  lightsLibraryReset: () => invoke<LibraryInfo>("lights_library_reset"),
+  /** Holds a look whatever the show does, or lets go with null. */
+  lightsHold: (look: number | null) => invoke<void>("lights_hold", { look }),
+  lightsBlackout: (on: boolean) => invoke<void>("lights_blackout", { on }),
+  /** The 512 channel values the lights show now. */
+  lightsUniverse: () => invoke<number[]>("lights_universe"),
   // The editor's commands on a draft name it (`EditorDraft.id`): one that
   // another draft has replaced since is refused with `draftChanged`.
   /** The quiz editor's draft left from last time, if any. */
   editorLoad: () => invoke<EditorDraft | null>("editor_load"),
   editorNew: (title: string) => invoke<EditorDraft>("editor_new", { title }),
-  /** Opens `recent`, a file in `editorRecentFiles`, or a quiz file the quizmaster picks; null when they cancel. */
+  /** Opens `recent`, a file in `recentFiles`, or a quiz file the quizmaster picks; null when they cancel. */
   editorOpen: (recent: string | null, picker: Picker) => invoke<EditorDraft | null>("editor_open", { recent, picker }),
-  /** Quiz files the editor opened or saved lately, latest first. */
-  editorRecentFiles: () => invoke<string[]>("editor_recent_files"),
   /** Stores the edited quiz; returns what keeps it from being played. */
   editorUpdate: (draft: string, quiz: Quiz, unsaved: boolean) => invoke<ValidationError[]>("editor_update", { draft, quiz, unsaved }),
   /** Saves over the quiz file the draft came from, unless `saveAs`, else where the quizmaster picks; returns the path, null when they cancel. */
@@ -144,6 +169,13 @@ export const api = {
   editorClose: () => invoke<void>("editor_close"),
   /** Plays the editor's quiz as a show that is not kept for resuming, from the slide `from` if given. */
   editorTestRun: (draft: string, quiz: Quiz, from: number | null = null) => invoke<void>("editor_test_run", { draft, quiz, from }),
+  /** Writes the skill package for chat assistants where the quizmaster picks; false when they cancel. */
+  aiSaveSkill: (picker: Picker) => invoke<boolean>("ai_save_skill", { picker }),
+  /**
+   * Adds the app to Claude Desktop as the MCP server it writes quizzes with, working in the Buzzdome folder of the
+   * quizmaster's documents, or with `choose` in a folder they pick; says what changed, null when they cancel.
+   */
+  aiConnectClaude: (choose: boolean) => invoke<ClaudeConnected | null>("ai_connect_claude", { choose }),
 };
 
 /** Events the backend emits (`app.emit` in app/src-tauri), with their payloads. */
@@ -163,6 +195,8 @@ export interface BackendEvents {
   /** A buzzer the receiver heard, as it now stands. */
   "receiver-buzzer": BuzzerSeen;
   "receiver-learn": LearnProgress;
+  /** The stage lights' output, look, hold and blackout, whenever one changes. */
+  "lights-status": LightsStatus;
   /** The projector window opened (true) or closed (false). */
   "host-window": boolean;
   /** A problem the projector met, worded for the Director to show. */

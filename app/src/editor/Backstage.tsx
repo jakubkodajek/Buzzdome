@@ -5,12 +5,13 @@ import { problemText } from "../messages";
 import { MAX_ALL_ANSWERED_DELAY_S } from "../bindings/Constants";
 import type { StringKey } from "../i18n";
 import { questionCount, settingsOf } from "../quiz";
+import { RecentFileList } from "../recent-files";
 import type { AllAnswered, Quiz, QuizSettings, ValidationError } from "../types";
 import type { Action, Actions } from "./actions";
 import { NumberBox, Select } from "./controls";
 import type { OpenQuiz } from "./editor-state";
 
-export type BackstagePage = "info" | "settings" | "open" | "import" | "export";
+export type BackstagePage = "info" | "settings" | "open" | "import" | "export" | "ai";
 
 interface BackstageProps {
   /** The open quiz; null when none is open. */
@@ -20,8 +21,14 @@ interface BackstageProps {
   onPage: (page: BackstagePage) => void;
   /** Back to the quiz; null when there is no quiz to go back to. */
   onClose: (() => void) | null;
-  /** The file's actions, and questions from a spreadsheet, the template for one, and the quiz as one (spec QZ-8). */
-  actions: Pick<Actions, "newQuiz" | "save" | "saveAs" | "closeQuiz" | "exit" | "importSheet" | "sheetTemplate" | "exportSheet">;
+  /**
+   * The file's actions, questions from a spreadsheet, the template for one and the quiz as one (spec QZ-8),
+   * and what AI assistants write quizzes with.
+   */
+  actions: Pick<
+    Actions,
+    "newQuiz" | "save" | "saveAs" | "closeQuiz" | "exit" | "importSheet" | "sheetTemplate" | "exportSheet" | "saveAiSkill" | "connectClaude" | "connectClaudeFolder"
+  >;
   recentFiles: string[];
   /** Opens `recent`, a file in `recentFiles`, or one the quizmaster picks. */
   onOpenFile: (recent?: string) => void;
@@ -31,18 +38,21 @@ interface BackstageProps {
   onShowSlide: (id: string) => void;
 }
 
+/** Pages shown when no quiz is open. */
+const WITHOUT_QUIZ: BackstagePage[] = ["open", "ai"];
+
 /** The FILE tab: the quiz as a whole and its file, over the whole window. */
 export function Backstage(props: BackstageProps) {
   const { open, page, onPage, onClose, actions } = props;
   const { t } = useApp();
-  const shown = open ? page : "open";
+  const shown = open || WITHOUT_QUIZ.includes(page) ? page : "open";
   const item = (action: Action) => (
     <button type="button" className="backstage-item" disabled={action.disabled} onClick={action.run}>
       {action.label}
     </button>
   );
   const pageItem = (id: BackstagePage, label: string) => (
-    <button type="button" className={shown === id ? "backstage-item active" : "backstage-item"} disabled={id !== "open" && !open} onClick={() => onPage(id)}>
+    <button type="button" className={shown === id ? "backstage-item active" : "backstage-item"} disabled={!open && !WITHOUT_QUIZ.includes(id)} onClick={() => onPage(id)}>
       {label}
     </button>
   );
@@ -63,11 +73,12 @@ export function Backstage(props: BackstageProps) {
         {item(actions.saveAs)}
         {pageItem("import", t("backstageImport"))}
         {pageItem("export", t("backstageExport"))}
+        {pageItem("ai", t("backstageAi"))}
         {item(actions.closeQuiz)}
         <span className="backstage-gap" />
         {item(actions.exit)}
       </nav>
-      <div className="backstage-page">{open ? pageFor(shown, props, open) : <OpenPage {...props} />}</div>
+      <div className="backstage-page">{open ? pageFor(shown, props, open) : shown === "ai" ? <AiPage {...props} /> : <OpenPage {...props} />}</div>
     </div>
   );
 }
@@ -84,6 +95,8 @@ function pageFor(page: BackstagePage, props: BackstageProps, open: OpenQuiz) {
       return <ImportPage {...props} />;
     case "export":
       return <ExportPage {...props} />;
+    case "ai":
+      return <AiPage {...props} />;
   }
 }
 
@@ -227,6 +240,33 @@ function ExportPage({ actions }: BackstageProps) {
   );
 }
 
+function AiPage({ actions }: BackstageProps) {
+  const { t } = useApp();
+  return (
+    <>
+      <h1>{t("backstageAi")}</h1>
+      <p>{t("aiAssistantsHint")}</p>
+      <div className="backstage-task">
+        <div className="backstage-buttons">
+          <button type="button" className="browse" onClick={actions.connectClaude.run}>
+            {actions.connectClaude.label}
+          </button>
+          <button type="button" className="browse" onClick={actions.connectClaudeFolder.run}>
+            {actions.connectClaudeFolder.label}
+          </button>
+        </div>
+        <p>{t("connectClaudeHint")}</p>
+      </div>
+      <div className="backstage-task">
+        <button type="button" className="browse" onClick={actions.saveAiSkill.run}>
+          {actions.saveAiSkill.label}
+        </button>
+        <p>{t("saveAiSkillHint")}</p>
+      </div>
+    </>
+  );
+}
+
 function OpenPage({ recentFiles, onOpenFile }: BackstageProps) {
   const { t } = useApp();
   return (
@@ -239,21 +279,8 @@ function OpenPage({ recentFiles, onOpenFile }: BackstageProps) {
       {recentFiles.length === 0 ? (
         <p className="muted">{t("noRecentFiles")}</p>
       ) : (
-        <ul className="recent-list">
-          {recentFiles.map((path) => (
-            <li key={path}>
-              <button type="button" onClick={() => onOpenFile(path)}>
-                <b>{fileName(path)}</b>
-                <small>{path}</small>
-              </button>
-            </li>
-          ))}
-        </ul>
+        <RecentFileList files={recentFiles} onOpen={onOpenFile} />
       )}
     </>
   );
-}
-
-function fileName(path: string): string {
-  return path.slice(Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\")) + 1);
 }
