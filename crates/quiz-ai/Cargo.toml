@@ -1,0 +1,22 @@
+[package]
+name = "quiz-ai"
+description = "Quiz writing for AI assistants: the quiz file's JSON Schema, a skill package, an MCP server and the buzzdome-quiz command line."
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "buzzdome-quiz"
+path = "src/main.rs"
+
+[dependencies]
+quiz-core = { path = "../quiz-core" }
+quiz-file = { path = "../quiz-file" }
+schemars.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+ts-rs.workspace = true
+# Pictures for the assistant to look at (mcp.rs).
+base64 = "0.22"
+# The skill package (skill.rs), written as quiz-file writes quiz files.
+zip = { version = "9", default-features = false, features = ["deflate-flate2-zlib-rs"] }

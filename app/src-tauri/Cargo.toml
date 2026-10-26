@@ -16,6 +16,7 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 quiz-core = { path = "../../crates/quiz-core" }
 quiz-file = { path = "../../crates/quiz-file" }
+quiz-ai = { path = "../../crates/quiz-ai" }
 buzzers = { path = "../../crates/buzzers", features = ["hidapi"] }
 # protocol-asset serves the running quiz's media files to the windows.
 tauri = { version = "2", features = ["protocol-asset", "image-png"] }

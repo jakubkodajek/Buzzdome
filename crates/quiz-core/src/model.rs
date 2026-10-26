@@ -10,6 +10,7 @@ use crate::settings::QuizSettings;
 use crate::style::SlideStyle;
 use crate::text::file_key;
 use crate::theme::is_theme_id;
+use schemars::JsonSchema;
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::hash_map::Entry;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
@@ -50,10 +51,11 @@ pub const MAX_TIME_LIMIT_S: u32 = 3_600;
 /// The share of a question's points a fully correct answer gives, in percent.
 pub const FULL_SHARE: u8 = 100;
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
 #[ts(export)]
 #[serde(rename_all = "camelCase")]
 pub struct Quiz {
+    #[schemars(range(min = 1, max = SCHEMA_VERSION))]
     pub schema_version: u32,
     pub title: String,
     /// Id of the look the screens use (spec section 5.2); the app's default
@@ -67,6 +69,7 @@ pub struct Quiz {
     pub categories: Vec<Category>,
     /// How the show runs (spec QZ-11). Left out when every setting is its default.
     #[serde(default, skip_serializing_if = "QuizSettings::is_default", with = "crate::style::lenient_or_default")]
+    #[schemars(with = "QuizSettings")]
     #[ts(as = "Option<QuizSettings>", optional)]
     pub settings: QuizSettings,
 }
@@ -80,7 +83,7 @@ fn theme_id_or_none<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Option
     Ok(value.as_ref().and_then(serde_json::Value::as_str).filter(|id| is_theme_id(id)).map(str::to_owned))
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
 #[ts(export)]
 #[serde(rename_all = "camelCase")]
 pub struct Slide {
@@ -97,10 +100,12 @@ pub struct Slide {
     pub sound: Option<SoundClip>,
     /// Picture or video behind the slide; the theme's otherwise.
     #[serde(default, with = "crate::media::background_any_version")]
+    #[schemars(with = "Option<Background>")]
     #[ts(as = "Option<Background>")]
     pub background: Option<Background>,
     /// Colours, gradients and fonts over the theme's.
     #[serde(default, skip_serializing_if = "SlideStyle::is_empty", with = "crate::style::lenient_or_default")]
+    #[schemars(with = "SlideStyle")]
     #[ts(as = "SlideStyle")]
     pub style: SlideStyle,
     /// Id of the category whose look the slide last took on (`Quiz::categories`).
@@ -228,7 +233,7 @@ impl Slide {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
 #[ts(export)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum SlideContent {
@@ -309,7 +314,7 @@ impl SlideType {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS, JsonSchema)]
 #[ts(export)]
 #[serde(rename_all = "camelCase")]
 pub enum AnswerMode {
@@ -340,7 +345,7 @@ impl AnswerMode {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
 #[ts(export)]
 #[serde(rename_all = "camelCase")]
 pub struct Question {
@@ -373,7 +378,7 @@ pub struct Question {
 /// are for everyone-answers questions: on a fastest finger question the
 /// quizmaster judges what was said, not which answer it was, so a right
 /// one gives all of the points.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS, JsonSchema)]
 #[ts(export)]
 #[serde(rename_all = "camelCase")]
 pub struct CorrectAnswer {

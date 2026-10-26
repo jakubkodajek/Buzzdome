@@ -2,6 +2,7 @@
 //! the windows see it and drives the buzzer lights. `app_windows` keeps the
 //! Director and projector windows.
 
+mod ai;
 mod app_file;
 mod app_icon;
 mod app_log;
@@ -584,6 +585,8 @@ pub(crate) fn play_press(app: &AppHandle, press: Press, at_ms: u64) -> bool {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let context = tauri::generate_context!();
+    ai::serve_mcp_if_asked(&context.package_info().version.to_string());
     let builder = tauri::Builder::default()
         // First, so a second start ends before it touches the show: it brings
         // the running app's Director forward instead.
@@ -688,6 +691,8 @@ pub fn run() {
             editor::editor_export_sheet,
             editor::editor_close,
             editor_test_run,
+            ai::ai_save_skill,
+            ai::ai_connect_claude,
             hardware::receiver_info,
             hardware::receiver_devices,
             hardware::receiver_select,
@@ -698,7 +703,7 @@ pub fn run() {
             hardware::receiver_export_log,
             hardware::receiver_udev_rule,
         ])
-        .run(tauri::generate_context!())
+        .run(context)
         .expect("error while running tauri application");
 }
 

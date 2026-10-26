@@ -54,6 +54,8 @@ const COMMANDS: &[&str] = &[
     "editor_export_sheet",
     "editor_close",
     "editor_test_run",
+    "ai_save_skill",
+    "ai_connect_claude",
     "receiver_info",
     "receiver_devices",
     "receiver_select",

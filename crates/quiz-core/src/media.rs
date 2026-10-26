@@ -1,6 +1,7 @@
 //! Media a quiz uses: pictures, sounds and videos stored in the quiz file's
 //! `media/` folder and referenced from slides as `media/<name>`.
 
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
@@ -134,7 +135,7 @@ pub fn check_reference(reference: &str, kinds: &[MediaKind]) -> Result<(), Media
     Err(MediaIssue::WrongType { expected: kinds.to_vec() })
 }
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS, JsonSchema)]
 #[ts(export)]
 #[serde(rename_all = "camelCase")]
 pub enum SoundStart {
@@ -154,7 +155,7 @@ pub const MAX_GAIN_DB: i32 = 20;
 
 /// A stretch of a media file, in milliseconds from its start. The default is
 /// the whole file.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS, JsonSchema)]
 #[ts(export)]
 #[serde(rename_all = "camelCase")]
 pub struct Span {
@@ -173,7 +174,7 @@ impl Span {
 }
 
 /// A sound that belongs to a slide (a music question, a jingle).
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
 #[ts(export)]
 #[serde(rename_all = "camelCase")]
 pub struct SoundClip {
@@ -207,7 +208,7 @@ impl SoundClip {
 
 /// The part of a question's sound played again once its answer is revealed,
 /// such as the chorus of the song the players had to name.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS, JsonSchema)]
 #[ts(export)]
 #[serde(rename_all = "camelCase")]
 pub struct Replay {
@@ -234,7 +235,7 @@ pub const MAX_REPLAY_DELAY_MS: u32 = 60_000;
 /// A change to a question's video that is strongest when the question
 /// starts and clears as its answer time runs out, so the players see more
 /// the longer they wait.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS, JsonSchema)]
 #[ts(export)]
 #[serde(rename_all = "camelCase")]
 pub enum VideoEffect {
@@ -245,7 +246,7 @@ pub enum VideoEffect {
 
 /// A video shown on a slide in place of a picture. It pauses and goes on
 /// with the show (`Game::on_hold`).
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
 #[ts(export)]
 #[serde(rename_all = "camelCase")]
 pub struct VideoClip {
@@ -351,7 +352,7 @@ pub(crate) const BACKGROUND_KINDS: &[MediaKind] = &[MediaKind::Image, MediaKind:
 
 /// A picture or video behind a slide's content, in place of the theme's
 /// (spec section 5). The options apply to videos only.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS, JsonSchema)]
 #[ts(export)]
 #[serde(rename_all = "camelCase")]
 pub struct Background {

@@ -824,6 +824,55 @@ packages users will install are read the same way.
   file was written writes it a quarter second later, with whatever volume
   the drag has come to by then, and the steps meanwhile write nothing.
 
+### 1.7 AI assistants
+
+How it is used: [`ai-assistants.md`](ai-assistants.md) (spec QZ-12).
+`crates/quiz-ai` gives assistants the quiz format and the app's checks,
+and has no rules of its own: what it accepts is what `quiz_file` and
+`Quiz::validate` accept.
+
+- **Schema.** `quiz_schema()` is `schemars::schema_for!(Quiz)`: the quiz
+  model's types derive `JsonSchema` beside `Serialize` and `TS`, so the
+  schema follows every change to them, with their doc comments as
+  descriptions. A field read through a `with` module (lenient styles, the
+  old background form) says which type it takes (`#[schemars(with)]`);
+  ranges are given where the type enforces them (`TextSize`,
+  `Transparency`, `schemaVersion`). Rules that relate fields stay in
+  `Quiz::validate` and `quiz-format.md`.
+- **Workbench.** `workbench` is what an assistant does with a quiz folder
+  (`quiz.json` and `media/`, which the app opens as it is): `write_quiz`
+  reads the JSON as a file would be read (`Quiz::read_json`, so what does
+  not fit is left out and said), `add_media` copies through
+  `quiz_file::import_media`, `check` lists `quiz_file::problems`, `pack`
+  is `quiz_file::save`, and `unpack` is `quiz_file::open_into`. The MCP
+  tools and the `buzzdome-quiz` command line are thin layers over it.
+- **MCP server.** `mcp::serve` reads JSON-RPC 2.0 messages, one per line,
+  from standard input and answers on standard output: `initialize` (the
+  client's protocol version when it is one of `PROTOCOL_VERSIONS`), `ping`,
+  `tools/list` and `tools/call`. Written by hand rather than with an SDK:
+  nine tools, no notifications of its own and no async runtime. A tool's
+  failure is a result with `isError` for the assistant to act on; only an
+  unknown method or tool is a protocol error. Paths must be absolute. The
+  app serves it when started with `--mcp`: `ai::serve_mcp_if_asked` runs
+  first in `run`, before the single-instance plugin and any window, so it
+  neither shows the running app nor touches its show, and ends the process
+  when the assistant closes its input. On Windows the release build is a
+  GUI program; standard input and output work all the same when the parent
+  passes pipes, as the sheet reader (`sheet_reader.rs`) relies on too.
+- **Claude Desktop.** `claude_desktop::connect` adds
+  `mcpServers.buzzdome = { command: <the app>, args: ["--mcp"] }` to
+  Claude Desktop's `claude_desktop_config.json` and keeps the rest (keys
+  may come out in another order). It refuses a file that is not a JSON
+  object, so nothing of the user's is lost, and makes no folder: without
+  Claude's folder, Claude Desktop is not installed.
+- **Skill.** `skill::write` zips `SKILL.md` and `make_quiz.py` (both in
+  `crates/quiz-ai/src/skill/`), `docs/quiz-format.md` and the schema into
+  one folder, as Claude takes a skill. The script is for the assistants'
+  sandboxes, which cannot run this app: standard library only, a JSON
+  Schema checker for the parts the schema uses, media present, and the
+  ZIP written as `quiz_file::save` writes it. Its tests run it with Python
+  and open what it wrote with `workbench::check`.
+
 ## 2. Buzzer link
 
 ### 2.1 Layers

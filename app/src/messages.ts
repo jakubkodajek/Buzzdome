@@ -6,7 +6,7 @@ import { buttonLabel } from "./answers";
 import { MEDIA_EXTENSIONS } from "./bindings/MediaExtensions";
 import type { StringKey, Translate } from "./i18n";
 import { mediaFileName } from "./media";
-import type { AppError, FileAction, ImportIssue, MediaIssue, MediaKind, Place, Problem, ProtocolKind, ReceiverProblem, SettingsLost } from "./types";
+import type { AppError, ClaudeConnection, FileAction, ImportIssue, MediaIssue, MediaKind, Place, Problem, ProtocolKind, ReceiverProblem, SettingsLost } from "./types";
 
 type Params = Record<string, string | number>;
 
@@ -56,6 +56,8 @@ const ERROR_KEYS: Record<Exclude<AppError["code"], WordedApart>, StringKey> = {
   spreadsheetTooComplex: "errSpreadsheetTooComplex",
   spreadsheetReaderFailed: "errSpreadsheetReaderFailed",
   noQuestionColumn: "errNoQuestionColumn",
+  claudeDesktopMissing: "errClaudeDesktopMissing",
+  claudeConfigUnreadable: "errClaudeConfigUnreadable",
   notAMediaFile: "errNotAMediaFile",
   usbUnavailable: "errUsbUnavailable",
   usbListFailed: "errUsbListFailed",
@@ -284,4 +286,15 @@ export function placesText(t: Translate, places: Place[]): string {
   });
   const more = places.length - PLACES_SHOWN;
   return more > 0 ? `${parts.join("; ")} ${t("importMore", { n: more })}` : parts.join("; ");
+}
+
+const CLAUDE_CONNECTION_KEYS: Record<ClaudeConnection, StringKey> = {
+  added: "claudeConnected",
+  updated: "claudeReconnected",
+  unchanged: "claudeAlreadyConnected",
+};
+
+/** What connecting Claude Desktop changed, and what the quizmaster does next. */
+export function claudeConnectionText(t: Translate, connection: ClaudeConnection): string {
+  return t(CLAUDE_CONNECTION_KEYS[connection]);
 }

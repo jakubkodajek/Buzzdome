@@ -57,6 +57,12 @@ was moved or deleted.
 
 ## quiz.json
 
+Its JSON Schema is generated from the app's quiz model: `buzzdome-quiz
+schema` prints it (see [`ai-assistants.md`](ai-assistants.md)). The schema
+gives the shape of every field; the rules below that relate fields (a right
+answer within the answers, a media file that is there) are checked by the
+app.
+
 ```json
 {
   "schemaVersion": 5,

@@ -59,6 +59,7 @@ on `PATH` first (macOS dev machine).
 | UI preview in a browser (mocked backend) | `cd app && npm run dev`, then `/preview.html?window=host&scene=running` (scenes in `app/src/dev/preview.tsx`) |
 | nightly soak and E2E | CI: `.github/workflows/nightly.yml` every night main changed, and on "Run workflow" |
 | installers | CI: `.github/workflows/build.yml` on tags `v*` and "Run workflow"; artifacts `buzzdome-windows`, `buzzdome-macos`, `buzzdome-linux` |
+| quiz files for scripts and AI assistants (check, pack, unpack, schema, skill, MCP) | `cargo run -p quiz-ai -- <command>` (`docs/ai-assistants.md`) |
 | receiver probe (no app) | `cargo run -p buzzers --example hid-monitor [-- VID:PID]` |
 | build installer | `cd app && npm run tauri build` (each OS builds its own installer) |
 
@@ -66,12 +67,14 @@ Layout: `crates/quiz-core` (model, game state machine, scoring, view),
 `crates/show-sim` (random quizzes and shows for the soak tests),
 `crates/quiz-file` (`.quiz` files: ZIP with media, unpack cache, save;
 `sheet.rs` spreadsheet import and CSV export),
+`crates/quiz-ai` (quiz writing for AI assistants: the quiz JSON Schema, `workbench.rs` quiz folders,
+`mcp.rs` the MCP server, `skill.rs` the skill package, `claude_desktop.rs`, the `buzzdome-quiz` command line),
 `crates/buzzers` (driver trait, USB-HID receiver thread, protocols, learn mode, `clock.rs` show clock),
 `app/src-tauri` (Tauri shell, session journal, `show_thread.rs` and `pump.rs` the show thread and its
 event order, `app_windows.rs` the Director and projector windows, `app_log.rs` the log file, `editor.rs` draft, `sheet_reader.rs` spreadsheet reader process, `hardware.rs` receiver setup,
 `teams.rs` prepared team names, `media_player.rs` media library, player, volume and sound board,
 `themes.rs` built-in themes, `fonts.rs` installed fonts, `app_file.rs` settings files,
-`app_icon.rs` the windows' icon colour),
+`app_icon.rs` the windows' icon colour, `ai.rs` `--mcp` and File › AI assistants),
 `app/src` (React UI: `director/`, `host/`, `editor/`; `browser-guard.ts` and `error-boundary.tsx`
 keep the windows from acting as a browser or going blank), `app/e2e` (E2E tests through WebDriver),
 `samples/demo-quiz.json`.
@@ -123,7 +126,7 @@ UI conventions (keep one way of doing each thing):
 - `ROADMAP.md`: phases, milestones and what is done.
 - `docs/specification.md`: requirements with IDs (buzzer link, themes, plugins).
   `docs/design.md`: architecture, buzzer stack. `docs/quiz-format.md`: the quiz
-  file format. `docs/hardware-test.md`:
+  file format. `docs/ai-assistants.md`: quizzes written by AI assistants. `docs/hardware-test.md`:
   checklist for the real receiver. Jakub keeps a copy of the reference manual
   in `docs/` locally; it is gitignored and must never be committed.
 - `replica/recon.md`: screens (S01..S42), flows (F01..F10), components, data model and

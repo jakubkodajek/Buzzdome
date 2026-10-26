@@ -9,5 +9,6 @@ serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 ts-rs.workspace = true
+schemars.workspace = true
 # Names compare alike however their accents are encoded (`text::name_key`).
 unicode-normalization = "0.1.24"

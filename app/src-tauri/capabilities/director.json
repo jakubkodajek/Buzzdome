@@ -58,6 +58,8 @@
     "allow-editor-export-sheet",
     "allow-editor-close",
     "allow-editor-test-run",
+    "allow-ai-save-skill",
+    "allow-ai-connect-claude",
     "allow-receiver-info",
     "allow-receiver-devices",
     "allow-receiver-select",

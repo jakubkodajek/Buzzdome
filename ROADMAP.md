@@ -64,6 +64,7 @@ Status keys: `[x]` done, `[~]` in progress, `[ ]` not started.
 - [x] Colour, gradient and font pickers with per-slide styles (QZ-9): docs gap item 7
 - [x] Several right answers per question, each with a share of the points: quiz format v5
 - [x] Categories with a background video, applied from the Design tab and named by a spreadsheet's `CAT` (QZ-10): docs gap item 6
+- [x] Quizzes written by AI assistants: MCP server for Claude Desktop, skill package for chat assistants, `buzzdome-quiz` command line (QZ-12)
 - [ ] Show settings: team names, sounds, welcome screen, end-of-question actions
 
 ### M4: Show polish (week 3-4)

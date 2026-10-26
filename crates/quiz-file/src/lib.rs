@@ -262,7 +262,7 @@ pub fn read_quiz_json(root: &Path) -> Result<Quiz> {
 }
 
 /// `read_quiz_json`, with what reading left out.
-fn read_quiz(root: &Path) -> Result<ReadQuiz> {
+pub fn read_quiz(root: &Path) -> Result<ReadQuiz> {
     let json = read_json(&root.join(QUIZ_JSON)).map_err(|e| match e {
         QuizFileError::Io { source, .. } if source.kind() == io::ErrorKind::NotFound => QuizFileError::MissingQuizJson,
         e => e,

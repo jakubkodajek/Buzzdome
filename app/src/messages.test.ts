@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { translator } from "./i18n";
-import { awaitsAnswer, errorText, importIssueText, placesText, problemText, protocolText, receiverProblemText, settingsLostText, thrownText } from "./messages";
+import { awaitsAnswer, claudeConnectionText, errorText, importIssueText, placesText, problemText, protocolText, receiverProblemText, settingsLostText, thrownText } from "./messages";
 
 const cs = translator("cs");
 const en = translator("en");
@@ -108,5 +108,17 @@ describe("receiver texts", () => {
     expect(settingsLostText(en, { detail: "in use", keptAs: null })).toBe(
       "in use The file was left as it is and is not written over until the app starts again.",
     );
+  });
+});
+
+describe("claudeConnectionText", () => {
+  it("tells the quizmaster to start Claude Desktop again only when its settings changed", () => {
+    expect(claudeConnectionText(en, "added")).toContain("Close it and open it again");
+    expect(claudeConnectionText(cs, "updated")).toContain("Zavřete ho a otevřete znovu");
+    expect(claudeConnectionText(en, "unchanged")).toBe("Claude Desktop is connected to this app already.");
+  });
+
+  it("names the settings file it left as it was", () => {
+    expect(errorText(en, { code: "claudeConfigUnreadable", path: "C:\\c.json" })).toBe("Claude Desktop's settings (C:\\c.json) cannot be read, so they were left as they are.");
   });
 });

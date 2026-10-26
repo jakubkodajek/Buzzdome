@@ -7,6 +7,7 @@ use crate::media::{check_reference, Background, BACKGROUND_KINDS};
 use crate::model::Problem;
 use crate::style::SlideStyle;
 use crate::text::name_key;
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use ts_rs::TS;
@@ -16,7 +17,7 @@ pub const MAX_CATEGORY_NAME_CHARS: usize = 40;
 /// Longest category id, in characters; the editor makes ones like `c-k3x9q2ab`.
 pub const MAX_CATEGORY_ID_CHARS: usize = 64;
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
 #[ts(export)]
 #[serde(rename_all = "camelCase")]
 pub struct Category {
@@ -25,10 +26,12 @@ pub struct Category {
     pub name: String,
     /// Picture or video behind the slides.
     #[serde(default, with = "crate::media::background_any_version")]
+    #[schemars(with = "Option<Background>")]
     #[ts(as = "Option<Background>")]
     pub background: Option<Background>,
     /// Colours, gradients and fonts over the theme's.
     #[serde(default, skip_serializing_if = "SlideStyle::is_empty", with = "crate::style::lenient_or_default")]
+    #[schemars(with = "SlideStyle")]
     #[ts(as = "SlideStyle")]
     pub style: SlideStyle,
 }
