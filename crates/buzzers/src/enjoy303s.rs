@@ -19,6 +19,7 @@ use crate::hid::{DeviceInfo, Report};
 use crate::protocol::{Protocol, ProtocolKind};
 use crate::Press;
 use quiz_core::{BuzzerId, BuzzerMode, Button, Light};
+use std::collections::BTreeMap;
 
 pub const VENDOR_ID: u16 = 0x10c4;
 pub const PRODUCT_ID: u16 = 0x1819;
@@ -34,6 +35,11 @@ const FROM_RECEIVER: [u8; 2] = [0x27, 0xa5];
 const CONNECTED: u8 = 0x10;
 const OPENED: u8 = 0x12;
 const PRESS: u8 = 0x32;
+
+/// Each button's code, in the high four bits of a press message's button byte.
+/// The big button sends 5 (hardware test, 2026-10-25), which the guide
+/// gives for key E of the vendor's keypads; a buzzer has no other key.
+const BUTTON_CODES: [(Button, u8); 5] = [(Button::A, 1), (Button::B, 2), (Button::C, 3), (Button::D, 4), (Button::Big, 5)];
 
 /// How long a set-up step waits for the receiver's answer before it is
 /// asked again: the vendor's SDK waits 200 ms for one.
@@ -79,6 +85,11 @@ fn colour_of(light: Light) -> u8 {
     }
 }
 
+/// The light a colour byte shows, if the app sets it.
+fn light_of(colour: u8) -> Option<Light> {
+    Light::ALL.into_iter().find(|&light| colour_of(light) == colour)
+}
+
 /// Where a buzzer's colour is kept: none for a buzzer the receiver does not take.
 fn slot(buzzer: BuzzerId) -> Option<usize> {
     (1..=MAX_BUZZER).contains(&buzzer).then(|| usize::from(buzzer - 1))
@@ -100,22 +111,47 @@ enum Order {
     PaintAll(u8),
 }
 
+/// The first payload byte of each order.
+const CONNECT: u8 = 0x10;
+const TAKE_BUZZERS: u8 = 0x14;
+const OPEN: u8 = 0x12;
+const START: u8 = 0x85;
+const PAINT: u8 = 0x2d;
+const PAINT_ALL: u8 = 0x74;
+
 impl Order {
-    fn reports(self) -> Vec<Report> {
-        let payload = match self {
-            Order::Connect => vec![0x10, 0x00],
-            Order::TakeBuzzers => vec![0x14, MAX_BUZZER as u8 - 1],
-            Order::Open => vec![0x12, 0x00],
-            Order::Start => vec![0x85],
-            Order::Paint(slot, colour) => vec![0x2d, slot as u8 % 4, slot as u8 / 4, colour],
-            Order::PaintAll(colour) => vec![0x74, colour],
-        };
-        let mut message = TO_RECEIVER.to_vec();
-        message.push(payload.len() as u8);
-        message.extend(&payload);
-        message.push(xor(&payload));
-        cp2110::send(&message)
+    fn payload(self) -> Vec<u8> {
+        match self {
+            Order::Connect => vec![CONNECT, 0x00],
+            Order::TakeBuzzers => vec![TAKE_BUZZERS, MAX_BUZZER as u8 - 1],
+            Order::Open => vec![OPEN, 0x00],
+            Order::Start => vec![START],
+            Order::Paint(slot, colour) => vec![PAINT, slot as u8 % 4, slot as u8 / 4, colour],
+            Order::PaintAll(colour) => vec![PAINT_ALL, colour],
+        }
     }
+
+    /// The order in `payload`, as the receiver reads it.
+    fn read(payload: &[u8]) -> Option<Order> {
+        Some(match *payload {
+            [CONNECT, 0x00] => Order::Connect,
+            [TAKE_BUZZERS, last] if last == MAX_BUZZER as u8 - 1 => Order::TakeBuzzers,
+            [OPEN, 0x00] => Order::Open,
+            [START] => Order::Start,
+            [PAINT, low, high, colour] => Order::Paint(usize::from(high) * 4 + usize::from(low), colour),
+            [PAINT_ALL, colour] => Order::PaintAll(colour),
+            _ => return None,
+        })
+    }
+
+    fn reports(self) -> Vec<Report> {
+        cp2110::send(&frame(TO_RECEIVER, &self.payload()))
+    }
+}
+
+/// A message: its `header`, the payload's length, the payload and its check byte.
+fn frame(header: [u8; 2], payload: &[u8]) -> Vec<u8> {
+    [&header[..], &[payload.len() as u8], payload, &[xor(payload)]].concat()
 }
 
 fn xor(bytes: &[u8]) -> u8 {
@@ -132,8 +168,9 @@ enum Parsed<'a> {
     Noise,
 }
 
-fn parse(bytes: &[u8]) -> Parsed<'_> {
-    if !FROM_RECEIVER.starts_with(&bytes[..bytes.len().min(2)]) {
+/// What `bytes` start with, for messages that begin with `header`.
+fn parse(header: [u8; 2], bytes: &[u8]) -> Parsed<'_> {
+    if !header.starts_with(&bytes[..bytes.len().min(2)]) {
         return Parsed::Noise;
     }
     let Some(&count) = bytes.get(2) else { return Parsed::Incomplete };
@@ -144,6 +181,32 @@ fn parse(bytes: &[u8]) -> Parsed<'_> {
     let Some(&check) = bytes.get(3 + count) else { return Parsed::Incomplete };
     let payload = &bytes[3..3 + count];
     if check == xor(payload) { Parsed::Message { payload, len: count + 4 } } else { Parsed::Noise }
+}
+
+/// The payloads of the messages beginning with `header` in `bytes`, after
+/// what earlier bytes left of one in `pending`, which keeps what is left
+/// now. Noise is skipped a byte at a time until messages line up again; so
+/// is the start of a message that cannot be whole when a whole message
+/// follows it, so a spoiled header holds up no message behind it.
+fn messages(header: [u8; 2], pending: &mut Vec<u8>, bytes: &[u8]) -> Vec<Vec<u8>> {
+    pending.extend_from_slice(bytes);
+    let mut payloads = Vec::new();
+    let mut at = 0;
+    while at < pending.len() {
+        match parse(header, &pending[at..]) {
+            Parsed::Message { payload, len } => {
+                payloads.push(payload.to_vec());
+                at += len;
+            }
+            Parsed::Noise => at += 1,
+            Parsed::Incomplete => match (at + 1..pending.len()).find(|&i| matches!(parse(header, &pending[i..]), Parsed::Message { .. })) {
+                Some(next) => at = next,
+                None => break,
+            },
+        }
+    }
+    pending.drain(..at);
+    payloads
 }
 
 /// How far the receiver is set up since the cable connected.
@@ -270,18 +333,8 @@ impl Enjoy303s {
         let [_, radio_id, code, shown, t0, t1, t2, ..] = *payload else { return None };
         let buzzer = BuzzerId::from(radio_id) + 1;
         slot(buzzer)?;
-        // The big button sends 5 (hardware test, 2026-10-25), which the
-        // guide gives for key E of the vendor's keypads; a buzzer has no
-        // other key. Any other code is no press, so nothing unknown ever
-        // buzzes.
-        let button = match code >> 4 {
-            1 => Button::A,
-            2 => Button::B,
-            3 => Button::C,
-            4 => Button::D,
-            5 => Button::Big,
-            _ => return None,
-        };
+        // Any other code is no press, so nothing unknown ever buzzes.
+        let &(button, _) = BUTTON_CODES.iter().find(|&&(_, c)| c == code >> 4)?;
         let press = Press::timed(buzzer, button, u32::from_le_bytes([t0, t1, t2, 0]));
         let judged = matches!(self.mode, BuzzerMode::FastestFinger | BuzzerMode::Buzzed);
         if judged && NOT_READY.iter().any(|&c| rgb(c) == rgb(shown)) {
@@ -359,29 +412,10 @@ impl Protocol for Enjoy303s {
     }
 
     /// Reads the messages in `report`, with what earlier reports left of
-    /// one. Noise is skipped a byte at a time until messages line up again;
-    /// so is the start of a message that cannot be whole when a whole
-    /// message follows it, so a spoiled header holds up no press.
+    /// one (`messages`).
     fn decode(&mut self, report: &[u8]) -> Vec<Press> {
-        self.pending.extend_from_slice(cp2110::received(report));
-        let pending = std::mem::take(&mut self.pending);
-        let mut presses = Vec::new();
-        let mut at = 0;
-        while at < pending.len() {
-            match parse(&pending[at..]) {
-                Parsed::Message { payload, len } => {
-                    presses.extend(self.read(payload));
-                    at += len;
-                }
-                Parsed::Noise => at += 1,
-                Parsed::Incomplete => match (at + 1..pending.len()).find(|&i| matches!(parse(&pending[i..]), Parsed::Message { .. })) {
-                    Some(next) => at = next,
-                    None => break,
-                },
-            }
-        }
-        self.pending = pending[at..].to_vec();
-        presses
+        let payloads = messages(FROM_RECEIVER, &mut self.pending, cp2110::received(report));
+        payloads.iter().filter_map(|payload| self.read(payload)).collect()
     }
 
     fn init_reports(&self) -> Vec<Report> {
@@ -442,6 +476,87 @@ impl Protocol for Enjoy303s {
     }
 }
 
+/// A receiver as the app meets it through the cable, for the fake receiver
+/// (`fake_receiver`): it answers the set-up, keeps the colour each buzzer
+/// was told to show, and sends presses as the real one does, with that
+/// colour. Bytes are those of the serial line, without the cable's reports.
+#[derive(Debug)]
+pub(crate) struct SimulatedReceiver {
+    /// Bytes heard and not yet read as a message.
+    pending: Vec<u8>,
+    /// The colour each buzzer shows, by slot: none until told.
+    shown: [Option<u8>; BUZZERS],
+    /// Bytes to send, in order.
+    out: Vec<u8>,
+}
+
+impl Default for SimulatedReceiver {
+    fn default() -> Self {
+        SimulatedReceiver { pending: Vec::new(), shown: [None; BUZZERS], out: Vec::new() }
+    }
+}
+
+impl SimulatedReceiver {
+    /// Reads what the app sent, answers it, and returns the buzzers it
+    /// coloured anew, with the light each shows: none for a colour the app
+    /// never sets.
+    pub(crate) fn hear(&mut self, bytes: &[u8]) -> Vec<(BuzzerId, Option<Light>)> {
+        let mut changed = BTreeMap::new();
+        for payload in messages(TO_RECEIVER, &mut self.pending, bytes) {
+            let painted = match Order::read(&payload) {
+                Some(Order::Connect) => {
+                    self.out.extend(frame(FROM_RECEIVER, &[CONNECTED, 0x00]));
+                    vec![]
+                }
+                Some(Order::Open) => {
+                    self.out.extend(frame(FROM_RECEIVER, &[OPENED, 0x01]));
+                    vec![]
+                }
+                Some(Order::Paint(slot, colour)) if slot < BUZZERS => vec![(slot, colour)],
+                Some(Order::PaintAll(colour)) => (0..BUZZERS).map(|slot| (slot, colour)).collect(),
+                _ => vec![],
+            };
+            for (slot, colour) in painted {
+                if self.shown[slot].replace(colour) != Some(colour) {
+                    changed.insert(slot as BuzzerId + 1, light_of(colour));
+                }
+            }
+        }
+        changed.into_iter().collect()
+    }
+
+    /// Sends `press` as the receiver does: with the colour its buzzer shows
+    /// and the low three bytes of its timer. A buzzer the receiver does not
+    /// take sends nothing.
+    pub(crate) fn press(&mut self, press: Press) {
+        let Some(slot) = slot(press.buzzer) else { return };
+        let Some(&(_, code)) = BUTTON_CODES.iter().find(|&&(button, _)| button == press.button) else { return };
+        let [t0, t1, t2, _] = press.timer.unwrap_or(0).to_le_bytes();
+        let shown = self.shown[slot].unwrap_or(OFF);
+        self.out.extend(frame(FROM_RECEIVER, &[PRESS, slot as u8, code << 4, shown, t0, t1, t2, 0, 0, 0]));
+    }
+
+    /// Sends `bytes` as they are, such as a spoiled message.
+    pub(crate) fn send_raw(&mut self, bytes: &[u8]) {
+        self.out.extend_from_slice(bytes);
+    }
+
+    /// Drops what waits to be sent, as the cable's purge does.
+    pub(crate) fn purge(&mut self) {
+        self.out.clear();
+    }
+
+    /// Whether bytes wait to be sent.
+    pub(crate) fn has_sent(&self) -> bool {
+        !self.out.is_empty()
+    }
+
+    /// Takes up to `max` of the bytes waiting to be sent.
+    pub(crate) fn take_sent(&mut self, max: usize) -> Vec<u8> {
+        self.out.drain(..max.min(self.out.len())).collect()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -464,7 +579,7 @@ mod tests {
 
     /// A message from the receiver with `payload`.
     fn message(payload: &[u8]) -> Vec<u8> {
-        [&FROM_RECEIVER[..], &[payload.len() as u8], payload, &[xor(payload)]].concat()
+        frame(FROM_RECEIVER, payload)
     }
 
     fn press_message(radio_id: u8, code: u8, shown: u8, timer: u32) -> Vec<u8> {
@@ -782,6 +897,69 @@ mod tests {
         assert_eq!(p.decode(&input(&a)), [Press::timed(1, Button::A, 1)], "lined up again");
         // A report that is not data carries no bytes.
         assert!(p.decode(&[0x50, 0x27, 0xa5]).is_empty());
+    }
+
+    #[test]
+    fn orders_read_back_as_written() {
+        let orders = [Order::Connect, Order::TakeBuzzers, Order::Open, Order::Start, Order::Paint(5, FIRST), Order::Paint(63, WRONG), Order::PaintAll(LOCKED)];
+        for order in orders {
+            assert_eq!(Order::read(&order.payload()), Some(order), "{order:?}");
+        }
+        assert_eq!(Order::read(&[PAINT_ALL]), None);
+        assert_eq!(Order::read(&[TAKE_BUZZERS, 0x07]), None, "not every buzzer");
+    }
+
+    /// The buzzers `receiver` shows anew after the output reports among `reports`.
+    fn hear(receiver: &mut SimulatedReceiver, reports: &[Report]) -> BTreeMap<BuzzerId, Option<Light>> {
+        serial(&reports.iter().filter(|r| matches!(r, Report::Output(_))).cloned().collect::<Vec<_>>())
+            .iter()
+            .flat_map(|bytes| receiver.hear(bytes))
+            .collect()
+    }
+
+    /// What `p` reads of all `receiver` sent, in reports as the cable makes them.
+    fn listen(p: &mut Enjoy303s, receiver: &mut SimulatedReceiver) -> Vec<Press> {
+        let mut presses = Vec::new();
+        loop {
+            let bytes = receiver.take_sent(cp2110::MAX_DATA);
+            if bytes.is_empty() {
+                return presses;
+            }
+            presses.extend(p.decode(&input(&bytes)));
+        }
+    }
+
+    #[test]
+    fn the_simulated_receiver_answers_the_set_up_and_shows_what_it_is_told() {
+        let mut p = Enjoy303s::default();
+        let mut receiver = SimulatedReceiver::default();
+        assert!(hear(&mut receiver, &p.init_reports()).is_empty());
+        listen(&mut p, &mut receiver);
+        assert!(hear(&mut receiver, &p.follow_up(0)).is_empty(), "takes the buzzers and opens");
+        listen(&mut p, &mut receiver);
+        assert_eq!(p.kind(), ProtocolKind::Enjoy303s { answered: true });
+        let dark = hear(&mut receiver, &p.follow_up(0));
+        assert_eq!(dark, (1..=MAX_BUZZER).map(|b| (b, Some(Light::Off))).collect());
+
+        // Ready for two goes to every buzzer at once, as on the hardware.
+        let lit = hear(&mut receiver, &p.encode_lights(&[(1, Light::Ready), (2, Light::Ready), (3, Light::Locked)]));
+        assert_eq!(lit.len(), BUZZERS);
+        assert_eq!((lit[&3], lit[&64]), (Some(Light::Locked), Some(Light::Ready)));
+        assert_eq!(hear(&mut receiver, &p.encode_lights(&[(1, Light::First)])), [(1, Some(Light::First))].into());
+
+        // Presses carry the colour their buzzer shows and their timer.
+        p.encode_mode(BuzzerMode::FastestFinger);
+        receiver.press(Press::timed(2, Button::Big, 0x01_02_03));
+        receiver.press(Press::timed(3, Button::Big, 40));
+        assert_eq!(listen(&mut p, &mut receiver), [Press::timed(2, Button::Big, 0x01_02_03)]);
+        assert_eq!(p.take_dropped(), [Press::timed(3, Button::Big, 40)], "locked out");
+        receiver.press(Press::timed(65, Button::A, 1));
+        receiver.send_raw(&[0x27, 0xa5, 0x01]);
+        receiver.press(Press::new(9, Button::D));
+        assert_eq!(listen(&mut p, &mut receiver), [Press::timed(9, Button::D, 0)], "nothing from buzzer 65, noise skipped");
+        receiver.press(Press::new(9, Button::D));
+        receiver.purge();
+        assert!(listen(&mut p, &mut receiver).is_empty());
     }
 
     #[test]

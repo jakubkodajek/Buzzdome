@@ -8,6 +8,7 @@
 use buzzers::clock::ShowClock;
 use buzzers::hid::{udev_rule, DeviceInfo, DeviceSelector, HidBackend};
 use buzzers::hidapi_backend::HidapiBackend;
+use buzzers::DriverError;
 use crate::app_file::{AppFile, SettingsLost};
 use crate::dialogs::{self, Picker};
 use crate::error::{AppError, CmdResult};
@@ -97,7 +98,7 @@ struct PressEvent {
 }
 
 pub struct Hardware {
-    backend: Option<Arc<HidapiBackend>>,
+    backend: Option<Arc<dyn HidBackend>>,
     handle: Option<ReceiverHandle>,
     init_error: Option<String>,
     settings: Arc<Mutex<ReceiverSettings>>,
@@ -109,6 +110,17 @@ pub struct Hardware {
     raw_log: Mutex<VecDeque<RawReport>>,
     /// The buzzers heard since the receiver connected.
     seen: Mutex<BTreeMap<BuzzerId, BuzzerSeen>>,
+}
+
+/// The system's USB-HID, or in a debug build whose environment names an
+/// end-to-end test's address (`fake_receiver::ENV`), a fake 303S receiver
+/// that test plugs in and presses (`buzzers::fake_receiver`).
+fn usb_backend() -> Result<Arc<dyn HidBackend>, DriverError> {
+    #[cfg(debug_assertions)]
+    if let Ok(address) = std::env::var(buzzers::fake_receiver::ENV) {
+        return Ok(Arc::new(buzzers::fake_receiver::FakeReceiver::connect(address)));
+    }
+    Ok(Arc::new(HidapiBackend::new()?))
 }
 
 impl Hardware {
@@ -123,8 +135,8 @@ impl Hardware {
         let remembered = choice(settings.receiver.clone());
         let settings = Arc::new(Mutex::new(settings));
 
-        let backend = match HidapiBackend::new() {
-            Ok(b) => Arc::new(b),
+        let backend = match usb_backend() {
+            Ok(b) => b,
             Err(e) => return Hardware::without_usb(settings_file, settings, Some(e.to_string())),
         };
 

@@ -13,12 +13,10 @@ hidapi = ["dep:hidapi"]
 [dependencies]
 quiz-core = { path = "../quiz-core" }
 serde.workspace = true
+serde_json.workspace = true
 thiserror.workspace = true
 ts-rs.workspace = true
 hidapi = { version = "2.6", optional = true }
-
-[dev-dependencies]
-serde_json.workspace = true
 
 [[example]]
 name = "hid-monitor"
