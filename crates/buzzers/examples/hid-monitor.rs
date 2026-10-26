@@ -82,7 +82,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if cycle {
         let handle = handle.clone();
         std::thread::spawn(move || {
-            let lights = [Light::Off, Light::Ready, Light::Locked, Light::First, Light::Correct, Light::Wrong];
+            let lights = Light::ALL;
             for (light, next) in lights.into_iter().zip(lights.into_iter().cycle().skip(1)).cycle() {
                 println!("{:>14}all buzzers: {light:?}", "");
                 light_all(&handle, light);

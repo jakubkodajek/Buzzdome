@@ -107,6 +107,11 @@ impl Light {
     pub const ALL: [Light; 6] = [Light::Off, Light::Ready, Light::Locked, Light::First, Light::Correct, Light::Wrong];
 }
 
+/// Stops compiling when a light is added: add it to `Light::ALL` too, then here.
+const _: fn(Light) = |light| match light {
+    Light::Off | Light::Ready | Light::Locked | Light::First | Light::Correct | Light::Wrong => {}
+};
+
 /// What the buzzers take in the current step, as a whole: for receivers
 /// that take presses only while told to, and to order fastest-finger
 /// presses by the buzzers' own timers. It follows from the same state as
