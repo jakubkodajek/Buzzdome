@@ -6,6 +6,7 @@
 use crate::app_file::AppFile;
 use crate::app_log;
 use crate::error::CmdResult;
+use crate::off_ui;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::Mutex;
@@ -54,7 +55,9 @@ struct IconFile {
 }
 
 pub struct AppIcon {
-    file: AppFile,
+    /// Held while the colour is written, so the last colour chosen is kept.
+    file: Mutex<AppFile>,
+    /// Never held while the disk works: windows read it as they open.
     color: Mutex<IconColor>,
 }
 
@@ -66,7 +69,7 @@ impl AppIcon {
         if let Some(lost) = file.lost() {
             app_log::note(&format!("app icon not read: {} (kept as {:?})", lost.detail, lost.kept_as));
         }
-        AppIcon { file, color: Mutex::new(saved.color) }
+        AppIcon { file: Mutex::new(file), color: Mutex::new(saved.color) }
     }
 
     pub fn color(&self) -> IconColor {
@@ -95,21 +98,26 @@ pub fn app_icon(state: State<AppIcon>) -> IconColor {
 }
 
 /// Keeps the icon in `color` for the next start, then gives it to every
-/// window. Kept first, so nothing shows a colour the next start would not
-/// have; a window that cannot take it keeps its icon and the rest change.
+/// window, off the windows' thread. Kept first, so nothing shows a colour
+/// the next start would not have; a window that cannot take it keeps its
+/// icon and the rest change.
 #[tauri::command]
-pub fn set_app_icon(app: AppHandle, state: State<AppIcon>, color: IconColor) -> CmdResult<()> {
+pub async fn set_app_icon(app: AppHandle, color: IconColor) -> CmdResult<()> {
     let image = color.image()?;
-    {
-        let mut kept = state.color.lock().unwrap();
-        state.file.store(&IconFile { color })?;
-        *kept = color;
-    }
-    for window in app.webview_windows().values() {
-        set_icon(window, image.clone());
-    }
-    let _ = app.emit("app-icon", color);
-    Ok(())
+    off_ui(move || {
+        let state = app.state::<AppIcon>();
+        {
+            let file = state.file.lock().unwrap();
+            file.store(&IconFile { color })?;
+            *state.color.lock().unwrap() = color;
+        }
+        for window in app.webview_windows().values() {
+            set_icon(window, image.clone());
+        }
+        let _ = app.emit("app-icon", color);
+        Ok(())
+    })
+    .await
 }
 
 #[cfg(test)]
@@ -130,7 +138,7 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join(ICON_FILE);
         assert_eq!(AppIcon::load(path.clone()).color(), IconColor::Orange);
-        AppIcon::load(path.clone()).file.store(&IconFile { color: IconColor::Purple }).unwrap();
+        AppIcon::load(path.clone()).file.lock().unwrap().store(&IconFile { color: IconColor::Purple }).unwrap();
         assert_eq!(AppIcon::load(path.clone()).color(), IconColor::Purple);
         // A colour this build does not know leaves the icon orange.
         std::fs::write(&path, r#"{"color": "pink"}"#).unwrap();

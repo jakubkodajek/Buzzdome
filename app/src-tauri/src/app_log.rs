@@ -20,8 +20,9 @@ const MAX_LOG_BYTES: u64 = 512 * 1024;
 /// The log folder, once known; one line is written at a time.
 static LOG_DIR: Mutex<Option<PathBuf>> = Mutex::new(None);
 
-/// Writes the log in `dir` from now on, panics included.
-pub fn start(dir: PathBuf) {
+/// Writes the log in `dir` from now on, panics included; the first line
+/// names the app's `version`.
+pub fn start(dir: PathBuf, version: &str) {
     *LOG_DIR.lock().unwrap_or_else(PoisonError::into_inner) = Some(dir);
     let previous = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
@@ -29,7 +30,7 @@ pub fn start(dir: PathBuf) {
         note(&format!("panic on thread {}: {info}\n{}", thread.name().unwrap_or("unnamed"), Backtrace::force_capture()));
         previous(info);
     }));
-    note(&format!("Buzzdome {} started", env!("CARGO_PKG_VERSION")));
+    note(&format!("Buzzdome {version} started"));
 }
 
 /// Writes `message` to the log, and to the console where there is one.
