@@ -106,10 +106,15 @@ describe("the Director", () => {
     await app.page.type(number, "42");
     await app.press("addPlayer");
     await app.waitView("buzzer 42", (v) => v.players.some((p) => p.buzzer === 42));
+    // Every score and time back to zero, once asked; the show stays where it is.
+    const slide = (await app.view())!.slideIndex;
+    await app.press("resetScores");
+    expect(await app.asked()).toContain(t("resetScoresConfirm"));
+    await app.waitView("scores reset", (v) => v.slideIndex === slide && v.players.every((p) => p.score === 0 && p.totalAnswerMs === 0));
     await app.assertHealthy();
   });
 
-  test("Questions: jumping to a slide and to the final", async () => {
+  test("Questions: jumping to a slide, to the final and back to registration", async () => {
     await app.tab("tabQuestions");
     await app.page.click(await app.$(".slide-grid tbody tr:nth-child(3) td:nth-child(1)"));
     await app.step("goToSelected");
@@ -119,6 +124,12 @@ describe("the Director", () => {
     await app.step("goToFinal");
     expect(await app.asked()).toContain(t("goToFinalConfirm"));
     await app.waitView("the final", (v) => v.phase.phase === "final");
+    // Starting over keeps the players and goes back to registration.
+    const players = (await app.view())!.players.map((p) => p.buzzer);
+    await app.step("startOver");
+    expect(await app.asked()).toContain(t("startOverConfirm"));
+    const same = (v: GameView) => v.players.map((p) => p.buzzer).join() === players.join();
+    await app.waitView("registration again", (v) => v.phase.phase === "lobby" && same(v) && v.players.every((p) => p.score === 0));
   });
 
   test("Settings: the language switches the whole Director and back", async () => {

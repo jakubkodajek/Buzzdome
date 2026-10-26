@@ -1076,6 +1076,8 @@ mod tests {
             Command::SetTeams { names: vec!["A".into()] },
             Command::GoTo { slide: 2 },
             Command::GoToFinal,
+            Command::StartOver,
+            Command::ResetScores,
             Command::AddPlayer { buzzer: 3, name: "A".into() },
             Command::RenamePlayer { buzzer: 3, name: "A".into() },
             Command::PairTeam { buzzer: 3, name: "A".into() },

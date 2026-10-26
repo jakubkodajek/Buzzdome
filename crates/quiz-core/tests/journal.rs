@@ -39,6 +39,8 @@ fn lines() -> Vec<(&'static str, u64, Command)> {
         (r#"{"atMs":21,"command":{"type":"press","buzzer":1,"button":"c"}}"#, 21, Command::Press { buzzer: 1, button: Button::C }),
         (r#"{"atMs":22,"command":{"type":"press","buzzer":1,"button":"d"}}"#, 22, Command::Press { buzzer: 1, button: Button::D }),
         (r#"{"atMs":23,"command":{"type":"setJoker","buzzer":2,"on":true}}"#, 23, Command::SetJoker { buzzer: 2, on: true }),
+        (r#"{"atMs":24,"command":{"type":"startOver"}}"#, 24, Command::StartOver),
+        (r#"{"atMs":25,"command":{"type":"resetScores"}}"#, 25, Command::ResetScores),
     ]
 }
 

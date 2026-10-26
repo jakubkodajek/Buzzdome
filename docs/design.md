@@ -819,6 +819,18 @@ packages users will install are read the same way.
   (`enter_slide` to another slide) drops its pairs, as the question was
   never asked. The command is journaled like any other and only exists in
   shows played since, so no rules version is needed.
+- **Reset scores and start over (SF-9).** `ResetScores` sets every
+  player's `score` and `total_answer_ms` to zero and empties `gains`, so
+  `RestartQuestion` has nothing left to take back; the slide, the jokers
+  played and `closed_questions` stay, so a question that ended is still
+  not asked twice. `StartOver` does the same, empties `jokers` and
+  `closed_questions` and enters the lobby on slide 0 (`Game::enter`, which
+  `enter_slide` calls with the slide's own phase): the players, their
+  names, who is switched on and the team names stay, and the rest is as in
+  a new show. Both are refused while a question is in play, as the jumps
+  are (`Controls::go_to`), so no question's score changes are split by
+  them. They only exist in shows played since, so no rules version is
+  needed. The Director's buttons for them ask first.
   The settings come with the quiz the session keeps, so a resumed show
   goes on with them; no rules version is needed, as a quiz without them
   plays as before. Space pressed as the reveal comes is meant for the step

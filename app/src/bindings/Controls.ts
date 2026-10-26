@@ -14,7 +14,8 @@ judge: boolean,
  */
 pauseClock: boolean, resumeClock: boolean, closeQuestion: boolean, playVideo: boolean, 
 /**
- * `GoTo` and `GoToFinal`: not while a question is in play.
+ * `GoTo`, `GoToFinal`, `StartOver` and `ResetScores`: not while a
+ * question is in play, whose score changes would go with it.
  */
 goTo: boolean, 
 /**
