@@ -420,6 +420,44 @@
   opacity: 0.9;
 }
 
+/* The answer chart (quiz setting answerChart): a bar on each answer for
+   the share of the players who gave it, grown in as the answer is shown. */
+.answer-bar {
+  position: absolute;
+  left: 24px;
+  right: 24px;
+  bottom: 10px;
+  height: 16px;
+  border-radius: calc(8px * var(--theme-roundness));
+  background: rgba(255, 255, 255, 0.25);
+}
+
+.answer-bar::after {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: var(--share);
+  border-radius: inherit;
+  background: #fff;
+  transform-origin: left;
+  animation: answer-bar-grow 0.8s ease-out;
+}
+
+@keyframes answer-bar-grow {
+  from {
+    transform: scaleX(0);
+  }
+}
+
+.answer.has-chart .answer-count {
+  bottom: 30px;
+}
+
+/* The chart reads on the wrong answers too. */
+.answer.has-chart.is-dim {
+  opacity: 0.55;
+}
+
 .answer.is-correct {
   transform: scale(1.04);
   box-shadow: 0 0 0 6px #fff, 0 0 50px var(--theme-correct);

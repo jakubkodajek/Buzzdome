@@ -47,7 +47,7 @@ Spreadsheet import of questions (one sheet per round),studio,should,yes,yes,§3.
 Export questions to a spreadsheet,studio,should,yes,yes,clone: CSV in the import columns with media next to it; re-importable (spec QZ-8)
 Table view to edit all questions at once,studio,should,yes,yes,§3.2.6.2
 Full-screen slide preview,studio,should,yes,partial,§3.2.6.1 F5; clone: Shift+F5 test-runs from the selected slide on the projector
-Response chart per answer,host screen,should,yes,partial,§5.4.8 key C; clone: answer counts on each answer and right / wrong / none bars
+Response chart per answer,host screen,should,yes,yes,"§5.4.8 key C; clone: answer counts on each answer and right / wrong / none bars, and with the quiz setting answerChart a bar on each answer once it is shown; the Director's Responses tab shows right / wrong / none"
 Phone shows correct or incorrect and points won,player,should,yes,skip,"§5.2.4.1 feedback screens; desktop scope (2026-10-05): players answer on hardware buzzers, no phones; the buzzer lights right or wrong"
 Phone shows own score and rank,player,should,yes,skip,"§5.2.4.1 intermediate and final scores; desktop scope (2026-10-05): players answer on hardware buzzers, no phones"
 Pause and resume the countdown,director,should,yes,yes,§5.5.1 key P

@@ -66,7 +66,7 @@ Status keys: `[x]` done, `[~]` in progress, `[ ]` not started.
 - [x] Several right answers per question, each with a share of the points: quiz format v5
 - [x] Categories with a background video, applied from the Design tab and named by a spreadsheet's `CAT` (QZ-10): docs gap item 6
 - [x] Quizzes written by AI assistants: MCP server for Claude Desktop, skill package for chat assistants, `buzzdome-quiz` command line (QZ-12)
-- [~] Show settings: team names (SF-5), the quiz settings (QZ-11: end-of-question steps, clock, answers, projector; jokers SF-8) and sounds (SN-1 to SN-3) done; the welcome screen to do
+- [~] Show settings: team names (SF-5), the quiz settings (QZ-11: end-of-question steps, clock, answers, projector, answer chart; jokers SF-8) and sounds (SN-1 to SN-3) done; the welcome screen to do
 - [x] Recent quiz files on the Director's start, played in one click (SF-1)
 - [x] Reset scores, or start the show over from registration with the same players and teams (SF-9)
 - [x] Results: the ranking with round totals and every question's answers in the Director, exported to CSV or printed and saved as a PDF (SF-11)

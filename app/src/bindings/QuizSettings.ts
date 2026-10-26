@@ -52,6 +52,12 @@ noAnswerPenalty: boolean,
  */
 hideBuzzPoints: boolean, 
 /**
+ * Once an everyone-answers question's answer is shown, the projector
+ * draws on each answer a bar for the share of the players the question
+ * counted who gave it: an answer chart.
+ */
+answerChart: boolean, 
+/**
  * Jokers each player has for the show, up to `MAX_JOKERS`; none by
  * default. A player's joker doubles what one question gives them,
  * the penalty too; the quizmaster plays it before the question ends.

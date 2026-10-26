@@ -107,6 +107,7 @@ pub fn random_quiz(rng: &mut Rng) -> Quiz {
         one_buzz: rng.chance(30),
         no_answer_penalty: rng.chance(30),
         hide_buzz_points: rng.chance(30),
+        answer_chart: rng.chance(30),
         jokers: if rng.chance(50) { rng.between(1, u64::from(MAX_JOKERS)) as u8 } else { 0 },
     };
     if let Err(errors) = quiz.validate() {

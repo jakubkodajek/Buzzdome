@@ -223,6 +223,7 @@ function SettingsPage({ open, onSettings, onSounds, onPickSound }: BackstageProp
         checked={!settings.hideBuzzPoints}
         onChange={(show) => set({ hideBuzzPoints: !show })}
       />
+      <SettingSwitch label={t("answerChart")} hint={t("answerChartHint")} checked={settings.answerChart} onChange={(answerChart) => set({ answerChart })} />
       <SoundsSettings sounds={soundsOf(quiz)} onSounds={onSounds} onPickFile={onPickSound} />
     </>
   );
