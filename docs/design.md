@@ -1428,7 +1428,10 @@ receiver's format: see [`hardware-test.md`](hardware-test.md).
    the end, a quiz saved and opened through the system's file picker
    (`xdotool`, Linux only). On Windows the app ignores environment
    overrides of its data folders, so the tests use the real ones and wipe
-   them; the harness refuses to run there except on a GitHub-hosted runner. macOS has no WebDriver
+   them; the harness refuses to run there except on a GitHub-hosted runner.
+   The runner is elevated and an elevated WebView2 ignores the debugging
+   port msedgedriver asks for, so the Windows tests run unelevated through
+   `gsudo --integrity Medium`. macOS has no WebDriver
    for WKWebView. When a test fails, each window's screenshot and text go up
    as the `e2e-output` artifact.
 

@@ -112,9 +112,8 @@ jobs:
       - name: Install tauri-driver
         run: cargo install tauri-driver --locked --version "$env:TAURI_DRIVER_VERSION"
 
-      # The runner's own msedgedriver matches its Edge, not the WebView2
-      # runtime the app runs in, and with it no session started ("DevToolsActivePort
-      # file doesn't exist"). This tool (the one Tauri's
+      # The runner's own msedgedriver matches its Edge, which can drift from
+      # the WebView2 runtime the app runs in. This tool (the one Tauri's
       # WebDriver CI guide uses) fetches the driver of the installed WebView2.
       - name: Install the msedgedriver that matches WebView2
         run: |
@@ -135,19 +134,45 @@ jobs:
         working-directory: app
         run: npm run tauri build -- --debug --no-bundle
 
+      # GitHub's Windows runners run elevated, and an elevated WebView2 ignores
+      # WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS, through which msedgedriver passes
+      # its debugging port: no session starts ("DevToolsActivePort file doesn't
+      # exist"; tauri-apps/wry#1782, MicrosoftEdge/WebView2Feedback#5645). So
+      # the tests run at medium integrity through gsudo, as Tauri's own api-e2e
+      # workflow does.
+      - name: Install gsudo
+        run: |
+          winget install gerardog.gsudo --accept-source-agreements --accept-package-agreements --disable-interactivity
+          $bin = Join-Path $env:ProgramFiles "gsudo\Current"
+          if (-not (Test-Path (Join-Path $bin "gsudo.exe"))) { throw "gsudo not found in $bin" }
+          $bin >> $env:GITHUB_PATH
+          icacls "$env:GITHUB_WORKSPACE" /grant "Everyone:(OI)(CI)F" /T /Q
+          icacls (Join-Path $env:RUNNER_TEMP "msedgedriver") /grant "Everyone:(OI)(CI)RX" /T /Q
+
       # The tests use this machine's real app data folders, which is why they
-      # run only on CI (app/e2e/harness.ts).
+      # run only on CI (app/e2e/harness.ts). The unelevated process gets its
+      # environment from a script, so nothing depends on gsudo passing it on.
       - name: Run the E2E tests
         working-directory: app
         env:
           RUNS: ${{ inputs.windows-runs }}
         run: |
+          $script = Join-Path $env:RUNNER_TEMP "e2e-run.ps1"
+          $vars = "PATH", "NATIVE_DRIVER", "GITHUB_ACTIONS", "RUNNER_ENVIRONMENT", "RUNS"
+          $lines = $vars | ForEach-Object { "`$env:$_ = '$((Get-Item "env:$_").Value -replace "'", "''")'" }
+          $lines += "Set-Location '$PWD'"
+          $lines += @'
           for ($run = 1; $run -le [int]$env:RUNS; $run++) {
             Write-Output "::group::run $run of $env:RUNS"
             npm run e2e
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
             Write-Output "::endgroup::"
           }
+          '@
+          Set-Content -Path $script -Value $lines
+          icacls $script /grant "Everyone:RX" /Q
+          gsudo --integrity Medium pwsh -NoProfile -NonInteractive -File $script
+          exit $LASTEXITCODE
 
       - uses: actions/upload-artifact@v4
         if: failure()
