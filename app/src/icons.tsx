@@ -352,17 +352,6 @@ export function BackIcon(props: IconProps) {
   );
 }
 
-export function GalleryIcon(props: IconProps) {
-  return (
-    <LineIcon {...props}>
-      <rect x="3" y="3" width="8" height="6" rx="0.5" />
-      <rect x="13" y="3" width="8" height="6" rx="0.5" />
-      <rect x="3" y="11" width="8" height="6" rx="0.5" />
-      <path d="M17 12v8M13 16h8" />
-    </LineIcon>
-  );
-}
-
 export function GamepadIcon(props: IconProps) {
   return (
     <LineIcon {...props}>

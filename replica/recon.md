@@ -119,7 +119,7 @@ States are what the manual describes or shows. "?" means not documented.
 
 The button layouts below are read from the manual's screenshots and text.
 They are reference for what controls exist and where users expect them, not a
-design to copy. Our layouts get designed fresh in `/replica-design`.
+design to copy. Our layouts are designed fresh.
 
 ### S02 Studio editor (§3.2, PDF p. 14)
 
@@ -472,22 +472,6 @@ Plus 3 rows the original does not have (`original = no`).
   Wheel of Fortune) and the QuizXpress name. Rounds get generic names.
 - QuizXpress Solo (trade-show lead capture) and the PowerPoint toggle.
 
-## Notes for /replica-architect
-
-Surfaces in the browser: Studio (author), Host screen (projector), Director
-(laptop, tablet or phone), Player (phone). All four share one realtime
-session state; the host screen is a view, not the source of truth.
-
-Open questions to settle with Jakub before choosing a stack:
-
-1. Typical and maximum number of players per event.
-2. Is there reliable internet at the venues, or must it run on a local
-   network without internet (the original supports both, §4.2.1)?
-3. Teams sharing one phone, or every person on their own phone?
-4. Who writes quizzes: only Jakub, or several people (accounts, sharing)?
-5. Hosting budget for a non-profit (free tiers, self-hosting).
-6. UI language: Czech only, or Czech and English.
-
 ## Size
 
 Screens 42 (original), flows 10, entities 11. Hard parts:
@@ -502,4 +486,5 @@ Screens 42 (original), flows 10, entities 11. Hard parts:
 
 Size: the full original is XL. The must-have slice (form-based editor,
 everyone-answers and fastest-finger questions, phones, Director, scores) is
-M. Next step: `/replica-architect`.
+M. (This sizing predates the 2026-10-05 move to a desktop app with
+hardware buzzers; the plan now is `ROADMAP.md`.)

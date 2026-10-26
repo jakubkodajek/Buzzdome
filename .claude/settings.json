@@ -1,11 +1,5 @@
 {
   "permissions": {
-    "allow": [
-      "Bash(python3 .claude/skills/replica-diff/parity.py *)",
-      "Bash(python3 .claude/skills/replica-diff/imgdiff.py *)",
-      "Bash(python3 .claude/skills/replica-design/contrast.py *)",
-      "Bash(python3 .claude/skills/replica-brand/sweep.py *)"
-    ],
     "deny": [
       "Read(./.env)",
       "Read(./.env.*)",
