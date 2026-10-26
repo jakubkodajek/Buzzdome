@@ -6,8 +6,8 @@
 
 use crate::desk::Desk;
 use crate::dmx::{self, DmxOutput, OutputError, Universe, FRAME_EVERY};
-use crate::setup::{LightsSetup, LookId, MessageSetup, OutputChoice};
-use crate::signals::{self, Signal, SignalOut};
+use crate::setup::{LightsSetup, LookId, OutputChoice};
+use crate::signals::{self, Signal, SignalOut, Target};
 use quiz_core::{Cue, Stage};
 use serde::Serialize;
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
@@ -57,8 +57,8 @@ pub struct LightsStatus {
 
 /// Opens the DMX output a setup chooses; none for no output.
 pub type OpenOutput = Box<dyn Fn(&OutputChoice) -> Result<Option<Box<dyn DmxOutput>>, OutputError> + Send>;
-/// Opens where a setup sends messages, with why one could not be opened.
-pub type OpenSignals = Box<dyn Fn(&MessageSetup) -> (Vec<Box<dyn SignalOut>>, Option<OutputError>) + Send>;
+/// Opens one place a setup sends messages.
+pub type OpenSignals = Box<dyn Fn(&Target) -> Result<Box<dyn SignalOut>, OutputError> + Send>;
 
 /// Opens outputs: the real ones in the app, fakes in tests.
 pub struct Openers {
@@ -97,11 +97,10 @@ impl Lights {
         let status = LightsStatus { output: OutputStatus::Off, messages: None, look: None, hold: None, blackout: false };
         let shared = Arc::new(Mutex::new(Shared { status, universe: Universe::default() }));
         let thread = Thread {
+            messages: setup.messages.targets().into_iter().map(MessageOut::new).collect(),
             desk: Desk::new(setup),
             output: None,
             output_retry: None,
-            outs: Vec::new(),
-            outs_retry: Some(Instant::now()),
             shared: shared.clone(),
             openers,
             notify: Box::new(notify),
@@ -129,14 +128,40 @@ impl Lights {
     }
 }
 
+/// One place messages go, opened when the first message after its retry
+/// time comes.
+struct MessageOut {
+    target: Target,
+    out: Option<Box<dyn SignalOut>>,
+    retry: Instant,
+    error: Option<OutputError>,
+}
+
+impl MessageOut {
+    fn new(target: Target) -> MessageOut {
+        MessageOut { target, out: None, retry: Instant::now(), error: None }
+    }
+
+    fn send(&mut self, signal: &Signal, open: &OpenSignals) {
+        let now = Instant::now();
+        if self.out.is_none() && now >= self.retry {
+            match open(&self.target) {
+                Ok(out) => (self.out, self.error) = (Some(out), None),
+                Err(error) => (self.retry, self.error) = (now + RETRY_AFTER, Some(error)),
+            }
+        }
+        if let Some(Err(error)) = self.out.as_mut().map(|out| out.send(signal)) {
+            (self.out, self.retry, self.error) = (None, now + RETRY_AFTER, Some(error));
+        }
+    }
+}
+
 struct Thread {
     desk: Desk,
     output: Option<Box<dyn DmxOutput>>,
     /// When to open the output again; none while it is open or none is chosen.
     output_retry: Option<Instant>,
-    outs: Vec<Box<dyn SignalOut>>,
-    /// When to open the message targets again; none while they are open.
-    outs_retry: Option<Instant>,
+    messages: Vec<MessageOut>,
     shared: Arc<Mutex<Shared>>,
     openers: Openers,
     notify: Box<dyn Fn(&LightsStatus) + Send>,
@@ -172,8 +197,19 @@ impl Thread {
                     self.output_retry = Some(Instant::now());
                 }
                 if setup.messages != self.desk.setup().messages {
-                    self.outs.clear();
-                    self.outs_retry = Some(Instant::now());
+                    // A target that stays keeps its connection.
+                    let mut before = std::mem::take(&mut self.messages);
+                    self.messages = setup
+                        .messages
+                        .targets()
+                        .into_iter()
+                        .map(|target| match before.iter().position(|m| m.target == target) {
+                            Some(i) => before.swap_remove(i),
+                            None => MessageOut::new(target),
+                        })
+                        .collect();
+                    let error = self.messages.iter().find_map(|m| m.error.clone());
+                    self.update(|status| status.messages = error);
                 }
                 self.desk.set_setup(setup);
             }
@@ -186,18 +222,11 @@ impl Thread {
     }
 
     fn signal(&mut self, signal: &Signal) {
-        if self.outs_retry.is_some_and(|at| Instant::now() >= at) {
-            let (outs, error) = (self.openers.signals)(&self.desk.setup().messages);
-            self.outs = outs;
-            self.outs_retry = error.is_some().then(|| Instant::now() + RETRY_AFTER);
-            self.update(|status| status.messages = error);
+        for message in &mut self.messages {
+            message.send(signal, &self.openers.signals);
         }
-        let failed = self.outs.iter_mut().find_map(|out| out.send(signal).err());
-        if let Some(error) = failed {
-            self.outs.clear();
-            self.outs_retry = Some(Instant::now() + RETRY_AFTER);
-            self.update(|status| status.messages = Some(error));
-        }
+        let error = self.messages.iter().find_map(|m| m.error.clone());
+        self.update(|status| status.messages = error);
     }
 
     fn frame(&mut self, at: Instant, now: u64) {
@@ -215,19 +244,21 @@ impl Thread {
                 }
             }
         }
+        // The status and the universe first, so that a frame sent is one the
+        // Director can already read.
         let universe = self.desk.frame(now);
-        if let Some(Err(error)) = self.output.as_mut().map(|output| output.send(&universe)) {
-            self.output = None;
-            self.output_retry = Some(at + RETRY_AFTER);
-            self.update(|s| s.output = OutputStatus::Lost { error });
-        }
         let (look, hold, blackout) = (self.desk.look(), self.desk.held(), self.desk.is_blacked_out());
         self.update(|s| {
             s.look = look;
             s.hold = hold;
             s.blackout = blackout;
         });
-        self.shared.lock().unwrap().universe = universe;
+        self.shared.lock().unwrap().universe = universe.clone();
+        if let Some(Err(error)) = self.output.as_mut().map(|output| output.send(&universe)) {
+            self.output = None;
+            self.output_retry = Some(at + RETRY_AFTER);
+            self.update(|s| s.output = OutputStatus::Lost { error });
+        }
     }
 
     /// Changes the status, and tells the app when it changed.
@@ -247,7 +278,7 @@ impl Thread {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::setup::{Channel, Fixture};
+    use crate::setup::{Channel, Fixture, MessageSetup, MidiTarget, OscTarget};
     use std::sync::mpsc::SyncSender;
 
     /// An output whose frames a test reads, which fails while told to.
@@ -287,6 +318,7 @@ mod tests {
         LightsSetup {
             output: OutputChoice::ArtNet { host: "fake".into(), universe: 0 },
             fixtures: vec![Fixture { id: 1, name: "Dimmer".into(), address: 1, channels: vec![Channel::Dimmer] }],
+            messages: MessageSetup { osc: Some(OscTarget { host: "127.0.0.1".into(), port: 9 }), midi: None },
             ..LightsSetup::default()
         }
     }
@@ -300,6 +332,14 @@ mod tests {
             }
         }
         panic!("no frame with {value}");
+    }
+
+    fn wait_until(done: impl Fn() -> bool) {
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while !done() {
+            assert!(Instant::now() < deadline, "timed out");
+            std::thread::sleep(Duration::from_millis(5));
+        }
     }
 
     #[test]
@@ -318,7 +358,7 @@ mod tests {
             }),
             signals: Box::new({
                 let sent = sent.clone();
-                move |_| (vec![Box::new(Sent(sent.clone())) as Box<dyn SignalOut>], None)
+                move |_| Ok(Box::new(Sent(sent.clone())) as Box<dyn SignalOut>)
             }),
         };
         let statuses = Arc::new(Mutex::new(Vec::new()));
@@ -340,8 +380,7 @@ mod tests {
         lights.send(Control::Signal(Signal::Slide { number: 2 }));
 
         *fail.lock().unwrap() = true;
-        std::thread::sleep(Duration::from_millis(50));
-        assert!(matches!(lights.status().output, OutputStatus::Lost { .. }));
+        wait_until(|| matches!(lights.status().output, OutputStatus::Lost { .. }));
         *fail.lock().unwrap() = false;
         lights.send(Control::Blackout(false));
         wait_for(&frames, 179);
@@ -351,5 +390,37 @@ mod tests {
         let mut statuses = statuses.lock().unwrap().clone();
         statuses.dedup();
         assert!(matches!(statuses[..], [OutputStatus::Connected { .. }, OutputStatus::Lost { .. }, OutputStatus::Connected { .. }]));
+    }
+
+    #[test]
+    fn a_message_target_that_fails_leaves_the_other_working() {
+        let opened = Arc::new(Mutex::new(Vec::new()));
+        let sent = Arc::new(Mutex::new(Vec::new()));
+        let openers = Openers {
+            output: Box::new(|_| Ok(None)),
+            signals: Box::new({
+                let (opened, sent) = (opened.clone(), sent.clone());
+                move |target| {
+                    opened.lock().unwrap().push(target.clone());
+                    match target {
+                        Target::Osc(_) => Err(OutputError::SendFailed { detail: "no network".into() }),
+                        Target::Midi(_) => Ok(Box::new(Sent(sent.clone())) as Box<dyn SignalOut>),
+                    }
+                }
+            }),
+        };
+        let messages = MessageSetup {
+            osc: Some(OscTarget { host: "127.0.0.1".into(), port: 9 }),
+            midi: Some(MidiTarget { port: "Loop".into(), channel: 1 }),
+        };
+        let lights = Lights::start(LightsSetup { messages, ..LightsSetup::default() }, || 0, openers, |_: &LightsStatus| {});
+        lights.send(Control::Signal(Signal::ShowStarted));
+        lights.send(Control::Signal(Signal::Slide { number: 1 }));
+        wait_until(|| sent.lock().unwrap().len() == 2);
+        assert!(matches!(lights.status().messages, Some(OutputError::SendFailed { .. })));
+        // MIDI was opened once, and OSC is not tried again before its retry time.
+        let opened = opened.lock().unwrap();
+        assert_eq!(opened.iter().filter(|t| matches!(t, Target::Midi(_))).count(), 1);
+        assert_eq!(opened.iter().filter(|t| matches!(t, Target::Osc(_))).count(), 1);
     }
 }

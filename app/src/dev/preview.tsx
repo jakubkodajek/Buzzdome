@@ -377,7 +377,7 @@ const LIGHTS_SETUP: LightsSetup = {
   looks: [
     { id: 1, name: "Uvítání", colors: ["#FF8800", "#AA00FF"], intensity: 80, effect: "chase", stepMs: 1500, fadeMs: 1000, fixtures: [], strobe: 0, channels: [] },
     { id: 2, name: "Otázka", colors: ["#0050FF"], intensity: 100, effect: "static", stepMs: 1000, fadeMs: 500, fixtures: [], strobe: 0, channels: [] },
-    { id: 3, name: "Správně", colors: ["#00FF40"], intensity: 100, effect: "pulse", stepMs: 400, fadeMs: 0, fixtures: [2], strobe: 0, channels: [{ address: 100, value: 255 }] },
+    { id: 3, name: "Správně", colors: ["#00FF40"], intensity: 100, effect: "pulse", stepMs: 500, fadeMs: 0, fixtures: [2], strobe: 0, channels: [{ address: 100, value: 255 }] },
   ],
   stages: { lobby: 1, questionReady: 2, answering: 2 },
   flashes: { correct: { look: 3, ms: 1500 } },

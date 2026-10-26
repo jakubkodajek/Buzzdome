@@ -26,10 +26,15 @@ const STATUS_EVENT: &str = "lights-status";
 pub struct StageLights {
     lights: Lights,
     file: AppFile,
-    /// The setup as kept, held while a change is kept (`lights_store`).
+    /// Held while a change is kept, from the file to the lights, so the
+    /// last setup kept is the one the lights take. Taken off the windows'
+    /// thread only (`lights_store`); `setup` and `refused` are taken under it.
+    storing: Mutex<()>,
+    /// The setup as kept.
     setup: Mutex<LightsSetup>,
-    /// Why a kept setup was not used: it did not pass its checks.
-    refused: Option<SetupError>,
+    /// Why the setup kept at start was not used: it did not pass its
+    /// checks. Cleared once a setup is kept.
+    refused: Mutex<Option<SetupError>>,
     /// What the lights were last told of the show. A leaf lock: taken
     /// under the show state, and nothing is taken under it.
     told: Mutex<ShowMoment>,
@@ -53,7 +58,7 @@ impl StageLights {
             }
         };
         let lights = Lights::start(setup.clone(), now_ms, lights::engine::Openers::default(), notify);
-        StageLights { lights, file, setup: Mutex::new(setup), refused, told: Mutex::new(ShowMoment::NO_SHOW) }
+        StageLights { lights, file, storing: Mutex::new(()), setup: Mutex::new(setup), refused: Mutex::new(refused), told: Mutex::new(ShowMoment::NO_SHOW) }
     }
 
     /// Tells the lights where the show is now: its stage, slide and buzz.
@@ -129,19 +134,25 @@ pub fn lights_info(state: State<StageLights>) -> LightsInfo {
         setup: state.setup.lock().unwrap().clone(),
         status: state.lights.status(),
         settings_error: state.file.lost().cloned(),
-        refused: state.refused.clone(),
+        refused: state.refused.lock().unwrap().clone(),
     }
 }
 
-/// Checks `setup`, keeps it, then gives it to the lights.
+/// Checks `setup`, keeps it, then gives it to the lights. Off the windows'
+/// thread (`off_ui`): a disk that does not answer freezes no window.
 #[tauri::command]
-pub fn lights_store(state: State<StageLights>, setup: LightsSetup) -> CmdResult<()> {
+pub async fn lights_store(app: AppHandle, setup: LightsSetup) -> CmdResult<()> {
     setup.check().map_err(|refused| AppError::LightsRefused { refused })?;
-    let mut kept = state.setup.lock().unwrap();
-    state.file.store(&setup)?;
-    *kept = setup.clone();
-    state.lights.send(Control::Setup(setup));
-    Ok(())
+    off_ui(move || {
+        let state = app.state::<StageLights>();
+        let _storing = state.storing.lock().unwrap();
+        state.file.store(&setup)?;
+        *state.setup.lock().unwrap() = setup.clone();
+        *state.refused.lock().unwrap() = None;
+        state.lights.send(Control::Setup(setup));
+        Ok(())
+    })
+    .await
 }
 
 /// Lists the interfaces and MIDI outputs; asking the system can take a while.

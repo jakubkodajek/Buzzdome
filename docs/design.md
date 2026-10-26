@@ -1521,7 +1521,9 @@ change what a replay does.
   lights thread). Serial and USB outputs sit behind the `devices` feature,
   so the crate's tests need no device libraries.
 - `app/src-tauri/src/stage_lights.rs` keeps the setup in `lights.json`
-  (`AppFile`, checked with `LightsSetup::check` before it is kept or used)
+  (`AppFile`, checked with `LightsSetup::check` before it is kept or used;
+  `lights_store` writes off the windows' thread under a lock of its own
+  held until the lights have the setup, so the last kept is the one used)
   and tells the lights thread what the show did: after every show change and
   every tick of the show thread it queues the cues of the change's effects,
   then the stage, slide and buzz, only when they changed. Sending is a
@@ -1535,8 +1537,17 @@ change what a replay does.
 Sends a frame every 25 ms (the output's `frame_every`), as fixtures expect
 a steady signal. An output that fails is dropped and opened again a second
 later; the status (`off`, `connected`, `lost` with why) goes to the Director
-as the `lights-status` event. Messages to OSC and MIDI go out on the same
-thread as they arrive.
+as the `lights-status` event. A frame's status and universe are shared
+before it is sent, so the preview never lags what fixtures show. Messages
+to OSC and MIDI go out on the same thread as they arrive; each target opens
+and retries on its own. Nothing on the thread looks up a name: network
+outputs and OSC take IPv4 addresses only (`SetupError::NotIpv4`), as a
+lookup can block for seconds (glibc's `RES_TIMEOUT` 5 s, `RES_DFLRETRY`
+2 tries, `<resolv.h>`), and an Open DMX signal, which the computer times,
+would stop meanwhile.
+
+Effects step at least every 500 ms (`MIN_EFFECT_MS`), at most 2 flashes a
+second; sources in spec LT-3.
 
 ### 7.3 Outputs
 
@@ -1582,4 +1593,5 @@ map each to a button; triggers carry the float 1.0.
 | Slide | `/buzzdome/slide` with the slide number (int) | program change number − 1 (slides 1 to 128) |
 | Buzz | `/buzzdome/buzz` with the buzzer number (int) | note 72 |
 
-A note is a note on at velocity 127 followed at once by its note off.
+A note is a note on at velocity 127 followed at once by its note off. Each
+message has its MIDI 1.0 length: 3 bytes for a note, 2 for a program change.

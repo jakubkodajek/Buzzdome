@@ -4,4 +4,4 @@ import type { Part } from "./Part";
 /**
  * Why a setup was refused (`LightsSetup::check`).
  */
-export type SetupError = { "problem": "tooMany", what: Part, } | { "problem": "outOfRange", what: Part, } | { "problem": "sameId", what: Part, } | { "problem": "missing" } | { "problem": "pastUniverse", name: string, };
+export type SetupError = { "problem": "tooMany", what: Part, } | { "problem": "outOfRange", what: Part, } | { "problem": "sameId", what: Part, } | { "problem": "missing" } | { "problem": "pastUniverse", name: string, } | { "problem": "notIpv4", host: string, };

@@ -129,7 +129,8 @@ export function LightsTab() {
     );
   }, [run]);
 
-  const store = useCallback((next: LightsSetup) => run(api.lightsStore(next)), [run]);
+  // A setup kept is the one in use, so a setup refused at start no longer is the news.
+  const store = useCallback((next: LightsSetup) => run(api.lightsStore(next).then(() => setInfo((i) => i && { ...i, refused: null }))), [run]);
   // A change still waiting is kept when the tab closes.
   useEffect(
     () => () => {
@@ -514,6 +515,7 @@ function LookRow(props: { look: Look; fixtures: Fixture[]; onChange: (edit: Part
           <NumberBox label={t("lightsStrobeValue")} value={look.strobe} min={0} max={255} onChange={(strobe) => onChange({ strobe })} />
         </label>
       </div>
+      {(look.effect === "strobe" || look.strobe > 0) && <p className="receiver-state error">{t("lightsFlashingWarning")}</p>}
       {fixtures.length > 0 && (
         <div className="row">
           <span>{t("lightsLookFixtures")}</span>

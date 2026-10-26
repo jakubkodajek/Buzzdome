@@ -16,7 +16,7 @@ pub mod usb;
 
 use crate::setup::OutputChoice;
 use serde::Serialize;
-use std::net::{Ipv4Addr, SocketAddr, ToSocketAddrs, UdpSocket};
+use std::net::{Ipv4Addr, SocketAddr, UdpSocket};
 use std::time::Duration;
 use ts_rs::TS;
 
@@ -73,8 +73,8 @@ pub enum OutputError {
     /// The interface is not plugged in, or another program holds it.
     #[error("not found or in use: {detail}")]
     NotAvailable { detail: String },
-    /// The host name does not resolve.
-    #[error("unknown host {host}")]
+    /// The host is no IPv4 address (a setup's checks refuse one first).
+    #[error("not an IPv4 address: {host}")]
     UnknownHost { host: String },
     /// Writing to the interface or the network failed.
     #[error("send failed: {detail}")]
@@ -116,11 +116,12 @@ pub fn open(choice: &OutputChoice) -> Result<Option<Box<dyn DmxOutput>>, OutputE
     }))
 }
 
-/// A UDP socket that sends to `host` (a name or an address) at `port`.
+/// A UDP socket that sends to `host`, an IPv4 address, at `port`. Never a
+/// name: looking one up would stop the lights thread (`SetupError::NotIpv4`).
 /// Broadcast is allowed, for Art-Net's broadcast addresses.
 pub(crate) fn udp_to(host: &str, port: u16) -> Result<(UdpSocket, SocketAddr), OutputError> {
-    let unknown = || OutputError::UnknownHost { host: host.to_owned() };
-    let to = (host.trim(), port).to_socket_addrs().map_err(|_| unknown())?.find(SocketAddr::is_ipv4).ok_or_else(unknown)?;
+    let ip = crate::setup::ipv4(host).ok_or_else(|| OutputError::UnknownHost { host: host.to_owned() })?;
+    let to = SocketAddr::from((ip, port));
     let failed = |e: std::io::Error| OutputError::NotAvailable { detail: e.to_string() };
     let socket = UdpSocket::bind((Ipv4Addr::UNSPECIFIED, 0)).map_err(failed)?;
     socket.set_broadcast(true).map_err(failed)?;

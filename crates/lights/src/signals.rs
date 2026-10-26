@@ -101,11 +101,12 @@ impl Signal {
         }
     }
 
-    /// Its MIDI messages on `channel` (1 to 16): a note on and off, or a
-    /// program change with the slide's number (up to 128).
-    pub fn midi(&self, channel: u8) -> Vec<[u8; 3]> {
+    /// Its MIDI messages on `channel` (1 to 16), each as long as MIDI 1.0
+    /// makes it: a note on and off (3 bytes each), or a program change with
+    /// the slide's number, up to 128 (2 bytes).
+    pub fn midi(&self, channel: u8) -> Vec<Vec<u8>> {
         let channel = channel.clamp(1, 16) - 1;
-        let note = |note: u8| vec![[0x90 | channel, note, 127], [0x80 | channel, note, 0]];
+        let note = |note: u8| vec![vec![0x90 | channel, note, 127], vec![0x80 | channel, note, 0]];
         let index = |i: Option<usize>| i.and_then(|i| u8::try_from(i).ok()).unwrap_or(0);
         match *self {
             Signal::ShowStarted => note(SHOW_STARTED_NOTE),
@@ -114,7 +115,7 @@ impl Signal {
             Signal::Cue { cue } => note(FIRST_CUE_NOTE + index(Cue::ALL.iter().position(|&c| c == cue))),
             Signal::Buzz { .. } => note(BUZZ_NOTE),
             Signal::Slide { number } => match u8::try_from(number) {
-                Ok(n @ 1..=128) => vec![[0xC0 | channel, n - 1, 0]],
+                Ok(n @ 1..=128) => vec![vec![0xC0 | channel, n - 1]],
                 _ => Vec::new(),
             },
         }
@@ -213,33 +214,31 @@ pub fn midi_ports() -> Vec<String> {
     Vec::new()
 }
 
-/// Opens where `setup` sends events; each output that cannot open is
-/// left out and its error given.
-pub fn open(setup: &MessageSetup) -> (Vec<Box<dyn SignalOut>>, Option<OutputError>) {
-    let mut outs: Vec<Box<dyn SignalOut>> = Vec::new();
-    let mut error = None;
-    if let Some(osc) = &setup.osc {
-        match OscOut::open(osc) {
-            Ok(out) => outs.push(Box::new(out)),
-            Err(e) => error = Some(e),
-        }
-    }
-    if let Some(midi) = &setup.midi {
-        match open_midi(midi) {
-            Ok(out) => outs.push(out),
-            Err(e) => error = Some(e),
-        }
-    }
-    (outs, error)
+/// One place the show's events go. Each is opened, and opened again after
+/// a failure, on its own, so one that fails leaves the other working.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Target {
+    Osc(OscTarget),
+    Midi(MidiTarget),
 }
 
-fn open_midi(target: &MidiTarget) -> Result<Box<dyn SignalOut>, OutputError> {
-    #[cfg(feature = "devices")]
-    return Ok(Box::new(MidiOut::open(target)?));
-    #[cfg(not(feature = "devices"))]
-    {
-        let _ = target;
-        Err(OutputError::NotSupported)
+impl MessageSetup {
+    /// Where the setup sends events.
+    pub fn targets(&self) -> Vec<Target> {
+        let osc = self.osc.clone().map(Target::Osc);
+        let midi = self.midi.clone().map(Target::Midi);
+        osc.into_iter().chain(midi).collect()
+    }
+}
+
+/// Opens `target`.
+pub fn open(target: &Target) -> Result<Box<dyn SignalOut>, OutputError> {
+    match target {
+        Target::Osc(osc) => Ok(Box::new(OscOut::open(osc)?)),
+        #[cfg(feature = "devices")]
+        Target::Midi(midi) => Ok(Box::new(MidiOut::open(midi)?)),
+        #[cfg(not(feature = "devices"))]
+        Target::Midi(_) => Err(OutputError::NotSupported),
     }
 }
 
@@ -280,12 +279,12 @@ mod tests {
 
     #[test]
     fn stages_and_cues_play_notes_of_their_own_and_a_slide_its_program() {
-        assert_eq!(Signal::Stage { stage: Stage::NoShow }.midi(1), [[0x90, 36, 127], [0x80, 36, 0]]);
+        assert_eq!(Signal::Stage { stage: Stage::NoShow }.midi(1), [vec![0x90, 36, 127], vec![0x80, 36, 0]]);
         assert_eq!(Signal::Stage { stage: Stage::Winner }.midi(1)[0][1], 36 + 13);
-        assert_eq!(Signal::Cue { cue: Cue::Reveal }.midi(16), [[0x9F, 65, 127], [0x8F, 65, 0]]);
+        assert_eq!(Signal::Cue { cue: Cue::Reveal }.midi(16), [vec![0x9F, 65, 127], vec![0x8F, 65, 0]]);
         assert!(FIRST_STAGE_NOTE as usize + Stage::ALL.len() <= FIRST_CUE_NOTE as usize);
         assert!(FIRST_CUE_NOTE as usize + Cue::ALL.len() <= SHOW_STARTED_NOTE as usize);
-        assert_eq!(Signal::Slide { number: 1 }.midi(2), [[0xC1, 0, 0]]);
+        assert_eq!(Signal::Slide { number: 1 }.midi(2), [vec![0xC1, 0]]);
         assert!(Signal::Slide { number: 129 }.midi(2).is_empty());
     }
 
@@ -293,9 +292,9 @@ mod tests {
     fn events_reach_an_osc_program() {
         let program = UdpSocket::bind("127.0.0.1:0").unwrap();
         let port = program.local_addr().unwrap().port();
-        let (mut outs, error) = open(&MessageSetup { osc: Some(OscTarget { host: "127.0.0.1".into(), port }), midi: None });
-        assert!(error.is_none());
-        outs[0].send(&Signal::Buzz { buzzer: 7 }).unwrap();
+        let setup = MessageSetup { osc: Some(OscTarget { host: "127.0.0.1".into(), port }), midi: None };
+        let mut out = open(&setup.targets()[0]).unwrap();
+        out.send(&Signal::Buzz { buzzer: 7 }).unwrap();
         let mut buffer = [0; 64];
         let (len, _) = program.recv_from(&mut buffer).unwrap();
         assert_eq!(&buffer[..len], osc_message("/buzzdome/buzz", &OscArg::Int(7)).as_slice());

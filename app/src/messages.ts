@@ -326,6 +326,8 @@ export function setupErrorText(t: Translate, error: SetupError): string {
       return t("lightsProblemMissing");
     case "pastUniverse":
       return t("lightsProblemPastUniverse", { name: error.name });
+    case "notIpv4":
+      return t("lightsProblemNotIpv4", { host: error.host });
   }
 }
 

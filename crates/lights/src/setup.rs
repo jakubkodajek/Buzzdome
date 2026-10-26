@@ -7,6 +7,7 @@ use crate::dmx::UNIVERSE_SIZE;
 use quiz_core::{Color, Cue, Stage};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
+use std::net::Ipv4Addr;
 use ts_rs::TS;
 
 pub type FixtureId = u32;
@@ -24,8 +25,15 @@ pub const MAX_LOOK_COLORS: usize = 8;
 pub const MAX_LOOK_CHANNELS: usize = 64;
 /// Longest name of a fixture or look, in characters.
 pub const MAX_LIGHTS_NAME_CHARS: usize = 60;
-/// Slowest and fastest step of a look's effect, in milliseconds.
-pub const MIN_EFFECT_MS: u32 = 50;
+/// Fastest and slowest step of a look's effect, in milliseconds. A strobe
+/// lights once a step, a pulse dims and lights once, a chase changes colour
+/// once: at 500 ms that is at most 2 flashes a second, under the 3 a second
+/// that can trigger photosensitive seizures (W3C, Understanding WCAG 2.0 SC
+/// 2.3.1, <https://www.w3.org/WAI/WCAG20/Understanding/three-flashes-or-below-threshold>)
+/// and the 4 a second the UK Health and Safety Executive allows strobes at
+/// public events (Epilepsy Society, Photosensitive epilepsy, April 2025,
+/// <https://epilepsysociety.org.uk/sites/default/files/2025-04/PhotosensitiveepilepsyApril2025.pdf>).
+pub const MIN_EFFECT_MS: u32 = 500;
 pub const MAX_EFFECT_MS: u32 = 10_000;
 /// Longest fade into a look, in milliseconds.
 pub const MAX_FADE_MS: u32 = 10_000;
@@ -37,7 +45,7 @@ pub const MAX_ARTNET_UNIVERSE: u16 = 32_767;
 /// The sACN universes a source may send (ANSI E1.31).
 pub const MIN_SACN_UNIVERSE: u16 = 1;
 pub const MAX_SACN_UNIVERSE: u16 = 63_999;
-/// Longest host name or address of a network output.
+/// The most of a host that is not an IPv4 address an error repeats.
 pub const MAX_HOST_CHARS: usize = 253;
 /// Longest name of a serial port or MIDI port.
 pub const MAX_PORT_CHARS: usize = 200;
@@ -221,6 +229,10 @@ pub enum SetupError {
     Missing,
     #[error("fixture \"{name}\" goes past channel 512")]
     PastUniverse { name: String },
+    /// Network outputs and OSC take an IPv4 address, never a name: looking
+    /// a name up can take seconds, and the lights thread would stop meanwhile.
+    #[error("\"{host}\" is no IPv4 address")]
+    NotIpv4 { host: String },
 }
 
 /// The part of a setup a `SetupError` is about.
@@ -261,8 +273,13 @@ fn name_fits(name: &str) -> bool {
     name.chars().count() <= MAX_LIGHTS_NAME_CHARS
 }
 
-fn host_fits(host: &str) -> bool {
-    !host.trim().is_empty() && host.len() <= MAX_HOST_CHARS
+/// `host` as an IPv4 address, as network outputs and OSC take it.
+pub fn ipv4(host: &str) -> Option<Ipv4Addr> {
+    host.trim().parse().ok()
+}
+
+fn check_ipv4(host: &str) -> Result<(), SetupError> {
+    ensure(ipv4(host).is_some(), SetupError::NotIpv4 { host: host.chars().take(MAX_HOST_CHARS).collect() })
 }
 
 fn port_fits(port: &str) -> bool {
@@ -300,8 +317,8 @@ impl Default for LightsSetup {
             look(7, "Wrong", &["#FF2020"], 100, LookEffect::Static, 1_000, 0),
             look(8, "Reveal", &["#B455FF"], 90, LookEffect::Static, 1_000, 300),
             look(9, "Leaderboard", &["#FFC000", "#FF7A00"], 90, LookEffect::Chase, 600, 800),
-            look(10, "Drum roll", &["#FFFFFF", "#2F6BFF"], 100, LookEffect::Strobe, 150, 0),
-            look(11, "Winner", &["#FFC000", "#FF3B30", "#2ECC40", "#2F6BFF", "#B455FF"], 100, LookEffect::Chase, 250, 0),
+            look(10, "Drum roll", &["#FFFFFF", "#2F6BFF"], 100, LookEffect::Pulse, 600, 0),
+            look(11, "Winner", &["#FFC000", "#FF3B30", "#2ECC40", "#2F6BFF", "#B455FF"], 100, LookEffect::Chase, 500, 0),
             look(12, "Dim", &["#FFD08A"], 25, LookEffect::Static, 1_000, 2_000),
         ];
         let stages = BTreeMap::from([
@@ -386,9 +403,15 @@ fn check_output(output: &OutputChoice) -> Result<(), SetupError> {
     let fits = match output {
         OutputChoice::None | OutputChoice::SoundSwitch => true,
         OutputChoice::EnttecPro { port } | OutputChoice::OpenDmx { port } => port_fits(port),
-        OutputChoice::ArtNet { host, universe } => host_fits(host) && *universe <= MAX_ARTNET_UNIVERSE,
+        OutputChoice::ArtNet { host, universe } => {
+            check_ipv4(host)?;
+            *universe <= MAX_ARTNET_UNIVERSE
+        }
         OutputChoice::Sacn { universe, host } => {
-            (MIN_SACN_UNIVERSE..=MAX_SACN_UNIVERSE).contains(universe) && host.as_deref().is_none_or(host_fits)
+            if let Some(host) = host {
+                check_ipv4(host)?;
+            }
+            (MIN_SACN_UNIVERSE..=MAX_SACN_UNIVERSE).contains(universe)
         }
     };
     ensure(fits, out_of_range(Part::Output))
@@ -396,7 +419,8 @@ fn check_output(output: &OutputChoice) -> Result<(), SetupError> {
 
 fn check_messages(messages: &MessageSetup) -> Result<(), SetupError> {
     if let Some(osc) = &messages.osc {
-        ensure(host_fits(&osc.host) && osc.port != 0, out_of_range(Part::Message))?;
+        check_ipv4(&osc.host)?;
+        ensure(osc.port != 0, out_of_range(Part::Message))?;
     }
     if let Some(midi) = &messages.midi {
         ensure(port_fits(&midi.port) && (1..=16).contains(&midi.channel), out_of_range(Part::Message))?;
@@ -472,5 +496,26 @@ mod tests {
         let mut setup = LightsSetup::default();
         setup.messages.midi = Some(MidiTarget { port: "loopMIDI".into(), channel: 17 });
         assert_eq!(setup.check(), Err(SetupError::OutOfRange { what: Part::Message }));
+    }
+
+    #[test]
+    fn network_outputs_and_osc_take_only_an_ipv4_address() {
+        let refused = |output: OutputChoice| LightsSetup { output, ..LightsSetup::default() }.check();
+        let not_ipv4 = |host: &str| Err(SetupError::NotIpv4 { host: host.into() });
+        assert_eq!(refused(OutputChoice::ArtNet { host: "lights.local".into(), universe: 0 }), not_ipv4("lights.local"));
+        assert_eq!(refused(OutputChoice::Sacn { universe: 1, host: Some("::1".into()) }), not_ipv4("::1"));
+        assert!(refused(OutputChoice::Sacn { universe: 1, host: Some(" 10.0.0.9 ".into()) }).is_ok());
+        let mut setup = LightsSetup::default();
+        setup.messages.osc = Some(OscTarget { host: "localhost".into(), port: 7700 });
+        assert_eq!(setup.check(), not_ipv4("localhost"));
+    }
+
+    #[test]
+    fn no_effect_flashes_more_than_twice_a_second() {
+        let mut setup = LightsSetup::default();
+        assert!(setup.looks.iter().all(|look| look.step_ms >= MIN_EFFECT_MS));
+        setup.looks[0].effect = LookEffect::Strobe;
+        setup.looks[0].step_ms = MIN_EFFECT_MS - 1;
+        assert_eq!(setup.check(), Err(SetupError::OutOfRange { what: Part::Look }));
     }
 }
