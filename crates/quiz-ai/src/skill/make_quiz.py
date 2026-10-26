@@ -21,8 +21,10 @@ from pathlib import Path
 
 SCHEMA = Path(__file__).resolve().parent.parent / "reference" / "quiz.schema.json"
 MEDIA_PREFIX = "media/"
-# Fields that name a media file, wherever they are in the quiz.
-MEDIA_FIELDS = ("picture", "file")
+# Characters some system refuses in a file name, besides control characters.
+FORBIDDEN_IN_NAMES = set('\\/:*?"<>|')
+# Device names Windows reserves with any extension.
+RESERVED_NAMES = {"CON", "PRN", "AUX", "NUL"} | {f"{device}{n}" for device in ("COM", "LPT") for n in "0123456789¹²³"}
 
 
 def json_type(value):
@@ -98,16 +100,32 @@ class Checker:
 
 
 def media_references(value):
-    """Every media file the quiz names, in order of appearance."""
-    if isinstance(value, dict):
-        for name, field in value.items():
-            if name in MEDIA_FIELDS and isinstance(field, str):
-                yield field
-            else:
-                yield from media_references(field)
+    """Every media file the quiz names, in order of appearance: every text
+    that starts with media/ (or media\\, as Windows writes it), whichever
+    field holds it."""
+    if isinstance(value, str):
+        if value.startswith((MEDIA_PREFIX, "media\\")):
+            yield value
+    elif isinstance(value, dict):
+        for field in value.values():
+            yield from media_references(field)
     elif isinstance(value, list):
         for item in value:
             yield from media_references(item)
+
+
+def is_media_name(reference):
+    """Whether `reference` is media/<file name> with a name every system
+    stores, and so a file inside the media folder: no folder, no character
+    some system refuses, no trailing dot or space (which rules out . and ..),
+    and no Windows device name."""
+    name = reference[len(MEDIA_PREFIX):]
+    return (
+        name != ""
+        and not name.endswith((".", " "))
+        and not any(char in FORBIDDEN_IN_NAMES or ord(char) < 32 or 127 <= ord(char) < 160 for char in name)
+        and name.split(".")[0].rstrip().upper() not in RESERVED_NAMES
+    )
 
 
 def check(folder):
@@ -120,8 +138,8 @@ def check(folder):
         return None, [f"quiz.json is not valid UTF-8 JSON: {error}"]
     found = Checker(json.loads(SCHEMA.read_text(encoding="utf-8"))).check(quiz)
     for reference in dict.fromkeys(media_references(quiz)):
-        if not reference.startswith(MEDIA_PREFIX):
-            found.append(f"{reference}: media files are named media/<file name>")
+        if not is_media_name(reference):
+            found.append(f"{reference}: name media files media/<file name>, without folders or the characters \\ / : * ? \" < > |")
         elif not (folder / reference).is_file():
             found.append(f"{reference}: the file is missing from {folder / 'media'}")
     return quiz, found

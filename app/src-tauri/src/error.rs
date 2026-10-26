@@ -137,6 +137,9 @@ pub enum AppError {
     /// Claude Desktop's configuration file holds something else than its settings, so it is left as it is.
     #[error("{path} is not a Claude Desktop configuration")]
     ClaudeConfigUnreadable { path: String },
+    /// The folder chosen for an assistant holds or is inside the app's own data (shows, drafts, settings).
+    #[error("{path} holds or is inside Buzzdome's own data")]
+    AiFolderNotAllowed { path: String },
 
     // The media player.
     #[error("{name} is not a picture, sound or video")]

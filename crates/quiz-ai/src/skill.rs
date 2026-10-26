@@ -5,6 +5,7 @@
 //! the skill's folder at its root, as Claude takes it; Gemini and ChatGPT
 //! take the same folder.
 
+use quiz_core::{AnswerMode, MediaKind};
 use quiz_file::{FileAction, QuizFileError};
 use std::io::{Cursor, Write};
 use std::path::Path;
@@ -19,11 +20,31 @@ pub const EXTENSION: &str = "zip";
 const SKILL_MD: &str = include_str!("skill/SKILL.md");
 const MAKE_QUIZ_PY: &str = include_str!("skill/make_quiz.py");
 
+/// `SKILL.md` with the core's limits written in, so it never says other
+/// numbers or file types than the app takes.
+fn skill_md() -> String {
+    let extensions = |kind: MediaKind| {
+        let names: Vec<String> = kind.extensions().iter().map(|extension| format!(".{extension}")).collect();
+        let (last, rest) = names.split_last().expect("every kind has extensions");
+        if rest.is_empty() { last.clone() } else { format!("{} or {last}", rest.join(", ")) }
+    };
+    let everyone = AnswerMode::Everyone.answer_limits();
+    [
+        ("{{EVERYONE_ANSWERS}}", format!("{} to {}", everyone.fewest, everyone.most)),
+        ("{{FASTEST_FINGER_ANSWERS}}", AnswerMode::FastestFinger.answer_limits().most.to_string()),
+        ("{{PICTURES}}", extensions(MediaKind::Image)),
+        ("{{SOUNDS}}", extensions(MediaKind::Audio)),
+        ("{{VIDEOS}}", extensions(MediaKind::Video)),
+    ]
+    .into_iter()
+    .fold(SKILL_MD.to_string(), |text, (placeholder, value)| text.replace(placeholder, &value))
+}
+
 /// The package's files, by their path in it.
 pub fn files() -> Vec<(String, String)> {
     let schema = serde_json::to_string_pretty(&crate::quiz_schema()).expect("a JSON value serializes");
     [
-        ("SKILL.md", SKILL_MD.to_string()),
+        ("SKILL.md", skill_md()),
         ("reference/quiz-format.md", crate::FORMAT_GUIDE.to_string()),
         ("reference/quiz.schema.json", schema),
         ("scripts/make_quiz.py", MAKE_QUIZ_PY.to_string()),
@@ -70,10 +91,19 @@ mod tests {
     /// up to 200 ("How to create custom skills", Claude Help Center).
     #[test]
     fn the_skill_says_its_name_and_when_to_use_it_within_the_limits() {
-        let front = SKILL_MD.strip_prefix("---\n").and_then(|rest| rest.split_once("\n---\n")).unwrap().0;
+        let skill = skill_md();
+        let front = skill.strip_prefix("---\n").and_then(|rest| rest.split_once("\n---\n")).unwrap().0;
         let field = |name: &str| front.lines().find_map(|line| line.strip_prefix(&format!("{name}: "))).unwrap();
         assert_eq!(field("name"), NAME);
         assert!(field("description").chars().count() <= 200);
+    }
+
+    #[test]
+    fn the_skill_gives_the_cores_limits() {
+        let skill = skill_md();
+        assert!(!skill.contains("{{"), "a placeholder is left");
+        assert!(skill.contains("has 2 to 4 answers") && skill.contains("up to 6 answers"));
+        assert!(skill.contains("Videos: .mp4 or .webm"));
     }
 
     fn entry_names(zip: &mut zip::ZipArchive<std::fs::File>) -> Vec<String> {
@@ -119,6 +149,60 @@ mod tests {
         assert!(check.is_ready(), "{check:?}");
         let names = entry_names(&mut zip::ZipArchive::new(std::fs::File::open(&output).unwrap()).unwrap());
         assert_eq!(names, ["media/brno.jpg", "quiz.json"]);
+    }
+
+    #[test]
+    fn the_script_packs_the_media_of_every_media_field() {
+        let dir = crate::workbench::tests::scratch("skill-script-media");
+        let skill = unpacked_skill(&dir);
+        let quiz = dir.join("quiz");
+        std::fs::create_dir_all(quiz.join("media")).unwrap();
+        let json = serde_json::json!({
+            "schemaVersion": quiz_core::SCHEMA_VERSION,
+            "title": "Every medium",
+            "categories": [{ "id": "c1", "name": "Films", "background": { "file": "media/category.webm" } }],
+            "slides": [
+                { "id": "b1", "type": "billboard", "title": "Round", "background": { "file": "media/background.png" },
+                  "sound": { "file": "media/intro.mp3" } },
+                { "id": "q1", "type": "question", "mode": "everyone", "text": "Which?", "answers": ["A", "B"],
+                  "correct": [{ "answer": 0 }], "picture": "media/picture.jpg" },
+                { "id": "q2", "type": "question", "mode": "everyone", "text": "Which?", "answers": ["A", "B"],
+                  "correct": [{ "answer": 1 }], "video": { "file": "media/clip.mp4" } },
+            ]
+        });
+        let read = quiz_core::Quiz::read_json(&json.to_string()).unwrap();
+        assert!(read.dropped.is_empty(), "{:?}", read.dropped);
+        let media: Vec<String> = read.quiz.media_files().into_iter().map(str::to_owned).collect();
+        assert_eq!(media.len(), 5, "the quiz uses every media field");
+        for file in &media {
+            std::fs::write(quiz.join(file), b"x").unwrap();
+        }
+        std::fs::write(quiz.join("quiz.json"), json.to_string()).unwrap();
+        let output = dir.join("media.quiz");
+        let run = make_quiz(&skill, &quiz, &output);
+        assert!(run.status.success(), "{}", String::from_utf8_lossy(&run.stderr));
+        let mut names = entry_names(&mut zip::ZipArchive::new(std::fs::File::open(&output).unwrap()).unwrap());
+        names.retain(|name| name != quiz_file::QUIZ_JSON);
+        assert_eq!(names, media);
+    }
+
+    #[test]
+    fn the_script_packs_nothing_from_outside_the_media_folder() {
+        let dir = crate::workbench::tests::scratch("skill-script-names");
+        let skill = unpacked_skill(&dir);
+        let quiz = dir.join("quiz");
+        std::fs::create_dir_all(quiz.join("media/sub")).unwrap();
+        std::fs::write(dir.join("secret.png"), b"x").unwrap();
+        std::fs::write(quiz.join("media/sub/a.png"), b"x").unwrap();
+        for picture in ["media/../../secret.png", "media/sub/a.png", "media\\..\\..\\secret.png", "media/CON.png", "media/a.png."] {
+            std::fs::write(quiz.join("quiz.json"), crate::workbench::tests::quiz_with_picture(picture)).unwrap();
+            let output = dir.join("bad.quiz");
+            let run = make_quiz(&skill, &quiz, &output);
+            assert_eq!(run.status.code(), Some(1), "{picture}");
+            let said = String::from_utf8_lossy(&run.stderr);
+            assert!(said.contains("media/<file name>"), "{picture}: {said}");
+            assert!(!output.exists());
+        }
     }
 
     #[test]

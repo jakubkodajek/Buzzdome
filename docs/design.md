@@ -843,16 +843,31 @@ and has no rules of its own: what it accepts is what `quiz_file` and
   (`quiz.json` and `media/`, which the app opens as it is): `write_quiz`
   reads the JSON as a file would be read (`Quiz::read_json`, so what does
   not fit is left out and said), `add_media` copies through
-  `quiz_file::import_media`, `check` lists `quiz_file::problems`, `pack`
-  is `quiz_file::save`, and `unpack` is `quiz_file::open_into`. The MCP
-  tools and the `buzzdome-quiz` command line are thin layers over it.
+  `quiz_file::import_media`, `check` lists `quiz_file::problems` (for a
+  `.quiz` file `quiz_file::inspect`, which reads `quiz.json` and the
+  names of the files without unpacking the media), `pack` is
+  `quiz_file::save`, and `unpack` is `quiz_file::open_into`. A quiz is
+  written only into a new folder, a quiz folder or one of media, and a
+  `.quiz` file is replaced only when asked. The MCP tools and the
+  `buzzdome-quiz` command line are thin layers over it.
+- **Roots.** The MCP tools work only in the folders given with
+  `--root` (`roots::Roots`), as the reference filesystem server does. A
+  path counts by its real path (`canonicalize` of the nearest part that is
+  there, so links and junctions are followed), must be absolute and has
+  no `..`. A root that holds or is inside the app's data folders
+  (`roots::app_data_dirs`: Tauri's data, local data and, on macOS, log
+  folders for the bundle identifier) is refused, so no tool reaches the
+  show's journal, the drafts or the settings. The app passes its own
+  identifier; the command line uses `roots::APP_IDENTIFIER`, which a test
+  keeps equal to `tauri.conf.json`.
 - **MCP server.** `mcp::serve` reads JSON-RPC 2.0 messages, one per line,
   from standard input and answers on standard output: `initialize` (the
   client's protocol version when it is one of `PROTOCOL_VERSIONS`), `ping`,
   `tools/list` and `tools/call`. Written by hand rather than with an SDK:
   nine tools, no notifications of its own and no async runtime. A tool's
   failure is a result with `isError` for the assistant to act on; only an
-  unknown method or tool is a protocol error. Paths must be absolute. The
+  unknown method or tool is a protocol error. Every path goes through
+  `Roots::resolve`, and the instructions name the roots. The
   app serves it when started with `--mcp`: `ai::serve_mcp_if_asked` runs
   first in `run`, before the single-instance plugin and any window, so it
   neither shows the running app nor touches its show, and ends the process
@@ -860,17 +875,23 @@ and has no rules of its own: what it accepts is what `quiz_file` and
   GUI program; standard input and output work all the same when the parent
   passes pipes, as the sheet reader (`sheet_reader.rs`) relies on too.
 - **Claude Desktop.** `claude_desktop::connect` adds
-  `mcpServers.buzzdome = { command: <the app>, args: ["--mcp"] }` to
+  `mcpServers.buzzdome = { command: <the app>, args: ["--mcp", "--root", <folder>] }` to
   Claude Desktop's `claude_desktop_config.json` and keeps the rest (keys
   may come out in another order). It refuses a file that is not a JSON
   object, so nothing of the user's is lost, and makes no folder: without
-  Claude's folder, Claude Desktop is not installed.
+  Claude's folder, Claude Desktop is not installed. The folder is the
+  `Buzzdome` folder of the quizmaster's documents, which the page makes,
+  or one they pick (`ai_connect_claude`).
 - **Skill.** `skill::write` zips `SKILL.md` and `make_quiz.py` (both in
   `crates/quiz-ai/src/skill/`), `docs/quiz-format.md` and the schema into
   one folder, as Claude takes a skill. The script is for the assistants'
   sandboxes, which cannot run this app: standard library only, a JSON
   Schema checker for the parts the schema uses, media present, and the
-  ZIP written as `quiz_file::save` writes it. Its tests run it with Python
+  ZIP written as `quiz_file::save` writes it. Media are every text that
+  starts with `media/`, so a new media field needs no change there, and
+  only `media/<portable file name>` is packed. `SKILL.md` gets the core's
+  answer limits and media types from `skill_md()`, never written by hand;
+  `.gitattributes` keeps it and the format guide LF on every system. Its tests run it with Python
   and open what it wrote with `workbench::check`.
 
 ## 2. Buzzer link

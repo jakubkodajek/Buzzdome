@@ -61,6 +61,7 @@ pub struct Quiz {
     /// Id of the look the screens use (spec section 5.2); the app's default
     /// when missing or not installed.
     #[serde(default, deserialize_with = "theme_id_or_none")]
+    #[schemars(with = "Option<String>")]
     pub theme: Option<String>,
     #[serde(default)]
     pub slides: Vec<Slide>,

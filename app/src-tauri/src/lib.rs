@@ -586,7 +586,7 @@ pub(crate) fn play_press(app: &AppHandle, press: Press, at_ms: u64) -> bool {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let context = tauri::generate_context!();
-    ai::serve_mcp_if_asked(&context.package_info().version.to_string());
+    ai::serve_mcp_if_asked(&context.package_info().version.to_string(), &context.config().identifier);
     let builder = tauri::Builder::default()
         // First, so a second start ends before it touches the show: it brings
         // the running app's Director forward instead.

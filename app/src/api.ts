@@ -6,7 +6,7 @@ import type {
   BuzzerId,
   BuzzerSeen,
   Category,
-  ClaudeConnection,
+  ClaudeConnected,
   ClockView,
   Command,
   Cue,
@@ -147,8 +147,11 @@ export const api = {
   editorTestRun: (draft: string, quiz: Quiz, from: number | null = null) => invoke<void>("editor_test_run", { draft, quiz, from }),
   /** Writes the skill package for chat assistants where the quizmaster picks; false when they cancel. */
   aiSaveSkill: (picker: Picker) => invoke<boolean>("ai_save_skill", { picker }),
-  /** Adds the app to Claude Desktop as the MCP server it writes quizzes with; says what changed. */
-  aiConnectClaude: () => invoke<ClaudeConnection>("ai_connect_claude"),
+  /**
+   * Adds the app to Claude Desktop as the MCP server it writes quizzes with, working in the Buzzdome folder of the
+   * quizmaster's documents, or with `choose` in a folder they pick; says what changed, null when they cancel.
+   */
+  aiConnectClaude: (choose: boolean) => invoke<ClaudeConnected | null>("ai_connect_claude", { choose }),
 };
 
 /** Events the backend emits (`app.emit` in app/src-tauri), with their payloads. */

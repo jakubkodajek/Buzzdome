@@ -249,6 +249,7 @@ function Studio({ editor, open, onExit }: { editor: QuizEditor; open: OpenQuiz |
     exportSheet: sheet.exportSheet,
     saveAiSkill: ai.saveAiSkill,
     connectClaude: ai.connectClaude,
+    connectClaudeFolder: ai.connectClaudeFolder,
   };
 
   const backstageShown = open === null || backstage !== null;

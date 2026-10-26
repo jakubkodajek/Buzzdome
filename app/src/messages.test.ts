@@ -113,12 +113,16 @@ describe("receiver texts", () => {
 
 describe("claudeConnectionText", () => {
   it("tells the quizmaster to start Claude Desktop again only when its settings changed", () => {
-    expect(claudeConnectionText(en, "added")).toContain("Close it and open it again");
-    expect(claudeConnectionText(cs, "updated")).toContain("Zavřete ho a otevřete znovu");
-    expect(claudeConnectionText(en, "unchanged")).toBe("Claude Desktop is connected to this app already.");
+    const folders = ["C:\\Users\\Eva\\Documents\\Buzzdome"];
+    expect(claudeConnectionText(en, { connection: "added", folders })).toContain("Close it and open it again");
+    expect(claudeConnectionText(cs, { connection: "updated", folders })).toContain("Zavřete ho a otevřete znovu");
+    expect(claudeConnectionText(en, { connection: "unchanged", folders })).toBe(
+      "Claude Desktop is connected to this app already and may work in C:\\Users\\Eva\\Documents\\Buzzdome.",
+    );
   });
 
   it("names the settings file it left as it was", () => {
     expect(errorText(en, { code: "claudeConfigUnreadable", path: "C:\\c.json" })).toBe("Claude Desktop's settings (C:\\c.json) cannot be read, so they were left as they are.");
+    expect(errorText(cs, { code: "aiFolderNotAllowed", path: "C:\\Users\\Eva" })).toContain("Složku C:\\Users\\Eva asistent dostat nemůže");
   });
 });

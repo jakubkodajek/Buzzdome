@@ -4,6 +4,7 @@
 //! starts the server ("Connect to local MCP servers", modelcontextprotocol.io).
 //! Claude Desktop reads the file when it starts.
 
+use crate::roots::Roots;
 use quiz_file::{FileAction, QuizFileError};
 use serde::Serialize;
 use serde_json::{json, Map, Value};
@@ -24,9 +25,20 @@ const CONFIG_FILE: &str = "claude_desktop_config.json";
 #[serde(rename_all = "camelCase")]
 pub enum ClaudeConnection {
     Added,
-    /// The entry started another program, such as the app before it moved.
+    /// The entry started another program, such as the app before it
+    /// moved, or worked in other folders.
     Updated,
     Unchanged,
+}
+
+/// What connecting did, and where the assistant may now work.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
+#[serde(rename_all = "camelCase")]
+pub struct ClaudeConnected {
+    pub connection: ClaudeConnection,
+    /// The folders Claude Desktop may work in (`Roots::folders`).
+    pub folders: Vec<String>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -53,12 +65,17 @@ pub fn config_path() -> Option<PathBuf> {
     Some(folder.join("Claude").join(CONFIG_FILE))
 }
 
-/// Adds the server that `command --mcp` starts to the configuration file
-/// `config`, keeping everything else in it. The file is made if Claude
+/// Adds the server that `command --mcp` starts, working in `roots`, to the
+/// configuration file `config`, keeping everything else in it. The file is made if Claude
 /// Desktop has not written one yet, but its folder must be there: without
 /// it, Claude Desktop is not installed. A file that is not a configuration
 /// is left as it is.
-pub fn connect(config: &Path, command: &Path) -> Result<ClaudeConnection, ConnectError> {
+pub fn connect(config: &Path, command: &Path, roots: &Roots) -> Result<ClaudeConnected, ConnectError> {
+    let folders = roots.folders().iter().map(|folder| folder.display().to_string()).collect();
+    Ok(ClaudeConnected { connection: add_server(config, command, roots)?, folders })
+}
+
+fn add_server(config: &Path, command: &Path, roots: &Roots) -> Result<ClaudeConnection, ConnectError> {
     let folder = config.parent().unwrap_or(Path::new("."));
     if !folder.is_dir() {
         return Err(ConnectError::NotInstalled(folder.to_path_buf()));
@@ -76,7 +93,8 @@ pub fn connect(config: &Path, command: &Path) -> Result<ClaudeConnection, Connec
     let Some(servers) = servers.as_object_mut() else {
         return Err(ConnectError::NotAConfig(config.to_path_buf()));
     };
-    let entry = json!({ "command": command, "args": [MCP_ARG] });
+    let args: Vec<String> = std::iter::once(MCP_ARG.to_string()).chain(roots.args()).collect();
+    let entry = json!({ "command": command, "args": args });
     let connection = match servers.get(SERVER_KEY) {
         Some(found) if *found == entry => return Ok(ClaudeConnection::Unchanged),
         Some(_) => ClaudeConnection::Updated,
@@ -91,6 +109,7 @@ pub fn connect(config: &Path, command: &Path) -> Result<ClaudeConnection, Connec
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::roots::{allow, ROOT_ARG};
     use crate::workbench::tests::scratch;
 
     #[test]
@@ -99,30 +118,35 @@ mod tests {
         let config = dir.join(CONFIG_FILE);
         fs::write(&config, r#"{ "mcpServers": { "files": { "command": "npx", "args": ["fs"] } }, "theme": "dark" }"#).unwrap();
         let app = dir.join("Buzzdome/buzzdome.exe");
-        assert_eq!(connect(&config, &app).unwrap(), ClaudeConnection::Added);
-        assert_eq!(connect(&config, &app).unwrap(), ClaudeConnection::Unchanged);
+        let quizzes = dir.join("quizzes");
+        fs::create_dir_all(&quizzes).unwrap();
+        let roots = Roots::new(vec![allow(&quizzes, &[]).unwrap()]);
+        let root = roots.folders()[0].clone();
+        assert_eq!(connect(&config, &app, &roots).unwrap().connection, ClaudeConnection::Added);
+        assert_eq!(connect(&config, &app, &roots).unwrap().connection, ClaudeConnection::Unchanged);
         let written: Value = serde_json::from_str(&fs::read_to_string(&config).unwrap()).unwrap();
         assert_eq!(
             written,
             json!({
                 "mcpServers": {
                     "files": { "command": "npx", "args": ["fs"] },
-                    "buzzdome": { "command": app, "args": ["--mcp"] },
+                    "buzzdome": { "command": app, "args": ["--mcp", ROOT_ARG, root] },
                 },
                 "theme": "dark",
             })
         );
-        assert_eq!(connect(&config, &dir.join("moved/buzzdome.exe")).unwrap(), ClaudeConnection::Updated);
+        assert_eq!(connect(&config, &dir.join("moved/buzzdome.exe"), &roots).unwrap().connection, ClaudeConnection::Updated);
+        assert_eq!(connect(&config, &dir.join("moved/buzzdome.exe"), &Roots::default()).unwrap().connection, ClaudeConnection::Updated);
     }
 
     #[test]
     fn a_first_configuration_is_made_but_only_where_claude_desktop_is_installed() {
         let dir = scratch("claude-first");
         let config = dir.join(CONFIG_FILE);
-        assert_eq!(connect(&config, Path::new("/Applications/Buzzdome.app/Contents/MacOS/buzzdome")).unwrap(), ClaudeConnection::Added);
+        assert_eq!(connect(&config, Path::new("/Applications/Buzzdome.app/Contents/MacOS/buzzdome"), &Roots::default()).unwrap().connection, ClaudeConnection::Added);
         assert!(fs::read_to_string(&config).unwrap().contains("--mcp"));
         let missing = dir.join("no-claude").join(CONFIG_FILE);
-        assert!(matches!(connect(&missing, Path::new("/b")), Err(ConnectError::NotInstalled(_))));
+        assert!(matches!(connect(&missing, Path::new("/b"), &Roots::default()), Err(ConnectError::NotInstalled(_))));
         assert!(!missing.exists());
     }
 
@@ -132,7 +156,7 @@ mod tests {
         let config = dir.join(CONFIG_FILE);
         for text in ["{ broken", "[1]", r#"{ "mcpServers": [] }"#] {
             fs::write(&config, text).unwrap();
-            assert!(matches!(connect(&config, Path::new("/b")), Err(ConnectError::NotAConfig(_))), "{text}");
+            assert!(matches!(connect(&config, Path::new("/b"), &Roots::default()), Err(ConnectError::NotAConfig(_))), "{text}");
             assert_eq!(fs::read_to_string(&config).unwrap(), text);
         }
     }

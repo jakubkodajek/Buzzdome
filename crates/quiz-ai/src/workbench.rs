@@ -6,10 +6,10 @@
 use quiz_core::{MediaKind, Quiz, ReadQuiz, SlideType, ValidationError};
 use quiz_file::{FileAction, MediaSource, QuizFileError, EXTENSION};
 use serde::Serialize;
+use std::collections::VecDeque;
 use std::fs;
-use std::io;
+use std::io::{self, Read};
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU64, Ordering};
 
 /// Most media files `list_media` lists.
 pub const MAX_LISTED: usize = 1000;
@@ -19,8 +19,7 @@ pub const MAX_LIST_DEPTH: usize = 4;
 /// 5 MB as base64, which is a third larger than the file.
 pub const MAX_PICTURE_BYTES: u64 = 3 << 20;
 /// What `picture` hands over: the types assistants read, by extension.
-const PICTURE_TYPES: [(&str, &str); 5] =
-    [("png", "image/png"), ("jpg", "image/jpeg"), ("jpeg", "image/jpeg"), ("gif", "image/gif"), ("webp", "image/webp")];
+const PICTURE_EXTENSIONS: [&str; 5] = ["png", "jpg", "jpeg", "gif", "webp"];
 
 #[derive(Debug, thiserror::Error)]
 pub enum WorkError {
@@ -28,6 +27,8 @@ pub enum WorkError {
     File(#[from] QuizFileError),
     #[error("{} exists already", .0.display())]
     Exists(PathBuf),
+    #[error("{} holds other files than a quiz: use a new or empty folder, or a quiz folder", .0.display())]
+    NotQuizFolder(PathBuf),
     #[error("{} is not a .{EXTENSION} file", .0.display())]
     NotQuizFile(PathBuf),
     #[error("{} is not a picture, sound or video the app plays", .0.display())]
@@ -62,14 +63,19 @@ pub struct Check {
 }
 
 impl Check {
+    /// The check of a quiz read from the quiz folder `root`.
     fn of(read: &ReadQuiz, root: &Path) -> Check {
+        Check::with(read, &quiz_file::problems(&read.quiz, root))
+    }
+
+    fn with(read: &ReadQuiz, problems: &[ValidationError]) -> Check {
         let words = |errors: &[ValidationError]| errors.iter().map(ToString::to_string).collect();
         let quiz = &read.quiz;
         Check {
             title: quiz.title.clone(),
             slides: quiz.slides.len(),
             questions: quiz.slides.iter().filter(|slide| slide.content.slide_type() == SlideType::Question).count(),
-            problems: words(&quiz_file::problems(quiz, root)),
+            problems: words(problems),
             left_out: words(&read.dropped),
         }
     }
@@ -81,28 +87,41 @@ impl Check {
 }
 
 /// Checks the quiz at `path`: a quiz folder, or a quiz file (`.quiz`, or a
-/// plain quiz JSON with its media next to it), which is unpacked into a
-/// temporary folder to check its media.
+/// plain quiz JSON with its media next to it) as the editor opens it, read
+/// without unpacking its media (`quiz_file::inspect`).
 pub fn check(path: &Path) -> Result<Check> {
     if path.is_dir() {
         return Ok(Check::of(&quiz_file::read_quiz(path)?, path));
     }
-    let temp = temp_dir("check");
-    // The quiz as the editor opens it, which gives media whose names do not
-    // work on every system names that do.
-    let checked = quiz_file::open_into(path, &temp)
-        .map_err(WorkError::from)
-        .map(|opened| Check::of(&ReadQuiz { quiz: opened.quiz, dropped: opened.dropped }, &temp));
-    let _ = fs::remove_dir_all(&temp);
-    checked
+    let inspected = quiz_file::inspect(path)?;
+    Ok(Check::with(&inspected.read, &inspected.problems()))
+}
+
+/// Refuses to write into `folder` unless it is a quiz folder, or can become
+/// one: missing, empty, holding a `quiz.json`, or only media and hidden
+/// files. So a quiz is never written among other files.
+fn quiz_folder(folder: &Path) -> Result<()> {
+    let entries = match fs::read_dir(folder) {
+        Ok(entries) => entries,
+        Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(()),
+        Err(e) => return Err(WorkError::io(FileAction::Read, folder, e)),
+    };
+    let names: Vec<String> = entries.flatten().map(|entry| entry.file_name().to_string_lossy().into_owned()).collect();
+    let media = quiz_core::MEDIA_PREFIX.trim_end_matches('/');
+    if names.iter().any(|name| name == quiz_file::QUIZ_JSON) || names.iter().all(|name| name == media || name.starts_with('.')) {
+        Ok(())
+    } else {
+        Err(WorkError::NotQuizFolder(folder.to_path_buf()))
+    }
 }
 
 /// Writes `json`, a whole quiz, as the `quiz.json` of the folder `folder`,
-/// which is made if missing; media stay as they are. What does not fit the
-/// format is left out (`Check::left_out`); JSON that is no quiz at all is
-/// refused and nothing is written.
+/// which is made if missing (see `quiz_folder`); media stay as they are.
+/// What does not fit the format is left out (`Check::left_out`); JSON that
+/// is no quiz at all is refused and nothing is written.
 pub fn write_quiz(folder: &Path, json: &str) -> Result<Check> {
     let read = Quiz::read_json(json).map_err(QuizFileError::from)?;
+    quiz_folder(folder)?;
     fs::create_dir_all(folder).map_err(|e| WorkError::io(FileAction::CreateFolder, folder, e))?;
     quiz_file::write_quiz_json(folder, &read.quiz)?;
     Ok(Check::of(&read, folder))
@@ -118,7 +137,7 @@ pub struct Added {
 }
 
 /// Copies the media files `files` into the folder `folder`, which is made
-/// if missing, and returns what the quiz names each by. A file with a name
+/// if missing (see `quiz_folder`), and returns what the quiz names each by. A file with a name
 /// that does not work on every system gets the closest one that does, and a
 /// different file of the same name a number (`quiz_file::import_media`).
 /// Nothing is copied unless every file is one the app plays.
@@ -126,6 +145,7 @@ pub fn add_media(folder: &Path, files: &[PathBuf]) -> Result<Vec<Added>> {
     if let Some(file) = files.iter().find(|file| !file.is_file() || media_kind(file).is_none()) {
         return Err(WorkError::NotMedia(file.clone()));
     }
+    quiz_folder(folder)?;
     files
         .iter()
         .map(|from| {
@@ -136,11 +156,15 @@ pub fn add_media(folder: &Path, files: &[PathBuf]) -> Result<Vec<Added>> {
 }
 
 /// Makes the quiz file `dest` (`.quiz`) of the quiz folder `folder`, with
-/// the media its slides use. A quiz with problems is refused: they are
-/// listed, and the file is not written.
-pub fn pack(folder: &Path, dest: &Path) -> Result<Check> {
+/// the media its slides use; over a file of that name only when `replace`.
+/// A quiz with problems is refused: they are listed, and the file is not
+/// written.
+pub fn pack(folder: &Path, dest: &Path, replace: bool) -> Result<Check> {
     if !dest.extension().is_some_and(|extension| extension.eq_ignore_ascii_case(EXTENSION)) {
         return Err(WorkError::NotQuizFile(dest.to_path_buf()));
+    }
+    if !replace && fs::symlink_metadata(dest).is_ok() {
+        return Err(WorkError::Exists(dest.to_path_buf()));
     }
     let read = quiz_file::read_quiz(folder)?;
     quiz_file::save(&read.quiz, folder, dest)?;
@@ -157,10 +181,10 @@ pub fn unpack(file: &Path, folder: &Path) -> Result<Check> {
     Ok(Check::of(&quiz_file::read_quiz(folder)?, folder))
 }
 
-/// The `quiz.json` of the quiz folder `folder`, as it is written.
+/// The `quiz.json` of the quiz folder `folder`, as it is written, up to
+/// `quiz_file::MAX_QUIZ_JSON_BYTES`.
 pub fn read_quiz(folder: &Path) -> Result<String> {
-    let path = folder.join(quiz_file::QUIZ_JSON);
-    fs::read_to_string(&path).map_err(|e| WorkError::io(FileAction::Read, &path, e))
+    Ok(quiz_file::read_json(&folder.join(quiz_file::QUIZ_JSON))?)
 }
 
 /// A media file found on this computer.
@@ -177,18 +201,29 @@ pub struct MediaFile {
 #[serde(rename_all = "camelCase")]
 pub struct Listing {
     pub files: Vec<MediaFile>,
-    /// More files are there than `MAX_LISTED`, or deeper than `MAX_LIST_DEPTH`.
+    /// More files are there than `MAX_LISTED`, deeper than `MAX_LIST_DEPTH`
+    /// or in folders that cannot be read.
     pub truncated: bool,
 }
 
 /// The pictures, sounds and videos the app plays in `folder` and the
-/// folders in it, up to `MAX_LIST_DEPTH` down, by path. Hidden files and
-/// folders are passed over.
+/// folders in it, up to `MAX_LIST_DEPTH` down, by path. The folders are
+/// read level by level, so the nearest files are the ones listed when there
+/// are more than `MAX_LISTED`. Hidden files and folders are passed over, and
+/// so are folders in it that cannot be read (the system's own, such as
+/// Windows' "Application Data").
 pub fn list_media(folder: &Path) -> Result<Listing> {
     let mut listing = Listing { files: Vec::new(), truncated: false };
-    let mut folders = vec![(folder.to_path_buf(), 0)];
-    while let Some((dir, depth)) = folders.pop() {
-        let entries = fs::read_dir(&dir).map_err(|e| WorkError::io(FileAction::Read, &dir, e))?;
+    let mut folders = VecDeque::from([(folder.to_path_buf(), 0)]);
+    while let Some((dir, depth)) = folders.pop_front() {
+        let entries = match fs::read_dir(&dir) {
+            Ok(entries) => entries,
+            Err(e) if depth == 0 => return Err(WorkError::io(FileAction::Read, &dir, e)),
+            Err(_) => {
+                listing.truncated = true;
+                continue;
+            }
+        };
         for entry in entries.flatten() {
             if entry.file_name().to_string_lossy().starts_with('.') {
                 continue;
@@ -197,14 +232,15 @@ pub fn list_media(folder: &Path) -> Result<Listing> {
             let Ok(kind) = entry.file_type() else { continue };
             if kind.is_dir() {
                 if depth < MAX_LIST_DEPTH {
-                    folders.push((path, depth + 1));
+                    folders.push_back((path, depth + 1));
                 } else {
                     listing.truncated = true;
                 }
             } else if let Some(kind) = media_kind(&path) {
                 if listing.files.len() == MAX_LISTED {
                     listing.truncated = true;
-                    break;
+                    listing.files.sort_by(|a, b| a.path.cmp(&b.path));
+                    return Ok(listing);
                 }
                 let bytes = entry.metadata().map_or(0, |meta| meta.len());
                 listing.files.push(MediaFile { path, kind, bytes });
@@ -222,28 +258,44 @@ pub struct Picture {
     pub mime_type: &'static str,
 }
 
-/// Reads the picture `path` for the assistant to look at.
+/// Reads the picture `path` for the assistant to look at: only a file
+/// named and made as a PNG, JPEG, GIF or WebP picture is read whole.
 pub fn picture(path: &Path) -> Result<Picture> {
     let extension = path.extension().map(|e| e.to_string_lossy().to_ascii_lowercase()).unwrap_or_default();
-    let Some(&(_, mime_type)) = PICTURE_TYPES.iter().find(|(known, _)| *known == extension) else {
+    if !PICTURE_EXTENSIONS.contains(&extension.as_str()) {
         return Err(WorkError::NotPicture(path.to_path_buf()));
-    };
-    let size = fs::metadata(path).map_err(|e| WorkError::io(FileAction::Read, path, e))?.len();
-    if size > MAX_PICTURE_BYTES {
+    }
+    let read = |e| WorkError::io(FileAction::Read, path, e);
+    let file = fs::File::open(path).map_err(read)?;
+    if file.metadata().map_err(read)?.len() > MAX_PICTURE_BYTES {
         return Err(WorkError::PictureTooLarge(path.to_path_buf()));
     }
-    let bytes = fs::read(path).map_err(|e| WorkError::io(FileAction::Read, path, e))?;
+    let mut bytes = Vec::new();
+    file.take(MAX_PICTURE_BYTES + 1).read_to_end(&mut bytes).map_err(read)?;
+    if bytes.len() as u64 > MAX_PICTURE_BYTES {
+        return Err(WorkError::PictureTooLarge(path.to_path_buf()));
+    }
+    let mime_type = picture_type(&bytes).ok_or_else(|| WorkError::NotPicture(path.to_path_buf()))?;
     Ok(Picture { bytes, mime_type })
+}
+
+/// The type of picture `bytes` are, by the signature each format starts with.
+fn picture_type(bytes: &[u8]) -> Option<&'static str> {
+    if bytes.starts_with(b"\x89PNG\r\n\x1a\n") {
+        Some("image/png")
+    } else if bytes.starts_with(&[0xFF, 0xD8, 0xFF]) {
+        Some("image/jpeg")
+    } else if bytes.starts_with(b"GIF87a") || bytes.starts_with(b"GIF89a") {
+        Some("image/gif")
+    } else if bytes.len() >= 12 && bytes.starts_with(b"RIFF") && &bytes[8..12] == b"WEBP" {
+        Some("image/webp")
+    } else {
+        None
+    }
 }
 
 fn media_kind(path: &Path) -> Option<MediaKind> {
     MediaKind::of(&path.file_name()?.to_string_lossy())
-}
-
-/// A folder name in the system's temporary folder that nothing has.
-fn temp_dir(purpose: &str) -> PathBuf {
-    static MADE: AtomicU64 = AtomicU64::new(0);
-    std::env::temp_dir().join(format!("buzzdome-{purpose}-{}-{}", std::process::id(), MADE.fetch_add(1, Ordering::Relaxed)))
 }
 
 #[cfg(test)]
@@ -287,8 +339,11 @@ pub(crate) mod tests {
         assert_eq!((check.slides, check.questions), (3, 1));
 
         let file = dir.join("capitals.quiz");
-        pack(&folder, &file).unwrap();
+        pack(&folder, &file, false).unwrap();
         assert!(check_is_ready(&file));
+        // A quiz file is replaced only when asked to.
+        assert!(matches!(pack(&folder, &file, false), Err(WorkError::Exists(_))));
+        pack(&folder, &file, true).unwrap();
         let copy = dir.join("copy");
         unpack(&file, &copy).unwrap();
         assert_eq!(fs::read(copy.join("media/brno photo.jpg")).unwrap(), b"jpeg");
@@ -307,9 +362,54 @@ pub(crate) mod tests {
         let check = write_quiz(&folder, &quiz_with_picture("media/missing.png")).unwrap();
         assert_eq!(check.problems, vec!["slide q1: media file media/missing.png: the file is missing".to_string()]);
         let file = dir.join("broken.quiz");
-        assert!(matches!(pack(&folder, &file), Err(WorkError::File(QuizFileError::Invalid(_)))));
+        assert!(matches!(pack(&folder, &file, false), Err(WorkError::File(QuizFileError::Invalid(_)))));
         assert!(!file.exists());
-        assert!(matches!(pack(&folder, &dir.join("broken.zip")), Err(WorkError::NotQuizFile(_))));
+        assert!(matches!(pack(&folder, &dir.join("broken.zip"), false), Err(WorkError::NotQuizFile(_))));
+    }
+
+    #[test]
+    fn a_quiz_file_is_checked_without_unpacking_it() {
+        let dir = scratch("check-file");
+        let folder = dir.join("quiz");
+        fs::create_dir_all(folder.join("media")).unwrap();
+        fs::write(folder.join("media/a.png"), b"png").unwrap();
+        write_quiz(&folder, &quiz_with_picture("media/a.png")).unwrap();
+        let file = dir.join("a.quiz");
+        pack(&folder, &file, false).unwrap();
+        assert!(check(&file).unwrap().is_ready());
+        // The plain quiz.json reads its media from next to it.
+        assert!(check(&folder.join(quiz_file::QUIZ_JSON)).unwrap().is_ready());
+        fs::remove_file(folder.join("media/a.png")).unwrap();
+        assert_eq!(check(&folder.join(quiz_file::QUIZ_JSON)).unwrap().problems.len(), 1);
+        let leftovers = fs::read_dir(std::env::temp_dir()).unwrap().flatten();
+        assert!(!leftovers.into_iter().any(|entry| entry.file_name().to_string_lossy().starts_with(&format!("buzzdome-check-{}-", std::process::id()))));
+    }
+
+    #[test]
+    fn a_quiz_is_written_only_into_a_quiz_folder_or_a_new_one() {
+        let dir = scratch("quiz-folder");
+        let quiz = quiz_with_picture("media/a.png");
+        // Media first, then the quiz: a folder of media becomes a quiz folder.
+        let folder = dir.join("quiz");
+        fs::write(dir.join("a.png"), b"png").unwrap();
+        add_media(&folder, &[dir.join("a.png")]).unwrap();
+        write_quiz(&folder, &quiz).unwrap();
+        write_quiz(&folder, &quiz).unwrap();
+        // A folder with other files is no quiz folder.
+        let documents = dir.join("documents");
+        fs::create_dir_all(&documents).unwrap();
+        fs::write(documents.join("tax.pdf"), b"pdf").unwrap();
+        assert!(matches!(write_quiz(&documents, &quiz), Err(WorkError::NotQuizFolder(_))));
+        assert!(matches!(add_media(&documents, &[dir.join("a.png")]), Err(WorkError::NotQuizFolder(_))));
+        assert!(!documents.join(quiz_file::QUIZ_JSON).exists() && !documents.join("media").exists());
+    }
+
+    #[test]
+    fn a_quiz_json_too_large_is_not_read() {
+        let dir = scratch("read-large");
+        let big = fs::File::create(dir.join(quiz_file::QUIZ_JSON)).unwrap();
+        big.set_len(quiz_file::MAX_QUIZ_JSON_BYTES + 1).unwrap();
+        assert!(matches!(read_quiz(&dir), Err(WorkError::File(QuizFileError::QuizJsonTooLarge))));
     }
 
     #[test]
@@ -362,15 +462,63 @@ pub(crate) mod tests {
         let found: Vec<(PathBuf, MediaKind)> = listing.files.into_iter().map(|f| (f.path, f.kind)).collect();
         assert_eq!(found, vec![(dir.join("a.PNG"), MediaKind::Image), (dir.join("round 2/clip.mp4"), MediaKind::Video)]);
         assert!(!listing.truncated);
+        assert!(list_media(&dir.join("missing")).is_err());
     }
+
+    #[test]
+    fn the_nearest_media_are_listed_up_to_the_cap() {
+        let dir = scratch("list-cap");
+        fs::create_dir_all(dir.join("a/deep")).unwrap();
+        for n in 0..MAX_LISTED {
+            fs::write(dir.join(format!("a/deep/{n}.png")), b"x").unwrap();
+        }
+        fs::write(dir.join("top.png"), b"x").unwrap();
+        fs::write(dir.join("a/near.png"), b"x").unwrap();
+        let listing = list_media(&dir).unwrap();
+        assert!(listing.truncated);
+        assert_eq!(listing.files.len(), MAX_LISTED);
+        assert!(listing.files.iter().any(|file| file.path == dir.join("top.png")));
+        assert!(listing.files.iter().any(|file| file.path == dir.join("a/near.png")));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_folder_that_cannot_be_read_is_passed_over() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = scratch("list-locked");
+        fs::create_dir_all(dir.join("locked")).unwrap();
+        fs::write(dir.join("locked/x.png"), b"x").unwrap();
+        fs::write(dir.join("a.png"), b"x").unwrap();
+        fs::set_permissions(dir.join("locked"), fs::Permissions::from_mode(0o000)).unwrap();
+        let listing = list_media(&dir);
+        fs::set_permissions(dir.join("locked"), fs::Permissions::from_mode(0o755)).unwrap();
+        let listing = listing.unwrap();
+        // Root reads any folder: then nothing is passed over.
+        if fs::read_dir(dir.join("locked")).is_ok() && listing.files.len() == 2 {
+            return;
+        }
+        assert_eq!(listing.files.len(), 1);
+        assert!(listing.truncated);
+    }
+
+    pub(crate) const PNG: &[u8] = b"\x89PNG\r\n\x1a\n....";
 
     #[test]
     fn a_picture_is_handed_over_only_when_an_assistant_reads_it() {
         let dir = scratch("picture");
-        fs::write(dir.join("p.JPG"), b"jpeg").unwrap();
+        let jpeg = [0xFF, 0xD8, 0xFF, 0xE0, 0, 0x10];
+        fs::write(dir.join("p.JPG"), jpeg).unwrap();
+        fs::write(dir.join("p.png"), PNG).unwrap();
+        fs::write(dir.join("p.webp"), b"RIFF\0\0\0\0WEBPVP8 ").unwrap();
         fs::write(dir.join("p.svg"), b"<svg/>").unwrap();
-        assert_eq!(picture(&dir.join("p.JPG")).unwrap(), Picture { bytes: b"jpeg".to_vec(), mime_type: "image/jpeg" });
+        fs::write(dir.join("notes.png"), b"a text named as a picture").unwrap();
+        assert_eq!(picture(&dir.join("p.JPG")).unwrap(), Picture { bytes: jpeg.to_vec(), mime_type: "image/jpeg" });
+        // The signature decides the type, not the name.
+        fs::copy(dir.join("p.png"), dir.join("png.gif")).unwrap();
+        assert_eq!(picture(&dir.join("png.gif")).unwrap().mime_type, "image/png");
+        assert_eq!(picture(&dir.join("p.webp")).unwrap().mime_type, "image/webp");
         assert!(matches!(picture(&dir.join("p.svg")), Err(WorkError::NotPicture(_))));
+        assert!(matches!(picture(&dir.join("notes.png")), Err(WorkError::NotPicture(_))));
         let big = fs::File::create(dir.join("big.png")).unwrap();
         big.set_len(MAX_PICTURE_BYTES + 1).unwrap();
         assert!(matches!(picture(&dir.join("big.png")), Err(WorkError::PictureTooLarge(_))));

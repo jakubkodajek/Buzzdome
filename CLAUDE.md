@@ -68,7 +68,8 @@ Layout: `crates/quiz-core` (model, game state machine, scoring, view),
 `crates/quiz-file` (`.quiz` files: ZIP with media, unpack cache, save;
 `sheet.rs` spreadsheet import and CSV export),
 `crates/quiz-ai` (quiz writing for AI assistants: the quiz JSON Schema, `workbench.rs` quiz folders,
-`mcp.rs` the MCP server, `skill.rs` the skill package, `claude_desktop.rs`, the `buzzdome-quiz` command line),
+`mcp.rs` the MCP server, `roots.rs` the folders it may use, `skill.rs` the skill package, `claude_desktop.rs`,
+the `buzzdome-quiz` command line),
 `crates/buzzers` (driver trait, USB-HID receiver thread, protocols, learn mode, `clock.rs` show clock),
 `app/src-tauri` (Tauri shell, session journal, `show_thread.rs` and `pump.rs` the show thread and its
 event order, `app_windows.rs` the Director and projector windows, `app_log.rs` the log file, `editor.rs` draft, `sheet_reader.rs` spreadsheet reader process, `hardware.rs` receiver setup,

@@ -51,16 +51,16 @@ in a `media` folder next to it, and open that `quiz.json` in Buzzdome.
   one, and an `endOfRound` slide that shows the scores. End the quiz with a
   `final` slide for the winners.
 - Every slide has an `id` unique in the quiz, such as `r1-q3`.
-- An `everyone` question has 2 to 4 answers, one per button A-D, and at
+- An `everyone` question has {{EVERYONE_ANSWERS}} answers, one per button A-D, and at
   least one right answer in `correct` (indexes from 0). Keep the right
   answer's position varied across questions.
-- A `fastestFinger` question has up to 6 answers, or none when players
+- A `fastestFinger` question has up to {{FASTEST_FINGER_ANSWERS}} answers, or none when players
   answer aloud; the quizmaster judges the answer.
 - Use `share` below 100 only on `everyone` questions, for a nearly right
   answer that earns part of the points.
 - Keep question texts short enough to read from across a room, and answers
   to a few words.
-- Pictures: PNG, JPEG, WebP, GIF or SVG. Sounds: MP3, WAV, OGG or M4A.
-  Videos: MP4 (H.264) or WebM. A slide shows a picture or a video, not both.
+- Pictures: {{PICTURES}}. Sounds: {{SOUNDS}}. Videos: {{VIDEOS}}, MP4 with
+  H.264. A slide shows a picture or a video, not both.
 - Leave out what you do not need: every field has a default, and the
   quiz's theme decides the look unless the quizmaster asks for a style.

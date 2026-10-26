@@ -7,7 +7,8 @@
 //! - a skill package for chat assistants that run code in the cloud
 //!   (`skill`), with the format guide, the schema and a packing script;
 //! - an MCP server for desktop assistants (`mcp`), whose tools check, pack
-//!   and fill quiz folders on this computer (`workbench`);
+//!   and fill quiz folders on this computer (`workbench`), only in the
+//!   folders the quizmaster chose (`roots`);
 //! - the `buzzdome-quiz` command line over the same functions (src/main.rs).
 //!
 //! Every check is the app's own: the tools read and write quizzes through
@@ -15,6 +16,7 @@
 
 pub mod claude_desktop;
 pub mod mcp;
+pub mod roots;
 pub mod skill;
 pub mod workbench;
 

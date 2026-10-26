@@ -26,7 +26,7 @@ interface BackstageProps {
    */
   actions: Pick<
     Actions,
-    "newQuiz" | "save" | "saveAs" | "closeQuiz" | "exit" | "importSheet" | "sheetTemplate" | "exportSheet" | "saveAiSkill" | "connectClaude"
+    "newQuiz" | "save" | "saveAs" | "closeQuiz" | "exit" | "importSheet" | "sheetTemplate" | "exportSheet" | "saveAiSkill" | "connectClaude" | "connectClaudeFolder"
   >;
   recentFiles: string[];
   /** Opens `recent`, a file in `recentFiles`, or one the quizmaster picks. */
@@ -246,9 +246,14 @@ function AiPage({ actions }: BackstageProps) {
       <h1>{t("backstageAi")}</h1>
       <p>{t("aiAssistantsHint")}</p>
       <div className="backstage-task">
-        <button type="button" className="browse" onClick={actions.connectClaude.run}>
-          {actions.connectClaude.label}
-        </button>
+        <div className="backstage-buttons">
+          <button type="button" className="browse" onClick={actions.connectClaude.run}>
+            {actions.connectClaude.label}
+          </button>
+          <button type="button" className="browse" onClick={actions.connectClaudeFolder.run}>
+            {actions.connectClaudeFolder.label}
+          </button>
+        </div>
         <p>{t("connectClaudeHint")}</p>
       </div>
       <div className="backstage-task">

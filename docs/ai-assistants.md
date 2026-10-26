@@ -10,7 +10,7 @@ There are two ways, depending on the assistant:
 
 | Assistant | How | Media |
 | --- | --- | --- |
-| Claude Desktop (Windows, macOS) | The app is its MCP server: File › AI assistants › Connect Claude Desktop. | Taken from folders on the computer; Claude can look at pictures. |
+| Claude Desktop (Windows, macOS) | The app is its MCP server: File › AI assistants › Connect Claude Desktop. | Taken from the folder the quizmaster gives it; Claude can look at pictures. |
 | Claude, Gemini or ChatGPT in the browser or their apps | The skill package: File › AI assistants › Save the AI skill, then upload it to the assistant as a skill. | Uploaded to the chat, or pictures the assistant makes; videos and the rest are added in the editor afterwards. |
 
 Why two: in October 2026 only Claude Desktop runs an MCP server on the
@@ -31,44 +31,74 @@ Enterprise and Edu plans (https://help.openai.com/en/articles/20001066).
 ## Claude Desktop
 
 1. Install Claude Desktop and start it once.
-2. In Buzzdome, File › AI assistants › Connect Claude Desktop.
-3. Close Claude Desktop and open it again. Its tools list now has
+2. In Buzzdome, File › AI assistants › Connect Claude Desktop. Claude may
+   then work in the `Buzzdome` folder of your Documents, which this makes;
+   *Connect with another folder…* gives it another one instead.
+3. Put the pictures, sounds and videos for the quiz in that folder.
+4. Close Claude Desktop and open it again. Its tools list now has
    Buzzdome.
-4. Ask, for example: "Write a pub quiz of three rounds about Czech films
-   with the pictures in C:\Quizzes\films, and save it as
-   C:\Quizzes\Films.quiz."
+5. Ask, for example: "Write a pub quiz of three rounds about Czech films
+   with the pictures in the films folder, and save it as Films.quiz."
 
 Connecting adds the app to Claude Desktop's configuration file
 (`claude_desktop_config.json`: `%APPDATA%\Claude\` on Windows,
 `~/Library/Application Support/Claude/` on macOS) under `mcpServers`, as
-the command `<path of Buzzdome> --mcp`; everything else in the file stays.
-Claude Desktop starts that command when it starts and talks to it over
-standard input and output. Started so, Buzzdome opens no window and does
-nothing else: it does not touch a running show, and a show does not need
-it. After Buzzdome moves (a reinstall to another folder), connect again.
+the command `<path of Buzzdome> --mcp --root <folder>`; everything else in
+the file stays. Claude Desktop starts that command when it starts and
+talks to it over standard input and output. Started so, Buzzdome opens no
+window and does nothing else, and a show does not need it. After Buzzdome
+moves (a reinstall to another folder), connect again.
+
+### What the assistant may touch
+
+The tools read and write only inside the folders given with `--root`
+(more than one may be given), as the reference filesystem server touches
+only the folders on its command line
+(https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem).
+The MCP specification leaves confirming each tool call to the assistant
+and asks the server to validate its inputs and control access
+(https://modelcontextprotocol.io/specification/2025-06-18/server/tools,
+"Security Considerations"), so the server does not rely on the assistant
+asking first:
+
+- A path must be absolute and without `..`, and it counts by where it
+  really leads, once links are followed: a link inside a folder that leads
+  out of it is refused.
+- Buzzdome's own data (the running show and its journal, editor drafts,
+  settings) is never a root: the app refuses a folder that holds it or is
+  inside it, and so the assistant cannot change a show, even by mistake.
+- `write_quiz` and `add_media` write only into a new or empty folder, a
+  quiz folder (one with a `quiz.json`), or one with only media; never
+  among other files.
+- `save_quiz_file` does not replace a file unless it is told to
+  (`replace`), which the assistant is told to do only when the quizmaster
+  asked.
+- `look_at_picture` sends the assistant's model only a file that is a PNG,
+  JPEG, GIF or WebP picture by its contents, not just by its name.
 
 The same entry by hand, for another assistant that runs local MCP servers:
 
 ```json
-{ "mcpServers": { "buzzdome": { "command": "C:\\Program Files\\Buzzdome\\buzzdome.exe", "args": ["--mcp"] } } }
+{ "mcpServers": { "buzzdome": { "command": "C:\\Program Files\\Buzzdome\\buzzdome.exe", "args": ["--mcp", "--root", "C:\\Users\\Eva\\Documents\\Buzzdome"] } } }
 ```
 
 ### Tools
 
 All paths are absolute, since the server does not know the assistant's
-working folder. A quiz is worked on as a folder, `quiz.json` with its media
-in `media/`, which `save_quiz_file` packs into a `.quiz` file.
+working folder, and inside the roots. A quiz is worked on as a folder,
+`quiz.json` with its media in `media/`, which `save_quiz_file` packs into
+a `.quiz` file.
 
 | Tool | What it does |
 | --- | --- |
 | `quiz_format` | The format guide and the JSON Schema of `quiz.json`. |
-| `list_media_files` | The pictures, sounds and videos in a folder and the folders in it (4 deep, 1000 files). |
+| `list_media_files` | The pictures, sounds and videos in a folder and the folders in it (4 deep, the nearest 1000 files; folders it cannot read are passed over). |
 | `look_at_picture` | Shows the assistant a PNG, JPEG, GIF or WebP picture of up to 3 MB. |
 | `add_media` | Copies files into a quiz folder and returns their names in the quiz (`media/...`). |
 | `write_quiz` | Writes a whole quiz as the folder's `quiz.json` and lists its problems. |
 | `read_quiz` | Returns a quiz folder's `quiz.json`. |
-| `check_quiz` | Checks a quiz folder or `.quiz` file as the app does. |
-| `save_quiz_file` | Makes the `.quiz` file; refuses a quiz with problems. |
+| `check_quiz` | Checks a quiz folder or `.quiz` file as the app does, without unpacking the file's media. |
+| `save_quiz_file` | Makes the `.quiz` file; refuses a quiz with problems, and an existing file unless `replace` is given. |
 | `unpack_quiz_file` | Unpacks a `.quiz` file into a new folder to change it. |
 
 ## Chat assistants: the skill
@@ -89,7 +119,10 @@ main folder of what is uploaded: if it refuses the ZIP, unpack it and upload
 the `buzzdome-quiz` folder. The assistant then writes `quiz.json` in its sandbox, puts
 the files the quizmaster uploaded into `media/`, and runs
 `make_quiz.py`, which checks the quiz against the schema and its media and
-writes the `.quiz` file to download. The script uses only Python's standard
+writes the `.quiz` file to download. It packs every text of the quiz that
+starts with `media/`, whichever field holds it, and only as
+`media/<file name>` with a name every system stores, so nothing from
+outside the media folder goes into the file. The script uses only Python's standard
 library. It checks the quiz's shape, not every rule; the editor lists the
 rest under File › Info when the file opens, and the show refuses a quiz
 until they are fixed. A slide that needs a picture the assistant does not
@@ -107,11 +140,11 @@ Code:
 
 ```text
 buzzdome-quiz check <folder or file>
-buzzdome-quiz pack <folder> <file.quiz>
+buzzdome-quiz pack <folder> <file.quiz> [--replace]
 buzzdome-quiz unpack <file.quiz> <folder>
 buzzdome-quiz schema
 buzzdome-quiz skill <file.zip>
-buzzdome-quiz mcp
+buzzdome-quiz mcp [--root <folder>]...
 ```
 
 It is not in the installer yet; the app's `--mcp` is.

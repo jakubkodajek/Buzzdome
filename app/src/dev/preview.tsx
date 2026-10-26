@@ -638,8 +638,8 @@ mockIPC(
         called.push({ cmd, ...(payload as object) });
         return true;
       case "ai_connect_claude":
-        called.push({ cmd });
-        return "added";
+        called.push({ cmd, ...(payload as object) });
+        return { connection: "added", folders: ["C:\\Users\\Eva\\Documents\\Buzzdome"] };
       case "receiver_info":
         return {
           status: { kind: "error", problem: "cannotOpen", detail: "access denied" },
