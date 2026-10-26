@@ -4,6 +4,7 @@ import type {
   BoardChange,
   Button,
   BuzzerId,
+  BuzzerSeen,
   Category,
   ClockView,
   Command,
@@ -158,6 +159,8 @@ export interface BackendEvents {
   "receiver-status": ReceiverStatus;
   "receiver-raw": RawReport;
   "receiver-press": PressEvent;
+  /** A buzzer the receiver heard, as it now stands. */
+  "receiver-buzzer": BuzzerSeen;
   "receiver-learn": LearnProgress;
   /** The projector window opened (true) or closed (false). */
   "host-window": boolean;

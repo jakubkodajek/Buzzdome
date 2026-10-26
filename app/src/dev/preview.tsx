@@ -88,6 +88,7 @@ function players(overrides: Partial<PlayerView>[] = []): PlayerView[] {
     answerCorrect: null,
     answerMs: null,
     lockedOut: false,
+    joinsNext: false,
     delta: null,
     ...overrides[i],
   }));
@@ -206,7 +207,7 @@ const SCENES: Record<string, GameView | null> = {
     answerCounts: [1, 2, 1, 0],
   }),
   buzzed: view({
-    phase: { phase: "question", step: "buzzed", buzzer: 3, clock: { limitMs: 30000, elapsedBeforeMs: 4300, runningSinceMs: null, pressesFromMs: 0 } },
+    phase: { phase: "question", step: "buzzed", buzzer: 3, button: "big", clock: { limitMs: 30000, elapsedBeforeMs: 4300, runningSinceMs: null, pressesFromMs: 0 } },
     slideIndex: 7,
     slide: quiz.slides[7],
     clock: { limitMs: 30000, remainingMs: 25700, elapsedMs: 4300, running: false, points: 129 },
@@ -635,9 +636,14 @@ mockIPC(
           status: { kind: "error", problem: "cannotOpen", detail: "access denied" },
           initError: null,
           settingsError: null,
+          chosen: null,
           learnedButtons: 0,
           learn: { active: false, buzzer: null, button: null, samples: 0, canSave: false },
           recent: [],
+          buzzers: [
+            { buzzer: 1, button: "big", atMs: 1_792_921_670_000 },
+            { buzzer: 2, button: "a", atMs: 1_792_921_675_500 },
+          ],
           platform: "linux",
         };
       case "receiver_devices":

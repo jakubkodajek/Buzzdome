@@ -4,4 +4,4 @@
  * Which protocol reads the receiver, for the Director (which words it).
  * Vendor protocols add a variant each.
  */
-export type ProtocolKind = { "type": "rawOnly" } | { "type": "learned", buttons: number, } | { "type": "rf215", answered: boolean, };
+export type ProtocolKind = { "type": "rawOnly" } | { "type": "learned", buttons: number, } | { "type": "enjoy303s", answered: boolean, };

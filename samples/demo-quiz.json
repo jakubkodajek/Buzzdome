@@ -56,7 +56,7 @@
       "id": "round-2",
       "type": "billboard",
       "title": "2. kolo: Rychlé prsty",
-      "text": "Kdo zmáčkne velké tlačítko první, odpovídá nahlas. Špatná odpověď = −30 bodů a do konce otázky stop."
+      "text": "Kdo zmáčkne první, odpovídá: u otázky s odpověďmi A–D tlačítkem s písmenem, jinak velkým tlačítkem a nahlas. Špatná odpověď = −30 bodů a do konce otázky stop."
     },
     {
       "id": "q-ff-1",
@@ -79,6 +79,18 @@
       "points": 150,
       "penalty": 30,
       "notes": "Správně: Karel Čapek (1936)."
+    },
+    {
+      "id": "q-ff-3",
+      "type": "question",
+      "mode": "fastestFinger",
+      "text": "U kterého města se Vltava vlévá do Labe?",
+      "answers": ["Litoměřice", "Mělník", "Roudnice nad Labem", "Ústí nad Labem"],
+      "correct": [{ "answer": 1, "share": 100 }],
+      "timeLimitS": 30,
+      "points": 150,
+      "penalty": 30,
+      "notes": "Správně: B, Mělník. Bzučí se tlačítky A–D: písmeno, které hráč zmáčkl první, je jeho odpověď."
     },
     {
       "id": "end-2",

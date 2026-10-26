@@ -10,7 +10,7 @@
 //! edits with odd names, score changes, and crashes followed by a resume.
 
 use quiz_core::{
-    AnswerMode, Button, Command, CorrectAnswer, Effect, Game, GameError, Phase, Question, QuestionStep, Quiz, Slide, SlideContent, Stamped,
+    AnswerMode, Button, BuzzerMode, Command, CorrectAnswer, Effect, Game, GameError, Light, Phase, Question, QuestionStep, Quiz, Slide, SlideContent, Stamped,
     VideoClip, FULL_SHARE, MAX_ANSWERS, MAX_EVERYONE_ANSWERS, MAX_POINTS, MAX_TEAMS, MIN_EVERYONE_ANSWERS, RULES_VERSION,
 };
 use std::collections::BTreeMap;
@@ -298,6 +298,16 @@ impl Show {
                         assert!(after.players().any(|p| p.buzzer == *buzzer), "a light for buzzer {buzzer}, which is not in the show");
                     }
                 }
+            }
+        }
+        // Every buzzer ready in a fastest-finger round that begins showed
+        // another light just before: the buzzes are ordered by the buzzers'
+        // timers, and an Enjoy 303S buzzer's starts again only when its
+        // colour changes (docs/design.md, 2.6).
+        if after.buzzer_mode() == BuzzerMode::FastestFinger && before.buzzer_mode() != BuzzerMode::FastestFinger {
+            let was: BTreeMap<_, _> = before.lights().into_iter().collect();
+            for (buzzer, light) in after.lights() {
+                assert!(light != Light::Ready || was.get(&buzzer) != Some(&Light::Ready), "buzzer {buzzer} was ready already as a round began: {stamped:?}");
             }
         }
         self.check_view(after);

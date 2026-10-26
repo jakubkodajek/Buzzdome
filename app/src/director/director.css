@@ -751,6 +751,34 @@
   border-left-color: var(--accent);
 }
 
+.buzzers-seen {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(92px, 1fr));
+  gap: 6px;
+  margin: 6px 0;
+  padding: 0;
+  list-style: none;
+}
+
+.buzzers-seen li {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 4px 6px;
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--good);
+  border-radius: 4px;
+  background: #f6f6f6;
+}
+
+.buzzers-seen strong {
+  font-size: 1.4em;
+}
+
+.buzzers-seen li.latest {
+  background: var(--accent-soft);
+}
+
 .learn-active {
   padding: 6px 10px;
   background: var(--accent-soft);

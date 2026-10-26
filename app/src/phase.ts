@@ -1,3 +1,4 @@
+import { ANSWER_LETTERS, answerIndex } from "./answers";
 import { playerName, type Translate } from "./i18n";
 import type { GameView } from "./types";
 
@@ -23,7 +24,10 @@ export function phaseLabel(t: Translate, view: GameView): string {
           return view.clock?.running ? t("running") : t("paused");
         case "buzzed": {
           const player = view.players.find((p) => p.buzzer === phase.buzzer);
-          return t("buzzed", { name: player ? playerName(t, player) : String(phase.buzzer) });
+          const name = player ? playerName(t, player) : String(phase.buzzer);
+          // Buzzed in with an answer button: that is the answer to judge.
+          const answer = answerIndex(phase.button);
+          return answer === null ? t("buzzed", { name }) : t("buzzedAnswer", { name, letter: ANSWER_LETTERS[answer] });
         }
         case "closed":
           return t("closed");

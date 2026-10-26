@@ -482,6 +482,20 @@
   font-weight: 900;
 }
 
+.buzz-answer {
+  margin: 0 auto 0 48px;
+  min-width: 112px;
+  height: 112px;
+  display: grid;
+  place-items: center;
+  border-radius: calc(50% * var(--theme-roundness));
+  font-size: 64px;
+  font-weight: 900;
+  color: var(--answer-text);
+  background: var(--answer);
+  border: 4px solid #fff;
+}
+
 .buzz-delta {
   font-size: 84px;
   font-weight: 900;

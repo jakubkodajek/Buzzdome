@@ -229,9 +229,14 @@ export function protocolText(t: Translate, protocol: ProtocolKind): string {
       return t("protocolRawOnly");
     case "learned":
       return t("protocolLearned", { buttons: protocol.buttons });
-    case "rf215":
-      return t(protocol.answered ? "protocolRf215" : "protocolRf215Silent");
+    case "enjoy303s":
+      return t("protocolEnjoy303s");
   }
+}
+
+/** Whether the receiver has yet to answer its set-up: shown as still being looked for, not as connected. */
+export function awaitsAnswer(protocol: ProtocolKind): boolean {
+  return protocol.type === "enjoy303s" && !protocol.answered;
 }
 
 

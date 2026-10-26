@@ -62,8 +62,10 @@ The most important part of the app: a show is only as good as its buzzers.
 
 ### 4.1 Hardware
 
-Wireless buzzers (A, B, C, D and one big fastest-finger button, with a light)
-talk by radio to a receiver; the receiver connects to the computer through a
+Wireless buzzers (A, B, C, D and one big button, with a light) talk by
+radio to a receiver; in a fastest-finger question players buzz in with the
+answer buttons where the question has answers A to D, else with the big
+button (BZ-19); the receiver connects to the computer through a
 "USB-HID cable" (USB on one end, RJ45 on the other). Details and sources are
 in [`replica/hardware.md`](../replica/hardware.md).
 
@@ -75,31 +77,33 @@ The manufacturer (Enjoy Tech) answered Jakub's email in October 2026:
 - dome and RGB versions use **different protocols**;
 - the protocol is described in their SDK, which they provide free of charge.
 
-Enjoy has not sent the SDK yet. The RF215 (dome) protocol is now known from
-a description written from an unofficial copy of it, which Jakub approved
-on 2026-10-20 (`docs/design.md` 2.4); it carries no press times. The 303S
-(RGB) protocol is still unknown, and Jakub's own set is the 303S (confirmed
-2026-10-21), so the RF215 driver does not apply to it. The app therefore
-reads buzzers in three ways:
+Jakub's own set is the 303S (confirmed 2026-10-21), and on 2026-10-21 he got
+Enjoy's official SDK kit for it. Its protocol, written down in our own words
+from the kit and the unofficial copy of the SDK Jakub approved on 2026-10-20
+(`docs/design.md` 2.4), is what the app drives: presses with each buzzer's
+own timer, by which fastest finger is ordered, and every light in colour. It
+has no battery level. The 215 (dome) uses the same cable with another
+protocol, which the app does not drive. The app reads buzzers in three ways:
 
 1. **Learned mapping** (no vendor information needed): the user teaches the
    app which USB report each button of each buzzer sends. Presses work;
    lights do not. Teaching is per buzzer, which is fine for a test with a
    few buzzers but too slow for a full event. It needs a receiver that sends
    plain HID reports, so it does not cover Enjoy's `10c4:1819` cable: that
-   cable is a USB-to-serial bridge whose serial line only the RF215 driver
+   cable is a USB-to-serial bridge whose serial line only the 303S driver
    opens (`docs/design.md` 2.4), and the app always uses that driver for
    it, which takes no teaching.
 2. **Vendor protocol**: presses with buzzer ID, and lights; press time and
    battery level where the protocol has them. Selected automatically by the
-   receiver's USB vendor and product ID. Built for the RF215 (presses, the
-   receiver's own rounds, right and wrong), to be checked on the hardware.
-3. **Keyboard**: keys `1`-`0` and the on-screen virtual buzzers, always
+   receiver's USB vendor and product ID. Built for the 303S (presses with
+   the buzzer's timer, colours), to be checked on the hardware.
+3. **Keyboard**: keys `1`-`0` (the big button, so they buzz in only where
+   BZ-19 lets it) and the on-screen virtual buzzers (every button), always
    available, also covering the vendor's "keystroke" mode.
 
-So learn mode is no fallback for Jakub's 303S set: if the set shows the
-`10c4:1819` cable and does not answer like the 215, only the keyboard and
-on-screen buzzers work with it until Enjoy's 303S protocol is built.
+So learn mode is no fallback on Enjoy's cable: if the 303S driver does not
+work with a set, only the keyboard and on-screen buzzers do until it is
+fixed.
 
 ### 4.2 Requirements
 
@@ -107,36 +111,39 @@ on-screen buzzers work with it until Enjoy's 303S protocol is built.
 | --- | --- | --- |
 | BZ-1 | The Director lists all USB HID devices (vendor and product ID, name, manufacturer, usage page, interface) and lets the user pick the receiver. Keyboards and mice are greyed out. | done |
 | BZ-2 | The chosen receiver is remembered and reopened automatically at the next start. | done |
-| BZ-3 | When the receiver is unplugged or fails, the Director shows it at once and the app reconnects by itself within 2 seconds of the receiver coming back, without losing the show. | done (simulated) |
+| BZ-3 | When the receiver is unplugged or fails, the Director shows it at once and the app reconnects by itself within 2 seconds of the receiver coming back, without losing the show. | done (simulated) for the USB cable; a 303S receiver that loses power or its RJ45 plug behind the cable is set up again only if it says so when it starts again (to check on the hardware), else with the Receiver tab's Reconnect |
 | BZ-4 | Every press becomes a game command (buzzer ID, button) that is written to the show journal **before** it changes anything on screen, exactly like a keyboard press. After a crash the show resumes with those presses. | done |
-| BZ-5 | Fastest-finger order is the order the receiver reports, or the receiver's press times when the protocol provides them. The PC never re-orders presses. Presses in one USB report keep their order within the report. | done for receiver order; the RF215 has no press times, the 303S waits for its protocol |
-| BZ-6 | A button held down, or a receiver that repeats a report, counts as one press. A new press needs a release or a 150 ms pause. | done |
+| BZ-5 | Fastest-finger order is the order the receiver reports, or the receiver's press times when the protocol provides them. The PC never orders presses by anything else, its own clock included. Presses in one USB report keep their order within the report. | done: the receiver's order, and for the 303S the buzzers' own timers (`docs/design.md` 2.6), so a player switched on mid-question joins at the next; checked with buzzers 1 and 2 on 2026-10-25, buzzers far apart in ID still to check |
+| BZ-6 | A button held down, or a receiver that repeats a report, counts as one press. A new press needs a release or a 150 ms pause. | done, also for a 303S press the receiver sends again with the same timer (seen 2026-10-25) |
 | BZ-7 | Learn mode: for a chosen buzzer number and button, the user presses the button at least twice; the app derives a signature (which bytes matter) and stores it per receiver model. Conflicting signatures are refused with a message. While learning, presses do not reach the game. | done |
 | BZ-8 | Diagnostics: the Director shows live presses and the raw reports (hex) with what they decoded to, and exports the raw log to a text file that can be sent to a developer. | done |
 | BZ-9 | A command-line monitor (`hid-monitor`) lists devices and prints raw reports with timestamps, without the app. | done |
-| BZ-10 | Lights follow the game: ready, locked out, first to buzz, correct, wrong (table 4.3). Dome buzzers use their fixed colours; RGB buzzers use the colours in table 4.3. | partial: the app sends light states; the RF215 runs ready, locked out and first itself and gets correct and wrong (not yet checked on the hardware); RGB waits for the protocol |
+| BZ-10 | Lights follow the game: ready, locked out, first to buzz, correct, wrong (table 4.3). Dome buzzers use their fixed colours; RGB buzzers use the colours in table 4.3. | done for the 303S, in the colours of table 4.3, checked on the hardware on 2026-10-25 (the whites show as two purples, told apart at arm's length); every buzzer goes dark when a show begins or ends; dome buzzers are not driven |
 | BZ-11 | Up to 100 dome buzzers or 64 RGB buzzers on one receiver (the receiver's own limits, see `replica/hardware.md`). Up to about 50 are used at our events. | to verify on hardware |
 | BZ-12 | Keyboard and on-screen virtual buzzers work at the same time as the receiver, so a missing buzzer can be replaced mid-show. | done |
 | BZ-13 | If another program (for example the vendor's software) holds the receiver, the error says so. | done |
-| BZ-14 | Battery level of each buzzer, shown in the buzzer test view. | planned, needs the protocol (the RF215's has none) |
+| BZ-14 | Battery level of each buzzer, shown in the buzzer test view. | not possible with the 303S: its SDK has no battery level, and in the hardware test of 2026-10-25 no press or other message carried one |
 | BZ-15 | Host screen shows a small "buzzers not connected" sign on the welcome screen while the chosen receiver is not connected (the reference app does this too). | planned |
-| BZ-16 | Buzzer test view: a grid of buzzer numbers that light up with the pressed button, for range tests in the venue. | partial (Receiver tab shows presses as a list) |
+| BZ-16 | Buzzer test view: a grid of buzzer numbers that light up with the pressed button, for range tests in the venue. | done: the Receiver tab lists each buzzer heard since the receiver connected, with its last button and when, the latest marked |
 | BZ-17 | Buzzer panel in the Director during a show: every known buzzer number with its state (registered, last button and when, light, battery when the protocol gives it), and the receiver state on top. A buzzer not seen for a long time is marked. | planned |
-| BZ-18 | If the receiver reports which buzzers are switched on and in range without a press (open question, section 11), the registration screen and the buzzer panel show them as "on" before anyone presses. | waits for the protocol |
+| BZ-18 | If the receiver reports which buzzers are switched on and in range without a press (open question, section 11), the registration screen and the buzzer panel show them as "on" before anyone presses. | waits for the hardware: the 303S's ping may give it, but what it answers is unknown |
+| BZ-19 | Which buttons buzz in a fastest-finger question follows its answers (Jakub, 2026-10-21): where it has one to four answers, the answer buttons A to D do, so the first press is also the player's answer, and the Director and the projector show the letter pressed; with no answers, or with E and F, which are read out, the big button does. The quizmaster judges either way. A player who joins while a fastest-finger question is under way (switched on, or new to the show by a press or by being added) plays from the next question, as the others' buzzer timers count from the question's start; in other questions they play at once. | done (rules version 5; shows begun before take any button and let a joining player buzz at once) |
+| BZ-20 | With no receiver chosen, the app takes a receiver whose protocol it knows (the Enjoy 303S's cable) by itself as soon as it is plugged in, also mid-show, with no click (Jakub, 2026-10-25). One chosen in the Receiver tab is kept until the quizmaster lets the app find it by itself again. | done |
 
 ### 4.3 Light states
 
 `Light` values come from the game core (`crates/quiz-core`). The RGB colours
-are this app's defaults and will become part of the theme (section 5).
+are this app's defaults and will become part of the theme (section 5). The
+303S's protocol has no flashing, so each light has a colour of its own.
 
 | Game situation | `Light` | Dome buzzer | RGB buzzer |
 | --- | --- | --- | --- |
 | no question running | `Off` | off | off |
-| buzzer may press | `Ready` | green | green |
-| out for this question (pressed wrong, or another team is answering) | `Locked` | red | red |
-| pressed first | `First` | white, flashing | blue, flashing |
-| answer judged correct | `Correct` | green, flashing | green, flashing |
-| answer judged wrong | `Wrong` | red, flashing | red, flashing |
+| buzzer may press | `Ready` | green | blue |
+| out for this question (pressed wrong, or another team is answering) | `Locked` | red | dim white (Jakub's choice, told apart from wrong) |
+| pressed first | `First` | white, flashing | white |
+| answer judged correct | `Correct` | green, flashing | green |
+| answer judged wrong | `Wrong` | red, flashing | red |
 
 ### 4.4 Acceptance test
 
@@ -371,7 +378,7 @@ the Host screen.
 | SF-1 | Start: open a quiz file (or a recent one) and start the show. The last unfinished show can be resumed instead. | done (`.quiz` files and plain JSON); recent files planned |
 | SF-2 | Launch check before the welcome screen: receiver connected (or keyboard only), projector window open on the chosen monitor, sound output working. Problems are listed with a fix; the show can start anyway. | planned |
 | SF-3 | Welcome screen on the projector: quiz title, the theme's background and logo, optional welcome music (section 10). A small sign while the receiver is not connected (BZ-15). | partial: title and background colour only |
-| SF-4 | Registration: players press any button; their buzzer numbers light up in a grid on the projector and appear in the Director's Teams tab with an editable name. Late presses still register. | done |
+| SF-4 | Registration: players press any button; their buzzer numbers light up in a grid on the projector and appear in the Director's Teams tab with an editable name. Late presses still register, between questions or in one (in fastest finger the late team plays from the next question, BZ-19). On the Enjoy 303S a buzzer showing dark registers only outside fastest finger and its judging, as a press there counts only from a ready buzzer (design 2.4). | done |
 | SF-5 | Team names can be prepared in the Director's Teams tab, before a show starts or during it, and are kept for the next shows: typed, pasted (one name per line) or loaded from a text or CSV file (first column, UTF-8 or Windows-1250). A buzzer is paired with a team by dragging its number onto the name, or by clicking the number and then the name; its player takes the team's name (a player who had it loses it) and the registration screen shows the name under the number. Pairing works at any point of the show, for late teams too. | done; a saved buzzer-to-name list that pairs on the first press is planned |
 | SF-6 | Slides, questions, judging, scores and the final ranking as in the reference app; all keyboard shortcuts work. | done for billboard, multiple choice and fastest finger |
 | SF-7 | The projector screen is the user's own: theme, backgrounds and per-slide pictures or videos (section 5 and 9). | partial: per-slide pictures, videos and backgrounds done; twelve built-in themes (section 5.2), the Design tab gallery and five clock designs done; importing user themes (TH-1, TH-6) planned |
@@ -381,7 +388,7 @@ the Host screen.
 | ID | Requirement | Status |
 | --- | --- | --- |
 | QZ-1 | Quiz editor in the Director, after the reference editor's layout: ribbon (File, Home, Insert, Question, View, Quiz show, and a contextual tab for the selected picture, video or sound), slide thumbnails (add from a layout gallery, cut, copy, paste, duplicate, delete, reorder by drag), the slide as the audience sees it with its parts selectable, a properties panel (pages, foldable sections with More options for rarely used rows, search across all pages with accents ignored, descriptions or tooltips, dark panel, an alphabetical list, Reset, Copy and Paste of a value from a row's context menu, a slider next to bounded numbers, drag a number's name to change it), several slides selected at once (Ctrl and Shift click, Ctrl+A) to edit their shared properties, cut, copy, delete or move them together, an Edit question form, a table view for typing many questions, quizmaster notes under the slide. Undo and redo; the draft survives a crash. | done |
-| QZ-2 | Slide types: billboard, question (multiple choice with 2 to 4 answers, one per answer button A-D, or fastest finger with up to 6 answers A-F or none, answered aloud), answer explanation, end of round, final results. An explanation is optional: the author inserts it after a question, and it shows that question with its right answers above the author's text, picture or video. A final results slide is optional too: it shows the final ranking where it stands (drum roll, third, second and first place, then everyone) with its own title, background and sound, so the winners' music plays when the slide opens or when the quizmaster plays it; without one, the ranking follows the last slide. More types come with the reference's other formats. | done |
+| QZ-2 | Slide types: billboard, question (multiple choice with 2 to 4 answers, one per answer button A-D, or fastest finger with up to 6 answers A-F or none, buzzed in as BZ-19 says), answer explanation, end of round, final results. An explanation is optional: the author inserts it after a question, and it shows that question with its right answers above the author's text, picture or video. A final results slide is optional too: it shows the final ranking where it stands (drum roll, third, second and first place, then everyone) with its own title, background and sound, so the winners' music plays when the slide opens or when the quizmaster plays it; without one, the ranking follows the last slide. More types come with the reference's other formats. | done |
 | QZ-3 | Per question: text, answers, the right answers (one or several; on an everyone-answers question each gives all or a share of the points, e.g. 50 % for a nearly exact one), time limit, points (fixed or falling from a start to an end value), penalty, notes for the quizmaster. | done |
 | QZ-4 | Media per slide: a picture, a sound clip and a video, each with its options (sound: when the slide opens, with the clock or on demand, loop, volume, the part that plays, loudness gain, a replay part; video: starting by itself after an intro pause or when the quizmaster plays it from the Director, muted, loop, volume, speed 25 to 250 %, the part that plays, a blur or mosaic effect that fades as the question's time runs out, a replay part after the reveal; it pauses and goes on with the show). A background per slide, with its video options, overrides the theme's (BG rules in section 5). | done |
 | QZ-5 | Quiz file: one file (`.quiz`, a ZIP) with `quiz.json` and a `media/` folder, so a quiz with all its pictures and sounds can be copied to the event laptop as one file. Format version in `quiz.json`; older versions keep opening. | done: [`quiz-format.md`](quiz-format.md) |
@@ -409,9 +416,10 @@ the Host screen.
 
 | Question | Who | Why it matters |
 | --- | --- | --- |
-| Which model is it: 215 (dome) or 303S (RGB)? Answered 2026-10-21: Jakub's set is the 303S (RGB, 64 colours, up to 64 buzzers per receiver). | Jakub | Decides the protocol and whether lights are colours; the 303S protocol must come from Enjoy. |
+| Which model is it: 215 (dome) or 303S (RGB)? Answered 2026-10-21: Jakub's set is the 303S (RGB, 64 colours, up to 64 buzzers per receiver). | Jakub | Decides the protocol and whether lights are colours. |
 | USB vendor and product ID of the cable (Receiver tab or `hid-monitor`). | Jakub | Selects the protocol automatically. |
-| The SDK files and protocol documentation for that model and the HID cable. | Jakub, from Enjoy | Lights, press times, battery level. |
+| The SDK files and protocol documentation for that model and the HID cable. Received 2026-10-21 for the 303S; it has no battery level. | Jakub, from Enjoy | Lights, press times, battery level. |
+| What the 303S's SDK leaves open: the big button's code, the colour a press reports, the unit of the buzzer's timer, how far apart presses made together arrive, how quickly the lights follow with 64 buzzers taken, what the receiver does when its power or RJ45 plug goes. Answered 2026-10-25 on Windows with buzzers 1 and 2: the big button sends 5, a press reports the colour shown, the timer counts milliseconds from the last colour change (a colour repeated leaves it running), presses arrive on a 36 ms tick (0 to 36 ms apart for buzzers 1 and 2), the buzzer has no power switch, no battery level anywhere. Still open: the gap for buzzers far apart in ID and whether a higher ID's timer starts later, the light lag, the power or RJ45 plug, macOS. | hardware test (`hardware-test.md` sections 3, 6 and 7) | Fastest-finger order and its wait (`docs/design.md` 2.6). |
 | SDK terms for using it in this app. Decided 2026-10-09: the app is a private copy for Jakub, not open source and not distributed, so publishing the protocol is no longer a question; Enjoy is asked for the SDK for personal use. | Jakub, from Enjoy | The vendor protocol may then live in this (private) repository. |
 | Does the receiver report one press per USB report, or several? | hardware test | Affects how ties within one report are ordered. |
 | Does the receiver know which buzzers are switched on and in range before anyone presses, and their battery level? Not asked in the October email; worth a follow-up if the SDK does not say. | Jakub, from Enjoy | Shows connected buzzers before registration (BZ-18). |

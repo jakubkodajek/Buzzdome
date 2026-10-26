@@ -5,14 +5,17 @@ use quiz_core::{
 use quiz_core::game::FINAL_LAST_STEP;
 use quiz_core::view::AnswerResults;
 
+/// A question; a fastest-finger one is answered aloud, so the big button
+/// buzzes in (`a_fastest_finger_question_with_answers_a_to_d_buzzes_with_them`).
 fn question(id: &str, mode: AnswerMode) -> Slide {
+    let aloud = mode == AnswerMode::FastestFinger;
     Slide::new(
         id,
         SlideContent::Question(Question {
             text: format!("{id}?"),
             mode,
-            answers: vec!["A".into(), "B".into(), "C".into(), "D".into()],
-            correct: vec![CorrectAnswer::full(1)],
+            answers: if aloud { vec![] } else { vec!["A".into(), "B".into(), "C".into(), "D".into()] },
+            correct: if aloud { vec![] } else { vec![CorrectAnswer::full(1)] },
             time_limit_s: 10,
             points: 100,
             points_end: Some(50),
@@ -302,7 +305,7 @@ fn a_press_made_while_the_clock_was_paused_counts_however_late_it_is_applied() {
     show.run(12_000, Command::ResumeClock).unwrap();
     show.press(10_000, 1, Button::Big);
     match step(&show.game) {
-        QuestionStep::Buzzed { buzzer: 1, clock } => assert_eq!(clock.elapsed_ms(20_000), 1_000),
+        QuestionStep::Buzzed { buzzer: 1, clock, .. } => assert_eq!(clock.elapsed_ms(20_000), 1_000),
         other => panic!("the buzz did not count: {other:?}"),
     }
 }
@@ -420,13 +423,13 @@ fn the_buzzer_mode_follows_the_steps_of_a_show() {
     show.run(1_000, Command::Next).unwrap();
     assert_eq!(mode(&show), BuzzerMode::FastestFinger);
     show.press(2_000, 1, Button::Big);
-    assert_eq!(mode(&show), BuzzerMode::Buzzed { buzzer: 1 });
+    assert_eq!(mode(&show), BuzzerMode::Buzzed);
     show.run(3_000, Command::JudgeWrong).unwrap();
     assert_eq!(mode(&show), BuzzerMode::FastestFinger);
     // A second wrong answer goes through a buzz again, so the round goes
     // on once more.
     show.press(4_000, 2, Button::Big);
-    assert_eq!(mode(&show), BuzzerMode::Buzzed { buzzer: 2 });
+    assert_eq!(mode(&show), BuzzerMode::Buzzed);
     show.run(5_000, Command::JudgeWrong).unwrap();
     assert_eq!(mode(&show), BuzzerMode::FastestFinger);
     show.press(6_000, 3, Button::Big);
@@ -457,6 +460,35 @@ fn the_buzzer_mode_follows_the_steps_of_a_show() {
     show.run(18_000, Command::Next).unwrap();
     assert_eq!(step(&show.game), QuestionStep::Revealed { winner: None });
     assert_eq!(mode(&show), BuzzerMode::Off);
+}
+
+#[test]
+fn the_lights_of_a_show_are_every_players_with_switched_off_ones_locked() {
+    let mut show = Show::new(vec![question("q1", AnswerMode::FastestFinger)]);
+    for b in 1..=3 {
+        show.press(0, b, Button::Big);
+    }
+    assert_eq!(show.game.lights(), [(1, Light::Ready), (2, Light::Ready), (3, Light::Ready)]);
+    show.run(0, Command::SetPlayerEnabled { buzzer: 3, enabled: false }).unwrap();
+    show.run(0, Command::Next).unwrap();
+    show.run(1_000, Command::Next).unwrap();
+    show.press(2_000, 1, Button::Big);
+    assert_eq!(show.game.lights(), [(1, Light::First), (2, Light::Locked), (3, Light::Locked)]);
+}
+
+#[test]
+fn every_buzzer_is_dark_before_a_question_runs() {
+    let mut show = Show::new(vec![question("q1", AnswerMode::FastestFinger)]);
+    for b in 1..=2 {
+        show.press(0, b, Button::Big);
+    }
+    assert_eq!(show.game.lights(), [(1, Light::Ready), (2, Light::Ready)], "registered in the lobby");
+    show.run(0, Command::Next).unwrap();
+    assert_eq!(show.game.lights(), [(1, Light::Off), (2, Light::Off)], "the question on screen");
+    show.run(1_000, Command::Next).unwrap();
+    assert_eq!(show.game.lights(), [(1, Light::Ready), (2, Light::Ready)]);
+    show.run(2_000, Command::RestartQuestion).unwrap();
+    assert_eq!(show.game.lights(), [(1, Light::Off), (2, Light::Off)], "restarted");
 }
 
 #[test]
@@ -1035,8 +1067,8 @@ fn switching_off_the_last_player_to_answer_closes_the_question_and_later_switche
 }
 
 #[test]
-fn a_player_switched_on_mid_question_can_still_answer_and_one_switched_off_cannot() {
-    let mut show = Show::new(vec![question("q1", AnswerMode::FastestFinger)]);
+fn a_player_switched_on_mid_question_joins_at_the_next_and_one_switched_off_cannot_buzz() {
+    let mut show = Show::new(vec![question("q1", AnswerMode::FastestFinger), question("q2", AnswerMode::FastestFinger)]);
     for buzzer in 1..=3 {
         show.press(0, buzzer, Button::Big);
     }
@@ -1044,18 +1076,18 @@ fn a_player_switched_on_mid_question_can_still_answer_and_one_switched_off_canno
     show.run(0, Command::Next).unwrap();
     show.run(0, Command::Next).unwrap();
     assert!(show.press(500, 3, Button::Big).is_empty(), "switched off");
+    // The others' buzzer timers count from the start, so 3 joins at the next question.
     let effects = show.run(600, Command::SetPlayerEnabled { buzzer: 3, enabled: true }).unwrap();
-    assert_eq!(effects, [Effect::Lights { lights: vec![(3, Light::Ready)] }]);
+    assert_eq!(effects, [Effect::Lights { lights: vec![(3, Light::Locked)] }]);
+    assert!(show.press(700, 3, Button::Big).is_empty(), "joins at the next question");
 
     show.press(1_000, 1, Button::Big);
     let effects = show.run(2_000, Command::JudgeWrong).unwrap();
     assert_eq!(show.score(1), -20);
-    assert!(effects.contains(&Effect::Lights { lights: vec![(2, Light::Ready), (3, Light::Ready)] }));
+    assert!(effects.contains(&Effect::Lights { lights: vec![(2, Light::Ready), (3, Light::Locked)] }));
     show.run(2_500, Command::SetPlayerEnabled { buzzer: 1, enabled: false }).unwrap();
     show.run(2_500, Command::SetPlayerEnabled { buzzer: 1, enabled: true }).unwrap();
     assert!(show.press(3_000, 1, Button::Big).is_empty(), "still locked out");
-    show.press(3_000, 3, Button::Big);
-    show.run(4_000, Command::JudgeWrong).unwrap();
     // Only 2 is left; switching it off leaves nobody to buzz.
     let effects = show.run(5_000, Command::SetPlayerEnabled { buzzer: 2, enabled: false }).unwrap();
     assert_eq!(step(&show.game), QuestionStep::Closed);
@@ -1063,6 +1095,146 @@ fn a_player_switched_on_mid_question_can_still_answer_and_one_switched_off_canno
     let answering: Vec<u64> = show.game.players().map(|p| p.total_answer_ms).collect();
     assert_eq!(answering, [0, 0, 0], "wrong answers add no answering time");
     assert_eq!(show.game.view(5_000).answer_counts, None, "fastest finger counts no answers");
+
+    show.run(6_000, Command::Next).unwrap();
+    show.run(6_000, Command::Next).unwrap();
+    show.run(6_000, Command::Next).unwrap();
+    show.press(7_000, 3, Button::Big);
+    assert!(matches!(step(&show.game), QuestionStep::Buzzed { buzzer: 3, .. }), "in from the next question");
+}
+
+#[test]
+fn enabling_players_who_are_on_leaves_them_in_the_fastest_finger_question() {
+    let mut show = Show::new(vec![question("q1", AnswerMode::FastestFinger)]);
+    for buzzer in 1..=2 {
+        show.press(0, buzzer, Button::Big);
+    }
+    show.run(0, Command::Next).unwrap();
+    show.run(0, Command::Next).unwrap();
+    // The Teams tab sends Enable for every selected row.
+    for buzzer in 1..=2 {
+        let effects = show.run(500, Command::SetPlayerEnabled { buzzer, enabled: true }).unwrap();
+        assert_eq!(effects, [Effect::Lights { lights: vec![(buzzer, Light::Ready)] }]);
+    }
+    assert!(matches!(step(&show.game), QuestionStep::Running { .. }), "still open");
+    assert!(show.game.view(500).players.iter().all(|p| !p.joins_next && !p.locked_out));
+    show.press(1_000, 2, Button::Big);
+    assert!(matches!(step(&show.game), QuestionStep::Buzzed { buzzer: 2, .. }));
+}
+
+#[test]
+fn a_buzzer_new_to_the_show_mid_fastest_finger_plays_from_the_next_question() {
+    let mut show = Show::new(vec![question("q1", AnswerMode::FastestFinger), question("q2", AnswerMode::Everyone)]);
+    show.press(0, 1, Button::Big);
+    show.run(0, Command::Next).unwrap();
+    show.run(0, Command::Next).unwrap();
+    // A press registers a buzzer whenever it comes, an added player too.
+    assert_eq!(show.press(500, 2, Button::Big), [Effect::Lights { lights: vec![(2, Light::Locked)] }]);
+    assert_eq!(show.run(500, Command::AddPlayer { buzzer: 3, name: "Late".into() }).unwrap(), [Effect::Lights { lights: vec![(3, Light::Locked)] }]);
+    assert!(show.press(700, 3, Button::Big).is_empty(), "plays from the next question");
+    let view = show.game.view(700);
+    let joining: Vec<u16> = view.players.iter().filter(|p| p.joins_next).map(|p| p.buzzer).collect();
+    assert_eq!(joining, [2, 3]);
+    assert!(view.players.iter().all(|p| !p.locked_out), "not marked as answered wrong");
+    assert!(matches!(step(&show.game), QuestionStep::Running { .. }), "1 is left to buzz");
+
+    // In the next question, everyone answers; a buzzer new to it answers at once.
+    show.run(1_000, Command::CloseQuestion).unwrap();
+    show.run(1_000, Command::Next).unwrap();
+    show.run(1_000, Command::Next).unwrap();
+    show.run(1_000, Command::Next).unwrap();
+    assert!(show.game.view(1_000).players.iter().all(|p| !p.joins_next));
+    show.press(1_500, 4, Button::B);
+    assert_eq!(show.game.responses().get(&4).map(|r| r.button), Some(Button::B));
+    assert_eq!(Game::replay(show.game.quiz().clone(), &show.journal, RULES_VERSION), show.game);
+}
+
+#[test]
+fn a_player_switched_on_mid_question_could_buzz_at_once_under_older_rules() {
+    let mut show = Show::new(vec![question("q1", AnswerMode::FastestFinger)]);
+    for buzzer in 1..=2 {
+        show.press(0, buzzer, Button::Big);
+    }
+    show.run(0, Command::SetPlayerEnabled { buzzer: 2, enabled: false }).unwrap();
+    show.run(0, Command::Next).unwrap();
+    show.run(0, Command::Next).unwrap();
+    show.run(600, Command::SetPlayerEnabled { buzzer: 2, enabled: true }).unwrap();
+    show.journal.push(Stamped { at_ms: 1_000, command: Command::Press { buzzer: 2, button: Button::Big } });
+    let replayed = Game::replay(show.game.quiz().clone(), &show.journal, 4);
+    assert!(matches!(step(&replayed), QuestionStep::Buzzed { buzzer: 2, .. }));
+}
+
+/// A fastest-finger question with `answers` answers.
+fn fastest_finger_with(answers: usize) -> Slide {
+    let mut slide = question("ff", AnswerMode::FastestFinger);
+    let SlideContent::Question(q) = &mut slide.content else { unreachable!() };
+    q.answers = (0..answers).map(|i| format!("answer {i}")).collect();
+    q.correct = vec![CorrectAnswer::full(0)];
+    slide
+}
+
+/// Which of A, B, C, D and the big button buzz in on `slide`, as their
+/// answer letters, `*` for the big one.
+fn buzz_buttons(slide: Slide, rules_version: u32) -> String {
+    let buttons = [(Button::A, 'A'), (Button::B, 'B'), (Button::C, 'C'), (Button::D, 'D'), (Button::Big, '*')];
+    buttons
+        .into_iter()
+        .filter(|&(button, _)| {
+            let mut show = Show::new(vec![slide.clone()]);
+            show.press(0, 1, Button::Big);
+            show.run(0, Command::Next).unwrap();
+            show.run(0, Command::Next).unwrap();
+            show.journal.push(Stamped { at_ms: 1_000, command: Command::Press { buzzer: 1, button } });
+            let game = Game::replay(show.game.quiz().clone(), &show.journal, rules_version);
+            matches!(step(&game), QuestionStep::Buzzed { buzzer: 1, button: buzzed, .. } if buzzed == button)
+        })
+        .map(|(_, letter)| letter)
+        .collect()
+}
+
+#[test]
+fn a_fastest_finger_question_with_answers_a_to_d_buzzes_with_them() {
+    assert_eq!(buzz_buttons(fastest_finger_with(4), RULES_VERSION), "ABCD");
+    assert_eq!(buzz_buttons(fastest_finger_with(3), RULES_VERSION), "ABC", "no answer D");
+    assert_eq!(buzz_buttons(fastest_finger_with(1), RULES_VERSION), "A");
+    // Answered aloud, or with E and F read out: the big button.
+    assert_eq!(buzz_buttons(fastest_finger_with(0), RULES_VERSION), "*");
+    assert_eq!(buzz_buttons(fastest_finger_with(5), RULES_VERSION), "*");
+    assert_eq!(buzz_buttons(fastest_finger_with(6), RULES_VERSION), "*");
+    // Before rules version 5 any button buzzed.
+    assert_eq!(buzz_buttons(fastest_finger_with(4), 4), "ABCD*");
+    assert_eq!(buzz_buttons(fastest_finger_with(0), 4), "ABCD*");
+}
+
+#[test]
+fn a_button_that_does_not_buzz_in_is_ignored_and_the_buzz_keeps_its_answer() {
+    let mut show = Show::new(vec![fastest_finger_with(4)]);
+    show.press(0, 1, Button::Big);
+    show.press(0, 2, Button::A);
+    show.run(0, Command::Next).unwrap();
+    show.run(0, Command::Next).unwrap();
+    let big = Stamped { at_ms: 1_000, command: Command::Press { buzzer: 1, button: Button::Big } };
+    assert!(show.game.ignores(&big), "neither journaled nor shown");
+    show.press(1_100, 2, Button::C);
+    assert!(matches!(step(&show.game), QuestionStep::Buzzed { buzzer: 2, button: Button::C, .. }));
+    assert_eq!(show.game.buzzer_mode(), BuzzerMode::Buzzed);
+}
+
+#[test]
+fn the_lights_of_a_wrong_judgement_merge_into_one_per_buzzer() {
+    let mut show = Show::new(vec![question("q1", AnswerMode::FastestFinger)]);
+    show.press(0, 1, Button::Big);
+    show.press(0, 2, Button::Big);
+    show.run(0, Command::Next).unwrap();
+    show.run(0, Command::Next).unwrap();
+    show.press(1_000, 1, Button::Big);
+    let effects = show.run(2_000, Command::JudgeWrong).unwrap();
+    assert_eq!(Effect::lights(&effects), [(1, Light::Wrong), (2, Light::Ready)]);
+    // The last wrong answer closes the question: the others go dark.
+    show.press(3_000, 2, Button::Big);
+    let effects = show.run(4_000, Command::JudgeWrong).unwrap();
+    assert_eq!(Effect::lights(&effects), [(1, Light::Off), (2, Light::Wrong)]);
+    assert!(Effect::lights(&[Effect::Sound { cue: Cue::Wrong }]).is_empty());
 }
 
 #[test]

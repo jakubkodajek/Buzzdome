@@ -1,9 +1,9 @@
 //! Receiver protocols: raw HID reports in, presses out; lights and the
 //! buzzer mode in, reports out.
 
+use crate::enjoy303s::Enjoy303s;
 use crate::hid::{DeviceInfo, Report};
 use crate::learned::{LearnedMapping, LearnedProtocol};
-use crate::rf215::Rf215;
 use crate::Press;
 use quiz_core::{BuzzerId, BuzzerMode, Light};
 use serde::Serialize;
@@ -19,9 +19,9 @@ pub enum ProtocolKind {
     RawOnly,
     /// Buttons learned from recorded presses (see `learned`).
     Learned { buttons: usize },
-    /// Enjoy RF215 dome buzzers (see `rf215`). `answered` once the receiver
-    /// answered the connect command.
-    Rf215 { answered: bool },
+    /// Enjoy 303S RGB buzzers (see `enjoy303s`). `answered` once the
+    /// receiver answered its set-up.
+    Enjoy303s { answered: bool },
 }
 
 pub trait Protocol: Send {
@@ -29,19 +29,28 @@ pub trait Protocol: Send {
 
     /// Decodes one input report. Several presses in one report must be returned
     /// in the order the receiver registered them (earliest first), so the app
-    /// never has to re-order fastest-finger presses.
+    /// never re-orders presses by its own clock; presses carrying the
+    /// buzzer's own timer are ordered by it in fastest finger (`timer_order`).
     fn decode(&mut self, report: &[u8]) -> Vec<Press>;
+
+    /// The presses `decode` read but did not pass on, as ones that cannot
+    /// count now, since this was last asked: for the raw log only.
+    fn take_dropped(&mut self) -> Vec<Press> {
+        Vec::new()
+    }
 
     /// Reports that set the receiver up, sent once after the device is opened.
     fn init_reports(&self) -> Vec<Report> {
         Vec::new()
     }
 
-    /// Whether the receiver takes commands after `init_reports`. Until it
-    /// does, the receiver thread holds them back, for a while at most
-    /// (`ReceiverConfig::ready_timeout`).
-    fn ready(&self) -> bool {
-        true
+    /// Reports to write now, taken after every read, whether a report came
+    /// or the read timed out, at `now_ms` on the show clock: what the
+    /// receiver's messages call for, as the next step of its set-up and the
+    /// lights and mode that waited for it, or a step again whose answer is
+    /// overdue. Written after the reports already waiting.
+    fn follow_up(&mut self, _now_ms: u64) -> Vec<Report> {
+        Vec::new()
     }
 
     /// Reports that set the lights of these buzzers, whose lights changed.
@@ -50,16 +59,16 @@ pub trait Protocol: Send {
         Vec::new()
     }
 
-    /// Reports that put the buzzers in `mode`, which changed: for receivers
-    /// that run each round themselves.
-    fn encode_mode(&mut self, _mode: BuzzerMode) -> Vec<Report> {
-        Vec::new()
+    /// Reports that darken every buzzer, whatever it showed before, and
+    /// light these (`BuzzerDriver::reset_lights`). By default they only
+    /// light these, so a protocol with lights must override it.
+    fn reset_lights(&mut self, lights: &[(BuzzerId, Light)]) -> Vec<Report> {
+        self.encode_lights(lights)
     }
 
-    /// Reports that set the round going again after the app ignored
-    /// `press`: for receivers that lock the other buzzers by themselves
-    /// when one presses, though the app took no buzz.
-    fn rearm(&mut self, _press: Press) -> Vec<Report> {
+    /// Reports that tell the receiver `mode`, which changed: for receivers
+    /// that take presses only while told to.
+    fn encode_mode(&mut self, _mode: BuzzerMode) -> Vec<Report> {
         Vec::new()
     }
 
@@ -81,13 +90,25 @@ pub type ProtocolResolver = dyn Fn(&DeviceInfo) -> Box<dyn Protocol> + Send + Sy
 /// The protocol for `device`: its vendor's when it is known, else the
 /// buttons learned for its model, else raw reports only.
 pub fn for_device(learned: &[LearnedMapping], device: &DeviceInfo) -> Box<dyn Protocol> {
-    if Rf215::handles(device) {
-        return Box::new(Rf215::default());
+    if let Some(protocol) = built_in(device) {
+        return protocol;
     }
     match learned.iter().find(|m| m.for_device(device) && !m.signatures.is_empty()) {
         Some(mapping) => Box::new(LearnedProtocol::new(mapping.clone())),
         None => Box::new(RawOnly),
     }
+}
+
+/// Whether a protocol built into the app knows `device`, by its vendor and
+/// product ID: such a receiver is used without being chosen
+/// (`receiver::ReceiverChoice::Automatic`).
+pub fn is_known(device: &DeviceInfo) -> bool {
+    built_in(device).is_some()
+}
+
+/// The protocol built into the app for `device`'s vendor and product, if any.
+fn built_in(device: &DeviceInfo) -> Option<Box<dyn Protocol>> {
+    Enjoy303s::handles(device).then(|| Box::new(Enjoy303s::default()) as Box<dyn Protocol>)
 }
 
 /// Used when no protocol knows the device: decodes nothing, so the raw reports

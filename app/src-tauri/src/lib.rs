@@ -29,7 +29,7 @@ use dialogs::Picker;
 use error::CmdResult;
 pub use error::AppError;
 use hardware::Hardware;
-use quiz_core::{BuzzerMode, Command, Effect, Game, GameView, Quiz, Stamped};
+use quiz_core::{BuzzerId, BuzzerMode, Command, Effect, Game, GameView, Light, Quiz, Stamped};
 use session::{Resumed, Session, SessionMeta, SessionSummary};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -219,6 +219,10 @@ fn apply_journaled(inner: &mut Inner, command: Command, at_ms: u64) -> CmdResult
 /// a test run), beginning now. A new journal has no failed write yet, and
 /// the next close during a show asks again. Every show begins and ends here.
 fn replace_show(inner: &mut Inner, game: Option<Game>, session: Option<Session>) {
+    // The buzzers show the new show's lights as it stands and every other
+    // one goes dark, whatever they showed before: another show's lights,
+    // those a receiver kept while the app restarted, or another program's.
+    let lights = game.as_ref().map(Game::lights).unwrap_or_default();
     inner.game = game;
     inner.session = session;
     inner.save_problem = None;
@@ -226,6 +230,7 @@ fn replace_show(inner: &mut Inner, game: Option<Game>, session: Option<Session>)
     // A close request left unanswered was about the show before.
     inner.close_request.forget();
     send_mode(inner);
+    noted(inner.driver.reset_lights(&lights));
 }
 
 /// Tells the buzzers what they take now (`Game::buzzer_mode`). With no show
@@ -254,20 +259,37 @@ fn deliver(app: &AppHandle, inner: &mut Inner, effects: Vec<Effect>) {
 
 /// Sends a show change's effects to the buzzer lights and the windows' sound.
 fn send_effects(app: &AppHandle, inner: &mut Inner, effects: Vec<Effect>) {
+    light_buzzers(inner, &effects);
     for effect in effects {
-        match effect {
-            Effect::Lights { lights } => {
-                if let Err(e) = inner.driver.set_lights(&lights) {
-                    app_log::note(&format!("buzzer lights: {e}"));
-                }
-            }
-            Effect::Sound { cue } => {
-                let _ = app.emit("sound-cue", cue);
-            }
+        if let Effect::Sound { cue } = effect {
+            let _ = app.emit("sound-cue", cue);
         }
     }
-    // After the lights: a result is lit before the round that follows it.
+}
+
+/// Tells the buzzers what a show change's effects call for. The mode goes
+/// before the lights: by the time the buzzers light ready, the receiver
+/// thread holds a round's presses for the buzzers' timers, and tells one
+/// made in the step before by the light it showed (`buzzers::enjoy303s`).
+/// The change's lights go at once.
+fn light_buzzers(inner: &mut Inner, effects: &[Effect]) {
     send_mode(inner);
+    let lights = Effect::lights(effects);
+    if !lights.is_empty() {
+        set_lights(inner, &lights);
+    }
+}
+
+/// Lights the buzzers; a failure is logged and never stops the show.
+fn set_lights(inner: &mut Inner, lights: &[(BuzzerId, Light)]) {
+    noted(inner.driver.set_lights(lights));
+}
+
+/// Logs a failure to light the buzzers, which never stops the show.
+fn noted(lit: Result<(), buzzers::DriverError>) {
+    if let Err(e) = lit {
+        app_log::note(&format!("buzzer lights: {e}"));
+    }
 }
 
 /// Locks the show state to start a show, refusing while one runs. Learn
@@ -518,7 +540,7 @@ async fn dispatch(app: AppHandle, window: Window, command: Command) -> CmdResult
         return Err(AppError::NotFromProjector);
     }
     if let Command::Press { buzzer, button } = command {
-        return show_thread::press(&app, Press { buzzer, button });
+        return show_thread::press(&app, Press::new(buzzer, button));
     }
     show_thread::run(&app, move |app, inner, at_ms| match command {
         // The names a show is given are the prepared ones, also kept on disk.
@@ -660,6 +682,7 @@ pub fn run() {
 mod tests {
     use super::*;
     use app_windows::{CloseAnswer, CLOSE_ANSWER_WAIT};
+    use std::sync::Arc;
     use std::time::Instant;
 
     #[test]
@@ -942,6 +965,61 @@ mod tests {
         // The show resumed after a crash begins here too (`resume_last_session`).
         replace_show(&mut inner, Some(demo()), None);
         assert_eq!(request.answer(now + CLOSE_ANSWER_WAIT), CloseAnswer::Ask, "a show resumed");
+    }
+
+    /// Notes what the buzzers are told, in order.
+    struct Recording(Arc<Mutex<Vec<String>>>);
+
+    impl BuzzerDriver for Recording {
+        fn name(&self) -> &'static str {
+            "recording"
+        }
+
+        fn has_lights(&self) -> bool {
+            true
+        }
+
+        fn set_lights(&mut self, lights: &[(BuzzerId, Light)]) -> Result<(), buzzers::DriverError> {
+            self.0.lock().unwrap().push(format!("lights {lights:?}"));
+            Ok(())
+        }
+
+        fn reset_lights(&mut self, lights: &[(BuzzerId, Light)]) -> Result<(), buzzers::DriverError> {
+            self.0.lock().unwrap().push(format!("lights {lights:?}, others dark"));
+            Ok(())
+        }
+
+        fn set_mode(&mut self, mode: BuzzerMode) {
+            self.0.lock().unwrap().push(format!("mode {mode:?}"));
+        }
+    }
+
+    #[test]
+    fn the_buzzers_hear_the_mode_before_the_lights() {
+        let told = Arc::new(Mutex::new(Vec::new()));
+        let mut inner = Inner { driver: Box::new(Recording(told.clone())), ..Inner::new() };
+        let quiz = Quiz::from_json(DEMO_QUIZ).unwrap();
+        let fastest_finger = quiz
+            .slides
+            .iter()
+            .position(|slide| matches!(&slide.content, quiz_core::SlideContent::Question(q) if q.mode == quiz_core::AnswerMode::FastestFinger))
+            .unwrap();
+        replace_show(&mut inner, Some(Game::new(quiz)), None);
+        // Whatever another program left on them, the buzzers go dark.
+        assert_eq!(*told.lock().unwrap(), ["mode Register", "lights [], others dark"]);
+        let mut step = |command, at_ms| {
+            told.lock().unwrap().clear();
+            let effects = apply_journaled(&mut inner, command, at_ms).unwrap().unwrap();
+            light_buzzers(&mut inner, &effects);
+            told.lock().unwrap().clone()
+        };
+        assert_eq!(step(Command::Press { buzzer: 3, button: quiz_core::Button::Big }, 1_000), ["mode Register", "lights [(3, Ready)]"]);
+        step(Command::GoTo { slide: fastest_finger }, 2_000);
+        // A fastest-finger clock starts: the buzzers take presses as buzzes before they turn ready.
+        assert_eq!(step(Command::Next, 3_000), ["mode FastestFinger", "lights [(3, Ready)]"]);
+        told.lock().unwrap().clear();
+        replace_show(&mut inner, None, None);
+        assert_eq!(*told.lock().unwrap(), ["mode Register", "lights [], others dark"], "the show ended");
     }
 
     #[test]

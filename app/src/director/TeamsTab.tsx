@@ -144,7 +144,7 @@ function ShowTeams({ view, lost }: { view: GameView; lost: SettingsLost | null }
                     {p.delta !== null && p.delta !== 0 && <span className={p.delta > 0 ? "good-text" : "bad-text"}> ({signed(p.delta)})</span>}
                   </td>
                   <td>
-                    {p.answer ? buttonLabel(p.answer) : p.lockedOut ? "✕" : ""}
+                    {p.answer ? buttonLabel(p.answer) : p.lockedOut ? "✕" : p.joinsNext ? <span className="muted">{t("joinsNext")}</span> : ""}
                     {p.answerMs !== null && <span className="muted"> · {seconds(p.answerMs)} s</span>}
                   </td>
                   <td className="num">{seconds(p.totalAnswerMs)} s</td>
