@@ -9,8 +9,9 @@ import ReactDOM from "react-dom/client";
 import demoQuiz from "../../../samples/demo-quiz.json";
 import { installBrowserGuard } from "../browser-guard";
 import { setBodyText } from "../editor/slides";
+import { rightAnswers } from "../quiz";
 import { answerShares, NO_CONTROLS } from "../host/preview";
-import { DEFAULT_QUIZ_SETTINGS, MAX_BOARD_COLUMNS, MAX_BOARD_ROWS, MAX_PLAYER_VOLUME } from "../bindings/Constants";
+import { ANSWER_BUTTONS, DEFAULT_QUIZ_SETTINGS, MAX_BOARD_COLUMNS, MAX_BOARD_ROWS, MAX_PLAYER_VOLUME } from "../bindings/Constants";
 import type {
   Background,
   BoardChange,
@@ -25,6 +26,7 @@ import type {
   PlayerView,
   Quiz,
   SheetImport,
+  ShowResults,
   SlideStyle,
   SoundBoard,
   SoundClip,
@@ -213,6 +215,15 @@ const SCENES: Record<string, GameView | null> = {
     answeredCount: 4,
     answerCounts: [1, 2, 1, 0],
   }),
+  // The same with the answer chart on (quiz setting answerChart).
+  chart: view({
+    phase: { phase: "question", step: "revealed", winner: null },
+    results: { right: 2, wrong: 2, none: 1 },
+    players: players(answered.map((a, i) => ({ ...a, delta: [84, 80, 0, 0, 0][i] || null }))),
+    answeredCount: 4,
+    answerCounts: [1, 2, 1, 0],
+    settings: { ...DEFAULT_QUIZ_SETTINGS, answerChart: true },
+  }),
   buzzed: view({
     phase: { phase: "question", step: "buzzed", buzzer: 3, button: "big", clock: { limitMs: 30000, elapsedBeforeMs: 4300, runningSinceMs: null, pressesFromMs: 0 } },
     slideIndex: 7,
@@ -318,6 +329,47 @@ const SCENES: Record<string, GameView | null> = {
   styled: view({ slide: { ...quiz.slides[1], style: STYLE } }),
   styledBillboard: view({ phase: { phase: "billboard" }, slideIndex: 0, slide: { ...setBodyText(quiz.slides[0], "Zeměpis a historie"), style: STYLE } }),
 };
+
+/**
+ * The results of a show that asked every question of `asked`: each player
+ * answers most of them right, a little slower than the player before, and
+ * now and then not at all. Ranked by score, as the core ranks them.
+ */
+function previewResults(shown: GameView, asked: Quiz): ShowResults {
+  let round = 0;
+  const questions = asked.slides.flatMap((slide, index) => {
+    if (slide.type === "endOfRound") round += 1;
+    if (slide.type !== "question") return [];
+    const rightButton = ANSWER_BUTTONS[rightAnswers(slide)[0]?.answer ?? 0];
+    const wrongButton = ANSWER_BUTTONS.find((button) => button !== rightButton) ?? "a";
+    return [
+      {
+        slide: index,
+        round,
+        marks: (shown.players ?? []).flatMap((player, i): ShowResults["questions"][number]["marks"] => {
+          const pick = (i + index) % 4;
+          if (pick === 3) return i % 2 === 0 ? [] : [[player.buzzer, { answer: null, right: false, points: -10, joker: false }]];
+          const right = pick !== 2;
+          const joker = right && i === 0 && index === 1;
+          const points = right ? (100 - i * 6) * (joker ? 2 : 1) : -10;
+          return [[player.buzzer, { answer: { button: right ? rightButton : wrongButton, elapsedMs: 1800 + 650 * i + 90 * index }, right, points, joker }]];
+        }),
+      },
+    ];
+  });
+  const rounds = Math.max(0, ...questions.map((question) => question.round)) + 1;
+  const players = (shown.players ?? []).map((player) => {
+    const marks = questions.flatMap((question) => question.marks.filter(([buzzer]) => buzzer === player.buzzer).map(([, mark]) => ({ round: question.round, mark })));
+    const byRound = Array.from({ length: rounds }, (_, r) => marks.filter((m) => m.round === r).reduce((sum, m) => sum + m.mark.points, 0));
+    const adjusted = player.buzzer === 3 ? 5 : 0;
+    const score = byRound.reduce((sum, points) => sum + points, adjusted);
+    const totalAnswerMs = marks.reduce((sum, m) => sum + (m.mark.right ? (m.mark.answer?.elapsedMs ?? 0) : 0), 0);
+    return { buzzer: player.buzzer, name: player.name, rank: null as number | null, score, totalAnswerMs, rounds: byRound, adjusted };
+  });
+  players.sort((a, b) => b.score - a.score || a.totalAnswerMs - b.totalAnswerMs);
+  players.forEach((player, i) => (player.rank = i + 1));
+  return { questions, rounds, players };
+}
 
 // The quiz as the scene's view shows it (scenes may add media to a slide).
 const found = SCENES[scene] ?? null;
@@ -592,6 +644,15 @@ mockIPC(
         return broken === "view" && current ? { ...current, players: null } : current;
       case "get_quiz":
         return sceneQuiz;
+      case "show_results":
+        return current && previewResults(current, sceneQuiz);
+      case "export_results":
+        called.push({ cmd, ...(payload as object) });
+        return true;
+      case "print_window":
+        called.push({ cmd });
+        window.print();
+        return null;
       case "list_monitors":
         return [
           { id: "Built-in Display@0,0", name: "Built-in Display", width: 2560, height: 1600, director: true },

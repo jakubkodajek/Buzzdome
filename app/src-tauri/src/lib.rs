@@ -30,10 +30,11 @@ use buzzers::clock::ShowClock;
 use buzzers::receiver::HardwareDriver;
 use buzzers::{BuzzerDriver, Press, VirtualDriver};
 use dialogs::Picker;
+use editor::ListSeparator;
 use error::CmdResult;
 pub use error::AppError;
 use hardware::Hardware;
-use quiz_core::{BuzzerId, BuzzerMode, Command, Effect, Game, GameView, Light, Quiz, Stamped};
+use quiz_core::{BuzzerId, BuzzerMode, Command, Effect, Game, GameView, Light, Quiz, ShowResults, Stamped};
 use recent_files::RecentFiles;
 use session::{Resumed, Session, SessionMeta, SessionSummary};
 use std::fs;
@@ -385,6 +386,24 @@ async fn get_view(app: AppHandle) -> CmdResult<Option<GameView>> {
     read_show(app, |inner| inner.game.as_ref().map(|g| g.view(now_ms()))).await
 }
 
+/// The show's results so far, for the Director's Results tab (spec SF-11).
+#[tauri::command]
+async fn show_results(app: AppHandle) -> CmdResult<Option<ShowResults>> {
+    read_show(app, |inner| inner.game.as_ref().map(Game::show_results)).await
+}
+
+/// Writes the show's results, as the Director lays them out in `rows`, to a
+/// CSV file the quizmaster picks; false when they cancel.
+#[tauri::command]
+async fn export_results(window: Window, rows: Vec<Vec<String>>, separator: ListSeparator, picker: Picker) -> CmdResult<bool> {
+    let Some(path) = dialogs::pick_save(window, picker, quiz_file::CSV_EXTENSION, None).await? else { return Ok(false) };
+    off_ui(move || {
+        quiz_file::export_results(rows, &path, separator.byte())?;
+        Ok(true)
+    })
+    .await
+}
+
 /// The whole quiz, for the Director's slide list and previews.
 #[tauri::command]
 async fn get_quiz(app: AppHandle) -> CmdResult<Option<Quiz>> {
@@ -704,6 +723,8 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             get_view,
+            show_results,
+            export_results,
             get_quiz,
             media_root,
             show_not_saved,
@@ -724,6 +745,7 @@ pub fn run() {
             app_windows::quit_app,
             app_windows::close_declined,
             app_windows::log_problem,
+            app_windows::print_window,
             app_windows::set_menu_words,
             themes::list_themes,
             fonts::installed_fonts,

@@ -12,7 +12,7 @@ use std::sync::{Arc, Mutex, TryLockError};
 use std::time::{Duration, Instant};
 use tauri::menu::{Menu, MenuEvent};
 use tauri::plugin::TauriPlugin;
-use tauri::{AppHandle, Emitter, Manager, Monitor, Runtime, State, Url, WebviewUrl, WebviewWindowBuilder, Window, WindowEvent};
+use tauri::{AppHandle, Emitter, Manager, Monitor, Runtime, State, Url, Webview, WebviewUrl, WebviewWindowBuilder, Window, WindowEvent};
 use ts_rs::TS;
 
 /// The projector window.
@@ -183,6 +183,14 @@ pub async fn report_host_problem(app: AppHandle, message: String) -> CmdResult<(
 /// The most of a window's problem that goes in the log: a window can send
 /// text of any size, and a long one would push the rest out of the log.
 const LOGGED_PROBLEM_CHARS: usize = 2_000;
+
+/// Opens the system's print dialog for the window that asks, which prints
+/// what its print style shows, on paper or as a PDF where the system offers
+/// it: the Director's results (spec SF-11).
+#[tauri::command]
+pub async fn print_window(webview: Webview) -> CmdResult<()> {
+    Ok(webview.print()?)
+}
 
 /// Notes in the log a problem a window has nowhere to show, such as the
 /// Director's close dialog not opening once its screen failed. Written off

@@ -52,6 +52,7 @@ import { useDirectorLook, type DirectorLook } from "./look";
 import { ReceiverTab } from "./ReceiverTab";
 import { MediaPlayerTab } from "./MediaPlayerTab";
 import { ResponsesTab } from "./ResponsesTab";
+import { ResultsTab } from "./ResultsTab";
 import { SettingsTab, useProjectorSettings, type ProjectorSettings } from "./SettingsTab";
 import { TeamsTab } from "./TeamsTab";
 import { confirmAction } from "../confirm";
@@ -60,7 +61,7 @@ import { restartOutcome } from "./restart";
 import { VirtualBuzzers } from "./VirtualBuzzers";
 import "./director.css";
 
-type Tab = "questions" | "teams" | "responses" | "buzzers" | "media" | "receiver" | "lights" | "settings";
+type Tab = "questions" | "teams" | "responses" | "results" | "buzzers" | "media" | "receiver" | "lights" | "settings";
 
 /** The show controls, the quiz editor, or the show controls for a test run of the edited quiz. */
 type Screen = "show" | "editor" | "testRun";
@@ -151,6 +152,7 @@ function DirectorLayout({ testRun, onEditor }: { testRun: boolean; onEditor: () 
     ["questions", t("tabQuestions")],
     ["teams", t("tabTeams")],
     ["responses", t("tabResponses")],
+    ["results", t("tabResults")],
     ["buzzers", t("tabBuzzers")],
     ["media", t("tabMedia")],
     ["receiver", t("tabReceiver")],
@@ -250,6 +252,8 @@ function TabBody({ tab, view, quiz, projector, look, launch, player, sound, show
       return <QuestionsTab view={view} quiz={quiz} />;
     case "responses":
       return <ResponsesTab view={view} />;
+    case "results":
+      return <ResultsTab view={view} quiz={quiz} />;
     case "buzzers":
       return <VirtualBuzzers />;
   }

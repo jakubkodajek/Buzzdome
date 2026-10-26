@@ -107,6 +107,7 @@ pub fn random_quiz(rng: &mut Rng) -> Quiz {
         one_buzz: rng.chance(30),
         no_answer_penalty: rng.chance(30),
         hide_buzz_points: rng.chance(30),
+        answer_chart: rng.chance(30),
         jokers: if rng.chance(50) { rng.between(1, u64::from(MAX_JOKERS)) as u8 } else { 0 },
     };
     if let Err(errors) = quiz.validate() {
@@ -234,6 +235,10 @@ pub struct Show {
     /// came near the ends of `i32` in this question, where adding saturates
     /// (by design).
     baseline: Option<BTreeMap<u16, i64>>,
+    /// Whether every score is still exactly what the show's results add up
+    /// to (`check_results`): false once a score or a change by hand came near
+    /// the ends of `i32`, where adding saturates, until the scores are reset.
+    results_exact: bool,
 }
 
 /// A command the show took or refused, for `check` and for the caller.
@@ -244,7 +249,7 @@ pub struct Stepped {
 
 impl Show {
     pub fn new(quiz: Quiz, buzzers: u16) -> Show {
-        Show { game: Game::new(quiz), journal: Vec::new(), now: 1_000, buzzers, baseline: Some(BTreeMap::new()) }
+        Show { game: Game::new(quiz), journal: Vec::new(), now: 1_000, buzzers, baseline: Some(BTreeMap::new()), results_exact: true }
     }
 
     /// Applies `command` at the current time as the app does: a press that
@@ -333,6 +338,26 @@ impl Show {
         }
         self.check_view(after);
         self.check_scores(after, stamped);
+        self.check_results(after, stamped);
+    }
+
+    /// Every point a player has is in the show's results: what the questions
+    /// asked gave them, by round, and what the quizmaster added by hand; and
+    /// their answering time is that of their right answers there.
+    fn check_results(&self, game: &Game, stamped: &Stamped) {
+        let results = game.show_results();
+        serde_json::to_string(&results).expect("the results do not serialize");
+        assert_eq!(results.players.len(), game.players().count());
+        for player in &results.players {
+            let marks = || game.asked().filter_map(|asked| asked.marks.get(&player.buzzer));
+            let time: u64 = marks().map(|mark| mark.answer_ms()).sum();
+            assert_eq!(time, player.total_answer_ms, "buzzer {}: answering time after {stamped:?}", player.buzzer);
+            if self.results_exact {
+                let given: i64 = marks().map(|mark| i64::from(mark.points)).sum();
+                assert_eq!(given, player.rounds.iter().map(|&points| i64::from(points)).sum::<i64>(), "buzzer {}: rounds", player.buzzer);
+                assert_eq!(given + i64::from(player.adjusted), i64::from(player.score), "buzzer {}: score after {stamped:?}", player.buzzer);
+            }
+        }
     }
 
     /// What the windows get must describe the game consistently, and serialize.
@@ -404,7 +429,7 @@ impl Show {
         }
     }
 
-    /// Keeps `baseline` after `command` changed the show from `before`.
+    /// Keeps `baseline` and `results_exact` after `command` changed the show from `before`.
     fn track_baseline(&mut self, before: &Game, command: &Command) {
         // Score changes start afresh where the show entered a slide (`Game::enter`), also a
         // question that closed before, which comes back with its answer shown, and once the
@@ -418,6 +443,12 @@ impl Show {
         }
         if near_the_limits(&self.game) {
             self.baseline = None;
+        }
+        if matches!(command, Command::ResetScores | Command::StartOver) {
+            self.results_exact = true;
+        }
+        if near_the_limits(&self.game) || self.game.players().any(|p| p.adjusted.unsigned_abs() > (i32::MAX as u32) / 4) {
+            self.results_exact = false;
         }
     }
 

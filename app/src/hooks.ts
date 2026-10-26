@@ -16,6 +16,7 @@ import type {
   ReceiverInfo,
   SessionSummary,
   SettingsLost,
+  ShowResults,
   SoundBoard,
 } from "./types";
 
@@ -138,6 +139,43 @@ function useReceivedValue<E extends keyof BackendEvents, T>(event: E, load: () =
 /** The latest game state, pushed by the backend after every change. */
 export function useGameView(): GameView | null {
   return usePushedValue("game-state", api.getView);
+}
+
+/**
+ * The show's results (spec SF-11), loaded again whenever the show changes
+ * (`view`). A change while a load is under way loads once more after it,
+ * so a burst of answers costs two loads, not one each, and the loads come
+ * back in order.
+ */
+export function useShowResults(view: GameView): ShowResults | null {
+  const [results, setResults] = useState<ShowResults | null>(null);
+  const loads = useRef({ busy: false, again: false, alive: true });
+  useEffect(() => {
+    const state = loads.current;
+    state.alive = true;
+    const load = () => {
+      state.busy = true;
+      api
+        .showResults()
+        .then((next) => {
+          if (state.alive) setResults(next);
+        })
+        .catch((e) => console.error(e))
+        .finally(() => {
+          state.busy = false;
+          if (state.again && state.alive) {
+            state.again = false;
+            load();
+          }
+        });
+    };
+    if (state.busy) state.again = true;
+    else load();
+    return () => {
+      state.alive = false;
+    };
+  }, [view]);
+  return results;
 }
 
 /** Whether the projector window is open, however it was opened or closed. */

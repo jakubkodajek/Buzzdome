@@ -5,6 +5,8 @@
 
 const COMMANDS: &[&str] = &[
     "get_view",
+    "show_results",
+    "export_results",
     "get_quiz",
     "media_root",
     "show_not_saved",
@@ -25,6 +27,7 @@ const COMMANDS: &[&str] = &[
     "quit_app",
     "close_declined",
     "log_problem",
+    "print_window",
     "set_menu_words",
     "list_themes",
     "installed_fonts",
