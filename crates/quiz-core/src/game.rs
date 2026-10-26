@@ -1331,12 +1331,17 @@ impl Game {
 
     /// Ends the current question at `step`: closed, or won by a fastest
     /// finger judged right. Either way it counts as asked from now on
-    /// (`closed_questions`), also in the show's results (`asked`) when it
-    /// gave nobody anything.
+    /// (`closed_questions`). Ended from play, it is in the show's results
+    /// (`asked`) also when it gave nobody anything; the reveal of a closed
+    /// question adds it to them no more, so a reset of the scores
+    /// (`ResetScores`) between the two leaves it out.
     fn end_question(&mut self, step: QuestionStep) {
+        let from_play = self.question_in_play();
         self.phase = Phase::Question(step);
         self.closed_questions.insert(self.slide);
-        self.asking();
+        if from_play {
+            self.asking();
+        }
     }
 
     /// The current question as asked (`asking`), from now on if not yet.

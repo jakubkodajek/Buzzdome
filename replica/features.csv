@@ -66,7 +66,7 @@ Sounds for countdown correct incorrect and background music,settings,should,yes,
 Play in groups or teams with group scoring,settings,should,yes,no,§4.2.2.1 and §4.3.2.1 lockout and first/sum/average
 Round scores and round winners,host screen,should,yes,no,§5.4.6 Ctrl+S and §5.4.7 Ctrl+E
 Works without internet on a local network,reliability,should,yes,yes,§4.2.1 local Wi-Fi mode; clone: a desktop app; needs no network
-Export results to a spreadsheet,results,should,yes,yes,§7.1 Analyzer export; clone: CSV from the Director's Results tab, also printed or saved as a PDF
+Export results to a spreadsheet,results,should,yes,yes,§7.1 Analyzer export; clone: CSV from the Director's Results tab; also printed or saved as a PDF
 Reversed leaderboard (lowest first),host screen,could,yes,no,§5.4.6 Shift+S
 Multiple correct answers with correctness percentages,studio,could,yes,yes,§3.4.1.2; clone: several right answers each with a share of the points (quiz format v5)
 Ordered answers with exact or partial scoring,studio,could,yes,no,§3.4.1.2

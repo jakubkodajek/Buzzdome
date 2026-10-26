@@ -2144,7 +2144,7 @@ fn the_results_hold_what_each_question_asked_gave_whom_and_each_round_in_total()
 
 #[test]
 fn a_question_asked_again_from_its_start_counts_once_and_a_reset_starts_the_results_afresh() {
-    let slides = vec![question("q1", AnswerMode::FastestFinger), question("q2", AnswerMode::Everyone)];
+    let slides = vec![question("q1", AnswerMode::FastestFinger), question("q2", AnswerMode::Everyone), billboard("end")];
     let mut show = running(with_jokers(slides, 1));
     show.press(3_000, 2, Button::Big);
     show.run(3_500, Command::JudgeWrong).unwrap();
@@ -2167,6 +2167,12 @@ fn a_question_asked_again_from_its_start_counts_once_and_a_reset_starts_the_resu
     show.press(10_000, 2, Button::B);
     show.press(10_000, 1, Button::C);
     assert_eq!(marks(&show.game), [(1, vec![(1, Some(Button::C), false, -20, false), (2, Some(Button::B), true, 95, false)])]);
-    show.run(11_000, Command::StartOver).unwrap();
-    assert!(marks(&show.game).is_empty() && standings(&show.game).iter().all(|p| p.4 == 0));
+    // A reset once the question closed leaves it out: its reveal does not bring it back.
+    show.run(10_500, Command::ResetScores).unwrap();
+    show.run(11_000, Command::Next).unwrap();
+    show.run(11_500, Command::Next).unwrap();
+    assert!(marks(&show.game).is_empty(), "the reveal after the reset gave nobody anything");
+    show.run(12_000, Command::AdjustScore { buzzer: 1, delta: 5 }).unwrap();
+    show.run(12_500, Command::StartOver).unwrap();
+    assert!(marks(&show.game).is_empty() && standings(&show.game).iter().all(|p| p.3 == 0 && p.4 == 0));
 }

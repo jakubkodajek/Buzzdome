@@ -101,7 +101,7 @@ function Questions({ results, quiz }: { results: ShowResults; quiz: Quiz }) {
         const right = slide?.type === "question" ? rightAnswers(slide).map(({ answer }) => ANSWER_LETTERS[answer]) : [];
         const marks = marksByTime(question);
         return (
-          // A question asked again after a start over is listed again.
+          // A question asked again on a revisit (shows before rules version 6) is listed again.
           <section key={asked} className="results-question">
             <h3>
               {label(question.slide)}
