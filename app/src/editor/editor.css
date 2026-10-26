@@ -2129,6 +2129,27 @@
   font-size: 15px;
 }
 
+.backstage-page h3 {
+  margin: 20px 0 8px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.setting-switch {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 2px 16px;
+  max-width: 560px;
+  margin: 12px 0;
+}
+
+.setting-switch .backstage-hint {
+  grid-column: 1 / -1;
+  margin: 0;
+  font-size: 13px;
+}
+
 .backstage-task {
   display: flex;
   align-items: flex-start;

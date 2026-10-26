@@ -288,7 +288,7 @@ it was applied (`Problem::keeps_from_playing`).
 ### Settings
 
 ```json
-"settings": { "allAnswered": "reveal", "allAnsweredDelayS": 3 }
+"settings": { "allAnswered": "reveal", "allAnsweredDelayS": 3, "nextAfterReveal": true, "nextAfterRevealDelayS": 8 }
 ```
 
 The quiz's advanced settings (spec QZ-11), for its whole show; each
@@ -300,6 +300,15 @@ reads as its default, so a quiz always opens and plays.
 | --- | --- | --- |
 | `allAnswered` | text | What the show does once a question has nobody left to answer (every player switched on answered it, or in fastest finger answered it wrong): `wait` for the quizmaster's Next (default), `reveal` the right answer, or go on to the `nextSlide` without showing it. A question ended by its time or by the quizmaster always waits. |
 | `allAnsweredDelayS` | number | Whole seconds the show waits before it does it, 0 to 10 (default 3; more reads as 10). The quizmaster can press Next meanwhile, or hold the step (Hold, key P), and the question then waits for Next. |
+| `nextAfterReveal` | true/false | Once a question's answer is shown (by the quizmaster, by `allAnswered`, or as a fastest finger judged right), the show goes on to the next slide by itself, as Next would (default false). The quizmaster can press Next first, or hold it. |
+| `nextAfterRevealDelayS` | number | Whole seconds the answer stays on screen first, 0 to 60 (default 5; more reads as 60). |
+| `runClockOut` | true/false | A timed question's clock runs to its end even once nobody is left to answer; the question then closes as everyone having answered, so `allAnswered` applies (default false). |
+| `changeAnswer` | true/false | In an everyone-answers question a player can change their answer while it runs; their last answer counts, with its time (default false: the first answer counts). |
+| `oneBuzz` | true/false | A fastest-finger question takes one buzz: once it is judged wrong nobody else can buzz in, and the question has nobody left to answer (default false). |
+| `noAnswerPenalty` | true/false | In an everyone-answers question a player switched on who gives no answer loses the question's `penalty`, as for a wrong answer (default false). |
+| `hideAnswer` | true/false | The projector does not mark the right answers when they are shown, so the quizmaster can tell them; the Director still marks them, and the buzzers still light right or wrong (default false). |
+| `hideBuzzPoints` | true/false | The projector does not show the points a fastest-finger buzz won or lost; the leaderboard still shows the scores (default false). |
+| `jokers` | number | Jokers each player has for the show, 0 to 5 (default 0: none; more reads as 5). A joker doubles what one question gives the player, the penalty too (spec SF-8). |
 
 ## Spreadsheets
 
@@ -406,7 +415,7 @@ the rows it came up in.
 | 2 | Adds `explanation` slides and, later within version 2, the quiz `theme` (builds from before that drop it when they save). Version 1 files read as version 2 unchanged. |
 | 3 | `background` becomes an object with video options; sounds get `part`, `gainDb` and `replay`. Version 1 and 2 files read as version 3 unchanged. Later within version 3, a `fastestFinger` question may have up to 6 answers instead of 4; earlier builds list such a question as a problem. |
 | 4 | Adds `final` slides. Version 1 to 3 files read as version 4 unchanged. Later within version 4, videos get `introPauseMs`, `volume`, `speed`, `part`, `effect` and `replay`; a video without them plays as before. Later still, slides get `style`; builds before it show the theme's look and drop the style when they save. |
-| 5 | A question's `correct` becomes a list of right answers, each with a `share` of the points. A version 1 to 4 question with `correct: n` reads as `[{ "answer": n, "share": 100 }]`, and one without as `[]`. Later within version 5, the quiz gets `categories` and slides `category`; builds before it drop them when they save, and the slides keep the look they took on. Later still, a slide's `style` gets `timer`; builds before it draw a ring and drop it when they save. Later still, the quiz gets `settings`; builds before it play as with the defaults and drop them when they save. |
+| 5 | A question's `correct` becomes a list of right answers, each with a `share` of the points. A version 1 to 4 question with `correct: n` reads as `[{ "answer": n, "share": 100 }]`, and one without as `[]`. Later within version 5, the quiz gets `categories` and slides `category`; builds before it drop them when they save, and the slides keep the look they took on. Later still, a slide's `style` gets `timer`; builds before it draw a ring and drop it when they save. Later still, the quiz gets `settings`; builds before it play as with the defaults and drop them when they save. Later still, `settings` gets `nextAfterReveal`, `nextAfterRevealDelayS`, `runClockOut`, `changeAnswer`, `oneBuzz`, `noAnswerPenalty`, `hideAnswer`, `hideBuzzPoints` and `jokers`; builds before it play as with the defaults and drop them when they save. |
 
 Fields may be added within a version as long as older files keep their
 meaning; readers ignore fields they do not know. Anything else (a new slide

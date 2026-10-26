@@ -346,6 +346,15 @@ press that leaves no line under "Raw data", and what came before it.
     comes back with its answer shown, takes no presses, and forward goes
     on with the scores unchanged. Note from how far away and through what the remote still
     works.
+23. **Quiz settings on the buzzers.** In File › Quiz settings, switch on
+    "Players can change their answer while the question runs". In an
+    everyone-answers question, before every player has answered, press A
+    on a buzzer, then B. Expected: the buzzer turns dim white after A, and
+    B still counts (the Responses tab shows B). Note whether players need
+    another light while they can still change. Then switch off "Mark the
+    right answer on the projector" and reveal a question: the projector
+    marks nothing, but each buzzer still lights green or red. Note whether
+    that should wait for the quizmaster too.
 
 ## 7. Failures
 

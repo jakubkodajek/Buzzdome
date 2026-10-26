@@ -749,7 +749,7 @@ packages users will install are read the same way.
   one switched on mid-question can, unless they already answered or were
   locked out.
 - **Everyone answered (QZ-11).** A question that closed for having nobody
-  left to answer notes when (`Game::all_answered_at`), and the quiz's
+  left to answer notes when (`Game::auto_step_from`), and the quiz's
   `settings.allAnswered` decides what follows: wait for Next, as before,
   or after `allAnsweredDelayS` the step Next would take (the reveal) or the
   jump to the slide Next would go on to (`GoTo`, or `GoToFinal` past the
@@ -762,7 +762,38 @@ packages users will install are read the same way.
   leaderboard and playing the slide's video again hold it as well, since
   the quizmaster has taken over, and a show resumed after a crash holds it
   (`recovery_command`), so the quizmaster first sees where it stands. A question closed by
-  time up or by the quizmaster has no `all_answered_at` and always waits.
+  time up or by the quizmaster has no `auto_step_from` and always waits.
+  With `settings.nextAfterReveal` the reveal starts the same count
+  (`Game::reveal`, also for a fastest finger judged right): after
+  `nextAfterRevealDelayS` the show takes the next slide's step the same
+  way, held the same way. A question shown again with its answer on a
+  revisit (rules version 6) does not count, as the quizmaster went there.
+- **Other quiz settings (QZ-11).** `runClockOut` keeps a timed question
+  running once nobody is left to answer (`Game::closes_as_answered`); its
+  time up then closes it as everyone answered, so `allAnswered` applies.
+  `changeAnswer` lets a press of another answer button replace the
+  player's answer and its time while an everyone-answers question runs.
+  `oneBuzz` makes everyone sit out a fastest-finger question once a buzz
+  in it was judged wrong (`Game::sits_out`), which leaves nobody to
+  answer. `noAnswerPenalty` gives the players an everyone-answers question
+  counts and who did not answer the question's penalty, as a wrong
+  answer. `hideAnswer` and `hideBuzzPoints` change only what the projector
+  shows (`GameView::settings`); the Director and the scores stay the same.
+  None needs a rules version: the settings travel with the quiz in the
+  session, and a quiz without them plays as before.
+- **Jokers (SF-8).** `Game::jokers` keeps the questions players play
+  their joker on, as (slide, buzzer) pairs: the ones that ended and the
+  current one, so a player's jokers left are `settings.jokers` less their
+  pairs, and a joker is spent when it is played. `SetJoker` plays or takes
+  back the current question's while it is ready or running and has given
+  the player nothing (`Game::can_set_joker`, no entry in `gains`), so a
+  joker always covers all or nothing of what the question gives. `credit`
+  doubles the points, gain or penalty, and keeps the doubled amount in
+  `gains`, so `RestartQuestion` takes back what was given and the joker
+  stays on the question asked again. Leaving a question before it ended
+  (`enter_slide` to another slide) drops its pairs, as the question was
+  never asked. The command is journaled like any other and only exists in
+  shows played since, so no rules version is needed.
   The settings come with the quiz the session keeps, so a resumed show
   goes on with them; no rules version is needed, as a quiz without them
   plays as before. Space pressed as the reveal comes is meant for the step

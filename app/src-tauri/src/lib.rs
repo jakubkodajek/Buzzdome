@@ -937,7 +937,7 @@ mod tests {
     fn a_show_that_stopped_during_the_wait_resumes_holding_the_step() {
         let root = sessions_dir("wait");
         let mut quiz = Quiz::from_json(DEMO_QUIZ).unwrap();
-        quiz.settings = quiz_core::QuizSettings { all_answered: quiz_core::AllAnswered::NextSlide, all_answered_delay_s: 3 };
+        quiz.settings = quiz_core::QuizSettings { all_answered: quiz_core::AllAnswered::NextSlide, ..Default::default() };
         let mut commands = up_to_the_first_question();
         commands.push(Command::Press { buzzer: 2, button: quiz_core::Button::C });
         let before = journaled_show_of(quiz, quiz_core::RULES_VERSION, &root, commands).game.unwrap();

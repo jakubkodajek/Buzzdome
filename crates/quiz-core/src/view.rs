@@ -2,7 +2,7 @@
 
 use crate::game::{same_name, BuzzerId, Button, Controls, Game, Phase, QuestionStep, Response};
 use crate::model::{AnswerMode, Slide};
-use crate::settings::AutoStep;
+use crate::settings::{AutoStep, QuizSettings};
 use serde::Serialize;
 use std::collections::BTreeMap;
 use ts_rs::TS;
@@ -51,9 +51,12 @@ pub struct GameView {
     pub video_plays: u32,
     /// See `Game::step_no`.
     pub step_no: u32,
-    /// The step the show takes by itself once everyone answered
-    /// (`Game::pending_step`); none while it waits for the quizmaster.
+    /// The step the show takes by itself (`Game::pending_step`); none
+    /// while it waits for the quizmaster.
     pub auto_step: Option<AutoStepView>,
+    /// The quiz's settings, for what the windows show: the projector hides
+    /// what they say it hides.
+    pub settings: QuizSettings,
 }
 
 /// A step the show takes by itself, for the Director to show coming.
@@ -125,6 +128,20 @@ pub struct PlayerView {
     pub joins_next: bool,
     /// Score change from the current question.
     pub delta: Option<i32>,
+    /// The player's joker in the show (`QuizSettings::jokers`).
+    pub joker: JokerView,
+}
+
+/// A player's joker: whether they play it on the current question, how
+/// many they have left, and whether the quizmaster can play it or take it
+/// back now (`Game::can_set_joker`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
+#[serde(rename_all = "camelCase")]
+pub struct JokerView {
+    pub on: bool,
+    pub left: u8,
+    pub can_change: bool,
 }
 
 impl Game {
@@ -188,6 +205,10 @@ impl Game {
                 answer_ms: self.responses().get(&p.buzzer).map(|r| r.elapsed_ms),
                 locked_out: self.locked_out().contains(&p.buzzer),
                 joins_next: self.joins_next().contains(&p.buzzer),
+                joker: {
+                    let on = self.plays_joker(p.buzzer);
+                    JokerView { on, left: self.jokers_left(p.buzzer), can_change: self.can_set_joker(p.buzzer, !on) }
+                },
                 delta: self.delta(p.buzzer),
             })
             .collect();
@@ -218,6 +239,7 @@ impl Game {
             video_plays: self.video_plays(),
             step_no: self.step_no(),
             auto_step: self.pending_step().map(|(action, _, at)| AutoStepView { action, in_ms: at.saturating_sub(now) }),
+            settings: self.quiz().settings,
             teams: self
                 .teams()
                 .iter()

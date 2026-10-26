@@ -5,6 +5,7 @@ import type { ClockView } from "./ClockView";
 import type { Controls } from "./Controls";
 import type { Phase } from "./Phase";
 import type { PlayerView } from "./PlayerView";
+import type { QuizSettings } from "./QuizSettings";
 import type { Slide } from "./Slide";
 import type { TeamView } from "./TeamView";
 
@@ -62,7 +63,12 @@ videoPlays: number,
  */
 stepNo: number, 
 /**
- * The step the show takes by itself once everyone answered
- * (`Game::pending_step`); none while it waits for the quizmaster.
+ * The step the show takes by itself (`Game::pending_step`); none
+ * while it waits for the quizmaster.
  */
-autoStep: AutoStepView | null, };
+autoStep: AutoStepView | null, 
+/**
+ * The quiz's settings, for what the windows show: the projector hides
+ * what they say it hides.
+ */
+settings: QuizSettings, };

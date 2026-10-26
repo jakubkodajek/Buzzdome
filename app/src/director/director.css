@@ -473,6 +473,13 @@
   color: #8d8d8d;
 }
 
+/* A player's joker in the Teams tab: pressed while they play it on the question. */
+.director .joker-toggle[aria-pressed="true"] {
+  color: #fff;
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
 .toolbar-separator {
   width: 1px;
   height: 20px;

@@ -32,7 +32,7 @@ describe("commandForKey", () => {
 
   it("gives only commands the projector may give, as its keys are the same", () => {
     const keys = [..."abcdefghijklmnopqrstuvwxyz0123456789", " ", "ArrowRight", "PageDown", "Enter", "Escape", "Backspace"];
-    const all: Controls = { next: true, judge: true, pauseClock: true, resumeClock: true, closeQuestion: true, playVideo: true, goTo: true, restartQuestion: true };
+    const all: Controls = { next: true, judge: true, pauseClock: true, resumeClock: true, closeQuestion: true, playVideo: true, goTo: true, restartQuestion: true, setJoker: true };
     const views = [viewWith(all), viewWith({ ...all, pauseClock: false }, true)];
     const given = new Set(views.flatMap((view) => keys.map((key) => commandForKey(key, view)?.type).filter((type) => type !== undefined)));
     expect([...given].filter((type) => !PROJECTOR_COMMANDS.includes(type))).toEqual([]);
@@ -55,7 +55,7 @@ describe("commandForKey", () => {
 
 describe("commandForAction", () => {
   it("does what the keyboard's key for the action does", () => {
-    const all: Controls = { next: true, judge: true, pauseClock: true, resumeClock: false, closeQuestion: true, playVideo: true, goTo: true, restartQuestion: true };
+    const all: Controls = { next: true, judge: true, pauseClock: true, resumeClock: false, closeQuestion: true, playVideo: true, goTo: true, restartQuestion: true, setJoker: true };
     const pairs = [
       ["next", " "],
       ["judgeRight", "y"],

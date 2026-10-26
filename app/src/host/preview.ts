@@ -1,9 +1,9 @@
-import { FINAL_LAST_STEP } from "../bindings/Constants";
+import { DEFAULT_QUIZ_SETTINGS, FINAL_LAST_STEP } from "../bindings/Constants";
 import { shareOf } from "../quiz";
 import type { Controls, GameView, Phase, Slide } from "../types";
 
 /** A preview is not a show: no command applies. */
-export const NO_CONTROLS: Controls = { next: false, judge: false, pauseClock: false, resumeClock: false, closeQuestion: false, playVideo: false, goTo: false, restartQuestion: false };
+export const NO_CONTROLS: Controls = { next: false, judge: false, pauseClock: false, resumeClock: false, closeQuestion: false, playVideo: false, goTo: false, restartQuestion: false, setJoker: false };
 
 /**
  * The game state a slide is shown in before anyone plays: a question ready
@@ -33,6 +33,7 @@ export function previewView(slide: Slide, slideIndex: number, slideCount: number
     videoPlays: 0,
     stepNo: 0,
     autoStep: null,
+    settings: DEFAULT_QUIZ_SETTINGS,
   };
 }
 

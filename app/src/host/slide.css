@@ -39,6 +39,7 @@
 .digits,
 .answer .letter,
 .buzz-bar,
+.joker-strip,
 .leaderboard li,
 .podium-step {
   font-family: var(--theme-font-heading);
@@ -50,7 +51,8 @@
 .welcome-header,
 .welcome-footer,
 .info-panel,
-.buzz-bar {
+.buzz-bar,
+.joker-strip {
   color: var(--theme-bar-text);
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.16) 0%, rgba(255, 255, 255, 0.04) 48%, rgba(0, 0, 0, 0.1) 52%, rgba(0, 0, 0, 0.3) 100%),
@@ -504,6 +506,49 @@
 
 .buzz-delta.plus { color: var(--theme-correct); }
 .buzz-delta.minus { color: var(--theme-wrong); }
+
+/* Jokers: the players who play theirs on the question, and the buzz of one. */
+
+.buzz-joker,
+.joker-label {
+  padding: 4px 22px;
+  border-radius: calc(24px * var(--theme-roundness));
+  font-weight: 900;
+  color: var(--theme-correct-text);
+  background: var(--theme-correct);
+}
+
+/* Right after the name or the answer; the points stay at the far end. */
+.buzz-joker {
+  margin: 0 auto 0 32px;
+  font-size: 56px;
+}
+
+.buzz-answer:has(+ .buzz-joker) {
+  margin-right: 0;
+}
+
+.joker-strip {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 96px;
+  display: flex;
+  align-items: center;
+  gap: 32px;
+  padding: 0 90px;
+  border-top: 4px solid var(--theme-bar-edge);
+  font-size: 44px;
+  animation: slide-up 0.25s ease-out;
+}
+
+.joker-names {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-weight: 800;
+}
 
 @keyframes slide-up {
   from { transform: translateY(100%); }

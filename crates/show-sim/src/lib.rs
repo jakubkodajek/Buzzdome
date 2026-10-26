@@ -11,8 +11,8 @@
 
 use quiz_core::{
     AllAnswered, AnswerMode, Button, BuzzerMode, Command, CorrectAnswer, Effect, Game, GameError, Light, Phase, Question, QuestionStep, Quiz,
-    QuizSettings, Slide, SlideContent, Stamped, VideoClip, FULL_SHARE, MAX_ALL_ANSWERED_DELAY_S, MAX_ANSWERS, MAX_EVERYONE_ANSWERS, MAX_POINTS,
-    MAX_TEAMS, MIN_EVERYONE_ANSWERS, RULES_VERSION,
+    QuizSettings, Slide, SlideContent, Stamped, VideoClip, FULL_SHARE, MAX_AFTER_REVEAL_DELAY_S, MAX_ALL_ANSWERED_DELAY_S, MAX_ANSWERS, MAX_EVERYONE_ANSWERS,
+    MAX_JOKERS, MAX_POINTS, MAX_TEAMS, MIN_EVERYONE_ANSWERS, RULES_VERSION,
 };
 use std::collections::BTreeMap;
 
@@ -99,6 +99,15 @@ pub fn random_quiz(rng: &mut Rng) -> Quiz {
     quiz.settings = QuizSettings {
         all_answered: *rng.pick(&[AllAnswered::Wait, AllAnswered::Reveal, AllAnswered::NextSlide]),
         all_answered_delay_s: rng.between(0, u64::from(MAX_ALL_ANSWERED_DELAY_S)) as u8,
+        next_after_reveal: rng.chance(30),
+        next_after_reveal_delay_s: rng.between(0, u64::from(MAX_AFTER_REVEAL_DELAY_S)) as u8,
+        run_clock_out: rng.chance(30),
+        hide_answer: rng.chance(30),
+        change_answer: rng.chance(30),
+        one_buzz: rng.chance(30),
+        no_answer_penalty: rng.chance(30),
+        hide_buzz_points: rng.chance(30),
+        jokers: if rng.chance(50) { rng.between(1, u64::from(MAX_JOKERS)) as u8 } else { 0 },
     };
     if let Err(errors) = quiz.validate() {
         panic!("the generator wrote a quiz the editor would refuse: {errors:?}");
@@ -187,6 +196,7 @@ fn offered(game: &Game, command: &Command) -> Option<bool> {
         Command::PlayVideo => c.play_video,
         Command::GoToFinal => c.go_to,
         Command::GoTo { slide } => c.go_to && *slide < game.quiz().slides.len(),
+        Command::SetJoker { buzzer, on } => c.set_joker && game.can_set_joker(*buzzer, *on),
         _ => return None,
     })
 }
@@ -449,7 +459,7 @@ impl Show {
             // Teams and scores.
             80..=94 => {
                 let buzzer = rng.between(1, u64::from(self.buzzers) + 2) as u16;
-                match rng.between(0, 7) {
+                match rng.between(0, 8) {
                     0 => Command::AddPlayer { buzzer, name: random_name(rng) },
                     1 => Command::RenamePlayer { buzzer, name: random_name(rng) },
                     2 => Command::PairTeam { buzzer, name: random_name(rng) },
@@ -458,6 +468,7 @@ impl Show {
                         Command::SetTeams { names: (0..count).map(|n| if rng.chance(70) { format!("Team {n}") } else { random_name(rng) }).collect() }
                     }
                     4 => Command::SetPlayerEnabled { buzzer, enabled: rng.chance(60) },
+                    5 | 6 => Command::SetJoker { buzzer, on: rng.chance(70) },
                     _ => {
                         let delta = if rng.chance(3) { *rng.pick(&[i32::MAX, i32::MIN, MAX_POINTS * 10]) } else { rng.between(0, 200) as i32 - 100 };
                         Command::AdjustScore { buzzer, delta }

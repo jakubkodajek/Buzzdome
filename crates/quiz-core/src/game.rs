@@ -220,6 +220,10 @@ pub enum Command {
     SetPlayerEnabled { buzzer: BuzzerId, enabled: bool },
     #[serde(rename_all = "camelCase")]
     AdjustScore { buzzer: BuzzerId, delta: i32 },
+    /// The player plays their joker on the current question (`on`), or
+    /// takes it back (`QuizSettings::jokers`, `Game::can_set_joker`).
+    #[serde(rename_all = "camelCase")]
+    SetJoker { buzzer: BuzzerId, on: bool },
     #[serde(rename_all = "camelCase")]
     ShowLeaderboard { visible: bool },
     /// Start the current slide's video from the start of its part, or start
@@ -275,6 +279,9 @@ pub struct Controls {
     /// results are on screen; a show begun before rules version 4 also
     /// restarts it closed, until its answer is shown.
     pub restart_question: bool,
+    /// `SetJoker`: in a quiz with jokers, before the current question ends;
+    /// for each player as `Game::can_set_joker` says.
+    pub set_joker: bool,
 }
 
 /// A countdown that can pause. `limit_ms == None` means untimed.
@@ -497,10 +504,14 @@ pub struct Game {
     /// shows its answer (rules version 6): its scores stand, and asking it
     /// again would score it twice.
     closed_questions: BTreeSet<usize>,
-    /// When the current question closed for having nobody left to answer,
-    /// for the step the quiz's settings then take (`pending_step`); none
-    /// once the quizmaster holds it.
-    all_answered_at: Option<u64>,
+    /// The questions players play their joker on, as (slide, buzzer): the
+    /// ones that ended, and the current one (`QuizSettings::jokers`).
+    jokers: BTreeSet<(usize, BuzzerId)>,
+    /// When the step the quiz's settings take by itself (`pending_step`)
+    /// began to count down: when the current question closed for having
+    /// nobody left to answer, or when its answer was shown. None once the
+    /// quizmaster holds it.
+    auto_step_from: Option<u64>,
     leaderboard_visible: bool,
     /// Team names prepared for the show; a team is paired with the buzzer
     /// whose player has its name (`view::TeamView`).
@@ -533,7 +544,8 @@ impl Game {
             joins_next: BTreeSet::new(),
             gains: BTreeMap::new(),
             closed_questions: BTreeSet::new(),
-            all_answered_at: None,
+            jokers: BTreeSet::new(),
+            auto_step_from: None,
             leaderboard_visible: false,
             teams: Vec::new(),
             video_plays: 0,
@@ -655,9 +667,11 @@ impl Game {
     }
 
     /// Whether the player has no buzz left in the current fastest-finger
-    /// question: they answered it wrong, or play from the next one.
+    /// question: they answered it wrong, play from the next one, or its one
+    /// buzz was judged wrong (`QuizSettings::one_buzz`).
     fn sits_out(&self, buzzer: BuzzerId) -> bool {
-        self.locked_out.contains(&buzzer) || self.joins_next.contains(&buzzer)
+        let buzz_used = self.quiz.settings.one_buzz && !self.locked_out.is_empty();
+        buzz_used || self.locked_out.contains(&buzzer) || self.joins_next.contains(&buzzer)
     }
 
     /// Whether a player who joins now plays from the next question
@@ -728,7 +742,34 @@ impl Game {
             play_video: self.shows_video(),
             go_to: self.can_jump(),
             restart_question: self.question_restartable(),
+            set_joker: self.jokers_open(),
         }
+    }
+
+    /// Whether jokers can be played now: in a quiz with jokers, while the
+    /// current question waits to start or runs.
+    fn jokers_open(&self) -> bool {
+        let before_the_end = matches!(self.phase, Phase::Question(QuestionStep::Ready | QuestionStep::Running { .. }));
+        self.quiz.settings.jokers > 0 && before_the_end
+    }
+
+    /// Whether the player's joker can be played (`on`) or taken back now:
+    /// while jokers can be played (`jokers_open`), as long as the question
+    /// gave the player nothing yet, and to play it, with one left.
+    pub fn can_set_joker(&self, buzzer: BuzzerId, on: bool) -> bool {
+        let open = self.jokers_open() && self.players.contains_key(&buzzer) && !self.gains.contains_key(&buzzer);
+        open && (!on || self.plays_joker(buzzer) || self.jokers_left(buzzer) > 0)
+    }
+
+    /// Whether the player plays their joker on the current question.
+    pub fn plays_joker(&self, buzzer: BuzzerId) -> bool {
+        self.jokers.contains(&(self.slide, buzzer))
+    }
+
+    /// The jokers the player has left in the show (`QuizSettings::jokers`).
+    pub fn jokers_left(&self, buzzer: BuzzerId) -> u8 {
+        let played = self.jokers.iter().filter(|&&(_, player)| player == buzzer).count();
+        self.quiz.settings.jokers.saturating_sub(u8::try_from(played).unwrap_or(u8::MAX))
     }
 
     /// True when the screen shows the current slide's video: a slide with a
@@ -761,38 +802,41 @@ impl Game {
 
     /// A command the app must issue on its own at `now`, such as time up
     /// (`PRESS_GRACE_MS` after the clock runs out), or the step the quiz's
-    /// settings take once everyone answered (`pending_step`).
+    /// settings take by themselves (`pending_step`).
     pub fn due_command(&self, now: u64) -> Option<Command> {
         match &self.phase {
             Phase::Question(QuestionStep::Running { clock }) if clock.expired(now.saturating_sub(PRESS_GRACE_MS)) => {
                 Some(Command::CloseQuestion)
             }
-            Phase::Question(QuestionStep::Closed) => {
+            _ => {
                 let (_, command, at) = self.pending_step()?;
                 (now >= at).then_some(command)
             }
-            _ => None,
         }
     }
 
     /// The quizmaster took over: the step the show was to take by itself
     /// (`pending_step`) waits for their Next.
     fn hold_pending_step(&mut self) {
-        self.all_answered_at = None;
+        self.auto_step_from = None;
     }
 
-    /// The step the show takes by itself once a question closed for having
-    /// nobody left to answer (`QuizSettings::all_answered`), and when: the
-    /// question's `all_answered_at` and the settings' wait. The quizmaster
-    /// can take a step first, or hold it (`PauseClock`). Gives the step,
-    /// the command that takes it and its time.
+    /// The step the show takes by itself, and when: once a question closed
+    /// for having nobody left to answer (`QuizSettings::all_answered`), or
+    /// once its answer was shown (`QuizSettings::next_after_reveal`), the
+    /// settings' wait after `auto_step_from`. The quizmaster can take a
+    /// step first, or hold it (`PauseClock`). Gives the step, the command
+    /// that takes it and its time.
     pub(crate) fn pending_step(&self) -> Option<(AutoStep, Command, u64)> {
-        if self.phase != Phase::Question(QuestionStep::Closed) {
-            return None;
-        }
         let settings = self.quiz.settings;
-        let step = settings.all_answered.auto_step()?;
-        let at = self.all_answered_at?.saturating_add(settings.all_answered_delay_ms());
+        let (step, wait_ms) = match self.phase {
+            Phase::Question(QuestionStep::Closed) => (settings.all_answered.auto_step()?, settings.all_answered_delay_ms()),
+            Phase::Question(QuestionStep::Revealed { .. }) if settings.next_after_reveal => {
+                (AutoStep::NextSlide, settings.next_after_reveal_delay_ms())
+            }
+            _ => return None,
+        };
+        let at = self.auto_step_from?.saturating_add(wait_ms);
         let command = match step {
             AutoStep::Reveal => Command::Next,
             // As Next goes on from the slide, past the last to the final ranking.
@@ -883,6 +927,14 @@ impl Game {
         self.enabled_buzzers().all(|b| self.responses.contains_key(&b) || self.sits_out(b))
     }
 
+    /// Whether the running question closes now for having nobody left to
+    /// answer it: not while a timed one's clock is to run out
+    /// (`QuizSettings::run_clock_out`).
+    fn closes_as_answered(&self) -> bool {
+        let runs_out = self.quiz.settings.run_clock_out && self.clock().is_some_and(|clock| clock.limit_ms.is_some());
+        !runs_out && self.nobody_left_to_answer()
+    }
+
     pub fn apply(&mut self, stamped: &Stamped) -> Result<Vec<Effect>, GameError> {
         let (slide, phase) = (self.slide, self.phase.clone());
         let effects = self.apply_command(stamped)?;
@@ -925,7 +977,9 @@ impl Game {
             Command::CloseQuestion => match &self.phase {
                 Phase::Question(QuestionStep::Running { clock }) => {
                     let timed_out = clock.expired(now);
-                    let mut effects = self.close_question();
+                    // A clock left to run out with nobody left to answer (`closes_as_answered`).
+                    let answered = timed_out && self.quiz.settings.run_clock_out && self.nobody_left_to_answer();
+                    let mut effects = if answered { self.close_answered(now) } else { self.close_question() };
                     if timed_out {
                         effects.push(Effect::Sound { cue: Cue::TimeUp });
                     }
@@ -973,6 +1027,18 @@ impl Game {
                 self.player_mut(*buzzer)?.add_score(*delta);
                 Ok(vec![])
             }
+            Command::SetJoker { buzzer, on } => {
+                self.player_mut(*buzzer)?;
+                if !self.can_set_joker(*buzzer, *on) {
+                    return Err(GameError::NotNow);
+                }
+                if *on {
+                    self.jokers.insert((self.slide, *buzzer));
+                } else {
+                    self.jokers.remove(&(self.slide, *buzzer));
+                }
+                Ok(vec![])
+            }
             Command::ShowLeaderboard { visible } => {
                 self.leaderboard_visible = *visible;
                 if *visible {
@@ -1009,7 +1075,7 @@ impl Game {
         let mut effects = vec![Effect::Lights { lights: vec![(buzzer, light)] }];
         // Before rules version 3 a switch never closed a question.
         let running = matches!(self.phase, Phase::Question(QuestionStep::Running { .. }));
-        if self.rules_version >= 3 && running && self.nobody_left_to_answer() {
+        if self.rules_version >= 3 && running && self.closes_as_answered() {
             effects.extend(self.close_answered(now));
         }
         Ok(effects)
@@ -1070,8 +1136,12 @@ impl Game {
         match question.mode {
             AnswerMode::Everyone => {
                 let valid = button.answer_index().is_some_and(|i| i < question.answers.len());
-                // The first answer counts; changing it is not allowed.
-                (valid && !self.responses.contains_key(&buzzer)).then(|| PressPlay::Answer { elapsed_ms: clock.elapsed_ms(now) })
+                // The first answer counts, unless the quiz lets players change it.
+                let takes = match self.responses.get(&buzzer) {
+                    None => true,
+                    Some(answer) => self.quiz.settings.change_answer && answer.button != button,
+                };
+                (valid && takes).then(|| PressPlay::Answer { elapsed_ms: clock.elapsed_ms(now) })
             }
             AnswerMode::FastestFinger => {
                 let buzzes = self.rules_version < 5 || button.buzzes_in(question);
@@ -1097,7 +1167,7 @@ impl Game {
     fn record_answer(&mut self, buzzer: BuzzerId, button: Button, elapsed_ms: u64, now: u64) -> Vec<Effect> {
         self.responses.insert(buzzer, Response { button, elapsed_ms });
         let mut effects = vec![Effect::Lights { lights: vec![(buzzer, self.light_of(buzzer))] }];
-        if self.nobody_left_to_answer() {
+        if self.closes_as_answered() {
             effects.extend(self.close_answered(now));
         }
         effects
@@ -1106,7 +1176,7 @@ impl Game {
     /// Closes the running question at `now` for having nobody left to
     /// answer it, for the step the quiz's settings then take (`pending_step`).
     fn close_answered(&mut self, now: u64) -> Vec<Effect> {
-        self.all_answered_at = Some(now);
+        self.auto_step_from = Some(now);
         self.close_question()
     }
 
@@ -1121,9 +1191,13 @@ impl Game {
         if q.mode == AnswerMode::Everyone {
             self.counted = self.enabled_buzzers().collect();
             for buzzer in self.counted.clone() {
-                if let Some(response) = self.responses.get(&buzzer).copied() {
-                    let answer_ms = if response.is_right(&q) { response.elapsed_ms } else { 0 };
-                    self.credit(buzzer, q.points_for(response.button.answer_index(), response.elapsed_ms), answer_ms);
+                match self.responses.get(&buzzer).copied() {
+                    Some(response) => {
+                        let answer_ms = if response.is_right(&q) { response.elapsed_ms } else { 0 };
+                        self.credit(buzzer, q.points_for(response.button.answer_index(), response.elapsed_ms), answer_ms);
+                    }
+                    None if self.quiz.settings.no_answer_penalty => self.credit(buzzer, q.points_for(None, 0), 0),
+                    None => {}
                 }
             }
         }
@@ -1138,9 +1212,11 @@ impl Game {
         self.closed_questions.insert(self.slide);
     }
 
-    /// Gives `buzzer`'s player `points` and `answer_ms` of answering time
-    /// from the current question, kept in `gains` for `RestartQuestion`.
+    /// Gives `buzzer`'s player `points`, doubled by their joker
+    /// (`plays_joker`), and `answer_ms` of answering time from the current
+    /// question, kept in `gains` for `RestartQuestion`.
     fn credit(&mut self, buzzer: BuzzerId, points: i32, answer_ms: u64) {
+        let points = if self.plays_joker(buzzer) { points.saturating_mul(2) } else { points };
         let Some(player) = self.players.get_mut(&buzzer) else { return };
         player.add_score(points);
         player.total_answer_ms += answer_ms;
@@ -1157,7 +1233,7 @@ impl Game {
         let elapsed = clock.elapsed_ms(now);
         if right {
             self.credit(buzzer, q.points_at(elapsed), elapsed);
-            self.end_question(QuestionStep::Revealed { winner: Some(buzzer) });
+            self.reveal(Some(buzzer), now);
             return Ok(vec![
                 Effect::Lights { lights: vec![(buzzer, self.light_of(buzzer))] },
                 Effect::Sound { cue: Cue::Correct },
@@ -1174,7 +1250,7 @@ impl Game {
             Effect::Lights { lights: vec![(buzzer, Light::Wrong)] },
             Effect::Sound { cue: Cue::Wrong },
         ];
-        let follow = if self.nobody_left_to_answer() { self.close_answered(now) } else { vec![self.lights_now()] };
+        let follow = if self.closes_as_answered() { self.close_answered(now) } else { vec![self.lights_now()] };
         // The others get the lights of the step that follows; the judged
         // buzzer shows wrong until the next step's lights.
         effects.extend(follow.into_iter().map(|effect| match effect {
@@ -1185,6 +1261,14 @@ impl Game {
             other => other,
         }));
         Ok(effects)
+    }
+
+    /// Shows the question's answer at `now`, which ends it if it had not
+    /// closed (a fastest finger judged right), for the step the quiz's
+    /// settings then take (`pending_step`).
+    fn reveal(&mut self, winner: Option<BuzzerId>, now: u64) {
+        self.end_question(QuestionStep::Revealed { winner });
+        self.auto_step_from = Some(now);
     }
 
     fn next(&mut self, now: u64) -> Result<Vec<Effect>, GameError> {
@@ -1203,7 +1287,7 @@ impl Game {
                 QuestionStep::Running { .. } => Ok(self.close_question()),
                 QuestionStep::Buzzed { .. } => Err(GameError::NotNow),
                 QuestionStep::Closed => {
-                    self.phase = Phase::Question(QuestionStep::Revealed { winner: None });
+                    self.reveal(None, now);
                     // Dark after a fastest-finger question nobody won, also
                     // the last buzz judged wrong (`judge`).
                     Ok(vec![self.lights_now(), Effect::Sound { cue: Cue::Reveal }])
@@ -1241,12 +1325,19 @@ impl Game {
     }
 
     fn enter_slide(&mut self, index: usize) -> Vec<Effect> {
+        // A joker stays on a question that ended, and on one asked again
+        // from its start (`RestartQuestion`); one left before it ended is
+        // not spent.
+        let left = self.slide;
+        if index != left && !self.closed_questions.contains(&left) {
+            self.jokers.retain(|&(slide, _)| slide != left);
+        }
         self.responses.clear();
         self.counted.clear();
         self.locked_out.clear();
         self.joins_next.clear();
         self.gains.clear();
-        self.all_answered_at = None;
+        self.auto_step_from = None;
         self.leaderboard_visible = false;
         self.video_plays = 0;
         self.slide = index;
