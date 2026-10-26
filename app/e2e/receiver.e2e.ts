@@ -44,10 +44,11 @@ class FakeReceiver {
     return `127.0.0.1:${address.port}`;
   }
 
-  private async send(command: object): Promise<void> {
+  /** Sends `commands` in one write, so the fake receiver takes them at the same moment. */
+  private async send(...commands: object[]): Promise<void> {
     // The app connects a moment after it starts, and again after a restart.
     const socket = await waitFor("the app to connect to the fake receiver", async () => (this.socket && !this.socket.destroyed ? this.socket : null));
-    socket.write(`${JSON.stringify(command)}\n`);
+    socket.write(commands.map((command) => `${JSON.stringify(command)}\n`).join(""));
   }
 
   plug(on: boolean): Promise<void> {
@@ -57,6 +58,11 @@ class FakeReceiver {
   /** A press of `button` on `buzzer`, `timer` being the buzzer's own response time. */
   press(buzzer: number, button: Button, timer = 0): Promise<void> {
     return this.send({ press: { buzzer, button, timer } });
+  }
+
+  /** Presses made at the same moment, in the order the radio delivers them. */
+  pressTogether(...presses: { buzzer: number; button: Button; timer: number }[]): Promise<void> {
+    return this.send(...presses.map((press) => ({ press })));
   }
 
   /** A press of `key` on the quizmaster's remote (`RemoteKey`). */
@@ -139,9 +145,9 @@ describe("a simulated buzzer receiver", () => {
     await app.waitView("slide 8", (v) => v.slideIndex === 7);
     await app.step("next");
     await app.waitView("the clock running", (v) => v.phase.phase === "question" && v.phase.step === "running");
-    // Buzzer 7 pressed later by the clock of the room, but sooner by its own.
-    await fake.press(12, "big", 400);
-    await fake.press(7, "big", 150);
+    // Buzzer 7 delivered second, but pressed sooner by its own clock. The receiver delivers presses made
+    // at the same moment within the app's timer window (`ReceiverConfig::timer_window`), so they go together.
+    await fake.pressTogether({ buzzer: 12, button: "big", timer: 400 }, { buzzer: 7, button: "big", timer: 150 });
     const buzzed = await app.waitView("a buzz", (v) => v.phase.phase === "question" && v.phase.step === "buzzed");
     expect(buzzed.buzzed).toBe(7);
     await waitFor("buzzer 7 lit as first", async () => fake.lights.get(7) === "first");
