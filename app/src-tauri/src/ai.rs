@@ -59,7 +59,9 @@ struct SkillFile {
 /// Which skill package the quizmaster saved last, if any.
 pub struct SavedSkill {
     /// Held while a save is written, so the last package saved is the one kept.
-    file: Mutex<(AppFile, SkillFile)>,
+    file: Mutex<AppFile>,
+    /// The fingerprint kept; never held while the disk works.
+    saved: Mutex<Option<String>>,
 }
 
 impl SavedSkill {
@@ -70,20 +72,19 @@ impl SavedSkill {
         if let Some(lost) = file.lost() {
             app_log::note(&format!("saved AI skill not read: {} (kept as {:?})", lost.detail, lost.kept_as));
         }
-        SavedSkill { file: Mutex::new((file, saved)) }
+        SavedSkill { file: Mutex::new(file), saved: Mutex::new(saved.saved) }
     }
 
     /// Whether a skill was saved and this version's differs from it.
     fn outdated(&self, current: &str) -> bool {
-        self.file.lock().unwrap().1.saved.as_deref().is_some_and(|saved| saved != current)
+        self.saved.lock().unwrap().as_deref().is_some_and(|saved| saved != current)
     }
 
     /// Keeps `fingerprint` as the skill saved.
     fn store(&self, fingerprint: String) -> CmdResult<()> {
-        let mut file = self.file.lock().unwrap();
-        let kept = SkillFile { saved: Some(fingerprint) };
-        file.0.store(&kept)?;
-        file.1 = kept;
+        let file = self.file.lock().unwrap();
+        file.store(&SkillFile { saved: Some(fingerprint.clone()) })?;
+        *self.saved.lock().unwrap() = Some(fingerprint);
         Ok(())
     }
 }

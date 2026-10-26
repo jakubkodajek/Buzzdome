@@ -82,14 +82,18 @@ can:
 - **Command line.** A release installs `buzzdome-quiz` beside the app
   (`externalBin` in `tauri.release.conf.json`; `release.yml` builds it, for
   both Mac architectures in one file), so updates replace it too. It is in
-  the app's folder: `C:\Program Files\Buzzdome\buzzdome-quiz.exe` on
-  Windows (or where the app was installed),
+  the app's folder: `%LOCALAPPDATA%\Buzzdome\buzzdome-quiz.exe` on
+  Windows (the installer's default, for the user installing it),
   `/Applications/Buzzdome.app/Contents/MacOS/buzzdome-quiz` on macOS.
 - **Skill.** A skill uploaded to Claude, Gemini or ChatGPT stays as it was
   when saved, in that assistant's account, where the app cannot reach. The
   app remembers which package it saved last (`ai-skill.json` in its data
   folder); when an update changes the skill, the Director says so and
   offers to save it again, to upload in place of the old one.
+
+On Windows the installer ends only the app's own program, so an assistant
+that runs `buzzdome-quiz mcp` keeps that file in use and the update cannot
+replace it: close such assistants before updating.
 
 A release build merges `app/src-tauri/tauri.release.conf.json` into the
 configuration, which makes the bundler sign the updater files and install
