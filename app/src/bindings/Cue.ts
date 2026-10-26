@@ -4,4 +4,4 @@
  * A moment of the show that plays a sound, flashes the stage lights and
  * is sent to outside programs.
  */
-export type Cue = "clockStart" | "buzz" | "correct" | "wrong" | "timeUp" | "reveal";
+export type Cue = "clockStart" | "buzz" | "correct" | "wrong" | "timeUp" | "reveal" | "leaderboard" | "place" | "winner";

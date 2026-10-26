@@ -1,0 +1,193 @@
+[
+  {
+    "id": "start.gong",
+    "kind": "effect",
+    "ms": 4700
+  },
+  {
+    "id": "start.chime",
+    "kind": "effect",
+    "ms": 2600
+  },
+  {
+    "id": "start.go",
+    "kind": "effect",
+    "ms": 2200
+  },
+  {
+    "id": "countdown.ticks",
+    "kind": "effect",
+    "ms": 5000
+  },
+  {
+    "id": "countdown.beeps",
+    "kind": "effect",
+    "ms": 5000
+  },
+  {
+    "id": "countdown.pulse",
+    "kind": "effect",
+    "ms": 5000
+  },
+  {
+    "id": "buzz.classic",
+    "kind": "effect",
+    "ms": 920
+  },
+  {
+    "id": "buzz.bell",
+    "kind": "effect",
+    "ms": 2200
+  },
+  {
+    "id": "buzz.laser",
+    "kind": "effect",
+    "ms": 570
+  },
+  {
+    "id": "buzz.horn",
+    "kind": "effect",
+    "ms": 1050
+  },
+  {
+    "id": "correct.chime",
+    "kind": "effect",
+    "ms": 2800
+  },
+  {
+    "id": "correct.dings",
+    "kind": "effect",
+    "ms": 2400
+  },
+  {
+    "id": "correct.fanfare",
+    "kind": "effect",
+    "ms": 3200
+  },
+  {
+    "id": "wrong.buzzer",
+    "kind": "effect",
+    "ms": 1350
+  },
+  {
+    "id": "wrong.trombone",
+    "kind": "effect",
+    "ms": 3800
+  },
+  {
+    "id": "wrong.bonk",
+    "kind": "effect",
+    "ms": 1600
+  },
+  {
+    "id": "timeup.horn",
+    "kind": "effect",
+    "ms": 2200
+  },
+  {
+    "id": "timeup.gong",
+    "kind": "effect",
+    "ms": 6500
+  },
+  {
+    "id": "timeup.alarm",
+    "kind": "effect",
+    "ms": 2000
+  },
+  {
+    "id": "reveal.whoosh",
+    "kind": "effect",
+    "ms": 2600
+  },
+  {
+    "id": "reveal.sparkle",
+    "kind": "effect",
+    "ms": 3200
+  },
+  {
+    "id": "reveal.sting",
+    "kind": "effect",
+    "ms": 3600
+  },
+  {
+    "id": "leaderboard.rise",
+    "kind": "effect",
+    "ms": 3600
+  },
+  {
+    "id": "leaderboard.drums",
+    "kind": "effect",
+    "ms": 3200
+  },
+  {
+    "id": "leaderboard.chord",
+    "kind": "effect",
+    "ms": 2620
+  },
+  {
+    "id": "place.cymbal",
+    "kind": "effect",
+    "ms": 4000
+  },
+  {
+    "id": "place.stab",
+    "kind": "effect",
+    "ms": 2600
+  },
+  {
+    "id": "place.boom",
+    "kind": "effect",
+    "ms": 3600
+  },
+  {
+    "id": "winner.fanfare",
+    "kind": "effect",
+    "ms": 6200
+  },
+  {
+    "id": "winner.applause",
+    "kind": "effect",
+    "ms": 5700
+  },
+  {
+    "id": "winner.party",
+    "kind": "effect",
+    "ms": 5200
+  },
+  {
+    "id": "music.lobby",
+    "kind": "music",
+    "ms": 35542,
+    "loopMs": 32542
+  },
+  {
+    "id": "music.lounge",
+    "kind": "music",
+    "ms": 46636,
+    "loopMs": 43636
+  },
+  {
+    "id": "music.thinking",
+    "kind": "music",
+    "ms": 41400,
+    "loopMs": 38400
+  },
+  {
+    "id": "music.race",
+    "kind": "music",
+    "ms": 33000,
+    "loopMs": 30000
+  },
+  {
+    "id": "music.drumroll",
+    "kind": "music",
+    "ms": 12100,
+    "loopMs": 9600
+  },
+  {
+    "id": "music.victory",
+    "kind": "music",
+    "ms": 35000,
+    "loopMs": 32000
+  }
+]

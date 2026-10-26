@@ -3,6 +3,7 @@
 // as codes with parameters (generated types), worded here from `i18n.ts`.
 
 import { buttonLabel } from "./answers";
+import { slotLabel } from "./audio/library";
 import { MEDIA_EXTENSIONS } from "./bindings/MediaExtensions";
 import type { StringKey, Translate } from "./i18n";
 import { mediaFileName } from "./media";
@@ -20,6 +21,8 @@ import type {
   Problem,
   ProtocolKind,
   ReceiverProblem,
+  RemoteAction,
+  RemoteKey,
   SettingsLost,
   SetupError,
 } from "./types";
@@ -152,7 +155,7 @@ export function errorText(t: Translate, error: unknown): string {
 }
 
 /** Problems worded with their own parameters, see `problemText`. */
-type ProblemApart = "media" | "categoryMedia" | "volume" | "partEmpty" | "replayNotOnQuestion";
+type ProblemApart = "media" | "categoryMedia" | "soundMedia" | "volume" | "partEmpty" | "replayNotOnQuestion";
 
 const PROBLEM_KEYS: Record<Exclude<Problem["code"], ProblemApart>, StringKey> = {
   duplicateSlideId: "problemDuplicateSlideId",
@@ -206,6 +209,8 @@ export function problemText(t: Translate, problem: Problem): string {
       return t("problemMedia", { file: problem.file, issue: mediaIssueText(t, problem.issue) });
     case "categoryMedia":
       return t("problemCategoryMedia", { name: problem.name, file: problem.file, issue: mediaIssueText(t, problem.issue) });
+    case "soundMedia":
+      return t("problemSoundMedia", { moment: slotLabel(t, problem.slot), file: problem.file, issue: mediaIssueText(t, problem.issue) });
     // Rules a sound and a video share, said of the one that breaks them.
     case "volume":
       return t(problem.media === "audio" ? "problemSoundVolume" : "problemVideoVolume");
@@ -258,6 +263,46 @@ export function protocolText(t: Translate, protocol: ProtocolKind): string {
     case "enjoy303s":
       return t("protocolEnjoy303s");
   }
+}
+
+const REMOTE_KEY_KEYS: Record<RemoteKey, StringKey> = {
+  back: "remoteKeyBack",
+  forward: "remoteKeyForward",
+  power: "remoteKeyPower",
+  grid: "remoteKeyGrid",
+  target: "remoteKeyTarget",
+  playPause: "remoteKeyPlayPause",
+  centre: "remoteKeyCentre",
+  question: "remoteKeyQuestion",
+  trophy: "remoteKeyTrophy",
+  colourBars: "remoteKeyColourBars",
+  cross: "remoteKeyCross",
+  tick: "remoteKeyTick",
+};
+
+/** A key of the quizmaster's remote, by what is printed on it. */
+export function remoteKeyText(t: Translate, key: RemoteKey): string {
+  return t(REMOTE_KEY_KEYS[key]);
+}
+
+const REMOTE_ACTION_KEYS: Record<RemoteAction, StringKey> = {
+  nothing: "remoteNothing",
+  next: "remoteNext",
+  previous: "remotePrevious",
+  clock: "remoteClock",
+  closeQuestion: "remoteCloseQuestion",
+  judgeRight: "remoteJudgeRight",
+  judgeWrong: "remoteJudgeWrong",
+  leaderboard: "remoteLeaderboard",
+  playVideo: "remotePlayVideo",
+  projector: "remoteProjector",
+};
+
+/** Every action a key of the remote can do, in the order the quizmaster picks from. */
+export const REMOTE_ACTIONS = Object.keys(REMOTE_ACTION_KEYS) as RemoteAction[];
+
+export function remoteActionText(t: Translate, action: RemoteAction): string {
+  return t(REMOTE_ACTION_KEYS[action]);
 }
 
 /** Whether the receiver has yet to answer its set-up: shown as still being looked for, not as connected. */

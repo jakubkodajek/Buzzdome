@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_QUIZ_SETTINGS } from "../bindings/Constants";
+import { DEFAULT_QUIZ_SETTINGS, DEFAULT_QUIZ_SOUNDS } from "../bindings/Constants";
 import type { Category, Quiz } from "../types";
 import { applyEdit, historyReducer, MERGE_MS, startHistory, UNDO_LIMIT, type History } from "./history";
 import { newSlide, setTextStyle } from "./slides";
@@ -68,9 +68,21 @@ describe("history", () => {
     const defaults = { ...DEFAULT_QUIZ_SETTINGS };
     expect(historyReducer(h, { type: "edit", edit: { type: "setSettings", settings: defaults }, at: 0 })).toBe(h);
     h = historyReducer(h, { type: "edit", edit: { type: "setSettings", settings: { ...defaults, allAnswered: "reveal" } }, at: 0 });
-    expect(h.present.settings).toEqual({ allAnswered: "reveal", allAnsweredDelayS: DEFAULT_QUIZ_SETTINGS.allAnsweredDelayS });
+    expect(h.present.settings).toEqual({ ...DEFAULT_QUIZ_SETTINGS, allAnswered: "reveal" });
     h = historyReducer(h, { type: "undo" });
     expect(h.present.settings).toBeUndefined();
+  });
+
+  it("changes the quiz's sounds as one undo step, and the defaults of a quiz without them change nothing", () => {
+    let h = startHistory(quiz);
+    const defaults = { ...DEFAULT_QUIZ_SOUNDS, slots: {} };
+    expect(historyReducer(h, { type: "edit", edit: { type: "setSounds", sounds: defaults }, at: 0 })).toBe(h);
+    const louder = { ...defaults, slots: { buzz: { builtIn: "buzz.horn" } }, musicVolume: 80 };
+    h = historyReducer(h, { type: "edit", edit: { type: "setSounds", sounds: louder }, at: 0 });
+    expect(h.present.sounds).toEqual(louder);
+    expect(historyReducer(h, { type: "edit", edit: { type: "setSounds", sounds: { ...louder, slots: { buzz: { builtIn: "buzz.horn" } } } }, at: 0 })).toBe(h);
+    h = historyReducer(h, { type: "undo" });
+    expect(h.present.sounds).toBeUndefined();
   });
 
   it("applies a batch of edits as one undo step", () => {

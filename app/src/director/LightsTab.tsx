@@ -29,6 +29,7 @@ import { calendarDay } from "../format";
 import { useLightsStatus } from "../hooks";
 import type { StringKey, Translate } from "../i18n";
 import { errorText, outputErrorText, settingsLostText, setupErrorText } from "../messages";
+import { CUE_LABEL } from "../phase";
 import type { Channel, Cue, Fixture, LibraryFixture, LibraryInfo, LibraryMatches, LibraryMode, LightsDevices, LightsInfo, LightsSetup, Look, LookEffect, OutputChoice, Stage } from "../types";
 import {
   addFixture,
@@ -98,15 +99,6 @@ const STAGE_KEYS: Record<Stage, StringKey> = {
   leaderboard: "lightsStageLeaderboard",
   finalBuildUp: "lightsStageFinalBuildUp",
   winner: "lightsStageWinner",
-};
-
-const CUE_KEYS: Record<Cue, StringKey> = {
-  clockStart: "lightsCueClockStart",
-  buzz: "lightsCueBuzz",
-  correct: "lightsCueCorrect",
-  wrong: "lightsCueWrong",
-  timeUp: "lightsCueTimeUp",
-  reveal: "lightsCueReveal",
 };
 
 const stageText = (t: Translate, stage: Stage) => t(STAGE_KEYS[stage], { s: LAST_SECONDS_MS / 1000 });
@@ -748,7 +740,7 @@ function WhenSection({ setup, change }: { setup: LightsSetup; change: Change }) 
       <h4>{t("lightsFlashes")}</h4>
       <p className="muted">{t("lightsFlashesHint")}</p>
       <div className="lights-when">
-        {(Object.keys(CUE_KEYS) as Cue[]).map((cue) => {
+        {(Object.keys(CUE_LABEL) as Cue[]).map((cue) => {
           const flash = setup.flashes[cue];
           const setFlash = (next: typeof flash) =>
             change((s) => {
@@ -759,9 +751,9 @@ function WhenSection({ setup, change }: { setup: LightsSetup; change: Change }) 
             });
           return (
             <label key={cue} className="inline">
-              <span>{t(CUE_KEYS[cue])}</span>
+              <span>{t(CUE_LABEL[cue])}</span>
               <Select
-                label={t(CUE_KEYS[cue])}
+                label={t(CUE_LABEL[cue])}
                 value={flash?.look ?? 0}
                 options={[[0, t("lightsNoFlash")], ...looks]}
                 onChange={(look) => setFlash(look === 0 ? undefined : { look, ms: flash?.ms ?? 1500 })}

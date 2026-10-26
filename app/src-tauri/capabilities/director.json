@@ -68,6 +68,8 @@
     "allow-receiver-learn-cancel",
     "allow-receiver-learn-finish",
     "allow-receiver-forget-learned",
+    "allow-receiver-set-remote-action",
+    "allow-receiver-reset-remote",
     "allow-receiver-export-log",
     "allow-receiver-udev-rule",
     "allow-lights-info",

@@ -1,8 +1,7 @@
 import { useCallback, useRef, useState, type ReactNode } from "react";
 import { api } from "../api";
 import { AppProvider, useApp, useDispatch, useRun, useStepShown } from "../app-context";
-import { playerLevel } from "../audio/clip-player";
-import { playCue } from "../audio/cues";
+import { otherSoundPlays, useShowSounds } from "../audio/show-sounds";
 import { useSlideSound, type SlideSound } from "../audio/slide-sound";
 import { clockSeconds } from "../format";
 import { EditorScreen } from "../editor/EditorScreen";
@@ -16,7 +15,6 @@ import {
   useLatest,
   useLearnProgress,
   useMediaRoot,
-  usePlayerVolume,
   useQuiz,
   useRecentFiles,
   useShowNotSaved,
@@ -38,7 +36,7 @@ import {
   StopIcon,
   VideoIcon,
 } from "../icons";
-import { keyHint, KEYS, useShortcuts } from "../keyboard";
+import { keyHint, KEYS, useRemote, useShortcuts } from "../keyboard";
 import { MediaRootContext } from "../media";
 import { phaseLabel } from "../phase";
 import { quizPicker, slideContext } from "../quiz";
@@ -136,12 +134,12 @@ function DirectorLayout({ testRun, onEditor }: { testRun: boolean; onEditor: () 
   const [tab, setTab] = useState<Tab>("questions");
   useStepShown(view);
   useShortcuts(view, projector.toggle);
+  useRemote(view, projector.toggle);
   // Sounds play here: this window is open for the whole show, the projector may not be.
-  const level = playerLevel(usePlayerVolume());
-  useBackendEvent("sound-cue", (cue) => playCue(cue, level));
   const sound = useSlideSound(view);
   // Here too, so what plays goes on and ends whichever tab is open.
   const player = useMediaPlayer();
+  useShowSounds(view, quiz, otherSoundPlays(view, sound.playing, player.now));
   const showStart = useShowStart();
 
   const tabs: [Tab, string][] = [

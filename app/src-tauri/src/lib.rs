@@ -18,6 +18,7 @@ mod hardware;
 mod media_player;
 mod pump;
 mod recent_files;
+mod remote;
 mod session;
 pub mod sheet_reader;
 mod show_thread;
@@ -751,6 +752,8 @@ pub fn run() {
             hardware::receiver_learn_cancel,
             hardware::receiver_learn_finish,
             hardware::receiver_forget_learned,
+            hardware::receiver_set_remote_action,
+            hardware::receiver_reset_remote,
             hardware::receiver_export_log,
             hardware::receiver_udev_rule,
             stage_lights::lights_info,
@@ -934,7 +937,7 @@ mod tests {
     fn a_show_that_stopped_during_the_wait_resumes_holding_the_step() {
         let root = sessions_dir("wait");
         let mut quiz = Quiz::from_json(DEMO_QUIZ).unwrap();
-        quiz.settings = quiz_core::QuizSettings { all_answered: quiz_core::AllAnswered::NextSlide, all_answered_delay_s: 3 };
+        quiz.settings = quiz_core::QuizSettings { all_answered: quiz_core::AllAnswered::NextSlide, ..Default::default() };
         let mut commands = up_to_the_first_question();
         commands.push(Command::Press { buzzer: 2, button: quiz_core::Button::C });
         let before = journaled_show_of(quiz, quiz_core::RULES_VERSION, &root, commands).game.unwrap();
@@ -1073,6 +1076,8 @@ mod tests {
             Command::SetTeams { names: vec!["A".into()] },
             Command::GoTo { slide: 2 },
             Command::GoToFinal,
+            Command::StartOver,
+            Command::ResetScores,
             Command::AddPlayer { buzzer: 3, name: "A".into() },
             Command::RenamePlayer { buzzer: 3, name: "A".into() },
             Command::PairTeam { buzzer: 3, name: "A".into() },

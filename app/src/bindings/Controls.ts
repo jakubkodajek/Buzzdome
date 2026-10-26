@@ -14,7 +14,8 @@ judge: boolean,
  */
 pauseClock: boolean, resumeClock: boolean, closeQuestion: boolean, playVideo: boolean, 
 /**
- * `GoTo` and `GoToFinal`: not while a question is in play.
+ * `GoTo`, `GoToFinal`, `StartOver` and `ResetScores`: not while a
+ * question is in play, whose score changes would go with it.
  */
 goTo: boolean, 
 /**
@@ -23,4 +24,9 @@ goTo: boolean,
  * results are on screen; a show begun before rules version 4 also
  * restarts it closed, until its answer is shown.
  */
-restartQuestion: boolean, };
+restartQuestion: boolean, 
+/**
+ * `SetJoker`: in a quiz with jokers, before the current question ends;
+ * for each player as `Game::can_set_joker` says.
+ */
+setJoker: boolean, };

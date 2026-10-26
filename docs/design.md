@@ -244,11 +244,12 @@ draws slides without a show.
   loads (`useBackendEvent`, `useGameView`, `useClock`, `useQuiz`,
   `useLastSession`). Small shared helpers live in `answers.ts`, `format.ts`,
   `quiz.ts`, `keyboard.ts` and `messages.ts`. ESLint with the React hooks rules runs in CI.
-- **Sound.** The Director window plays the cues and the slides' sound
-  clips, because it stays open for the whole show and the projector window
-  may not. Spec SN-5 moves playback into the Rust shell later. The code is in
-  `app/src/audio/`: `context.ts` (one shared `AudioContext`), `cues.ts` (game
-  effects), `clip-player.ts` (`PartPlayer` plays a part of any media
+- **Sound.** The Director window plays the show's sounds and the slides'
+  sound clips, because it stays open for the whole show and the projector
+  window may not. Spec SN-5 moves playback into the Rust shell later. The
+  code is in `app/src/audio/`: `context.ts` (one shared `AudioContext`),
+  `library.ts` (the app's sounds and what each moment plays),
+  `show-audio.ts` and `show-sounds.ts` (playing them), `clip-player.ts` (`PartPlayer` plays a part of any media
   element, looping or stopping at its end; `ClipPlayer` adds a sound file
   at volume × loudness gain), `slide-sound.ts` (when a slide's sound plays),
   `replay.ts` (the replay part after the reveal, for a slide's sound and
@@ -272,6 +273,30 @@ draws slides without a show.
   - Files are decoded for measuring with an `OfflineAudioContext` at 48 kHz,
     because `decodeAudioData` resamples to its context's rate (W3C Web Audio
     API) and BS.1770-4 gives the K-weighting filter for 48 kHz.
+  - The show's sounds (spec SN-1 to SN-4) are in the quiz's `sounds`
+    (`quiz_core::QuizSounds`, docs/quiz-format.md): a choice per moment
+    (`SoundSlot`), kept only where it is not the default, and two volumes.
+    The core says when: an effect comes as `Effect::Sound` with its `Cue`
+    (the `sound-cue` event), and the music as `GameView.music`, the moment
+    the show is at (`Game::music`), so a resumed show plays what it played.
+    The countdown is the one effect the clock plays: `useCountdown` starts
+    it from the clock's latest reading so that it ends as the time is up.
+  - The app's sounds (`app/src/audio/library/`) are read whole and play
+    from `AudioBuffer`s, to the sample; the last 20 read stay read (a piece
+    of music takes up to 18 MB once decoded, an effect about 1 MB). A piece of
+    music loops by starting each round `loopMs` after the one before, set
+    on the audio clock up to 2 s ahead, while the file's tail (a reverb, a
+    last chord) rings on under the next round: no seam and no gap. A quiz's
+    own files may be long, so they stream through `ClipPlayer` into the
+    same nodes; a file an effect plays stays open, so it starts at once.
+  - Music fades in (0.4 s), out (1.2 s) when the moment changes, and away
+    (0.3 s) while other sound plays (`otherSoundPlays`: the slide's sound,
+    a slide video with sound, a sound or video in the media player). Volumes: the quiz's
+    effects or music volume times the player volume.
+  - The library is made by `make_sounds.py` with NumPy alone, from
+    oscillators, noise and filters, at 48 kHz, each sound at -16 LUFS
+    (BS.1770-4, as SN-9), lowered where its decoded peak would pass
+    -1 dBFS, as MP3 by FFmpeg's LAME encoder.
   - The editor's Trim windows (`TrimDialog.tsx` with the waveform maths in
     `waveform.ts`, and `VideoTrimDialog.tsx`, sharing the part state, keys
     and controls in `part-editing.tsx`) and Normalize volume window
@@ -366,8 +391,9 @@ and the game keeps that version to the show's end (`Game::replay`), so
 what is journaled after a resume replays the same way at the next one: a
 show begun before version 2 jumps out of a question in play, as the app
 then restarted a question after a crash with a `GoTo` to it, one begun
-before version 3 switches a player off without closing the question, and
-one begun before version 4 restarts a closed question. Version 3 also
+before version 3 switches a player off without closing the question,
+one begun before version 4 restarts a closed question, and one begun
+before version 6 asks a question it goes back to again. Version 3 also
 changed what is not kept so (ties, accents in names), so a show begun
 before it, or under a newer app's rules, resumes with a warning that its
 scores may differ (`RulesChanged`); from version 3 on
@@ -748,7 +774,7 @@ packages users will install are read the same way.
   one switched on mid-question can, unless they already answered or were
   locked out.
 - **Everyone answered (QZ-11).** A question that closed for having nobody
-  left to answer notes when (`Game::all_answered_at`), and the quiz's
+  left to answer notes when (`Game::auto_step_from`), and the quiz's
   `settings.allAnswered` decides what follows: wait for Next, as before,
   or after `allAnsweredDelayS` the step Next would take (the reveal) or the
   jump to the slide Next would go on to (`GoTo`, or `GoToFinal` past the
@@ -761,12 +787,55 @@ packages users will install are read the same way.
   leaderboard and playing the slide's video again hold it as well, since
   the quizmaster has taken over, and a show resumed after a crash holds it
   (`recovery_command`), so the quizmaster first sees where it stands. A question closed by
-  time up or by the quizmaster has no `all_answered_at` and always waits.
+  time up or by the quizmaster has no `auto_step_from` and always waits.
+  With `settings.nextAfterReveal` the reveal starts the same count
+  (`Game::reveal`, also for a fastest finger judged right): after
+  `nextAfterRevealDelayS` the show takes the next slide's step the same
+  way, held the same way. A question shown again with its answer on a
+  revisit (rules version 6) does not count, as the quizmaster went there.
   The settings come with the quiz the session keeps, so a resumed show
   goes on with them; no rules version is needed, as a quiz without them
   plays as before. Space pressed as the reveal comes is meant for the step
   before and is dropped (one step per press, above), so it does not also
   leave the slide.
+- **Other quiz settings (QZ-11).** `runClockOut` keeps a timed question
+  running once nobody is left to answer (`Game::closes_as_answered`); its
+  time up then closes it as everyone answered, so `allAnswered` applies.
+  `changeAnswer` lets a press of another answer button replace the
+  player's answer and its time while an everyone-answers question runs.
+  `oneBuzz` makes everyone sit out a fastest-finger question once a buzz
+  in it was judged wrong (`Game::sits_out`), which leaves nobody to
+  answer. `noAnswerPenalty` gives the players an everyone-answers question
+  counts and who did not answer the question's penalty, as a wrong
+  answer. `hideAnswer` and `hideBuzzPoints` change only what the projector
+  shows (`GameView::settings`); the Director and the scores stay the same.
+  None needs a rules version: the settings travel with the quiz in the
+  session, and a quiz without them plays as before.
+- **Jokers (SF-8).** `Game::jokers` keeps the questions players play
+  their joker on, as (slide, buzzer) pairs: the ones that ended and the
+  current one, so a player's jokers left are `settings.jokers` less their
+  pairs, and a joker is spent when it is played. `SetJoker` plays or takes
+  back the current question's while it is ready or running and has given
+  the player nothing (`Game::can_set_joker`, no entry in `gains`), so a
+  joker always covers all or nothing of what the question gives. `credit`
+  doubles the points, gain or penalty, and keeps the doubled amount in
+  `gains`, so `RestartQuestion` takes back what was given and the joker
+  stays on the question asked again. Leaving a question before it ended
+  (`enter_slide` to another slide) drops its pairs, as the question was
+  never asked. The command is journaled like any other and only exists in
+  shows played since, so no rules version is needed.
+- **Reset scores and start over (SF-9).** `ResetScores` sets every
+  player's `score` and `total_answer_ms` to zero and empties `gains`, so
+  `RestartQuestion` has nothing left to take back; the slide, the jokers
+  played and `closed_questions` stay, so a question that ended is still
+  not asked twice. `StartOver` does the same, empties `jokers` and
+  `closed_questions` and enters the lobby on slide 0 (`Game::enter`, which
+  `enter_slide` calls with the slide's own phase): the players, their
+  names, who is switched on and the team names stay, and the rest is as in
+  a new show. Both are refused while a question is in play, as the jumps
+  are (`Controls::go_to`), so no question's score changes are split by
+  them. They only exist in shows played since, so no rules version is
+  needed. The Director's buttons for them ask first.
 - **Ranking.** `Game::ranking` orders the players switched on by score,
   then by the time their right answers took together (`total_answer_ms`,
   less first); wrong answers add no time, so not answering never helps.
@@ -1185,15 +1254,16 @@ between the two could go wrong mid-show.
   before a question started, `7F` while a buzz was judged), and the drop
   worked in the app. A colour the app never sets, as another program
   might leave, lets the press through. Elsewhere the game
-  alone decides, so any buzzer can register. The quizmaster's remote (`34`) and
-  the answers to setting a buzzer's ID (`17`, `24`) are skipped.
+  alone decides, so any buzzer can register. The answers to setting a
+  buzzer's ID (`17`, `24`) are skipped.
 - The receiver runs no round itself and locks nobody out: the app lights
   every buzzer (2.7) and decides who buzzed first (2.6).
 - No battery level: the 303S's SDK has none, and in the test no byte of a
   press differed between buzzers but the ID and the two counts, and the
   receiver sent nothing unasked in 7.5 idle minutes.
 - The quizmaster's remote sends `34 key` with bit 7 set, keys 0 to 11, one
-  message per press, none while held or at the release.
+  message per press, none while held or at the release. The protocol reads
+  it as a `RemoteKey` (2.10); a code no key has is nothing.
 
 ### 2.5 Learn mode
 
@@ -1409,9 +1479,9 @@ The 303S shows them as colours: ready blue, locked dim white (Jakub's
 choice, told apart from the red of a wrong answer next to it), first
 white, right green, wrong red, off dark (`enjoy303s.rs`); no two share a
 colour byte. Locked and first are both white, told apart by brightness
-alone; on the 303S's lights both come out purple, dim white the lighter
-one, told apart at arm's length in the 2026-10-25 test, and Jakub kept
-dim white for locked after it. A light that goes to all buzzers at once reaches spare
+alone, told apart at arm's length in the 2026-10-25 test, and Jakub kept
+dim white for locked after it (both read as white on the hardware;
+an early note of them as purple was a misreading, 2026-10-26). A light that goes to all buzzers at once reaches spare
 buzzers too, which the app never lit and so show whatever went to all
 last: in a fastest-finger round they light ready, so a spare's press
 registers a late team, which plays from the next question as any player
@@ -1439,14 +1509,14 @@ the buzzers' lights are the app's either way.
   list starts again whenever the receiver goes.
 - The app keeps the last 2000 raw reports in memory; the Receiver tab shows the
   latest ones and can export all of them as text
-  (`unix-ms <tab> hex bytes <tab> decoded presses <tab> dropped presses`,
-  such as `3A@500` for buzzer 3, button A, with its timer at 500; dropped
-  ones came from a buzzer that was not ready, 2.4).
+  (`unix-ms <tab> hex bytes <tab> decoded presses <tab> dropped presses
+  <tab> remote keys`, such as `3A@500` for buzzer 3, button A, with its
+  timer at 500; dropped ones came from a buzzer that was not ready, 2.4).
 - `cargo run -p buzzers --example hid-monitor` lists HID devices and, with a
   `VID:PID` argument, runs the app's receiver thread and protocol on that
   receiver without the app, printing the status, every report with its
-  timestamp, the presses decoded, with the buzzer's timer, and those
-  dropped as not ready. The buzzers
+  timestamp, the presses decoded, with the buzzer's timer, those
+  dropped as not ready and the remote's keys. The buzzers
   show ready and take answers A to D; with a further `rush` argument they
   are in a fastest-finger round, whose presses come in the timers' order.
   With `lights` every buzzer shows each light of a show in turn, two
@@ -1464,18 +1534,65 @@ settings while unanswered, the write gap, a fastest-finger buzz in the
 timers' order, one passed on when the round ends, the receiver is lost or
 deselected, a buzz from a buzzer that was not ready dropped and logged
 while the next press after it counts, the timer window under the grace
-after time up, unplug and replug, open failure and retry, deselect. Unit
+after time up, the remote's keys after the presses of their report and
+once, unplug and replug, open failure and retry, deselect. Unit
 tests cover the edge filter, signatures, the recorder, conflict
 detection, the CP2110 reports, the 303S's set-up, its steps asked again
 and a receiver started again, orders, colours, when one goes to all, that
 no two differ in brightness alone, its presses with timer and shown
 colour, in fastest finger only from buzzers that were ready, button
-codes, short messages, buzzer ID range, messages split, spoiled and after
-noise, and the timer order; `quiz-core`'s `game_flow.rs` follows the
+codes, the remote's key codes, short messages, buzzer ID range, messages
+split, spoiled and after noise, and the timer order; `quiz-core`'s `game_flow.rs` follows the
 buzzer mode through a show, which buttons buzz in on which question, a
 player switched on mid-question and the merged lights of a wrong
 judgement. None of this proves the real
 receiver's format: see [`hardware-test.md`](hardware-test.md).
+
+### 2.10 The quizmaster's remote
+
+The Galaxy set's 12-key remote talks to the same receiver as the buzzers
+(specification BZ-21). Its keys take the presses' way to the app, but
+never go into the game themselves:
+
+- The 303S protocol reads each key as a `RemoteKey`, named after what is
+  printed on it (2.4). The receiver thread sends a key after the presses
+  of its report, and only once: the same key again within 700 ms is taken
+  for the receiver sending it again, as it did with presses (BZ-6), and
+  is only logged. A key pressed twice that fast counts once.
+- What each key does (`RemoteAction` in `app/src-tauri/src/remote.rs`) is
+  kept per computer with the receiver's settings in `receiver.json`: only
+  the keys changed from their default. The Receiver tab lists the 12 keys
+  with a choice each, marks the key last pressed, so the quizmaster can
+  tell which key is which, and puts the defaults back.
+- The Director does a key's action exactly as the keyboard key for that
+  action (`commandForAction` in `keyboard.ts`): only when the step takes
+  it, one step per press through the window's step guard, and journaled
+  like any command. Previous slide goes where `Game::previous` says
+  (`GameView.previousSlide`, `GoTo`): the slide before, or from the final
+  ranking the last slide, and only between questions. A question that
+  ended earlier in the show, closed or won by a fastest finger judged
+  right (`Game::end_question`), comes back with its answer shown
+  (`Game::closed_questions`, rules version 6): it takes no presses, shows
+  no results (they are not kept), and its scores stand, so Back then
+  Forward, as on a presenter's clicker, never asks it and scores it twice.
+  The Director's Go to does the same. Projector opens or closes the projector window,
+  as M does. The projector window does not listen, so no key acts twice.
+
+| key | default action |
+| --- | --- |
+| back arrow | previous slide |
+| forward arrow, middle arrow | next |
+| target | end question |
+| play / pause | pause the clock, or go on |
+| trophy | leaderboard, shown or hidden |
+| colour bars | play the video |
+| red cross, green tick | wrong, right |
+| power, grid, question mark | nothing |
+
+Power does nothing by default, so a key pressed by mistake never closes
+the projector mid-show. The three arrows' codes were named over chat in
+the first hardware test; the next one checks them (`hardware-test.md`
+section 3).
 
 ## 3. OS specifics
 
@@ -1768,7 +1885,7 @@ map each to a button; triggers carry the float 1.0.
 | --- | --- | --- |
 | Show started / ended | `/buzzdome/show/start`, `/buzzdome/show/end` | notes 70 / 71 |
 | Stage | `/buzzdome/stage/<stage>` (`noShow`, `lobby`, `billboard`, `explanation`, `endOfRound`, `questionReady`, `answering`, `lastSeconds`, `buzzed`, `closed`, `revealed`, `leaderboard`, `finalBuildUp`, `winner`) | notes 36 to 49 in that order |
-| Cue | `/buzzdome/cue/<cue>` (`clockStart`, `buzz`, `correct`, `wrong`, `timeUp`, `reveal`) | notes 60 to 65 in that order |
+| Cue | `/buzzdome/cue/<cue>` (`clockStart`, `buzz`, `correct`, `wrong`, `timeUp`, `reveal`, `leaderboard`, `place`, `winner`) | notes 60 to 68 in that order |
 | Slide | `/buzzdome/slide` with the slide number (int) | program change number − 1 (slides 1 to 128) |
 | Buzz | `/buzzdome/buzz` with the buzzer number (int) | note 72 |
 

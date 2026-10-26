@@ -58,7 +58,9 @@ impl From<ReceiverEvent> for ShowEvent {
 impl Timed for ShowEvent {
     fn at_ms(&self) -> u64 {
         match self {
-            ShowEvent::Receiver(ReceiverEvent::Press { at_ms, .. }) | ShowEvent::Press { at_ms, .. } | ShowEvent::Job { at_ms, .. } => *at_ms,
+            ShowEvent::Receiver(ReceiverEvent::Press { at_ms, .. } | ReceiverEvent::Remote { at_ms, .. })
+            | ShowEvent::Press { at_ms, .. }
+            | ShowEvent::Job { at_ms, .. } => *at_ms,
             ShowEvent::Receiver(ReceiverEvent::Raw(report)) => report.at_ms,
             ShowEvent::Receiver(ReceiverEvent::Status(_)) => 0,
         }

@@ -2,14 +2,15 @@ import { useApp } from "../app-context";
 import { BackIcon } from "../icons";
 import { keyHint, KEYS } from "../keyboard";
 import { problemText } from "../messages";
-import { MAX_ALL_ANSWERED_DELAY_S } from "../bindings/Constants";
+import { MAX_AFTER_REVEAL_DELAY_S, MAX_ALL_ANSWERED_DELAY_S, MAX_JOKERS } from "../bindings/Constants";
 import type { StringKey } from "../i18n";
-import { questionCount, settingsOf } from "../quiz";
+import { questionCount, settingsOf, soundsOf } from "../quiz";
 import { RecentFileList } from "../recent-files";
-import type { AllAnswered, Quiz, QuizSettings, ValidationError } from "../types";
+import type { AllAnswered, Quiz, QuizSettings, QuizSounds, ValidationError } from "../types";
 import type { Action, Actions } from "./actions";
-import { NumberBox, Select } from "./controls";
+import { NumberBox, Select, Switch } from "./controls";
 import type { OpenQuiz } from "./editor-state";
+import { SoundsSettings } from "./SoundsSettings";
 
 export type BackstagePage = "info" | "settings" | "open" | "import" | "export" | "ai";
 
@@ -34,6 +35,9 @@ interface BackstageProps {
   onOpenFile: (recent?: string) => void;
   onTitle: (title: string) => void;
   onSettings: (settings: QuizSettings) => void;
+  onSounds: (sounds: QuizSounds) => void;
+  /** Lets the quizmaster pick a sound file, added to the quiz's media; null when none is picked. */
+  onPickSound: () => Promise<string | null>;
   /** Shows a slide (by id) in the editor. */
   onShowSlide: (id: string) => void;
 }
@@ -146,16 +150,19 @@ const ALL_ANSWERED_LABEL: Record<AllAnswered, StringKey> = {
 };
 
 /** How the show runs, for the whole quiz (spec QZ-11); each question has its own time, points and answers. */
-function SettingsPage({ open, onSettings }: BackstageProps & { open: OpenQuiz }) {
+function SettingsPage({ open, onSettings, onSounds, onPickSound }: BackstageProps & { open: OpenQuiz }) {
   const { t } = useApp();
-  const settings = settingsOf(open.history.present);
+  const quiz = open.history.present;
+  const settings = settingsOf(quiz);
   const set = (change: Partial<QuizSettings>) => onSettings({ ...settings, ...change });
   const options = (Object.keys(ALL_ANSWERED_LABEL) as AllAnswered[]).map((value): [AllAnswered, string] => [value, t(ALL_ANSWERED_LABEL[value])]);
+  const hold = { key: keyHint(t, KEYS.clock) };
   return (
     <>
       <h1>{t("quizSettings")}</h1>
       <p className="backstage-hint">{t("quizSettingsHint")}</p>
       <h2>{t("advancedSettings")}</h2>
+      <h3>{t("settingsFlow")}</h3>
       <div className="field">
         <span>{t("allAnswered")}</span>
         <Select label={t("allAnswered")} value={settings.allAnswered} options={options} onChange={(allAnswered) => set({ allAnswered })} />
@@ -173,8 +180,62 @@ function SettingsPage({ open, onSettings }: BackstageProps & { open: OpenQuiz })
           />
         </div>
       )}
-      <p className="backstage-hint">{t("allAnsweredHint", { key: keyHint(t, KEYS.clock) })}</p>
+      <p className="backstage-hint">{t("allAnsweredHint", hold)}</p>
+      <SettingSwitch label={t("runClockOut")} hint={t("runClockOutHint")} checked={settings.runClockOut} onChange={(runClockOut) => set({ runClockOut })} />
+      <SettingSwitch
+        label={t("nextAfterReveal")}
+        hint={t("nextAfterRevealHint", hold)}
+        checked={settings.nextAfterReveal}
+        onChange={(nextAfterReveal) => set({ nextAfterReveal })}
+      />
+      {settings.nextAfterReveal && (
+        <div className="field">
+          <span>{t("nextAfterRevealDelay")}</span>
+          <NumberBox
+            label={t("nextAfterRevealDelay")}
+            value={settings.nextAfterRevealDelayS}
+            min={0}
+            max={MAX_AFTER_REVEAL_DELAY_S}
+            unit="s"
+            onChange={(nextAfterRevealDelayS) => set({ nextAfterRevealDelayS })}
+          />
+        </div>
+      )}
+      <h3>{t("settingsAnswers")}</h3>
+      <SettingSwitch label={t("changeAnswer")} hint={t("changeAnswerHint")} checked={settings.changeAnswer} onChange={(changeAnswer) => set({ changeAnswer })} />
+      <SettingSwitch label={t("oneBuzz")} hint={t("oneBuzzHint")} checked={settings.oneBuzz} onChange={(oneBuzz) => set({ oneBuzz })} />
+      <SettingSwitch
+        label={t("noAnswerPenalty")}
+        hint={t("noAnswerPenaltyHint")}
+        checked={settings.noAnswerPenalty}
+        onChange={(noAnswerPenalty) => set({ noAnswerPenalty })}
+      />
+      <div className="field">
+        <span>{t("jokers")}</span>
+        <NumberBox label={t("jokers")} value={settings.jokers} min={0} max={MAX_JOKERS} onChange={(jokers) => set({ jokers })} />
+      </div>
+      <p className="backstage-hint">{t("jokersHint")}</p>
+      <h3>{t("settingsProjector")}</h3>
+      <SettingSwitch label={t("showAnswer")} hint={t("showAnswerHint")} checked={!settings.hideAnswer} onChange={(show) => set({ hideAnswer: !show })} />
+      <SettingSwitch
+        label={t("showBuzzPoints")}
+        hint={t("showBuzzPointsHint")}
+        checked={!settings.hideBuzzPoints}
+        onChange={(show) => set({ hideBuzzPoints: !show })}
+      />
+      <SoundsSettings sounds={soundsOf(quiz)} onSounds={onSounds} onPickFile={onPickSound} />
     </>
+  );
+}
+
+/** A setting that is on or off, with what it does. */
+function SettingSwitch(props: { label: string; hint: string; checked: boolean; onChange: (on: boolean) => void }) {
+  return (
+    <div className="setting-switch">
+      <span>{props.label}</span>
+      <Switch label={props.label} checked={props.checked} onChange={props.onChange} />
+      <p className="backstage-hint">{props.hint}</p>
+    </div>
   );
 }
 

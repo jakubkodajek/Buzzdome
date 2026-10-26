@@ -2,7 +2,8 @@
 
 use crate::game::{same_name, BuzzerId, Button, Controls, Game, Phase, QuestionStep, Response};
 use crate::model::{AnswerMode, Slide};
-use crate::settings::AutoStep;
+use crate::settings::{AutoStep, QuizSettings};
+use crate::sounds::SoundSlot;
 use serde::Serialize;
 use std::collections::BTreeMap;
 use ts_rs::TS;
@@ -20,6 +21,9 @@ pub struct GameView {
     /// (`Game::following`), for the quizmaster: past the last slide for the
     /// final ranking, none once the show is over.
     pub next_slide: Option<usize>,
+    /// The slide the quizmaster's Back goes to (`Game::previous`), none
+    /// where it goes nowhere.
+    pub previous_slide: Option<usize>,
     pub clock: Option<ClockView>,
     pub players: Vec<PlayerView>,
     /// The team names prepared for the show, in order, with their buzzers.
@@ -28,13 +32,15 @@ pub struct GameView {
     /// Enabled players who answered the current question.
     pub answered_count: usize,
     /// Everyone-answers: how many of the players it counted gave each
-    /// answer, in order, once the question is closed.
+    /// answer, in order, once the question is closed; none when it counted
+    /// nobody, as when the show came back to it (`Game::previous`).
     pub answer_counts: Option<Vec<usize>>,
     /// The current question's answers in order, each with the share of the
     /// points it scores (`FULL_SHARE` when fully right), none for a wrong
     /// one; empty on another slide. Windows mark the right answers from it.
     pub answer_shares: Vec<Option<u8>>,
-    /// Everyone-answers: how the players it counted did, once the question is closed.
+    /// Everyone-answers: how the players it counted did, once the question
+    /// is closed; none when it counted nobody, as `answer_counts`.
     pub results: Option<AnswerResults>,
     pub buzzed: Option<BuzzerId>,
     pub leaderboard_visible: bool,
@@ -46,9 +52,14 @@ pub struct GameView {
     pub video_plays: u32,
     /// See `Game::step_no`.
     pub step_no: u32,
-    /// The step the show takes by itself once everyone answered
-    /// (`Game::pending_step`); none while it waits for the quizmaster.
+    /// The step the show takes by itself (`Game::pending_step`); none
+    /// while it waits for the quizmaster.
     pub auto_step: Option<AutoStepView>,
+    /// The quiz's settings, for what the windows show: the projector hides
+    /// what they say it hides.
+    pub settings: QuizSettings,
+    /// The music the show's moment takes (`Game::music`).
+    pub music: Option<SoundSlot>,
 }
 
 /// A step the show takes by itself, for the Director to show coming.
@@ -120,6 +131,20 @@ pub struct PlayerView {
     pub joins_next: bool,
     /// Score change from the current question.
     pub delta: Option<i32>,
+    /// The player's joker in the show (`QuizSettings::jokers`).
+    pub joker: JokerView,
+}
+
+/// A player's joker: whether they play it on the current question, how
+/// many they have left, and whether the quizmaster can play it or take it
+/// back now (`Game::can_set_joker`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
+#[serde(rename_all = "camelCase")]
+pub struct JokerView {
+    pub on: bool,
+    pub left: u8,
+    pub can_change: bool,
 }
 
 impl Game {
@@ -140,7 +165,7 @@ impl Game {
 
     /// How the players a closed everyone-answers question counted did.
     fn results(&self) -> Option<AnswerResults> {
-        let question = self.question().filter(|q| q.mode == AnswerMode::Everyone && self.is_closed())?;
+        let question = self.question().filter(|q| q.mode == AnswerMode::Everyone && self.has_results())?;
         let answers: Vec<&Response> = self.counted().iter().filter_map(|b| self.responses().get(b)).collect();
         let right = answers.iter().filter(|r| r.is_right(question)).count();
         Some(AnswerResults { right, wrong: answers.len() - right, none: self.counted().len() - answers.len() })
@@ -149,7 +174,7 @@ impl Game {
     /// How many of the players a closed everyone-answers question counted
     /// gave each of its answers.
     fn answer_counts(&self) -> Option<Vec<usize>> {
-        let question = self.question().filter(|q| q.mode == AnswerMode::Everyone && self.is_closed())?;
+        let question = self.question().filter(|q| q.mode == AnswerMode::Everyone && self.has_results())?;
         let mut counts = vec![0; question.answers.len()];
         for response in self.counted().iter().filter_map(|b| self.responses().get(b)) {
             if let Some(count) = response.button.answer_index().and_then(|i| counts.get_mut(i)) {
@@ -159,8 +184,10 @@ impl Game {
         Some(counts)
     }
 
-    fn is_closed(&self) -> bool {
-        matches!(self.phase(), Phase::Question(QuestionStep::Closed | QuestionStep::Revealed { .. }))
+    /// The question closed and counted somebody, so it has results to show.
+    fn has_results(&self) -> bool {
+        let closed = matches!(self.phase(), Phase::Question(QuestionStep::Closed | QuestionStep::Revealed { .. }));
+        closed && !self.counted().is_empty()
     }
 
     pub fn view(&self, now: u64) -> GameView {
@@ -181,6 +208,10 @@ impl Game {
                 answer_ms: self.responses().get(&p.buzzer).map(|r| r.elapsed_ms),
                 locked_out: self.locked_out().contains(&p.buzzer),
                 joins_next: self.joins_next().contains(&p.buzzer),
+                joker: {
+                    let on = self.plays_joker(p.buzzer);
+                    JokerView { on, left: self.jokers_left(p.buzzer), can_change: self.can_set_joker(p.buzzer, !on) }
+                },
                 delta: self.delta(p.buzzer),
             })
             .collect();
@@ -194,6 +225,7 @@ impl Game {
             phase: self.phase().clone(),
             slide: self.current_slide().cloned(),
             next_slide: self.following(),
+            previous_slide: self.previous(),
             clock: self.clock_view(now),
             enabled_count: enabled.len(),
             answered_count: enabled.iter().filter(|p| p.answered).count(),
@@ -210,6 +242,8 @@ impl Game {
             video_plays: self.video_plays(),
             step_no: self.step_no(),
             auto_step: self.pending_step().map(|(action, _, at)| AutoStepView { action, in_ms: at.saturating_sub(now) }),
+            settings: self.quiz().settings,
+            music: self.music(),
             teams: self
                 .teams()
                 .iter()

@@ -9,6 +9,7 @@ pub mod model;
 pub mod settings;
 pub mod sheet;
 pub mod sound_board;
+pub mod sounds;
 pub mod stage;
 pub mod style;
 mod text;
@@ -26,7 +27,10 @@ pub use media::{
     NEW_VIDEO_INTRO_PAUSE_MS,
 };
 pub use media_player::{MediaPlayer, NowPlaying, PlayerCommand, MAX_DROPPED_MB, MAX_PLAYER_VOLUME};
-pub use settings::{AllAnswered, AutoStep, QuizSettings, DEFAULT_ALL_ANSWERED_DELAY_S, MAX_ALL_ANSWERED_DELAY_S};
+pub use settings::{
+    AllAnswered, AutoStep, QuizSettings, DEFAULT_AFTER_REVEAL_DELAY_S, DEFAULT_ALL_ANSWERED_DELAY_S, MAX_AFTER_REVEAL_DELAY_S, MAX_ALL_ANSWERED_DELAY_S,
+    MAX_JOKERS,
+};
 pub use model::{
     AnswerLimits, AnswerMode, CorrectAnswer, Plays, Problem, Question, Quiz, QuizJsonError, ReadQuiz, Slide, SlideContent, SlideType, ValidationError,
     DEFAULT_POINTS, DEFAULT_TIME_LIMIT_S, FULL_SHARE, MAX_ANSWERS, MAX_EVERYONE_ANSWERS, MAX_POINTS, MAX_TIME_LIMIT_S,
@@ -36,6 +40,7 @@ pub use sheet::{export_table, import_tables, ImportIssue, ImportNote, ImportedRo
 pub use text::file_key;
 pub use stage::{Stage, LAST_SECONDS_MS};
 pub use sound_board::{BoardChange, BoardError, Pad, PadClick, PadColor, PadSource, SoundBoard};
+pub use sounds::{is_sound_id, QuizSounds, SoundChoice, SoundSlot, DEFAULT_EFFECTS_VOLUME, DEFAULT_MUSIC_VOLUME, MAX_SOUND_ID_LEN, MAX_SOUND_VOLUME};
 pub use style::{
     Color, FontName, Gradient, GradientKind, SlideStyle, TextAlign, TextSize, TextStyle, TimerDesign, Transparency, MAX_FONT_NAME_CHARS, MAX_TEXT_SIZE,
     MAX_TRANSPARENCY, MIN_TEXT_SIZE,
@@ -89,7 +94,14 @@ mod ui_constants {
             ("FULL_SHARE", crate::FULL_SHARE.to_string()),
             ("DEFAULT_QUIZ_SETTINGS", format!("{} as const", serde_json::to_string(&crate::QuizSettings::default()).unwrap())),
             ("MAX_ALL_ANSWERED_DELAY_S", crate::MAX_ALL_ANSWERED_DELAY_S.to_string()),
+            ("MAX_AFTER_REVEAL_DELAY_S", crate::MAX_AFTER_REVEAL_DELAY_S.to_string()),
+            ("MAX_JOKERS", crate::MAX_JOKERS.to_string()),
             ("LAST_SECONDS_MS", crate::LAST_SECONDS_MS.to_string()),
+            ("DEFAULT_QUIZ_SOUNDS", format!("{} as const", serde_json::to_string(&crate::QuizSounds::default()).unwrap())),
+            ("MAX_SOUND_VOLUME", crate::MAX_SOUND_VOLUME.to_string()),
+            ("SOUND_SLOTS", format!("{} as const", serde_json::to_string(&crate::SoundSlot::ALL).unwrap())),
+            ("EFFECT_SLOTS", sound_slots(false)),
+            ("MUSIC_SLOTS", sound_slots(true)),
             ("STAGES", format!("{} as const", serde_json::to_string(&crate::Stage::ALL).unwrap())),
             ("ANSWER_BUTTONS", format!("{} as const", serde_json::to_string(&crate::game::ANSWER_BUTTONS).unwrap())),
         ];
@@ -98,6 +110,12 @@ mod ui_constants {
             ts.push_str(&format!("export const {name} = {value};\n"));
         }
         std::fs::write(std::path::Path::new(&dir).join("Constants.ts"), ts).unwrap();
+    }
+
+    /// The moments of the show that play music, or those that play effects.
+    fn sound_slots(music: bool) -> String {
+        let slots: Vec<_> = crate::SoundSlot::ALL.into_iter().filter(|slot| slot.is_music() == music).collect();
+        format!("{} as const", serde_json::to_string(&slots).unwrap())
     }
 
     /// What each slide type can play, by the type's name in the quiz file.

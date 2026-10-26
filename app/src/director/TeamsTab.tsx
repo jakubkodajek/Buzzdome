@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { buttonLabel } from "../answers";
-import { useApp, useDispatch } from "../app-context";
+import { useApp, useDispatch, useRun } from "../app-context";
 import { MAX_NAME_CHARS } from "../bindings/Constants";
+import { confirmAction } from "../confirm";
 import { seconds, signed } from "../format";
 import { usePreparedTeams, useTeamsLost } from "../hooks";
 import { settingsLostText } from "../messages";
@@ -44,6 +45,7 @@ function TeamsLost({ lost }: { lost: SettingsLost | null }) {
 function ShowTeams({ view, lost }: { view: GameView; lost: SettingsLost | null }) {
   const { t } = useApp();
   const dispatch = useDispatch();
+  const run = useRun();
   const [selected, setSelected] = useState<Set<BuzzerId>>(new Set());
   const [anchor, setAnchor] = useState<BuzzerId | null>(null);
   const [newBuzzer, setNewBuzzer] = useState("");
@@ -51,6 +53,7 @@ function ShowTeams({ view, lost }: { view: GameView; lost: SettingsLost | null }
   const [picked, setPicked] = useState<BuzzerId | null>(null);
   const pick = (buzzer: BuzzerId | null) => setPicked((current) => (buzzer === current ? null : buzzer));
   const players = [...view.players].sort((a, b) => a.buzzer - b.buzzer);
+  const jokers = view.settings.jokers > 0;
 
   const select = (buzzer: BuzzerId, e: React.MouseEvent) => {
     const next = new Set(e.ctrlKey || e.metaKey ? selected : []);
@@ -68,6 +71,8 @@ function ShowTeams({ view, lost }: { view: GameView; lost: SettingsLost | null }
   };
 
   const forSelected = (make: (buzzer: BuzzerId) => Command) => selected.forEach((buzzer) => dispatch(make(buzzer)));
+  // Refused mid-question like the jumps (`Controls.goTo`), and asks first.
+  const resetScores = () => run(confirmAction(t, t("resetScoresConfirm")).then((yes) => yes && dispatch({ type: "resetScores" })));
 
   const addPlayer = () => {
     const buzzer = Number(newBuzzer);
@@ -92,6 +97,10 @@ function ShowTeams({ view, lost }: { view: GameView; lost: SettingsLost | null }
         <button disabled={selected.size === 0} onClick={() => forSelected((buzzer) => ({ type: "setPlayerEnabled", buzzer, enabled: true }))}>
           {t("enable")}
         </button>
+        <span className="toolbar-separator" />
+        <button disabled={!view.controls.goTo} onClick={resetScores}>
+          {t("resetScores")}
+        </button>
         <span className="spacer" />
         <input
           type="number"
@@ -115,6 +124,7 @@ function ShowTeams({ view, lost }: { view: GameView; lost: SettingsLost | null }
                 <th>{t("colLastResponse")}</th>
                 <th title={t("colTotalTimeHint")}>{t("colTotalTime")}</th>
                 <th>{t("active")}</th>
+                {jokers && <th title={t("colJokerHint")}>{t("colJoker")}</th>}
               </tr>
             </thead>
             <tbody>
@@ -149,6 +159,23 @@ function ShowTeams({ view, lost }: { view: GameView; lost: SettingsLost | null }
                   </td>
                   <td className="num">{seconds(p.totalAnswerMs)} s</td>
                   <td>{p.enabled ? t("yes") : t("no")}</td>
+                  {jokers && (
+                    <td className="joker-cell">
+                      <button
+                        className="joker-toggle"
+                        aria-pressed={p.joker.on}
+                        disabled={!p.joker.canChange}
+                        title={t("colJokerHint")}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          dispatch({ type: "setJoker", buzzer: p.buzzer, on: !p.joker.on });
+                        }}
+                      >
+                        {t("jokerPlay")}
+                      </button>
+                      <span className="muted"> {t("jokersLeft", { n: p.joker.left })}</span>
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>

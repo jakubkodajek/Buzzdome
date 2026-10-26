@@ -129,10 +129,10 @@ not go as expected; whatever happens, go on and export the log at the end
 7. **Colours.** Section 6 checks each light in a show; there, check also
    that dim white (locked out) is easy to tell from white (first) and from
    red (wrong) next to it, on the stage and in its light, and that it is
-   bright enough to see (steps 6 and 12 show them together). On the 303S's
-   lights both whites come out purple, dim white the lighter one; at
-   arm's length they were told apart (2026-10-25), from the back of a room
-   nobody has judged yet. Before that,
+   bright enough to see (steps 6 and 12 show them together). On the 303S
+   both read as white, dim white the fainter one; at arm's length they
+   were told apart (2026-10-25), from the back of a room nobody has judged
+   yet. Before that,
    or if a light does not change, run
    `hid-monitor` with `lights` (end of this file): every buzzer takes each
    colour in turn, and a second into each, buzzers 2 and 6 alone take the
@@ -163,6 +163,16 @@ not go as expected; whatever happens, go on and export the log at the end
     `cargo run -p buzzers --example hid-monitor -- 10c4:1819` (end of this
     file), press A a few times on it and on a full one, and note it if
     that digit, or any byte but the buzzer and the timers, differs.
+11. **The remote's keys.** Before you start a show (in an open show a key
+    also does its action), open the Receiver tab and press each key of the
+    quizmaster's remote once, slowly. Expected: under "Quizmaster's
+    remote" the row of the key pressed lights up, and "Last pressed" names
+    it. The three arrows were named over chat on 2026-10-25: check
+    especially that the back arrow lights "Back arrow", the forward arrow
+    "Forward arrow" and the middle one "Middle arrow". Note any key that
+    lights another row, or none. Then press one key twice quickly: it
+    counts once (a second press within 0.7 s is taken for the receiver
+    sending it again).
 
 ## 4. Record raw reports
 
@@ -224,9 +234,9 @@ press that leaves no line under "Raw data", and what came before it.
    white; note it if that is long enough to see. Let buzzers 2, 3 and 4,
    and one numbered 5 or higher, each win once: exactly the winner turns
    white each time, none of the others. On the stage, in its light, check
-   that the winner's white and everyone else's dim white (purple and
-   light purple on the 303S) are easy to tell apart from the back of the
-   room, and that the letter on the projector's buzz bar can be read.
+   that the winner's white and everyone else's dim white are easy to tell
+   apart from the back of the room, and that the letter on the projector's
+   buzz bar can be read.
 7. **The colour a press shows.** For one buzz of step 6, find its "Raw
    data" line: after `27 A5`, the length and `32`, come the buzzer's radio
    ID, the button code, then the colour the buzzer showed. Expected: `43`
@@ -326,6 +336,32 @@ press that leaves no line under "Raw data", and what came before it.
     pressed registers and turns blue. Do a test run from the editor (F5)
     and end it, then start a real show: no buzzer keeps a colour from the
     test run.
+22. **The remote in a show.** Run a whole show from the remote alone,
+    standing where the quizmaster will stand: forward arrow for each
+    step, tick and cross to judge a fastest-finger buzz, play / pause to
+    pause the clock and go on, trophy for the leaderboard, back arrow
+    between questions to go back a slide, colour bars to play a video
+    again. Expected: each key does what the Receiver tab says, once per
+    press. Back arrow after a question, then forward arrow: the question
+    comes back with its answer shown, takes no presses, and forward goes
+    on with the scores unchanged. Note from how far away and through what the remote still
+    works.
+23. **Quiz settings on the buzzers.** In File › Quiz settings, switch on
+    "Players can change their answer while the question runs". In an
+    everyone-answers question, before every player has answered, press A
+    on a buzzer, then B. Expected: the buzzer turns dim white after A, and
+    B still counts (the Responses tab shows B). Note whether players need
+    another light while they can still change. Then switch off "Mark the
+    right answer on the projector" and reveal a question: the projector
+    marks nothing, but each buzzer still lights green or red. Note whether
+    that should wait for the quizmaster too.
+24. **Sounds in the room.** Run part of a show through the venue's
+    speakers with the default sounds, and in File › Quiz settings › Sounds
+    and music pick a piece of music for "While the clock runs". Expected:
+    each moment sounds once; the ticking of the last 5 seconds ends as the
+    time is up, and stops while the clock is paused; the music fades away
+    while a buzz waits for its verdict. Note whether the effects and the
+    music are too loud or too soft against the quizmaster's voice.
 
 ## 7. Failures
 
@@ -382,6 +418,9 @@ installer, then on the Mac, that nothing it should allow is blocked:
    the app's language.
 4. In the **Media player** tab, add a sound and a video and play each.
    Expected: both play.
+5. In File › Quiz settings › Sounds and music, pick one of the app's
+   effects, one of its pieces of music and a sound file of your own, and
+   play each with its play button. Expected: all three play.
 
 A step that fails here and not in a dev build is the policy blocking it:
 note the step and attach `buzzdome.log`, where each window notes what the

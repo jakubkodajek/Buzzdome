@@ -1,68 +1,70 @@
 feature,area,priority,original,clone,notes
 Create save and reopen a quiz,studio,must,yes,yes,§3.2; original uses .qx files; clone: .quiz files; crash-safe draft; File page with recent files
 Slide list with drag to reorder duplicate and delete,studio,must,yes,yes,§3.2.4 thumbnails panel
-Properties panel with search and several selected slides,studio,should,yes,yes,§3.2.5; clone: pages, More options, search, Reset/Copy/Paste, dark and alphabetical views, Mixed values, colour gradient and font pickers with per-slide styles
+Properties panel with search and several selected slides,studio,should,yes,yes,"§3.2.5; clone: pages, More options, search, Reset/Copy/Paste, dark and alphabetical views, Mixed values, colour gradient and font pickers with per-slide styles"
 Multiple-choice question with 2 to 6 answers and one correct answer,studio,must,yes,yes,§3.4.1.1; clone: fastest finger may have 0 answers or no correct one
 Picture on a question slide,studio,must,yes,yes,§3.7.1; also show it on phones (§4.2.1 option); clone: projector only; phones out of scope
 Info slide without interaction (billboard),studio,must,yes,yes,§3.4.2; round intros and announcements
 End-of-round slide that shows the leaderboard,studio,must,yes,yes,§3.4.3; rounds are derived from these slides
 Answer time per question including untimed questions,studio,must,yes,yes,§3.2.5.1 Answer time 0 = untimed
-Points for a correct answer and optional penalty for a wrong one,scoring,must,yes,no,§3.4.1 points section
-Everyone-answers mode,scoring,must,yes,no,§3.4.1 voting
-Fastest-finger mode with the quizmaster judging a verbal answer,scoring,must,yes,no,§5.4.5.1; wrong answer locks the player out and the clock resumes
+Points for a correct answer and optional penalty for a wrong one,scoring,must,yes,yes,"§3.4.1 points section; clone: points, points at the end of the clock, penalty"
+Everyone-answers mode,scoring,must,yes,yes,§3.4.1 voting
+Fastest-finger mode with the quizmaster judging a verbal answer,scoring,must,yes,yes,"§5.4.5.1; wrong answer locks the player out and the clock resumes; clone: ordered by the buzzers' own timers (BZ-5); judged from the Director, the keyboard or the quizmaster's remote"
 Quizmaster notes per slide visible in the Director,studio,must,yes,yes,§3.2.8
-Players join from a phone browser with a PIN or QR code and a name,player,must,yes,no,§5.2.3; no app install
-Rejoin after the phone sleeps keeps the same player and score,player,must,yes,no,original documents it for bingo cards (§3.4.14.2.2); we need it for every game
-Phone shows the question and the right input for its type,player,must,yes,no,§5.2.4.1 question types
-Phone confirms that the answer was received,player,must,yes,no,§5.7.8.3 confirmation messages
-Lobby on the host screen with PIN QR and the joined players,host screen,must,yes,no,§5.4.2 welcome screen; Q key for the QR code §5.2.3
-Question screen with clock answered count and points available,host screen,must,yes,no,§5.4.5 information panel
-Reveal the correct answer after a question,host screen,must,yes,no,§4.7 end-of-question actions
-Fastest-finger buzz bar with name and a big right or wrong verdict,host screen,must,yes,no,§5.4.5.1
-Leaderboard top 20,host screen,must,yes,no,§5.4.6
+Players join from a phone browser with a PIN or QR code and a name,player,must,yes,skip,"§5.2.3; no app install; desktop scope (2026-10-05): players answer on hardware buzzers, no phones"
+Rejoin after the phone sleeps keeps the same player and score,player,must,yes,skip,"original documents it for bingo cards (§3.4.14.2.2); we need it for every game; desktop scope (2026-10-05): players answer on hardware buzzers, no phones"
+Phone shows the question and the right input for its type,player,must,yes,skip,"§5.2.4.1 question types; desktop scope (2026-10-05): players answer on hardware buzzers, no phones"
+Phone confirms that the answer was received,player,must,yes,skip,"§5.7.8.3 confirmation messages; desktop scope (2026-10-05): players answer on hardware buzzers, no phones; the buzzer's light confirms a press"
+Lobby on the host screen with PIN QR and the joined players,host screen,must,yes,yes,§5.4.2 welcome screen; Q key for the QR code §5.2.3; clone: buzzer numbers appear as they register by a press; no PIN or QR (hardware buzzers)
+Question screen with clock answered count and points available,host screen,must,yes,yes,§5.4.5 information panel
+Reveal the correct answer after a question,host screen,must,yes,yes,§4.7 end-of-question actions; clone: the projector can also leave it unmarked (spec QZ-11)
+Fastest-finger buzz bar with name and a big right or wrong verdict,host screen,must,yes,partial,"§5.4.5.1; clone: name, answer letter and the points won or lost; no big verdict"
+Leaderboard top 20,host screen,must,yes,yes,§5.4.6
 Final scores with a 3-2-1 reveal,host screen,must,yes,yes,§5.4.9 and the Show top three option §4.6; clone: also as an optional final results slide with its own music
-Host screen scales to the projector at 16:9,host screen,must,yes,no,§3.14.11; 4:3 and 16:10 exist in the original
-Next and advance control from the Director,director,must,yes,no,§5.7 command panel; Space key on host
-Director runs on a second device (laptop tablet or phone),director,must,yes,no,§5.7 and §5.2.4.4; native in a web app
-Judge right or wrong from the Director,director,must,yes,no,§5.2.4.4 Right/Wrong buttons
-Edit a player's score and add or subtract points,director,must,yes,no,§5.7.2
+Host screen scales to the projector at 16:9,host screen,must,yes,yes,§3.14.11; 4:3 and 16:10 exist in the original; clone: 16:9 only
+Next and advance control from the Director,director,must,yes,yes,§5.7 command panel; Space key on host
+Director runs on a second device (laptop tablet or phone),director,must,yes,skip,§5.7 and §5.2.4.4; native in a web app; desktop scope: the Director is a window on the show laptop; the quizmaster's remote drives it (spec BZ-21)
+Judge right or wrong from the Director,director,must,yes,yes,§5.2.4.4 Right/Wrong buttons; clone: also the keyboard and the quizmaster's remote
+Quizmaster's remote drives the show,director,should,yes,yes,the Galaxy set's 12-key remote through the buzzer receiver; each key's action chosen in the Receiver tab (spec BZ-21)
+Edit a player's score and add or subtract points,director,must,yes,yes,§5.7.2
 Teams table with name score and enabled state,director,must,yes,yes,§5.7.2 Teams view; clone: team names paired with buzzers by dragging the buzzer number
-Resume a live show after a crash or reload,reliability,must,yes,no,§9.1 recovery mode: snapshot after every completed question; not in test mode
+Resume a live show after a crash or reload,reliability,must,yes,yes,§9.1 recovery mode: snapshot after every completed question; not in test mode; clone: every command is journaled before it is shown and replayed on resume
 Test run of a quiz with simulated players,studio,must,yes,partial,§3.15 Simulate keypads; also our way to test the realtime layer; clone: F5 / Shift+F5 from the editor with keyboard and on-screen buzzers; no automatic players
-Unique player names in one session,player,must,yes,no,§5.2.3 asks for a unique name
-Points decrease over the countdown (start and end values),scoring,should,yes,no,§3.4.1 interpolation
+Unique player names in one session,player,must,yes,yes,§5.2.3 asks for a unique name; clone: a name given to one buzzer is taken from any other
+Points decrease over the countdown (start and end values),scoring,should,yes,yes,§3.4.1 interpolation
 Speed bonus for the three fastest correct players,scoring,should,yes,no,§3.4.1 Speed Bonus
-Penalty when no answer is given,scoring,should,yes,no,§3.2.5.1 Points to lose on no answer
-Number answer with exact value or range,studio,should,yes,no,§3.4.1.3.1 e.g. 80-90
-Number answer where the nearest n players win,scoring,should,yes,no,§3.4.1.3.1 Nearest wins
-Text answer with alternatives and typo tolerance,scoring,should,yes,no,§3.4.1.3.2; we add Czech diacritics handling
-Test question that does not count,studio,should,yes,no,§5.4.5.4
+Penalty when no answer is given,scoring,should,yes,yes,§3.2.5.1 Points to lose on no answer; clone: quiz setting (spec QZ-11)
+Number answer with exact value or range,studio,should,yes,skip,§3.4.1.3.1 e.g. 80-90; the buzzers have only A-D and the big button
+Number answer where the nearest n players win,scoring,should,yes,skip,§3.4.1.3.1 Nearest wins; the buzzers have only A-D and the big button
+Text answer with alternatives and typo tolerance,scoring,should,yes,skip,§3.4.1.3.2; we add Czech diacritics handling; the buzzers have only A-D and the big button
+Test question that does not count,studio,should,yes,partial,§5.4.5.4; clone: a question worth 0 points; imported T rows become one
 Audience poll that does not score plus a chart,studio,should,yes,no,§3.4.6
 Delay before answers appear so the quizmaster can read the question,studio,should,yes,no,§3.2.5.1 Delay before answer
 Sound clip on a question,studio,should,yes,yes,"§3.7.4; clone: played by the Director: on slide, with the clock or on demand"
 Background image per slide,studio,should,yes,yes,§3.2.5.1 Background image; clone: image or video
-Design themes for the projector screen with inheritance,studio,should,yes,partial,quizxpress-docs skinning guide (skin.config); clone: theme.json packages (spec 5.2) with eleven built-in themes and a Design tab gallery; importing user themes planned
+Design themes for the projector screen with inheritance,studio,should,yes,partial,quizxpress-docs skinning guide (skin.config); clone: theme.json packages (spec 5.2) with twelve built-in themes and a Design tab gallery; importing user themes planned
 Spreadsheet import of questions (one sheet per round),studio,should,yes,yes,§3.10.1 columns Q A1..A6 NOTES and media with settings; clone: xlsx xlsm xls ods csv (spec QZ-8); CAT names a category of the quiz; P2-P6 and other slide types reported not imported; {L} files copied
 Export questions to a spreadsheet,studio,should,yes,yes,clone: CSV in the import columns with media next to it; re-importable (spec QZ-8)
 Table view to edit all questions at once,studio,should,yes,yes,§3.2.6.2
 Full-screen slide preview,studio,should,yes,partial,§3.2.6.1 F5; clone: Shift+F5 test-runs from the selected slide on the projector
-Response chart per answer,host screen,should,yes,no,§5.4.8 key C
-Phone shows correct or incorrect and points won,player,should,yes,no,§5.2.4.1 feedback screens
-Phone shows own score and rank,player,should,yes,no,§5.2.4.1 intermediate and final scores
-Pause and resume the countdown,director,should,yes,no,§5.5.1 key P
-Stop a paused question,director,should,yes,no,§5.2.4.4 Stop
-Question list with current and visited state and jump to a question,director,should,yes,no,§5.7.1
-Undo the score changes of the last question,director,should,yes,no,§5.7.2
-Live responses view showing who has not answered,director,should,yes,no,§5.7.4
-Disable enable and remove a player,director,should,yes,no,§5.7.2
-Keyboard shortcuts on the host screen (Space next S scores P pause),host screen,should,yes,no,§5.5.1
-Show settings: show correct answer and allow revising answers,settings,should,yes,no,§4.6
-Show settings: run the clock for the full time,settings,should,yes,no,§4.6
-Configurable end-of-question steps,settings,should,yes,no,§4.7
-Sounds for countdown correct incorrect and background music,settings,should,yes,no,§4.4; we need our own royalty-free sounds
+Response chart per answer,host screen,should,yes,partial,§5.4.8 key C; clone: answer counts on each answer and right / wrong / none bars
+Phone shows correct or incorrect and points won,player,should,yes,skip,"§5.2.4.1 feedback screens; desktop scope (2026-10-05): players answer on hardware buzzers, no phones; the buzzer lights right or wrong"
+Phone shows own score and rank,player,should,yes,skip,"§5.2.4.1 intermediate and final scores; desktop scope (2026-10-05): players answer on hardware buzzers, no phones"
+Pause and resume the countdown,director,should,yes,yes,§5.5.1 key P
+Stop a paused question,director,should,yes,yes,§5.2.4.4 Stop
+Question list with current and visited state and jump to a question,director,should,yes,partial,"§5.7.1; clone: the current slide is highlighted, Go to jumps; no visited mark"
+Undo the score changes of the last question,director,should,yes,partial,§5.7.2; clone: Restart question takes them back while the question is in play
+Reset scores and start the show over with the same players,director,should,yes,yes,"§5.7.2 reset scores; clone: Reset scores in the Teams tab, Start over in the Questions tab (spec SF-9)"
+Live responses view showing who has not answered,director,should,yes,yes,§5.7.4
+Disable enable and remove a player,director,should,yes,partial,§5.7.2; clone: enable and disable; no remove
+Keyboard shortcuts on the host screen (Space next S scores P pause),host screen,should,yes,yes,§5.5.1
+Show settings: show correct answer and allow revising answers,settings,should,yes,yes,§4.6; clone: quiz settings (spec QZ-11)
+Show settings: run the clock for the full time,settings,should,yes,yes,§4.6; clone: quiz settings (spec QZ-11)
+Configurable end-of-question steps,settings,should,yes,partial,"§4.7; clone: when everyone answered wait, reveal or go on, and go on a while after the answer (spec QZ-11)"
+Sounds for countdown correct incorrect and background music,settings,should,yes,yes,"§4.4; we need our own royalty-free sounds; clone: our own synthesized library (31 effects for ten moments, six music loops) or the quiz's own files, chosen per quiz (spec SN-1 to SN-3)"
 Play in groups or teams with group scoring,settings,should,yes,no,§4.2.2.1 and §4.3.2.1 lockout and first/sum/average
 Round scores and round winners,host screen,should,yes,no,§5.4.6 Ctrl+S and §5.4.7 Ctrl+E
-Works without internet on a local network,reliability,should,yes,no,§4.2.1 local Wi-Fi mode; decide in /replica-architect
+Works without internet on a local network,reliability,should,yes,yes,§4.2.1 local Wi-Fi mode; decide in /replica-architect; clone: a desktop app; needs no network
 Export results to a spreadsheet,results,should,yes,no,§7.1 Analyzer export
 Reversed leaderboard (lowest first),host screen,could,yes,no,§5.4.6 Shift+S
 Multiple correct answers with correctness percentages,studio,could,yes,yes,§3.4.1.2; clone: several right answers each with a share of the points (quiz format v5)
@@ -70,11 +72,11 @@ Ordered answers with exact or partial scoring,studio,could,yes,no,§3.4.1.2
 Answers revealed one by one,studio,could,yes,no,§3.2.5.1 Show answers action
 First-letter answer with an A-Z grid,studio,could,yes,no,§3.4.1.3.3
 Multi-field text answer (e.g. artist and title),studio,could,yes,no,§3.4.1.3.2.1
-Video on a question,studio,could,yes,yes,§3.7.5; intro pause, Play video from the Director, speed, volume, part, blur or mosaic fading with the clock, replay after the reveal
+Video on a question,studio,could,yes,yes,"§3.7.5; intro pause, Play video from the Director, speed, volume, part, blur or mosaic fading with the clock, replay after the reveal"
 Text reveal animation word by word,studio,could,yes,no,§3.14.3
 Categories as reusable slide styles,studio,could,yes,yes,§3.3 clone: Categories view; a category's background (video too) and style are copied onto the slides it is applied to (spec QZ-10)
 Steal points on a wrong buzz,scoring,could,yes,no,§3.2.5.1
-Next in line may answer after a wrong buzz,scoring,could,yes,no,§4.6 Allow the next in line to answer
+Next in line may answer after a wrong buzz,scoring,could,yes,partial,"§4.6 Allow the next in line to answer; clone: everyone else may buzz again after a wrong answer, unless the quiz allows one buzz (spec QZ-11)"
 Wager slide,studio,could,yes,no,§5.4.5.8
 Majority-rules question,studio,could,yes,no,§3.4.8
 Last-man-standing question,studio,could,yes,no,§5.4.5.6
@@ -85,12 +87,12 @@ Ladder round with safety nets,studio,could,yes,no,§3.4.11; do not call it Milli
 Survey round where players guess the most popular answers,studio,could,yes,no,§3.4.12; do not call it Family Feud
 Speed round for one player,studio,could,yes,no,§3.4.13
 Bingo round (number trivia or music),studio,could,yes,no,§3.4.14
-Jokers (time warp free ride point boost),player,could,yes,no,§3.14.4
-Thumbs up or down poll on a verbal answer,player,could,yes,no,§5.2.4.3
-Chat between players and the quizmaster,director,could,yes,no,§5.7.8.2
-Waiting room where the host admits players,settings,could,yes,no,§4.2.3
-Entry codes checked when joining,settings,could,yes,no,§5.2.6 tickets; useful for paid fundraisers
-Branding of the player page (logo and colour),player,could,yes,no,§5.2.5
+Jokers (time warp free ride point boost),player,could,yes,partial,"§3.14.4; clone: a point boost that doubles one question, played by the quizmaster (spec SF-8)"
+Thumbs up or down poll on a verbal answer,player,could,yes,skip,"§5.2.4.3; desktop scope (2026-10-05): players answer on hardware buzzers, no phones"
+Chat between players and the quizmaster,director,could,yes,skip,"§5.7.8.2; desktop scope (2026-10-05): players answer on hardware buzzers, no phones"
+Waiting room where the host admits players,settings,could,yes,skip,"§4.2.3; desktop scope (2026-10-05): players answer on hardware buzzers, no phones"
+Entry codes checked when joining,settings,could,yes,skip,"§5.2.6 tickets; useful for paid fundraisers; desktop scope (2026-10-05): players answer on hardware buzzers, no phones"
+Branding of the player page (logo and colour),player,could,yes,skip,"§5.2.5; desktop scope (2026-10-05): players answer on hardware buzzers, no phones"
 Personal jingles for players,player,could,yes,no,§4.4
 Sound pad for the quizmaster,director,could,yes,yes,§5.2.4.4; clone: sound board of 3x4 to 8x8 pads in the Media player tab (SN-7)
 Media player in the Director (show a picture or video full screen),director,could,yes,yes,§5.7.7; clone: library kept per computer with search; pictures and videos over the projector stage (SN-7)
@@ -103,11 +105,11 @@ Quiz Wizard for round skeletons,studio,could,yes,no,§3.2.7
 Shuffle questions with a percentage to play,settings,could,yes,no,§4.6 Randomize questions
 Headless mode without a projector,settings,could,yes,no,§4.2.1
 Mini games (random winner draw wheel auction and others),mini games,could,yes,no,§3.5; randomizer and auction fit fundraisers; the rest is post-MVP
-AI question generation,studio,could,yes,no,§3.8; original sells AI credits; would use our own API key
+AI question generation,studio,could,yes,yes,"§3.8; original sells AI credits; would use our own API key; clone: AI assistants write quizzes through an MCP server, a skill package or a command line (spec QZ-12); no credits"
 Read questions aloud with text-to-speech,studio,could,yes,no,§3.7.3; Web Speech API in the browser
-Connection quality test for players,director,could,yes,no,§5.7.8.1
-Generic USB buzzers in the browser,hardware,could,yes,no,via WebHID in Chromium only; not their proprietary receivers
-Proprietary keypads buzzers and receivers,hardware,must,yes,partial,scope changed 2026-10-05: USB-HID receiver driver with learn mode done; vendor protocol (lights / press time / battery) waits for the SDK; see docs/specification.md section 4
+Connection quality test for players,director,could,yes,skip,"§5.7.8.1; desktop scope (2026-10-05): players answer on hardware buzzers, no phones"
+Generic USB buzzers in the browser,hardware,could,yes,skip,via WebHID in Chromium only; not their proprietary receivers; desktop scope: buzzers through the USB receiver driver
+Proprietary keypads buzzers and receivers,hardware,must,yes,yes,"scope changed 2026-10-05: the Enjoy 303S (Jakub's set) from Enjoy's SDK, with each buzzer's timer, lights and the quizmaster's remote; tested on the hardware 2026-10-25; see docs/specification.md section 4"
 Galaxy LED devices and wireless scoreboards,hardware,could,yes,skip,vendor hardware
 Cloud servers buzzerpad.com and buzzerpad.eu,services,could,yes,skip,their hosted service; we run our own backend
 Quiz Center content subscriptions,services,could,yes,skip,their content distribution business
@@ -118,8 +120,8 @@ QuizXpress Solo trade-show kiosk,other,could,yes,skip,lead capture for trade sho
 Spotify import,studio,could,yes,skip,depends on Spotify API terms
 PowerPoint toggle on the presenter remote,other,could,yes,skip,Windows-only integration
 DMX stage lights that follow the show (message broker add-on),other,could,yes,yes,spec section 12 LT-1..LT-6: Enttec Pro / Open DMX / Art-Net / sACN / SoundSwitch Micro (experimental); fixtures looks stages flashes; not tried on real fixtures yet
-Fixture library: add a light by its model and DMX mode,other,could,no,yes,spec LT-9; generated from the Open Fixture Library (MIT); 623 models, lasers left out; can be updated from the internet in the Lights tab
+Fixture library: add a light by its model and DMX mode,other,could,no,yes,"spec LT-9; generated from the Open Fixture Library (MIT); 623 models, lasers left out; can be updated from the internet in the Lights tab"
 Show events to outside programs over OSC and MIDI,other,could,yes,yes,spec LT-7; OSC over UDP and MIDI notes; the original's broker also speaks other protocols not built here
-Runs in any browser on any OS for host director and editor,platform,must,no,no,the reason this project exists
-Czech user interface,platform,should,no,no,original UI languages not checked; our audience is Czech
-Diacritics-insensitive text matching,scoring,should,no,no,e.g. Plzen matches Plzeň; decide the tolerance rules
+Runs in any browser on any OS for host director and editor,platform,must,no,skip,the reason this project exists; scope changed 2026-10-05: a desktop app for Windows and macOS
+Czech user interface,platform,should,no,yes,"original UI languages not checked; our audience is Czech; clone: Czech by default, English in Settings"
+Diacritics-insensitive text matching,scoring,should,no,skip,e.g. Plzen matches Plzeň; decide the tolerance rules; no text answers on buzzers; names are compared however their accents are encoded
