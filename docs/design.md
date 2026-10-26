@@ -1509,7 +1509,12 @@ receiver's format: see [`hardware-test.md`](hardware-test.md).
    each step, crashes (the app killed) and resumes, every button on every
    Director tab and editor ribbon tab, the command panel step by step to
    the end, a quiz saved and opened through the system's file picker
-   (`xdotool`, Linux only). On Windows the app ignores environment
+   (`xdotool`, Linux only). Buzzers with no hardware: a debug build
+   given `BUZZDOME_FAKE_RECEIVER=<host:port>` lists a fake 303S receiver
+   in place of USB-HID (`buzzers::fake_receiver`), which the test plugs
+   in, pulls out and presses over TCP, and which reports the lights the
+   app gives the buzzers; the receiver thread and the 303S protocol above
+   it are the real ones. Release builds never read the variable. On Windows the app ignores environment
    overrides of its data folders, so the tests use the real ones and wipe
    them; the harness refuses to run there except on a GitHub-hosted runner. macOS has no WebDriver
    for WKWebView. When a test fails, each window's screenshot and text go up
