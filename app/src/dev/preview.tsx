@@ -681,6 +681,20 @@ mockIPC(
             { buzzer: 1, button: "big", atMs: 1_792_921_670_000 },
             { buzzer: 2, button: "a", atMs: 1_792_921_675_500 },
           ],
+          remote: [
+            { key: "back", action: "previous" },
+            { key: "forward", action: "next" },
+            { key: "power", action: "projector" },
+            { key: "grid", action: "nothing" },
+            { key: "target", action: "closeQuestion" },
+            { key: "playPause", action: "clock" },
+            { key: "centre", action: "next" },
+            { key: "question", action: "nothing" },
+            { key: "trophy", action: "leaderboard" },
+            { key: "colourBars", action: "playVideo" },
+            { key: "cross", action: "judgeWrong" },
+            { key: "tick", action: "judgeRight" },
+          ],
           platform: "linux",
         };
       case "lights_info":

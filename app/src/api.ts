@@ -35,6 +35,9 @@ import type {
   RawReport,
   ReceiverInfo,
   ReceiverStatus,
+  RemoteAction,
+  RemoteKey,
+  RemoteKeyAction,
   SessionSummary,
   SettingsLost,
   SheetExport,
@@ -123,6 +126,10 @@ export const api = {
   /** Saves the button being learned and returns it. */
   receiverLearnFinish: () => invoke<Press>("receiver_learn_finish"),
   receiverForgetLearned: () => invoke<void>("receiver_forget_learned"),
+  /** Makes a key of the quizmaster's remote do `action` from now on. */
+  receiverSetRemoteAction: (key: RemoteKey, action: RemoteAction) => invoke<void>("receiver_set_remote_action", { key, action }),
+  /** Gives every key of the remote its default action again. */
+  receiverResetRemote: () => invoke<void>("receiver_reset_remote"),
   /** Writes the receiver's recent reports to a file the quizmaster picks; false when they cancel. */
   receiverExportLog: (picker: Picker) => invoke<boolean>("receiver_export_log", { picker }),
   receiverUdevRule: () => invoke<string>("receiver_udev_rule"),
@@ -195,6 +202,8 @@ export interface BackendEvents {
   /** A buzzer the receiver heard, as it now stands. */
   "receiver-buzzer": BuzzerSeen;
   "receiver-learn": LearnProgress;
+  /** A key of the quizmaster's remote was pressed, with what it does: the Director does it. */
+  "receiver-remote": RemoteKeyAction;
   /** The stage lights' output, look, hold and blackout, whenever one changes. */
   "lights-status": LightsStatus;
   /** The projector window opened (true) or closed (false). */

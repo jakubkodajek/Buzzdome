@@ -1,7 +1,11 @@
 import { useEffect } from "react";
 import { useDispatch } from "./app-context";
+import { useBackendEvent } from "./hooks";
 import type { Translate } from "./i18n";
-import type { Command, GameView } from "./types";
+import type { Command, GameView, RemoteAction } from "./types";
+
+/** What a quizmaster's key or a key of the remote does in a show: a `RemoteAction` but nothing. */
+export type ShowAction = Exclude<RemoteAction, "nothing">;
 
 /** The quizmaster's keys, as `KeyboardEvent.key` in lower case. Digits 1-0 are the keyboard buzzers. */
 export const KEYS = {
@@ -156,20 +160,67 @@ export function commandForKey(key: string, view: GameView): Command | null {
     // Keyboard buzzers as in the original: 1..9 and 0 for buzzer 10.
     return { type: "press", buzzer: key === "0" ? 10 : Number(key), button: "big" };
   }
-  const { controls } = view;
-  const lower = key.toLowerCase();
-  if (NEXT_KEYS.includes(lower)) return controls.next ? { type: "next" } : null;
+  const action = actionForKey(key.toLowerCase());
+  return action && commandForAction(action, view);
+}
+
+/** The show action of a key, in lower case; M, the projector's, is the Director's own (`useShortcuts`). */
+function actionForKey(lower: string): ShowAction | null {
+  if (NEXT_KEYS.includes(lower)) return "next";
   switch (lower) {
     case KEYS.right:
-      return controls.judge ? { type: "judgeRight" } : null;
+      return "judgeRight";
     case KEYS.wrong:
-      return controls.judge ? { type: "judgeWrong" } : null;
+      return "judgeWrong";
     case KEYS.clock:
-      if (controls.pauseClock) return { type: "pauseClock" };
-      return controls.resumeClock ? { type: "resumeClock" } : null;
+      return "clock";
     case KEYS.leaderboard:
-      return { type: "showLeaderboard", visible: !view.leaderboardVisible };
+      return "leaderboard";
     default:
       return null;
   }
+}
+
+/**
+ * The command an action stands for, or null when the current step does not take it (see `Controls`). Opening
+ * or closing the projector is no command: the Director does it (`onToggleProjector`).
+ */
+export function commandForAction(action: ShowAction, view: GameView): Command | null {
+  const { controls } = view;
+  switch (action) {
+    case "next":
+      return controls.next ? { type: "next" } : null;
+    case "previous":
+      // From the final ranking past the last slide, back to the last slide.
+      return controls.goTo && view.slideIndex > 0 ? { type: "goTo", slide: Math.min(view.slideIndex, view.slideCount) - 1 } : null;
+    case "clock":
+      if (controls.pauseClock) return { type: "pauseClock" };
+      return controls.resumeClock ? { type: "resumeClock" } : null;
+    case "closeQuestion":
+      return controls.closeQuestion ? { type: "closeQuestion" } : null;
+    case "judgeRight":
+      return controls.judge ? { type: "judgeRight" } : null;
+    case "judgeWrong":
+      return controls.judge ? { type: "judgeWrong" } : null;
+    case "leaderboard":
+      return { type: "showLeaderboard", visible: !view.leaderboardVisible };
+    case "playVideo":
+      return controls.playVideo ? { type: "playVideo" } : null;
+    case "projector":
+      return null;
+  }
+}
+
+/**
+ * The quizmaster's remote, in the Director only: a key does its action as the action's key on the keyboard
+ * does (`useShortcuts`), one step per press (`useDispatch`), and `projector` opens or closes the projector.
+ */
+export function useRemote(view: GameView | null, onToggleProjector: () => void) {
+  const dispatch = useDispatch();
+  useBackendEvent("receiver-remote", ({ action }) => {
+    if (action === "nothing") return;
+    if (action === "projector") return onToggleProjector();
+    const command = view && commandForAction(action, view);
+    if (command) dispatch(command);
+  });
 }

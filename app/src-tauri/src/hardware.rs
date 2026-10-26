@@ -1,5 +1,6 @@
 //! The buzzer receiver inside the app: remembered settings, the receiver
-//! thread, learn mode and the commands behind the Director's Receiver tab.
+//! thread, learn mode, the quizmaster's remote (`remote`) and the commands
+//! behind the Director's Receiver tab.
 //!
 //! Hardware presses take the same path as keyboard and on-screen presses
 //! (`Command::Press` through `execute_at`), so they are journaled and replayed
@@ -13,11 +14,12 @@ use crate::app_file::{AppFile, SettingsLost};
 use crate::dialogs::{self, Picker};
 use crate::error::{AppError, CmdResult};
 use crate::off_ui;
+use crate::remote::{RemoteAction, RemoteKeyAction, RemoteKeys};
 use crate::show_thread::ShowEvent;
 use buzzers::learned::{LearnedMapping, Recorder};
 use buzzers::protocol::{self, format_hex, Protocol};
 use buzzers::receiver::{self, RawReport, ReceiverChoice, ReceiverConfig, ReceiverEvent, ReceiverHandle, ReceiverStatus};
-use buzzers::Press;
+use buzzers::{Press, RemoteKey};
 use quiz_core::{BuzzerId, Button};
 use quiz_file::FileAction;
 use serde::{Deserialize, Serialize};
@@ -42,6 +44,9 @@ struct ReceiverSettings {
     receiver: Option<DeviceSelector>,
     #[serde(default)]
     learned: Vec<LearnedMapping>,
+    /// What the keys of the quizmaster's remote do.
+    #[serde(default)]
+    remote: RemoteKeys,
 }
 
 #[derive(Debug, Clone, Serialize, TS)]
@@ -84,6 +89,8 @@ pub struct ReceiverInfo {
     recent: Vec<RawReport>,
     /// The buzzers heard since the receiver connected, by number.
     buzzers: Vec<BuzzerSeen>,
+    /// Every key of the quizmaster's remote with what it does.
+    remote: Vec<RemoteKeyAction>,
     platform: &'static str,
 }
 
@@ -310,6 +317,11 @@ pub fn handle_event(app: &AppHandle, event: ReceiverEvent) {
             let used = !learning && crate::play_press(app, press, at_ms);
             let _ = app.emit("receiver-press", PressEvent { press, used });
         }
+        // The Director carries it out, as the same action's key on the keyboard.
+        ReceiverEvent::Remote { key, .. } => {
+            let action = hw.settings.lock().unwrap().remote.action(key);
+            let _ = app.emit("receiver-remote", RemoteKeyAction { key, action });
+        }
     }
 }
 
@@ -329,6 +341,7 @@ pub fn receiver_info(hw: tauri::State<Hardware>) -> ReceiverInfo {
         learn: hw.learn_progress(),
         recent: log.iter().skip(skip).cloned().collect(),
         buzzers,
+        remote: settings.remote.all(),
         platform: std::env::consts::OS,
     }
 }
@@ -427,6 +440,30 @@ pub async fn receiver_forget_learned(app: AppHandle) -> CmdResult<()> {
     .await
 }
 
+/// Makes the remote's `key` do `action` from now on (also after restarts).
+#[tauri::command]
+pub async fn receiver_set_remote_action(app: AppHandle, key: RemoteKey, action: RemoteAction) -> CmdResult<()> {
+    off_ui(move || {
+        let hw = app.state::<Hardware>();
+        let change = hw.change_settings();
+        let mut settings = change.settings();
+        settings.remote.set(key, action);
+        change.store(settings)
+    })
+    .await
+}
+
+/// Gives every key of the remote its default action again.
+#[tauri::command]
+pub async fn receiver_reset_remote(app: AppHandle) -> CmdResult<()> {
+    off_ui(move || {
+        let hw = app.state::<Hardware>();
+        let change = hw.change_settings();
+        change.store(ReceiverSettings { remote: RemoteKeys::default(), ..change.settings() })
+    })
+    .await
+}
+
 /// Writes the recent raw reports to a text file the quizmaster picks, e.g.
 /// to attach to a bug report or to work out the receiver's protocol; false
 /// when they cancel.
@@ -441,7 +478,7 @@ pub async fn receiver_export_log(app: AppHandle, window: Window, picker: Picker)
 fn write_log(hw: &Hardware, version: &str, path: &Path) -> CmdResult<()> {
     let status = hw.handle.as_ref().map(ReceiverHandle::status);
     let mut out = format!(
-        "# Receiver log, app {} on {}\n# status: {}\n# unix-ms\tbytes (hex)\tdecoded (buzzer, button, @ the buzzer's timer)\tdropped as not ready\n",
+        "# Receiver log, app {} on {}\n# status: {}\n# unix-ms\tbytes (hex)\tdecoded (buzzer, button, @ the buzzer's timer)\tdropped as not ready\tremote keys\n",
         version,
         std::env::consts::OS,
         serde_json::to_string(&status).unwrap_or_default()
@@ -452,7 +489,8 @@ fn write_log(hw: &Hardware, version: &str, path: &Path) -> CmdResult<()> {
         presses.join(",")
     };
     for r in hw.raw_log.lock().unwrap().iter() {
-        out.push_str(&format!("{}\t{}\t{}\t{}\n", r.at_ms, format_hex(&r.bytes), presses(&r.decoded), presses(&r.dropped)));
+        let remote: Vec<String> = r.remote.iter().map(|key| format!("{key:?}")).collect();
+        out.push_str(&format!("{}\t{}\t{}\t{}\t{}\n", r.at_ms, format_hex(&r.bytes), presses(&r.decoded), presses(&r.dropped), remote.join(",")));
     }
     std::fs::write(path, out).map_err(|e| AppError::file(FileAction::Write, path, e))
 }
@@ -504,7 +542,7 @@ mod tests {
     #[test]
     fn every_buzzer_heard_shows_with_its_last_press() {
         let hw = hardware(std::env::temp_dir().join("receiver-heard").join(SETTINGS_FILE));
-        let report = |at_ms, decoded, dropped| RawReport { at_ms, bytes: Vec::new(), decoded, dropped };
+        let report = |at_ms, decoded, dropped| RawReport { at_ms, bytes: Vec::new(), decoded, dropped, remote: Vec::new() };
         let seen = |buzzer, button, at_ms| BuzzerSeen { buzzer, button, at_ms };
         let heard = hw.hear(&report(100, vec![Press::new(5, Button::A), Press::new(3, Button::Big), Press::new(5, Button::B)], vec![Press::timed(7, Button::C, 40)]));
         assert_eq!(heard, [seen(3, Button::Big, 100), seen(5, Button::B, 100), seen(7, Button::C, 100)], "a press not counted shows too");

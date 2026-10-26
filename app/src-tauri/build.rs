@@ -64,6 +64,8 @@ const COMMANDS: &[&str] = &[
     "receiver_learn_cancel",
     "receiver_learn_finish",
     "receiver_forget_learned",
+    "receiver_set_remote_action",
+    "receiver_reset_remote",
     "receiver_export_log",
     "receiver_udev_rule",
     "lights_info",

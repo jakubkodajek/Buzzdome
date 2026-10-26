@@ -38,7 +38,7 @@ import {
   StopIcon,
   VideoIcon,
 } from "../icons";
-import { keyHint, KEYS, useShortcuts } from "../keyboard";
+import { keyHint, KEYS, useRemote, useShortcuts } from "../keyboard";
 import { MediaRootContext } from "../media";
 import { phaseLabel } from "../phase";
 import { quizPicker, slideContext } from "../quiz";
@@ -136,6 +136,7 @@ function DirectorLayout({ testRun, onEditor }: { testRun: boolean; onEditor: () 
   const [tab, setTab] = useState<Tab>("questions");
   useStepShown(view);
   useShortcuts(view, projector.toggle);
+  useRemote(view, projector.toggle);
   // Sounds play here: this window is open for the whole show, the projector may not be.
   const level = playerLevel(usePlayerVolume());
   useBackendEvent("sound-cue", (cue) => playCue(cue, level));

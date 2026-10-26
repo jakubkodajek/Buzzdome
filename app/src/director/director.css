@@ -1518,3 +1518,16 @@
   white-space: pre-wrap;
   font-size: 0.85em;
 }
+
+.remote-keys {
+  max-width: 480px;
+}
+
+/* Row headers: they scroll with their row. */
+.remote-keys th {
+  position: static;
+}
+
+.remote-keys tr.selected th {
+  background: var(--accent-soft);
+}

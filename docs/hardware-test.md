@@ -163,6 +163,15 @@ not go as expected; whatever happens, go on and export the log at the end
     `cargo run -p buzzers --example hid-monitor -- 10c4:1819` (end of this
     file), press A a few times on it and on a full one, and note it if
     that digit, or any byte but the buzzer and the timers, differs.
+11. **The remote's keys.** Open the Receiver tab and press each key of the
+    quizmaster's remote once, slowly. Expected: under "Quizmaster's
+    remote" the row of the key pressed lights up, and "Last pressed" names
+    it. The three arrows were named over chat on 2026-10-25: check
+    especially that the back arrow lights "Back arrow", the forward arrow
+    "Forward arrow" and the middle one "Middle arrow". Note any key that
+    lights another row, or none. Then press one key twice quickly: it
+    counts once (a second press within 0.7 s is taken for the receiver
+    sending it again).
 
 ## 4. Record raw reports
 
@@ -326,6 +335,14 @@ press that leaves no line under "Raw data", and what came before it.
     pressed registers and turns blue. Do a test run from the editor (F5)
     and end it, then start a real show: no buzzer keeps a colour from the
     test run.
+22. **The remote in a show.** Run a whole show from the remote alone,
+    standing where the quizmaster will stand: forward arrow for each
+    step, tick and cross to judge a fastest-finger buzz, play / pause to
+    pause the clock and go on, trophy for the leaderboard, back arrow
+    between questions to go back a slide, colour bars to play a video
+    again. Expected: each key does what the Receiver tab says, once per
+    press. Note from how far away and through what the remote still
+    works.
 
 ## 7. Failures
 

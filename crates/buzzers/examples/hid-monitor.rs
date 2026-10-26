@@ -107,6 +107,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let timer = press.timer.map(|t| format!(", timer {t}")).unwrap_or_default();
                 println!("{:>14}buzzer {}, {:?}{timer}", "", press.buzzer, press.button);
             }
+            ReceiverEvent::Remote { key, .. } => println!("{:>14}remote: {key:?}", ""),
         }
     }
     Ok(())

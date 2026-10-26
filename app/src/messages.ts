@@ -20,6 +20,8 @@ import type {
   Problem,
   ProtocolKind,
   ReceiverProblem,
+  RemoteAction,
+  RemoteKey,
   SettingsLost,
   SetupError,
 } from "./types";
@@ -258,6 +260,46 @@ export function protocolText(t: Translate, protocol: ProtocolKind): string {
     case "enjoy303s":
       return t("protocolEnjoy303s");
   }
+}
+
+const REMOTE_KEY_KEYS: Record<RemoteKey, StringKey> = {
+  back: "remoteKeyBack",
+  forward: "remoteKeyForward",
+  power: "remoteKeyPower",
+  grid: "remoteKeyGrid",
+  target: "remoteKeyTarget",
+  playPause: "remoteKeyPlayPause",
+  centre: "remoteKeyCentre",
+  question: "remoteKeyQuestion",
+  trophy: "remoteKeyTrophy",
+  colourBars: "remoteKeyColourBars",
+  cross: "remoteKeyCross",
+  tick: "remoteKeyTick",
+};
+
+/** A key of the quizmaster's remote, by what is printed on it. */
+export function remoteKeyText(t: Translate, key: RemoteKey): string {
+  return t(REMOTE_KEY_KEYS[key]);
+}
+
+const REMOTE_ACTION_KEYS: Record<RemoteAction, StringKey> = {
+  nothing: "remoteNothing",
+  next: "remoteNext",
+  previous: "remotePrevious",
+  clock: "remoteClock",
+  closeQuestion: "remoteCloseQuestion",
+  judgeRight: "remoteJudgeRight",
+  judgeWrong: "remoteJudgeWrong",
+  leaderboard: "remoteLeaderboard",
+  playVideo: "remotePlayVideo",
+  projector: "remoteProjector",
+};
+
+/** Every action a key of the remote can do, in the order the quizmaster picks from. */
+export const REMOTE_ACTIONS = Object.keys(REMOTE_ACTION_KEYS) as RemoteAction[];
+
+export function remoteActionText(t: Translate, action: RemoteAction): string {
+  return t(REMOTE_ACTION_KEYS[action]);
 }
 
 /** Whether the receiver has yet to answer its set-up: shown as still being looked for, not as connected. */

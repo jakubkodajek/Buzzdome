@@ -5,7 +5,7 @@ use buzzers::clock::ShowClock;
 use buzzers::fake_receiver::FakeReceiver;
 use buzzers::protocol::{self, ProtocolKind};
 use buzzers::receiver::{spawn, ReceiverChoice, ReceiverConfig, ReceiverEvent, ReceiverHandle, ReceiverStatus};
-use buzzers::Press;
+use buzzers::{Press, RemoteKey};
 use quiz_core::{BuzzerMode, Button, Light};
 use serde_json::{json, Value};
 use std::io::{BufRead, BufReader, Lines, Write};
@@ -93,6 +93,9 @@ fn a_test_plugs_the_receiver_in_presses_and_sees_the_lights() {
         })
         .collect();
     assert_eq!(presses, [Press::timed(2, Button::Big, 120), Press::timed(1, Button::Big, 300)], "buzzer 3 is locked out");
+
+    test.send(json!({ "remote": "tick" }));
+    assert!(matches!(wait_for(&rx, |e| matches!(e, ReceiverEvent::Remote { .. })), ReceiverEvent::Remote { key: RemoteKey::Tick, .. }));
 
     test.send(json!({ "plug": "yes" }));
     assert!(test.wait_for(|v| v.get("error").is_some())["error"].as_str().unwrap().contains("plug"));

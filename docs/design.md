@@ -1185,15 +1185,16 @@ between the two could go wrong mid-show.
   before a question started, `7F` while a buzz was judged), and the drop
   worked in the app. A colour the app never sets, as another program
   might leave, lets the press through. Elsewhere the game
-  alone decides, so any buzzer can register. The quizmaster's remote (`34`) and
-  the answers to setting a buzzer's ID (`17`, `24`) are skipped.
+  alone decides, so any buzzer can register. The answers to setting a
+  buzzer's ID (`17`, `24`) are skipped.
 - The receiver runs no round itself and locks nobody out: the app lights
   every buzzer (2.7) and decides who buzzed first (2.6).
 - No battery level: the 303S's SDK has none, and in the test no byte of a
   press differed between buzzers but the ID and the two counts, and the
   receiver sent nothing unasked in 7.5 idle minutes.
 - The quizmaster's remote sends `34 key` with bit 7 set, keys 0 to 11, one
-  message per press, none while held or at the release.
+  message per press, none while held or at the release. The protocol reads
+  it as a `RemoteKey` (2.10); a code no key has is nothing.
 
 ### 2.5 Learn mode
 
@@ -1439,14 +1440,14 @@ the buzzers' lights are the app's either way.
   list starts again whenever the receiver goes.
 - The app keeps the last 2000 raw reports in memory; the Receiver tab shows the
   latest ones and can export all of them as text
-  (`unix-ms <tab> hex bytes <tab> decoded presses <tab> dropped presses`,
-  such as `3A@500` for buzzer 3, button A, with its timer at 500; dropped
-  ones came from a buzzer that was not ready, 2.4).
+  (`unix-ms <tab> hex bytes <tab> decoded presses <tab> dropped presses
+  <tab> remote keys`, such as `3A@500` for buzzer 3, button A, with its
+  timer at 500; dropped ones came from a buzzer that was not ready, 2.4).
 - `cargo run -p buzzers --example hid-monitor` lists HID devices and, with a
   `VID:PID` argument, runs the app's receiver thread and protocol on that
   receiver without the app, printing the status, every report with its
-  timestamp, the presses decoded, with the buzzer's timer, and those
-  dropped as not ready. The buzzers
+  timestamp, the presses decoded, with the buzzer's timer, those
+  dropped as not ready and the remote's keys. The buzzers
   show ready and take answers A to D; with a further `rush` argument they
   are in a fastest-finger round, whose presses come in the timers' order.
   With `lights` every buzzer shows each light of a show in turn, two
@@ -1464,18 +1465,58 @@ settings while unanswered, the write gap, a fastest-finger buzz in the
 timers' order, one passed on when the round ends, the receiver is lost or
 deselected, a buzz from a buzzer that was not ready dropped and logged
 while the next press after it counts, the timer window under the grace
-after time up, unplug and replug, open failure and retry, deselect. Unit
+after time up, the remote's keys after the presses of their report and
+once, unplug and replug, open failure and retry, deselect. Unit
 tests cover the edge filter, signatures, the recorder, conflict
 detection, the CP2110 reports, the 303S's set-up, its steps asked again
 and a receiver started again, orders, colours, when one goes to all, that
 no two differ in brightness alone, its presses with timer and shown
 colour, in fastest finger only from buzzers that were ready, button
-codes, short messages, buzzer ID range, messages split, spoiled and after
-noise, and the timer order; `quiz-core`'s `game_flow.rs` follows the
+codes, the remote's key codes, short messages, buzzer ID range, messages
+split, spoiled and after noise, and the timer order; `quiz-core`'s `game_flow.rs` follows the
 buzzer mode through a show, which buttons buzz in on which question, a
 player switched on mid-question and the merged lights of a wrong
 judgement. None of this proves the real
 receiver's format: see [`hardware-test.md`](hardware-test.md).
+
+### 2.10 The quizmaster's remote
+
+The Galaxy set's 12-key remote talks to the same receiver as the buzzers
+(specification BZ-21). Its keys take the presses' way to the app, but
+never go into the game themselves:
+
+- The 303S protocol reads each key as a `RemoteKey`, named after what is
+  printed on it (2.4). The receiver thread sends a key after the presses
+  of its report, and only once: the same key again within 700 ms is taken
+  for the receiver sending it again, as it did with presses (BZ-6), and
+  is only logged. A key pressed twice that fast counts once.
+- What each key does (`RemoteAction` in `app/src-tauri/src/remote.rs`) is
+  kept per computer with the receiver's settings in `receiver.json`: only
+  the keys changed from their default. The Receiver tab lists the 12 keys
+  with a choice each, marks the key last pressed, so the quizmaster can
+  tell which key is which, and puts the defaults back.
+- The Director does a key's action exactly as the keyboard key for that
+  action (`commandForAction` in `keyboard.ts`): only when the step takes
+  it, one step per press through the window's step guard, and journaled
+  like any command. Previous slide goes to the slide before, between
+  questions only (`GoTo`). Projector opens or closes the projector window,
+  as M does. The projector window does not listen, so no key acts twice.
+
+| key | default action |
+| --- | --- |
+| back arrow | previous slide |
+| forward arrow, middle arrow | next |
+| target | end question |
+| play / pause | pause the clock, or go on |
+| trophy | leaderboard, shown or hidden |
+| colour bars | play the video |
+| red cross, green tick | wrong, right |
+| power, grid, question mark | nothing |
+
+Power does nothing by default, so a key pressed by mistake never closes
+the projector mid-show. The three arrows' codes were named over chat in
+the first hardware test; the next one checks them (`hardware-test.md`
+section 3).
 
 ## 3. OS specifics
 

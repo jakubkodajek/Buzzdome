@@ -1,10 +1,10 @@
-//! Receiver protocols: raw HID reports in, presses out; lights and the
-//! buzzer mode in, reports out.
+//! Receiver protocols: raw HID reports in, presses and remote keys out;
+//! lights and the buzzer mode in, reports out.
 
 use crate::enjoy303s::Enjoy303s;
 use crate::hid::{DeviceInfo, Report};
 use crate::learned::{LearnedMapping, LearnedProtocol};
-use crate::Press;
+use crate::{Press, RemoteKey};
 use quiz_core::{BuzzerId, BuzzerMode, Light};
 use serde::Serialize;
 use ts_rs::TS;
@@ -36,6 +36,12 @@ pub trait Protocol: Send {
     /// The presses `decode` read but did not pass on, as ones that cannot
     /// count now, since this was last asked: for the raw log only.
     fn take_dropped(&mut self) -> Vec<Press> {
+        Vec::new()
+    }
+
+    /// The keys of the quizmaster's remote `decode` read since this was
+    /// last asked, in the order they came.
+    fn take_remote(&mut self) -> Vec<RemoteKey> {
         Vec::new()
     }
 
