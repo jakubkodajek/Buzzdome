@@ -1671,6 +1671,19 @@ fn going_back_to_a_scored_question_shows_its_answer_and_never_asks_it_again() {
     // A show begun under rules version 5 asks it again on Back and Forward, as it did.
     let old = Game::replay(show.game.quiz().clone(), &show.journal[..10], 5);
     assert!(matches!((old.slide_index(), step(&old)), (0, QuestionStep::Running { .. })), "{:?}", old.phase());
+
+    // So does a fastest-finger question won by a buzz judged right, as with the remote's tick.
+    let slides = vec![question("q1", AnswerMode::FastestFinger), question("q2", AnswerMode::Everyone)];
+    let mut show = running(Show::new(slides));
+    show.press(3_000, 1, Button::Big);
+    show.run(4_000, Command::JudgeRight).unwrap();
+    show.run(5_000, Command::Next).unwrap();
+    assert_eq!(show.score(1), 95);
+    show.run(6_000, Command::GoTo { slide: 0 }).unwrap();
+    assert_eq!(step(&show.game), QuestionStep::Revealed { winner: None });
+    assert!(show.game.ignores(&Stamped { at_ms: 7_000, command: Command::Press { buzzer: 2, button: Button::Big } }));
+    show.run(8_000, Command::Next).unwrap();
+    assert_eq!((show.game.slide_index(), step(&show.game), show.score(1)), (1, QuestionStep::Ready, 95));
 }
 
 #[test]

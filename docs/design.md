@@ -1502,7 +1502,8 @@ never go into the game themselves:
   like any command. Previous slide goes where `Game::previous` says
   (`GameView.previousSlide`, `GoTo`): the slide before, or from the final
   ranking the last slide, and only between questions. A question that
-  closed earlier in the show comes back with its answer shown
+  ended earlier in the show, closed or won by a fastest finger judged
+  right (`Game::end_question`), comes back with its answer shown
   (`Game::closed_questions`, rules version 6): it takes no presses, shows
   no results (they are not kept), and its scores stand, so Back then
   Forward, as on a presenter's clicker, never asks it and scores it twice.

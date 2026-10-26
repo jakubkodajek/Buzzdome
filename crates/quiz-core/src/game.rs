@@ -32,7 +32,7 @@ pub type BuzzerId = u16;
 /// shows its results. 5: a fastest-finger question takes buzzes from the
 /// answer buttons where every answer has one, else from the big button
 /// (`Button::buzzes_in`), and a player switched on while one is under way
-/// joins at the next question. 6: a question that closed earlier in the
+/// joins at the next question. 6: a question that ended earlier in the
 /// show comes back with its answer shown when the show goes to it again
 /// (`Game::closed_questions`), so it is never asked and scored twice.
 pub const RULES_VERSION: u32 = 6;
@@ -493,7 +493,7 @@ pub struct Game {
     joins_next: BTreeSet<BuzzerId>,
     /// What the current question gave each player (`credit`).
     gains: BTreeMap<BuzzerId, Gain>,
-    /// The slides whose question closed in this show. Going to one again
+    /// The slides whose question ended in this show (`end_question`). Going to one again
     /// shows its answer (rules version 6): its scores stand, and asking it
     /// again would score it twice.
     closed_questions: BTreeSet<usize>,
@@ -1117,8 +1117,7 @@ impl Game {
         let Some(q) = self.question().cloned() else {
             return vec![];
         };
-        self.phase = Phase::Question(QuestionStep::Closed);
-        self.closed_questions.insert(self.slide);
+        self.end_question(QuestionStep::Closed);
         if q.mode == AnswerMode::Everyone {
             self.counted = self.enabled_buzzers().collect();
             for buzzer in self.counted.clone() {
@@ -1129,6 +1128,14 @@ impl Game {
             }
         }
         vec![self.lights_now()]
+    }
+
+    /// Ends the current question at `step`: closed, or won by a fastest
+    /// finger judged right. Either way it counts as asked from now on
+    /// (`closed_questions`).
+    fn end_question(&mut self, step: QuestionStep) {
+        self.phase = Phase::Question(step);
+        self.closed_questions.insert(self.slide);
     }
 
     /// Gives `buzzer`'s player `points` and `answer_ms` of answering time
@@ -1150,7 +1157,7 @@ impl Game {
         let elapsed = clock.elapsed_ms(now);
         if right {
             self.credit(buzzer, q.points_at(elapsed), elapsed);
-            self.phase = Phase::Question(QuestionStep::Revealed { winner: Some(buzzer) });
+            self.end_question(QuestionStep::Revealed { winner: Some(buzzer) });
             return Ok(vec![
                 Effect::Lights { lights: vec![(buzzer, self.light_of(buzzer))] },
                 Effect::Sound { cue: Cue::Correct },
