@@ -91,6 +91,7 @@ function players(overrides: Partial<PlayerView>[] = []): PlayerView[] {
     lockedOut: false,
     joinsNext: false,
     delta: null,
+    joker: { on: false, left: 0, canChange: false },
     ...overrides[i],
   }));
   return list;
@@ -218,6 +219,22 @@ const SCENES: Record<string, GameView | null> = {
     clock: { limitMs: 30000, remainingMs: 25700, elapsedMs: 4300, running: false, points: 129 },
     buzzed: 3,
     controls: { ...NO_CONTROLS, judge: true, restartQuestion: true },
+  }),
+  // Two teams play their joker on the running question; the Director's Teams tab plays them.
+  jokers: view({
+    phase: { phase: "question", step: "running", clock: { limitMs: 20000, elapsedBeforeMs: 0, runningSinceMs: 0, pressesFromMs: 0 } },
+    clock: { limitMs: 20000, remainingMs: 12400, elapsedMs: 7600, running: true, points: 81 },
+    players: players(answered.map((a, i) => ({ ...a, joker: { on: i === 1 || i === 3, left: i === 1 || i === 3 ? 1 : 2, canChange: true } }))),
+    answeredCount: 4,
+    controls: { ...NO_CONTROLS, next: true, pauseClock: true, closeQuestion: true, restartQuestion: true, setJoker: true },
+    settings: { ...DEFAULT_QUIZ_SETTINGS, jokers: 2 },
+  }),
+  ffJoker: view({
+    phase: { phase: "question", step: "revealed", winner: 3 },
+    slideIndex: 7,
+    slide: quiz.slides[7],
+    players: players([{}, {}, { delta: 258, joker: { on: true, left: 0, canChange: false } }]),
+    settings: { ...DEFAULT_QUIZ_SETTINGS, jokers: 1 },
   }),
   ffRevealed: view({
     phase: { phase: "question", step: "revealed", winner: 3 },

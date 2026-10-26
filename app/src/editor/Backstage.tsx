@@ -2,7 +2,7 @@ import { useApp } from "../app-context";
 import { BackIcon } from "../icons";
 import { keyHint, KEYS } from "../keyboard";
 import { problemText } from "../messages";
-import { MAX_AFTER_REVEAL_DELAY_S, MAX_ALL_ANSWERED_DELAY_S } from "../bindings/Constants";
+import { MAX_AFTER_REVEAL_DELAY_S, MAX_ALL_ANSWERED_DELAY_S, MAX_JOKERS } from "../bindings/Constants";
 import type { StringKey } from "../i18n";
 import { questionCount, settingsOf } from "../quiz";
 import { RecentFileList } from "../recent-files";
@@ -205,6 +205,11 @@ function SettingsPage({ open, onSettings }: BackstageProps & { open: OpenQuiz })
         checked={settings.noAnswerPenalty}
         onChange={(noAnswerPenalty) => set({ noAnswerPenalty })}
       />
+      <div className="field">
+        <span>{t("jokers")}</span>
+        <NumberBox label={t("jokers")} value={settings.jokers} min={0} max={MAX_JOKERS} onChange={(jokers) => set({ jokers })} />
+      </div>
+      <p className="backstage-hint">{t("jokersHint")}</p>
       <h3>{t("settingsProjector")}</h3>
       <SettingSwitch label={t("showAnswer")} hint={t("showAnswerHint")} checked={!settings.hideAnswer} onChange={(show) => set({ hideAnswer: !show })} />
       <SettingSwitch

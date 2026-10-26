@@ -15,6 +15,8 @@ pub const MAX_ALL_ANSWERED_DELAY_S: u8 = 10;
 pub const DEFAULT_AFTER_REVEAL_DELAY_S: u8 = 5;
 /// Longest wait, in seconds, before the show goes on from a question's answer.
 pub const MAX_AFTER_REVEAL_DELAY_S: u8 = 60;
+/// Most jokers a player can have in a show.
+pub const MAX_JOKERS: u8 = 5;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS, JsonSchema)]
 #[ts(export)]
@@ -79,6 +81,13 @@ pub struct QuizSettings {
     #[schemars(with = "bool")]
     #[ts(as = "bool")]
     pub hide_buzz_points: bool,
+    /// Jokers each player has for the show, up to `MAX_JOKERS`; none by
+    /// default. A player's joker doubles what one question gives them,
+    /// the penalty too; the quizmaster plays it before the question ends.
+    #[serde(with = "jokers")]
+    #[schemars(with = "u8")]
+    #[ts(as = "u8")]
+    pub jokers: u8,
 }
 
 impl Default for QuizSettings {
@@ -94,6 +103,7 @@ impl Default for QuizSettings {
             one_buzz: false,
             no_answer_penalty: false,
             hide_buzz_points: false,
+            jokers: 0,
         }
     }
 }
@@ -154,33 +164,34 @@ pub enum AutoStep {
     NextSlide,
 }
 
-/// A wait in whole seconds: one longer than `max` reads as `max`, and one
-/// that is not a number of seconds as `default`.
-fn seconds_up_to<'de, D: Deserializer<'de>>(deserializer: D, default: u8, max: u8) -> Result<u8, D::Error> {
+/// A whole number, such as a wait in seconds: one larger than `max` reads
+/// as `max`, and one that is not a whole number as `default`.
+fn count_up_to<'de, D: Deserializer<'de>>(deserializer: D, default: u8, max: u8) -> Result<u8, D::Error> {
     let value = Option::<serde_json::Value>::deserialize(deserializer)?;
-    let seconds = value.as_ref().and_then(serde_json::Value::as_u64);
-    Ok(seconds.map_or(default, |s| u8::try_from(s).unwrap_or(u8::MAX).min(max)))
+    let count = value.as_ref().and_then(serde_json::Value::as_u64);
+    Ok(count.map_or(default, |n| u8::try_from(n).unwrap_or(u8::MAX).min(max)))
 }
 
-/// A module for `#[serde(with)]` that reads a wait with `seconds_up_to`.
-macro_rules! seconds_up_to {
+/// A module for `#[serde(with)]` that reads a number with `count_up_to`.
+macro_rules! count_up_to {
     ($module:ident, $default:expr, $max:expr) => {
         mod $module {
             use serde::{Deserializer, Serialize, Serializer};
 
-            pub fn serialize<S: Serializer>(seconds: &u8, serializer: S) -> Result<S::Ok, S::Error> {
-                seconds.serialize(serializer)
+            pub fn serialize<S: Serializer>(count: &u8, serializer: S) -> Result<S::Ok, S::Error> {
+                count.serialize(serializer)
             }
 
             pub fn deserialize<'de, D: Deserializer<'de>>(deserializer: D) -> Result<u8, D::Error> {
-                super::seconds_up_to(deserializer, $default, $max)
+                super::count_up_to(deserializer, $default, $max)
             }
         }
     };
 }
 
-seconds_up_to!(all_answered_delay, super::DEFAULT_ALL_ANSWERED_DELAY_S, super::MAX_ALL_ANSWERED_DELAY_S);
-seconds_up_to!(after_reveal_delay, super::DEFAULT_AFTER_REVEAL_DELAY_S, super::MAX_AFTER_REVEAL_DELAY_S);
+count_up_to!(all_answered_delay, super::DEFAULT_ALL_ANSWERED_DELAY_S, super::MAX_ALL_ANSWERED_DELAY_S);
+count_up_to!(after_reveal_delay, super::DEFAULT_AFTER_REVEAL_DELAY_S, super::MAX_AFTER_REVEAL_DELAY_S);
+count_up_to!(jokers, 0, super::MAX_JOKERS);
 
 #[cfg(test)]
 mod tests {
@@ -199,7 +210,7 @@ mod tests {
 
     #[test]
     fn a_setting_that_does_not_read_reads_as_its_default() {
-        let settings = read(r#"{ "allAnswered": "dance", "allAnsweredDelayS": "soon", "oneBuzz": "yes", "nextAfterRevealDelayS": null }"#);
+        let settings = read(r#"{ "allAnswered": "dance", "allAnsweredDelayS": "soon", "oneBuzz": "yes", "nextAfterRevealDelayS": null, "jokers": 1.5 }"#);
         assert_eq!(settings, QuizSettings::default());
         assert_eq!(read(r#"{ "allAnsweredDelayS": -1 }"#).all_answered_delay_s, DEFAULT_ALL_ANSWERED_DELAY_S);
         assert_eq!(read(r#"{ "allAnswered": "reveal" }"#).all_answered, AllAnswered::Reveal);
@@ -213,8 +224,9 @@ mod tests {
             assert_eq!(settings.all_answered_delay_s, MAX_ALL_ANSWERED_DELAY_S, "{seconds}");
         }
         assert_eq!(read(r#"{ "allAnsweredDelayS": 0 }"#).all_answered_delay_ms(), 0);
-        let settings = read(r#"{ "nextAfterRevealDelayS": 61 }"#);
+        let settings = read(r#"{ "nextAfterRevealDelayS": 61, "jokers": 99 }"#);
         assert_eq!((settings.next_after_reveal_delay_s, settings.next_after_reveal_delay_ms()), (MAX_AFTER_REVEAL_DELAY_S, 60_000));
+        assert_eq!(settings.jokers, MAX_JOKERS);
     }
 
     #[test]
@@ -241,11 +253,12 @@ mod tests {
             one_buzz: true,
             no_answer_penalty: true,
             hide_buzz_points: true,
+            jokers: 2,
         };
         let json = serde_json::to_string(&settings).unwrap();
         assert_eq!(
             json,
-            r#"{"allAnswered":"nextSlide","allAnsweredDelayS":7,"nextAfterReveal":true,"nextAfterRevealDelayS":30,"runClockOut":true,"hideAnswer":true,"changeAnswer":true,"oneBuzz":true,"noAnswerPenalty":true,"hideBuzzPoints":true}"#
+            r#"{"allAnswered":"nextSlide","allAnsweredDelayS":7,"nextAfterReveal":true,"nextAfterRevealDelayS":30,"runClockOut":true,"hideAnswer":true,"changeAnswer":true,"oneBuzz":true,"noAnswerPenalty":true,"hideBuzzPoints":true,"jokers":2}"#
         );
         assert_eq!(read(&json), settings);
     }

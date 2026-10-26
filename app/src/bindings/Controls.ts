@@ -23,4 +23,9 @@ goTo: boolean,
  * results are on screen; a show begun before rules version 4 also
  * restarts it closed, until its answer is shown.
  */
-restartQuestion: boolean, };
+restartQuestion: boolean, 
+/**
+ * `SetJoker`: in a quiz with jokers, before the current question ends;
+ * for each player as `Game::can_set_joker` says.
+ */
+setJoker: boolean, };

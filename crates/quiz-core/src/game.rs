@@ -220,6 +220,10 @@ pub enum Command {
     SetPlayerEnabled { buzzer: BuzzerId, enabled: bool },
     #[serde(rename_all = "camelCase")]
     AdjustScore { buzzer: BuzzerId, delta: i32 },
+    /// The player plays their joker on the current question (`on`), or
+    /// takes it back (`QuizSettings::jokers`, `Game::can_set_joker`).
+    #[serde(rename_all = "camelCase")]
+    SetJoker { buzzer: BuzzerId, on: bool },
     #[serde(rename_all = "camelCase")]
     ShowLeaderboard { visible: bool },
     /// Start the current slide's video from the start of its part, or start
@@ -275,6 +279,9 @@ pub struct Controls {
     /// results are on screen; a show begun before rules version 4 also
     /// restarts it closed, until its answer is shown.
     pub restart_question: bool,
+    /// `SetJoker`: in a quiz with jokers, before the current question ends;
+    /// for each player as `Game::can_set_joker` says.
+    pub set_joker: bool,
 }
 
 /// A countdown that can pause. `limit_ms == None` means untimed.
@@ -497,6 +504,9 @@ pub struct Game {
     /// shows its answer (rules version 6): its scores stand, and asking it
     /// again would score it twice.
     closed_questions: BTreeSet<usize>,
+    /// The questions players play their joker on, as (slide, buzzer): the
+    /// ones that ended, and the current one (`QuizSettings::jokers`).
+    jokers: BTreeSet<(usize, BuzzerId)>,
     /// When the step the quiz's settings take by itself (`pending_step`)
     /// began to count down: when the current question closed for having
     /// nobody left to answer, or when its answer was shown. None once the
@@ -534,6 +544,7 @@ impl Game {
             joins_next: BTreeSet::new(),
             gains: BTreeMap::new(),
             closed_questions: BTreeSet::new(),
+            jokers: BTreeSet::new(),
             auto_step_from: None,
             leaderboard_visible: false,
             teams: Vec::new(),
@@ -731,7 +742,34 @@ impl Game {
             play_video: self.shows_video(),
             go_to: self.can_jump(),
             restart_question: self.question_restartable(),
+            set_joker: self.jokers_open(),
         }
+    }
+
+    /// Whether jokers can be played now: in a quiz with jokers, while the
+    /// current question waits to start or runs.
+    fn jokers_open(&self) -> bool {
+        let before_the_end = matches!(self.phase, Phase::Question(QuestionStep::Ready | QuestionStep::Running { .. }));
+        self.quiz.settings.jokers > 0 && before_the_end
+    }
+
+    /// Whether the player's joker can be played (`on`) or taken back now:
+    /// while jokers can be played (`jokers_open`), as long as the question
+    /// gave the player nothing yet, and to play it, with one left.
+    pub fn can_set_joker(&self, buzzer: BuzzerId, on: bool) -> bool {
+        let open = self.jokers_open() && self.players.contains_key(&buzzer) && !self.gains.contains_key(&buzzer);
+        open && (!on || self.plays_joker(buzzer) || self.jokers_left(buzzer) > 0)
+    }
+
+    /// Whether the player plays their joker on the current question.
+    pub fn plays_joker(&self, buzzer: BuzzerId) -> bool {
+        self.jokers.contains(&(self.slide, buzzer))
+    }
+
+    /// The jokers the player has left in the show (`QuizSettings::jokers`).
+    pub fn jokers_left(&self, buzzer: BuzzerId) -> u8 {
+        let played = self.jokers.iter().filter(|&&(_, player)| player == buzzer).count();
+        self.quiz.settings.jokers.saturating_sub(u8::try_from(played).unwrap_or(u8::MAX))
     }
 
     /// True when the screen shows the current slide's video: a slide with a
@@ -989,6 +1027,18 @@ impl Game {
                 self.player_mut(*buzzer)?.add_score(*delta);
                 Ok(vec![])
             }
+            Command::SetJoker { buzzer, on } => {
+                self.player_mut(*buzzer)?;
+                if !self.can_set_joker(*buzzer, *on) {
+                    return Err(GameError::NotNow);
+                }
+                if *on {
+                    self.jokers.insert((self.slide, *buzzer));
+                } else {
+                    self.jokers.remove(&(self.slide, *buzzer));
+                }
+                Ok(vec![])
+            }
             Command::ShowLeaderboard { visible } => {
                 self.leaderboard_visible = *visible;
                 if *visible {
@@ -1162,9 +1212,11 @@ impl Game {
         self.closed_questions.insert(self.slide);
     }
 
-    /// Gives `buzzer`'s player `points` and `answer_ms` of answering time
-    /// from the current question, kept in `gains` for `RestartQuestion`.
+    /// Gives `buzzer`'s player `points`, doubled by their joker
+    /// (`plays_joker`), and `answer_ms` of answering time from the current
+    /// question, kept in `gains` for `RestartQuestion`.
     fn credit(&mut self, buzzer: BuzzerId, points: i32, answer_ms: u64) {
+        let points = if self.plays_joker(buzzer) { points.saturating_mul(2) } else { points };
         let Some(player) = self.players.get_mut(&buzzer) else { return };
         player.add_score(points);
         player.total_answer_ms += answer_ms;
@@ -1273,6 +1325,13 @@ impl Game {
     }
 
     fn enter_slide(&mut self, index: usize) -> Vec<Effect> {
+        // A joker stays on a question that ended, and on one asked again
+        // from its start (`RestartQuestion`); one left before it ended is
+        // not spent.
+        let left = self.slide;
+        if index != left && !self.closed_questions.contains(&left) {
+            self.jokers.retain(|&(slide, _)| slide != left);
+        }
         self.responses.clear();
         self.counted.clear();
         self.locked_out.clear();

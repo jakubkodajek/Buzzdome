@@ -781,6 +781,19 @@ packages users will install are read the same way.
   shows (`GameView::settings`); the Director and the scores stay the same.
   None needs a rules version: the settings travel with the quiz in the
   session, and a quiz without them plays as before.
+- **Jokers (SF-8).** `Game::jokers` keeps the questions players play
+  their joker on, as (slide, buzzer) pairs: the ones that ended and the
+  current one, so a player's jokers left are `settings.jokers` less their
+  pairs, and a joker is spent when it is played. `SetJoker` plays or takes
+  back the current question's while it is ready or running and has given
+  the player nothing (`Game::can_set_joker`, no entry in `gains`), so a
+  joker always covers all or nothing of what the question gives. `credit`
+  doubles the points, gain or penalty, and keeps the doubled amount in
+  `gains`, so `RestartQuestion` takes back what was given and the joker
+  stays on the question asked again. Leaving a question before it ended
+  (`enter_slide` to another slide) drops its pairs, as the question was
+  never asked. The command is journaled like any other and only exists in
+  shows played since, so no rules version is needed.
   The settings come with the quiz the session keeps, so a resumed show
   goes on with them; no rules version is needed, as a quiz without them
   plays as before. Space pressed as the reveal comes is meant for the step

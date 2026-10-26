@@ -199,6 +199,8 @@ function QuestionScreen(props: {
   const show = mode === "show";
   const marksAnswer = step === "revealed" && !(show && view.settings.hideAnswer);
   const buzzPoints = barPlayer?.delta ?? 0;
+  const jokers = enabled.filter((p) => p.joker.on);
+  const buzzBar = question.mode === "fastestFinger" && step !== "ready";
 
   return (
     <div className={hasMedia ? "question-screen has-media" : "question-screen"}>
@@ -253,6 +255,7 @@ function QuestionScreen(props: {
         <div className="buzz-bar">
           <span className="buzz-name">{playerName(t, barPlayer)}</span>
           {buzzedAnswer !== null && <span className={`buzz-answer answer-${buzzedAnswer}`}>{ANSWER_LETTERS[buzzedAnswer]}</span>}
+          {barPlayer.joker.on && <span className="buzz-joker">{t("jokerTimes")}</span>}
           {buzzPoints !== 0 && !(show && view.settings.hideBuzzPoints) && (
             <span className={`buzz-delta ${buzzPoints > 0 ? "plus" : "minus"}`}>{signed(buzzPoints)}</span>
           )}
@@ -260,6 +263,12 @@ function QuestionScreen(props: {
       )}
       {question.mode === "fastestFinger" && step === "running" && !barPlayer && <div className="buzz-bar idle">{t("waitingForBuzz")}</div>}
       {question.mode === "fastestFinger" && step === "closed" && remaining === 0 && <div className="buzz-bar idle">{t("timeUp")}</div>}
+      {!buzzBar && jokers.length > 0 && (
+        <div className="joker-strip">
+          <span className="joker-label">{t("jokerStrip")}</span>
+          <span className="joker-names">{jokers.map((p) => playerName(t, p)).join(", ")}</span>
+        </div>
+      )}
     </div>
   );
 }

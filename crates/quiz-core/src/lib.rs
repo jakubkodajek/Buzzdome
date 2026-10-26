@@ -28,6 +28,7 @@ pub use media::{
 pub use media_player::{MediaPlayer, NowPlaying, PlayerCommand, MAX_DROPPED_MB, MAX_PLAYER_VOLUME};
 pub use settings::{
     AllAnswered, AutoStep, QuizSettings, DEFAULT_AFTER_REVEAL_DELAY_S, DEFAULT_ALL_ANSWERED_DELAY_S, MAX_AFTER_REVEAL_DELAY_S, MAX_ALL_ANSWERED_DELAY_S,
+    MAX_JOKERS,
 };
 pub use model::{
     AnswerLimits, AnswerMode, CorrectAnswer, Plays, Problem, Question, Quiz, QuizJsonError, ReadQuiz, Slide, SlideContent, SlideType, ValidationError,
@@ -92,6 +93,7 @@ mod ui_constants {
             ("DEFAULT_QUIZ_SETTINGS", format!("{} as const", serde_json::to_string(&crate::QuizSettings::default()).unwrap())),
             ("MAX_ALL_ANSWERED_DELAY_S", crate::MAX_ALL_ANSWERED_DELAY_S.to_string()),
             ("MAX_AFTER_REVEAL_DELAY_S", crate::MAX_AFTER_REVEAL_DELAY_S.to_string()),
+            ("MAX_JOKERS", crate::MAX_JOKERS.to_string()),
             ("LAST_SECONDS_MS", crate::LAST_SECONDS_MS.to_string()),
             ("STAGES", format!("{} as const", serde_json::to_string(&crate::Stage::ALL).unwrap())),
             ("ANSWER_BUTTONS", format!("{} as const", serde_json::to_string(&crate::game::ANSWER_BUTTONS).unwrap())),

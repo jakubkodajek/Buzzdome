@@ -128,6 +128,20 @@ pub struct PlayerView {
     pub joins_next: bool,
     /// Score change from the current question.
     pub delta: Option<i32>,
+    /// The player's joker in the show (`QuizSettings::jokers`).
+    pub joker: JokerView,
+}
+
+/// A player's joker: whether they play it on the current question, how
+/// many they have left, and whether the quizmaster can play it or take it
+/// back now (`Game::can_set_joker`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
+#[serde(rename_all = "camelCase")]
+pub struct JokerView {
+    pub on: bool,
+    pub left: u8,
+    pub can_change: bool,
 }
 
 impl Game {
@@ -191,6 +205,10 @@ impl Game {
                 answer_ms: self.responses().get(&p.buzzer).map(|r| r.elapsed_ms),
                 locked_out: self.locked_out().contains(&p.buzzer),
                 joins_next: self.joins_next().contains(&p.buzzer),
+                joker: {
+                    let on = self.plays_joker(p.buzzer);
+                    JokerView { on, left: self.jokers_left(p.buzzer), can_change: self.can_set_joker(p.buzzer, !on) }
+                },
                 delta: self.delta(p.buzzer),
             })
             .collect();

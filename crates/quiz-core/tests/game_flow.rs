@@ -1854,3 +1854,91 @@ fn the_windows_get_the_quiz_settings_with_the_view() {
     let settings = show.game.view(0).settings;
     assert!(settings.hide_answer && settings.hide_buzz_points);
 }
+
+/// Two players, and the first slide's question waiting to start at 1 s.
+fn ready(mut show: Show) -> Show {
+    show.press(0, 1, Button::Big);
+    show.press(0, 2, Button::Big);
+    show.run(1_000, Command::Next).unwrap();
+    show
+}
+
+fn with_jokers(slides: Vec<Slide>, jokers: u8) -> Show {
+    show_setting(slides, |s| s.jokers = jokers)
+}
+
+#[test]
+fn a_joker_doubles_what_one_question_gives_the_player_the_penalty_too() {
+    let slides = vec![question("q1", AnswerMode::Everyone), question("q2", AnswerMode::Everyone)];
+    let mut show = ready(with_jokers(slides, 1));
+    assert!(show.game.controls().set_joker);
+    show.run(1_500, Command::SetJoker { buzzer: 1, on: true }).unwrap();
+    show.run(1_600, Command::SetJoker { buzzer: 2, on: true }).unwrap();
+    let view = show.game.view(1_600);
+    assert!(view.players.iter().all(|p| p.joker.on && p.joker.left == 0 && p.joker.can_change), "{:?}", view.players);
+    show.run(2_000, Command::Next).unwrap();
+    show = everyone_answered(show);
+    assert_eq!((show.score(1), show.score(2)), (190, -40), "95 and -20, doubled");
+    assert!(!show.game.controls().set_joker, "the question ended");
+    assert_eq!(show.run(5_000, Command::SetJoker { buzzer: 1, on: false }), Err(GameError::NotNow));
+
+    // A joker is played once: none is left for the next question.
+    show.run(5_000, Command::Next).unwrap();
+    show.run(6_000, Command::Next).unwrap();
+    assert!(!show.game.plays_joker(1));
+    assert_eq!(show.run(6_500, Command::SetJoker { buzzer: 1, on: true }), Err(GameError::NotNow));
+    assert_eq!(show.run(6_500, Command::SetJoker { buzzer: 9, on: true }), Err(GameError::UnknownBuzzer(9)));
+}
+
+#[test]
+fn a_quiz_without_jokers_takes_none() {
+    let mut show = ready(Show::new(vec![question("q1", AnswerMode::Everyone)]));
+    assert!(!show.game.controls().set_joker);
+    assert_eq!(show.run(1_500, Command::SetJoker { buzzer: 1, on: true }), Err(GameError::NotNow));
+    assert_eq!(show.game.view(1_500).players[0].joker.left, 0);
+}
+
+#[test]
+fn a_joker_can_be_taken_back_until_the_question_gives_the_player_something() {
+    let slides = vec![question("q1", AnswerMode::FastestFinger), question("q2", AnswerMode::FastestFinger)];
+    let mut show = ready(with_jokers(slides, 2));
+    show.run(1_500, Command::SetJoker { buzzer: 1, on: true }).unwrap();
+    show.run(2_000, Command::Next).unwrap();
+    // While the question runs, before it gave the player anything.
+    show.run(2_500, Command::SetJoker { buzzer: 1, on: false }).unwrap();
+    assert_eq!(show.game.jokers_left(1), 2, "taken back, not spent");
+    show.run(2_600, Command::SetJoker { buzzer: 1, on: true }).unwrap();
+    show.press(3_000, 1, Button::Big);
+    assert!(!show.game.controls().set_joker, "not while a buzz waits for judgement");
+    show.run(3_500, Command::JudgeWrong).unwrap();
+    assert_eq!(show.score(1), -40, "the penalty, doubled");
+    assert!(!show.game.can_set_joker(1, false), "the question took the penalty with the joker on");
+    assert!(show.game.can_set_joker(2, true), "the others can still play theirs");
+
+    show.press(4_000, 2, Button::Big);
+    show.run(4_500, Command::JudgeRight).unwrap();
+    assert_eq!(show.score(2), 92, "a right answer at 1.5 s, without a joker");
+    assert_eq!((show.game.jokers_left(1), show.game.jokers_left(2)), (1, 2));
+}
+
+#[test]
+fn a_joker_on_a_question_left_before_it_ended_is_not_spent_but_one_restarted_keeps_it() {
+    let slides = vec![question("q1", AnswerMode::Everyone), question("q2", AnswerMode::Everyone)];
+    let mut show = ready(with_jokers(slides, 1));
+    show.run(1_500, Command::SetJoker { buzzer: 1, on: true }).unwrap();
+    show.run(2_000, Command::GoTo { slide: 1 }).unwrap();
+    assert_eq!(show.game.jokers_left(1), 1, "q1 was skipped");
+    show.run(3_000, Command::GoTo { slide: 0 }).unwrap();
+    assert!(!show.game.plays_joker(1), "called again when the question comes back");
+
+    show.run(3_500, Command::SetJoker { buzzer: 1, on: true }).unwrap();
+    show.run(4_000, Command::Next).unwrap();
+    show.press(5_000, 1, Button::B);
+    show.run(6_000, Command::RestartQuestion).unwrap();
+    assert!(show.game.plays_joker(1), "asked again from its start, with the joker");
+    assert_eq!((show.score(1), show.game.jokers_left(1)), (0, 0));
+    show.run(7_000, Command::Next).unwrap();
+    show.press(8_000, 1, Button::B);
+    show.press(8_000, 2, Button::B);
+    assert_eq!((show.score(1), show.score(2)), (190, 95));
+}

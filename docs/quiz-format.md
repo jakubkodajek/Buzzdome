@@ -308,6 +308,7 @@ reads as its default, so a quiz always opens and plays.
 | `noAnswerPenalty` | true/false | In an everyone-answers question a player switched on who gives no answer loses the question's `penalty`, as for a wrong answer (default false). |
 | `hideAnswer` | true/false | The projector does not mark the right answers when they are shown, so the quizmaster can tell them; the Director still marks them (default false). |
 | `hideBuzzPoints` | true/false | The projector does not show the points a fastest-finger buzz won or lost; the leaderboard still shows the scores (default false). |
+| `jokers` | number | Jokers each player has for the show, 0 to 5 (default 0: none; more reads as 5). A joker doubles what one question gives the player, the penalty too (spec SF-8). |
 
 ## Spreadsheets
 

@@ -51,6 +51,7 @@ function ShowTeams({ view, lost }: { view: GameView; lost: SettingsLost | null }
   const [picked, setPicked] = useState<BuzzerId | null>(null);
   const pick = (buzzer: BuzzerId | null) => setPicked((current) => (buzzer === current ? null : buzzer));
   const players = [...view.players].sort((a, b) => a.buzzer - b.buzzer);
+  const jokers = view.settings.jokers > 0;
 
   const select = (buzzer: BuzzerId, e: React.MouseEvent) => {
     const next = new Set(e.ctrlKey || e.metaKey ? selected : []);
@@ -115,6 +116,7 @@ function ShowTeams({ view, lost }: { view: GameView; lost: SettingsLost | null }
                 <th>{t("colLastResponse")}</th>
                 <th title={t("colTotalTimeHint")}>{t("colTotalTime")}</th>
                 <th>{t("active")}</th>
+                {jokers && <th title={t("colJokerHint")}>{t("colJoker")}</th>}
               </tr>
             </thead>
             <tbody>
@@ -149,6 +151,23 @@ function ShowTeams({ view, lost }: { view: GameView; lost: SettingsLost | null }
                   </td>
                   <td className="num">{seconds(p.totalAnswerMs)} s</td>
                   <td>{p.enabled ? t("yes") : t("no")}</td>
+                  {jokers && (
+                    <td className="joker-cell">
+                      <button
+                        className="joker-toggle"
+                        aria-pressed={p.joker.on}
+                        disabled={!p.joker.canChange}
+                        title={t("colJokerHint")}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          dispatch({ type: "setJoker", buzzer: p.buzzer, on: !p.joker.on });
+                        }}
+                      >
+                        {t("jokerPlay")}
+                      </button>
+                      <span className="muted"> {t("jokersLeft", { n: p.joker.left })}</span>
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>

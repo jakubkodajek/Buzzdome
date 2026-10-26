@@ -50,4 +50,10 @@ noAnswerPenalty: boolean,
  * The projector does not show what a fastest-finger buzz won or lost;
  * the leaderboard shows the scores.
  */
-hideBuzzPoints: boolean, };
+hideBuzzPoints: boolean, 
+/**
+ * Jokers each player has for the show, up to `MAX_JOKERS`; none by
+ * default. A player's joker doubles what one question gives them,
+ * the penalty too; the quizmaster plays it before the question ends.
+ */
+jokers: number, };
