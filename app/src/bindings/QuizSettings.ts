@@ -10,4 +10,44 @@ allAnswered: AllAnswered,
  * Seconds it waits before it does it, up to `MAX_ALL_ANSWERED_DELAY_S`;
  * the quizmaster can step in meanwhile.
  */
-allAnsweredDelayS: number, };
+allAnsweredDelayS: number, 
+/**
+ * Once a question's answer is shown, the show goes on to the next
+ * slide by itself after `next_after_reveal_delay_s`; the quizmaster
+ * can step in meanwhile.
+ */
+nextAfterReveal: boolean, 
+/**
+ * Up to `MAX_AFTER_REVEAL_DELAY_S`.
+ */
+nextAfterRevealDelayS: number, 
+/**
+ * A timed question's clock runs to its end even once nobody is left
+ * to answer; the question then closes as everyone having answered it.
+ */
+runClockOut: boolean, 
+/**
+ * The projector does not mark a question's right answers when they
+ * are shown, so the quizmaster can tell them; the Director still does.
+ */
+hideAnswer: boolean, 
+/**
+ * In an everyone-answers question a player can change their answer
+ * while it runs: their last answer counts, with its time.
+ */
+changeAnswer: boolean, 
+/**
+ * A fastest-finger question takes one buzz: once it is judged wrong,
+ * nobody else can buzz in.
+ */
+oneBuzz: boolean, 
+/**
+ * In an everyone-answers question a player who gives no answer loses
+ * the question's penalty, as for a wrong answer.
+ */
+noAnswerPenalty: boolean, 
+/**
+ * The projector does not show what a fastest-finger buzz won or lost;
+ * the leaderboard shows the scores.
+ */
+hideBuzzPoints: boolean, };

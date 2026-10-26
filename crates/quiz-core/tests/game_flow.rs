@@ -1373,7 +1373,12 @@ fn a_name_is_the_same_however_its_accents_are_encoded() {
 
 /// A show of `slides` whose quiz takes `all_answered` after `delay_s`.
 fn show_with(slides: Vec<Slide>, all_answered: AllAnswered, delay_s: u8) -> Show {
-    let quiz = Quiz { settings: QuizSettings { all_answered, all_answered_delay_s: delay_s }, ..quiz(slides) };
+    show_with_settings(slides, QuizSettings { all_answered, all_answered_delay_s: delay_s, ..QuizSettings::default() })
+}
+
+/// A show of `slides` whose quiz has `settings`.
+fn show_with_settings(slides: Vec<Slide>, settings: QuizSettings) -> Show {
+    let quiz = Quiz { settings, ..quiz(slides) };
     Show { game: Game::new(quiz), journal: Vec::new() }
 }
 
@@ -1705,4 +1710,147 @@ fn back_goes_to_the_slide_before_but_not_out_of_a_question_in_play() {
     show.run(6_000, Command::Next).unwrap();
     assert_eq!(show.game.phase(), &Phase::Final { step: 0 });
     assert_eq!(show.game.previous(), Some(1), "from the final ranking back to the last slide");
+}
+
+/// A show of `slides` whose quiz has the default settings but for `change`.
+fn show_setting(slides: Vec<Slide>, change: impl FnOnce(&mut QuizSettings)) -> Show {
+    let mut settings = QuizSettings::default();
+    change(&mut settings);
+    show_with_settings(slides, settings)
+}
+
+#[test]
+fn once_the_answer_is_shown_the_show_goes_on_after_the_wait() {
+    let slides = vec![question("q1", AnswerMode::Everyone), question("q2", AnswerMode::FastestFinger)];
+    let mut show = everyone_answered(running(show_setting(slides, |s| {
+        s.next_after_reveal = true;
+        s.next_after_reveal_delay_s = 5;
+    })));
+    assert_eq!(show.game.due_command(60_000), None, "the closed question waits for Next");
+    show.run(6_000, Command::Next).unwrap();
+    assert_eq!(show.game.view(7_000).auto_step, Some(AutoStepView { action: AutoStep::NextSlide, in_ms: 4_000 }));
+    assert!(show.game.controls().pause_clock, "the quizmaster can hold it");
+    assert_eq!(show.game.due_command(10_999), None);
+    run_due(&mut show, 11_000);
+    assert_eq!((show.game.slide_index(), step(&show.game)), (1, QuestionStep::Ready));
+
+    // A buzz judged right shows the answer too; from the last slide on to the final ranking.
+    show.run(12_000, Command::Next).unwrap();
+    show.press(13_000, 2, Button::Big);
+    show.run(14_000, Command::JudgeRight).unwrap();
+    assert_eq!(show.game.due_command(19_000), Some(Command::GoToFinal));
+
+    // Held, it waits for the quizmaster, also after a crash.
+    show.run(15_000, Command::PauseClock).unwrap();
+    assert_eq!(show.game.due_command(60_000), None);
+    let replayed = Game::replay(show.game.quiz().clone(), &show.journal, RULES_VERSION);
+    assert_eq!((replayed.due_command(60_000), replayed.recovery_command()), (None, None));
+}
+
+#[test]
+fn a_show_that_stopped_while_the_answer_showed_holds_the_next_slide() {
+    let slides = vec![question("q1", AnswerMode::Everyone), question("q2", AnswerMode::Everyone)];
+    let mut show = everyone_answered(running(show_setting(slides, |s| s.next_after_reveal = true)));
+    show.run(5_000, Command::Next).unwrap();
+    let crashed = Game::replay(show.game.quiz().clone(), &show.journal, RULES_VERSION);
+    assert_eq!(crashed.recovery_command(), Some(Command::PauseClock));
+}
+
+#[test]
+fn a_clock_left_to_run_out_closes_at_time_up_as_everyone_having_answered() {
+    let slides = vec![question("q1", AnswerMode::Everyone)];
+    let mut show = everyone_answered(running(show_setting(slides, |s| {
+        s.run_clock_out = true;
+        s.all_answered = AllAnswered::Reveal;
+    })));
+    assert!(matches!(step(&show.game), QuestionStep::Running { .. }), "the clock runs on");
+    assert_eq!(show.game.due_command(12_000 + PRESS_GRACE_MS - 1), None);
+    run_due(&mut show, 12_000 + PRESS_GRACE_MS);
+    assert_eq!(step(&show.game), QuestionStep::Closed);
+    assert_eq!(show.game.due_command(15_000 + PRESS_GRACE_MS), Some(Command::Next), "then the step everyone answering takes");
+    assert_eq!((show.score(1), show.score(2)), (95, -20), "scored by when they answered");
+
+    // Ended by the quizmaster, it waits as ever.
+    let mut show = everyone_answered(running(show_setting(vec![question("q1", AnswerMode::Everyone)], |s| {
+        s.run_clock_out = true;
+        s.all_answered = AllAnswered::Reveal;
+    })));
+    show.run(5_000, Command::CloseQuestion).unwrap();
+    assert_eq!(show.game.due_command(60_000), None);
+
+    // An untimed question has no clock to run out: it closes on the last answer.
+    let mut untimed = question("q1", AnswerMode::Everyone);
+    if let SlideContent::Question(q) = &mut untimed.content {
+        q.time_limit_s = 0;
+    }
+    let show = everyone_answered(running(show_setting(vec![untimed], |s| s.run_clock_out = true)));
+    assert_eq!(step(&show.game), QuestionStep::Closed);
+}
+
+#[test]
+fn a_player_can_change_their_answer_while_the_question_runs_if_the_quiz_lets_them() {
+    let mut show = running(show_setting(vec![question("q1", AnswerMode::Everyone)], |s| s.change_answer = true));
+    show.press(3_000, 1, Button::A);
+    show.press(5_000, 1, Button::B);
+    let again = Stamped { at_ms: 6_000, command: Command::Press { buzzer: 1, button: Button::B } };
+    assert!(show.game.ignores(&again), "the same answer again changes nothing");
+    show.press(6_000, 2, Button::A);
+    assert_eq!(step(&show.game), QuestionStep::Closed);
+    // The last answer counts, with its time: 3 s into a falling scale of 100 to 50 points.
+    assert_eq!((show.score(1), show.score(2)), (85, -20));
+
+    // By default the first answer counts.
+    let mut show = running(Show::new(vec![question("q1", AnswerMode::Everyone)]));
+    show.press(3_000, 1, Button::A);
+    let changed = Stamped { at_ms: 5_000, command: Command::Press { buzzer: 1, button: Button::B } };
+    assert!(show.game.ignores(&changed));
+}
+
+#[test]
+fn a_fastest_finger_question_can_take_one_buzz() {
+    let mut show = running(show_setting(vec![question("q1", AnswerMode::FastestFinger)], |s| s.one_buzz = true));
+    show.press(3_000, 1, Button::Big);
+    let effects = show.run(4_000, Command::JudgeWrong).unwrap();
+    assert_eq!(step(&show.game), QuestionStep::Closed, "nobody else buzzes in");
+    assert!(effects.contains(&Effect::Lights { lights: vec![(1, Light::Wrong)] }), "{effects:?}");
+    assert!(show.game.ignores(&Stamped { at_ms: 5_000, command: Command::Press { buzzer: 2, button: Button::Big } }));
+    assert_eq!((show.score(1), show.score(2)), (-20, 0));
+
+    // With its clock left to run out, everyone waits for time up.
+    let mut show = running(show_setting(vec![question("q1", AnswerMode::FastestFinger)], |s| {
+        s.one_buzz = true;
+        s.run_clock_out = true;
+    }));
+    show.press(3_000, 1, Button::Big);
+    show.run(4_000, Command::JudgeWrong).unwrap();
+    assert!(matches!(step(&show.game), QuestionStep::Running { .. }));
+    assert_eq!(show.game.lights(), [(1, Light::Locked), (2, Light::Locked)]);
+    assert!(show.game.ignores(&Stamped { at_ms: 5_000, command: Command::Press { buzzer: 2, button: Button::Big } }));
+}
+
+#[test]
+fn no_answer_can_cost_the_penalty() {
+    let mut show = running(show_setting(vec![question("q1", AnswerMode::Everyone)], |s| s.no_answer_penalty = true));
+    show.press(3_000, 1, Button::B);
+    show.run(4_000, Command::CloseQuestion).unwrap();
+    assert_eq!((show.score(1), show.score(2)), (95, -20));
+    assert_eq!(show.game.view(4_000).results, Some(AnswerResults { right: 1, wrong: 0, none: 1 }));
+
+    // By default it costs nothing.
+    let mut show = running(Show::new(vec![question("q1", AnswerMode::Everyone)]));
+    show.press(3_000, 1, Button::B);
+    show.run(4_000, Command::CloseQuestion).unwrap();
+    assert_eq!(show.score(2), 0);
+}
+
+#[test]
+fn the_windows_get_the_quiz_settings_with_the_view() {
+    let show = Show::new(vec![question("q1", AnswerMode::Everyone)]);
+    assert_eq!(show.game.view(0).settings, QuizSettings::default());
+    let show = show_setting(vec![question("q1", AnswerMode::FastestFinger)], |s| {
+        s.hide_answer = true;
+        s.hide_buzz_points = true;
+    });
+    let settings = show.game.view(0).settings;
+    assert!(settings.hide_answer && settings.hide_buzz_points);
 }

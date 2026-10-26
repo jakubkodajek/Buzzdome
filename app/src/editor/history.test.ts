@@ -68,7 +68,7 @@ describe("history", () => {
     const defaults = { ...DEFAULT_QUIZ_SETTINGS };
     expect(historyReducer(h, { type: "edit", edit: { type: "setSettings", settings: defaults }, at: 0 })).toBe(h);
     h = historyReducer(h, { type: "edit", edit: { type: "setSettings", settings: { ...defaults, allAnswered: "reveal" } }, at: 0 });
-    expect(h.present.settings).toEqual({ allAnswered: "reveal", allAnsweredDelayS: DEFAULT_QUIZ_SETTINGS.allAnsweredDelayS });
+    expect(h.present.settings).toEqual({ ...DEFAULT_QUIZ_SETTINGS, allAnswered: "reveal" });
     h = historyReducer(h, { type: "undo" });
     expect(h.present.settings).toBeUndefined();
   });

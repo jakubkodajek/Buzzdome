@@ -11,7 +11,7 @@
 
 use quiz_core::{
     AllAnswered, AnswerMode, Button, BuzzerMode, Command, CorrectAnswer, Effect, Game, GameError, Light, Phase, Question, QuestionStep, Quiz,
-    QuizSettings, Slide, SlideContent, Stamped, VideoClip, FULL_SHARE, MAX_ALL_ANSWERED_DELAY_S, MAX_ANSWERS, MAX_EVERYONE_ANSWERS, MAX_POINTS,
+    QuizSettings, Slide, SlideContent, Stamped, VideoClip, FULL_SHARE, MAX_AFTER_REVEAL_DELAY_S, MAX_ALL_ANSWERED_DELAY_S, MAX_ANSWERS, MAX_EVERYONE_ANSWERS, MAX_POINTS,
     MAX_TEAMS, MIN_EVERYONE_ANSWERS, RULES_VERSION,
 };
 use std::collections::BTreeMap;
@@ -99,6 +99,14 @@ pub fn random_quiz(rng: &mut Rng) -> Quiz {
     quiz.settings = QuizSettings {
         all_answered: *rng.pick(&[AllAnswered::Wait, AllAnswered::Reveal, AllAnswered::NextSlide]),
         all_answered_delay_s: rng.between(0, u64::from(MAX_ALL_ANSWERED_DELAY_S)) as u8,
+        next_after_reveal: rng.chance(30),
+        next_after_reveal_delay_s: rng.between(0, u64::from(MAX_AFTER_REVEAL_DELAY_S)) as u8,
+        run_clock_out: rng.chance(30),
+        hide_answer: rng.chance(30),
+        change_answer: rng.chance(30),
+        one_buzz: rng.chance(30),
+        no_answer_penalty: rng.chance(30),
+        hide_buzz_points: rng.chance(30),
     };
     if let Err(errors) = quiz.validate() {
         panic!("the generator wrote a quiz the editor would refuse: {errors:?}");

@@ -10,7 +10,7 @@ import demoQuiz from "../../../samples/demo-quiz.json";
 import { installBrowserGuard } from "../browser-guard";
 import { setBodyText } from "../editor/slides";
 import { answerShares, NO_CONTROLS } from "../host/preview";
-import { MAX_BOARD_COLUMNS, MAX_BOARD_ROWS, MAX_PLAYER_VOLUME } from "../bindings/Constants";
+import { DEFAULT_QUIZ_SETTINGS, MAX_BOARD_COLUMNS, MAX_BOARD_ROWS, MAX_PLAYER_VOLUME } from "../bindings/Constants";
 import type {
   Background,
   BoardChange,
@@ -159,6 +159,7 @@ function view(partial: Partial<GameView>): GameView {
     videoPlays: 0,
     stepNo: 0,
     autoStep: null,
+    settings: DEFAULT_QUIZ_SETTINGS,
     ...partial,
   };
   return { ...shown, answerShares: answerShares(shown.slide) };
@@ -293,6 +294,7 @@ const SCENES: Record<string, GameView | null> = {
     controls: { ...NO_CONTROLS, next: true, playVideo: true, goTo: true },
     videoPlays: 1,
     autoStep: null,
+    settings: DEFAULT_QUIZ_SETTINGS,
   }),
   brokenBackground: view({ phase: { phase: "billboard" }, slideIndex: 0, slide: { ...quiz.slides[0], background: { ...BACKGROUND, file: "media/missing.png" } } }),
   styled: view({ slide: { ...quiz.slides[1], style: STYLE } }),

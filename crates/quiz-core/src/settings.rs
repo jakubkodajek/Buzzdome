@@ -4,13 +4,17 @@
 //! opens and plays.
 
 use schemars::JsonSchema;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use ts_rs::TS;
 
 /// Seconds the show waits by default before it acts on everyone having answered.
 pub const DEFAULT_ALL_ANSWERED_DELAY_S: u8 = 3;
 /// Longest wait, in seconds, before the show acts on everyone having answered.
 pub const MAX_ALL_ANSWERED_DELAY_S: u8 = 10;
+/// Seconds a question's answer stays on screen by default before the show goes on by itself.
+pub const DEFAULT_AFTER_REVEAL_DELAY_S: u8 = 5;
+/// Longest wait, in seconds, before the show goes on from a question's answer.
+pub const MAX_AFTER_REVEAL_DELAY_S: u8 = 60;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS, JsonSchema)]
 #[ts(export)]
@@ -23,15 +27,74 @@ pub struct QuizSettings {
     pub all_answered: AllAnswered,
     /// Seconds it waits before it does it, up to `MAX_ALL_ANSWERED_DELAY_S`;
     /// the quizmaster can step in meanwhile.
-    #[serde(with = "delay_in_range")]
+    #[serde(with = "all_answered_delay")]
     #[schemars(with = "u8")]
     #[ts(as = "u8")]
     pub all_answered_delay_s: u8,
+    /// Once a question's answer is shown, the show goes on to the next
+    /// slide by itself after `next_after_reveal_delay_s`; the quizmaster
+    /// can step in meanwhile.
+    #[serde(with = "crate::style::lenient_or_default")]
+    #[schemars(with = "bool")]
+    #[ts(as = "bool")]
+    pub next_after_reveal: bool,
+    /// Up to `MAX_AFTER_REVEAL_DELAY_S`.
+    #[serde(with = "after_reveal_delay")]
+    #[schemars(with = "u8")]
+    #[ts(as = "u8")]
+    pub next_after_reveal_delay_s: u8,
+    /// A timed question's clock runs to its end even once nobody is left
+    /// to answer; the question then closes as everyone having answered it.
+    #[serde(with = "crate::style::lenient_or_default")]
+    #[schemars(with = "bool")]
+    #[ts(as = "bool")]
+    pub run_clock_out: bool,
+    /// The projector does not mark a question's right answers when they
+    /// are shown, so the quizmaster can tell them; the Director still does.
+    #[serde(with = "crate::style::lenient_or_default")]
+    #[schemars(with = "bool")]
+    #[ts(as = "bool")]
+    pub hide_answer: bool,
+    /// In an everyone-answers question a player can change their answer
+    /// while it runs: their last answer counts, with its time.
+    #[serde(with = "crate::style::lenient_or_default")]
+    #[schemars(with = "bool")]
+    #[ts(as = "bool")]
+    pub change_answer: bool,
+    /// A fastest-finger question takes one buzz: once it is judged wrong,
+    /// nobody else can buzz in.
+    #[serde(with = "crate::style::lenient_or_default")]
+    #[schemars(with = "bool")]
+    #[ts(as = "bool")]
+    pub one_buzz: bool,
+    /// In an everyone-answers question a player who gives no answer loses
+    /// the question's penalty, as for a wrong answer.
+    #[serde(with = "crate::style::lenient_or_default")]
+    #[schemars(with = "bool")]
+    #[ts(as = "bool")]
+    pub no_answer_penalty: bool,
+    /// The projector does not show what a fastest-finger buzz won or lost;
+    /// the leaderboard shows the scores.
+    #[serde(with = "crate::style::lenient_or_default")]
+    #[schemars(with = "bool")]
+    #[ts(as = "bool")]
+    pub hide_buzz_points: bool,
 }
 
 impl Default for QuizSettings {
     fn default() -> Self {
-        QuizSettings { all_answered: AllAnswered::Wait, all_answered_delay_s: DEFAULT_ALL_ANSWERED_DELAY_S }
+        QuizSettings {
+            all_answered: AllAnswered::Wait,
+            all_answered_delay_s: DEFAULT_ALL_ANSWERED_DELAY_S,
+            next_after_reveal: false,
+            next_after_reveal_delay_s: DEFAULT_AFTER_REVEAL_DELAY_S,
+            run_clock_out: false,
+            hide_answer: false,
+            change_answer: false,
+            one_buzz: false,
+            no_answer_penalty: false,
+            hide_buzz_points: false,
+        }
     }
 }
 
@@ -42,8 +105,17 @@ impl QuizSettings {
 
     /// See `all_answered_delay_s`.
     pub fn all_answered_delay_ms(&self) -> u64 {
-        u64::from(self.all_answered_delay_s.min(MAX_ALL_ANSWERED_DELAY_S)) * 1000
+        seconds_to_ms(self.all_answered_delay_s, MAX_ALL_ANSWERED_DELAY_S)
     }
+
+    /// See `next_after_reveal_delay_s`.
+    pub fn next_after_reveal_delay_ms(&self) -> u64 {
+        seconds_to_ms(self.next_after_reveal_delay_s, MAX_AFTER_REVEAL_DELAY_S)
+    }
+}
+
+fn seconds_to_ms(seconds: u8, max: u8) -> u64 {
+    u64::from(seconds.min(max)) * 1000
 }
 
 /// What the show does once a question has nobody left to answer: every
@@ -72,7 +144,8 @@ impl AllAnswered {
     }
 }
 
-/// A step the show takes by itself once everyone answered (`AllAnswered`).
+/// A step the show takes by itself: once everyone answered (`AllAnswered`),
+/// or once a question's answer was shown (`QuizSettings::next_after_reveal`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
 #[ts(export)]
 #[serde(rename_all = "camelCase")]
@@ -81,22 +154,33 @@ pub enum AutoStep {
     NextSlide,
 }
 
-/// A wait in whole seconds: one longer than the longest reads as the
-/// longest, and one that is not a number of seconds as the default.
-mod delay_in_range {
-    use super::{DEFAULT_ALL_ANSWERED_DELAY_S, MAX_ALL_ANSWERED_DELAY_S};
-    use serde::{Deserialize, Deserializer, Serializer};
-
-    pub fn serialize<S: Serializer>(seconds: &u8, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_u8(*seconds)
-    }
-
-    pub fn deserialize<'de, D: Deserializer<'de>>(deserializer: D) -> Result<u8, D::Error> {
-        let value = Option::<serde_json::Value>::deserialize(deserializer)?;
-        let seconds = value.as_ref().and_then(serde_json::Value::as_u64);
-        Ok(seconds.map_or(DEFAULT_ALL_ANSWERED_DELAY_S, |s| u8::try_from(s).unwrap_or(u8::MAX).min(MAX_ALL_ANSWERED_DELAY_S)))
-    }
+/// A wait in whole seconds: one longer than `max` reads as `max`, and one
+/// that is not a number of seconds as `default`.
+fn seconds_up_to<'de, D: Deserializer<'de>>(deserializer: D, default: u8, max: u8) -> Result<u8, D::Error> {
+    let value = Option::<serde_json::Value>::deserialize(deserializer)?;
+    let seconds = value.as_ref().and_then(serde_json::Value::as_u64);
+    Ok(seconds.map_or(default, |s| u8::try_from(s).unwrap_or(u8::MAX).min(max)))
 }
+
+/// A module for `#[serde(with)]` that reads a wait with `seconds_up_to`.
+macro_rules! seconds_up_to {
+    ($module:ident, $default:expr, $max:expr) => {
+        mod $module {
+            use serde::{Deserializer, Serialize, Serializer};
+
+            pub fn serialize<S: Serializer>(seconds: &u8, serializer: S) -> Result<S::Ok, S::Error> {
+                seconds.serialize(serializer)
+            }
+
+            pub fn deserialize<'de, D: Deserializer<'de>>(deserializer: D) -> Result<u8, D::Error> {
+                super::seconds_up_to(deserializer, $default, $max)
+            }
+        }
+    };
+}
+
+seconds_up_to!(all_answered_delay, super::DEFAULT_ALL_ANSWERED_DELAY_S, super::MAX_ALL_ANSWERED_DELAY_S);
+seconds_up_to!(after_reveal_delay, super::DEFAULT_AFTER_REVEAL_DELAY_S, super::MAX_AFTER_REVEAL_DELAY_S);
 
 #[cfg(test)]
 mod tests {
@@ -115,10 +199,11 @@ mod tests {
 
     #[test]
     fn a_setting_that_does_not_read_reads_as_its_default() {
-        let settings = read(r#"{ "allAnswered": "dance", "allAnsweredDelayS": "soon" }"#);
+        let settings = read(r#"{ "allAnswered": "dance", "allAnsweredDelayS": "soon", "oneBuzz": "yes", "nextAfterRevealDelayS": null }"#);
         assert_eq!(settings, QuizSettings::default());
         assert_eq!(read(r#"{ "allAnsweredDelayS": -1 }"#).all_answered_delay_s, DEFAULT_ALL_ANSWERED_DELAY_S);
         assert_eq!(read(r#"{ "allAnswered": "reveal" }"#).all_answered, AllAnswered::Reveal);
+        assert!(read(r#"{ "hideAnswer": true, "changeAnswer": 1 }"#).hide_answer);
     }
 
     #[test]
@@ -128,6 +213,8 @@ mod tests {
             assert_eq!(settings.all_answered_delay_s, MAX_ALL_ANSWERED_DELAY_S, "{seconds}");
         }
         assert_eq!(read(r#"{ "allAnsweredDelayS": 0 }"#).all_answered_delay_ms(), 0);
+        let settings = read(r#"{ "nextAfterRevealDelayS": 61 }"#);
+        assert_eq!((settings.next_after_reveal_delay_s, settings.next_after_reveal_delay_ms()), (MAX_AFTER_REVEAL_DELAY_S, 60_000));
     }
 
     #[test]
@@ -143,9 +230,23 @@ mod tests {
 
     #[test]
     fn settings_read_back_the_same() {
-        let settings = QuizSettings { all_answered: AllAnswered::NextSlide, all_answered_delay_s: 7 };
+        let settings = QuizSettings {
+            all_answered: AllAnswered::NextSlide,
+            all_answered_delay_s: 7,
+            next_after_reveal: true,
+            next_after_reveal_delay_s: 30,
+            run_clock_out: true,
+            hide_answer: true,
+            change_answer: true,
+            one_buzz: true,
+            no_answer_penalty: true,
+            hide_buzz_points: true,
+        };
         let json = serde_json::to_string(&settings).unwrap();
-        assert_eq!(json, r#"{"allAnswered":"nextSlide","allAnsweredDelayS":7}"#);
+        assert_eq!(
+            json,
+            r#"{"allAnswered":"nextSlide","allAnsweredDelayS":7,"nextAfterReveal":true,"nextAfterRevealDelayS":30,"runClockOut":true,"hideAnswer":true,"changeAnswer":true,"oneBuzz":true,"noAnswerPenalty":true,"hideBuzzPoints":true}"#
+        );
         assert_eq!(read(&json), settings);
     }
 }

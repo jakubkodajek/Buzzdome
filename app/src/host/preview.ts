@@ -1,4 +1,4 @@
-import { FINAL_LAST_STEP } from "../bindings/Constants";
+import { DEFAULT_QUIZ_SETTINGS, FINAL_LAST_STEP } from "../bindings/Constants";
 import { shareOf } from "../quiz";
 import type { Controls, GameView, Phase, Slide } from "../types";
 
@@ -33,6 +33,7 @@ export function previewView(slide: Slide, slideIndex: number, slideCount: number
     videoPlays: 0,
     stepNo: 0,
     autoStep: null,
+    settings: DEFAULT_QUIZ_SETTINGS,
   };
 }
 

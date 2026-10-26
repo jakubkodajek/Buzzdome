@@ -2,7 +2,7 @@
 
 use crate::game::{same_name, BuzzerId, Button, Controls, Game, Phase, QuestionStep, Response};
 use crate::model::{AnswerMode, Slide};
-use crate::settings::AutoStep;
+use crate::settings::{AutoStep, QuizSettings};
 use serde::Serialize;
 use std::collections::BTreeMap;
 use ts_rs::TS;
@@ -51,9 +51,12 @@ pub struct GameView {
     pub video_plays: u32,
     /// See `Game::step_no`.
     pub step_no: u32,
-    /// The step the show takes by itself once everyone answered
-    /// (`Game::pending_step`); none while it waits for the quizmaster.
+    /// The step the show takes by itself (`Game::pending_step`); none
+    /// while it waits for the quizmaster.
     pub auto_step: Option<AutoStepView>,
+    /// The quiz's settings, for what the windows show: the projector hides
+    /// what they say it hides.
+    pub settings: QuizSettings,
 }
 
 /// A step the show takes by itself, for the Director to show coming.
@@ -218,6 +221,7 @@ impl Game {
             video_plays: self.video_plays(),
             step_no: self.step_no(),
             auto_step: self.pending_step().map(|(action, _, at)| AutoStepView { action, in_ms: at.saturating_sub(now) }),
+            settings: self.quiz().settings,
             teams: self
                 .teams()
                 .iter()
