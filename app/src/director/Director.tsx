@@ -18,6 +18,7 @@ import {
   useMediaRoot,
   usePlayerVolume,
   useQuiz,
+  useRecentFiles,
   useShowNotSaved,
 } from "../hooks";
 import {
@@ -41,6 +42,7 @@ import { keyHint, KEYS, useShortcuts } from "../keyboard";
 import { MediaRootContext } from "../media";
 import { phaseLabel } from "../phase";
 import { quizPicker, slideContext } from "../quiz";
+import { RecentFileList } from "../recent-files";
 import { ThemeContext, ThemesProvider, useResolvedTheme, useThemes } from "../theme/context";
 import { isThemeMissing } from "../theme/themes";
 import type { AutoStepView, GameView, Quiz } from "../types";
@@ -214,14 +216,13 @@ interface TabBodyProps {
 }
 
 function TabBody({ tab, view, quiz, projector, player, sound }: TabBodyProps) {
-  const { t } = useApp();
   // Setup tabs work without a show; the others need one.
   if (tab === "settings") return <SettingsTab projector={projector} />;
   if (tab === "receiver") return <ReceiverTab />;
   // Team names can be prepared before a show, and the media player plays without one.
   if (tab === "teams") return <TeamsTab view={view} />;
   if (tab === "media") return <MediaPlayerTab player={player} sound={sound} view={view} />;
-  if (!view) return <p className="empty">{t("welcome")}</p>;
+  if (!view) return <StartPane />;
   switch (tab) {
     case "questions":
       return <QuestionsTab view={view} quiz={quiz} />;
@@ -230,6 +231,26 @@ function TabBody({ tab, view, quiz, projector, player, sound }: TabBodyProps) {
     case "buzzers":
       return <VirtualBuzzers />;
   }
+}
+
+/** The show's tabs before a show: the recent quiz files, each starting a show in a click (spec SF-1). */
+function StartPane() {
+  const { t } = useApp();
+  const run = useRun();
+  const recent = useRecentFiles();
+  // Read again either way: a file that is gone leaves the list.
+  const start = (path: string) => run(api.startShowFromRecent(path).finally(recent.reload));
+  return (
+    <div className="start-pane">
+      <p className="muted">{t("welcome")}</p>
+      {recent.files.length > 0 && (
+        <>
+          <h2>{t("recentFiles")}</h2>
+          <RecentFileList files={recent.files} onOpen={start} />
+        </>
+      )}
+    </div>
+  );
 }
 
 function CommandButton(props: { icon: ReactNode; label: string; hint?: string; tone?: "good" | "bad"; onClick: () => void }) {

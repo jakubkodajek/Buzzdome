@@ -591,8 +591,11 @@ mockIPC(
         return { id: "draft-1", quiz: editorQuiz, sourcePath: "C:\\Kvizy\\hospodsky-kviz.quiz", unsaved: false, mediaRoot: "/src/dev/", problems: [], dropped: [] };
       case "editor_new":
         return { id: `draft-${++drafts}`, quiz: { ...editorQuiz, title: (payload as { title: string }).title, slides: [] }, sourcePath: null, unsaved: false, mediaRoot: "/src/dev/", problems: [], dropped: [] };
-      case "editor_recent_files":
+      case "recent_files":
         return RECENT_FILES;
+      case "start_show_from_recent":
+        called.push({ cmd, ...(payload as object) });
+        return RECENT_FILES.includes((payload as { recent: string }).recent) ? null : Promise.reject({ code: "notRecent" });
       case "editor_close":
         called.push({ cmd });
         return null;

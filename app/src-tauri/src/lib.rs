@@ -30,6 +30,7 @@ use error::CmdResult;
 pub use error::AppError;
 use hardware::Hardware;
 use quiz_core::{BuzzerId, BuzzerMode, Command, Effect, Game, GameView, Light, Quiz, Stamped};
+use recent_files::RecentFiles;
 use session::{Resumed, Session, SessionMeta, SessionSummary};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -399,16 +400,33 @@ async fn show_not_saved(app: AppHandle) -> CmdResult<Option<AppError>> {
 #[tauri::command]
 async fn start_show_from_file(app: AppHandle, window: Window, picker: Picker) -> CmdResult<bool> {
     let Some(path) = dialogs::pick_file(window, picker, quiz_file::OPEN_EXTENSIONS.to_vec()).await? else { return Ok(false) };
+    off_ui(move || start_show_from(&app, &path).map(|()| true)).await
+}
+
+/// Starts a show with the `recent` quiz file, which has to be in the list
+/// (`RecentFiles`). A file that is no longer there leaves the list.
+#[tauri::command]
+async fn start_show_from_recent(app: AppHandle, recent: String) -> CmdResult<()> {
     off_ui(move || {
-        // Unpacking big media takes a moment: it runs before the show is locked.
-        let package = {
-            let _cache = QUIZZES_CACHE.lock().unwrap();
-            quiz_file::open(&path, &quizzes_cache(&app)?)?
-        };
-        start_show(&app, package.quiz, Some(path.to_string_lossy().into_owned()), Some(package.root))?;
-        Ok(true)
+        let path = app.state::<RecentFiles>().get(&recent)?;
+        start_show_from(&app, &path)
     })
     .await
+}
+
+/// Opens the quiz file `path` and starts a show with it. The file goes
+/// first in the recent list once it opens, and leaves it once it is gone.
+fn start_show_from(app: &AppHandle, path: &Path) -> CmdResult<()> {
+    let source_path = path.to_string_lossy().into_owned();
+    let recent = app.state::<RecentFiles>();
+    // Unpacking big media takes a moment: it runs before the show is locked.
+    let opened = {
+        let _cache = QUIZZES_CACHE.lock().unwrap();
+        quiz_file::open(path, &quizzes_cache(app)?)
+    };
+    let package = opened.inspect_err(|_| recent.forget_if_gone(&source_path))?;
+    recent.remember(&source_path);
+    start_show(app, package.quiz, Some(source_path), Some(package.root))
 }
 
 /// Plays the editor's quiz without a journal, so the last real show stays
@@ -649,6 +667,7 @@ pub fn run() {
             media_root,
             show_not_saved,
             start_show_from_file,
+            start_show_from_recent,
             start_demo_show,
             last_session,
             resume_last_session,
@@ -685,7 +704,7 @@ pub fn run() {
             editor::editor_load,
             editor::editor_new,
             editor::editor_open,
-            recent_files::editor_recent_files,
+            recent_files::recent_files,
             editor::editor_update,
             editor::editor_save,
             editor::editor_add_media,

@@ -375,7 +375,7 @@ the Host screen.
 
 | ID | Requirement | Status |
 | --- | --- | --- |
-| SF-1 | Start: open a quiz file (or a recent one) and start the show. The last unfinished show can be resumed instead. | done (`.quiz` files and plain JSON); recent files planned |
+| SF-1 | Start: open a quiz file (or a recent one) and start the show. The last unfinished show can be resumed instead. | done (`.quiz` files and plain JSON); the Director lists the quiz files opened, saved or played lately and plays one in a click |
 | SF-2 | Launch check before the welcome screen: receiver connected (or keyboard only), projector window open on the chosen monitor, sound output working. Problems are listed with a fix; the show can start anyway. | planned |
 | SF-3 | Welcome screen on the projector: quiz title, the theme's background and logo, optional welcome music (section 10). A small sign while the receiver is not connected (BZ-15). | partial: title and background colour only |
 | SF-4 | Registration: players press any button; their buzzer numbers light up in a grid on the projector and appear in the Director's Teams tab with an editable name. Late presses still register, between questions or in one (in fastest finger the late team plays from the next question, BZ-19). On the Enjoy 303S a buzzer showing dark registers only outside fastest finger and its judging, as a press there counts only from a ready buzzer (design 2.4). | done |

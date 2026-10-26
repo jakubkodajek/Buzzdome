@@ -2193,30 +2193,13 @@
   white-space: nowrap;
 }
 
-.recent-list {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.recent-list button {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  width: 100%;
-  max-width: 620px;
+.studio .recent-list button {
   padding: 7px 10px;
-  text-align: left;
 }
 
-.recent-list button:hover {
+.studio .recent-list button:hover {
   border-color: var(--hover-line);
   background: var(--hover);
-}
-
-.recent-list small {
-  color: var(--muted);
-  overflow-wrap: anywhere;
 }
 
 /* Status bar */

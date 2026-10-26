@@ -125,8 +125,8 @@ describe("the quiz editor", () => {
     await app.step("next");
     await app.waitView("the first slide", (v) => v.phase.phase !== "lobby");
     await app.press("backToEditor");
-    await app.$(".studio");
-    expect(await slideCount()).toBe(slides);
+    // The editor shows the slides once it has read its draft again.
+    await waitFor(`${slides} slides back`, async () => (await slideCount()) === slides);
     expect(await app.view()).toBeNull();
   });
 
@@ -170,7 +170,7 @@ describe("the quiz editor", () => {
   });
 
   // The system's file picker is driven through the X server (`App.pickFile`).
-  test.skipIf(process.platform !== "linux")("Save as writes a quiz file through the system's picker, and the Director plays it", async () => {
+  test.skipIf(process.platform !== "linux")("Save as writes a quiz file through the system's picker, and the Director plays it, again from its recent quizzes", async () => {
     const file = join(data, "saved-quiz.quiz");
     await ctrl("s", true);
     await app.pickFile(file);
@@ -183,6 +183,12 @@ describe("the quiz editor", () => {
     await app.pickFile(file);
     const view = await app.waitView("the saved quiz's show", () => true);
     expect(view.slideCount).toBe(slides);
+    await app.answerQuestions(true);
+    await app.press("endShow");
+    await waitFor("the show to end", async () => (await app.view()) === null);
+    await app.press({ text: "saved-quiz.quiz" });
+    const again = await app.waitView("the show of the recent quiz", () => true);
+    expect(again.slideCount).toBe(slides);
     await app.assertHealthy();
   });
 });

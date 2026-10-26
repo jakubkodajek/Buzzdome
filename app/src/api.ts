@@ -51,6 +51,10 @@ export const api = {
   // The backend opens the file pickers: a window names no file to write.
   /** Starts a show of a quiz file the quizmaster picks; false when they cancel. */
   startShowFromFile: (picker: Picker) => invoke<boolean>("start_show_from_file", { picker }),
+  /** Starts a show of `recent`, a file in `recentFiles`. */
+  startShowFromRecent: (recent: string) => invoke<void>("start_show_from_recent", { recent }),
+  /** Quiz files opened, saved or played lately, latest first. */
+  recentFiles: () => invoke<string[]>("recent_files"),
   startDemoShow: () => invoke<void>("start_demo_show"),
   lastSession: () => invoke<SessionSummary | null>("last_session"),
   /** Resumes the last show; returns warnings when it runs but not quite as before (its media are missing, other rules). */
@@ -120,10 +124,8 @@ export const api = {
   /** The quiz editor's draft left from last time, if any. */
   editorLoad: () => invoke<EditorDraft | null>("editor_load"),
   editorNew: (title: string) => invoke<EditorDraft>("editor_new", { title }),
-  /** Opens `recent`, a file in `editorRecentFiles`, or a quiz file the quizmaster picks; null when they cancel. */
+  /** Opens `recent`, a file in `recentFiles`, or a quiz file the quizmaster picks; null when they cancel. */
   editorOpen: (recent: string | null, picker: Picker) => invoke<EditorDraft | null>("editor_open", { recent, picker }),
-  /** Quiz files the editor opened or saved lately, latest first. */
-  editorRecentFiles: () => invoke<string[]>("editor_recent_files"),
   /** Stores the edited quiz; returns what keeps it from being played. */
   editorUpdate: (draft: string, quiz: Quiz, unsaved: boolean) => invoke<ValidationError[]>("editor_update", { draft, quiz, unsaved }),
   /** Saves over the quiz file the draft came from, unless `saveAs`, else where the quizmaster picks; returns the path, null when they cancel. */

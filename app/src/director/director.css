@@ -79,6 +79,30 @@
   color: var(--muted);
 }
 
+/* Before a show: the recent quiz files */
+
+.start-pane {
+  padding: 30px;
+}
+
+.start-pane p {
+  margin: 0;
+}
+
+.start-pane h2 {
+  margin: 24px 0 8px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.director .recent-list li + li {
+  margin-top: 4px;
+}
+
+.director .recent-list button {
+  padding: 6px 12px;
+}
+
 /* Command panel */
 
 .command-panel {

@@ -1,4 +1,5 @@
-//! The quiz files the editor opened or saved lately, for its FILE menu.
+//! The quiz files opened, saved or played lately, for the editor's FILE
+//! menu and the Director's start, which plays one in a click.
 //! Kept here, not in the page: the page opens one by its path, which has to
 //! be in the list, so it can open only files the quizmaster once picked or
 //! saved to, and never name a path of its own (a share on another computer,
@@ -25,14 +26,14 @@ struct Saved {
 }
 
 pub struct RecentFiles {
-    file: AppFile,
+    file: Mutex<AppFile>,
     paths: Mutex<Vec<String>>,
 }
 
 impl RecentFiles {
     pub fn load(path: PathBuf) -> RecentFiles {
         let (file, saved) = AppFile::load::<Saved>(path);
-        RecentFiles { file, paths: Mutex::new(saved.paths.into_iter().take(KEEP).collect()) }
+        RecentFiles { file: Mutex::new(file), paths: Mutex::new(saved.paths.into_iter().take(KEEP).collect()) }
     }
 
     /// The files, latest first.
@@ -59,9 +60,12 @@ impl RecentFiles {
     }
 
     /// Changes the list by `change` and keeps it on disk if it changed.
-    /// Called by the editor's commands, one at a time and off the windows'
-    /// thread; a list that cannot be written is only noted in the log.
+    /// Called off the windows' thread, which reads the list meanwhile; a
+    /// list that cannot be written is only noted in the log.
     fn change(&self, change: impl FnOnce(&mut Vec<String>)) {
+        // Held through the write, so the file ends with the latest list
+        // when the editor and a show starting change it at once.
+        let file = self.file.lock().unwrap();
         let paths = {
             let mut paths = self.paths.lock().unwrap();
             let before = paths.clone();
@@ -71,7 +75,7 @@ impl RecentFiles {
             }
             paths.clone()
         };
-        if let Err(e) = self.file.store(&Saved { paths }) {
+        if let Err(e) = file.store(&Saved { paths }) {
             app_log::note(&format!("keeping the recent files: {e}"));
         }
     }
@@ -90,9 +94,9 @@ fn put_first(paths: &[String], path: &str) -> Vec<String> {
     std::iter::once(path).chain(paths.iter().map(String::as_str).filter(|kept| *kept != path)).take(KEEP).map(str::to_owned).collect()
 }
 
-/// The quiz files opened or saved lately, latest first.
+/// The quiz files opened, saved or played lately, latest first.
 #[tauri::command]
-pub fn editor_recent_files(recent: tauri::State<RecentFiles>) -> Vec<String> {
+pub fn recent_files(recent: tauri::State<RecentFiles>) -> Vec<String> {
     recent.paths()
 }
 
