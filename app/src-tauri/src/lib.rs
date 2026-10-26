@@ -406,17 +406,25 @@ async fn start_show_from_file(app: AppHandle, window: Window, picker: Picker) ->
 }
 
 /// Plays the editor's quiz without a journal, so the last real show stays
-/// the one that can be resumed.
+/// the one that can be resumed. It begins at the slide `from`, if given,
+/// in the same step: a jump the editor sent once the show began would
+/// carry the step its window saw in the show before, and be dropped
+/// (`dispatch`).
 #[tauri::command]
-async fn editor_test_run(app: AppHandle, draft: String, quiz: Quiz) -> CmdResult<()> {
+async fn editor_test_run(app: AppHandle, draft: String, quiz: Quiz, from: Option<usize>) -> CmdResult<()> {
     off_ui(move || {
+        if let Some(slide) = from.filter(|&slide| slide >= quiz.slides.len()) {
+            return Err(AppError::NoSuchSlide { slide });
+        }
         // Held until the show serves the draft's media, which the editor then keeps.
         let _editor = editor::lock(&app);
         let root = editor::draft_root(&app, &draft)?;
         quiz_file::check_playable(&quiz, &root)?;
         let mut inner = lock_for_new_show(&app)?;
         inner.media_root = Some(root);
-        begin_show(&app, &mut inner, Game::new(quiz), None)
+        begin_show(&app, &mut inner, Game::new(quiz), None)?;
+        // A slide of the quiz, from the lobby: the jump is never refused.
+        from.map_or(Ok(()), |slide| execute_at(&app, &mut inner, Command::GoTo { slide }, now_ms()).map(drop))
     })
     .await
 }
@@ -534,18 +542,34 @@ fn may_give(window: &str, command: &Command) -> bool {
     }
 }
 
+/// A window's command that moves the show on was meant for the step it
+/// showed (`seen`, `Game::step_no`), and the show has taken another since.
+fn step_gone(game: Option<&Game>, seen: Option<u32>) -> bool {
+    seen.is_some_and(|step| game.is_some_and(|game| game.step_no() != step))
+}
+
+/// Runs a window's `command`. One meant for a step the show has left
+/// (`step_gone`) is dropped, as the window's step guard drops one sent too
+/// soon, and the window is sent the show as it stands: one that missed a
+/// view (it opened as the step was taken) catches up, so its next press counts.
 #[tauri::command]
-async fn dispatch(app: AppHandle, window: Window, command: Command) -> CmdResult<()> {
+async fn dispatch(app: AppHandle, window: Window, command: Command, seen: Option<u32>) -> CmdResult<()> {
     if !may_give(window.label(), &command) {
         return Err(AppError::NotFromProjector);
     }
     if let Command::Press { buzzer, button } = command {
         return show_thread::press(&app, Press::new(buzzer, button));
     }
-    show_thread::run(&app, move |app, inner, at_ms| match command {
-        // The names a show is given are the prepared ones, also kept on disk.
-        Command::SetTeams { names } => teams::set(app, inner, names, at_ms),
-        command => execute_at(app, inner, command, at_ms).map(drop),
+    show_thread::run(&app, move |app, inner, at_ms| {
+        if step_gone(inner.game.as_ref(), seen) {
+            emit_state(app, inner.game.as_ref());
+            return Ok(());
+        }
+        match command {
+            // The names a show is given are the prepared ones, also kept on disk.
+            Command::SetTeams { names } => teams::set(app, inner, names, at_ms),
+            command => execute_at(app, inner, command, at_ms).map(drop),
+        }
     })
     .await
 }
@@ -700,7 +724,11 @@ mod tests {
 
     /// `journaled_show` for a show begun under `rules_version`.
     fn journaled_show_under(rules_version: u32, root: &Path, commands: Vec<Command>) -> Inner {
-        let quiz = Quiz::from_json(DEMO_QUIZ).unwrap();
+        journaled_show_of(Quiz::from_json(DEMO_QUIZ).unwrap(), rules_version, root, commands)
+    }
+
+    /// `journaled_show_under` for a show of `quiz`.
+    fn journaled_show_of(quiz: Quiz, rules_version: u32, root: &Path, commands: Vec<Command>) -> Inner {
         let meta = SessionMeta { quiz_title: quiz.title.clone(), source_path: None, started_ms: 1, media_root: None, rules_version };
         let session = Session::create(root, &quiz, &meta).unwrap();
         let game = Game::replay(quiz, &[], rules_version);
@@ -784,6 +812,38 @@ mod tests {
         assert_eq!(Game::replay(on_disk.quiz, &on_disk.journal, quiz_core::RULES_VERSION), resumed.game);
         assert_eq!(resumed.game.slide_index(), slide);
         assert_ne!(resumed.game, before, "the question started again");
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn a_step_command_meant_for_a_step_the_show_left_is_dropped() {
+        let quiz = Quiz::from_json(DEMO_QUIZ).unwrap();
+        let journal: Vec<Stamped> = up_to_the_first_question().into_iter().map(|command| Stamped { at_ms: 1_000, command }).collect();
+        let game = Game::replay(quiz, &journal, quiz_core::RULES_VERSION);
+        let now = game.step_no();
+        assert!(!step_gone(Some(&game), Some(now)));
+        assert!(step_gone(Some(&game), Some(now - 1)), "meant for the step before");
+        assert!(!step_gone(Some(&game), None), "a command that does not move the show on");
+        assert!(!step_gone(None, Some(now)), "no show: the command is refused as before");
+    }
+
+    #[test]
+    fn a_show_that_stopped_during_the_wait_resumes_holding_the_step() {
+        let root = sessions_dir("wait");
+        let mut quiz = Quiz::from_json(DEMO_QUIZ).unwrap();
+        quiz.settings = quiz_core::QuizSettings { all_answered: quiz_core::AllAnswered::NextSlide, all_answered_delay_s: 3 };
+        let mut commands = up_to_the_first_question();
+        commands.push(Command::Press { buzzer: 2, button: quiz_core::Button::C });
+        let before = journaled_show_of(quiz, quiz_core::RULES_VERSION, &root, commands).game.unwrap();
+        assert!(before.view(7_000).auto_step.is_some(), "the step was on its way");
+
+        let resumed = resume_show(&root, 60_000, &[]).unwrap();
+        // The question waits for the quizmaster, and the hold is on disk.
+        let on_disk = Session::resume_latest(&root).unwrap().unwrap();
+        assert_eq!(on_disk.journal.last(), Some(&Stamped { at_ms: 60_000, command: Command::PauseClock }));
+        assert_eq!(Game::replay(on_disk.quiz, &on_disk.journal, quiz_core::RULES_VERSION), resumed.game);
+        assert_eq!((resumed.game.slide_index(), resumed.game.phase()), (before.slide_index(), before.phase()));
+        assert_eq!(resumed.game.due_command(60_000), None);
         std::fs::remove_dir_all(&root).unwrap();
     }
 

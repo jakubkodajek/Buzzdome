@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState, type ReactNode } from "react";
 import { api } from "../api";
-import { AppProvider, useApp, useDispatch, useRun } from "../app-context";
+import { AppProvider, useApp, useDispatch, useRun, useStepShown } from "../app-context";
 import { playerLevel } from "../audio/clip-player";
 import { playCue } from "../audio/cues";
 import { useSlideSound, type SlideSound } from "../audio/slide-sound";
@@ -43,7 +43,7 @@ import { phaseLabel } from "../phase";
 import { quizPicker, slideContext } from "../quiz";
 import { ThemeContext, ThemesProvider, useResolvedTheme, useThemes } from "../theme/context";
 import { isThemeMissing } from "../theme/themes";
-import type { GameView, Quiz } from "../types";
+import type { AutoStepView, GameView, Quiz } from "../types";
 import { QuestionsTab } from "./QuestionsTab";
 import { ReceiverTab } from "./ReceiverTab";
 import { MediaPlayerTab } from "./MediaPlayerTab";
@@ -131,6 +131,7 @@ function DirectorLayout({ testRun, onEditor }: { testRun: boolean; onEditor: () 
   const theme = useResolvedTheme(quiz?.theme ?? null);
   const projector = useProjectorSettings();
   const [tab, setTab] = useState<Tab>("questions");
+  useStepShown(view);
   useShortcuts(view, projector.toggle);
   // Sounds play here: this window is open for the whole show, the projector may not be.
   const level = playerLevel(usePlayerVolume());
@@ -243,6 +244,21 @@ function CommandButton(props: { icon: ReactNode; label: string; hint?: string; t
   );
 }
 
+/**
+ * The step the show takes by itself once everyone answered, with a bar
+ * that runs out when it comes; the quizmaster can take a step first or
+ * hold it.
+ */
+function AutoStepNote({ step }: { step: AutoStepView }) {
+  const { t } = useApp();
+  return (
+    <div className="auto-step" role="status">
+      {t(step.action === "nextSlide" ? "autoStepNextSlide" : "autoStepReveal")}
+      <span key={step.inMs} className="auto-step-bar" style={{ animationDuration: `${step.inMs}ms` }} />
+    </div>
+  );
+}
+
 /** Left command area: only the commands that make sense right now. */
 function CommandPanel(props: { view: GameView | null; projector: ProjectorSettings; sound: SlideSound; testRun: boolean; onEditor: () => void }) {
   const { view, projector, sound, testRun, onEditor } = props;
@@ -303,6 +319,7 @@ function CommandPanel(props: { view: GameView | null; projector: ProjectorSettin
         </>
       ) : (
         <>
+          {view.autoStep && <AutoStepNote step={view.autoStep} />}
           {controls?.next && <CommandButton icon={<NextIcon />} label={t("next")} hint={hint(KEYS.next)} onClick={() => dispatch({ type: "next" })} />}
           {controls?.judge && (
             <>
@@ -311,7 +328,12 @@ function CommandPanel(props: { view: GameView | null; projector: ProjectorSettin
             </>
           )}
           {controls?.pauseClock && (
-            <CommandButton icon={<PauseIcon />} label={t("pause")} hint={hint(KEYS.clock)} onClick={() => dispatch({ type: "pauseClock" })} />
+            <CommandButton
+              icon={<PauseIcon />}
+              label={t(view.autoStep ? "holdAutoStep" : "pause")}
+              hint={hint(KEYS.clock)}
+              onClick={() => dispatch({ type: "pauseClock" })}
+            />
           )}
           {controls?.resumeClock && (
             <CommandButton icon={<PlayIcon />} label={t("resumeClock")} hint={hint(KEYS.clock)} onClick={() => dispatch({ type: "resumeClock" })} />

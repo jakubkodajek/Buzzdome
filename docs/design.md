@@ -81,6 +81,17 @@ draws slides without a show.
   see the new step, so a double press never runs the step after the one on
   screen, however long the journal write took. Presses and score changes are never dropped,
   nor is Restart question, which the quizmaster confirms first.
+  A step command also carries the step the window shows (`GameView.stepNo`,
+  `Game::step_no`, counted in `Game::apply` by `same_step`), and `dispatch`
+  drops it, as the guard would, when the show has taken another step since:
+  a press made as time ran out, a player buzzed in, the show took a step
+  by itself or another window took one, before this window showed it, is
+  not run on the step after. Pausing or resuming the clock and the
+  leaderboard are no steps; another buzzer buzzing in is. A dropped
+  command also sends that window the show as it stands, so a window that
+  missed a view is not left sending stale steps; and a window loads its
+  first view only once it listens for the next (`useReceivedValue`), so a
+  step taken as it opens is not missed.
   Show keys count as typing only in text fields: after the quizmaster
   touched a slider, checkbox or list, the keys still work, and a slider
   lets go of the focus when released.
@@ -115,8 +126,9 @@ draws slides without a show.
   the wall clock once when the app starts and counts on from a monotonic
   clock, so the system setting its clock mid-show (say, on joining the
   venue's network) neither freezes the countdown nor ends a question early.
-  The show thread (`show_thread.rs`) applies due timer commands (time up)
-  and otherwise sends `clock-tick` with the core's `ClockView`. The UI never
+  The show thread (`show_thread.rs`) applies due timer commands (time up,
+  and the step the quiz's settings take once everyone answered) and
+  otherwise sends `clock-tick` with the core's `ClockView`. The UI never
   reads the wall clock: what plays counts on from the show clock it heard,
   by one monotonic clock (`showClockNow` and `msSinceHeard` in
   `media-player.ts`; ESLint refuses other clock reads anywhere in the UI,
@@ -542,8 +554,11 @@ table view toggle. It edits a quiz; it never touches a running show.
   language and the sample sheet.
 - **Test run.** F5 (from the start) and Shift+F5 (from the selected slide)
   start a show of the draft with keyboard and on-screen buzzers. The
-  Director shows a test run badge and "Back to the editor" ends the show
-  and returns. A quiz with problems opens the File page instead.
+  backend begins it at the selected slide in the same call
+  (`editor_test_run`), as no window has seen the new show yet to send the
+  jump for (one step per press). The Director shows a test run badge and
+  "Back to the editor" ends the show and returns. A quiz with problems
+  opens the File page instead.
 
 ### 1.4 Themes
 
@@ -725,6 +740,26 @@ packages users will install are read the same way.
   not answered closes the question. A player switched off cannot answer;
   one switched on mid-question can, unless they already answered or were
   locked out.
+- **Everyone answered (QZ-11).** A question that closed for having nobody
+  left to answer notes when (`Game::all_answered_at`), and the quiz's
+  `settings.allAnswered` decides what follows: wait for Next, as before,
+  or after `allAnsweredDelayS` the step Next would take (the reveal) or the
+  jump to the slide Next would go on to (`GoTo`, or `GoToFinal` past the
+  last). `Game::pending_step` says which and when; `due_command` issues it
+  through the show thread like time up, so it is journaled and a replay
+  ends where the show did, and `GameView::auto_step` shows it coming in the
+  Director with a bar that runs out in CSS. The quizmaster's Next leaves
+  the closed step first, and `PauseClock` holds the step (the Director
+  calls it Hold): the question then waits for Next. Opening the
+  leaderboard and playing the slide's video again hold it as well, since
+  the quizmaster has taken over, and a show resumed after a crash holds it
+  (`recovery_command`), so the quizmaster first sees where it stands. A question closed by
+  time up or by the quizmaster has no `all_answered_at` and always waits.
+  The settings come with the quiz the session keeps, so a resumed show
+  goes on with them; no rules version is needed, as a quiz without them
+  plays as before. Space pressed as the reveal comes is meant for the step
+  before and is dropped (one step per press, above), so it does not also
+  leave the slide.
 - **Ranking.** `Game::ranking` orders the players switched on by score,
   then by the time their right answers took together (`total_answer_ms`,
   less first); wrong answers add no time, so not answering never helps.
@@ -1155,7 +1190,10 @@ A show that stopped mid-question has its question restarted
 (`Game::recovery_command` gives `RestartQuestion`, which takes the
 question's score changes back, so a wrong answer before the crash is not
 charged twice), and that command is journaled before `show-changed`
-reaches the windows, so no window shows the stopped question. The
+reaches the windows, so no window shows the stopped question. One that
+stopped while a step was coming by itself (QZ-11) has the step held
+(`PauseClock`): the clock reads later after a restart, so the step would
+otherwise come at once, before the quizmaster saw where the show stands. The
 quizmaster can restart a question in play too (Restart question, after a
 confirmation): it is the way to leave a question without scoring it, since
 a jump is refused then. Its score changes and answering times are taken

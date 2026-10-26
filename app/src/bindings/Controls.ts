@@ -8,7 +8,11 @@ export type Controls = { next: boolean,
 /**
  * `JudgeRight` and `JudgeWrong`.
  */
-judge: boolean, pauseClock: boolean, resumeClock: boolean, closeQuestion: boolean, playVideo: boolean, 
+judge: boolean, 
+/**
+ * `PauseClock`: also while the show waits to take a step by itself.
+ */
+pauseClock: boolean, resumeClock: boolean, closeQuestion: boolean, playVideo: boolean, 
 /**
  * `GoTo` and `GoToFinal`: not while a question is in play.
  */

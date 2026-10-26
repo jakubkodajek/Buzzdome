@@ -41,11 +41,22 @@ not code-signed yet:
 
 ## Development
 
-Needs Rust (stable) and Node.js.
+Needs Rust (the release in `rust-toolchain.toml`, which rustup fetches by
+itself) and Node.js 22.
+
+On Windows, install first: Git for Windows, Rust with rustup (the MSVC
+toolchain), Node.js 22 and the Microsoft C++ Build Tools with "Desktop
+development with C++". WebView2 comes with Windows 11 and with Windows 10
+from version 1803. The buzzer receiver's USB cable is a HID device and
+needs no driver.
+`npm run tauri build` makes both an `.exe` (NSIS) and an `.msi` installer;
+if the MSI step fails with `light.exe`, turn on VBSCRIPT under Settings >
+Apps > Optional features, or build only the `.exe` with
+`npm run tauri build -- --bundles nsis`.
 
 ```sh
 cd app
-npm install
+npm ci
 npm run tauri dev      # run the app
 cd .. && cargo test --workspace
 cargo run -p buzzers --example hid-monitor   # list HID devices, print receiver reports

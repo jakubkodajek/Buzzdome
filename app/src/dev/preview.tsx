@@ -155,6 +155,8 @@ function view(partial: Partial<GameView>): GameView {
     controls: { ...NO_CONTROLS, next: true, goTo: true },
     onHold: false,
     videoPlays: 0,
+    stepNo: 0,
+    autoStep: null,
     ...partial,
   };
   return { ...shown, answerShares: answerShares(shown.slide) };
@@ -288,6 +290,7 @@ const SCENES: Record<string, GameView | null> = {
     slide: { ...quiz.slides[0], video: { ...VIDEO, autoplay: false, effect: null } },
     controls: { ...NO_CONTROLS, next: true, playVideo: true, goTo: true },
     videoPlays: 1,
+    autoStep: null,
   }),
   brokenBackground: view({ phase: { phase: "billboard" }, slideIndex: 0, slide: { ...quiz.slides[0], background: { ...BACKGROUND, file: "media/missing.png" } } }),
   styled: view({ slide: { ...quiz.slides[1], style: STYLE } }),

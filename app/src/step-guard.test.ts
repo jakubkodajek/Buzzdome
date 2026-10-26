@@ -7,13 +7,15 @@ function guarded() {
   let ms = 1_000;
   const guard = createStepGuard(() => ms);
   const sent: Command["type"][] = [];
+  const seen: (number | null)[] = [];
   const answers: (() => void)[] = [];
   const send = (command: Command) =>
-    guard.send(command, () => {
+    guard.send(command, (step) => {
       sent.push(command.type);
+      seen.push(step);
       return new Promise<void>((resolve) => answers.push(resolve));
     });
-  return { send, sent, answer: () => answers.shift()?.(), wait: (by: number) => (ms += by) };
+  return { send, sent, seen, answer: () => answers.shift()?.(), wait: (by: number) => (ms += by), shown: (step = 1) => guard.shown(step) };
 }
 
 describe("step guard", () => {
@@ -52,6 +54,27 @@ describe("step guard", () => {
     show.wait(STEP_PAUSE_MS);
     expect(show.send({ type: "next" })).not.toBeNull();
     expect(show.sent).toEqual(["next", "next"]);
+  });
+
+  it("drops a step sent right after one the show took by itself, meant for the step before", () => {
+    const show = guarded();
+    show.shown();
+    expect(show.send({ type: "next" })).toBeNull();
+    show.wait(STEP_PAUSE_MS);
+    expect(show.send({ type: "next" })).not.toBeNull();
+    expect(show.sent).toEqual(["next"]);
+  });
+
+  it("sends a step with the step on screen, so the show drops it once it took another", async () => {
+    const show = guarded();
+    const first = show.send({ type: "next" });
+    show.shown(7);
+    show.answer();
+    await first;
+    show.wait(STEP_PAUSE_MS);
+    show.send({ type: "next" });
+    show.send({ type: "press", buzzer: 1, button: "a" });
+    expect(show.seen).toEqual([null, 7, null]);
   });
 
   it("lets presses and score changes through at any rate", () => {

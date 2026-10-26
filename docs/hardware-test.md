@@ -22,7 +22,8 @@ Takes about two hours with four buzzers, most of it on section 6.
   installs beside Quiz Show rather than over it, and both would write the
   same show journal. Buzzdome itself runs once (starting it again brings the
   running Director forward), but an old Quiz Show does not step aside.
-- The vendor's quiz software closed: only one program can open the receiver.
+- The vendor's quiz software closed: it can open the cable at the same time
+  as the app, and both would set up the receiver and drive the lights.
 - A phone that films in slow motion helps with step 6 of section 6.
 
 ## 1. Identify
@@ -153,6 +154,15 @@ not go as expected; whatever happens, go on and export the log at the end
    kept counting from its last colour change. Note it if a later test
    differs. (Ping `86`, which a heartbeat would use, is not sent by this
    build.)
+10. **Battery.** No message carried a battery level on 2026-10-25
+    (specification BZ-14): no byte of a press differed between the two
+    buzzers but the buzzer and the two timers, and the receiver sent
+    nothing unasked in 7.5 idle minutes. Nobody knew which buzzer was the
+    more charged, though, and the second hex digit of the button byte read
+    `C` on every press. With a buzzer nearly flat, run
+    `cargo run -p buzzers --example hid-monitor -- 10c4:1819` (end of this
+    file), press A a few times on it and on a full one, and note it if
+    that digit, or any byte but the buzzer and the timers, differs.
 
 ## 4. Record raw reports
 
@@ -385,8 +395,9 @@ Attach to the project thread:
 - the VID:PID, usage and interface of the receiver row;
 - with the Enjoy 303S: the notes from sections 3, 6 and 7, above all the
   big button, other buttons, the colour byte of a press, the timer
-  readings, the two-at-once presses, how the lights looked, and what the
-  receiver did when its power or RJ45 plug went;
+  readings, the two-at-once presses, how the lights looked, what the
+  receiver did when its power or RJ45 plug went, and the battery lines
+  of section 3, step 10;
 - the exported log files from sections 4 and 5;
 - the result of the release smoke check (section 8);
 - what failed, with the exact message.
@@ -397,7 +408,10 @@ protocol for it would be written from (specification BZ-5, BZ-10).
 
 ## Without the app
 
-The same raw reports can be printed from a terminal on any machine with Rust:
+The same raw reports can be printed from a terminal on any machine with
+Rust. Close Buzzdome and the vendor's software first: either can open the
+cable at the same time as `hid-monitor`, and both would set up the receiver
+and drive the lights.
 
 ```sh
 cargo run -p buzzers --example hid-monitor                      # list devices

@@ -6,6 +6,7 @@ use crate::media::{
     check_reference, Background, MediaIssue, MediaKind, Playback, SoundClip, SoundStart, VideoClip, BACKGROUND_KINDS, MAX_GAIN_DB,
     MAX_INTRO_PAUSE_MS, MAX_REPLAY_DELAY_MS, MAX_VIDEO_SPEED, MIN_GAIN_DB, MIN_VIDEO_SPEED,
 };
+use crate::settings::QuizSettings;
 use crate::style::SlideStyle;
 use crate::text::file_key;
 use crate::theme::is_theme_id;
@@ -21,8 +22,9 @@ use ts_rs::TS;
 /// later within 4, video options and slide styles (builds before drop them
 /// when they save). 5: a question may have several correct answers, each
 /// with its share of the points (`correct` becomes a list); later within 5,
-/// categories (builds before drop them when they save). Older files read
-/// unchanged (`migrate`).
+/// categories (builds before drop them when they save), and later still the
+/// quiz's settings (builds before play as with the defaults and drop them
+/// when they save). Older files read unchanged (`migrate`).
 pub const SCHEMA_VERSION: u32 = 5;
 
 /// Most answers a question can show (A-F, as many as the reference app's
@@ -63,6 +65,10 @@ pub struct Quiz {
     /// Named looks the slides can take on (spec QZ-10).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub categories: Vec<Category>,
+    /// How the show runs (spec QZ-11). Left out when every setting is its default.
+    #[serde(default, skip_serializing_if = "QuizSettings::is_default", with = "crate::style::lenient_or_default")]
+    #[ts(as = "Option<QuizSettings>", optional)]
+    pub settings: QuizSettings,
 }
 
 /// A `theme` that is not a theme id (see `is_theme_id`), a text or not,
@@ -661,7 +667,7 @@ fn migrate(quiz: &mut serde_json::Value, version: u64) {
 impl Quiz {
     /// A quiz of the current schema version in the default look.
     pub fn new(title: impl Into<String>, slides: Vec<Slide>) -> Quiz {
-        Quiz { schema_version: SCHEMA_VERSION, title: title.into(), theme: None, slides, categories: Vec::new() }
+        Quiz { schema_version: SCHEMA_VERSION, title: title.into(), theme: None, slides, categories: Vec::new(), settings: QuizSettings::default() }
     }
 
     /// Reads a quiz, leaving out what it cannot keep (see `ReadQuiz::dropped`).

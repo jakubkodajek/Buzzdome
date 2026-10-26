@@ -3,7 +3,8 @@ use quiz_core::{
     SlideContent, Stamped, VideoClip, team_names, FULL_SHARE, MAX_NAME_CHARS, MAX_TEAMS, PRESS_GRACE_MS, RULES_VERSION,
 };
 use quiz_core::game::FINAL_LAST_STEP;
-use quiz_core::view::AnswerResults;
+use quiz_core::view::{AnswerResults, AutoStepView};
+use quiz_core::{AllAnswered, AutoStep, QuizSettings};
 
 /// A question; a fastest-finger one is answered aloud, so the big button
 /// buzzes in (`a_fastest_finger_question_with_answers_a_to_d_buzzes_with_them`).
@@ -1368,4 +1369,224 @@ fn a_name_is_the_same_however_its_accents_are_encoded() {
     show.run(0, Command::RenamePlayer { buzzer: 2, name: "žluťoučký".into() }).unwrap();
     let players: Vec<&str> = show.game.players().map(|p| p.name.as_str()).collect();
     assert_eq!(players, ["", "žluťoučký"], "the name moved to the other buzzer");
+}
+
+/// A show of `slides` whose quiz takes `all_answered` after `delay_s`.
+fn show_with(slides: Vec<Slide>, all_answered: AllAnswered, delay_s: u8) -> Show {
+    let quiz = Quiz { settings: QuizSettings { all_answered, all_answered_delay_s: delay_s }, ..quiz(slides) };
+    Show { game: Game::new(quiz), journal: Vec::new() }
+}
+
+/// Two players, and the first slide's question running from 2 s.
+fn running(mut show: Show) -> Show {
+    show.press(0, 1, Button::Big);
+    show.press(0, 2, Button::Big);
+    show.run(1_000, Command::Next).unwrap();
+    show.run(2_000, Command::Next).unwrap();
+    show
+}
+
+/// Applies the command due at `now`, as the app's show thread does.
+fn run_due(show: &mut Show, now: u64) {
+    let due = show.game.due_command(now).expect("a command is due");
+    show.run(now, due).unwrap();
+}
+
+#[test]
+fn by_default_a_question_everyone_answered_waits_for_next() {
+    let mut show = running(Show::new(vec![question("q1", AnswerMode::Everyone)]));
+    show.press(3_000, 1, Button::B);
+    show.press(4_000, 2, Button::A);
+    assert_eq!(step(&show.game), QuestionStep::Closed);
+    assert_eq!(show.game.due_command(60_000), None);
+    assert_eq!(show.game.view(60_000).auto_step, None);
+    assert!(!show.game.controls().pause_clock);
+}
+
+#[test]
+fn once_everyone_answered_the_answer_is_shown_after_the_wait() {
+    let mut show = running(show_with(vec![question("q1", AnswerMode::Everyone)], AllAnswered::Reveal, 3));
+    show.press(3_000, 1, Button::B);
+    assert_eq!(show.game.due_command(3_500), None, "one player has yet to answer");
+    show.press(4_000, 2, Button::A);
+    assert_eq!(step(&show.game), QuestionStep::Closed);
+    assert_eq!(show.game.view(5_000).auto_step, Some(AutoStepView { action: AutoStep::Reveal, in_ms: 2_000 }));
+    assert!(show.game.controls().pause_clock, "the quizmaster can hold it");
+    assert_eq!(show.game.due_command(6_999), None);
+    assert_eq!(show.game.due_command(7_000), Some(Command::Next));
+    run_due(&mut show, 7_000);
+    assert_eq!(step(&show.game), QuestionStep::Revealed { winner: None });
+    assert_eq!(show.game.due_command(60_000), None, "the next slide waits for the quizmaster");
+    assert_eq!(show.game.view(60_000).auto_step, None);
+
+    // The step is journaled, so the show replays to the same place.
+    let replayed = Game::replay(show.game.quiz().clone(), &show.journal, RULES_VERSION);
+    assert_eq!(replayed.phase(), show.game.phase());
+}
+
+#[test]
+fn once_everyone_answered_the_show_goes_on_without_the_answer() {
+    let slides = vec![question("q1", AnswerMode::Everyone), question("q2", AnswerMode::Everyone)];
+    let mut show = running(show_with(slides, AllAnswered::NextSlide, 0));
+    show.press(3_000, 1, Button::B);
+    show.press(4_000, 2, Button::A);
+    let scores = (show.score(1), show.score(2));
+    assert_eq!(show.game.due_command(4_000), Some(Command::GoTo { slide: 1 }), "no wait");
+    run_due(&mut show, 4_000);
+    assert_eq!((show.game.slide_index(), step(&show.game)), (1, QuestionStep::Ready));
+    assert_eq!((show.score(1), show.score(2)), scores, "the question was scored when it closed");
+
+    // From the last slide, on to the final ranking as Next goes.
+    show.run(5_000, Command::Next).unwrap();
+    show.press(6_000, 1, Button::B);
+    show.press(6_000, 2, Button::B);
+    assert_eq!(show.game.due_command(6_000), Some(Command::GoToFinal));
+    run_due(&mut show, 6_000);
+    assert_eq!(show.game.phase(), &Phase::Final { step: 0 });
+}
+
+#[test]
+fn the_quizmaster_can_step_in_or_hold_the_step_while_it_waits() {
+    let answered = |show: &mut Show| {
+        show.press(3_000, 1, Button::B);
+        show.press(4_000, 2, Button::A);
+    };
+    // Next first: the answer shows now, and nothing more happens by itself.
+    let mut show = running(show_with(vec![question("q1", AnswerMode::Everyone)], AllAnswered::NextSlide, 5));
+    answered(&mut show);
+    show.run(5_000, Command::Next).unwrap();
+    assert_eq!(step(&show.game), QuestionStep::Revealed { winner: None });
+    assert_eq!(show.game.due_command(60_000), None);
+
+    // Held: the question waits for Next, as without the setting.
+    let mut show = running(show_with(vec![question("q1", AnswerMode::Everyone)], AllAnswered::Reveal, 5));
+    answered(&mut show);
+    show.run(5_000, Command::PauseClock).unwrap();
+    assert_eq!(show.game.due_command(60_000), None);
+    assert_eq!(show.game.view(5_000).auto_step, None);
+    assert!(!show.game.controls().pause_clock);
+    assert_eq!(show.run(6_000, Command::PauseClock), Err(GameError::NotNow), "held once");
+    let replayed = Game::replay(show.game.quiz().clone(), &show.journal, RULES_VERSION);
+    assert_eq!(replayed.due_command(60_000), None, "the hold is journaled");
+}
+
+#[test]
+fn a_question_closed_by_time_up_or_by_the_quizmaster_waits_for_next() {
+    let mut show = running(show_with(vec![question("q1", AnswerMode::Everyone)], AllAnswered::Reveal, 0));
+    show.press(3_000, 1, Button::B);
+    run_due(&mut show, 12_000 + PRESS_GRACE_MS);
+    assert_eq!(step(&show.game), QuestionStep::Closed);
+    assert_eq!(show.game.due_command(60_000), None);
+
+    let mut show = running(show_with(vec![question("q1", AnswerMode::Everyone)], AllAnswered::Reveal, 0));
+    show.run(3_000, Command::CloseQuestion).unwrap();
+    assert_eq!(show.game.due_command(60_000), None);
+}
+
+#[test]
+fn everyone_answered_counts_also_when_the_last_one_is_switched_off_or_all_buzzed_wrong() {
+    let mut show = running(show_with(vec![question("q1", AnswerMode::Everyone)], AllAnswered::Reveal, 1));
+    show.press(3_000, 1, Button::B);
+    show.run(4_000, Command::SetPlayerEnabled { buzzer: 2, enabled: false }).unwrap();
+    assert_eq!(show.game.due_command(5_000), Some(Command::Next));
+
+    let mut show = running(show_with(vec![question("q1", AnswerMode::FastestFinger)], AllAnswered::Reveal, 1));
+    for (at, buzzer) in [(3_000, 1), (4_000, 2)] {
+        show.press(at, buzzer, Button::Big);
+        show.run(at + 500, Command::JudgeWrong).unwrap();
+    }
+    assert_eq!(step(&show.game), QuestionStep::Closed);
+    assert_eq!(show.game.due_command(5_499), None);
+    assert_eq!(show.game.due_command(5_500), Some(Command::Next));
+}
+
+/// `show` with every player having answered the running question by 4 s.
+fn everyone_answered(mut show: Show) -> Show {
+    show.press(3_000, 1, Button::B);
+    show.press(4_000, 2, Button::A);
+    show
+}
+
+#[test]
+fn the_leaderboard_or_the_video_holds_the_step() {
+    // The quizmaster opened the leaderboard: the step waits for their Next.
+    let slides = vec![question("q1", AnswerMode::Everyone), question("q2", AnswerMode::Everyone)];
+    let mut show = everyone_answered(running(show_with(slides, AllAnswered::NextSlide, 3)));
+    show.run(5_000, Command::ShowLeaderboard { visible: true }).unwrap();
+    assert_eq!(show.game.due_command(60_000), None);
+    assert_eq!(show.game.view(5_000).auto_step, None);
+    show.run(6_000, Command::ShowLeaderboard { visible: false }).unwrap();
+    assert_eq!(show.game.due_command(60_000), None, "held until Next");
+
+    // Hiding a leaderboard is no step of the quizmaster's.
+    let mut show = everyone_answered(running(show_with(vec![question("q1", AnswerMode::Everyone)], AllAnswered::Reveal, 3)));
+    show.run(5_000, Command::ShowLeaderboard { visible: false }).unwrap();
+    assert_eq!(show.game.due_command(7_000), Some(Command::Next));
+
+    // The quizmaster played the question's video again.
+    let mut show = everyone_answered(running(show_with(vec![with_video(question("q1", AnswerMode::Everyone))], AllAnswered::Reveal, 3)));
+    show.run(5_000, Command::PlayVideo).unwrap();
+    assert_eq!(show.game.due_command(60_000), None);
+    let replayed = Game::replay(show.game.quiz().clone(), &show.journal, RULES_VERSION);
+    assert_eq!(replayed.due_command(60_000), None, "the hold replays");
+}
+
+#[test]
+fn a_show_that_stopped_during_the_wait_holds_the_step_when_it_resumes() {
+    let show = everyone_answered(running(show_with(vec![question("q1", AnswerMode::Everyone)], AllAnswered::Reveal, 3)));
+    let mut crashed = Game::replay(show.game.quiz().clone(), &show.journal, RULES_VERSION);
+    assert_eq!(crashed.due_command(60_000), Some(Command::Next), "overdue by the time the show is back");
+    let command = crashed.recovery_command().expect("a pending step needs recovery");
+    assert_eq!(command, Command::PauseClock);
+    crashed.apply(&Stamped { at_ms: 60_000, command }).unwrap();
+    assert_eq!(step(&crashed), QuestionStep::Closed);
+    assert_eq!(crashed.due_command(60_000), None, "waits for the quizmaster's Next");
+    assert_eq!(crashed.recovery_command(), None);
+}
+
+#[test]
+fn enabling_players_who_are_on_starts_no_step() {
+    let slides = vec![question("q1", AnswerMode::FastestFinger), question("q2", AnswerMode::Everyone)];
+    let mut show = running(show_with(slides, AllAnswered::NextSlide, 0));
+    for buzzer in 1..=2 {
+        show.run(3_000, Command::SetPlayerEnabled { buzzer, enabled: true }).unwrap();
+    }
+    assert!(matches!(step(&show.game), QuestionStep::Running { .. }), "still open");
+    assert_eq!(show.game.due_command(3_000), None);
+    assert_eq!(show.game.view(3_000).auto_step, None);
+}
+
+/// Runs `command` and tells whether the show took a new step (`Game::step_no`).
+fn takes_step(show: &mut Show, at_ms: u64, command: Command) -> bool {
+    let before = show.game.step_no();
+    show.run(at_ms, command).unwrap();
+    show.game.step_no() != before
+}
+
+#[test]
+fn the_show_counts_its_steps_as_the_quizmaster_sees_them() {
+    let mut show = Show::new(vec![question("q1", AnswerMode::FastestFinger), question("q2", AnswerMode::Everyone)]);
+    let press = |buzzer, button| Command::Press { buzzer, button };
+    let steps = [
+        (press(1, Button::Big), false), // registers in the lobby
+        (press(2, Button::Big), false),
+        (Command::Next, true), // the question
+        (Command::Next, true), // its clock
+        (Command::PauseClock, false),
+        (Command::ResumeClock, false),
+        (Command::ShowLeaderboard { visible: true }, false),
+        (press(1, Button::Big), true), // buzzed in
+        (Command::JudgeWrong, true),   // the clock runs on
+        (press(2, Button::Big), true), // another buzzer buzzed in
+        (Command::JudgeRight, true),
+        (Command::Next, true), // the next question
+        (Command::Next, true),
+        (press(1, Button::B), false), // one player is still to answer
+        (press(2, Button::A), true),  // closed: everyone answered
+    ];
+    for (n, (command, new_step)) in steps.into_iter().enumerate() {
+        assert_eq!(takes_step(&mut show, 1_000 * n as u64, command.clone()), new_step, "{command:?}");
+    }
+    let replayed = Game::replay(show.game.quiz().clone(), &show.journal, RULES_VERSION);
+    assert_eq!(replayed.step_no(), show.game.step_no());
 }

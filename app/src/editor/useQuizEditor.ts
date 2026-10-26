@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useReducer, useRef, useState, useSyncExternalStore } from "react";
 import { api } from "../api";
-import { useApp, useDispatch, useReport } from "../app-context";
+import { useApp, useReport } from "../app-context";
 import { useLatest } from "../hooks";
 import { mediaPicker, type MediaKind } from "../media";
 import { quizPicker } from "../quiz";
@@ -62,7 +62,6 @@ export function useQuizEditor(onTestRun: () => void): QuizEditor {
   const [state, dispatch] = useReducer(editorReducer, LOADING);
   const status = useSyncExternalStore(drafts.subscribe, drafts.getStatus);
   const report = useLatest(useReport());
-  const dispatchCommand = useDispatch();
   // Kept by the backend, which opens only a recent file in its list.
   const [recentFiles, setRecentFiles] = useState<string[]>([]);
   const readRecentFiles = useCallback(
@@ -216,10 +215,9 @@ export function useQuizEditor(onTestRun: () => void): QuizEditor {
     testRun: (from) =>
       attempt("testRun", async (draftApi) => {
         if (!open) return false;
-        await draftApi.editorTestRun(open.draftId, open.history.present);
-        // The show runs now, whatever happens next: the Director shows it.
+        await draftApi.editorTestRun(open.draftId, open.history.present, from ?? null);
+        // The show runs now: the Director shows it.
         onTestRun();
-        if (from !== undefined) dispatchCommand({ type: "goTo", slide: from });
         return true;
       }),
   };
