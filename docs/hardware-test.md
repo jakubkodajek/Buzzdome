@@ -351,8 +351,8 @@ press that leaves no line under "Raw data", and what came before it.
     everyone-answers question, before every player has answered, press A
     on a buzzer, then B. Expected: the buzzer turns dim white after A, and
     B still counts (the Responses tab shows B). Note whether players need
-    another light while they can still change. Then switch off "Show the
-    right answer" and reveal a question: the projector
+    another light while they can still change. Then switch off "Mark the
+    right answer on the projector" and reveal a question: the projector
     marks nothing, but each buzzer still lights green or red. Note whether
     that should wait for the quizmaster too.
 
