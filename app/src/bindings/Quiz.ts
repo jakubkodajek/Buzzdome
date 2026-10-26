@@ -3,6 +3,7 @@ import type { Category } from "./Category";
 import type { QuizSettings } from "./QuizSettings";
 import type { QuizSounds } from "./QuizSounds";
 import type { Slide } from "./Slide";
+import type { Welcome } from "./Welcome";
 
 export type Quiz = { schemaVersion: number, title: string, 
 /**
@@ -22,4 +23,9 @@ settings?: QuizSettings,
  * What the show sounds like (spec SN-1 to SN-4). Left out when it
  * sounds as the app does.
  */
-sounds?: QuizSounds, };
+sounds?: QuizSounds, 
+/**
+ * The screen the show opens on (spec SF-3). Left out while it is the
+ * default: off, with nothing on it.
+ */
+welcome?: Welcome, };

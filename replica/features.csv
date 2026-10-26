@@ -15,7 +15,7 @@ Players join from a phone browser with a PIN or QR code and a name,player,must,y
 Rejoin after the phone sleeps keeps the same player and score,player,must,yes,skip,"original documents it for bingo cards (§3.4.14.2.2); we need it for every game; desktop scope (2026-10-05): players answer on hardware buzzers, no phones"
 Phone shows the question and the right input for its type,player,must,yes,skip,"§5.2.4.1 question types; desktop scope (2026-10-05): players answer on hardware buzzers, no phones"
 Phone confirms that the answer was received,player,must,yes,skip,"§5.7.8.3 confirmation messages; desktop scope (2026-10-05): players answer on hardware buzzers, no phones; the buzzer's light confirms a press"
-Lobby on the host screen with PIN QR and the joined players,host screen,must,yes,yes,§5.4.2 welcome screen; Q key for the QR code §5.2.3; clone: buzzer numbers appear as they register by a press; no PIN or QR (hardware buzzers)
+Lobby on the host screen with PIN QR and the joined players,host screen,must,yes,yes,§5.4.2 welcome screen; Q key for the QR code §5.2.3; clone: buzzer numbers appear as they register by a press; no PIN or QR (hardware buzzers); an optional welcome screen before it with the quiz's heading logo intro picture or video and footer (SF-3)
 Question screen with clock answered count and points available,host screen,must,yes,yes,§5.4.5 information panel
 Reveal the correct answer after a question,host screen,must,yes,yes,§4.7 end-of-question actions; clone: the projector can also leave it unmarked (spec QZ-11)
 Fastest-finger buzz bar with name and a big right or wrong verdict,host screen,must,yes,partial,"§5.4.5.1; clone: name, answer letter and the points won or lost; no big verdict"

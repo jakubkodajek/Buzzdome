@@ -39,6 +39,7 @@ export const MAX_AFTER_REVEAL_DELAY_S = 60;
 export const MAX_JOKERS = 5;
 export const LAST_SECONDS_MS = 5000;
 export const DEFAULT_QUIZ_SOUNDS = {"slots":{},"effectsVolume":100,"musicVolume":50} as const;
+export const DEFAULT_WELCOME = {"on":false,"heading":"","logo":null,"intro":null,"footer":""} as const;
 export const MAX_SOUND_VOLUME = 100;
 export const SOUND_SLOTS = ["clockStart","countdown","buzz","correct","wrong","timeUp","reveal","leaderboard","place","winner","lobbyMusic","betweenMusic","clockMusic","buildUpMusic","winnerMusic"] as const;
 export const EFFECT_SLOTS = ["clockStart","countdown","buzz","correct","wrong","timeUp","reveal","leaderboard","place","winner"] as const;

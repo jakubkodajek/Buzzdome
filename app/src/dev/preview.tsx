@@ -30,6 +30,7 @@ import type {
   SoundClip,
   TimerDesign,
   VideoClip,
+  Welcome,
 } from "../types";
 import "../styles.css";
 import { BUILTIN_THEMES } from "../bindings/BuiltinThemes";
@@ -134,6 +135,9 @@ const STYLE: SlideStyle = {
   answers: { fill: { from: "#FFFFFF", to: "#B8C8D8", kind: "vertical" }, color: "#102030", transparency: 20, align: "left", bold: false },
 };
 
+/** A welcome screen with everything on it. */
+const WELCOME: Welcome = { on: true, heading: "Páteční kvíz", logo: "media/landscape.svg", intro: "media/landscape.svg", footer: "Začínáme ve 20:00, týmy po čtyřech" };
+
 /** A picture behind a slide, with the options a new background gets. */
 const BACKGROUND: Background = { file: "media/landscape.svg", repeat: true, muted: true, sync: false };
 
@@ -162,6 +166,7 @@ function view(partial: Partial<GameView>): GameView {
     autoStep: null,
     settings: DEFAULT_QUIZ_SETTINGS,
     music: null,
+    welcome: null,
     ...partial,
   };
   return { ...shown, answerShares: answerShares(shown.slide) };
@@ -189,6 +194,10 @@ const SCENES: Record<string, GameView | null> = {
       { name: "Sovy", buzzer: null },
     ],
   }),
+  // The screen the show opens on: the logo by the heading, the intro picture, the footer.
+  welcome: view({ phase: { phase: "welcome" }, slide: null, welcome: WELCOME }),
+  // The same with the intro video, looping without its sound.
+  welcomeVideo: view({ phase: { phase: "welcome" }, slide: null, welcome: { ...WELCOME, intro: VIDEO.file } }),
   billboard: view({ phase: { phase: "billboard" }, slideIndex: 0, slide: quiz.slides[0] }),
   ready: view({}),
   running: view({

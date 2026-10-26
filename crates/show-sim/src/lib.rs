@@ -110,6 +110,8 @@ pub fn random_quiz(rng: &mut Rng) -> Quiz {
         answer_chart: rng.chance(30),
         jokers: if rng.chance(50) { rng.between(1, u64::from(MAX_JOKERS)) as u8 } else { 0 },
     };
+    // Now and then the show opens on a welcome screen.
+    quiz.welcome.on = rng.chance(30);
     if let Err(errors) = quiz.validate() {
         panic!("the generator wrote a quiz the editor would refuse: {errors:?}");
     }
@@ -411,7 +413,7 @@ impl Show {
         // question that closed before, which comes back with its answer shown, and once the
         // scores were reset.
         let jumped = matches!(command, Command::GoTo { .. } | Command::GoToFinal | Command::RestartQuestion | Command::StartOver | Command::ResetScores);
-        let entered = jumped || before.phase() == &Phase::Lobby || before.slide_index() != self.game.slide_index();
+        let entered = jumped || before.before_slides() || before.slide_index() != self.game.slide_index();
         if entered {
             self.baseline = Some(self.game.players().map(|p| (p.buzzer, i64::from(p.score))).collect());
         } else if let (Some(baselines), Command::AdjustScore { buzzer, delta }) = (&mut self.baseline, command) {

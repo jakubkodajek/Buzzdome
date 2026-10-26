@@ -852,6 +852,17 @@ packages users will install are read the same way.
   are (`Controls::go_to`), so no question's score changes are split by
   them. They only exist in shows played since, so no rules version is
   needed. The Director's buttons for them ask first.
+- **Welcome screen (SF-3).** A quiz with `welcome.on` starts its show in
+  `Phase::Welcome` (`Game::new`), and Next enters `Phase::Lobby`; nothing
+  else leads there, so Start over goes to the registration. The welcome
+  phase is the registration as far as the buzzers, lights and music go
+  (`before_slides`: presses register, `Stage::Lobby`, `lobbyMusic`), and
+  only the projector tells them apart: `GameView::welcome` carries what
+  the screen shows while the show is on it. Quizzes from before have it
+  off, so their shows replay as they were and no rules version is needed.
+  Its logo and intro are the quiz's media like a slide's (`media_files`,
+  `rename_media`, `validate`, the missing-file check), so a quiz whose
+  welcome file is missing or of the wrong kind does not play.
 - **Ranking.** `Game::ranking` orders the players switched on by score,
   then by the time their right answers took together (`total_answer_ms`,
   less first); wrong answers add no time, so not answering never helps.

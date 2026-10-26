@@ -4,6 +4,7 @@ use crate::game::{same_name, BuzzerId, Button, Controls, Game, Phase, QuestionSt
 use crate::model::{AnswerMode, Slide};
 use crate::settings::{AutoStep, QuizSettings};
 use crate::sounds::SoundSlot;
+use crate::welcome::Welcome;
 use serde::Serialize;
 use std::collections::BTreeMap;
 use ts_rs::TS;
@@ -60,6 +61,8 @@ pub struct GameView {
     pub settings: QuizSettings,
     /// The music the show's moment takes (`Game::music`).
     pub music: Option<SoundSlot>,
+    /// What the welcome screen shows, while the show is on it (`Phase::Welcome`).
+    pub welcome: Option<Welcome>,
 }
 
 /// A step the show takes by itself, for the Director to show coming.
@@ -244,6 +247,7 @@ impl Game {
             auto_step: self.pending_step().map(|(action, _, at)| AutoStepView { action, in_ms: at.saturating_sub(now) }),
             settings: self.quiz().settings,
             music: self.music(),
+            welcome: (self.phase() == &Phase::Welcome).then(|| self.quiz().welcome.clone()),
             teams: self
                 .teams()
                 .iter()

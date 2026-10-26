@@ -45,7 +45,8 @@ pub enum SoundSlot {
     /// The final ranking shows the winner.
     Winner,
     // Music, played over and over while the show is at its moment.
-    /// Before the first slide, while the buzzers register.
+    /// Before the first slide: on the welcome screen, and while the
+    /// buzzers register.
     LobbyMusic,
     /// Between questions: on billboards, explanations, the ends of rounds
     /// and the leaderboard, and once a question's answer is shown.
@@ -206,7 +207,7 @@ impl Game {
             return Some(SoundSlot::BetweenMusic);
         }
         match self.phase() {
-            Phase::Lobby => Some(SoundSlot::LobbyMusic),
+            Phase::Welcome | Phase::Lobby => Some(SoundSlot::LobbyMusic),
             Phase::Billboard | Phase::Explanation | Phase::EndOfRound => Some(SoundSlot::BetweenMusic),
             Phase::Question(QuestionStep::Running { clock }) if clock.is_running() => Some(SoundSlot::ClockMusic),
             Phase::Question(QuestionStep::Revealed { .. }) => Some(SoundSlot::BetweenMusic),

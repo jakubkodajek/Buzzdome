@@ -66,12 +66,12 @@ Status keys: `[x]` done, `[~]` in progress, `[ ]` not started.
 - [x] Several right answers per question, each with a share of the points: quiz format v5
 - [x] Categories with a background video, applied from the Design tab and named by a spreadsheet's `CAT` (QZ-10): docs gap item 6
 - [x] Quizzes written by AI assistants: MCP server for Claude Desktop, skill package for chat assistants, `buzzdome-quiz` command line (QZ-12)
-- [~] Show settings: team names (SF-5), the quiz settings (QZ-11: end-of-question steps, clock, answers, projector, answer chart; jokers SF-8) and sounds (SN-1 to SN-3) done; the welcome screen to do
+- [x] Show settings: team names (SF-5), the quiz settings (QZ-11: end-of-question steps, clock, answers, projector, answer chart; jokers SF-8), sounds (SN-1 to SN-3) and the welcome screen (SF-3)
 - [x] Recent quiz files on the Director's start, played in one click (SF-1)
 - [x] Reset scores, or start the show over from registration with the same players and teams (SF-9)
 
 ### M4: Show polish (week 3-4)
-- [~] Sounds (our own library with a choice per event, background music) and the countdown done (SN-1 to SN-3); transitions and branding of the welcome screen to do
+- [~] Sounds (our own library with a choice per event, background music), the countdown (SN-1 to SN-3) and the welcome screen with the quiz's logo, intro and footer (SF-3) done; transitions to do
 - [x] Design templates: twelve built-in themes (colours, fonts, corners, heading case, a background per screen) chosen on the editor's Design tab with live preview
 - [x] Clock designs: ring, bar, digital, hourglass or stopwatch, chosen per question
 - [x] Czech and English UI (switchable in Settings)

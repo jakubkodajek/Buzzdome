@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_QUIZ_SETTINGS, DEFAULT_QUIZ_SOUNDS } from "../bindings/Constants";
+import { DEFAULT_QUIZ_SETTINGS, DEFAULT_QUIZ_SOUNDS, DEFAULT_WELCOME } from "../bindings/Constants";
 import type { Category, Quiz } from "../types";
 import { applyEdit, historyReducer, MERGE_MS, startHistory, UNDO_LIMIT, type History } from "./history";
 import { newSlide, setTextStyle } from "./slides";
@@ -83,6 +83,17 @@ describe("history", () => {
     expect(historyReducer(h, { type: "edit", edit: { type: "setSounds", sounds: { ...louder, slots: { buzz: { builtIn: "buzz.horn" } } } }, at: 0 })).toBe(h);
     h = historyReducer(h, { type: "undo" });
     expect(h.present.sounds).toBeUndefined();
+  });
+
+  it("changes the welcome screen as one undo step, and the default of a quiz without one changes nothing", () => {
+    let h = startHistory(quiz);
+    expect(historyReducer(h, { type: "edit", edit: { type: "setWelcome", welcome: DEFAULT_WELCOME }, at: 0 })).toBe(h);
+    const welcome = { ...DEFAULT_WELCOME, on: true, intro: "media/hall.mp4" };
+    h = historyReducer(h, { type: "edit", edit: { type: "setWelcome", welcome }, at: 0 });
+    expect(h.present.welcome).toEqual(welcome);
+    expect(historyReducer(h, { type: "edit", edit: { type: "setWelcome", welcome: { ...welcome } }, at: 0 })).toBe(h);
+    h = historyReducer(h, { type: "undo" });
+    expect(h.present.welcome).toBeUndefined();
   });
 
   it("applies a batch of edits as one undo step", () => {

@@ -198,6 +198,48 @@
   align-items: center;
   justify-content: center;
   gap: 50px;
+  min-height: 0;
+}
+
+/* The welcome screen the show can open on: the logo by the heading, the intro in the middle. */
+.welcome-screen .welcome-header {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 36px;
+}
+
+.welcome-heading {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.welcome-logo {
+  display: flex;
+  flex: none;
+}
+
+.welcome-logo img {
+  max-width: 360px;
+  max-height: 110px;
+  object-fit: contain;
+}
+
+.welcome-screen .welcome-body {
+  padding: 50px 80px;
+}
+
+.welcome-intro {
+  flex: 1 1 0;
+  width: 100%;
+}
+
+.welcome-screen .welcome-footer {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .register-grid {
@@ -421,7 +463,9 @@
 }
 
 /* The answer chart (quiz setting answerChart): a bar on each answer for
-   the share of the players who gave it, grown in as the answer is shown. */
+   the share of the players who gave it, grown in as the answer is shown.
+   It takes the answer's text colour, which the theme and the slide's style
+   pick to read on the answer. */
 .answer-bar {
   position: absolute;
   left: 24px;
@@ -429,16 +473,24 @@
   bottom: 10px;
   height: 16px;
   border-radius: calc(8px * var(--theme-roundness));
-  background: rgba(255, 255, 255, 0.25);
 }
 
+.answer-bar::before,
 .answer-bar::after {
   content: "";
   position: absolute;
   inset: 0 auto 0 0;
-  width: var(--share);
   border-radius: inherit;
-  background: #fff;
+  background: currentColor;
+}
+
+.answer-bar::before {
+  right: 0;
+  opacity: 0.25;
+}
+
+.answer-bar::after {
+  width: var(--share);
   transform-origin: left;
   animation: answer-bar-grow 0.8s ease-out;
 }
@@ -752,7 +804,8 @@
 
 .slide-media,
 .question-media,
-.explanation-media {
+.explanation-media,
+.welcome-intro {
   position: relative;
   display: flex;
   justify-content: center;
@@ -773,7 +826,9 @@
 .question-media img,
 .question-media video,
 .explanation-media img,
-.explanation-media video {
+.explanation-media video,
+.welcome-intro img,
+.welcome-intro video {
   max-width: 100%;
   max-height: 100%;
   object-fit: contain;

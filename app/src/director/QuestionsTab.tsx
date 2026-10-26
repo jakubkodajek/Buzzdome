@@ -7,6 +7,7 @@ import { SlideThumbnail } from "../host/SlideThumbnail";
 import type { StringKey } from "../i18n";
 import { NextIcon, TrophyIcon, UndoIcon } from "../icons";
 import { mediaFileName } from "../media";
+import { beforeSlides } from "../phase";
 import { readPreference, writePreference } from "../preferences";
 import { rightAnswers, shareOf, SLIDE_TYPE_LABEL, slideContexts, slideTitle, type SlideContext } from "../quiz";
 import { SlideMedia } from "../slide-media";
@@ -27,7 +28,7 @@ export function QuestionsTab({ view, quiz }: { view: GameView; quiz: Quiz | null
   const dispatch = useDispatch();
   const run = useRun();
   // None in the lobby and in the ranking after the last slide.
-  const current = view.phase.phase === "lobby" || view.slideIndex >= view.slideCount ? null : view.slideIndex;
+  const current = beforeSlides(view.phase) || view.slideIndex >= view.slideCount ? null : view.slideIndex;
   // A selection lasts until the show moves on; then the current slide is shown again.
   const [selection, setSelection] = useState<{ slide: number; madeOn: number | null } | null>(null);
   const selected = selection !== null && selection.madeOn === current ? selection.slide : null;
@@ -66,7 +67,7 @@ export function QuestionsTab({ view, quiz }: { view: GameView; quiz: Quiz | null
         <ToolButton icon={<TrophyIcon />} disabled={!jumps || view.phase.phase === "final"} onClick={goToFinal}>
           {t("goToFinal")}
         </ToolButton>
-        <ToolButton icon={<UndoIcon />} disabled={!jumps || view.phase.phase === "lobby"} onClick={startOver}>
+        <ToolButton icon={<UndoIcon />} disabled={!jumps || beforeSlides(view.phase)} onClick={startOver}>
           {t("startOver")}
         </ToolButton>
         <span className="toolbar-separator" />

@@ -473,7 +473,7 @@ async fn editor_test_run(app: AppHandle, draft: String, quiz: Quiz, from: Option
         let mut inner = lock_for_new_show(&app)?;
         inner.media_root = Some(root);
         begin_show(&app, &mut inner, Game::new(quiz), None)?;
-        // A slide of the quiz, from the lobby: the jump is never refused.
+        // A slide of the quiz, from the welcome screen or the lobby: the jump is never refused.
         from.map_or(Ok(()), |slide| execute_at(&app, &mut inner, Command::GoTo { slide }, now_ms()).map(drop))
     })
     .await
