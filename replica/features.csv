@@ -63,7 +63,7 @@ Configurable end-of-question steps,settings,should,yes,partial,"§4.7; clone: wh
 Sounds for countdown correct incorrect and background music,settings,should,yes,yes,"§4.4; we need our own royalty-free sounds; clone: our own synthesized library (31 effects for ten moments, six music loops) or the quiz's own files, chosen per quiz (spec SN-1 to SN-3)"
 Play in groups or teams with group scoring,settings,should,yes,no,§4.2.2.1 and §4.3.2.1 lockout and first/sum/average
 Round scores and round winners,host screen,should,yes,no,§5.4.6 Ctrl+S and §5.4.7 Ctrl+E
-Works without internet on a local network,reliability,should,yes,yes,§4.2.1 local Wi-Fi mode; decide in /replica-architect; clone: a desktop app; needs no network
+Works without internet on a local network,reliability,should,yes,yes,§4.2.1 local Wi-Fi mode; clone: a desktop app; needs no network
 Export results to a spreadsheet,results,should,yes,no,§7.1 Analyzer export
 Reversed leaderboard (lowest first),host screen,could,yes,no,§5.4.6 Shift+S
 Multiple correct answers with correctness percentages,studio,could,yes,yes,§3.4.1.2; clone: several right answers each with a share of the points (quiz format v5)

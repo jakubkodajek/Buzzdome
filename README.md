@@ -199,9 +199,10 @@ and the full design is [`docs/design.md`](docs/design.md).
 
 ## Ground rules
 
-- **Clean room.** Behaviour is rebuilt from our own notes. No code, text,
-  images, sounds or vendor SDK files from third parties go into this
-  repository.
+- **Clean room.** Behaviour is rebuilt from our own notes. Nothing of the
+  reference app (code, text, screenshots, sounds, skins, icons, example
+  quizzes) and no vendor SDK file goes into this repository. Third-party
+  files are bundled only under their own licences (see Licence).
 - **Live shows cannot fail.** State is persisted before it is shown, and
   the app stays usable without buzzer hardware.
 - **English** for code, comments, commits and docs. The UI is Czech by
@@ -210,5 +211,10 @@ and the full design is [`docs/design.md`](docs/design.md).
 ## Licence
 
 This is a private project for the author's own non-profit events. No
-open-source licence is granted. Bundled fonts keep their own licences
-(SIL Open Font License), next to each font in `app/src-tauri/themes/`.
+open-source licence is granted. Bundled third-party files keep their own
+licences:
+
+- the theme fonts, under the SIL Open Font License (`OFL.txt` next to each
+  font in `app/src-tauri/themes/*/fonts/`);
+- the fixture data of the Open Fixture Library, under the MIT licence
+  (`crates/lights/data/`, with `OPEN-FIXTURE-LIBRARY-LICENSE`).

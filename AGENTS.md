@@ -22,6 +22,8 @@ Then read:
 | `buzzdome-hardware` | work on the buzzers, the receiver or the stage lights |
 | `buzzdome-quiz-authoring` | write or check a `.quiz` file from the repository |
 
-Never commit the reference manual copies (`docs/` subfolders,
-`replica/sources/`, `replica/screens/`, all gitignored) or any vendor SDK
-file.
+Never commit the reference manual copies or any vendor SDK file. The
+manual copies are every path `.gitignore` lists for it: `docs/` subfolders,
+`docs/index.md`, `docs/solo.md`, `docs/tips-and-tricks.md`,
+`replica/sources/` and `replica/screens/`. They are not our docs; never
+quote them into ours.

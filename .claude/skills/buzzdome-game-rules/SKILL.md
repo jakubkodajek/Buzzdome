@@ -26,9 +26,13 @@ reference app unless Jakub decided otherwise (`ROADMAP.md`, the spec).
    `self.rules_version`, so a resumed old show plays on under its rules.
 3. Values the UI shows (points, correctness, places) are computed here and
    sent in `GameView`; never recompute them in TypeScript.
-4. Constants the UI needs go to `bindings/Constants.ts` through the
+4. A new `Command` variant (or a new value one can carry) adds its journal
+   line to `crates/quiz-core/tests/journal.rs`; a shipped line never
+   changes. Decide whether the projector may give it: `may_give` in
+   `app/src-tauri/src/lib.rs` and `PROJECTOR_COMMANDS` (tests check both).
+5. Constants the UI needs go to `bindings/Constants.ts` through the
    quiz-core test that writes it; never copy a number into the UI.
-5. Tests: unit tests next to the code, `crates/quiz-core/tests/game_flow.rs`
+6. Tests: unit tests next to the code, `crates/quiz-core/tests/game_flow.rs`
    for a whole show, and teach `crates/show-sim` any new command or slide
    kind so the random shows cover it.
 

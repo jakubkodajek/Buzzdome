@@ -53,10 +53,10 @@ quiz-core (crates/quiz-core)    pure game state machine, rules, scoring, view
 
 | Path | Owns | Notes |
 | --- | --- | --- |
-| `crates/quiz-core` | quiz model (`model.rs`, `SCHEMA_VERSION`), game state machine (`game.rs`, `RULES_VERSION`), view, scoring, themes, styles, spreadsheet rows, stage looks, sound board | Pure. Writes `app/src/bindings` (ts-rs) when tested. |
+| `crates/quiz-core` | quiz model (`model.rs`, `SCHEMA_VERSION`), game state machine (`game.rs`, `RULES_VERSION`), view, scoring, themes, styles, spreadsheet rows, the stage (the show's moment the lights follow, `stage.rs`), sound board | Pure. Writes `app/src/bindings` (ts-rs) when tested. |
 | `crates/quiz-file` | `.quiz` files: ZIP with `quiz.json` and `media/`, unpack cache, atomic save, spreadsheet import and CSV export | Format: `docs/quiz-format.md`. |
 | `crates/buzzers` | `BuzzerDriver` trait, USB-HID receiver thread, protocols (`enjoy303s.rs` over `cp2110.rs`, `learned.rs`), edge filter, fastest-finger timer order, show clock, fake receiver for E2E | Read `replica/hardware.md` and `docs/design.md` §2 first. |
-| `crates/lights` | stage lights: setup checks, looks, desk priority and fades, DMX frame formats, outputs, OSC and MIDI, the lights thread | A view of the show, never journaled (`docs/design.md` §7). |
+| `crates/lights` | stage lights: setup checks, looks (`look.rs`), desk priority and fades, DMX frame formats, outputs, OSC and MIDI, the lights thread | A view of the show, never journaled (`docs/design.md` §7). |
 | `crates/quiz-ai` | quiz writing for AI assistants: JSON Schema, quiz folders, MCP server, skill package, the `buzzdome-quiz` CLI | `docs/ai-assistants.md`. |
 | `crates/show-sim` | random quizzes and shows for soak tests | Used by CI nightly. |
 | `app/src-tauri` | Tauri shell: commands, windows, show thread and event order (`show_thread.rs`, `pump.rs`), journal, editor draft, receiver setup, media player, themes, fonts, lights setup, log, crash drills | Module list in `CLAUDE.md`. |
@@ -132,8 +132,8 @@ load skills can read them as plain checklists.
   slide changes, keys, colours, audio maths).
 - `npm run e2e` in `app/`: the real app driven through `tauri-driver`
   (Linux; Windows on CI only, because it wipes the real app data).
-- UI preview in a browser with a mocked backend:
-  `app/preview.html?window=<director|host>&scene=<name>`
+- UI preview in a browser with a mocked backend: `cd app && npm run dev`,
+  then open `/preview.html?window=<director|host>&scene=<name>`
   (scenes in `app/src/dev/preview.tsx`).
 - CI: `.github/workflows/build.yml` (check, Windows tests, installers),
   `e2e.yml`, `nightly.yml` (30 000 random shows, 10 000 crash drills, E2E
@@ -144,8 +144,12 @@ load skills can read them as plain checklists.
 - **Clean room.** Behaviour is rebuilt from `replica/recon.md` and the
   reference manuals. No code, text, screenshots, sounds, skins, icons or
   example quizzes of the reference app, and no vendor SDK file, go into the
-  repository. The reference manual copies (`docs/` subfolders,
-  `replica/sources/`, `replica/screens/`) are gitignored and must stay so.
+  repository. Third-party files are bundled only under their own licences
+  (OFL fonts in the themes, the Open Fixture Library data in
+  `crates/lights/data/`). The reference manual copies are gitignored and
+  must stay so: every path `.gitignore` lists for the manual (`docs/`
+  subfolders, `docs/index.md`, `docs/solo.md`, `docs/tips-and-tricks.md`,
+  `replica/sources/`, `replica/screens/`). Never quote them into our docs.
 - **No trademarked names** in the product or UI (see `CLAUDE.md`).
 - **Languages.** UI in Czech (default) and English; all code, comments,
   commits and docs in English.
