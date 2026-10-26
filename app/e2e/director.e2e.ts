@@ -19,12 +19,12 @@ afterAll(async () => {
   app?.forget();
 });
 
-const TABS: StringKey[] = ["tabQuestions", "tabTeams", "tabResponses", "tabBuzzers", "tabMedia", "tabReceiver", "tabSettings"];
+const TABS: StringKey[] = ["tabQuestions", "tabTeams", "tabResponses", "tabBuzzers", "tabMedia", "tabReceiver", "tabLights", "tabSettings"];
 
 /**
  * Buttons the crawl leaves alone: they open the system's file picker, which
  * the file tests drive, leave the Director (the editor has its own tests),
- * end the show or the app, or start one.
+ * end the show or the app, start one, or download the fixture library.
  */
 const NOT_CLICKED: (StringKey | { text: string })[] = [
   "openQuiz",
@@ -36,6 +36,8 @@ const NOT_CLICKED: (StringKey | { text: string })[] = [
   "closeAppKeepShow",
   "demoQuiz",
   "resume",
+  "lightsLibraryUpdate",
+  "lightsLibraryReset",
 ];
 
 const player = (view: GameView, buzzer: number) => {

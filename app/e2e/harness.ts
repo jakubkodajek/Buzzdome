@@ -38,7 +38,7 @@ import { Session, WebDriverError, type ElementRef } from "./webdriver";
 export const t = translator("cs");
 
 const WINDOWS = process.platform === "win32";
-const APP = process.env.BUZZDOME_APP ?? fileURLToPath(new URL(`../../target/debug/buzzdome${WINDOWS ? ".exe" : ""}`, import.meta.url));
+export const APP = process.env.BUZZDOME_APP ?? fileURLToPath(new URL(`../../target/debug/buzzdome${WINDOWS ? ".exe" : ""}`, import.meta.url));
 /** Where the app keeps its data on Windows (tauri.conf.json `identifier`, design.md section 3). */
 const WINDOWS_DATA = WINDOWS ? [join(process.env.APPDATA ?? "", "cz.kodajek.quizshow"), join(process.env.LOCALAPPDATA ?? "", "cz.kodajek.quizshow")] : [];
 

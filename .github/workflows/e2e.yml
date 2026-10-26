@@ -69,6 +69,10 @@ jobs:
         working-directory: app
         run: npm run tauri build -- --debug --no-bundle
 
+      # The AI tests drive the quiz command line too (app/e2e/ai.e2e.ts).
+      - name: Build the quiz command line
+        run: cargo build -p quiz-ai --bin buzzdome-quiz
+
       - name: Run the E2E tests
         working-directory: app
         env:
@@ -134,6 +138,10 @@ jobs:
       - name: Build the app
         working-directory: app
         run: npm run tauri build -- --debug --no-bundle
+
+      # The AI tests drive the quiz command line too (app/e2e/ai.e2e.ts).
+      - name: Build the quiz command line
+        run: cargo build -p quiz-ai --bin buzzdome-quiz
 
       # GitHub's Windows runners run elevated, and an elevated WebView2 ignores
       # WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS, through which msedgedriver passes
