@@ -1,7 +1,8 @@
 //! Enjoy 303S RGB buzzers (sold as the Galaxy RGB set), through the REC-A
-//! receiver and its USB-HID cable. Not yet checked on a real receiver:
-//! `docs/hardware-test.md` says what to check, and `docs/design.md` (2.4)
-//! where this description comes from.
+//! receiver and its USB-HID cable. First checked on a real receiver on
+//! 2026-10-25 (Windows 11, buzzers 1 and 2; `docs/design.md` section 6):
+//! `docs/hardware-test.md` says what that left to check, and
+//! `docs/design.md` (2.4) where this description comes from.
 //!
 //! The cable is a CP2110-type bridge (`cp2110`) to the receiver's serial
 //! line, 750000 baud 8N1. A message either way is two header bytes, the
@@ -11,7 +12,7 @@
 //! of 64 colours, and decides who buzzed first. Each press comes with the
 //! colour its buzzer showed and the buzzer's own timer, which counts from
 //! the moment its colour last changed (`Press::timer`, `timer_order`).
-//! Nothing here is checked on a receiver yet: what is unverified says so.
+//! What that first test did not check says so where it matters.
 
 use crate::cp2110;
 use crate::hid::{DeviceInfo, Report};
