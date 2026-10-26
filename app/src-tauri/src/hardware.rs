@@ -13,8 +13,8 @@ use crate::dialogs::{self, Picker};
 use crate::error::{AppError, CmdResult};
 use crate::off_ui;
 use crate::show_thread::ShowEvent;
-use buzzers::learned::{self, LearnedMapping, Recorder};
-use buzzers::protocol::{format_hex, Protocol};
+use buzzers::learned::{LearnedMapping, Recorder};
+use buzzers::protocol::{self, format_hex, Protocol};
 use buzzers::receiver::{self, RawReport, ReceiverConfig, ReceiverEvent, ReceiverHandle, ReceiverStatus};
 use buzzers::Press;
 use quiz_core::{BuzzerId, Button};
@@ -109,7 +109,7 @@ impl Hardware {
 
         let resolver_settings = settings.clone();
         let resolver = Arc::new(move |device: &DeviceInfo| -> Box<dyn Protocol> {
-            learned::protocol_for(&resolver_settings.lock().unwrap().learned, device)
+            protocol::for_device(&resolver_settings.lock().unwrap().learned, device)
         });
         let (handle, _join) = receiver::spawn(backend.clone(), resolver, events, ReceiverConfig::new(clock));
         handle.select(remembered);
@@ -251,6 +251,12 @@ pub fn handle_event(app: &AppHandle, event: ReceiverEvent) {
             // While learning, presses only teach; they must not play.
             let learning = hw.learn.lock().unwrap().is_some();
             let used = !learning && crate::play_press(app, press, at_ms);
+            if !used {
+                // A receiver that locked the others out for it sets the round going again.
+                if let Some(handle) = &hw.handle {
+                    handle.ignored(press);
+                }
+            }
             let _ = app.emit("receiver-press", PressEvent { press, used });
         }
     }
@@ -299,8 +305,10 @@ pub async fn receiver_select(app: AppHandle, device: Option<DeviceInfo>) -> CmdR
 pub async fn receiver_learn_start(app: AppHandle, buzzer: BuzzerId, button: Button) -> CmdResult<()> {
     off_ui(move || {
         let hw = app.state::<Hardware>();
-        if hw.connected_device().is_none() {
-            return Err(AppError::ReceiverNotConnected);
+        match hw.handle.as_ref().map(ReceiverHandle::status) {
+            Some(ReceiverStatus::Connected { learnable: true, .. }) => {}
+            Some(ReceiverStatus::Connected { .. }) => return Err(AppError::ReceiverNotLearnable),
+            _ => return Err(AppError::ReceiverNotConnected),
         }
         // Held until learn mode is on, so no show starts in between; the
         // show's lock comes before the learn lock (`lock_show`).

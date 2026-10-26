@@ -5,15 +5,17 @@
 //!
 //! - [`hid`]: a minimal USB-HID backend trait, implemented with `hidapi` in
 //!   production and with fakes in tests.
-//! - [`protocol`]: turns raw input reports into presses and light commands into
-//!   output reports. Vendor protocols plug in here; until the receiver's protocol
-//!   is documented, [`learned`] maps reports recorded from real presses.
+//! - [`protocol`]: turns raw input reports into presses, and the buzzer mode
+//!   and lights into reports. Vendor protocols plug in here ([`rf215`], over
+//!   the [`cp2110`] bridge); for other receivers, [`learned`] maps reports
+//!   recorded from real presses.
 //! - [`receiver`]: owns one receiver on an I/O thread: connect, read, decode,
-//!   write lights, reconnect after unplugging.
+//!   write the mode and lights, reconnect after unplugging.
 //!
 //! See `docs/design.md` and `replica/hardware.md`.
 
 pub mod clock;
+pub mod cp2110;
 pub mod edge;
 pub mod hid;
 #[cfg(feature = "hidapi")]
@@ -21,8 +23,9 @@ pub mod hidapi_backend;
 pub mod learned;
 pub mod protocol;
 pub mod receiver;
+pub mod rf215;
 
-use quiz_core::{BuzzerId, Button, Light};
+use quiz_core::{BuzzerId, BuzzerMode, Button, Light};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
@@ -49,6 +52,10 @@ pub trait BuzzerDriver: Send {
     fn has_lights(&self) -> bool;
 
     fn set_lights(&mut self, lights: &[(BuzzerId, Light)]) -> Result<(), DriverError>;
+
+    /// Puts the buzzers in `mode`, for receivers that run each round
+    /// themselves.
+    fn set_mode(&mut self, mode: BuzzerMode);
 }
 
 /// Keyboard and on-screen buzzers. Presses are injected by the UI; there are
@@ -68,4 +75,6 @@ impl BuzzerDriver for VirtualDriver {
     fn set_lights(&mut self, _lights: &[(BuzzerId, Light)]) -> Result<(), DriverError> {
         Ok(())
     }
+
+    fn set_mode(&mut self, _mode: BuzzerMode) {}
 }

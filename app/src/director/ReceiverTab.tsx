@@ -62,6 +62,8 @@ export function ReceiverTab() {
   }, [info?.platform, status]);
 
   const connected = status?.kind === "connected" ? status.device : null;
+  // A receiver whose protocol the app knows has nothing to teach.
+  const teaches = status?.kind !== "connected" || status.learnable;
 
   const exportLog = () => run(api.receiverExportLog({ filter: t("textFile"), fileName: "receiver-log" }));
 
@@ -164,59 +166,61 @@ export function ReceiverTab() {
         </table>
       </fieldset>
 
-      <fieldset>
-        <legend>{t("learnTitle")}</legend>
-        <p className="muted">{t("learnHint", { n: info?.learnedButtons ?? 0 })}</p>
-        {learn?.active ? (
-          <div className="row learn-active">
-            <span>{t("learnPress", { button: buttonLabel(learn.button ?? "a"), buzzer: learn.buzzer ?? 0, n: learn.samples })}</span>
-            <button disabled={!learn.canSave} onClick={finishLearn}>
-              {t("learnSave")}
-            </button>
-            <button onClick={() => run(api.receiverLearnCancel())}>{t("learnCancel")}</button>
-          </div>
-        ) : (
-          <div className="row">
-            <label className="inline">
-              {t("learnBuzzer")}
-              <input
-                type="number"
-                min={1}
-                className="narrow"
-                value={buzzer}
-                onChange={(e) => setBuzzer(Math.max(1, Math.floor(Number(e.target.value) || 1)))}
-              />
-            </label>
-            <label className="inline">
-              {t("learnButton")}
-              <select value={button} onChange={(e) => setButton(e.target.value as Button)}>
-                {BUTTONS.map((b) => (
-                  <option key={b} value={b}>
-                    {buttonLabel(b)}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <button
-              disabled={!connected}
-              onClick={() => {
-                setMessage(null);
-                run(api.receiverLearnStart(buzzer, button));
-              }}
-            >
-              {t("learnStart")}
-            </button>
-            <span className="spacer" />
-            <button
-              disabled={!info?.learnedButtons}
-              onClick={() => run(confirmAction(t, t("learnForgetConfirm")).then((yes) => (yes ? api.receiverForgetLearned().then(reload) : undefined)))}
-            >
-              {t("learnForget")}
-            </button>
-          </div>
-        )}
-        {message && <p className="learn-message">{message}</p>}
-      </fieldset>
+      {teaches && (
+        <fieldset>
+          <legend>{t("learnTitle")}</legend>
+          <p className="muted">{t("learnHint", { n: info?.learnedButtons ?? 0 })}</p>
+          {learn?.active ? (
+            <div className="row learn-active">
+              <span>{t("learnPress", { button: buttonLabel(learn.button ?? "a"), buzzer: learn.buzzer ?? 0, n: learn.samples })}</span>
+              <button disabled={!learn.canSave} onClick={finishLearn}>
+                {t("learnSave")}
+              </button>
+              <button onClick={() => run(api.receiverLearnCancel())}>{t("learnCancel")}</button>
+            </div>
+          ) : (
+            <div className="row">
+              <label className="inline">
+                {t("learnBuzzer")}
+                <input
+                  type="number"
+                  min={1}
+                  className="narrow"
+                  value={buzzer}
+                  onChange={(e) => setBuzzer(Math.max(1, Math.floor(Number(e.target.value) || 1)))}
+                />
+              </label>
+              <label className="inline">
+                {t("learnButton")}
+                <select value={button} onChange={(e) => setButton(e.target.value as Button)}>
+                  {BUTTONS.map((b) => (
+                    <option key={b} value={b}>
+                      {buttonLabel(b)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <button
+                disabled={!connected}
+                onClick={() => {
+                  setMessage(null);
+                  run(api.receiverLearnStart(buzzer, button));
+                }}
+              >
+                {t("learnStart")}
+              </button>
+              <span className="spacer" />
+              <button
+                disabled={!info?.learnedButtons}
+                onClick={() => run(confirmAction(t, t("learnForgetConfirm")).then((yes) => (yes ? api.receiverForgetLearned().then(reload) : undefined)))}
+              >
+                {t("learnForget")}
+              </button>
+            </div>
+          )}
+          {message && <p className="learn-message">{message}</p>}
+        </fieldset>
+      )}
 
       <fieldset className="live">
         <legend>{t("liveInput")}</legend>

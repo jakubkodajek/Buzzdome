@@ -76,6 +76,26 @@ pub trait HidDevice: Send {
     fn read_timeout(&mut self, buf: &mut [u8], timeout_ms: i32) -> Result<usize, DriverError>;
     /// Writes one output report. The first byte is the report ID (0 if the device has none).
     fn write(&mut self, data: &[u8]) -> Result<usize, DriverError>;
+    /// Sends one feature report, which sets the device up rather than
+    /// carrying data. The first byte is the report ID.
+    fn send_feature_report(&mut self, data: &[u8]) -> Result<(), DriverError>;
+}
+
+/// A report for the device, whose first byte is the report ID.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Report {
+    Output(Vec<u8>),
+    Feature(Vec<u8>),
+}
+
+impl Report {
+    /// Sends the report to `device`.
+    pub fn send(&self, device: &mut dyn HidDevice) -> Result<(), DriverError> {
+        match self {
+            Report::Output(data) => device.write(data).map(drop),
+            Report::Feature(data) => device.send_feature_report(data),
+        }
+    }
 }
 
 /// udev rule that lets the logged-in user open the receiver on Linux without root.

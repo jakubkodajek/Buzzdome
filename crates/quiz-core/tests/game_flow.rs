@@ -1,5 +1,5 @@
 use quiz_core::{
-    AnswerMode, Button, Command, CorrectAnswer, Cue, Effect, Game, GameError, Light, Phase, Question, QuestionStep, Quiz, Slide,
+    AnswerMode, BuzzerMode, Button, Command, CorrectAnswer, Cue, Effect, Game, GameError, Light, Phase, Question, QuestionStep, Quiz, Slide,
     SlideContent, Stamped, VideoClip, team_names, FULL_SHARE, MAX_NAME_CHARS, MAX_TEAMS, PRESS_GRACE_MS, RULES_VERSION,
 };
 use quiz_core::game::FINAL_LAST_STEP;
@@ -401,6 +401,62 @@ fn fastest_finger_closes_when_everyone_is_locked_out() {
     show.press(1_000, 1, Button::Big);
     show.run(2_000, Command::JudgeWrong).unwrap();
     assert_eq!(step(&show.game), QuestionStep::Closed);
+}
+
+#[test]
+fn the_buzzer_mode_follows_the_steps_of_a_show() {
+    let mut show = Show::new(vec![
+        question("q1", AnswerMode::FastestFinger),
+        question("q2", AnswerMode::Everyone),
+        question("q3", AnswerMode::FastestFinger),
+    ]);
+    let mode = |show: &Show| show.game.buzzer_mode();
+    assert_eq!(mode(&show), BuzzerMode::Register);
+    for b in 1..=3 {
+        show.press(0, b, Button::Big);
+    }
+    show.run(0, Command::Next).unwrap();
+    assert_eq!(mode(&show), BuzzerMode::Off);
+    show.run(1_000, Command::Next).unwrap();
+    assert_eq!(mode(&show), BuzzerMode::FastestFinger);
+    show.press(2_000, 1, Button::Big);
+    assert_eq!(mode(&show), BuzzerMode::Buzzed { buzzer: 1 });
+    show.run(3_000, Command::JudgeWrong).unwrap();
+    assert_eq!(mode(&show), BuzzerMode::FastestFinger);
+    // A second wrong answer goes through a buzz again, so the round goes
+    // on once more.
+    show.press(4_000, 2, Button::Big);
+    assert_eq!(mode(&show), BuzzerMode::Buzzed { buzzer: 2 });
+    show.run(5_000, Command::JudgeWrong).unwrap();
+    assert_eq!(mode(&show), BuzzerMode::FastestFinger);
+    show.press(6_000, 3, Button::Big);
+    show.run(7_000, Command::JudgeRight).unwrap();
+    assert_eq!(mode(&show), BuzzerMode::Results);
+
+    show.run(8_000, Command::Next).unwrap();
+    assert_eq!(mode(&show), BuzzerMode::Off);
+    show.run(9_000, Command::Next).unwrap();
+    assert_eq!(mode(&show), BuzzerMode::Answers);
+    show.press(10_000, 1, Button::B);
+    assert_eq!(mode(&show), BuzzerMode::Answers);
+    // A restart begins the question again from its start, with a new round.
+    show.run(11_000, Command::RestartQuestion).unwrap();
+    assert_eq!(mode(&show), BuzzerMode::Off);
+    show.run(12_000, Command::Next).unwrap();
+    assert_eq!(mode(&show), BuzzerMode::Answers);
+    show.run(13_000, Command::Next).unwrap();
+    assert_eq!(mode(&show), BuzzerMode::Off);
+    show.run(14_000, Command::Next).unwrap();
+    assert_eq!(mode(&show), BuzzerMode::Results);
+
+    // A fastest-finger question nobody won shows no result.
+    show.run(15_000, Command::Next).unwrap();
+    show.run(16_000, Command::Next).unwrap();
+    show.run(17_000, Command::Next).unwrap();
+    assert_eq!(step(&show.game), QuestionStep::Closed);
+    show.run(18_000, Command::Next).unwrap();
+    assert_eq!(step(&show.game), QuestionStep::Revealed { winner: None });
+    assert_eq!(mode(&show), BuzzerMode::Off);
 }
 
 #[test]

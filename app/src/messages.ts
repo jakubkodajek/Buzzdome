@@ -60,6 +60,7 @@ const ERROR_KEYS: Record<Exclude<AppError["code"], WordedApart>, StringKey> = {
   usbUnavailable: "errUsbUnavailable",
   usbListFailed: "errUsbListFailed",
   receiverNotConnected: "errReceiverNotConnected",
+  receiverNotLearnable: "errReceiverNotLearnable",
   learnNotStarted: "errLearnNotStarted",
   learnTooFewPresses: "errLearnTooFewPresses",
   learnInconsistent: "errLearnInconsistent",
@@ -223,8 +224,16 @@ export function settingsLostText(t: Translate, lost: SettingsLost): string {
 
 /** Which protocol reads the receiver. */
 export function protocolText(t: Translate, protocol: ProtocolKind): string {
-  return protocol.type === "learned" ? t("protocolLearned", { buttons: protocol.buttons }) : t("protocolRawOnly");
+  switch (protocol.type) {
+    case "rawOnly":
+      return t("protocolRawOnly");
+    case "learned":
+      return t("protocolLearned", { buttons: protocol.buttons });
+    case "rf215":
+      return t(protocol.answered ? "protocolRf215" : "protocolRf215Silent");
+  }
 }
+
 
 const IMPORT_ISSUE_KEYS: Record<ImportIssue["code"], StringKey> = {
   noQuestionColumn: "importNoQuestionColumn",

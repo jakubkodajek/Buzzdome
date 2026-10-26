@@ -29,7 +29,7 @@ use dialogs::Picker;
 use error::CmdResult;
 pub use error::AppError;
 use hardware::Hardware;
-use quiz_core::{Command, Effect, Game, GameView, Quiz, Stamped};
+use quiz_core::{BuzzerMode, Command, Effect, Game, GameView, Quiz, Stamped};
 use session::{Resumed, Session, SessionMeta, SessionSummary};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -225,6 +225,14 @@ fn replace_show(inner: &mut Inner, game: Option<Game>, session: Option<Session>)
     inner.began_ms = now_ms();
     // A close request left unanswered was about the show before.
     inner.close_request.forget();
+    send_mode(inner);
+}
+
+/// Tells the buzzers what they take now (`Game::buzzer_mode`). With no show
+/// they register as in a lobby, so the Receiver tab sees their presses.
+fn send_mode(inner: &mut Inner) {
+    let mode = inner.game.as_ref().map_or(BuzzerMode::Register, Game::buzzer_mode);
+    inner.driver.set_mode(mode);
 }
 
 /// Applies `stamped` to a copy of `game` and journals it in `session` (none
@@ -258,6 +266,8 @@ fn send_effects(app: &AppHandle, inner: &mut Inner, effects: Vec<Effect>) {
             }
         }
     }
+    // After the lights: a result is lit before the round that follows it.
+    send_mode(inner);
 }
 
 /// Locks the show state to start a show, refusing while one runs. Learn
@@ -551,7 +561,9 @@ pub fn run() {
             let (queue, events) = mpsc::channel();
             let hardware = Hardware::start(app.handle(), queue.clone(), *SHOW_CLOCK);
             if let Some(handle) = hardware.handle() {
-                lock_show(app.handle()).driver = Box::new(HardwareDriver(handle));
+                let mut inner = lock_show(app.handle());
+                inner.driver = Box::new(HardwareDriver(handle));
+                send_mode(&mut inner);
             }
             app.manage(hardware);
             show_thread::start(app.handle(), queue, events);

@@ -2,18 +2,22 @@
 //!
 //! The thread owns the open device (hidapi handles are not shared across
 //! threads), reads input reports with a short timeout, decodes them in arrival
-//! order and sends presses to the app. Light commands reach it over a channel
-//! and are written between reads. When the cable is unplugged the read fails,
-//! the device is dropped and the thread retries until it is back.
+//! order and sends presses to the app. The buzzer mode and lights reach it
+//! over a channel; it keeps them, and writes what changed between reads, one
+//! report at a time with a gap, so a slow receiver is not flooded. When the
+//! cable is unplugged the read fails, the device is dropped and the thread
+//! retries until it is back, then sets the receiver up again with the mode
+//! and lights the buzzers should show.
 
 use crate::clock::ShowClock;
 use crate::edge::EdgeFilter;
-use crate::hid::{DeviceInfo, DeviceSelector, HidBackend, HidDevice};
+use crate::hid::{DeviceInfo, DeviceSelector, HidBackend, HidDevice, Report};
 use crate::protocol::{Protocol, ProtocolKind, ProtocolResolver};
 use crate::{BuzzerDriver, DriverError, Press};
-use quiz_core::{BuzzerId, Light};
+use quiz_core::{BuzzerId, BuzzerMode, Light};
 use serde::Serialize;
 use ts_rs::TS;
+use std::collections::{BTreeMap, VecDeque};
 use std::sync::mpsc::{self, Receiver as ChannelRx, RecvTimeoutError, Sender, TryRecvError};
 use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
@@ -29,7 +33,7 @@ pub enum ReceiverStatus {
     #[serde(rename_all = "camelCase")]
     Searching { selector: DeviceSelector },
     #[serde(rename_all = "camelCase")]
-    Connected { device: DeviceInfo, protocol: ProtocolKind, has_lights: bool },
+    Connected { device: DeviceInfo, protocol: ProtocolKind, has_lights: bool, learnable: bool },
     /// The receiver cannot be used now; the thread keeps retrying. `detail`
     /// is the system's own message.
     Error { problem: ReceiverProblem, detail: String },
@@ -81,19 +85,35 @@ pub struct ReceiverConfig {
     pub repeat_gap_ms: u64,
     /// What reports are stamped with: the app's show clock.
     pub clock: ShowClock,
+    /// Least time between two reports written to the receiver.
+    pub write_gap: Duration,
+    /// Longest the mode and lights wait for a receiver that is not ready
+    /// after being set up (`Protocol::ready`).
+    pub ready_timeout: Duration,
 }
 
 impl ReceiverConfig {
     /// The usual settings, stamping reports with the app's show `clock`:
-    /// there is no default clock, so presses and commands share one.
+    /// there is no default clock, so presses and commands share one. The
+    /// write gap and the wait for a ready receiver are those of the Enjoy
+    /// SDK (`rf215`).
     pub fn new(clock: ShowClock) -> ReceiverConfig {
-        ReceiverConfig { retry: Duration::from_secs(2), read_timeout_ms: 20, repeat_gap_ms: 150, clock }
+        ReceiverConfig {
+            retry: Duration::from_secs(2),
+            read_timeout_ms: 20,
+            repeat_gap_ms: 150,
+            clock,
+            write_gap: Duration::from_millis(10),
+            ready_timeout: Duration::from_millis(500),
+        }
     }
 }
 
 enum Control {
     Select(Option<DeviceSelector>),
     Lights(Vec<(BuzzerId, Light)>),
+    Mode(BuzzerMode),
+    Ignored(Press),
     ReloadProtocol,
     Shutdown,
 }
@@ -111,8 +131,19 @@ impl ReceiverHandle {
         let _ = self.tx.send(Control::Select(selector));
     }
 
+    /// Sets these buzzers' lights, now or once a receiver connects.
     pub fn set_lights(&self, lights: Vec<(BuzzerId, Light)>) {
         let _ = self.tx.send(Control::Lights(lights));
+    }
+
+    /// Puts the buzzers in `mode`, now or once a receiver connects.
+    pub fn set_mode(&self, mode: BuzzerMode) {
+        let _ = self.tx.send(Control::Mode(mode));
+    }
+
+    /// Tells the receiver the app did not take `press` (`Protocol::rearm`).
+    pub fn ignored(&self, press: Press) {
+        let _ = self.tx.send(Control::Ignored(press));
     }
 
     /// Re-resolves the protocol of the open device, e.g. after learning buttons.
@@ -129,7 +160,9 @@ impl ReceiverHandle {
     }
 }
 
-/// `BuzzerDriver` for the game: lights go to the receiver when one is connected.
+/// `BuzzerDriver` for the game: the mode and lights go to the receiver
+/// thread, which writes them when a receiver is connected and again after
+/// it reconnects.
 pub struct HardwareDriver(pub ReceiverHandle);
 
 impl BuzzerDriver for HardwareDriver {
@@ -142,10 +175,12 @@ impl BuzzerDriver for HardwareDriver {
     }
 
     fn set_lights(&mut self, lights: &[(BuzzerId, Light)]) -> Result<(), DriverError> {
-        if self.has_lights() {
-            self.0.set_lights(lights.to_vec());
-        }
+        self.0.set_lights(lights.to_vec());
         Ok(())
+    }
+
+    fn set_mode(&mut self, mode: BuzzerMode) {
+        self.0.set_mode(mode);
     }
 }
 
@@ -170,6 +205,10 @@ pub fn spawn<E: From<ReceiverEvent> + Send + 'static>(
         conn: None,
         next_try: Instant::now(),
         edge: EdgeFilter::default(),
+        mode: BuzzerMode::Off,
+        lights: BTreeMap::new(),
+        outbox: VecDeque::new(),
+        next_write: Instant::now(),
     };
     let join = std::thread::Builder::new()
         .name("buzzer-receiver".into())
@@ -182,6 +221,22 @@ struct Connection {
     info: DeviceInfo,
     device: Box<dyn HidDevice>,
     protocol: Box<dyn Protocol>,
+    /// The protocol's kind in the status last sent.
+    kind: ProtocolKind,
+    /// Until when writes wait for the receiver to be ready.
+    ready_by: Instant,
+}
+
+impl Connection {
+    fn new(info: DeviceInfo, device: Box<dyn HidDevice>, protocol: Box<dyn Protocol>) -> Connection {
+        let kind = protocol.kind();
+        Connection { info, device, protocol, kind, ready_by: Instant::now() }
+    }
+
+    /// Whether writes wait for the receiver at `now`.
+    fn held(&self, now: Instant) -> bool {
+        now < self.ready_by && !self.protocol.ready()
+    }
 }
 
 struct Worker<E> {
@@ -194,6 +249,12 @@ struct Worker<E> {
     conn: Option<Connection>,
     next_try: Instant,
     edge: EdgeFilter,
+    /// The mode and lights the buzzers should show, as the app last set them.
+    mode: BuzzerMode,
+    lights: BTreeMap<BuzzerId, Light>,
+    /// Reports waiting to be written, in order.
+    outbox: VecDeque<Report>,
+    next_write: Instant,
 }
 
 impl<E: From<ReceiverEvent>> Worker<E> {
@@ -207,8 +268,10 @@ impl<E: From<ReceiverEvent>> Worker<E> {
                     Err(TryRecvError::Empty) => break,
                 }
             }
+            self.write_due();
+            let timeout_ms = self.read_timeout_ms();
             if let Some(conn) = self.conn.as_mut() {
-                match conn.device.read_timeout(&mut buf, self.config.read_timeout_ms) {
+                match conn.device.read_timeout(&mut buf, timeout_ms) {
                     Ok(0) => {}
                     Ok(n) => self.report(&buf[..n]),
                     Err(e) => self.lost(ReceiverProblem::ConnectionLost, &e),
@@ -233,6 +296,7 @@ impl<E: From<ReceiverEvent>> Worker<E> {
         match c {
             Control::Select(selector) => {
                 self.conn = None;
+                self.outbox.clear();
                 self.edge.reset();
                 self.selector = selector.clone();
                 self.next_try = Instant::now();
@@ -242,17 +306,32 @@ impl<E: From<ReceiverEvent>> Worker<E> {
                 });
             }
             Control::Lights(lights) => {
-                let reports = match &self.conn {
-                    Some(conn) => conn.protocol.encode_lights(&lights),
-                    None => return,
-                };
-                self.write_all(&reports);
+                let changed: Vec<_> = lights.into_iter().filter(|&(buzzer, light)| self.lights.insert(buzzer, light) != Some(light)).collect();
+                if let Some(conn) = self.conn.as_mut() {
+                    let reports = conn.protocol.encode_lights(&changed);
+                    self.queue(reports);
+                }
+            }
+            Control::Mode(mode) => {
+                if mode == self.mode {
+                    return;
+                }
+                self.mode = mode;
+                if let Some(conn) = self.conn.as_mut() {
+                    let reports = conn.protocol.encode_mode(mode);
+                    self.queue(reports);
+                }
+            }
+            Control::Ignored(press) => {
+                if let Some(conn) = self.conn.as_mut() {
+                    let reports = conn.protocol.rearm(press);
+                    self.queue(reports);
+                }
             }
             Control::ReloadProtocol => {
-                if let Some(conn) = self.conn.as_mut() {
-                    conn.protocol = (self.resolver)(&conn.info);
-                    let status = connected_status(conn);
-                    self.set_status(status);
+                if let Some(conn) = self.conn.take() {
+                    let protocol = (self.resolver)(&conn.info);
+                    self.set_up(Connection::new(conn.info, conn.device, protocol));
                 }
             }
             Control::Shutdown => {}
@@ -274,43 +353,99 @@ impl<E: From<ReceiverEvent>> Worker<E> {
             Err(e) => return self.set_status(error_status(ReceiverProblem::CannotOpen, &e)),
         };
         let protocol = (self.resolver)(&info);
-        let init = protocol.init_reports();
-        let conn = Connection { info, device, protocol };
+        self.set_up(Connection::new(info, device, protocol));
+    }
+
+    /// Sets up the receiver on `conn` with its protocol's init reports,
+    /// written one after another with the write gap before the connection
+    /// is announced, so nothing is sent to an unready receiver. Then the
+    /// lights and mode the buzzers should show wait to be written until
+    /// the receiver is ready, in the order the app sends a change in.
+    fn set_up(&mut self, mut conn: Connection) {
+        self.outbox.clear();
+        self.edge.reset();
+        for (i, report) in conn.protocol.init_reports().iter().enumerate() {
+            if i > 0 {
+                std::thread::sleep(self.config.write_gap);
+            }
+            if let Err(e) = report.send(conn.device.as_mut()) {
+                return self.lost(ReceiverProblem::WriteFailed, &e);
+            }
+        }
+        let now = Instant::now();
+        conn.ready_by = now + self.config.ready_timeout;
+        self.next_write = now + self.config.write_gap;
+        let lights: Vec<_> = self.lights.iter().map(|(&buzzer, &light)| (buzzer, light)).collect();
+        let mut shown = conn.protocol.encode_lights(&lights);
+        shown.extend(conn.protocol.encode_mode(self.mode));
         let status = connected_status(&conn);
         self.conn = Some(conn);
-        self.edge.reset();
-        // Initialise before announcing the connection, so nothing is sent to an unready receiver.
-        self.write_all(&init);
-        if self.conn.is_some() {
-            self.set_status(status);
-        }
+        self.queue(shown);
+        self.set_status(status);
     }
 
     fn report(&mut self, bytes: &[u8]) {
         let Some(conn) = self.conn.as_mut() else { return };
         let at_ms = self.config.clock.now_ms();
         let decoded = conn.protocol.decode(bytes);
+        // The report may have changed what the protocol knows of the receiver.
+        let kind = conn.protocol.kind();
+        let status = (kind != conn.kind).then(|| {
+            conn.kind = kind;
+            connected_status(conn)
+        });
         let presses = self.edge.filter(decoded.clone(), at_ms);
+        if let Some(status) = status {
+            self.set_status(status);
+        }
         let _ = self.events.send(ReceiverEvent::Raw(RawReport { at_ms, bytes: bytes.to_vec(), decoded }).into());
         for press in presses {
             let _ = self.events.send(ReceiverEvent::Press { press, at_ms }.into());
         }
     }
 
-    fn write_all(&mut self, reports: &[Vec<u8>]) {
+    /// Adds `reports` to those waiting to be written, but for one that
+    /// repeats the report before it.
+    fn queue(&mut self, reports: Vec<Report>) {
         for report in reports {
-            let result = match self.conn.as_mut() {
-                Some(conn) => conn.device.write(report),
-                None => return,
-            };
-            if let Err(e) = result {
-                return self.lost(ReceiverProblem::WriteFailed, &e);
+            if self.outbox.back() != Some(&report) {
+                self.outbox.push_back(report);
             }
         }
     }
 
+    /// Writes the next waiting report, once its time has come and the
+    /// receiver is ready.
+    fn write_due(&mut self) {
+        let now = Instant::now();
+        let Some(conn) = self.conn.as_mut() else { return };
+        if now < self.next_write || conn.held(now) {
+            return;
+        }
+        let Some(report) = self.outbox.pop_front() else { return };
+        match report.send(conn.device.as_mut()) {
+            Ok(()) => self.next_write = now + self.config.write_gap,
+            Err(e) => self.lost(ReceiverProblem::WriteFailed, &e),
+        }
+    }
+
+    /// How long the next read may wait: no longer than the read timeout,
+    /// nor than until the next waiting report is due.
+    fn read_timeout_ms(&self) -> i32 {
+        let longest = self.config.read_timeout_ms;
+        let Some(conn) = &self.conn else { return longest };
+        if self.outbox.is_empty() {
+            return longest;
+        }
+        let now = Instant::now();
+        let due = if conn.held(now) { conn.ready_by } else { self.next_write };
+        let wait_ms = due.saturating_duration_since(now).as_micros().div_ceil(1_000);
+        i32::try_from(wait_ms).map_or(longest, |ms| ms.min(longest))
+    }
+
     fn lost(&mut self, problem: ReceiverProblem, error: &DriverError) {
         self.conn = None;
+        self.outbox.clear();
         self.edge.reset();
         self.next_try = Instant::now() + self.config.retry;
         self.set_status(error_status(problem, error));
@@ -328,8 +463,9 @@ impl<E: From<ReceiverEvent>> Worker<E> {
 fn connected_status(conn: &Connection) -> ReceiverStatus {
     ReceiverStatus::Connected {
         device: conn.info.clone(),
-        protocol: conn.protocol.kind(),
+        protocol: conn.kind.clone(),
         has_lights: conn.protocol.has_lights(),
+        learnable: conn.protocol.learnable(),
     }
 }
 

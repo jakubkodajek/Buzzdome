@@ -49,7 +49,7 @@ Status keys: `[x]` done, `[~]` in progress, `[ ]` not started.
 - [x] Learn mode: teach each button when the protocol is unknown (no lights)
 - [x] Receiver tab with live presses, raw reports and log export; `hid-monitor` CLI
 - [ ] First test with the real receiver (`docs/hardware-test.md`)
-- [ ] Vendor protocol from the SDK: buzzer ID, press time, lights, battery (dome and RGB)
+- [~] Vendor protocol: Enjoy RF215 (dome) presses, rounds, right and wrong in `crates/buzzers/src/rf215.rs`, waiting for the hardware test; it has no press times or battery. The 303S (RGB), which is Jakub's own set, still needs Enjoy's SDK
 - [~] Buzzer lights: ready, locked out, first, correct, wrong; game sends them, encoding waits for the protocol
 - [~] Buzzer registration (any press registers in the lobby) and a buzzer test grid (list view done)
 - [ ] Fallback: vendor keystroke mode through the keyboard driver
