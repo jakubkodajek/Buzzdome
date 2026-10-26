@@ -793,6 +793,11 @@ packages users will install are read the same way.
   `nextAfterRevealDelayS` the show takes the next slide's step the same
   way, held the same way. A question shown again with its answer on a
   revisit (rules version 6) does not count, as the quizmaster went there.
+  The settings come with the quiz the session keeps, so a resumed show
+  goes on with them; no rules version is needed, as a quiz without them
+  plays as before. Space pressed as the reveal comes is meant for the step
+  before and is dropped (one step per press, above), so it does not also
+  leave the slide.
 - **Other quiz settings (QZ-11).** `runClockOut` keeps a timed question
   running once nobody is left to answer (`Game::closes_as_answered`); its
   time up then closes it as everyone answered, so `allAnswered` applies.
@@ -831,11 +836,6 @@ packages users will install are read the same way.
   are (`Controls::go_to`), so no question's score changes are split by
   them. They only exist in shows played since, so no rules version is
   needed. The Director's buttons for them ask first.
-  The settings come with the quiz the session keeps, so a resumed show
-  goes on with them; no rules version is needed, as a quiz without them
-  plays as before. Space pressed as the reveal comes is meant for the step
-  before and is dropped (one step per press, above), so it does not also
-  leave the slide.
 - **Ranking.** `Game::ranking` orders the players switched on by score,
   then by the time their right answers took together (`total_answer_ms`,
   less first); wrong answers add no time, so not answering never helps.
