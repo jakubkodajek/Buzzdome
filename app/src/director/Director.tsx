@@ -153,7 +153,8 @@ function DirectorLayout({ testRun, onEditor }: { testRun: boolean; onEditor: () 
   ];
 
   return (
-    <div className="director">
+    // `data-step`: the step on screen, which the E2E tests wait for before a step press (StepGuard.shown).
+    <div className="director" data-step={view?.stepNo}>
       <CommandPanel view={view} projector={projector} sound={sound} testRun={testRun} onEditor={onEditor} />
       <div className="workspace">
         <nav className="tabs" role="tablist">

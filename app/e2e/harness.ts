@@ -254,14 +254,31 @@ export class App {
    * press (step-guard.ts).
    */
   async step(label: StringKey | { text: string }): Promise<void> {
-    await sleep(STEP_PAUSE_MS + 100);
+    await this.stepPause();
     await this.press(label);
   }
 
   /** Presses the quizmaster's `keys` in the Director, after the step pause as `step` does. */
   async stepKeys(...keys: string[]): Promise<void> {
-    await sleep(STEP_PAUSE_MS + 100);
+    await this.stepPause();
     await this.page.keys(keys);
+  }
+
+  /**
+   * Waits until the Director shows the show's current step, then for the
+   * step pause: the guard counts the pause from when the window shows a step
+   * (`StepGuard.shown`), which on a busy machine can be well after the
+   * backend took it.
+   */
+  private async stepPause(): Promise<void> {
+    const view = await this.view();
+    if (view) {
+      await waitFor(`the Director to show step ${view.stepNo}`, async () => {
+        const shown = await this.page.execute<string | null>("return document.querySelector('.director')?.dataset.step ?? null;");
+        return shown !== null && Number(shown) >= view.stepNo;
+      });
+    }
+    await sleep(STEP_PAUSE_MS + 100);
   }
 
   /** Clicks the Director tab named by `label`. */

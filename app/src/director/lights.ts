@@ -30,7 +30,6 @@ export const FIXTURE_PRESETS: { id: string; label: StringKey; channels: Channel[
   { id: "dimmer", label: "lightsPresetDimmer", channels: [{ kind: "dimmer" }] },
 ];
 
-/** The kinds of channel, in the order the channel picker lists them. */
 /** Every kind of channel, in the order the Director offers them (`Channel::KINDS`). */
 export { CHANNEL_KINDS };
 
