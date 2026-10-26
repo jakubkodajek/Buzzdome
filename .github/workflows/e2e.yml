@@ -27,6 +27,7 @@ env:
   E2E_DEPS: webkit2gtk-driver xvfb xdotool
   TAURI_DRIVER_VERSION: "2.1.0"
   MSEDGEDRIVER_TOOL_REV: 8c4b34f51b45f5cf08013366d703de464ab871d1
+  GSUDO_VERSION: "2.6.1"
 
 jobs:
   linux:
@@ -142,7 +143,7 @@ jobs:
       # workflow does.
       - name: Install gsudo
         run: |
-          winget install gerardog.gsudo --accept-source-agreements --accept-package-agreements --disable-interactivity
+          winget install --id gerardog.gsudo --exact --version "$env:GSUDO_VERSION" --scope machine --accept-source-agreements --accept-package-agreements --disable-interactivity
           $bin = Join-Path $env:ProgramFiles "gsudo\Current"
           if (-not (Test-Path (Join-Path $bin "gsudo.exe"))) { throw "gsudo not found in $bin" }
           $bin >> $env:GITHUB_PATH
