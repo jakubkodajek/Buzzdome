@@ -1013,15 +1013,11 @@ impl Game {
     /// Every player's light in the current step, switched-off ones locked:
     /// what the buzzers should show when a show begins or resumes.
     pub fn lights(&self) -> Vec<(BuzzerId, Light)> {
-        self.players.values().map(|p| (p.buzzer, self.player_light(p.buzzer, p.enabled))).collect()
+        self.players.values().map(|p| (p.buzzer, self.lit_if_on(p.buzzer, self.light_of(p.buzzer)))).collect()
     }
 
-    fn player_light(&self, buzzer: BuzzerId, enabled: bool) -> Light {
-        if enabled { self.light_of(buzzer) } else { Light::Locked }
-    }
-
-    /// `light` on the buzzer of a player switched on, else locked: a
-    /// player switched off while their buzz waited to be judged.
+    /// `light` on the buzzer of a player switched on, else locked, also for
+    /// a player switched off while their buzz waited to be judged.
     fn lit_if_on(&self, buzzer: BuzzerId, light: Light) -> Light {
         if self.players.get(&buzzer).is_some_and(|p| p.enabled) { light } else { Light::Locked }
     }
@@ -1214,7 +1210,7 @@ impl Game {
         if switched_on && self.joins_at_next_question() {
             self.joins_next.insert(buzzer);
         }
-        let light = self.player_light(buzzer, enabled);
+        let light = self.lit_if_on(buzzer, self.light_of(buzzer));
         let mut effects = vec![Effect::Lights { lights: vec![(buzzer, light)] }];
         // Before rules version 3 a switch never closed a question.
         let running = matches!(self.phase, Phase::Question(QuestionStep::Running { .. }));
