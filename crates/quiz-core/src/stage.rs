@@ -16,7 +16,7 @@ pub const LAST_SECONDS_MS: u64 = 5_000;
 pub enum Stage {
     /// No show runs. The app's, never `Game::stage`.
     NoShow,
-    /// Before the first slide, while buzzers register.
+    /// Before the first slide: the welcome screen, and while buzzers register.
     Lobby,
     Billboard,
     Explanation,
@@ -69,7 +69,7 @@ impl Game {
             return Stage::Leaderboard;
         }
         match self.phase() {
-            Phase::Lobby => Stage::Lobby,
+            Phase::Welcome | Phase::Lobby => Stage::Lobby,
             Phase::Billboard => Stage::Billboard,
             Phase::Explanation => Stage::Explanation,
             Phase::EndOfRound => Stage::EndOfRound,

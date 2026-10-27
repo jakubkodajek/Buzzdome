@@ -1,6 +1,6 @@
 import { DEFAULT_QUIZ_SETTINGS, FINAL_LAST_STEP } from "../bindings/Constants";
 import { shareOf } from "../quiz";
-import type { Controls, GameView, Phase, Slide } from "../types";
+import type { Controls, GameView, Phase, Slide, Welcome } from "../types";
 
 /** A preview is not a show: no command applies. */
 export const NO_CONTROLS: Controls = { next: false, judge: false, pauseClock: false, resumeClock: false, closeQuestion: false, playVideo: false, goTo: false, restartQuestion: false, setJoker: false };
@@ -10,12 +10,19 @@ export const NO_CONTROLS: Controls = { next: false, judge: false, pauseClock: fa
  * to start, with nobody registered. The editor draws slides with it.
  */
 export function previewView(slide: Slide, slideIndex: number, slideCount: number, quizTitle: string): GameView {
+  return { ...nobodyPlays(quizTitle, slideCount), slideIndex, phase: previewPhase(slide), slide, answerShares: answerShares(slide) };
+}
+
+/** The welcome screen the show opens on, before anyone registered, for the editor to draw. */
+export function welcomePreviewView(welcome: Welcome, quizTitle: string, slideCount: number): GameView {
+  return { ...nobodyPlays(quizTitle, slideCount), slideIndex: 0, phase: { phase: "welcome" }, slide: null, answerShares: [], welcome };
+}
+
+/** A show before anyone plays, without the slide on screen. */
+function nobodyPlays(quizTitle: string, slideCount: number): Omit<GameView, "slideIndex" | "phase" | "slide" | "answerShares"> {
   return {
     quizTitle,
-    slideIndex,
     slideCount,
-    phase: previewPhase(slide),
-    slide,
     nextSlide: null,
     previousSlide: null,
     clock: null,
@@ -24,7 +31,6 @@ export function previewView(slide: Slide, slideIndex: number, slideCount: number
     enabledCount: 0,
     answeredCount: 0,
     answerCounts: null,
-    answerShares: answerShares(slide),
     results: null,
     buzzed: null,
     leaderboardVisible: false,
@@ -35,6 +41,7 @@ export function previewView(slide: Slide, slideIndex: number, slideCount: number
     autoStep: null,
     settings: DEFAULT_QUIZ_SETTINGS,
     music: null,
+    welcome: null,
   };
 }
 

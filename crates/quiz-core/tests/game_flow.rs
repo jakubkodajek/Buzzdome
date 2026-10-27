@@ -74,6 +74,39 @@ fn lobby_registers_buzzers_on_any_press() {
     assert_eq!(show.game.phase(), &Phase::Lobby);
 }
 
+#[test]
+fn a_quiz_with_a_welcome_screen_opens_on_it_and_next_goes_on_to_the_lobby() {
+    let mut with_welcome = quiz(vec![question("q1", AnswerMode::Everyone), question("q2", AnswerMode::Everyone)]);
+    with_welcome.welcome.on = true;
+    let mut show = Show { game: Game::new(with_welcome.clone()), journal: Vec::new() };
+    let game = &show.game;
+    assert_eq!(game.phase(), &Phase::Welcome);
+    assert!(game.before_slides() && game.current_slide().is_none() && game.previous().is_none());
+    assert_eq!((game.following(), game.music(), game.stage(0)), (Some(0), Some(SoundSlot::LobbyMusic), quiz_core::Stage::Lobby));
+    assert!(game.controls().next && game.controls().go_to && !game.controls().judge);
+
+    // A buzzer pressed meanwhile registers, lit ready as in the lobby.
+    assert_eq!(show.game.buzzer_mode(), BuzzerMode::Register);
+    assert_eq!(show.press(1_000, 4, Button::Big), vec![Effect::Lights { lights: vec![(4, Light::Ready)] }]);
+    let step = show.game.step_no();
+    show.run(2_000, Command::Next).unwrap();
+    assert_eq!(show.game.phase(), &Phase::Lobby);
+    assert_ne!(show.game.step_no(), step, "a window's command for the welcome screen no longer applies");
+    assert_eq!(show.game.players().map(|p| p.buzzer).collect::<Vec<_>>(), [4]);
+    show.run(3_000, Command::Next).unwrap();
+    assert_eq!((show.game.phase(), show.game.slide_index()), (&Phase::Question(QuestionStep::Ready), 0));
+
+    // A resumed show replays to where it was; starting over goes to the lobby, past the welcome screen.
+    assert_eq!(Game::replay(with_welcome.clone(), &show.journal, RULES_VERSION), show.game);
+    show.run(4_000, Command::StartOver).unwrap();
+    assert_eq!(show.game.phase(), &Phase::Lobby);
+
+    // The welcome screen jumps to a slide, as the lobby does.
+    let mut show = Show { game: Game::new(with_welcome), journal: Vec::new() };
+    show.run(0, Command::GoTo { slide: 1 }).unwrap();
+    assert_eq!((show.game.phase(), show.game.slide_index()), (&Phase::Question(QuestionStep::Ready), 1));
+}
+
 fn names(names: &[&str]) -> Vec<String> {
     names.iter().map(|name| name.to_string()).collect()
 }

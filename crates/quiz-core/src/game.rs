@@ -404,6 +404,10 @@ pub enum QuestionStep {
 #[ts(export)]
 #[serde(tag = "phase", rename_all = "camelCase")]
 pub enum Phase {
+    /// The quiz's welcome screen, which the show opens on when the quiz has
+    /// one switched on (`Quiz::welcome`); Next goes on to the lobby. A
+    /// buzzer pressed meanwhile registers, as in the lobby.
+    Welcome,
     /// Before the first slide: buzzers register by pressing any button.
     Lobby,
     Billboard,
@@ -593,10 +597,11 @@ pub struct Game {
 
 impl Game {
     pub fn new(quiz: Quiz) -> Game {
+        let phase = if quiz.welcome.on { Phase::Welcome } else { Phase::Lobby };
         Game {
             quiz,
             slide: 0,
-            phase: Phase::Lobby,
+            phase,
             players: BTreeMap::new(),
             responses: BTreeMap::new(),
             counted: BTreeSet::new(),
@@ -665,11 +670,12 @@ impl Game {
         self.slide
     }
 
-    /// The slide on screen; none in the lobby and in the final ranking that
-    /// follows the last slide of a quiz without a final slide.
+    /// The slide on screen; none before the first slide (`before_slides`)
+    /// and in the final ranking that follows the last slide of a quiz
+    /// without a final slide.
     pub fn current_slide(&self) -> Option<&Slide> {
         match self.phase {
-            Phase::Lobby => None,
+            Phase::Welcome | Phase::Lobby => None,
             _ => self.quiz.slides.get(self.slide),
         }
     }
@@ -680,7 +686,7 @@ impl Game {
     /// the show is over.
     pub fn following(&self) -> Option<usize> {
         let next = match self.phase {
-            Phase::Lobby => 0,
+            Phase::Welcome | Phase::Lobby => 0,
             _ => self.slide + 1,
         };
         let count = self.quiz.slides.len();
@@ -691,15 +697,22 @@ impl Game {
     /// the slide on screen, the last one from the final ranking after it.
     /// None on the first slide, before it and while a question is in play.
     pub fn previous(&self) -> Option<usize> {
-        if self.phase == Phase::Lobby || !self.can_jump() {
+        if self.before_slides() || !self.can_jump() {
             return None;
         }
         self.slide.checked_sub(1)
     }
 
-    /// The next `Next` leaves the current slide (rather than moving on within it).
+    /// The show is on its welcome screen or in the lobby, before the first slide.
+    pub fn before_slides(&self) -> bool {
+        matches!(self.phase, Phase::Welcome | Phase::Lobby)
+    }
+
+    /// The next `Next` leaves the current slide (rather than moving on
+    /// within it); from the welcome screen it goes on to the lobby.
     fn next_leaves_slide(&self) -> bool {
         match &self.phase {
+            Phase::Welcome => false,
             Phase::Lobby | Phase::Billboard | Phase::Explanation | Phase::EndOfRound => true,
             Phase::Question(step) => matches!(step, QuestionStep::Revealed { .. }),
             Phase::Final { step } => *step >= FINAL_LAST_STEP,
@@ -952,7 +965,7 @@ impl Game {
     }
 
     /// The light a switched-on buzzer shows in the current step: ready while
-    /// its player can press (in the lobby to register), locked once they
+    /// its player can press (before the slides, to register), locked once they
     /// answered or answered wrong or another player buzzed, first for the
     /// buzz being judged, and from the reveal the result: right or wrong
     /// for the players an everyone-answers question counted, right for the
@@ -961,7 +974,7 @@ impl Game {
     /// buzz judged wrong shows wrong until the step after it (`judge`).
     fn light_of(&self, buzzer: BuzzerId) -> Light {
         match &self.phase {
-            Phase::Lobby => Light::Ready,
+            Phase::Welcome | Phase::Lobby => Light::Ready,
             Phase::Question(QuestionStep::Running { .. }) => {
                 let done = self.responses.contains_key(&buzzer) || self.sits_out(buzzer);
                 if done { Light::Locked } else { Light::Ready }
@@ -985,7 +998,7 @@ impl Game {
     /// judged or show a result.
     pub fn buzzer_mode(&self) -> BuzzerMode {
         match &self.phase {
-            Phase::Lobby => BuzzerMode::Register,
+            Phase::Welcome | Phase::Lobby => BuzzerMode::Register,
             Phase::Question(QuestionStep::Running { .. }) => match self.question().map(|q| q.mode) {
                 Some(AnswerMode::Everyone) => BuzzerMode::Answers,
                 Some(AnswerMode::FastestFinger) => BuzzerMode::FastestFinger,
@@ -1227,7 +1240,7 @@ impl Game {
         // Any press from an unknown buzzer registers it, also late arrivals.
         if !self.players.contains_key(&buzzer) {
             let light = self.join(buzzer, String::new());
-            if self.phase == Phase::Lobby || self.joins_next.contains(&buzzer) {
+            if self.before_slides() || self.joins_next.contains(&buzzer) {
                 return vec![light];
             }
         }
@@ -1419,6 +1432,10 @@ impl Game {
             return Ok(self.enter_slide(following));
         }
         match self.phase.clone() {
+            Phase::Welcome => {
+                self.phase = Phase::Lobby;
+                Ok(vec![])
+            }
             Phase::Lobby | Phase::Billboard | Phase::Explanation | Phase::EndOfRound => Err(GameError::NotNow),
             Phase::Question(step) => match step {
                 QuestionStep::Ready => {

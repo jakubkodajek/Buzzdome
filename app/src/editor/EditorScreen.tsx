@@ -341,7 +341,8 @@ function Studio({ editor, open, onExit }: { editor: QuizEditor; open: OpenQuiz |
               onTitle={(text) => editor.edit({ type: "setTitle", title: text }, "title")}
               onSettings={(settings) => editor.edit({ type: "setSettings", settings }, "settings")}
               onSounds={(sounds) => editor.edit({ type: "setSounds", sounds }, "sounds")}
-              onPickSound={() => editor.pickMedia(["audio"])}
+              onWelcome={(welcome) => editor.edit({ type: "setWelcome", welcome }, "welcome")}
+              onPickMedia={(kinds) => editor.pickMedia(kinds)}
               onShowSlide={(id) => {
                 list.setSelection(selectIds([id], 0));
                 setView("graphical");

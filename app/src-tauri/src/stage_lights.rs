@@ -85,7 +85,7 @@ impl StageLights {
 
 /// The show's moment as the lights follow it.
 fn moment(game: &Game, now: u64) -> ShowMoment {
-    let slide = (game.phase() != &Phase::Lobby).then(|| u32::try_from(game.slide_index() + 1).unwrap_or(u32::MAX));
+    let slide = (!game.before_slides()).then(|| u32::try_from(game.slide_index() + 1).unwrap_or(u32::MAX));
     let buzzer = match game.phase() {
         Phase::Question(QuestionStep::Buzzed { buzzer, .. }) => Some(*buzzer),
         _ => None,

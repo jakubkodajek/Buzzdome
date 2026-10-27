@@ -264,7 +264,8 @@ draws slides without a show.
   backend does not push: `projector_window` (whether the projector window
   is full screen and on the Director's screen) and `show_disk_space` (free
   space where the journals are written, through `fs4`). `LaunchCheck.tsx`
-  shows them below the tabs while the show is in the lobby, and reads those
+  shows them below the tabs while the show waits before its first slide
+  (`beforeSlides`: the welcome screen or the registration), and reads those
   two again every 2 and 10 seconds while it is on screen. Hide puts it away
   until another show starts; Settings turns it off for the computer
   (`preferences.ts`). Only a person can tell that sound reaches the hall,
@@ -866,6 +867,17 @@ packages users will install are read the same way.
   are (`Controls::go_to`), so no question's score changes are split by
   them. They only exist in shows played since, so no rules version is
   needed. The Director's buttons for them ask first.
+- **Welcome screen (SF-3).** A quiz with `welcome.on` starts its show in
+  `Phase::Welcome` (`Game::new`), and Next enters `Phase::Lobby`; nothing
+  else leads there, so Start over goes to the registration. The welcome
+  phase is the registration as far as the buzzers, lights and music go
+  (`before_slides`: presses register, `Stage::Lobby`, `lobbyMusic`), and
+  only the projector tells them apart: `GameView::welcome` carries what
+  the screen shows while the show is on it. Quizzes from before have it
+  off, so their shows replay as they were and no rules version is needed.
+  Its logo and intro are the quiz's media like a slide's (`media_files`,
+  `rename_media`, `validate`, the missing-file check), so a quiz whose
+  welcome file is missing or of the wrong kind does not play.
 - **Results (SF-11).** A question as asked (`Asked`) keeps what it gave
   each player it scored as a `Mark`: their answer or buzz and its time,
   whether it was right, the points (doubled by a joker) and whether a

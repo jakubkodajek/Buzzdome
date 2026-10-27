@@ -9,6 +9,7 @@ import type { QuizSettings } from "./QuizSettings";
 import type { Slide } from "./Slide";
 import type { SoundSlot } from "./SoundSlot";
 import type { TeamView } from "./TeamView";
+import type { Welcome } from "./Welcome";
 
 export type GameView = { quizTitle: string, slideIndex: number, slideCount: number, phase: Phase, slide: Slide | null, 
 /**
@@ -76,4 +77,8 @@ settings: QuizSettings,
 /**
  * The music the show's moment takes (`Game::music`).
  */
-music: SoundSlot | null, };
+music: SoundSlot | null, 
+/**
+ * What the welcome screen shows, while the show is on it (`Phase::Welcome`).
+ */
+welcome: Welcome | null, };

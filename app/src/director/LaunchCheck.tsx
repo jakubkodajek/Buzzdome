@@ -24,7 +24,7 @@ interface LaunchCheckProps {
 
 /**
  * The check before a show (spec SF-2), below the tabs while the show waits
- * in the lobby. Hide puts it away until another show starts.
+ * before its first slide. Hide puts it away until another show starts.
  */
 export function LaunchCheck(props: LaunchCheckProps) {
   const [hidden, setHidden] = useState(false);

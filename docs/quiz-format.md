@@ -103,6 +103,7 @@ app.
 | `categories` | list | Named looks the slides can take on; see [Categories](#categories). Left out when there are none. |
 | `settings` | object | How the show runs; see [Settings](#settings). Left out when every setting is its default. |
 | `sounds` | object | What the show sounds like; see [Sounds](#sounds). Left out when every moment plays its default at the default volumes. |
+| `welcome` | object | The screen the show opens on; see [Welcome screen](#welcome-screen). Left out while it is off with nothing on it. |
 
 ### Every slide
 
@@ -371,6 +372,32 @@ app's music.
 A quiz file whose sound file is not a sound in its media folder does not
 play, and the editor lists the problem (`soundMedia`).
 
+### Welcome screen
+
+```json
+"welcome": { "on": true, "heading": "Friday quiz", "logo": "media/logo.png", "intro": "media/intro.mp4", "footer": "Teams of four, we start at eight" }
+```
+
+The screen the show opens on (spec SF-3), before the buzzers register. The
+projector shows the heading by the logo, the intro picture or video in the
+middle and the footer on a strip, over the theme's welcome background, and
+the Director plays the `lobbyMusic`. The quizmaster's Next goes on to the
+registration, and a buzzer pressed meanwhile registers already. Starting
+the show over goes back to the registration. A value that does not read
+reads as its default, so a quiz always opens and plays.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `on` | true/false | The show opens on the welcome screen (default false: on the registration). What the screen shows is kept while it is off. |
+| `heading` | text | The text on top, by the logo; the quiz's `title` when empty (default). |
+| `logo` | text or `null` | A picture by the heading, `media/<name>` (default none). |
+| `intro` | text or `null` | A picture, or a video that plays over and over without its sound, in the middle of the screen, `media/<name>` (default none). |
+| `footer` | text | A text on a strip at the bottom; no strip when empty (default). |
+
+A quiz file whose logo is not a picture, or whose intro is neither a
+picture nor a video, in its media folder does not play, and the editor
+lists the problem (`welcomeMedia`).
+
 ## Spreadsheets
 
 Questions can also be written in a spreadsheet and imported into a quiz
@@ -476,7 +503,7 @@ the rows it came up in.
 | 2 | Adds `explanation` slides and, later within version 2, the quiz `theme` (builds from before that drop it when they save). Version 1 files read as version 2 unchanged. |
 | 3 | `background` becomes an object with video options; sounds get `part`, `gainDb` and `replay`. Version 1 and 2 files read as version 3 unchanged. Later within version 3, a `fastestFinger` question may have up to 6 answers instead of 4; earlier builds list such a question as a problem. |
 | 4 | Adds `final` slides. Version 1 to 3 files read as version 4 unchanged. Later within version 4, videos get `introPauseMs`, `volume`, `speed`, `part`, `effect` and `replay`; a video without them plays as before. Later still, slides get `style`; builds before it show the theme's look and drop the style when they save. |
-| 5 | A question's `correct` becomes a list of right answers, each with a `share` of the points. A version 1 to 4 question with `correct: n` reads as `[{ "answer": n, "share": 100 }]`, and one without as `[]`. Later within version 5, the quiz gets `categories` and slides `category`; builds before it drop them when they save, and the slides keep the look they took on. Later still, a slide's `style` gets `timer`; builds before it draw a ring and drop it when they save. Later still, the quiz gets `settings`; builds before it play as with the defaults and drop them when they save. Later still, `settings` gets `nextAfterReveal`, `nextAfterRevealDelayS`, `runClockOut`, `changeAnswer`, `oneBuzz`, `noAnswerPenalty`, `hideAnswer`, `hideBuzzPoints` and `jokers`; builds before it play as with the defaults and drop them when they save. Later still, the quiz gets `sounds`; builds before it play their own sounds and drop it when they save. Later still, `settings` gets `answerChart`; builds before it show the counts only and drop it when they save. |
+| 5 | A question's `correct` becomes a list of right answers, each with a `share` of the points. A version 1 to 4 question with `correct: n` reads as `[{ "answer": n, "share": 100 }]`, and one without as `[]`. Later within version 5, the quiz gets `categories` and slides `category`; builds before it drop them when they save, and the slides keep the look they took on. Later still, a slide's `style` gets `timer`; builds before it draw a ring and drop it when they save. Later still, the quiz gets `settings`; builds before it play as with the defaults and drop them when they save. Later still, `settings` gets `nextAfterReveal`, `nextAfterRevealDelayS`, `runClockOut`, `changeAnswer`, `oneBuzz`, `noAnswerPenalty`, `hideAnswer`, `hideBuzzPoints` and `jokers`; builds before it play as with the defaults and drop them when they save. Later still, the quiz gets `sounds`; builds before it play their own sounds and drop it when they save. Later still, `settings` gets `answerChart`; builds before it show the counts only and drop it when they save. Later still, the quiz gets `welcome`; builds before it open on the registration and drop it when they save. |
 
 Fields may be added within a version as long as older files keep their
 meaning; readers ignore fields they do not know. Anything else (a new slide

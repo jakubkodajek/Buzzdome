@@ -385,9 +385,13 @@ fn problems_where(quiz: &Quiz, has: impl Fn(&str) -> bool, counts: impl Fn(&Prob
         let problem = Problem::SoundMedia { slot, file: file.to_string(), issue: MediaIssue::Missing };
         (file, ValidationError { slide_id: None, problem })
     });
+    let welcome = quiz.welcome.files().map(|(place, file)| {
+        let problem = Problem::WelcomeMedia { place, file: file.to_string(), issue: MediaIssue::Missing };
+        (file, ValidationError { slide_id: None, problem })
+    });
     // Only the references that count are known to be safe paths now, so
     // only they are looked up, which keeps a join to a folder inside it.
-    slides.chain(categories).chain(sounds).filter(|(file, e)| counts(&e.problem) && !has(file)).map(|(_, e)| e).collect()
+    slides.chain(categories).chain(sounds).chain(welcome).filter(|(file, e)| counts(&e.problem) && !has(file)).map(|(_, e)| e).collect()
 }
 
 /// Writes `quiz.json` into the package folder `root` (see `write_atomic`).
@@ -942,7 +946,10 @@ fn remove_dir(path: &Path) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use quiz_core::{AnswerMode, Background, Category, CorrectAnswer, Question, Slide, SlideContent, SoundChoice, SoundSlot, MAX_EVERYONE_ANSWERS, MAX_POINTS};
+    use quiz_core::{
+        AnswerMode, Background, Category, CorrectAnswer, Question, Slide, SlideContent, SoundChoice, SoundSlot, Welcome, WelcomeFile,
+        MAX_EVERYONE_ANSWERS, MAX_POINTS,
+    };
 
     /// The problem `check` reports when the quiz's flag picture is missing.
     fn flag_missing() -> Vec<ValidationError> {
@@ -1566,6 +1573,24 @@ mod tests {
 
         fs::remove_file(package.root.join("media/intro.mp3")).unwrap();
         let problem = Problem::SoundMedia { slot: SoundSlot::LobbyMusic, file: "media/intro.mp3".into(), issue: MediaIssue::Missing };
+        assert_eq!(problems(&package.quiz, &package.root), [ValidationError { slide_id: None, problem }]);
+        assert!(check_playable(&package.quiz, &package.root).is_err());
+    }
+
+    #[test]
+    fn the_welcome_screens_files_are_saved_with_the_quiz_and_a_missing_one_keeps_it_from_playing() {
+        let mut quiz = quiz_with_picture("media/flag.png");
+        quiz.welcome = Welcome { on: true, logo: Some("media/logo.png".into()), intro: Some("media/intro.mp4".into()), ..Welcome::default() };
+        let media = media_folder("welcome-media", &[("media/flag.png", b"png"), ("media/logo.png", b"logo"), ("media/intro.mp4", b"mp4")]);
+        let file = temp("welcome-out").join("test.quiz");
+        save(&quiz, &media, &file).unwrap();
+        let package = open(&file, &temp("welcome-cache")).unwrap();
+        assert_eq!(package.quiz.welcome, quiz.welcome);
+        assert_eq!(fs::read(package.root.join("media/logo.png")).unwrap(), b"logo");
+        assert_eq!(fs::read(package.root.join("media/intro.mp4")).unwrap(), b"mp4");
+
+        fs::remove_file(package.root.join("media/intro.mp4")).unwrap();
+        let problem = Problem::WelcomeMedia { place: WelcomeFile::Intro, file: "media/intro.mp4".into(), issue: MediaIssue::Missing };
         assert_eq!(problems(&package.quiz, &package.root), [ValidationError { slide_id: None, problem }]);
         assert!(check_playable(&package.quiz, &package.root).is_err());
     }

@@ -16,6 +16,7 @@ pub mod style;
 mod text;
 pub mod theme;
 pub mod view;
+pub mod welcome;
 
 pub use category::{category_named, fresh_category_name, Category, MAX_CATEGORY_NAME_CHARS};
 pub use game::{
@@ -52,6 +53,7 @@ pub use theme::{
 };
 pub use results::{AskedQuestion, PlayerResult, ShowResults};
 pub use view::GameView;
+pub use welcome::{Welcome, WelcomeFile};
 
 #[cfg(test)]
 mod ui_constants {
@@ -100,6 +102,7 @@ mod ui_constants {
             ("MAX_JOKERS", crate::MAX_JOKERS.to_string()),
             ("LAST_SECONDS_MS", crate::LAST_SECONDS_MS.to_string()),
             ("DEFAULT_QUIZ_SOUNDS", format!("{} as const", serde_json::to_string(&crate::QuizSounds::default()).unwrap())),
+            ("DEFAULT_WELCOME", format!("{} as const", serde_json::to_string(&crate::Welcome::default()).unwrap())),
             ("MAX_SOUND_VOLUME", crate::MAX_SOUND_VOLUME.to_string()),
             ("SOUND_SLOTS", format!("{} as const", serde_json::to_string(&crate::SoundSlot::ALL).unwrap())),
             ("EFFECT_SLOTS", sound_slots(false)),

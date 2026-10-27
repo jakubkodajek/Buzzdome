@@ -157,7 +157,8 @@ function BackgroundVideo(props: { src: string; playing: boolean; loop: boolean; 
   return <video ref={video} src={src} loop={loop} muted={muted} playsInline preload={preload} onError={onError} />;
 }
 
-function Picture({ src }: { src: string }) {
+/** A picture that shows nothing when its file fails. */
+export function Picture({ src }: { src: string }) {
   // A missing file shows nothing rather than a broken-image icon on the projector.
   const [failed, setFailed] = useState(false);
   return failed ? null : <img src={src} alt="" onError={() => setFailed(true)} />;

@@ -2,8 +2,8 @@
 // come in with the actions, and slide updates are pure functions.
 
 import { sameSounds } from "../audio/library";
-import { settingsOf, soundsOf } from "../quiz";
-import type { Category, Quiz, QuizSettings, QuizSounds, Slide } from "../types";
+import { sameFields, settingsOf, soundsOf, welcomeOf } from "../quiz";
+import type { Category, Quiz, QuizSettings, QuizSounds, Slide, Welcome } from "../types";
 import { forgetCategory, formatLike } from "./slides";
 
 export type Edit =
@@ -14,6 +14,8 @@ export type Edit =
   | { type: "setSettings"; settings: QuizSettings }
   /** What the show sounds like (`Quiz.sounds`). */
   | { type: "setSounds"; sounds: QuizSounds }
+  /** The screen the show opens on (`Quiz.welcome`). */
+  | { type: "setWelcome"; welcome: Welcome }
   | { type: "insertSlide"; index: number; slide: Slide }
   /** Applies `update` to the slide with this id as it is when the edit lands. */
   | { type: "updateSlide"; id: string; update: (slide: Slide) => Slide }
@@ -61,13 +63,12 @@ export function applyEdit(quiz: Quiz, edit: Edit): Quiz {
       return edit.title === quiz.title ? quiz : { ...quiz, title: edit.title };
     case "setTheme":
       return edit.theme === quiz.theme ? quiz : { ...quiz, theme: edit.theme };
-    case "setSettings": {
-      const settings = settingsOf(quiz);
-      const same = (Object.keys(edit.settings) as (keyof QuizSettings)[]).every((key) => edit.settings[key] === settings[key]);
-      return same ? quiz : { ...quiz, settings: edit.settings };
-    }
+    case "setSettings":
+      return sameFields(settingsOf(quiz), edit.settings) ? quiz : { ...quiz, settings: edit.settings };
     case "setSounds":
       return sameSounds(soundsOf(quiz), edit.sounds) ? quiz : { ...quiz, sounds: edit.sounds };
+    case "setWelcome":
+      return sameFields(welcomeOf(quiz), edit.welcome) ? quiz : { ...quiz, welcome: edit.welcome };
     case "insertSlide": {
       if (!inRange(edit.index, count + 1)) return quiz;
       const slides = [...quiz.slides];
