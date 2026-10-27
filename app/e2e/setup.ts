@@ -21,6 +21,8 @@ afterEach(async (context) => {
       // That window is not open, or the app is gone: nothing to keep.
     }
   }
+  // The file's next tests go on in the Director, as after any other test.
+  await app.window("director").catch(() => undefined);
 });
 
 afterAll(async () => {

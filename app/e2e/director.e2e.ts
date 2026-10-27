@@ -26,7 +26,10 @@ const TABS: StringKey[] = ["tabQuestions", "tabTeams", "tabResponses", "tabResul
 /**
  * Buttons the crawl leaves alone: they open the system's file picker, which
  * the file tests drive, or its print dialog, leave the Director (the editor
- * has its own tests), end the show or the app, or start one.
+ * has its own tests), end the show or the app, or start one. Going to the
+ * final, starting over and resetting the scores have their own tests: in a
+ * crawl they would skip the questions the command panel test plays, or
+ * clear what the results test reads, whenever they happen to be enabled.
  */
 const NOT_CLICKED: (StringKey | { text: string })[] = [
   "openQuiz",
@@ -40,6 +43,9 @@ const NOT_CLICKED: (StringKey | { text: string })[] = [
   "closeAppKeepShow",
   "demoQuiz",
   "resume",
+  "goToFinal",
+  "startOver",
+  "resetScores",
 ];
 
 const player = (view: GameView, buzzer: number) => {
@@ -127,8 +133,11 @@ describe("the Director", () => {
     // What the questions gave and the points added by hand make the score.
     for (const p of results.players) expect(p.rounds.reduce((sum, points) => sum + points, p.adjusted)).toBe(p.score);
     await app.tab("tabResults");
-    expect(await app.count(".results-body > .grid tbody tr")).toBe(results.players.length);
-    expect(await app.count(".results-question")).toBe(results.questions.length);
+    // The tab draws the results a moment after it opens.
+    const rows = async () => [await app.count(".results-body > .grid tbody tr"), await app.count(".results-question")];
+    await waitFor("the results drawn", async () => (await rows()).join() === [results.players.length, results.questions.length].join()).catch(async (error) => {
+      throw new Error(`${error}: the tab shows ${(await rows()).join(" players, ")} questions`);
+    });
     await app.assertHealthy();
   });
 
