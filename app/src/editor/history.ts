@@ -2,7 +2,7 @@
 // come in with the actions, and slide updates are pure functions.
 
 import { sameSounds } from "../audio/library";
-import { sameWelcome, settingsOf, soundsOf, welcomeOf } from "../quiz";
+import { sameFields, settingsOf, soundsOf, welcomeOf } from "../quiz";
 import type { Category, Quiz, QuizSettings, QuizSounds, Slide, Welcome } from "../types";
 import { forgetCategory, formatLike } from "./slides";
 
@@ -63,15 +63,12 @@ export function applyEdit(quiz: Quiz, edit: Edit): Quiz {
       return edit.title === quiz.title ? quiz : { ...quiz, title: edit.title };
     case "setTheme":
       return edit.theme === quiz.theme ? quiz : { ...quiz, theme: edit.theme };
-    case "setSettings": {
-      const settings = settingsOf(quiz);
-      const same = (Object.keys(edit.settings) as (keyof QuizSettings)[]).every((key) => edit.settings[key] === settings[key]);
-      return same ? quiz : { ...quiz, settings: edit.settings };
-    }
+    case "setSettings":
+      return sameFields(settingsOf(quiz), edit.settings) ? quiz : { ...quiz, settings: edit.settings };
     case "setSounds":
       return sameSounds(soundsOf(quiz), edit.sounds) ? quiz : { ...quiz, sounds: edit.sounds };
     case "setWelcome":
-      return sameWelcome(welcomeOf(quiz), edit.welcome) ? quiz : { ...quiz, welcome: edit.welcome };
+      return sameFields(welcomeOf(quiz), edit.welcome) ? quiz : { ...quiz, welcome: edit.welcome };
     case "insertSlide": {
       if (!inRange(edit.index, count + 1)) return quiz;
       const slides = [...quiz.slides];

@@ -22,9 +22,10 @@ export function welcomeOf(quiz: Quiz): Welcome {
   return quiz.welcome ?? DEFAULT_WELCOME;
 }
 
-/** Whether two welcome screens show the same. */
-export function sameWelcome(a: Welcome, b: Welcome): boolean {
-  return (Object.keys(a) as (keyof Welcome)[]).every((key) => a[key] === b[key]);
+/** Whether two flat records (the quiz's settings, its welcome screen) hold the same value under each key. */
+export function sameFields<T extends object>(a: T, b: T): boolean {
+  const keys = new Set([...Object.keys(a), ...Object.keys(b)] as (keyof T)[]);
+  return [...keys].every((key) => a[key] === b[key]);
 }
 
 /** How each kind of slide is named in the UI. */
