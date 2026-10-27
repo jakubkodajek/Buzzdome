@@ -404,6 +404,18 @@ fn buzz_303s_showing(buzzer: u8, timer: u8, shown: u8) -> Vec<u8> {
     from_303s(&[0x32, buzzer - 1, 0x50, shown, timer, 0, 0, 0, 0, 0])
 }
 
+/// Puts the buzzers in `mode` and waits until the receiver thread took it:
+/// a report pushed right after `set_mode` may otherwise be read, in a read
+/// already waiting, under the mode before. The thread takes its control
+/// messages before each read, so once a report sent after `set_mode` comes
+/// back, every later report is read in `mode`.
+fn set_mode_now(handle: &ReceiverHandle, backend: &FakeBackend, rx: &Receiver<ReceiverEvent>, mode: BuzzerMode) {
+    handle.set_mode(mode);
+    let answer = from_303s(&[0x12, 0x01]);
+    backend.0.lock().unwrap().inbox.push_back(answer.clone());
+    wait_for(rx, |e| matches!(e, ReceiverEvent::Raw(r) if r.bytes == answer));
+}
+
 /// The receiver thread on an Enjoy 303S receiver that answered its set-up.
 fn start_303s(backend: &FakeBackend, config: ReceiverConfig) -> (ReceiverHandle, Receiver<ReceiverEvent>) {
     backend.0.lock().unwrap().plugged = true;
@@ -463,7 +475,7 @@ fn orders_a_fastest_finger_buzz_by_the_buzzers_timers() {
     let backend = FakeBackend::default();
     let config = ReceiverConfig { timer_window: Duration::from_millis(60), ..config() };
     let (handle, rx) = start_303s(&backend, config);
-    handle.set_mode(BuzzerMode::FastestFinger);
+    set_mode_now(&handle, &backend, &rx, BuzzerMode::FastestFinger);
     // Buzzer 1's press arrives first, though buzzer 2 pressed sooner after its light.
     backend.0.lock().unwrap().inbox.extend([buzz_303s(1, 200), buzz_303s(2, 120)]);
     let ReceiverEvent::Raw(first) = wait_for(&rx, |e| matches!(e, ReceiverEvent::Raw(r) if !r.decoded.is_empty())) else { unreachable!() };
@@ -477,7 +489,7 @@ fn orders_a_fastest_finger_buzz_by_the_buzzers_timers() {
     assert_eq!(presses, [(2, Some(120), first.at_ms), (1, Some(200), first.at_ms)]);
 
     // Outside fastest finger a press goes on at once.
-    handle.set_mode(BuzzerMode::Answers);
+    set_mode_now(&handle, &backend, &rx, BuzzerMode::Answers);
     let sent = Instant::now();
     backend.0.lock().unwrap().inbox.push_back(buzz_303s(3, 50));
     wait_for(&rx, |e| matches!(e, ReceiverEvent::Press { press, .. } if press.buzzer == 3));
@@ -490,7 +502,7 @@ fn a_buzz_from_a_buzzer_that_was_not_ready_is_dropped_and_logged() {
     let backend = FakeBackend::default();
     let (handle, rx) = start_303s(&backend, config());
     // Team 5 hammers its locked buzzer while team 2's buzz is judged.
-    handle.set_mode(BuzzerMode::Buzzed);
+    set_mode_now(&handle, &backend, &rx, BuzzerMode::Buzzed);
     backend.0.lock().unwrap().inbox.extend([buzz_303s_showing(5, 30, 0x15), buzz_303s_showing(5, 140, 0x15)]);
     for _ in 0..2 {
         let pressed = |e: &ReceiverEvent| matches!(e, ReceiverEvent::Raw(r) if r.bytes.get(4) == Some(&0x32));
@@ -500,7 +512,7 @@ fn a_buzz_from_a_buzzer_that_was_not_ready_is_dropped_and_logged() {
     }
     // Judged wrong: the round goes on, and team 5's next press, as its
     // buzzer turned ready, counts, however soon after its last.
-    handle.set_mode(BuzzerMode::FastestFinger);
+    set_mode_now(&handle, &backend, &rx, BuzzerMode::FastestFinger);
     backend.0.lock().unwrap().inbox.push_back(buzz_303s(5, 8));
     let ReceiverEvent::Press { press, .. } = wait_for(&rx, |e| matches!(e, ReceiverEvent::Press { .. })) else { unreachable!() };
     assert_eq!(press, Press::timed(5, Button::Big, 8));
@@ -534,8 +546,7 @@ fn a_press_just_before_a_round_begins_does_not_hide_the_first_one_in_it() {
     // A team hammers its buzzer through the start: one press while dark...
     backend.0.lock().unwrap().inbox.push_back(buzz_303s_showing(5, 30, 0x00));
     wait_for(&rx, |e| matches!(e, ReceiverEvent::Press { press, .. } if press.buzzer == 5));
-    handle.set_mode(BuzzerMode::FastestFinger);
-    std::thread::sleep(Duration::from_millis(20));
+    set_mode_now(&handle, &backend, &rx, BuzzerMode::FastestFinger);
     // ...and the next, within the repeat gap, as its buzzer showed ready.
     backend.0.lock().unwrap().inbox.push_back(buzz_303s(5, 8));
     let ReceiverEvent::Press { press, .. } = wait_for(&rx, |e| matches!(e, ReceiverEvent::Press { .. })) else { unreachable!() };
@@ -585,7 +596,7 @@ fn a_fastest_finger_buzz_waiting_for_the_timers_goes_on_when_the_receiver_goes()
         let backend = FakeBackend::default();
         let config = ReceiverConfig { timer_window: Duration::from_secs(30), ..config() };
         let (handle, rx) = start_303s(&backend, config);
-        handle.set_mode(BuzzerMode::FastestFinger);
+        set_mode_now(&handle, &backend, &rx, BuzzerMode::FastestFinger);
         backend.0.lock().unwrap().inbox.push_back(buzz_303s(4, 90));
         wait_for(&rx, |e| matches!(e, ReceiverEvent::Raw(r) if !r.decoded.is_empty()));
         if deselect {
@@ -609,7 +620,7 @@ fn a_fastest_finger_buzz_waiting_for_the_timers_goes_on_when_the_round_ends() {
     let backend = FakeBackend::default();
     let config = ReceiverConfig { timer_window: Duration::from_secs(30), ..config() };
     let (handle, rx) = start_303s(&backend, config);
-    handle.set_mode(BuzzerMode::FastestFinger);
+    set_mode_now(&handle, &backend, &rx, BuzzerMode::FastestFinger);
     backend.0.lock().unwrap().inbox.push_back(buzz_303s(4, 90));
     wait_for(&rx, |e| matches!(e, ReceiverEvent::Raw(r) if !r.decoded.is_empty()));
     handle.set_mode(BuzzerMode::Off);
