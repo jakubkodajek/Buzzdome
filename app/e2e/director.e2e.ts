@@ -2,10 +2,12 @@
 // button clicked once (nothing may break), then the controls that change a
 // show checked for what they do.
 
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import type { StringKey } from "../src/i18n";
 import { translator } from "../src/i18n";
-import type { GameView } from "../src/types";
+import type { GameView, ShowResults } from "../src/types";
 import { App, t, waitFor } from "./harness";
 
 let app: App;
@@ -21,17 +23,19 @@ afterAll(async () => {
 
 // The Lights tab has its own crawl (lights.e2e.ts): with a button or more for
 // each of its looks, a crawl of it takes long enough to need a test of its own.
-const TABS: StringKey[] = ["tabQuestions", "tabTeams", "tabResponses", "tabBuzzers", "tabMedia", "tabReceiver", "tabSettings"];
+const TABS: StringKey[] = ["tabQuestions", "tabTeams", "tabResponses", "tabResults", "tabBuzzers", "tabMedia", "tabReceiver", "tabSettings"];
 
 /**
  * Buttons the crawl leaves alone: they open the system's file picker, which
- * the file tests drive, leave the Director (the editor has its own tests),
- * end the show or the app, or start one.
+ * the file tests drive, or its print dialog, leave the Director (the editor
+ * has its own tests), end the show or the app, or start one.
  */
 const NOT_CLICKED: (StringKey | { text: string })[] = [
   "openQuiz",
   "importTeams",
   "exportLog",
+  "resultsExport",
+  "resultsPrint",
   "mediaAddHint",
   "quizEditor",
   "endShow",
@@ -46,6 +50,18 @@ const player = (view: GameView, buzzer: number) => {
   return found;
 };
 
+/** Chooses `value` in the Settings tab's list that offers all of `values`. */
+async function chooseSetting(value: string, ...values: string[]): Promise<void> {
+  for (const element of await app.page.findAll(".tab-body select")) {
+    const options = await app.page.execute<string[]>("return [...arguments[0].options].map((o) => o.value);", [element]);
+    if (values.every((v) => options.includes(v))) {
+      await app.page.execute("const s = arguments[0]; s.value = arguments[1]; s.dispatchEvent(new Event('change', { bubbles: true })); return true;", [element, value]);
+      return;
+    }
+  }
+  throw new Error(`no list of ${values.join(", ")}`);
+}
+
 describe("the Director", () => {
   test("every tab and button works before a show", async () => {
     for (const tab of TABS) {
@@ -56,9 +72,29 @@ describe("the Director", () => {
     expect(await app.view()).toBeNull();
   });
 
-  test("every tab and button works during a show", async () => {
+  test("the check before the show: what is not ready, a fix for each, then hidden", async () => {
     await app.press("demoQuiz");
-    await app.waitView("the show", () => true);
+    await app.waitView("the lobby", (v) => v.phase.phase === "lobby");
+    await app.seeText(t("launchCheck"));
+    // The receiver, the buzzers, the projector, the sound and the disk, whose free space the system tells.
+    expect(await app.count(".launch-item")).toBe(5);
+    await app.seeText(t("launchNoBuzzers"));
+    await app.tab("tabBuzzers");
+    await app.page.click(await app.$(".buzzer-grid .buzzer:nth-child(1) .key-big"));
+    await app.seeText(t("launchBuzzersRegistered", { players: 1 }));
+    await app.seeText(t("launchProjectorClosed"));
+    await app.press("launchOpenProjector");
+    await waitFor("the projector open", async () => !(await app.bodyText()).includes(t("launchProjectorClosed")));
+    await app.press("launchPlaySound");
+    await app.press("launchSoundHeardButton");
+    await app.seeText(t("launchSoundHeard"));
+    await app.assertHealthy();
+    await app.press("launchHide");
+    await waitFor("the check hidden", async () => (await app.count(".launch-check")) === 0);
+  });
+
+  test("every tab and button works during a show", async () => {
+    // The show the check before it started, still in the lobby.
     await app.tab("tabBuzzers");
     for (const buzzer of [1, 2, 3]) await app.page.click(await app.$(`.buzzer-grid .buzzer:nth-child(${buzzer}) .key-big`));
     for (const tab of TABS) {
@@ -82,6 +118,35 @@ describe("the Director", () => {
     }
     const end = (await app.view())!;
     expect(end.controls.next).toBe(false);
+    await app.assertHealthy();
+  });
+
+  test("Results: the ranking and every question the show asked", async () => {
+    const results = (await app.invoke<ShowResults | null>("show_results"))!;
+    const buzzers = (await app.view())!.players.map((p) => p.buzzer);
+    expect(results.players.map((p) => p.buzzer).sort((a, b) => a - b)).toEqual([...buzzers].sort((a, b) => a - b));
+    expect(results.questions.length).toBeGreaterThan(0);
+    // What the questions gave and the points added by hand make the score.
+    for (const p of results.players) expect(p.rounds.reduce((sum, points) => sum + points, p.adjusted)).toBe(p.score);
+    await app.tab("tabResults");
+    expect(await app.count(".results-body > .grid tbody tr")).toBe(results.players.length);
+    expect(await app.count(".results-question")).toBe(results.questions.length);
+    await app.assertHealthy();
+  });
+
+  // The system's file picker is driven through the X server (`App.pickFile`).
+  test.skipIf(process.platform !== "linux")("Results: exported to a CSV file through the system's picker", async () => {
+    const results = (await app.invoke<ShowResults | null>("show_results"))!;
+    const file = join(app.data, "results.csv");
+    await app.tab("tabResults");
+    await app.press("resultsExport");
+    await app.pickFile(file);
+    await waitFor("the results file", async () => existsSync(file));
+    const rows = readFileSync(file, "utf8").split("\r\n").filter(Boolean);
+    // Czech: cells split at semicolons, as Excel set for Czech reads them.
+    expect(rows[0]).toMatch(new RegExp(`^\uFEFF${t("colPlace")};${t("colBuzzer")};${t("name")};`));
+    expect(rows).toHaveLength(results.players.length + 1);
+    await app.seeText(t("resultsSaved"));
     await app.assertHealthy();
   });
 
@@ -136,15 +201,7 @@ describe("the Director", () => {
 
   test("Settings: the language switches the whole Director and back", async () => {
     await app.tab("tabSettings");
-    const select = async () => {
-      for (const element of await app.page.findAll(".tab-body select")) {
-        const options = await app.page.execute<string[]>("return [...arguments[0].options].map((o) => o.value);", [element]);
-        if (options.includes("en") && options.includes("cs")) return element;
-      }
-      throw new Error("no language list");
-    };
-    const choose = async (lang: string) =>
-      app.page.execute("const s = arguments[0]; s.value = arguments[1]; s.dispatchEvent(new Event('change', { bubbles: true })); return true;", [await select(), lang]);
+    const choose = (lang: string) => chooseSetting(lang, "cs", "en");
     await choose("en");
     const en = translator("en");
     await app.seeText(en("tabSettings"));
@@ -152,6 +209,18 @@ describe("the Director", () => {
     await app.assertHealthy();
     await choose("cs");
     await app.seeText(t("tabSettings"));
+  });
+
+  test("Settings: the dark look darkens the Director and back", async () => {
+    await app.tab("tabSettings");
+    const choose = (look: string) => chooseSetting(look, "light", "dark", "system");
+    const dark = () => app.count(".director.dark");
+    expect(await dark()).toBe(0);
+    await choose("dark");
+    await waitFor("the dark look", async () => (await dark()) === 1);
+    await app.assertHealthy();
+    await choose("light");
+    await waitFor("the light look", async () => (await dark()) === 0);
   });
 
   test("nothing failed in either window", async () => {

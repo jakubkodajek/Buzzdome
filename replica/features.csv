@@ -47,7 +47,7 @@ Spreadsheet import of questions (one sheet per round),studio,should,yes,yes,§3.
 Export questions to a spreadsheet,studio,should,yes,yes,clone: CSV in the import columns with media next to it; re-importable (spec QZ-8)
 Table view to edit all questions at once,studio,should,yes,yes,§3.2.6.2
 Full-screen slide preview,studio,should,yes,partial,§3.2.6.1 F5; clone: Shift+F5 test-runs from the selected slide on the projector
-Response chart per answer,host screen,should,yes,partial,§5.4.8 key C; clone: answer counts on each answer and right / wrong / none bars
+Response chart per answer,host screen,should,yes,yes,"§5.4.8 key C; clone: answer counts on each answer and right / wrong / none bars, and with the quiz setting answerChart a bar on each answer once it is shown; the Director's Responses tab shows right / wrong / none"
 Phone shows correct or incorrect and points won,player,should,yes,skip,"§5.2.4.1 feedback screens; desktop scope (2026-10-05): players answer on hardware buzzers, no phones; the buzzer lights right or wrong"
 Phone shows own score and rank,player,should,yes,skip,"§5.2.4.1 intermediate and final scores; desktop scope (2026-10-05): players answer on hardware buzzers, no phones"
 Pause and resume the countdown,director,should,yes,yes,§5.5.1 key P
@@ -57,6 +57,7 @@ Undo the score changes of the last question,director,should,yes,partial,§5.7.2;
 Reset scores and start the show over with the same players,director,should,yes,yes,"§5.7.2 reset scores; clone: Reset scores in the Teams tab, Start over in the Questions tab (spec SF-9)"
 Live responses view showing who has not answered,director,should,yes,yes,§5.7.4
 Disable enable and remove a player,director,should,yes,partial,§5.7.2; clone: enable and disable; no remove
+Dark mode for the Director,director,could,yes,yes,"§5.7 right-click the command panel; clone: the Settings tab chooses light, dark or as the system (spec SF-10)"
 Keyboard shortcuts on the host screen (Space next S scores P pause),host screen,should,yes,yes,§5.5.1
 Show settings: show correct answer and allow revising answers,settings,should,yes,yes,§4.6; clone: quiz settings (spec QZ-11)
 Show settings: run the clock for the full time,settings,should,yes,yes,§4.6; clone: quiz settings (spec QZ-11)
@@ -64,8 +65,8 @@ Configurable end-of-question steps,settings,should,yes,partial,"§4.7; clone: wh
 Sounds for countdown correct incorrect and background music,settings,should,yes,yes,"§4.4; we need our own royalty-free sounds; clone: our own synthesized library (31 effects for ten moments, six music loops) or the quiz's own files, chosen per quiz (spec SN-1 to SN-3)"
 Play in groups or teams with group scoring,settings,should,yes,no,§4.2.2.1 and §4.3.2.1 lockout and first/sum/average
 Round scores and round winners,host screen,should,yes,no,§5.4.6 Ctrl+S and §5.4.7 Ctrl+E
-Works without internet on a local network,reliability,should,yes,yes,§4.2.1 local Wi-Fi mode; decide in /replica-architect; clone: a desktop app; needs no network
-Export results to a spreadsheet,results,should,yes,no,§7.1 Analyzer export
+Works without internet on a local network,reliability,should,yes,yes,§4.2.1 local Wi-Fi mode; clone: a desktop app; needs no network
+Export results to a spreadsheet,results,should,yes,yes,§7.1 Analyzer export; clone: CSV from the Director's Results tab; also printed or saved as a PDF
 Reversed leaderboard (lowest first),host screen,could,yes,no,§5.4.6 Shift+S
 Multiple correct answers with correctness percentages,studio,could,yes,yes,§3.4.1.2; clone: several right answers each with a share of the points (quiz format v5)
 Ordered answers with exact or partial scoring,studio,could,yes,no,§3.4.1.2
@@ -97,7 +98,7 @@ Personal jingles for players,player,could,yes,no,§4.4
 Sound pad for the quizmaster,director,could,yes,yes,§5.2.4.4; clone: sound board of 3x4 to 8x8 pads in the Media player tab (SN-7)
 Media player in the Director (show a picture or video full screen),director,could,yes,yes,§5.7.7; clone: library kept per computer with search; pictures and videos over the projector stage (SN-7)
 Edit a question during the show,director,could,yes,no,§5.7.1 Edit question
-Per-question history of every answer,director,could,yes,no,§5.7.3 Analyzer view
+Per-question history of every answer,director,could,yes,yes,§5.7.3 Analyzer view; clone: the Director's Results tab
 Slide routing based on a vote,studio,could,yes,no,§3.14.2
 Bilingual quiz shown side by side,studio,could,yes,no,§3.9
 Playlists of several quizzes with scores carried over,studio,could,yes,no,§3.14.14

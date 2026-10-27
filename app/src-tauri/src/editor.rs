@@ -381,6 +381,15 @@ pub enum ListSeparator {
     Comma,
 }
 
+impl ListSeparator {
+    pub fn byte(self) -> u8 {
+        match self {
+            ListSeparator::Semicolon => b';',
+            ListSeparator::Comma => b',',
+        }
+    }
+}
+
 /// Writes the quiz of the draft `draft` as a CSV file the quizmaster picks
 /// (none when they cancel), with its media next to it (spec QZ-8).
 #[tauri::command]
@@ -392,12 +401,8 @@ pub async fn editor_export_sheet(
     separator: ListSeparator,
     picker: Picker,
 ) -> CmdResult<Option<SheetExport>> {
-    let separator = match separator {
-        ListSeparator::Semicolon => b';',
-        ListSeparator::Comma => b',',
-    };
     let Some(path) = dialogs::pick_save(window, picker, quiz_file::CSV_EXTENSION, None).await? else { return Ok(None) };
-    on_draft(app, draft, move |_, _, root, _| Ok(Some(quiz_file::export_sheet(&quiz, &root, &path, separator)?))).await
+    on_draft(app, draft, move |_, _, root, _| Ok(Some(quiz_file::export_sheet(&quiz, &root, &path, separator.byte())?))).await
 }
 
 /// Discards the draft, also one that cannot be read: the quizmaster chose to.

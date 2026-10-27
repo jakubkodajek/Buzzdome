@@ -30,10 +30,11 @@ use buzzers::clock::ShowClock;
 use buzzers::receiver::HardwareDriver;
 use buzzers::{BuzzerDriver, Press, VirtualDriver};
 use dialogs::Picker;
+use editor::ListSeparator;
 use error::CmdResult;
 pub use error::AppError;
 use hardware::Hardware;
-use quiz_core::{BuzzerId, BuzzerMode, Command, Effect, Game, GameView, Light, Quiz, Stamped};
+use quiz_core::{BuzzerId, BuzzerMode, Command, Effect, Game, GameView, Light, Quiz, ShowResults, Stamped};
 use recent_files::RecentFiles;
 use session::{Resumed, Session, SessionMeta, SessionSummary};
 use std::fs;
@@ -385,6 +386,24 @@ async fn get_view(app: AppHandle) -> CmdResult<Option<GameView>> {
     read_show(app, |inner| inner.game.as_ref().map(|g| g.view(now_ms()))).await
 }
 
+/// The show's results so far, for the Director's Results tab (spec SF-11).
+#[tauri::command]
+async fn show_results(app: AppHandle) -> CmdResult<Option<ShowResults>> {
+    read_show(app, |inner| inner.game.as_ref().map(Game::show_results)).await
+}
+
+/// Writes the show's results, as the Director lays them out in `rows`, to a
+/// CSV file the quizmaster picks; false when they cancel.
+#[tauri::command]
+async fn export_results(window: Window, rows: Vec<Vec<String>>, separator: ListSeparator, picker: Picker) -> CmdResult<bool> {
+    let Some(path) = dialogs::pick_save(window, picker, quiz_file::CSV_EXTENSION, None).await? else { return Ok(false) };
+    off_ui(move || {
+        quiz_file::export_results(rows, &path, separator.byte())?;
+        Ok(true)
+    })
+    .await
+}
+
 /// The whole quiz, for the Director's slide list and previews.
 #[tauri::command]
 async fn get_quiz(app: AppHandle) -> CmdResult<Option<Quiz>> {
@@ -403,6 +422,17 @@ async fn media_root(app: AppHandle) -> CmdResult<Option<String>> {
 #[tauri::command]
 async fn show_not_saved(app: AppHandle) -> CmdResult<Option<AppError>> {
     Ok(show_thread::not_saved(&app))
+}
+
+/// Free space in bytes on the disk the shows' journals are written to
+/// (`sessions_root`), for the check before a show (spec SF-2); none when
+/// the system does not say. Read off the windows' thread: a disk that does
+/// not answer freezes no window.
+#[tauri::command]
+async fn show_disk_space(app: AppHandle) -> CmdResult<Option<u64>> {
+    let root = sessions_root(&app)?;
+    // A folder not made yet will be on the disk of its nearest parent that is.
+    off_ui(move || Ok(root.ancestors().find(|dir| dir.is_dir()).and_then(|dir| fs4::available_space(dir).ok()))).await
 }
 
 /// Opens a quiz file the quizmaster picks (`.quiz` or a plain quiz JSON)
@@ -693,9 +723,12 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             get_view,
+            show_results,
+            export_results,
             get_quiz,
             media_root,
             show_not_saved,
+            show_disk_space,
             start_show_from_file,
             start_show_from_recent,
             start_demo_show,
@@ -707,10 +740,12 @@ pub fn run() {
             app_windows::open_host_window,
             app_windows::close_host_window,
             app_windows::host_window_open,
+            app_windows::projector_window,
             app_windows::report_host_problem,
             app_windows::quit_app,
             app_windows::close_declined,
             app_windows::log_problem,
+            app_windows::print_window,
             app_windows::set_menu_words,
             themes::list_themes,
             fonts::installed_fonts,

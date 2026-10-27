@@ -4,14 +4,12 @@ import { api } from "../api";
 import { useApp, useRun } from "../app-context";
 import { useBackendEvent, useLearnProgress } from "../hooks";
 import type { Translate } from "../i18n";
-import { awaitsAnswer, errorText, protocolText, receiverProblemText, REMOTE_ACTIONS, remoteActionText, remoteKeyText, settingsLostText } from "../messages";
+import { awaitsAnswer, errorText, hex4, receiverStatusText, REMOTE_ACTIONS, remoteActionText, remoteKeyText, settingsLostText, vidPid } from "../messages";
 import type { Button, BuzzerSeen, DeviceInfo, Press, PressEvent, RawReport, ReceiverInfo, ReceiverStatus, RemoteAction, RemoteKey, RemoteKeyAction } from "../types";
 import { confirmAction } from "../confirm";
 
 const LOG_LEN = 40;
 
-const hex4 = (n: number) => n.toString(16).padStart(4, "0");
-const vidPid = (d: { vendorId: number; productId: number }) => `${hex4(d.vendorId)}:${hex4(d.productId)}`;
 const hexBytes = (bytes: number[]) => bytes.map((b) => b.toString(16).padStart(2, "0")).join(" ");
 /** A press as the logs show it, with the buzzer's own timer when it sends one. */
 const pressLabel = (t: Translate, p: Press) =>
@@ -120,18 +118,7 @@ export function ReceiverTab() {
             {t("receiverUnavailable")} {info.initError}
           </p>
         ) : (
-          <p className={`receiver-state ${stateClass(status)}`}>
-            {status?.kind === "connected" &&
-              t(awaitsAnswer(status.protocol) ? "receiverNotReady" : "receiverConnected", {
-                name: status.device.product ?? "HID",
-                id: vidPid(status.device),
-                protocol: protocolText(t, status.protocol),
-              })}
-            {status?.kind === "looking" && t("receiverLooking")}
-            {status?.kind === "searching" && t("receiverSearching", { id: vidPid(status.selector) })}
-            {status?.kind === "error" && receiverProblemText(t, status.problem, status.detail, info?.platform ?? "")}
-            {status?.kind === "off" && t("receiverOff")}
-          </p>
+          <p className={`receiver-state ${stateClass(status)}`}>{status && receiverStatusText(t, status, info?.platform ?? "")}</p>
         )}
         {status?.kind === "connected" && info && !info.chosen && <p className="muted">{t("receiverFoundAutomatically")}</p>}
         {status?.kind === "connected" && !status.hasLights && <p className="muted">{t("receiverNoLights")}</p>}

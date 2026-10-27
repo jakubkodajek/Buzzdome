@@ -10,6 +10,8 @@ import { useApp, useRun } from "../app-context";
 import { useAppIcon, useHostWindowOpen } from "../hooks";
 import type { Lang, StringKey } from "../i18n";
 import type { IconColor, MonitorInfo } from "../types";
+import type { LaunchCheckSetting } from "./launch-check";
+import { LOOKS, readLook, type DirectorLook, type Look } from "./look";
 
 /** The app's icons, as the windows take them (`app_icon.rs`), in the order the picker shows them. */
 const ICONS: Record<IconColor, { label: StringKey; image: string }> = {
@@ -20,6 +22,8 @@ const ICONS: Record<IconColor, { label: StringKey; image: string }> = {
   red: { label: "iconRed", image: redIcon },
   yellow: { label: "iconYellow", image: yellowIcon },
 };
+
+const LOOK_LABEL: Record<Look, StringKey> = { light: "lookLight", dark: "lookDark", system: "lookSystem" };
 
 export interface ProjectorSettings {
   monitors: MonitorInfo[];
@@ -63,7 +67,7 @@ export function useProjectorSettings(): ProjectorSettings {
   );
 }
 
-export function SettingsTab({ projector }: { projector: ProjectorSettings }) {
+export function SettingsTab({ projector, look, launch }: { projector: ProjectorSettings; look: DirectorLook; launch: LaunchCheckSetting }) {
   const { t, lang, setLang } = useApp();
   return (
     <div className="settings">
@@ -97,6 +101,25 @@ export function SettingsTab({ projector }: { projector: ProjectorSettings }) {
           <option value="cs">Čeština</option>
           <option value="en">English</option>
         </select>
+      </fieldset>
+      <fieldset>
+        <legend>{t("directorLook")}</legend>
+        <select value={look.look} onChange={(e) => look.setLook(readLook(e.target.value))}>
+          {LOOKS.map((value) => (
+            <option key={value} value={value}>
+              {t(LOOK_LABEL[value])}
+            </option>
+          ))}
+        </select>
+        <p className="muted">{t("directorLookHint")}</p>
+      </fieldset>
+      <fieldset>
+        <legend>{t("launchCheck")}</legend>
+        <label>
+          <span>{t("launchCheckShow")}</span>
+          <input type="checkbox" checked={launch.on} onChange={(e) => launch.setOn(e.target.checked)} />
+        </label>
+        <p className="muted">{t("launchCheckHint")}</p>
       </fieldset>
       <p className="muted">{t("keyboardHint")}</p>
     </div>

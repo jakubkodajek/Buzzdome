@@ -12,7 +12,7 @@ use std::sync::{Arc, Mutex, TryLockError};
 use std::time::{Duration, Instant};
 use tauri::menu::{Menu, MenuEvent};
 use tauri::plugin::TauriPlugin;
-use tauri::{AppHandle, Emitter, Manager, Monitor, Runtime, State, Url, WebviewUrl, WebviewWindowBuilder, Window, WindowEvent};
+use tauri::{AppHandle, Emitter, Manager, Monitor, Runtime, State, Url, Webview, WebviewUrl, WebviewWindowBuilder, Window, WindowEvent};
 use ts_rs::TS;
 
 /// The projector window.
@@ -128,6 +128,36 @@ pub fn host_window_open(app: AppHandle) -> bool {
     app.get_webview_window(HOST_LABEL).is_some()
 }
 
+/// The projector window as it is now, for the check before a show (spec SF-2).
+#[derive(Serialize, TS)]
+#[ts(export)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectorWindow {
+    /// It is on the monitor the Director is on.
+    on_director_monitor: bool,
+    /// How many monitors the computer has.
+    monitors: usize,
+    fullscreen: bool,
+}
+
+/// Where the projector window is now; none while it is closed.
+#[tauri::command]
+pub async fn projector_window(app: AppHandle) -> CmdResult<Option<ProjectorWindow>> {
+    let Some(host) = app.get_webview_window(HOST_LABEL) else {
+        return Ok(None);
+    };
+    // A window closing meanwhile answers no more: as closed.
+    let (Ok(monitor), Ok(fullscreen)) = (host.current_monitor(), host.is_fullscreen()) else {
+        return Ok(None);
+    };
+    let on = monitor.as_ref().map(monitor_id);
+    Ok(Some(ProjectorWindow {
+        on_director_monitor: on.is_some() && on == director_monitor(&app),
+        monitors: app.available_monitors()?.len(),
+        fullscreen,
+    }))
+}
+
 #[tauri::command]
 pub async fn close_host_window(app: AppHandle) -> CmdResult<()> {
     match app.get_webview_window(HOST_LABEL) {
@@ -153,6 +183,14 @@ pub async fn report_host_problem(app: AppHandle, message: String) -> CmdResult<(
 /// The most of a window's problem that goes in the log: a window can send
 /// text of any size, and a long one would push the rest out of the log.
 const LOGGED_PROBLEM_CHARS: usize = 2_000;
+
+/// Opens the system's print dialog for the window that asks, which prints
+/// what its print style shows, on paper or as a PDF where the system offers
+/// it: the Director's results (spec SF-11).
+#[tauri::command]
+pub async fn print_window(webview: Webview) -> CmdResult<()> {
+    Ok(webview.print()?)
+}
 
 /// Notes in the log a problem a window has nowhere to show, such as the
 /// Director's close dialog not opening once its screen failed. Written off

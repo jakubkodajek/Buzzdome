@@ -81,6 +81,13 @@ pub struct QuizSettings {
     #[schemars(with = "bool")]
     #[ts(as = "bool")]
     pub hide_buzz_points: bool,
+    /// Once an everyone-answers question's answer is shown, the projector
+    /// draws on each answer a bar for the share of the players the question
+    /// counted who gave it: an answer chart.
+    #[serde(with = "crate::style::lenient_or_default")]
+    #[schemars(with = "bool")]
+    #[ts(as = "bool")]
+    pub answer_chart: bool,
     /// Jokers each player has for the show, up to `MAX_JOKERS`; none by
     /// default. A player's joker doubles what one question gives them,
     /// the penalty too; the quizmaster plays it before the question ends.
@@ -103,6 +110,7 @@ impl Default for QuizSettings {
             one_buzz: false,
             no_answer_penalty: false,
             hide_buzz_points: false,
+            answer_chart: false,
             jokers: 0,
         }
     }
@@ -254,12 +262,13 @@ mod tests {
             one_buzz: true,
             no_answer_penalty: true,
             hide_buzz_points: true,
+            answer_chart: true,
             jokers: 2,
         };
         let json = serde_json::to_string(&settings).unwrap();
         assert_eq!(
             json,
-            r#"{"allAnswered":"nextSlide","allAnsweredDelayS":7,"nextAfterReveal":true,"nextAfterRevealDelayS":30,"runClockOut":true,"hideAnswer":true,"changeAnswer":true,"oneBuzz":true,"noAnswerPenalty":true,"hideBuzzPoints":true,"jokers":2}"#
+            r#"{"allAnswered":"nextSlide","allAnsweredDelayS":7,"nextAfterReveal":true,"nextAfterRevealDelayS":30,"runClockOut":true,"hideAnswer":true,"changeAnswer":true,"oneBuzz":true,"noAnswerPenalty":true,"hideBuzzPoints":true,"answerChart":true,"jokers":2}"#
         );
         assert_eq!(read(&json), settings);
     }

@@ -244,6 +244,32 @@ draws slides without a show.
   loads (`useBackendEvent`, `useGameView`, `useClock`, `useQuiz`,
   `useLastSession`). Small shared helpers live in `answers.ts`, `format.ts`,
   `quiz.ts`, `keyboard.ts` and `messages.ts`. ESLint with the React hooks rules runs in CI.
+- **Director look (SF-10).** `director/look.ts` keeps the choice (light,
+  dark or as the system) in the window's preferences, and the Director's
+  root takes the class `dark` while it shows dark. Every colour of
+  `director.css` is a custom property of `.director`, which `.director.dark`
+  sets again, so the two looks cannot drift apart; the command panel,
+  toolbars and sound board are dark in both. `.director.dark` applies on
+  screen only, so what the Director prints (the results, SF-11) is light. The editor's popups the
+  Director borrows (menus, dialogs, colour, gradient and font pickers)
+  read `--popup-*` properties with their light colours as fallbacks, which
+  `.director.dark` sets, as the editor's dark properties panel does; the
+  light switches get their dark colours in `director.css`.
+  While the dark look is on screen the window's title bar is set dark
+  (`setTheme`, which draws it on Windows), and left to the system again
+  otherwise, so the light look changes nothing there.
+- **Check before the show (SF-2).** `director/launch-check.ts` decides
+  how each part stands from what the Director has anyway (the receiver's
+  info, the view's players and teams, the volumes) and from two reads the
+  backend does not push: `projector_window` (whether the projector window
+  is full screen and on the Director's screen) and `show_disk_space` (free
+  space where the journals are written, through `fs4`). `LaunchCheck.tsx`
+  shows them below the tabs while the show is in the lobby, and reads those
+  two again every 2 and 10 seconds while it is on screen. Hide puts it away
+  until another show starts; Settings turns it off for the computer
+  (`preferences.ts`). Only a person can tell that sound reaches the hall,
+  so the check plays the app's own right-answer sound at the show's
+  volume and asks.
 - **Sound.** The Director window plays the show's sounds and the slides'
   sound clips, because it stays open for the whole show and the projector
   window may not. Spec SN-5 moves playback into the Rust shell later. The
@@ -807,8 +833,11 @@ packages users will install are read the same way.
   in it was judged wrong (`Game::sits_out`), which leaves nobody to
   answer. `noAnswerPenalty` gives the players an everyone-answers question
   counts and who did not answer the question's penalty, as a wrong
-  answer. `hideAnswer` and `hideBuzzPoints` change only what the projector
-  shows (`GameView::settings`); the Director and the scores stay the same.
+  answer. `hideAnswer`, `hideBuzzPoints` and `answerChart` change only
+  what the projector shows (`GameView::settings`); the Director and the
+  scores stay the same. The answer chart's bars come from the view's
+  `answer_counts` over the players the question counted (`results`), so
+  they show what the counts on the answers already say, as shares.
   None needs a rules version: the settings travel with the quiz in the
   session, and a quiz without them plays as before.
 - **Jokers (SF-8).** `Game::jokers` keeps the questions players play
@@ -816,17 +845,18 @@ packages users will install are read the same way.
   current one, so a player's jokers left are `settings.jokers` less their
   pairs, and a joker is spent when it is played. `SetJoker` plays or takes
   back the current question's while it is ready or running and has given
-  the player nothing (`Game::can_set_joker`, no entry in `gains`), so a
-  joker always covers all or nothing of what the question gives. `credit`
-  doubles the points, gain or penalty, and keeps the doubled amount in
-  `gains`, so `RestartQuestion` takes back what was given and the joker
-  stays on the question asked again. Leaving a question before it ended
+  the player nothing (`Game::can_set_joker`, no mark of theirs in
+  `asking`), so a joker always covers all or nothing of what the question
+  gives. `credit` doubles the points, gain or penalty, and the player's
+  mark keeps the doubled amount, so `RestartQuestion` takes back what was
+  given and the joker stays on the question asked again. Leaving a question before it ended
   (`enter_slide` to another slide) drops its pairs, as the question was
   never asked. The command is journaled like any other and only exists in
   shows played since, so no rules version is needed.
 - **Reset scores and start over (SF-9).** `ResetScores` sets every
-  player's `score` and `total_answer_ms` to zero and empties `gains`, so
-  `RestartQuestion` has nothing left to take back; the slide, the jokers
+  player's `score`, `total_answer_ms` and `adjusted` to zero and empties
+  the results (`asked` and `asking`, SF-11), so `RestartQuestion` has
+  nothing left to take back; the slide, the jokers
   played and `closed_questions` stay, so a question that ended is still
   not asked twice. `StartOver` does the same, empties `jokers` and
   `closed_questions` and enters the lobby on slide 0 (`Game::enter`, which
@@ -836,6 +866,34 @@ packages users will install are read the same way.
   are (`Controls::go_to`), so no question's score changes are split by
   them. They only exist in shows played since, so no rules version is
   needed. The Director's buttons for them ask first.
+- **Results (SF-11).** A question as asked (`Asked`) keeps what it gave
+  each player it scored as a `Mark`: their answer or buzz and its time,
+  whether it was right, the points (doubled by a joker) and whether a
+  joker was played. `credit` is the one place a question changes a score,
+  and it writes the mark, so the history cannot drift from the scores.
+  The current question's marks are `asking`, made when the question first
+  credits a player or ends; entering another slide moves them to `asked`,
+  and `RestartQuestion` takes its points and answering time back from
+  them. `AdjustScore` also adds to `Player::adjusted`, so a score is
+  always the sum of the player's marks and `adjusted`: show-sim checks
+  this, and that `total_answer_ms` is the sum of the right answers' times,
+  after every command of its shows (unless a score reached the `i32`
+  limits). `Game::show_results` reads the history: the questions in the
+  order they were asked, each with its round (an end-of-round slide closes
+  one), and every player in the ranking's order (`Game::standings`, which
+  the view's ranking uses too) with what each round gave them. The history
+  is game state, rebuilt by replaying the journal like the rest, so it
+  survives a crash and needs no rules version: no command changes what it
+  does to a show.
+  The Director's Results tab loads the results again whenever the view
+  changes, one load at a time. Export to CSV writes the table that
+  `director/results.ts` lays out through `quiz_file::export_results`:
+  UTF-8 with a BOM, `;` and a decimal comma in Czech, `,` in English, and
+  a cell that would start a formula gets a leading apostrophe, as in the
+  question export. Print opens the system's print dialog for the
+  Director's window (`Webview::print`), which can also save a PDF; the
+  print style leaves the results alone on the page, under the quiz's
+  title, on as many pages as they take.
 - **Ranking.** `Game::ranking` orders the players switched on by score,
   then by the time their right answers took together (`total_answer_ms`,
   less first); wrong answers add no time, so not answering never helps.
@@ -1706,6 +1764,7 @@ them.
 | Teams: names, pairing, replay, names kept between shows; drag, click, paste and CSV import (Windows-1250), preparing names before a show | `cargo test` (`game_flow`, shell `teams`, `app_file`), `npm test` (`team-names`), headless Chromium against the preview | pass |
 | Media player and sound board: library list and order, board rules (filling, placing, swapping, resizing, mending a stored board), playing, pausing, pad clicks, ends; Director tab (search, pads lit and counting down, menus, drag and drop, layout) and the projector's picture and video | `cargo test` (`quiz_core::sound_board`, `media_player`, shell `media_player`, `quiz-file` imports), `npm test` (`media-player`), headless Chromium against the preview with generated sounds | pass |
 | Spreadsheets: columns, prefixes, settings, notes, shuffling, rounds per sheet, CSV encodings and separators, workbooks, media found and copied, export and re-import; File › Import and Export, notes dialog, one undo step, sample sheet | `cargo test` (`quiz_core::sheet`, `quiz-file` sheet), `npm test` (`sheet`, `slides`, `messages`), headless Chromium against the preview | pass |
+| Results: what each question gave whom, joker, penalty for no answer, a question asked again, rounds, hand adjustments, reset; Results tab, CSV export and the print style | `cargo test` (`game_flow`, `quiz-file` sheet; show-sim checks that marks and adjustments add up to every score after every command), `npm test` (`results`), E2E (Results tab, CSV export through the picker), the print style in headless Chromium against the preview | pass; the print dialog itself on Windows and macOS **not tested** |
 | Loudness measurement | `npm test`: a full-scale 997 Hz sine in one channel measures -3.01 LUFS as BS.1770-4 states; gating, channel sum, part, peak limit | pass |
 | Trim and Normalize volume windows, video trim window, background video menu and options, slide video (intro pause, Play video, speed, volume, part, holding with the show, blur and mosaic, replay) | headless Chromium against the preview with generated test media (a song and a test-pattern video, not in the repo) | pass |
 | Game rules under random shows: refused commands change nothing, controls match what the game accepts, scores add up, results only after close, places as the game ranks them (shared on a tie, 1, 1, 3), replay from the journal gives the same game; 1 to 50 buzzers, random quizzes of every slide kind | `crates/show-sim` (`cargo test -p show-sim`: 40 shows on every push; 30 000 and a 3000-step evening nightly); 30 000 shows locally | pass |

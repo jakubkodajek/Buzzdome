@@ -11,6 +11,32 @@
   --accent-soft: #cce4f7;
   --panel: #2b2b2b;
   --panel-hover: #3a3a3a;
+  /* Buttons and fields */
+  --control-line: #c4c4c4;
+  --button: linear-gradient(#fdfdfd, #ececec);
+  --button-hover: linear-gradient(#f2f8fe, #dcecfc);
+  --disabled: #a0a0a0;
+  --field: #ffffff;
+  /* Tables, boxes and popups */
+  --head-text: #3c3c3c;
+  --head: linear-gradient(#fafafa, #ececec);
+  --head-line: #e3e3e3;
+  --row-line: #ececec;
+  --cell-line: #f2f2f2;
+  --row-hover: #f3f9ff;
+  --on-accent-muted: #dbe9f7;
+  --backdrop: #fafafa;
+  --well: #f6f6f6;
+  --well-line: #e3e3e3;
+  --stripe: #f8f8f8;
+  --hover: #e6e6e6;
+  --right-soft: #e3f6e9;
+  --note: #fffbe6;
+  --popup-line: #b9b9b9;
+  --menu-hover: #dcebfb;
+  --menu-hover-line: #9cc3ec;
+  /* Something to look at that does not stop the show (the check before it). */
+  --warn: #b25e00;
 
   display: grid;
   grid-template-columns: 210px minmax(0, 1fr);
@@ -19,6 +45,53 @@
   color: var(--text);
   background: var(--chrome);
   user-select: none;
+}
+
+/* The dark look (Settings tab, `look.ts`): dim enough for a darkened hall.
+   The command panel, toolbars and sound board are dark in both looks.
+   Only on screen: paper stays white (the printed results, SF-11). */
+@media screen {
+  .director.dark {
+    color-scheme: dark;
+    --good: #3fb950;
+    --bad: #e5534b;
+    --chrome: #1e1e1e;
+    --surface: #252526;
+    --line: #3c3c3c;
+    --text: #e4e4e4;
+    --muted: #9a9a9a;
+    --accent: #2b78c5;
+    --accent-soft: #23395a;
+    --panel: #161616;
+    --panel-hover: #2a2a2a;
+    --control-line: #4a4a4a;
+    --button: linear-gradient(#353535, #2c2c2c);
+    --button-hover: linear-gradient(#2f3f52, #283648);
+    --disabled: #6a6a6a;
+    --field: #2a2a2a;
+    --head-text: #c8c8c8;
+    --head: linear-gradient(#2f2f2f, #282828);
+    --head-line: #3a3a3a;
+    --row-line: #313131;
+    --cell-line: #2b2b2b;
+    --row-hover: #2a3542;
+    --on-accent-muted: #cfe0f2;
+    --backdrop: #1b1b1b;
+    --well: #2c2c2c;
+    --well-line: #3a3a3a;
+    --stripe: #2a2a2a;
+    --hover: #363636;
+    --right-soft: #1f3b2a;
+    --note: #3a3320;
+    --popup-line: #4a4a4a;
+    --popup-text: var(--text);
+    --popup-bg: var(--surface);
+    --popup-separator: var(--line);
+    --popup-footer: var(--chrome);
+    --menu-hover: #2d3b4d;
+    --menu-hover-line: #4f7bb5;
+    --warn: #e3a33b;
+  }
 }
 
 .director button,
@@ -30,28 +103,28 @@
 
 .director button {
   padding: 4px 12px;
-  border: 1px solid #c4c4c4;
+  border: 1px solid var(--control-line);
   border-radius: 3px;
-  background: linear-gradient(#fdfdfd, #ececec);
+  background: var(--button);
   cursor: pointer;
 }
 
 .director button:hover:not(:disabled) {
   border-color: var(--accent);
-  background: linear-gradient(#f2f8fe, #dcecfc);
+  background: var(--button-hover);
 }
 
 .director button:disabled {
-  color: #a0a0a0;
+  color: var(--disabled);
   cursor: default;
 }
 
 .director select,
 .director input:not([type="checkbox"]) {
   padding: 3px 6px;
-  border: 1px solid #c4c4c4;
+  border: 1px solid var(--control-line);
   border-radius: 3px;
-  background: #fff;
+  background: var(--field);
 }
 
 .director .muted {
@@ -250,6 +323,75 @@
   font-weight: 600;
 }
 
+/* The check before the show (SF-2, LaunchCheck.tsx), above the tabs in the lobby. */
+.launch-check {
+  padding: 8px 12px 10px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+}
+
+.launch-check header {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+
+.launch-check h2 {
+  margin: 0;
+  font-size: 14px;
+}
+
+.launch-check header .muted {
+  flex: 1;
+}
+
+.launch-check ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.launch-item {
+  display: grid;
+  grid-template-columns: 20px 90px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  border-top: 1px solid var(--row-line);
+}
+
+.launch-icon {
+  display: flex;
+}
+
+.launch-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.launch-item.ok .launch-icon {
+  color: var(--good);
+}
+
+.launch-item.warn .launch-icon {
+  color: var(--warn);
+}
+
+.launch-item.problem .launch-icon,
+.launch-item.problem .launch-text {
+  color: var(--bad);
+}
+
+.launch-item.todo .launch-icon {
+  color: var(--accent);
+}
+
+.launch-fixes {
+  display: flex;
+  gap: 6px;
+}
+
 .tab-body {
   flex: 1;
   min-height: 0;
@@ -318,21 +460,21 @@
   padding: 4px 8px;
   text-align: left;
   font-weight: 400;
-  color: #3c3c3c;
-  background: linear-gradient(#fafafa, #ececec);
+  color: var(--head-text);
+  background: var(--head);
   border-bottom: 1px solid var(--line);
-  border-right: 1px solid #e3e3e3;
+  border-right: 1px solid var(--head-line);
 }
 
 .grid td {
   padding: 5px 8px;
   white-space: nowrap;
-  border-bottom: 1px solid #ececec;
-  border-right: 1px solid #f2f2f2;
+  border-bottom: 1px solid var(--row-line);
+  border-right: 1px solid var(--cell-line);
 }
 
 .grid tr:hover td {
-  background: #f3f9ff;
+  background: var(--row-hover);
 }
 
 .grid tr.selected td {
@@ -345,11 +487,11 @@
 }
 
 .grid tr.current .muted {
-  color: #dbe9f7;
+  color: var(--on-accent-muted);
 }
 
 .grid tr.disabled td {
-  color: #a0a0a0;
+  color: var(--disabled);
 }
 
 .grid .num {
@@ -373,7 +515,7 @@
 
 .director .grid .cell-input:focus {
   border-color: var(--accent);
-  background: #fff;
+  background: var(--field);
   color: var(--text);
 }
 
@@ -384,7 +526,8 @@
 /* Questions tab */
 
 .questions-tab,
-.teams-tab {
+.teams-tab,
+.responses-tab {
   flex: 1;
   min-height: 0;
   display: flex;
@@ -395,7 +538,7 @@
   margin: 8px;
   padding: 8px 10px;
   border-left: 4px solid var(--bad);
-  background: #f6f6f6;
+  background: var(--well);
 }
 
 .split {
@@ -492,14 +635,14 @@
   flex-direction: column;
   min-height: 0;
   overflow: auto;
-  background: #fafafa;
+  background: var(--backdrop);
 }
 
 .preview-card {
   margin: 10px;
   padding: 16px;
   border: 1px solid var(--line);
-  background: #fff;
+  background: var(--field);
 }
 
 .preview-title {
@@ -513,7 +656,7 @@
 .preview-answers {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  border-top: 1px solid #ececec;
+  border-top: 1px solid var(--row-line);
   margin-top: 12px;
 }
 
@@ -522,7 +665,7 @@
   align-items: center;
   gap: 8px;
   padding: 8px 6px;
-  border-bottom: 1px solid #ececec;
+  border-bottom: 1px solid var(--row-line);
   min-width: 0;
 }
 
@@ -535,7 +678,7 @@
 }
 
 .preview-answer.correct {
-  background: #e3f6e9;
+  background: var(--right-soft);
   font-weight: 600;
 }
 
@@ -611,7 +754,7 @@
   margin: 0 10px 10px;
   padding: 8px 10px;
   border: 1px solid var(--line);
-  background: #fffbe6;
+  background: var(--note);
   user-select: text;
 }
 
@@ -708,7 +851,7 @@
   gap: 4px;
   align-items: center;
   padding: 4px;
-  border: 1px solid #e3e3e3;
+  border: 1px solid var(--well-line);
   border-radius: 4px;
 }
 
@@ -791,15 +934,15 @@
   padding: 8px;
   white-space: pre-wrap;
   word-break: break-all;
-  background: #f6f6f6;
-  border: 1px solid #e3e3e3;
+  background: var(--well);
+  border: 1px solid var(--well-line);
 }
 
 .receiver-state {
   margin: 4px 0;
   padding: 8px 10px;
   border-left: 4px solid var(--muted);
-  background: #f6f6f6;
+  background: var(--well);
 }
 
 .receiver-state.connected {
@@ -831,7 +974,7 @@
   border: 1px solid var(--line);
   border-left: 4px solid var(--good);
   border-radius: 4px;
-  background: #f6f6f6;
+  background: var(--well);
 }
 
 .buzzers-seen strong {
@@ -871,8 +1014,8 @@
   overflow: auto;
   list-style: none;
   font-size: 12px;
-  background: #fff;
-  border: 1px solid #e3e3e3;
+  background: var(--field);
+  border: 1px solid var(--well-line);
 }
 
 .receiver .log .used,
@@ -882,6 +1025,51 @@
 
 .pre-line {
   white-space: pre-line;
+}
+
+/* Responses tab: how a closed question's players did (ResultStrip) */
+
+.result-strip {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.result-strip-bar {
+  flex: 0 1 320px;
+  display: flex;
+  height: 12px;
+  overflow: hidden;
+  border-radius: 6px;
+  background: var(--well);
+}
+
+.result-strip-bar .right,
+.result-strip-count.right strong {
+  background: var(--good);
+}
+
+.result-strip-bar .wrong,
+.result-strip-count.wrong strong {
+  background: var(--bad);
+}
+
+.result-strip-bar .none,
+.result-strip-count.none strong {
+  background: var(--muted);
+}
+
+.result-strip-count strong {
+  display: inline-block;
+  min-width: 26px;
+  margin-left: 4px;
+  padding: 0 6px;
+  border-radius: 9px;
+  text-align: center;
+  color: #fff;
+  font-variant-numeric: tabular-nums;
 }
 
 /* Teams tab: players beside the team names their buzzers are paired with */
@@ -961,7 +1149,7 @@
   align-items: center;
   gap: 6px;
   padding: 4px 6px;
-  border-bottom: 1px solid #ececec;
+  border-bottom: 1px solid var(--row-line);
 }
 
 .team-list li:last-child {
@@ -1010,7 +1198,7 @@
 
 .team-panel .icon-button:hover {
   color: var(--text);
-  background: #e6e6e6;
+  background: var(--hover);
 }
 
 .team-panel .icon-button svg {
@@ -1032,6 +1220,54 @@
 .team-hint {
   margin: 0;
   font-size: 11px;
+}
+
+/* Results tab: the ranking and every question asked (spec SF-11) */
+
+.results-tab {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.results-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 0 16px 16px;
+  user-select: text;
+}
+
+.results-body .grid {
+  width: auto;
+  min-width: 50%;
+}
+
+/* The quiz's title heads the printed results only: the window shows the quiz already. */
+.results-title {
+  display: none;
+}
+
+.results-body h2 {
+  margin: 16px 0 8px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.results-question h3 {
+  margin: 14px 0 6px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.results-body p {
+  margin: 0;
+}
+
+.results-joker {
+  font-weight: 600;
+  color: var(--accent);
 }
 
 /* Media player: a toolbar, the library list with its search, and the sound board */
@@ -1146,7 +1382,7 @@
 }
 
 .media-files li:nth-child(even) {
-  background: #f8f8f8;
+  background: var(--stripe);
 }
 
 .media-files li.selected {
@@ -1317,9 +1553,9 @@
   position: fixed;
   z-index: 50;
   padding: 8px;
-  border: 1px solid #b9b9b9;
+  border: 1px solid var(--popup-line);
   border-radius: 4px;
-  background: #fff;
+  background: var(--field);
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.25);
 }
 
@@ -1350,7 +1586,7 @@
 
 .director button.pad-swatch[aria-checked="true"],
 .director button.pad-swatch:hover {
-  border-color: #1b1b1b;
+  border-color: var(--text);
   background: var(--pad);
 }
 
@@ -1364,7 +1600,7 @@
   height: 18px;
   padding: 0;
   border-radius: 2px;
-  background: #f2f2f2;
+  background: var(--chrome);
 }
 
 .director .grid-size-cells button.on {
@@ -1386,8 +1622,31 @@
 }
 
 .director .context-menu button:hover:not(:disabled) {
-  border-color: #9cc3ec;
-  background: #dcebfb;
+  border-color: var(--menu-hover-line);
+  background: var(--menu-hover);
+}
+
+/* The editor's controls the Director borrows (editor/controls.tsx,
+   ColorPicker.tsx) take the dark look's colours from the --popup-* tokens;
+   the light switches need their own. */
+
+.director.dark .lights {
+  --chequer: repeating-conic-gradient(#3a3a3a 0 25%, #2a2a2a 0 50%);
+}
+
+.director.dark .lights .switch,
+.director.dark .lights .swatch {
+  border-color: var(--control-line);
+  background: var(--field);
+}
+
+.director.dark .lights .switch:not(.on) .switch-knob {
+  background: #cfcfcf;
+}
+
+.director.dark .lights .switch.on {
+  border-color: var(--accent);
+  background: var(--accent);
 }
 
 /* Lights tab */
@@ -1537,4 +1796,52 @@
 
 .remote-keys tr.selected th {
   background: var(--accent-soft);
+}
+
+/* Printing the results (spec SF-11): the results alone, on as many pages
+   as they take; the scrolling panes they sit in grow to their full length. */
+@media print {
+  html,
+  body,
+  #root {
+    height: auto;
+  }
+
+  .toasts {
+    display: none;
+  }
+
+  .director:has(.results-tab) {
+    display: block;
+    height: auto;
+    background: none;
+  }
+
+  .director:has(.results-tab) :is(.command-panel, .tabs, .not-saved-banner, .learn-banner, .status-bar),
+  .results-tab > .toolbar {
+    display: none;
+  }
+
+  .director:has(.results-tab) :is(.workspace, .tab-body),
+  .results-tab,
+  .results-body {
+    display: block;
+    overflow: visible;
+    padding: 0;
+  }
+
+  .results-title {
+    display: block;
+    margin: 0 0 4px;
+    font-size: 18px;
+  }
+
+  .results-body .grid th {
+    position: static;
+  }
+
+  .results-question,
+  .results-body tr {
+    break-inside: avoid;
+  }
 }

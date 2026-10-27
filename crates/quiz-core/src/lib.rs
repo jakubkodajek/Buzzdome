@@ -6,6 +6,7 @@ pub mod game;
 pub mod media;
 pub mod media_player;
 pub mod model;
+pub mod results;
 pub mod settings;
 pub mod sheet;
 pub mod sound_board;
@@ -18,8 +19,8 @@ pub mod view;
 
 pub use category::{category_named, fresh_category_name, Category, MAX_CATEGORY_NAME_CHARS};
 pub use game::{
-    team_names, BuzzerId, BuzzerMode, Button, Clock, Command, Controls, Cue, Effect, Game, GameError, Light, Phase, QuestionStep, Stamped,
-    MAX_NAME_CHARS, MAX_TEAMS, PRESS_GRACE_MS, REPLAYS_AS_PLAYED_FROM, RULES_VERSION,
+    team_names, Asked, BuzzerId, BuzzerMode, Button, Clock, Command, Controls, Cue, Effect, Game, GameError, Light, Mark, Phase, QuestionStep,
+    Response, Stamped, MAX_NAME_CHARS, MAX_TEAMS, PRESS_GRACE_MS, REPLAYS_AS_PLAYED_FROM, RULES_VERSION,
 };
 pub use media::{
     is_safe_reference, portable_name, portable_reference, Background, MediaIssue, MediaKind, Playback, Replay, SoundClip, SoundStart, Span,
@@ -36,7 +37,7 @@ pub use model::{
     DEFAULT_POINTS, DEFAULT_TIME_LIMIT_S, FULL_SHARE, MAX_ANSWERS, MAX_EVERYONE_ANSWERS, MAX_POINTS, MAX_TIME_LIMIT_S,
     MIN_EVERYONE_ANSWERS, SCHEMA_VERSION,
 };
-pub use sheet::{export_table, import_tables, ImportIssue, ImportNote, ImportedRows, Notes, Place, SheetError, Table};
+pub use sheet::{defused, export_table, import_tables, ImportIssue, ImportNote, ImportedRows, Notes, Place, SheetError, Table};
 pub use text::file_key;
 pub use stage::{Stage, LAST_SECONDS_MS};
 pub use sound_board::{BoardChange, BoardError, Pad, PadClick, PadColor, PadSource, SoundBoard};
@@ -49,6 +50,7 @@ pub use theme::{
     is_theme_id, resolve_themes, Corners, HeadingCase, Ignored, ResolvedThemes, ScreenKey, SkippedTheme, Theme, ThemeError, ThemeFile, ThemeManifest,
     ThemeSource, BUILTIN_PREFIX, DEFAULT_THEME_ID,
 };
+pub use results::{AskedQuestion, PlayerResult, ShowResults};
 pub use view::GameView;
 
 #[cfg(test)]

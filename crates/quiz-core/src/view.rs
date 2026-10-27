@@ -5,7 +5,6 @@ use crate::model::{AnswerMode, Slide};
 use crate::settings::{AutoStep, QuizSettings};
 use crate::sounds::SoundSlot;
 use serde::Serialize;
-use std::collections::BTreeMap;
 use ts_rs::TS;
 
 #[derive(Debug, Clone, Serialize, TS)]
@@ -191,17 +190,17 @@ impl Game {
     }
 
     pub fn view(&self, now: u64) -> GameView {
-        let ranks: BTreeMap<BuzzerId, usize> = self.ranking().into_iter().map(|(place, p)| (p.buzzer, place)).collect();
         let question = self.question();
-        let mut players: Vec<PlayerView> = self
-            .players()
-            .map(|p| PlayerView {
+        let players: Vec<PlayerView> = self
+            .standings()
+            .into_iter()
+            .map(|(rank, p)| PlayerView {
                 buzzer: p.buzzer,
                 name: p.name.clone(),
                 score: p.score,
                 enabled: p.enabled,
                 total_answer_ms: p.total_answer_ms,
-                rank: ranks.get(&p.buzzer).copied(),
+                rank,
                 answered: self.responses().contains_key(&p.buzzer),
                 answer: self.responses().get(&p.buzzer).map(|r| r.button),
                 answer_correct: self.responses().get(&p.buzzer).map(|r| question.is_some_and(|q| r.is_right(q))),
@@ -215,7 +214,6 @@ impl Game {
                 delta: self.delta(p.buzzer),
             })
             .collect();
-        players.sort_by_key(|p| (p.rank.unwrap_or(usize::MAX), p.buzzer));
 
         let enabled: Vec<&PlayerView> = players.iter().filter(|p| p.enabled).collect();
         GameView {
