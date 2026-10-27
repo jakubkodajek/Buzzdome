@@ -10,6 +10,7 @@
 
 use crate::app_log;
 use quiz_core::{Quiz, QuizJsonError, Stamped};
+use quiz_file::{Context, FileAction, QuizFileError};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 use std::fs::{self, File, OpenOptions};
@@ -106,18 +107,20 @@ pub struct Resumed {
 
 impl Session {
     /// Starts a new session folder under `root`.
-    pub fn create(root: &Path, quiz: &Quiz, meta: &SessionMeta) -> io::Result<Session> {
+    pub fn create(root: &Path, quiz: &Quiz, meta: &SessionMeta) -> Result<Session, QuizFileError> {
         let dir = new_dir(root, meta.started_ms)?;
         // A power cut must not lose the new folder (or a sessions folder made
         // just now) or the journal's entry in it, only their unsynced data.
         for created in root.parent().into_iter().chain([root]) {
-            sync_dir(created)?;
+            quiz_file::sync_dir(created)?;
         }
-        write_atomic(&dir.join(QUIZ_FILE), quiz)?;
-        write_atomic(&dir.join(META_FILE), meta)?;
-        let journal = open_journal(&dir.join(JOURNAL_FILE))?;
-        sync_dir(&dir)?;
-        let len = journal.metadata()?.len();
+        // The quiz last: a folder without it is a show that did not start (`latest_dir`).
+        write_json(&dir.join(META_FILE), meta)?;
+        write_json(&dir.join(QUIZ_FILE), quiz)?;
+        let path = dir.join(JOURNAL_FILE);
+        let journal = open_journal(&path).context(FileAction::Write, &path)?;
+        quiz_file::sync_dir(&dir)?;
+        let len = journal.metadata().context(FileAction::Read, &path)?.len();
         Ok(Session { journal, len, broken: false })
     }
 
@@ -273,9 +276,9 @@ fn append_line(file: &mut impl JournalFile, len: &mut u64, line: &[u8]) -> Resul
     }
 }
 
-fn write_atomic<T: Serialize>(path: &Path, value: &T) -> io::Result<()> {
-    let json = serde_json::to_string_pretty(value)?;
-    quiz_file::write_atomic(path, json.as_bytes()).map_err(io::Error::other)
+fn write_json<T: Serialize>(path: &Path, value: &T) -> Result<(), QuizFileError> {
+    let json = serde_json::to_string_pretty(value).map_err(io::Error::from).context(FileAction::Write, path)?;
+    quiz_file::write_atomic(path, json.as_bytes())
 }
 
 fn sync_dir(dir: &Path) -> io::Result<()> {
@@ -303,11 +306,15 @@ fn session_dirs(root: &Path) -> io::Result<Vec<(u64, PathBuf)>> {
 
 /// Makes the folder of a show started at `started_ms`, with a name higher
 /// than every folder's before it, so two shows never share one.
-fn new_dir(root: &Path, started_ms: u64) -> io::Result<PathBuf> {
-    fs::create_dir_all(root)?;
-    // A number past the highest there is, which only a folder made by hand can be.
-    let after = |number: u64| number.checked_add(1).ok_or_else(|| io::Error::other("no session folder number is left"));
-    let mut number = match session_dirs(root)?.into_iter().map(|(number, _)| number).max() {
+fn new_dir(root: &Path, started_ms: u64) -> Result<PathBuf, QuizFileError> {
+    fs::create_dir_all(root).context(FileAction::CreateFolder, root)?;
+    // A number past the highest there is, which only a folder made by hand
+    // can be; past the highest of all, that folder is in the way.
+    let after = |number: u64| {
+        let in_the_way = root.join(number.to_string());
+        number.checked_add(1).ok_or(io::Error::from(io::ErrorKind::AlreadyExists)).context(FileAction::CreateFolder, &in_the_way)
+    };
+    let mut number = match session_dirs(root).context(FileAction::Read, root)?.into_iter().map(|(number, _)| number).max() {
         Some(last) => started_ms.max(after(last)?),
         None => started_ms,
     };
@@ -316,7 +323,7 @@ fn new_dir(root: &Path, started_ms: u64) -> io::Result<PathBuf> {
         match fs::create_dir(&dir) {
             Ok(()) => return Ok(dir),
             Err(e) if e.kind() == io::ErrorKind::AlreadyExists => number = after(number)?,
-            Err(e) => return Err(e),
+            Err(e) => return Err(e).context(FileAction::CreateFolder, &dir),
         }
     }
 }
@@ -525,8 +532,32 @@ mod tests {
     #[test]
     fn no_show_starts_past_the_highest_folder_number() {
         let root = temp_root("last-number");
-        fs::create_dir_all(root.join(u64::MAX.to_string())).unwrap();
-        assert!(Session::create(&root, &Quiz::new("T", vec![]), &meta(1)).is_err());
+        let highest = root.join(u64::MAX.to_string());
+        fs::create_dir_all(&highest).unwrap();
+        let refused = Session::create(&root, &Quiz::new("T", vec![]), &meta(1));
+        assert!(matches!(refused, Err(QuizFileError::Io { action: FileAction::CreateFolder, path, .. }) if path == highest));
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn a_show_that_cannot_start_says_which_file_and_why() {
+        let root = temp_root("not-a-folder");
+        fs::write(&root, "a file where the shows go").unwrap();
+        let refused = Session::create(&root, &Quiz::new("T", vec![]), &meta(1));
+        assert!(matches!(refused, Err(QuizFileError::Io { action: FileAction::CreateFolder, path, .. }) if path == root));
+        fs::remove_file(&root).unwrap();
+    }
+
+    #[test]
+    fn a_show_whose_start_stopped_before_its_quiz_leaves_the_last_show_to_resume() {
+        let root = temp_root("start-stopped");
+        journaled_show(&root, 70);
+        // Stopped after the meta, which is written first.
+        let stopped = root.join("80");
+        fs::create_dir(&stopped).unwrap();
+        fs::write(stopped.join(META_FILE), serde_json::to_string(&meta(80)).unwrap()).unwrap();
+        let summary = Session::latest_summary(&root).unwrap().unwrap();
+        assert_eq!((summary.meta.started_ms, summary.command_count), (70, 2));
         fs::remove_dir_all(&root).unwrap();
     }
 

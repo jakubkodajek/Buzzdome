@@ -1013,11 +1013,13 @@ impl Game {
     /// Every player's light in the current step, switched-off ones locked:
     /// what the buzzers should show when a show begins or resumes.
     pub fn lights(&self) -> Vec<(BuzzerId, Light)> {
-        self.players.values().map(|p| (p.buzzer, self.player_light(p.buzzer, p.enabled))).collect()
+        self.players.values().map(|p| (p.buzzer, self.lit_if_on(p.buzzer, self.light_of(p.buzzer)))).collect()
     }
 
-    fn player_light(&self, buzzer: BuzzerId, enabled: bool) -> Light {
-        if enabled { self.light_of(buzzer) } else { Light::Locked }
+    /// `light` on the buzzer of a player switched on, else locked, also for
+    /// a player switched off while their buzz waited to be judged.
+    fn lit_if_on(&self, buzzer: BuzzerId, light: Light) -> Light {
+        if self.players.get(&buzzer).is_some_and(|p| p.enabled) { light } else { Light::Locked }
     }
 
     /// Every switched-on buzzer's light in the current step (`light_of`).
@@ -1208,7 +1210,7 @@ impl Game {
         if switched_on && self.joins_at_next_question() {
             self.joins_next.insert(buzzer);
         }
-        let light = self.player_light(buzzer, enabled);
+        let light = self.lit_if_on(buzzer, self.light_of(buzzer));
         let mut effects = vec![Effect::Lights { lights: vec![(buzzer, light)] }];
         // Before rules version 3 a switch never closed a question.
         let running = matches!(self.phase, Phase::Question(QuestionStep::Running { .. }));
@@ -1238,14 +1240,17 @@ impl Game {
 
     fn press(&mut self, buzzer: BuzzerId, button: Button, now: u64) -> Vec<Effect> {
         // Any press from an unknown buzzer registers it, also late arrivals.
+        let mut joined = None;
         if !self.players.contains_key(&buzzer) {
             let light = self.join(buzzer, String::new());
             if self.before_slides() || self.joins_next.contains(&buzzer) {
                 return vec![light];
             }
+            joined = Some(light);
         }
         match self.press_play(buzzer, button, now) {
-            None => vec![],
+            // A buzzer that joins with a press that does not count still shows its light.
+            None => joined.into_iter().collect(),
             Some(PressPlay::Answer { elapsed_ms }) => self.record_answer(buzzer, button, elapsed_ms, now),
             // The first press applied wins. Presses come in the receiver's order and the
             // PC clock never re-ranks them (BZ-5), not even against a keyboard press.
@@ -1390,7 +1395,7 @@ impl Game {
             self.credit(buzzer, buzz, true, q.points_at(elapsed));
             self.reveal(Some(buzzer), now);
             return Ok(vec![
-                Effect::Lights { lights: vec![(buzzer, self.light_of(buzzer))] },
+                Effect::Lights { lights: vec![(buzzer, self.lit_if_on(buzzer, self.light_of(buzzer)))] },
                 Effect::Sound { cue: Cue::Correct },
             ]);
         }
@@ -1402,7 +1407,7 @@ impl Game {
         clock.go_on_after_buzz(now);
         self.phase = Phase::Question(QuestionStep::Running { clock });
         let mut effects = vec![
-            Effect::Lights { lights: vec![(buzzer, Light::Wrong)] },
+            Effect::Lights { lights: vec![(buzzer, self.lit_if_on(buzzer, Light::Wrong))] },
             Effect::Sound { cue: Cue::Wrong },
         ];
         let follow = if self.closes_as_answered() { self.close_answered(now) } else { vec![self.lights_now()] };

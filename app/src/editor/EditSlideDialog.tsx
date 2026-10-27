@@ -12,12 +12,19 @@ const FORM_ID = "edit-slide";
 /**
  * The slide's texts in one form: the question and its answers with the
  * right one ticked, the title and text, or the explanation, and the notes. OK applies them
- * as one change; Cancel leaves the slide as it was.
+ * as one change, the texts changed from the slide the dialog `opened` on
+ * (`setEditedTexts`); Cancel leaves the slide as it was.
  */
-export function EditSlideDialog(props: { slide: Slide; focus: ElementId; onApply: (slide: Slide) => void; onClose: () => void }) {
+export function EditSlideDialog(props: {
+  slide: Slide;
+  focus: ElementId;
+  onApply: (opened: Slide, edited: Slide) => void;
+  onClose: () => void;
+}) {
   const { slide, focus, onApply, onClose } = props;
   const { t } = useApp();
-  const [draft, setDraft] = useState(slide);
+  const [opened] = useState(slide);
+  const [draft, setDraft] = useState(opened);
   const form = useRef<HTMLFormElement>(null);
 
   useEffect(() => {
@@ -49,7 +56,7 @@ export function EditSlideDialog(props: { slide: Slide; focus: ElementId; onApply
         className="edit-form"
         onSubmit={(e) => {
           e.preventDefault();
-          if (draft !== slide) onApply(draft);
+          if (draft !== opened) onApply(opened, draft);
           onClose();
         }}
         onKeyDown={(e) => {

@@ -160,7 +160,7 @@ fn download() -> CmdResult<Vec<u8>> {
     let failed = |e: ureq::Error| AppError::LibraryDownload { detail: e.to_string() };
     let mut response = agent().get(DOWNLOAD_URL).call().map_err(failed)?;
     if !from_the_library(response.get_uri()) {
-        return Err(AppError::LibraryDownload { detail: format!("redirected to {}", response.get_uri()) });
+        return Err(AppError::LibraryRedirected { to: response.get_uri().to_string() });
     }
     response.body_mut().with_config().limit(MAX_DOWNLOAD_BYTES).read_to_vec().map_err(failed)
 }

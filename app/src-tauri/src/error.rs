@@ -143,6 +143,10 @@ pub enum AppError {
     /// The folder chosen for an assistant holds or is inside the app's own data (shows, drafts, settings).
     #[error("{path} holds or is inside Buzzdome's own data")]
     AiFolderNotAllowed { path: String },
+    /// The system names no documents folder for the quizmaster, where
+    /// Claude Desktop would work unless they choose another.
+    #[error("the system has no documents folder")]
+    NoDocumentsFolder,
 
     // The media player.
     #[error("{name} is not a picture, sound or video")]
@@ -180,6 +184,10 @@ pub enum AppError {
     /// site did not answer); the one in use stays.
     #[error("the fixture library cannot be downloaded: {detail}")]
     LibraryDownload { detail: String },
+    /// The download was redirected to `to`, away from the library's own
+    /// site (`fixture_library::DOWNLOAD_HOST`), so it was not read.
+    #[error("the fixture library download was redirected to {to}")]
+    LibraryRedirected { to: String },
     #[error("the downloaded fixture library cannot be read: {detail}")]
     LibraryNotRead { detail: String },
     /// The download is in another major version of the Open Fixture

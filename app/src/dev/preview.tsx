@@ -57,7 +57,7 @@ const quiz = {
 const params = new URLSearchParams(location.search);
 const windowLabel = params.get("window") === "host" ? "host" : "director";
 const scene = params.get("scene") ?? "running";
-/** What the media player plays at first: `picture` or `video` (for the projector's overlay). */
+/** What the media player plays at first: `picture`, `video` or `broken`, a picture that does not load (for the projector's overlay). */
 const playing = params.get("media");
 /** A theme id to draw the screens in; the default when missing. */
 const theme = params.get("theme");
@@ -504,6 +504,7 @@ const showClockMs = () => Math.round(performance.now());
 let nowPlaying: NowPlaying | null =
   playing === "picture" ? { id: 1, reference: "media/landscape.svg", kind: "image", positionMs: 0, sinceMs: showClockMs() }
   : playing === "video" ? { id: 1, reference: "media/clip.webm", kind: "video", positionMs: 3_000, sinceMs: showClockMs() }
+  : playing === "broken" ? { id: 1, reference: "media/broken.png", kind: "image", positionMs: 0, sinceMs: showClockMs() }
   : null;
 const mediaNow = (): MediaNow => ({ now: nowPlaying, atMs: showClockMs() });
 

@@ -45,7 +45,7 @@ struct Pointer {
     source_path: Option<String>,
     unsaved: bool,
     /// What opening the file left out, until the draft is saved over it.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[serde(default, skip_serializing_if = "Vec::is_empty", deserialize_with = "known_problems")]
     dropped: Vec<ValidationError>,
 }
 
@@ -98,6 +98,14 @@ fn draft_folder<'de, D: Deserializer<'de>>(deserializer: D) -> Result<String, D:
         return Err(D::Error::invalid_value(Unexpected::Str(&folder), &"a draft folder name"));
     }
     Ok(folder)
+}
+
+/// The left-out values in `draft.json` that this build can name. One that
+/// another build named only goes unmentioned: it is no reason to refuse
+/// the draft and its unsaved changes.
+fn known_problems<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Vec<ValidationError>, D::Error> {
+    let named = Vec::<serde_json::Value>::deserialize(deserializer)?;
+    Ok(named.into_iter().filter_map(|problem| serde_json::from_value(problem).ok()).collect())
 }
 
 /// The current draft's pointer, or none when there is no draft. One that
@@ -469,6 +477,22 @@ mod tests {
             assert!(matches!(new_draft_folder(&dir), Err(AppError::DraftNotRead { .. })), "{broken}");
             assert!(matches!(current(&dir, "draft-1"), Err(AppError::DraftNotRead { .. })), "{broken}");
         }
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn a_left_out_value_another_build_named_does_not_refuse_the_draft() {
+        let dir = editor_dir("dropped-unknown");
+        let known = ValidationError { slide_id: None, problem: quiz_core::Problem::ThemeUnread };
+        let pointer = serde_json::json!({
+            "folder": "draft-1",
+            "sourcePath": null,
+            "unsaved": true,
+            "dropped": [known, { "slideId": "s1", "problem": { "code": "fromANewerBuild" } }],
+        });
+        fs::write(dir.join(POINTER_FILE), pointer.to_string()).unwrap();
+        let read = read_pointer(&dir).unwrap().unwrap();
+        assert_eq!((read.folder.as_str(), read.unsaved, read.dropped), ("draft-1", true, vec![known]));
         fs::remove_dir_all(&dir).unwrap();
     }
 }

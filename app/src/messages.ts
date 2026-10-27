@@ -81,6 +81,7 @@ const ERROR_KEYS: Record<Exclude<AppError["code"], WordedApart>, StringKey> = {
   claudeDesktopMissing: "errClaudeDesktopMissing",
   claudeConfigUnreadable: "errClaudeConfigUnreadable",
   aiFolderNotAllowed: "errAiFolderNotAllowed",
+  noDocumentsFolder: "errNoDocumentsFolder",
   notAMediaFile: "errNotAMediaFile",
   usbUnavailable: "errUsbUnavailable",
   usbListFailed: "errUsbListFailed",
@@ -92,6 +93,7 @@ const ERROR_KEYS: Record<Exclude<AppError["code"], WordedApart>, StringKey> = {
   noDataFolder: "errNoDataFolder",
   system: "errSystem",
   libraryDownload: "errLibraryDownload",
+  libraryRedirected: "errLibraryRedirected",
   libraryNotRead: "errLibraryNotRead",
   libraryFormatChanged: "errLibraryFormatChanged",
   libraryTooSmall: "errLibraryTooSmall",
@@ -423,8 +425,10 @@ export function setupErrorText(t: Translate, error: SetupError): string {
 
 const OUTPUT_ERROR_KEYS: Record<OutputError["problem"], StringKey> = {
   notAvailable: "lightsOutputNotAvailable",
+  notFound: "lightsOutputNotFound",
   unknownHost: "lightsOutputUnknownHost",
   sendFailed: "lightsOutputSendFailed",
+  sentPart: "lightsOutputSentPart",
   notSupported: "lightsOutputNotSupported",
 };
 

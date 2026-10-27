@@ -10,7 +10,9 @@ use crate::error::{AppError, CmdResult};
 use crate::off_ui;
 use quiz_ai::claude_desktop::{self, ClaudeConnected, ConnectError, MCP_ARG};
 use quiz_ai::roots::{self, RootError, Roots};
+use quiz_file::FileAction;
 use std::ffi::OsStr;
+use std::io;
 use std::path::PathBuf;
 use tauri::{AppHandle, Manager, Window};
 
@@ -55,15 +57,16 @@ pub async fn ai_connect_claude(window: Window, app: AppHandle, choose: bool) -> 
         let Some(folder) = dialogs::pick_folder(window, documents).await? else { return Ok(None) };
         folder
     } else {
-        let folder = documents.ok_or_else(|| AppError::system("no documents folder"))?.join(QUIZ_FOLDER);
-        std::fs::create_dir_all(&folder).map_err(|e| AppError::file(quiz_file::FileAction::CreateFolder, &folder, e))?;
+        let folder = documents.ok_or(AppError::NoDocumentsFolder)?.join(QUIZ_FOLDER);
+        std::fs::create_dir_all(&folder).map_err(|e| AppError::file(FileAction::CreateFolder, &folder, e))?;
         folder
     };
     let app_data: Vec<PathBuf> = [app.path().app_data_dir(), app.path().app_local_data_dir(), app.path().app_log_dir()].into_iter().flatten().collect();
     off_ui(move || {
         let root = roots::allow(&folder, &app_data).map_err(|e| match e {
             RootError::AppData { path, .. } => AppError::AiFolderNotAllowed { path: path.display().to_string() },
-            e => AppError::system(e),
+            RootError::Unusable { path, source } => AppError::file(FileAction::Read, &path, source),
+            RootError::NotAFolder(path) => AppError::file(FileAction::Read, &path, io::Error::from(io::ErrorKind::NotADirectory)),
         })?;
         let config = claude_desktop::config_path().ok_or(AppError::ClaudeDesktopMissing)?;
         let command = std::env::current_exe().map_err(AppError::system)?;
