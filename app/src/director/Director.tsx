@@ -45,6 +45,8 @@ import { ThemeContext, ThemesProvider, useResolvedTheme, useThemes } from "../th
 import { isThemeMissing } from "../theme/themes";
 import type { AutoStepView, GameView, Quiz } from "../types";
 import { QuestionsTab } from "./QuestionsTab";
+import { LaunchCheck } from "./LaunchCheck";
+import { useLaunchCheckSetting, type LaunchCheckSetting } from "./launch-check";
 import { LightsTab } from "./LightsTab";
 import { useDirectorLook, type DirectorLook } from "./look";
 import { ReceiverTab } from "./ReceiverTab";
@@ -134,6 +136,7 @@ function DirectorLayout({ testRun, onEditor }: { testRun: boolean; onEditor: () 
   const theme = useResolvedTheme(quiz?.theme ?? null);
   const projector = useProjectorSettings();
   const look = useDirectorLook();
+  const launch = useLaunchCheckSetting();
   const [tab, setTab] = useState<Tab>("questions");
   useStepShown(view);
   useShortcuts(view, projector.toggle);
@@ -171,11 +174,22 @@ function DirectorLayout({ testRun, onEditor }: { testRun: boolean; onEditor: () 
         </nav>
         <NotSavedBanner />
         <LearnBanner />
+        {view?.phase.phase === "lobby" && launch.on && <LaunchCheck view={view} quiz={quiz} projector={projector} onTab={setTab} />}
         <div className="tab-body" role="tabpanel">
           <ThemeContext value={theme}>
             {/* A tab that fails to render keeps the rest of the window, and its keys, working. */}
             <ErrorBoundary key={tab} fallback={(message, retry) => <RenderFailed t={t} text={t("partFailed", { message })} retry={retry} />}>
-              <TabBody tab={tab} view={view} quiz={quiz} projector={projector} look={look} player={player} sound={sound} showStart={showStart} />
+              <TabBody
+                tab={tab}
+                view={view}
+                quiz={quiz}
+                projector={projector}
+                look={look}
+                launch={launch}
+                player={player}
+                sound={sound}
+                showStart={showStart}
+              />
             </ErrorBoundary>
           </ThemeContext>
         </div>
@@ -218,14 +232,15 @@ interface TabBodyProps {
   quiz: Quiz | null;
   projector: ProjectorSettings;
   look: DirectorLook;
+  launch: LaunchCheckSetting;
   player: MediaPlayer;
   sound: SlideSound;
   showStart: ShowStart;
 }
 
-function TabBody({ tab, view, quiz, projector, look, player, sound, showStart }: TabBodyProps) {
+function TabBody({ tab, view, quiz, projector, look, launch, player, sound, showStart }: TabBodyProps) {
   // Setup tabs work without a show; the others need one.
-  if (tab === "settings") return <SettingsTab projector={projector} look={look} />;
+  if (tab === "settings") return <SettingsTab projector={projector} look={look} launch={launch} />;
   if (tab === "receiver") return <ReceiverTab />;
   if (tab === "lights") return <LightsTab />;
   // Team names can be prepared before a show, and the media player plays without one.

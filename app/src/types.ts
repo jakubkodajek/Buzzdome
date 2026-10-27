@@ -83,6 +83,7 @@ export type { TeamView } from "./bindings/TeamView";
 export type { Press } from "./bindings/Press";
 export type { PressEvent } from "./bindings/PressEvent";
 export type { Problem } from "./bindings/Problem";
+export type { ProjectorWindow } from "./bindings/ProjectorWindow";
 export type { ProtocolKind } from "./bindings/ProtocolKind";
 export type { Question } from "./bindings/Question";
 export type { Quiz } from "./bindings/Quiz";

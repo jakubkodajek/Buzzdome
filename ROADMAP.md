@@ -77,6 +77,7 @@ Status keys: `[x]` done, `[~]` in progress, `[ ]` not started.
 - [x] Clock designs: ring, bar, digital, hourglass or stopwatch, chosen per question
 - [x] Czech and English UI (switchable in Settings)
 - [x] A dark look for the Director in a darkened hall: light, dark or as the system, in Settings (SF-10)
+- [x] A check before the show: receiver, buzzers and teams, projector, sound and free disk space, each with a fix (SF-2)
 - [~] Should-haves from `features.csv` that the first event needs
 
 ### M5: Extensions (after the first event)

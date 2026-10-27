@@ -35,6 +35,8 @@
   --popup-line: #b9b9b9;
   --menu-hover: #dcebfb;
   --menu-hover-line: #9cc3ec;
+  /* Something to look at that does not stop the show (the check before it). */
+  --warn: #b25e00;
 
   display: grid;
   grid-template-columns: 210px minmax(0, 1fr);
@@ -88,6 +90,7 @@
     --popup-footer: var(--chrome);
     --menu-hover: #2d3b4d;
     --menu-hover-line: #4f7bb5;
+    --warn: #e3a33b;
   }
 }
 
@@ -318,6 +321,75 @@
 .learn-banner span {
   flex: 1;
   font-weight: 600;
+}
+
+/* The check before the show (SF-2, LaunchCheck.tsx), above the tabs in the lobby. */
+.launch-check {
+  padding: 8px 12px 10px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+}
+
+.launch-check header {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+
+.launch-check h2 {
+  margin: 0;
+  font-size: 14px;
+}
+
+.launch-check header .muted {
+  flex: 1;
+}
+
+.launch-check ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.launch-item {
+  display: grid;
+  grid-template-columns: 20px 90px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  border-top: 1px solid var(--row-line);
+}
+
+.launch-icon {
+  display: flex;
+}
+
+.launch-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.launch-item.ok .launch-icon {
+  color: var(--good);
+}
+
+.launch-item.warn .launch-icon {
+  color: var(--warn);
+}
+
+.launch-item.problem .launch-icon,
+.launch-item.problem .launch-text {
+  color: var(--bad);
+}
+
+.launch-item.todo .launch-icon {
+  color: var(--accent);
+}
+
+.launch-fixes {
+  display: flex;
+  gap: 6px;
 }
 
 .tab-body {

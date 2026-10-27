@@ -15,6 +15,12 @@ export function seconds(ms: number, digits = 1): string {
   return (ms / 1000).toFixed(digits);
 }
 
+/** A size on disk, counted in 1024s as the systems show it: in MB below a gigabyte, else in GB to a tenth ("750 MB", "12.5 GB"). */
+export function diskSize(bytes: number): string {
+  const mb = bytes / 1024 ** 2;
+  return mb < 1024 ? `${Math.floor(mb)} MB` : `${(mb / 1024).toFixed(1)} GB`;
+}
+
 /** A score change with its sign, e.g. "+10" or "-5". */
 export function signed(n: number): string {
   return n > 0 ? `+${n}` : String(n);

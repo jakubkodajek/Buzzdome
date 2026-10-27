@@ -128,6 +128,36 @@ pub fn host_window_open(app: AppHandle) -> bool {
     app.get_webview_window(HOST_LABEL).is_some()
 }
 
+/// The projector window as it is now, for the check before a show (spec SF-2).
+#[derive(Serialize, TS)]
+#[ts(export)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectorWindow {
+    /// It is on the monitor the Director is on.
+    on_director_monitor: bool,
+    /// How many monitors the computer has.
+    monitors: usize,
+    fullscreen: bool,
+}
+
+/// Where the projector window is now; none while it is closed.
+#[tauri::command]
+pub async fn projector_window(app: AppHandle) -> CmdResult<Option<ProjectorWindow>> {
+    let Some(host) = app.get_webview_window(HOST_LABEL) else {
+        return Ok(None);
+    };
+    // A window closing meanwhile answers no more: as closed.
+    let (Ok(monitor), Ok(fullscreen)) = (host.current_monitor(), host.is_fullscreen()) else {
+        return Ok(None);
+    };
+    let on = monitor.as_ref().map(monitor_id);
+    Ok(Some(ProjectorWindow {
+        on_director_monitor: on.is_some() && on == director_monitor(&app),
+        monitors: app.available_monitors()?.len(),
+        fullscreen,
+    }))
+}
+
 #[tauri::command]
 pub async fn close_host_window(app: AppHandle) -> CmdResult<()> {
     match app.get_webview_window(HOST_LABEL) {
