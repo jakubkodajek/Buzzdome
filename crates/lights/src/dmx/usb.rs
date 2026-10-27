@@ -23,8 +23,8 @@ pub struct SoundSwitchMicro {
 
 impl SoundSwitchMicro {
     pub fn open() -> Result<SoundSwitchMicro, OutputError> {
-        let handle = rusb::open_device_with_vid_pid(VENDOR_ID, PRODUCT_ID)
-            .ok_or_else(|| not_available("SoundSwitch Micro DMX Interface not found, or SoundSwitch holds it"))?;
+        // Not found, or SoundSwitch holds it: libusb does not say which.
+        let handle = rusb::open_device_with_vid_pid(VENDOR_ID, PRODUCT_ID).ok_or(OutputError::NotFound)?;
         // Where the system has a driver of its own on it (not on Windows), it lets go.
         let _ = handle.set_auto_detach_kernel_driver(true);
         handle.claim_interface(INTERFACE).map_err(not_available)?;
@@ -41,7 +41,7 @@ impl SoundSwitchMicro {
         if written == bytes.len() {
             Ok(())
         } else {
-            Err(OutputError::SendFailed { detail: format!("wrote {written} of {} bytes", bytes.len()) })
+            Err(OutputError::SentPart { written, of: bytes.len() })
         }
     }
 }

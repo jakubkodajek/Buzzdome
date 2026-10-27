@@ -100,7 +100,7 @@ pub enum QuizFileError {
 type Result<T> = std::result::Result<T, QuizFileError>;
 
 /// Adds what was being done, and to which file, to an I/O error.
-trait Context<T> {
+pub trait Context<T> {
     fn context(self, action: FileAction, path: &Path) -> Result<T>;
 }
 

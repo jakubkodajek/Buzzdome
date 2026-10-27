@@ -335,7 +335,7 @@ fn start_show(app: &AppHandle, quiz: Quiz, source_path: Option<String>, media_ro
             media_root: media_root.as_ref().map(|root| root.to_string_lossy().into_owned()),
             rules_version: quiz_core::RULES_VERSION,
         };
-        let session = Session::create(&sessions_root(app)?, &quiz, &meta).map_err(|e| AppError::ShowNotSaved { detail: e.to_string() })?;
+        let session = Session::create(&sessions_root(app)?, &quiz, &meta)?;
         inner.media_root = media_root.clone();
         begin_show(app, &mut inner, Game::new(quiz), Some(session))
     };
