@@ -2209,3 +2209,36 @@ fn a_question_asked_again_from_its_start_counts_once_and_a_reset_starts_the_resu
     show.run(12_500, Command::StartOver).unwrap();
     assert!(marks(&show.game).is_empty() && standings(&show.game).iter().all(|p| p.3 == 0 && p.4 == 0));
 }
+
+#[test]
+fn a_player_switched_off_while_their_buzz_waits_is_judged_with_their_buzzer_locked() {
+    let mut show = Show::new(vec![question("q1", AnswerMode::FastestFinger)]);
+    for buzzer in 1..=3 {
+        show.press(0, buzzer, Button::Big);
+    }
+    show.run(0, Command::Next).unwrap();
+    show.run(0, Command::Next).unwrap();
+    show.press(1_000, 2, Button::Big);
+    show.run(1_500, Command::SetPlayerEnabled { buzzer: 2, enabled: false }).unwrap();
+    let effects = show.run(2_000, Command::JudgeWrong).unwrap();
+    assert_eq!(Effect::lights(&effects).into_iter().find(|&(buzzer, _)| buzzer == 2), Some((2, Light::Locked)));
+    assert!(show.game.lights().contains(&(2, Light::Locked)));
+
+    show.press(3_000, 1, Button::Big);
+    show.run(3_500, Command::SetPlayerEnabled { buzzer: 1, enabled: false }).unwrap();
+    let effects = show.run(4_000, Command::JudgeRight).unwrap();
+    assert_eq!(Effect::lights(&effects), [(1, Light::Locked)]);
+    assert_eq!(show.game.lights(), [(1, Light::Locked), (2, Light::Locked), (3, Light::Locked)]);
+}
+
+#[test]
+fn a_buzzer_that_joins_with_a_press_that_does_not_count_is_lit() {
+    let mut show = Show::new(vec![question("q1", AnswerMode::Everyone)]);
+    show.press(0, 1, Button::A);
+    show.run(0, Command::Next).unwrap();
+    show.run(0, Command::Next).unwrap();
+    assert!(matches!(step(&show.game), QuestionStep::Running { .. }));
+    // The big button answers nothing in a question of answers A to D.
+    assert_eq!(show.press(1_000, 9, Button::Big), [Effect::Lights { lights: vec![(9, Light::Ready)] }]);
+    assert!(show.game.lights().contains(&(9, Light::Ready)));
+}

@@ -241,6 +241,9 @@ pub struct Show {
     /// to (`check_results`): false once a score or a change by hand came near
     /// the ends of `i32`, where adding saturates, until the scores are reset.
     results_exact: bool,
+    /// The light each buzzer shows: the last the show's effects gave it,
+    /// or the show's own (`Game::lights`) since it was resumed.
+    shown: BTreeMap<u16, Light>,
 }
 
 /// A command the show took or refused, for `check` and for the caller.
@@ -251,7 +254,15 @@ pub struct Stepped {
 
 impl Show {
     pub fn new(quiz: Quiz, buzzers: u16) -> Show {
-        Show { game: Game::new(quiz), journal: Vec::new(), now: 1_000, buzzers, baseline: Some(BTreeMap::new()), results_exact: true }
+        Show {
+            game: Game::new(quiz),
+            journal: Vec::new(),
+            now: 1_000,
+            buzzers,
+            baseline: Some(BTreeMap::new()),
+            results_exact: true,
+            shown: BTreeMap::new(),
+        }
     }
 
     /// Applies `command` at the current time as the app does: a press that
@@ -266,6 +277,9 @@ impl Show {
         if result.is_ok() && !ignored {
             self.track_baseline(&before, &stamped.command);
             self.journal.push(stamped.clone());
+        }
+        if let Ok(effects) = &result {
+            self.shown.extend(Effect::lights(effects));
         }
         self.check(&before, &stamped, ignored, &result);
         Stepped { stamped, result }
@@ -286,6 +300,8 @@ impl Show {
     pub fn crash_and_resume(&mut self) {
         let replayed = Game::replay(self.game.quiz().clone(), &self.journal, RULES_VERSION);
         assert_eq!(replayed, self.game, "the journal does not rebuild the show the windows saw");
+        // A resumed show lights every buzzer as the show has it.
+        self.shown = self.game.lights().into_iter().collect();
         // A restarted run's clock may read earlier than the last command (the system clock went back).
         if self.journal.last().is_some() && self.now > 5_000 && self.now.is_multiple_of(3) {
             self.now -= 3_000;
@@ -336,6 +352,15 @@ impl Show {
             let was: BTreeMap<_, _> = before.lights().into_iter().collect();
             for (buzzer, light) in after.lights() {
                 assert!(light != Light::Ready || was.get(&buzzer) != Some(&Light::Ready), "buzzer {buzzer} was ready already as a round began: {stamped:?}");
+            }
+        }
+        // Every player's buzzer shows a light, and a switched-off player's
+        // shows locked, whatever happened to their press.
+        for player in after.players() {
+            let shown = self.shown.get(&player.buzzer);
+            assert!(shown.is_some(), "buzzer {} joined with no light: {stamped:?}", player.buzzer);
+            if !player.enabled {
+                assert_eq!(shown, Some(&Light::Locked), "buzzer {} is switched off but lit: {stamped:?}", player.buzzer);
             }
         }
         self.check_view(after);
