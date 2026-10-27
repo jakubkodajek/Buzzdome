@@ -332,7 +332,9 @@ const TOOLS: [Tool; 9] = [
     Tool {
         name: "unpack_quiz_file",
         title: "Unpack a quiz file",
-        description: "Unpacks a .quiz file into a new quiz folder to change it; the folder must not exist yet.",
+        description: "Unpacks a .quiz file into a new quiz folder to change it; the folder must not exist yet. It lists what keeps \
+                      the quiz from being played, and what the file has that does not fit the format: the folder's quiz.json \
+                      is written without it, so saving the quiz over the file loses it.",
         read_only: false,
         input: || {
             object(
