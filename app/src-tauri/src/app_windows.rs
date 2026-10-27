@@ -102,9 +102,13 @@ pub async fn open_host_window(app: AppHandle, monitor: Option<String>, fullscree
     let window = match app.get_webview_window(HOST_LABEL) {
         Some(window) => window,
         None => {
+            // A file or folder dropped on a window that keeps Tauri's drop
+            // handler joins the asset scope, which holds only the media
+            // folders (`lib.rs`); the Director's is off in tauri.conf.json.
             let window = WebviewWindowBuilder::new(&app, HOST_LABEL, WebviewUrl::App("index.html".into()))
                 .title("Buzzdome")
                 .inner_size(1280.0, 720.0)
+                .disable_drag_drop_handler()
                 .build()?;
             app_icon::apply(&app, &window);
             window
@@ -173,7 +177,7 @@ pub async fn close_host_window(app: AppHandle) -> CmdResult<()> {
 #[tauri::command]
 pub async fn report_host_problem(app: AppHandle, message: String) -> CmdResult<()> {
     off_ui(move || {
-        app_log::note(&format!("the projector: {message}"));
+        app_log::note(&format!("the projector: {}", logged_problem(&message)));
         let _ = app.emit("host-problem", message);
         Ok(())
     })
@@ -511,6 +515,18 @@ mod tests {
         for command in ["editor_save", "editor_open", "start_show_from_file", "start_show_from_recent", "receiver_select", "quit_app"] {
             assert!(!projector.iter().any(|c| c == command), "the projector opens no file and changes no setting: {command}");
         }
+    }
+
+    #[test]
+    fn no_window_takes_dropped_files_into_the_asset_scope() {
+        let config: serde_json::Value = serde_json::from_str(include_str!("../tauri.conf.json")).unwrap();
+        let windows = config["app"]["windows"].as_array().unwrap();
+        assert!(windows.iter().any(|w| w["label"] == DIRECTOR_LABEL));
+        assert!(windows.iter().all(|w| w["dragDropEnabled"] == false), "{windows:?}");
+        let source = include_str!("app_windows.rs");
+        let built = source.matches(&format!("WebviewWindowBuilder::{}(", "new")).count();
+        assert_eq!(built, 1, "the projector is the one window built here");
+        assert_eq!(source.matches(&format!(".{}()", "disable_drag_drop_handler")).count(), built);
     }
 
     #[test]
