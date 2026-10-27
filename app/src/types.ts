@@ -109,6 +109,8 @@ export type { SoundBoard } from "./bindings/SoundBoard";
 export type { SoundChoice } from "./bindings/SoundChoice";
 export type { SoundClip } from "./bindings/SoundClip";
 export type { SoundSlot } from "./bindings/SoundSlot";
+export type { Welcome } from "./bindings/Welcome";
+export type { WelcomeFile } from "./bindings/WelcomeFile";
 export type { SoundStart } from "./bindings/SoundStart";
 export type { Span } from "./bindings/Span";
 export type { TextAlign } from "./bindings/TextAlign";

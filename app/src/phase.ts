@@ -1,6 +1,6 @@
 import { ANSWER_LETTERS, answerIndex } from "./answers";
 import { playerName, type StringKey, type Translate } from "./i18n";
-import type { Cue, GameView } from "./types";
+import type { Cue, GameView, Phase } from "./types";
 
 /** What each moment the show has a sound and a light flash for is called. */
 export const CUE_LABEL: Record<Cue, StringKey> = {
@@ -15,10 +15,17 @@ export const CUE_LABEL: Record<Cue, StringKey> = {
   winner: "cueWinner",
 };
 
+/** Whether the show is on its welcome screen or in the lobby, before the first slide (`Game::before_slides`). */
+export function beforeSlides(phase: Phase): boolean {
+  return phase.phase === "welcome" || phase.phase === "lobby";
+}
+
 /** Short status of the show for the Director header. */
 export function phaseLabel(t: Translate, view: GameView): string {
   const phase = view.phase;
   switch (phase.phase) {
+    case "welcome":
+      return t("welcomeScreen");
     case "lobby":
       return t("lobby");
     case "billboard":

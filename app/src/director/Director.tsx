@@ -38,7 +38,7 @@ import {
 } from "../icons";
 import { keyHint, KEYS, useRemote, useShortcuts } from "../keyboard";
 import { MediaRootContext } from "../media";
-import { phaseLabel } from "../phase";
+import { beforeSlides, phaseLabel } from "../phase";
 import { quizPicker, slideContext } from "../quiz";
 import { RecentFileList } from "../recent-files";
 import { ThemeContext, ThemesProvider, useResolvedTheme, useThemes } from "../theme/context";
@@ -174,7 +174,7 @@ function DirectorLayout({ testRun, onEditor }: { testRun: boolean; onEditor: () 
         </nav>
         <NotSavedBanner />
         <LearnBanner />
-        {view?.phase.phase === "lobby" && launch.on && <LaunchCheck view={view} quiz={quiz} projector={projector} onTab={setTab} />}
+        {view && beforeSlides(view.phase) && launch.on && <LaunchCheck view={view} quiz={quiz} projector={projector} onTab={setTab} />}
         <div className="tab-body" role="tabpanel">
           <ThemeContext value={theme}>
             {/* A tab that fails to render keeps the rest of the window, and its keys, working. */}

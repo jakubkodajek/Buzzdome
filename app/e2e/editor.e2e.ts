@@ -158,6 +158,30 @@ describe("the quiz editor", () => {
     await app.$(".studio");
   });
 
+  test("a test run from the start opens on the quiz's welcome screen, and Next goes on to the registration", async () => {
+    await app.press("ribbonFile");
+    await app.press("quizSettings");
+    await app.page.click(await app.$(`button[role="switch"][aria-label="${t("welcomeOn")}"]`));
+    await app.page.type(await app.$(".welcome-fields label:first-of-type input"), "Friday quiz");
+    await app.page.type(await app.$(".welcome-fields label:last-of-type input"), "Teams of four");
+    await app.page.click(await app.$(".backstage-back"));
+    await app.page.keys([Key.F5]);
+    await app.seeText(t("testRunActive"));
+    const welcome = await app.waitView("the welcome screen", (v) => v.phase.phase === "welcome");
+    expect(welcome.welcome).toMatchObject({ on: true, heading: "Friday quiz", footer: "Teams of four" });
+    // A press registers a buzzer on the welcome screen already.
+    await app.tab("tabBuzzers");
+    await app.page.click(await app.$(".buzzer-grid .buzzer:nth-child(1) .key-big"));
+    await app.waitView("a player", (v) => v.players.length === 1);
+    await app.step("next");
+    const lobby = await app.waitView("the registration", (v) => v.phase.phase === "lobby");
+    expect(lobby.welcome).toBeNull();
+    await app.step("next");
+    await app.waitView("the first slide", (v) => v.slide !== null);
+    await app.press("backToEditor");
+    await app.$(".studio");
+  });
+
   test("the draft survives a crash", async () => {
     // Back from a test run, the editor shows the slides once it has read its draft.
     const slides = await waitFor("the slides", async () => (await slideCount()) || null);

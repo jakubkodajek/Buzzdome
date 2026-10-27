@@ -13,6 +13,7 @@ import type { AnswerResults, ClockView, GameView, PlayerView, QuestionSlide, Sli
 import { podiumBlocks } from "./podium";
 import { chartShares } from "./answer-chart";
 import { Timer } from "./Timer";
+import { WelcomeScreen } from "./WelcomeScreen";
 import "./slide.css";
 
 export function ranked(view: GameView): PlayerView[] {
@@ -32,8 +33,10 @@ export function SlideScreen(props: { view: GameView; context: SlideContext; cloc
   const placeholder = (text: string, empty: string) => (text || mode === "show" ? text : <span className="placeholder">{empty}</span>);
   const look = (text: StyledText) => styledText(view.slide, text);
   switch (phase.phase) {
+    case "welcome":
+      return <WelcomeScreen view={view} mode={mode} />;
     case "lobby":
-      return <Welcome view={view} />;
+      return <Registration view={view} />;
     case "billboard":
       return view.slide?.type === "billboard" ? (
         <div className="center-slide">
@@ -103,7 +106,7 @@ function styledText(slide: Slide | null, text: StyledText): CSSProperties {
 }
 
 /** Registration: every buzzer number, lit once it is pressed, with its team's name once paired. */
-function Welcome({ view }: { view: GameView }) {
+function Registration({ view }: { view: GameView }) {
   const { t } = useApp();
   const names = new Map(view.players.map((p) => [p.buzzer, p.name]));
   const highest = Math.max(20, ...view.players.map((p) => p.buzzer));

@@ -36,6 +36,7 @@ describe("themes", () => {
 
   it("picks the background for the screen the game is on", () => {
     const view = (phase: Phase) => ({ ...previewView(newSlide("question", "q"), 0, 1, ""), phase });
+    expect(screenOf(view({ phase: "welcome" }))).toBe("welcome");
     expect(screenOf(view({ phase: "lobby" }))).toBe("welcome");
     expect(screenOf(view({ phase: "question", step: "closed" }))).toBe("question");
     expect(screenOf(view({ phase: "question", step: "revealed", winner: null }))).toBe("answer");

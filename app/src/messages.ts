@@ -26,6 +26,7 @@ import type {
   RemoteKey,
   SettingsLost,
   SetupError,
+  WelcomeFile,
 } from "./types";
 
 type Params = Record<string, string | number>;
@@ -156,7 +157,7 @@ export function errorText(t: Translate, error: unknown): string {
 }
 
 /** Problems worded with their own parameters, see `problemText`. */
-type ProblemApart = "media" | "categoryMedia" | "soundMedia" | "volume" | "partEmpty" | "replayNotOnQuestion";
+type ProblemApart = "media" | "categoryMedia" | "soundMedia" | "welcomeMedia" | "volume" | "partEmpty" | "replayNotOnQuestion";
 
 const PROBLEM_KEYS: Record<Exclude<Problem["code"], ProblemApart>, StringKey> = {
   duplicateSlideId: "problemDuplicateSlideId",
@@ -203,6 +204,12 @@ const MEDIA_KIND_KEYS: Record<MediaKind, StringKey> = {
   video: "mediaKindVideo",
 };
 
+/** What each file of the welcome screen is called. */
+const WELCOME_FILE_LABEL: Record<WelcomeFile, StringKey> = {
+  logo: "welcomeLogo",
+  intro: "welcomeIntro",
+};
+
 /** A problem that keeps a quiz from being played, or that opening its file left out. */
 export function problemText(t: Translate, problem: Problem): string {
   switch (problem.code) {
@@ -212,6 +219,8 @@ export function problemText(t: Translate, problem: Problem): string {
       return t("problemCategoryMedia", { name: problem.name, file: problem.file, issue: mediaIssueText(t, problem.issue) });
     case "soundMedia":
       return t("problemSoundMedia", { moment: slotLabel(t, problem.slot), file: problem.file, issue: mediaIssueText(t, problem.issue) });
+    case "welcomeMedia":
+      return t("problemWelcomeMedia", { place: t(WELCOME_FILE_LABEL[problem.place]), file: problem.file, issue: mediaIssueText(t, problem.issue) });
     // Rules a sound and a video share, said of the one that breaks them.
     case "volume":
       return t(problem.media === "audio" ? "problemSoundVolume" : "problemVideoVolume");

@@ -1,14 +1,18 @@
 import { useApp } from "../app-context";
+import { welcomePreviewView } from "../host/preview";
+import { SlideScreen } from "../host/SlideScreen";
+import { Stage } from "../host/Stage";
 import { BackIcon } from "../icons";
 import { keyHint, KEYS } from "../keyboard";
 import { problemText } from "../messages";
 import { MAX_AFTER_REVEAL_DELAY_S, MAX_ALL_ANSWERED_DELAY_S, MAX_JOKERS } from "../bindings/Constants";
 import type { StringKey } from "../i18n";
-import { questionCount, settingsOf, soundsOf } from "../quiz";
+import type { MediaKind } from "../media";
+import { NO_CONTEXT, questionCount, settingsOf, soundsOf, welcomeOf } from "../quiz";
 import { RecentFileList } from "../recent-files";
-import type { AllAnswered, Quiz, QuizSettings, QuizSounds, ValidationError } from "../types";
+import type { AllAnswered, Quiz, QuizSettings, QuizSounds, ValidationError, Welcome } from "../types";
 import type { Action, Actions } from "./actions";
-import { NumberBox, Select, Switch } from "./controls";
+import { MediaPicker, NumberBox, Select, Switch } from "./controls";
 import type { OpenQuiz } from "./editor-state";
 import { SoundsSettings } from "./SoundsSettings";
 
@@ -36,8 +40,9 @@ interface BackstageProps {
   onTitle: (title: string) => void;
   onSettings: (settings: QuizSettings) => void;
   onSounds: (sounds: QuizSounds) => void;
-  /** Lets the quizmaster pick a sound file, added to the quiz's media; null when none is picked. */
-  onPickSound: () => Promise<string | null>;
+  onWelcome: (welcome: Welcome) => void;
+  /** Lets the quizmaster pick a media file of `kinds`, added to the quiz's media; null when none is picked. */
+  onPickMedia: (kinds: MediaKind[]) => Promise<string | null>;
   /** Shows a slide (by id) in the editor. */
   onShowSlide: (id: string) => void;
 }
@@ -150,7 +155,7 @@ const ALL_ANSWERED_LABEL: Record<AllAnswered, StringKey> = {
 };
 
 /** How the show runs, for the whole quiz (spec QZ-11); each question has its own time, points and answers. */
-function SettingsPage({ open, onSettings, onSounds, onPickSound }: BackstageProps & { open: OpenQuiz }) {
+function SettingsPage({ open, onSettings, onSounds, onWelcome, onPickMedia }: BackstageProps & { open: OpenQuiz }) {
   const { t } = useApp();
   const quiz = open.history.present;
   const settings = settingsOf(quiz);
@@ -224,7 +229,44 @@ function SettingsPage({ open, onSettings, onSounds, onPickSound }: BackstageProp
         onChange={(show) => set({ hideBuzzPoints: !show })}
       />
       <SettingSwitch label={t("answerChart")} hint={t("answerChartHint")} checked={settings.answerChart} onChange={(answerChart) => set({ answerChart })} />
-      <SoundsSettings sounds={soundsOf(quiz)} onSounds={onSounds} onPickFile={onPickSound} />
+      <WelcomeSettings quiz={quiz} onWelcome={onWelcome} onPickMedia={onPickMedia} />
+      <SoundsSettings sounds={soundsOf(quiz)} onSounds={onSounds} onPickFile={() => onPickMedia(["audio"])} />
+    </>
+  );
+}
+
+/** The welcome screen the show opens on (spec SF-3), drawn as the projector will show it. */
+function WelcomeSettings({ quiz, onWelcome, onPickMedia }: { quiz: Quiz; onWelcome: (welcome: Welcome) => void; onPickMedia: (kinds: MediaKind[]) => Promise<string | null> }) {
+  const { t } = useApp();
+  const welcome = welcomeOf(quiz);
+  const set = (change: Partial<Welcome>) => onWelcome({ ...welcome, ...change });
+  const text = (label: string, value: string, change: (text: string) => Partial<Welcome>, placeholder?: string) => (
+    <label>
+      <span>{label}</span>
+      <input value={value} placeholder={placeholder} onChange={(e) => set(change(e.target.value))} />
+    </label>
+  );
+  const file = (label: string, value: string | null, kinds: MediaKind[], change: (file: string | null) => Partial<Welcome>) => (
+    <>
+      <span>{label}</span>
+      <MediaPicker label={label} file={value} onChoose={() => void onPickMedia(kinds).then((picked) => picked && set(change(picked)))} onRemove={() => set(change(null))} />
+    </>
+  );
+  const view = welcomePreviewView(welcome, quiz.title, quiz.slides.length);
+  return (
+    <>
+      <h2>{t("welcomeScreen")}</h2>
+      <SettingSwitch label={t("welcomeOn")} hint={t("welcomeOnHint", { key: keyHint(t, KEYS.next) })} checked={welcome.on} onChange={(on) => set({ on })} />
+      <div className="welcome-fields">
+        {text(t("welcomeHeading"), welcome.heading, (heading) => ({ heading }), quiz.title)}
+        {file(t("welcomeLogo"), welcome.logo, ["image"], (logo) => ({ logo }))}
+        {file(t("welcomeIntro"), welcome.intro, ["image", "video"], (intro) => ({ intro }))}
+        {text(t("welcomeFooter"), welcome.footer, (footer) => ({ footer }))}
+      </div>
+      <p className="backstage-hint">{t("welcomeIntroHint")}</p>
+      <Stage className="thumbnail-stage welcome-preview" screen="welcome" slide={null} mode="thumbnail">
+        <SlideScreen view={view} context={NO_CONTEXT} clock={null} mode="thumbnail" />
+      </Stage>
     </>
   );
 }

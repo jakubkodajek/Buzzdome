@@ -30,6 +30,7 @@ export function isThemeMissing(themes: readonly Theme[], id: string | null): boo
 /** The screen a game state shows, for its background. */
 export function screenOf(view: GameView): ScreenKey {
   switch (view.phase.phase) {
+    case "welcome":
     case "lobby":
       return "welcome";
     case "question":

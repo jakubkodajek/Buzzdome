@@ -43,7 +43,8 @@ Windows first, with macOS and Linux too. Built with [Tauri 2](https://tauri.app)
 - **Import and export.** Questions come in from Excel, OpenDocument and CSV
   sheets, and go out to CSV.
 - **Themes.** Twelve built-in themes, five clock designs, and backgrounds
-  per screen.
+  per screen. A show can open on a welcome screen with the quiz's logo, an
+  intro picture or video, and a footer.
 - **Media.** A media player with a sound board for the quizmaster, and our
   own sound library with a choice of sound per moment of the show.
 - **Stage lights.** DMX over USB interfaces, Art-Net and sACN, with looks

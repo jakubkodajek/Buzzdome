@@ -606,6 +606,26 @@
   pointer-events: none;
 }
 
+/* The welcome screen's texts and files, a label beside each (Quiz settings). */
+.welcome-fields {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(200px, 300px);
+  align-items: center;
+  gap: 6px 12px;
+  max-width: 640px;
+  margin: 8px 0;
+}
+
+.welcome-fields > label {
+  display: contents;
+}
+
+/* The welcome screen as the projector shows it. */
+.welcome-preview {
+  width: min(100%, 480px);
+  margin: 12px 0 8px;
+}
+
 /* A category's name under its sample slide (Categories view). */
 .category-name {
   display: block;

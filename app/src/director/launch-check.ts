@@ -1,6 +1,7 @@
-// The check before a show (spec SF-2): while the show waits in the lobby,
-// the Director lists what could spoil it, each part with a way to put it
-// right. None of them holds the show back.
+// The check before a show (spec SF-2): while the show waits before its first
+// slide, on the welcome screen or the registration, the Director lists what
+// could spoil it, each part with a way to put it right. None of them holds
+// the show back.
 
 import { useCallback, useMemo, useState } from "react";
 import { diskSize } from "../format";
@@ -145,7 +146,7 @@ export function projectorScreen(monitors: readonly MonitorInfo[], chosen: string
 const LAUNCH_CHECK_KEY = "quiz-show.launch-check";
 
 export interface LaunchCheckSetting {
-  /** The check shows in the lobby. */
+  /** The check shows before the first slide. */
   on: boolean;
   setOn: (on: boolean) => void;
 }
