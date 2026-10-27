@@ -93,6 +93,25 @@ export function setNotes(slide: Slide, notes: string): Slide {
 }
 
 /**
+ * Sets on `slide` the texts the Edit Slide dialog changed from `opened`, the
+ * slide as the dialog opened on it, to `edited`: the headline, a
+ * billboard's text, a question's answers with the right ones, and the
+ * notes. What changed on the slide meanwhile stays, such as a sound
+ * normalized while the dialog was open, and so does a text it left as it was.
+ */
+export function setEditedTexts(slide: Slide, opened: Slide, edited: Slide): Slide {
+  let next = edited.notes === opened.notes ? slide : setNotes(slide, edited.notes);
+  if (next.type !== edited.type || opened.type !== edited.type) return next;
+  const headline = (s: Slide) => (hasTitle(s) ? s.title : s.text);
+  if (headline(edited) !== headline(opened)) next = setHeadline(next, headline(edited));
+  if (edited.type === "billboard" && opened.type === "billboard" && edited.text !== opened.text) next = setBodyText(next, edited.text);
+  if (next.type === "question" && edited.type === "question" && opened.type === "question") {
+    if (edited.answers !== opened.answers || edited.correct !== opened.correct) next = { ...next, answers: edited.answers, correct: edited.correct };
+  }
+  return next;
+}
+
+/**
  * The slide as another type. Its id, notes and media stay, the question,
  * explanation or title carries over, and the rest starts as on a new slide.
  * What the new type cannot play goes (`plays`): without a reveal, the
