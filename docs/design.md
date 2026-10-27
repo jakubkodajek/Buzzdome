@@ -258,6 +258,19 @@ draws slides without a show.
   While the dark look is on screen the window's title bar is set dark
   (`setTheme`, which draws it on Windows), and left to the system again
   otherwise, so the light look changes nothing there.
+- **Check before the show (SF-2).** `director/launch-check.ts` decides
+  how each part stands from what the Director has anyway (the receiver's
+  info, the view's players and teams, the volumes) and from two reads the
+  backend does not push: `projector_window` (whether the projector window
+  is full screen and on the Director's screen) and `show_disk_space` (free
+  space where the journals are written, through `fs4`). `LaunchCheck.tsx`
+  shows them below the tabs while the show waits before its first slide
+  (`beforeSlides`: the welcome screen or the registration), and reads those
+  two again every 2 and 10 seconds while it is on screen. Hide puts it away
+  until another show starts; Settings turns it off for the computer
+  (`preferences.ts`). Only a person can tell that sound reaches the hall,
+  so the check plays the app's own right-answer sound at the show's
+  volume and asks.
 - **Sound.** The Director window plays the show's sounds and the slides'
   sound clips, because it stays open for the whole show and the projector
   window may not. Spec SN-5 moves playback into the Rust shell later. The

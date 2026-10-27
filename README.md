@@ -21,6 +21,8 @@ Windows first, with macOS and Linux too. Built with [Tauri 2](https://tauri.app)
 - **Two windows.** The **Director** on the laptop runs the show, edits
   scores and shows each buzzer's state, in a light or a dark look. The
   **projector** window shows the slides full screen on a second monitor.
+  Before a show the Director checks the receiver, buzzers, projector,
+  sound and disk space.
 - **Results.** After the show, or during it, the Director lists the
   ranking with each round's points and every question's answers, exports
   them to CSV and prints them or saves a PDF.

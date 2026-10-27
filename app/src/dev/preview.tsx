@@ -673,6 +673,9 @@ mockIPC(
         return null;
       case "host_window_open":
         return false;
+      case "projector_window":
+        // Closed, as `host_window_open` says.
+        return null;
       case "close_host_window":
         called.push({ cmd });
         return null;
@@ -692,6 +695,8 @@ mockIPC(
       case "media_root":
         // Served by Vite from this folder (see the convertFileSrc mock below).
         return "/src/dev/";
+      case "show_disk_space":
+        return 120 * 1024 ** 3;
       case "show_not_saved":
         if (saving === "full") return { code: "showNotSaved", detail: "No space left on device (os error 28)" };
         if (saving === "hangs") return { code: "saveHangs" };

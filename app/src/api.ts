@@ -28,6 +28,7 @@ import type {
   MenuWords,
   MonitorInfo,
   Picker,
+  ProjectorWindow,
   PlayerCommand,
   Press,
   PressEvent,
@@ -65,6 +66,8 @@ export const api = {
   mediaRoot: () => invoke<string | null>("media_root"),
   /** Why the running show's journal cannot be written, if so. */
   showNotSaved: () => invoke<AppError | null>("show_not_saved"),
+  /** Free space in bytes on the disk the shows are saved to; null when the system does not say. */
+  showDiskSpace: () => invoke<number | null>("show_disk_space"),
   // The backend opens the file pickers: a window names no file to write.
   /** Starts a show of a quiz file the quizmaster picks; false when they cancel. */
   startShowFromFile: (picker: Picker) => invoke<boolean>("start_show_from_file", { picker }),
@@ -85,6 +88,8 @@ export const api = {
     invoke<void>("open_host_window", { monitor, fullscreen }),
   closeHostWindow: () => invoke<void>("close_host_window"),
   hostWindowOpen: () => invoke<boolean>("host_window_open"),
+  /** Where the projector window is; null while it is closed. */
+  projectorWindow: () => invoke<ProjectorWindow | null>("projector_window"),
   reportHostProblem: (message: string) => invoke<void>("report_host_problem", { message }),
   /** Ends the app; the running show stays saved for resuming. */
   quitApp: () => invoke<void>("quit_app"),
