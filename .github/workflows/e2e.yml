@@ -152,9 +152,13 @@ jobs:
       - name: Install gsudo
         run: |
           winget install --id gerardog.gsudo --exact --version "$env:GSUDO_VERSION" --scope machine --accept-source-agreements --accept-package-agreements --disable-interactivity
-          $bin = Join-Path $env:ProgramFiles "gsudo\Current"
-          if (-not (Test-Path (Join-Path $bin "gsudo.exe"))) { throw "gsudo not found in $bin" }
-          $bin >> $env:GITHUB_PATH
+          # Where winget puts it depends on the package's installer: its own
+          # folder for an MSI, WinGet's package folder for a portable one.
+          $roots = (Join-Path $env:ProgramFiles "gsudo"), (Join-Path $env:ProgramFiles "WinGet\Packages"), (Join-Path $env:LOCALAPPDATA "Microsoft\WinGet\Packages")
+          $exe = $roots | Where-Object { Test-Path $_ } | ForEach-Object { Get-ChildItem $_ -Recurse -Filter gsudo.exe -File -ErrorAction SilentlyContinue } | Select-Object -First 1
+          if (-not $exe) { throw "gsudo.exe not found under $($roots -join ', ')" }
+          & $exe.FullName --version
+          $exe.DirectoryName >> $env:GITHUB_PATH
           icacls "$env:GITHUB_WORKSPACE" /grant "Everyone:(OI)(CI)F" /T /Q
           icacls (Join-Path $env:RUNNER_TEMP "msedgedriver") /grant "Everyone:(OI)(CI)RX" /T /Q
 
