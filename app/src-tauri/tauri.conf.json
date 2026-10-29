@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Buzzdome",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "identifier": "cz.kodajek.quizshow",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -44,7 +44,7 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDU1RDQ1OTZCQjY3MTVGNzcKUldSM1gzRzJhMW5VVmZjOXFYY0gzUHRtQ3FtcitGN2tHM0V5SVJJSWFaSXRhNDl5WVcydzhKdnMK",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEFCQjEyM0YwOEUyRkRDNUIKUldSYjNDK084Q094cThlYnhYTUxMZUJVN0pYeGZPN2w3MWM3QUFhWW80VnBINkJ0S1loUno4czAK",
       "endpoints": ["https://github.com/jakubkodajek/Buzzdome/releases/latest/download/latest.json"],
       "requireSignedVersion": true,
       "windows": {
