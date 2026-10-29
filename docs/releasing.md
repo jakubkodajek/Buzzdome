@@ -132,7 +132,9 @@ signing settings ([Tauri docs: macOS](https://v2.tauri.app/distribute/sign/macos
    Environments, create `release`, and under Deployment branches and tags
    choose "Selected branches and tags" and add the tag rule `v*`. Under
    Required reviewers add yourself, and leave "Prevent self-reviews" off,
-   or you cannot approve your own releases. Every run that would use the
+   or you cannot approve your own releases. Clear "Allow administrators to
+   bypass configured protection rules": sessions that act as you are admins
+   too. Every run that would use the
    key then waits for your approval, and GitHub mails you about each one.
    Both are free on a public repository
    ([GitHub docs: Deployments and environments](https://docs.github.com/en/actions/reference/workflows-and-actions/deployments-and-environments)).
