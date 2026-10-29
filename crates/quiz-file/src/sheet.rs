@@ -161,6 +161,8 @@ impl SheetRead {
             Ok(tables) => SheetRead::Tables(tables),
             Err(QuizFileError::SpreadsheetTooLarge) => SheetRead::TooLarge,
             Err(QuizFileError::Spreadsheet(reason)) => SheetRead::Unreadable(reason),
+            // The system's own message, which the Director shows as it is.
+            Err(QuizFileError::Io { source, .. }) => SheetRead::Unreadable(source.to_string()),
             Err(other) => SheetRead::Unreadable(other.to_string()),
         }
     }
@@ -562,7 +564,9 @@ mod tests {
         let SheetRead::Unreadable(reason) = SheetRead::of(&dir.join("notes.xlsx")) else { panic!("read") };
         assert!(!reason.starts_with("the spreadsheet cannot be read"), "{reason}");
         assert!(matches!(SheetRead::TooLarge.into_result(), Err(QuizFileError::SpreadsheetTooLarge)));
-        assert!(matches!(SheetRead::of(&dir.join("gone.csv")), SheetRead::Unreadable(_)));
+        let gone = dir.join("gone.csv");
+        let missing = fs::metadata(&gone).unwrap_err().to_string();
+        assert_eq!(SheetRead::of(&gone), SheetRead::Unreadable(missing), "the system's own message");
         fs::remove_dir_all(&dir).unwrap();
     }
 

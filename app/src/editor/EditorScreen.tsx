@@ -39,7 +39,7 @@ import { selectionPages } from "./property-pages";
 import type { CopiedValue } from "./property-rows";
 import { clickSlide, FIRST, moveToGap, selectIds } from "./selection";
 import { Ribbon, type RibbonTab } from "./Ribbon";
-import { formatImported, freshSlideId, setNotes, withFreshIds } from "./slides";
+import { formatImported, freshSlideId, setEditedTexts, setNotes, withFreshIds } from "./slides";
 import { styleProperties } from "./style-properties";
 import { TableView } from "./TableView";
 import { Thumbnails } from "./Thumbnails";
@@ -464,7 +464,7 @@ function Studio({ editor, open, onExit }: { editor: QuizEditor; open: OpenQuiz |
             <EditSlideDialog
               slide={dialogSlide}
               focus={dialog.focus}
-              onApply={(edited) => list.update([edited.id], () => edited)}
+              onApply={(opened, edited) => list.update([edited.id], (slide) => setEditedTexts(slide, opened, edited))}
               onClose={() => setDialog(null)}
             />
           )}

@@ -73,12 +73,18 @@ pub enum OutputError {
     /// The interface is not plugged in, or another program holds it.
     #[error("not found or in use: {detail}")]
     NotAvailable { detail: String },
+    /// As `NotAvailable`, where the system does not say which.
+    #[error("not found or in use")]
+    NotFound,
     /// The host is no IPv4 address (a setup's checks refuse one first).
     #[error("not an IPv4 address: {host}")]
     UnknownHost { host: String },
     /// Writing to the interface or the network failed.
     #[error("send failed: {detail}")]
     SendFailed { detail: String },
+    /// The interface took only `written` bytes of a frame of `of`.
+    #[error("sent {written} of {of} bytes")]
+    SentPart { written: usize, of: usize },
     /// This build of the app cannot drive it.
     #[error("not supported in this build")]
     NotSupported,

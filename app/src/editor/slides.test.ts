@@ -18,6 +18,7 @@ import {
   setBodyText,
   setCorrect,
   setCorrectAnswers,
+  setEditedTexts,
   setHeadline,
   setMode,
   setNotes,
@@ -44,6 +45,23 @@ const right = (...answers: number[]) => answers.map(fullyCorrect);
 const rightOf = (q: QuestionSlide) => q.correct.map((c) => c.answer);
 
 describe("slides", () => {
+  it("sets only the texts the Edit Slide dialog changed, on the slide as it is now", () => {
+    const opened = setSound(question({ text: "Capital?", answers: ["Brno", "Praha"], correct: right(1) }), "media/a.mp3") as QuestionSlide;
+    // A sound normalized while the dialog was open.
+    const now = setSoundOptions(opened, { gainDb: -4 });
+    const edited = { ...setAnswerAt(opened, 0, "Ostrava"), notes: "Ask slowly" } as QuestionSlide;
+    const applied = setEditedTexts(now, opened, edited) as QuestionSlide;
+    expect(applied.sound?.gainDb).toBe(-4);
+    expect([applied.answers, applied.correct, applied.notes, applied.text]).toEqual([["Ostrava", "Praha"], right(1), "Ask slowly", "Capital?"]);
+    // A dialog that changed nothing changes nothing.
+    expect(setEditedTexts(now, opened, opened)).toBe(now);
+    // A billboard's title and text, each only when changed.
+    const board = setBodyText(setHeadline(newSlide("billboard", "b"), "Round 1"), "Rules");
+    const retitled = setEditedTexts(setBodyText(board, "New rules"), board, setHeadline(board, "Round one"));
+    expect(retitled).toMatchObject({ title: "Round one", text: "New rules" });
+    expect(setEditedTexts(board, board, setBodyText(board, "Fewer rules"))).toMatchObject({ title: "Round 1", text: "Fewer rules" });
+  });
+
   it("starts a question that can be played: four answers, the first one right", () => {
     const q = question();
     expect(q.answers).toEqual(["", "", "", ""]);

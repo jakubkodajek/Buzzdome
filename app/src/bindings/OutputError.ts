@@ -3,4 +3,4 @@
 /**
  * Why an output could not be opened or send.
  */
-export type OutputError = { "problem": "notAvailable", detail: string, } | { "problem": "unknownHost", host: string, } | { "problem": "sendFailed", detail: string, } | { "problem": "notSupported" };
+export type OutputError = { "problem": "notAvailable", detail: string, } | { "problem": "notFound" } | { "problem": "unknownHost", host: string, } | { "problem": "sendFailed", detail: string, } | { "problem": "sentPart", written: number, of: number, } | { "problem": "notSupported" };

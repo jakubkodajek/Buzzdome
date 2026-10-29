@@ -204,12 +204,15 @@ pub fn pack(folder: &Path, dest: &Path, replace: bool) -> Result<Check> {
 
 /// Unpacks the quiz file `file` into the folder `folder` to work on it.
 /// The folder must not exist yet: nothing is ever unpacked over a quiz.
+/// What the file has that the format cannot keep is said in `left_out`:
+/// the folder's quiz.json is already written without it, so a quiz packed
+/// from the folder over the file loses it.
 pub fn unpack(file: &Path, folder: &Path) -> Result<Check> {
     if fs::symlink_metadata(folder).is_ok() {
         return Err(WorkError::Exists(folder.to_path_buf()));
     }
-    quiz_file::open_into(file, folder)?;
-    Ok(Check::of(&quiz_file::read_quiz(folder)?, folder))
+    let opened = quiz_file::open_into(file, folder)?;
+    Ok(Check::of(&ReadQuiz { quiz: opened.quiz, dropped: opened.dropped }, folder))
 }
 
 /// The `quiz.json` of the quiz folder `folder`, as it is written, up to
@@ -509,6 +512,27 @@ pub(crate) mod tests {
         let check = write_quiz(&dir, &quiz.to_string()).unwrap();
         assert!(check.is_ready());
         assert_eq!(check.left_out, vec!["slide r1: the style value style.headline cannot be read".to_string()]);
+    }
+
+    #[test]
+    fn unpacking_says_what_the_file_had_that_the_folder_left_out() {
+        let dir = scratch("unpack-left-out");
+        let mut quiz: serde_json::Value = serde_json::from_str(&quiz_with_picture("media/x.png")).unwrap();
+        quiz["slides"][0]["style"] = json!({ "headline": { "color": "gold" } });
+        quiz["slides"][1].as_object_mut().unwrap().remove("picture");
+        let file = dir.join("colleague.quiz");
+        let mut zip = zip::ZipWriter::new(fs::File::create(&file).unwrap());
+        zip.start_file(quiz_file::QUIZ_JSON, zip::write::SimpleFileOptions::default()).unwrap();
+        std::io::Write::write_all(&mut zip, quiz.to_string().as_bytes()).unwrap();
+        zip.finish().unwrap();
+        let left_out = vec!["slide r1: the style value style.headline cannot be read".to_string()];
+        assert_eq!(check(&file).unwrap().left_out, left_out);
+
+        let folder = dir.join("quiz");
+        assert_eq!(unpack(&file, &folder).unwrap().left_out, left_out);
+        // The folder's quiz no longer has it, so only unpacking can say so.
+        assert!(!read_quiz(&folder).unwrap().contains("gold"));
+        assert_eq!(check(&folder).unwrap().left_out, Vec::<String>::new());
     }
 
     #[test]

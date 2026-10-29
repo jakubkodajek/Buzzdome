@@ -124,7 +124,9 @@ const _: fn(RemoteKey) = |key| match key {
 pub enum DriverError {
     #[error("receiver not connected")]
     NotConnected,
-    #[error("receiver error: {0}")]
+    /// The system's own message, which the Director shows as it is
+    /// (`ReceiverStatus::Error`).
+    #[error("{0}")]
     Device(String),
 }
 
