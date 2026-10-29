@@ -359,7 +359,14 @@ export class App {
     const clicked = new Set<string>();
     for (let round = 0; round < 300; round++) {
       let target: { element: ElementRef; label: string } | null = null;
-      const buttons = await this.page.findAll(`${scope} button`);
+      let buttons: ElementRef[];
+      try {
+        buttons = await this.page.findAll(`${scope} button`);
+      } catch (error) {
+        // A button drawn anew while the driver lists them (the Receiver tab's list of buzzers heard): list again.
+        if (!(error instanceof WebDriverError)) throw error;
+        continue;
+      }
       for (let i = 0; i < buttons.length && !target; i++) {
         const element = buttons[i];
         let text: string;
@@ -369,7 +376,7 @@ export class App {
           text = (await this.page.text(element)).trim();
           title = (await this.page.attribute(element, "title")) ?? (await this.page.attribute(element, "aria-label")) ?? "";
         } catch (error) {
-          // Drawn anew while being read (the Receiver tab's list of buzzers heard): read the next one.
+          // Drawn anew while being read: read the next one; the next round lists it again.
           if (!(error instanceof WebDriverError)) throw error;
           continue;
         }
