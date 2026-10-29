@@ -21,6 +21,8 @@ afterAll(async () => {
   app?.forget();
 });
 
+// The Lights tab has its own crawl (lights.e2e.ts): with a button or more for
+// each of its looks, a crawl of it takes long enough to need a test of its own.
 const TABS: StringKey[] = ["tabQuestions", "tabTeams", "tabResponses", "tabResults", "tabBuzzers", "tabMedia", "tabReceiver", "tabSettings"];
 
 /**

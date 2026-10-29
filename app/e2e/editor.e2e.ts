@@ -3,7 +3,7 @@
 // one, saving through the system's file picker, and the draft surviving a
 // crash.
 
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, renameSync } from "node:fs";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import type { StringKey } from "../src/i18n";
@@ -50,21 +50,26 @@ const NOT_CLICKED: (StringKey | { text: string })[] = [
 
 const slideCount = () => app.count(".thumbnails .thumbnail-number");
 
-/** How many slides each editor draft of the app holds on disk (`quiz.json` in a `draft-*` folder, editor.rs). */
-function draftSlides(): number[] {
-  const counts: number[] = [];
+/** Each editor draft of the app as it is on disk (`quiz.json` in a `draft-*` folder, editor.rs). */
+function drafts(): { slides: unknown[]; theme?: string | null }[] {
+  const found = [];
   for (const folder of app.storage.filter((f) => existsSync(f))) {
     for (const entry of readdirSync(folder, { recursive: true, encoding: "utf8" })) {
       if (!/(^|[\\/])draft-[^\\/]+[\\/]quiz\.json$/.test(entry)) continue;
       try {
-        counts.push((JSON.parse(readFileSync(join(folder, entry), "utf8")) as { slides: unknown[] }).slides.length);
+        found.push(JSON.parse(readFileSync(join(folder, entry), "utf8")) as { slides: unknown[]; theme?: string | null });
       } catch {
         // Being written right now.
       }
     }
   }
-  return counts;
+  return found;
 }
+
+/** How many slides each draft holds on disk. */
+const draftSlides = () => drafts().map((draft) => draft.slides.length);
+/** The theme each draft has on disk. */
+const draftThemes = () => drafts().map((draft) => draft.theme ?? null);
 
 async function ctrl(key: string, shift = false): Promise<void> {
   await app.page.keys([key], shift ? [Key.Control, Key.Shift] : [Key.Control]);
@@ -219,5 +224,46 @@ describe("the quiz editor", () => {
     await sleep(1_000);
     expect(await app.count(".toast")).toBe(0);
     await app.assertHealthy();
+  });
+
+  test.skipIf(process.platform !== "linux")("a recent quiz whose file is gone leaves the list, and no show starts", async () => {
+    const file = join(data, "saved-quiz.quiz");
+    await app.answerQuestions(true);
+    await app.press("endShow");
+    await waitFor("the show to end", async () => (await app.view()) === null);
+    await app.tab("tabQuestions");
+    await app.seeText(t("recentFiles"));
+    renameSync(file, `${file}.moved`);
+    try {
+      await app.press({ text: "saved-quiz.quiz" });
+      await waitFor("the file gone from the list", async () => !(await app.bodyText()).includes("saved-quiz.quiz"));
+      expect(await app.view()).toBeNull();
+      expect(await app.count(".render-failed")).toBe(0);
+    } finally {
+      renameSync(`${file}.moved`, file);
+    }
+  });
+
+  test("a theme picked on the Design tab is the quiz's look, in the draft and in a test run", async () => {
+    if ((await app.view()) !== null) {
+      await app.answerQuestions(true);
+      await app.press("endShow");
+      await waitFor("the show to end", async () => (await app.view()) === null);
+    }
+    // Where the tests before it run (Linux), they end in the Director; elsewhere the crash test ends in the editor.
+    if ((await app.count(".studio")) === 0) await app.press("quizEditor");
+    await app.$(".studio");
+    const themes = await app.invoke<{ id: string; name: { cs: string } }[]>("list_themes");
+    const current = draftThemes();
+    const theme = themes.find((candidate) => !current.includes(candidate.id))!;
+    await ribbonTab("ribbonDesign");
+    await app.page.click(await app.$(`button[title="${theme.name.cs}"]`));
+    await waitFor(`the draft in ${theme.id}`, async () => draftThemes().includes(theme.id));
+    await app.page.keys([Key.F5], [Key.Shift]);
+    await app.seeText(t("testRunActive"));
+    expect((await app.invoke<{ theme: string | null } | null>("get_quiz"))?.theme).toBe(theme.id);
+    await app.assertHealthy();
+    await app.press("backToEditor");
+    await app.$(".studio");
   });
 });

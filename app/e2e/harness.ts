@@ -38,7 +38,7 @@ import { Session, WebDriverError, type ElementRef } from "./webdriver";
 export const t = translator("cs");
 
 const WINDOWS = process.platform === "win32";
-const APP = process.env.BUZZDOME_APP ?? fileURLToPath(new URL(`../../target/debug/buzzdome${WINDOWS ? ".exe" : ""}`, import.meta.url));
+export const APP = process.env.BUZZDOME_APP ?? fileURLToPath(new URL(`../../target/debug/buzzdome${WINDOWS ? ".exe" : ""}`, import.meta.url));
 /** Where the app keeps its data on Windows (tauri.conf.json `identifier`, design.md section 3). */
 const WINDOWS_DATA = WINDOWS ? [join(process.env.APPDATA ?? "", "cz.kodajek.quizshow"), join(process.env.LOCALAPPDATA ?? "", "cz.kodajek.quizshow")] : [];
 
@@ -268,9 +268,10 @@ export class App {
    * Waits until the Director shows the show's current step, then for the
    * step pause: the guard counts the pause from when the window shows a step
    * (`StepGuard.shown`), which on a busy machine can be well after the
-   * backend took it.
+   * backend took it. Before a step that does not come from the Director's
+   * buttons or keys too, such as a key of the receiver's remote.
    */
-  private async stepPause(): Promise<void> {
+  async stepPause(): Promise<void> {
     const view = await this.view();
     if (view) {
       await waitFor(`the Director to show step ${view.stepNo}`, async () => {
@@ -356,18 +357,37 @@ export class App {
   async clickEverything(scope: string, skip: (StringKey | { text: string })[] = []): Promise<string[]> {
     const skipped = skip.map((label) => (typeof label === "string" ? t(label) : label.text));
     const clicked = new Set<string>();
+    // A button drawn anew while the driver lists or reads it (the Receiver tab's list of buzzers heard).
+    const redrawn = (error: unknown) => error instanceof WebDriverError && error.error === "stale element reference";
     for (let round = 0; round < 300; round++) {
       let target: { element: ElementRef; label: string } | null = null;
-      const buttons = await this.page.findAll(`${scope} button`);
+      // A button this round could not read, which the next round lists again.
+      let unread = false;
+      let buttons: ElementRef[];
+      try {
+        buttons = await this.page.findAll(`${scope} button`);
+      } catch (error) {
+        if (!redrawn(error)) throw error;
+        continue;
+      }
       for (let i = 0; i < buttons.length && !target; i++) {
         const element = buttons[i];
-        if (!(await this.page.displayed(element)) || !(await this.page.enabled(element))) continue;
-        const text = (await this.page.text(element)).trim();
-        const title = (await this.page.attribute(element, "title")) ?? (await this.page.attribute(element, "aria-label")) ?? "";
+        let text: string;
+        let title: string;
+        try {
+          if (!(await this.page.displayed(element)) || !(await this.page.enabled(element))) continue;
+          text = (await this.page.text(element)).trim();
+          title = (await this.page.attribute(element, "title")) ?? (await this.page.attribute(element, "aria-label")) ?? "";
+        } catch (error) {
+          if (!redrawn(error)) throw error;
+          unread = true;
+          continue;
+        }
         const label = `${text || title || "(no label)"} #${i}`;
         if (clicked.has(label) || skipped.some((s) => text.includes(s) || title.includes(s))) continue;
         target = { element, label };
       }
+      if (!target && unread) continue;
       if (!target) return [...clicked];
       clicked.add(target.label);
       try {
