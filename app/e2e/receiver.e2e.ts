@@ -25,8 +25,11 @@ class FakeReceiver {
     server.on("connection", (socket) => {
       this.socket = socket;
       // An app that quits or restarts resets the connection (ECONNRESET on Windows); it connects again.
+      // readline passes the socket's errors on to its own listeners, so both take them.
       socket.on("error", () => socket.destroy());
-      createInterface({ input: socket }).on("line", (line) => {
+      const lines = createInterface({ input: socket });
+      lines.on("error", () => lines.close());
+      lines.on("line", (line) => {
         const message = JSON.parse(line) as { lights?: { buzzer: number; light: string | null }[]; error?: string };
         for (const lit of message.lights ?? []) this.lights.set(lit.buzzer, lit.light);
         if (message.error) this.errors.push(message.error);
