@@ -357,14 +357,17 @@ export class App {
   async clickEverything(scope: string, skip: (StringKey | { text: string })[] = []): Promise<string[]> {
     const skipped = skip.map((label) => (typeof label === "string" ? t(label) : label.text));
     const clicked = new Set<string>();
+    // A button drawn anew while the driver lists or reads it (the Receiver tab's list of buzzers heard).
+    const redrawn = (error: unknown) => error instanceof WebDriverError && error.error === "stale element reference";
     for (let round = 0; round < 300; round++) {
       let target: { element: ElementRef; label: string } | null = null;
+      // A button this round could not read, which the next round lists again.
+      let unread = false;
       let buttons: ElementRef[];
       try {
         buttons = await this.page.findAll(`${scope} button`);
       } catch (error) {
-        // A button drawn anew while the driver lists them (the Receiver tab's list of buzzers heard): list again.
-        if (!(error instanceof WebDriverError)) throw error;
+        if (!redrawn(error)) throw error;
         continue;
       }
       for (let i = 0; i < buttons.length && !target; i++) {
@@ -376,14 +379,15 @@ export class App {
           text = (await this.page.text(element)).trim();
           title = (await this.page.attribute(element, "title")) ?? (await this.page.attribute(element, "aria-label")) ?? "";
         } catch (error) {
-          // Drawn anew while being read: read the next one; the next round lists it again.
-          if (!(error instanceof WebDriverError)) throw error;
+          if (!redrawn(error)) throw error;
+          unread = true;
           continue;
         }
         const label = `${text || title || "(no label)"} #${i}`;
         if (clicked.has(label) || skipped.some((s) => text.includes(s) || title.includes(s))) continue;
         target = { element, label };
       }
+      if (!target && unread) continue;
       if (!target) return [...clicked];
       clicked.add(target.label);
       try {
