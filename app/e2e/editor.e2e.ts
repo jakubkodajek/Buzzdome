@@ -250,7 +250,8 @@ describe("the quiz editor", () => {
       await app.press("endShow");
       await waitFor("the show to end", async () => (await app.view()) === null);
     }
-    await app.press("quizEditor");
+    // Where the tests before it run (Linux), they end in the Director; elsewhere the crash test ends in the editor.
+    if ((await app.count(".studio")) === 0) await app.press("quizEditor");
     await app.$(".studio");
     const themes = await app.invoke<{ id: string; name: { cs: string } }[]>("list_themes");
     const current = draftThemes();

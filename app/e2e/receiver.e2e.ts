@@ -24,6 +24,8 @@ class FakeReceiver {
   private constructor(private readonly server: Server) {
     server.on("connection", (socket) => {
       this.socket = socket;
+      // An app that quits or restarts resets the connection (ECONNRESET on Windows); it connects again.
+      socket.on("error", () => socket.destroy());
       createInterface({ input: socket }).on("line", (line) => {
         const message = JSON.parse(line) as { lights?: { buzzer: number; light: string | null }[]; error?: string };
         for (const lit of message.lights ?? []) this.lights.set(lit.buzzer, lit.light);
@@ -82,6 +84,13 @@ let app: App;
 const info = () => app.invoke<ReceiverInfo>("receiver_info");
 const connected = async () => (await info()).status?.kind === "connected";
 const player = (view: GameView, buzzer: number) => view.players.find((p) => p.buzzer === buzzer);
+/**
+ * Waits until `buzzers` light ready. The app sends the receiver thread the round's mode before the
+ * lights (lib.rs `light_buzzers`), so from then on it takes the round's presses: one sent as soon as
+ * the view says the clock runs can reach it before, in the step before's mode.
+ */
+const buzzersReady = (...buzzers: number[]) =>
+  waitFor(`buzzers ${buzzers.join(", ")} ready`, async () => buzzers.every((buzzer) => fake.lights.get(buzzer) === "ready"));
 
 beforeAll(async () => {
   fake = await FakeReceiver.open();
@@ -145,6 +154,7 @@ describe("a simulated buzzer receiver", () => {
     await app.waitView("slide 8", (v) => v.slideIndex === 7);
     await app.step("next");
     await app.waitView("the clock running", (v) => v.phase.phase === "question" && v.phase.step === "running");
+    await buzzersReady(7, 12);
     // Buzzer 7 delivered second, but pressed sooner by its own clock. The receiver delivers presses made
     // at the same moment within the app's timer window (`ReceiverConfig::timer_window`), so they go together.
     await fake.pressTogether({ buzzer: 12, button: "big", timer: 400 }, { buzzer: 7, button: "big", timer: 150 });
@@ -214,9 +224,12 @@ describe("a simulated buzzer receiver", () => {
     await app.page.click(await app.$(".slide-grid tbody tr:nth-child(8) td:nth-child(1)"));
     await app.step("goToSelected");
     await app.waitView("slide 8", (v) => v.slideIndex === 7);
+    // Dark since the lobby lit them ready, so that ready below is the round's.
+    await waitFor("buzzers 3 and 7 dark", async () => [3, 7].every((buzzer) => fake.lights.get(buzzer) === "off"));
     await app.stepPause();
     await fake.remote("forward");
     await app.waitView("the clock running", (v) => v.phase.phase === "question" && v.phase.step === "running");
+    await buzzersReady(3, 7);
 
     await fake.press(7, "big", 150);
     await app.waitView("buzzer 7 buzzed", (v) => v.phase.phase === "question" && v.phase.step === "buzzed" && v.buzzed === 7);
