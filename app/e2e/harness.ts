@@ -362,9 +362,17 @@ export class App {
       const buttons = await this.page.findAll(`${scope} button`);
       for (let i = 0; i < buttons.length && !target; i++) {
         const element = buttons[i];
-        if (!(await this.page.displayed(element)) || !(await this.page.enabled(element))) continue;
-        const text = (await this.page.text(element)).trim();
-        const title = (await this.page.attribute(element, "title")) ?? (await this.page.attribute(element, "aria-label")) ?? "";
+        let text: string;
+        let title: string;
+        try {
+          if (!(await this.page.displayed(element)) || !(await this.page.enabled(element))) continue;
+          text = (await this.page.text(element)).trim();
+          title = (await this.page.attribute(element, "title")) ?? (await this.page.attribute(element, "aria-label")) ?? "";
+        } catch (error) {
+          // Drawn anew while being read (the Receiver tab's list of buzzers heard): read the next one.
+          if (!(error instanceof WebDriverError)) throw error;
+          continue;
+        }
         const label = `${text || title || "(no label)"} #${i}`;
         if (clicked.has(label) || skipped.some((s) => text.includes(s) || title.includes(s))) continue;
         target = { element, label };
