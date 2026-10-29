@@ -66,6 +66,7 @@
     "allow-editor-close",
     "allow-editor-test-run",
     "allow-ai-save-skill",
+    "allow-ai-skill-outdated",
     "allow-ai-connect-claude",
     "allow-receiver-info",
     "allow-receiver-devices",
@@ -87,6 +88,8 @@
     "allow-lights-library-reset",
     "allow-lights-hold",
     "allow-lights-blackout",
-    "allow-lights-universe"
+    "allow-lights-universe",
+    "allow-update-check",
+    "allow-update-install"
   ]
 }

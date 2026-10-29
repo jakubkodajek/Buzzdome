@@ -46,3 +46,6 @@ app/src/dev/media/*.wav
 
 # ts-rs default output when a test binary runs outside cargo; bindings go to app/src/bindings
 /bindings/
+
+# The command line a release installs beside the app (release.yml builds it there)
+app/src-tauri/binaries/

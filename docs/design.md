@@ -1720,6 +1720,29 @@ A failing random show prints `SOAK_SEED=<n>`; that variable replays it alone.
 Signing and notarization need a Windows code-signing certificate and an Apple
 Developer ID; until then builds are unsigned (macOS ad-hoc), see PL-5.
 
+Releases the installed apps update to are built from a `v*` tag of main
+and published as GitHub releases of this repository by
+`.github/workflows/release.yml`, merging
+`tauri.release.conf.json` so the bundler signs the updater files with the
+release key and installs the `buzzdome-quiz` command line beside the app.
+Its build job waits for Jakub's approval (the `release` environment's
+required reviewer), since the workflow file comes from the tagged commit. It runs no action from another repository, and publishes only
+updates that verify against the public key in the built commit for the
+version that commit declares, which the tag must name. The app's updater (`tauri-plugin-updater`, `updates.rs`) is
+asked from the Director, which offers a newer version only while no show
+runs, since installing ends the app; `update_install` marks the show state
+as updating (`Inner::updating`, which `lock_for_new_show` refuses) while
+the new version goes in, so no show begins meanwhile without the lock
+being held across the installer, and a show begun during the download
+puts the update off until it ends. Claude Desktop, when connected,
+runs the old MCP server until it is opened again, which the install
+question says; a skill package saved before is compared with this
+version's (`ai::SavedSkill`), and the Director offers to save it again
+when an update changed it. Each
+download is verified against `plugins.updater.pubkey`, and its signature
+must name the version `latest.json` announces. Debug builds never ask.
+How to release: `docs/releasing.md`.
+
 ## 5. Extension points (for sections 5, 6 and 10 of the specification)
 
 Not built yet; this is where they will attach, so current code does not block

@@ -65,6 +65,14 @@ pub fn config_path() -> Option<PathBuf> {
     Some(folder.join("Claude").join(CONFIG_FILE))
 }
 
+/// Whether the configuration file `config` names this app's MCP server, so
+/// that Claude Desktop runs it while it is open: false without the file,
+/// the entry, or a configuration that can be read.
+pub fn is_connected(config: &Path) -> bool {
+    let settings = fs::read_to_string(config).ok().and_then(|text| serde_json::from_str::<Value>(&text).ok());
+    settings.is_some_and(|settings| settings["mcpServers"].get(SERVER_KEY).is_some())
+}
+
 /// Adds the server that `command --mcp` starts, working in `roots`, to the
 /// configuration file `config`, keeping everything else in it. The file is made if Claude
 /// Desktop has not written one yet, but its folder must be there: without
@@ -137,6 +145,19 @@ mod tests {
         );
         assert_eq!(connect(&config, &dir.join("moved/buzzdome.exe"), &roots).unwrap().connection, ClaudeConnection::Updated);
         assert_eq!(connect(&config, &dir.join("moved/buzzdome.exe"), &Roots::default()).unwrap().connection, ClaudeConnection::Updated);
+    }
+
+    #[test]
+    fn a_configuration_that_names_the_server_is_connected() {
+        let dir = scratch("claude-connected");
+        let config = dir.join(CONFIG_FILE);
+        assert!(!is_connected(&config));
+        for text in ["{ broken", "[1]", r#"{ "mcpServers": [] }"#, r#"{ "mcpServers": { "files": {} } }"#] {
+            fs::write(&config, text).unwrap();
+            assert!(!is_connected(&config), "{text}");
+        }
+        connect(&config, Path::new("/b"), &Roots::default()).unwrap();
+        assert!(is_connected(&config));
     }
 
     #[test]

@@ -54,6 +54,20 @@ pub fn files() -> Vec<(String, String)> {
     .collect()
 }
 
+/// What tells this package from another: a digest of its files, the same
+/// in every build that holds the same files, so the app can tell that the
+/// skill the quizmaster saved before has changed since (`ai.rs`).
+pub fn fingerprint() -> String {
+    let bytes = files().into_iter().flat_map(|(path, contents)| [path.into_bytes(), vec![0], contents.into_bytes(), vec![0]]).flatten();
+    format!("{:016x}", fnv1a(bytes))
+}
+
+/// The 64-bit FNV-1a hash of `bytes`: fixed by its definition, where the
+/// standard library's hashers may change between Rust releases.
+fn fnv1a(bytes: impl IntoIterator<Item = u8>) -> u64 {
+    bytes.into_iter().fold(0xcbf2_9ce4_8422_2325, |hash, byte| (hash ^ u64::from(byte)).wrapping_mul(0x0000_0100_0000_01b3))
+}
+
 /// Writes the package to `dest`, replacing it only once it is complete.
 pub fn write(dest: &Path) -> Result<(), QuizFileError> {
     let failed = |e: zip::result::ZipError| QuizFileError::Io { action: FileAction::Write, path: dest.to_path_buf(), source: std::io::Error::other(e) };
@@ -85,6 +99,16 @@ mod tests {
         let mut schema = String::new();
         zip.by_name("buzzdome-quiz/reference/quiz.schema.json").unwrap().read_to_string(&mut schema).unwrap();
         assert_eq!(serde_json::from_str::<serde_json::Value>(&schema).unwrap(), crate::quiz_schema());
+    }
+
+    #[test]
+    fn the_fingerprint_is_fnv1a_of_the_files() {
+        // Test vectors of the FNV reference (isthe.com/chongo/tech/comp/fnv).
+        assert_eq!(fnv1a(*b""), 0xcbf2_9ce4_8422_2325);
+        assert_eq!(fnv1a(*b"a"), 0xaf63_dc4c_8601_ec8c);
+        assert_eq!(fnv1a(*b"foobar"), 0x8594_4171_f739_67e8);
+        assert_eq!(fingerprint(), fingerprint());
+        assert_eq!(fingerprint().len(), 16);
     }
 
     /// Claude takes a skill's name up to 64 characters and its description

@@ -58,7 +58,8 @@ on `PATH` first (macOS dev machine).
 | random shows / crash drills (more, or replay one) | `SOAK_SHOWS=5000 cargo test --release -p show-sim`; `SOAK_SEED=<n> cargo test -p buzzdome crash_drill` |
 | UI preview in a browser (mocked backend) | `cd app && npm run dev`, then `/preview.html?window=host&scene=running` (scenes in `app/src/dev/preview.tsx`) |
 | nightly soak and E2E | CI: `.github/workflows/nightly.yml` every night main changed, and on "Run workflow" |
-| installers | CI: `.github/workflows/build.yml` on tags `v*` and "Run workflow"; artifacts `buzzdome-windows`, `buzzdome-macos`, `buzzdome-linux` |
+| test installers (unsigned) | CI: `.github/workflows/build.yml` on "Run workflow"; artifacts `buzzdome-windows`, `buzzdome-macos`, `buzzdome-linux` |
+| release (signed, offered to installed apps) | push an annotated tag `v<version>` of main: `.github/workflows/release.yml` (`docs/releasing.md`) |
 | quiz files for scripts and AI assistants (check, pack, unpack, schema, skill, MCP) | `cargo run -p quiz-ai -- <command>` (`docs/ai-assistants.md`) |
 | receiver probe (no app) | `cargo run -p buzzers --example hid-monitor [-- VID:PID]` |
 | build installer | `cd app && npm run tauri build` (each OS builds its own installer) |
@@ -77,7 +78,8 @@ event order, `app_windows.rs` the Director and projector windows, `remote.rs` wh
 `teams.rs` prepared team names, `media_player.rs` media library, player, volume and sound board,
 `themes.rs` built-in themes, `fonts.rs` installed fonts, `app_file.rs` settings files,
 `app_icon.rs` the windows' icon colour, `stage_lights.rs` the lights setup and what the show tells them,
-`fixture_library.rs` the fixture library in use and its download, `ai.rs` `--mcp` and File › AI assistants),
+`fixture_library.rs` the fixture library in use and its download, `ai.rs` `--mcp` and File › AI assistants,
+`updates.rs` checking for and installing app updates),
 `app/src` (React UI: `director/`, `host/`, `editor/`; `browser-guard.ts` and `error-boundary.tsx`
 keep the windows from acting as a browser or going blank), `app/e2e` (E2E tests through WebDriver),
 `samples/demo-quiz.json`.
@@ -134,7 +136,8 @@ UI conventions (keep one way of doing each thing):
 - `docs/specification.md`: requirements with IDs (buzzer link, themes, plugins).
   `docs/design.md`: architecture, buzzer stack. `docs/quiz-format.md`: the quiz
   file format. `docs/ai-assistants.md`: quizzes written by AI assistants. `docs/hardware-test.md`:
-  checklist for the real receiver. Jakub keeps a copy of the reference manual
+  checklist for the real receiver. `docs/releasing.md`: how versions are
+  released and how installed apps update. Jakub keeps a copy of the reference manual
   in `docs/` locally; it is gitignored and must never be committed.
 - `replica/recon.md`: screens (S01..S42), flows (F01..F10), components, data model and
   scoring rules of the reference app. Read it before designing or building a feature.
@@ -170,3 +173,13 @@ UI conventions (keep one way of doing each thing):
   virtual buzzers are always available.
 - UI in Czech (default) and English. Text-answer matching must handle diacritics.
 - English for all code, comments, commit messages, docs and identifiers.
+- Installed apps update themselves from GitHub releases of this repository, so
+  only a release reaches them. To release: raise `version` in
+  `app/src-tauri/tauri.conf.json`, merge to main, wait for `check` and
+  `windows-tests`, then push an annotated tag of that commit,
+  `git tag -a v<version> -m "<notes in Czech>" origin/main && git push origin v<version>`,
+  and Jakub approves the run (Review deployments, environment `release`).
+  The tag's message is what the quizmaster reads before updating.
+  `release.yml` builds, signs and publishes; never make the release or the
+  tag on GitHub's Releases page, and never push a tag without Jakub's
+  go-ahead (`docs/releasing.md`).

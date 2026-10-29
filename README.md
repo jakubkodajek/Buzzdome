@@ -120,6 +120,11 @@ A quiz is a single `.quiz` file: a ZIP with a versioned `quiz.json` and a
 
 Details are in [`docs/ai-assistants.md`](docs/ai-assistants.md).
 
+Once installed from a
+[release](https://github.com/jakubkodajek/Buzzdome/releases/latest),
+the app offers newer versions itself when the Director opens without a show
+(Windows and macOS). How releases are made: [`docs/releasing.md`](docs/releasing.md).
+
 ## Development
 
 ### Prerequisites

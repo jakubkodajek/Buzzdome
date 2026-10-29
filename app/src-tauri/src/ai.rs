@@ -3,18 +3,24 @@
 //! (`quiz_ai::mcp`) and nothing else, working only in the folders named by
 //! `--root` (`quiz_ai::roots`); the editor's File › AI assistants page saves
 //! the skill package for chat assistants and connects Claude Desktop with
-//! the folder the quizmaster chooses.
+//! the folder the quizmaster chooses. A skill uploaded to an assistant stays
+//! as it was when saved, so the app remembers which one it saved and says
+//! when an update has changed it (`SavedSkill`).
 
+use crate::app_file::AppFile;
+use crate::app_log;
 use crate::dialogs::{self, Picker};
 use crate::error::{AppError, CmdResult};
 use crate::off_ui;
 use quiz_ai::claude_desktop::{self, ClaudeConnected, ConnectError, MCP_ARG};
 use quiz_ai::roots::{self, RootError, Roots};
 use quiz_file::FileAction;
+use serde::{Deserialize, Serialize};
 use std::ffi::OsStr;
 use std::io;
 use std::path::PathBuf;
-use tauri::{AppHandle, Manager, Window};
+use std::sync::Mutex;
+use tauri::{AppHandle, Manager, State, Window};
 
 /// The folder in the quizmaster's documents that Claude Desktop works in
 /// unless they choose another.
@@ -39,12 +45,70 @@ pub fn serve_mcp_if_asked(version: &str, identifier: &str) {
     std::process::exit(if served.is_ok() { 0 } else { 1 });
 }
 
-/// Writes the skill package where the quizmaster picks; false when they cancel.
+/// Where the fingerprint of the skill last saved is kept, in the app's data folder.
+pub const SKILL_FILE: &str = "ai-skill.json";
+
+#[derive(Debug, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SkillFile {
+    /// `quiz_ai::skill::fingerprint` of the package last saved; none before the first.
+    #[serde(default)]
+    saved: Option<String>,
+}
+
+/// Which skill package the quizmaster saved last, if any.
+pub struct SavedSkill {
+    /// Held while a save is written, so the last package saved is the one kept.
+    file: Mutex<AppFile>,
+    /// The fingerprint kept; never held while the disk works.
+    saved: Mutex<Option<String>>,
+}
+
+impl SavedSkill {
+    /// What is kept at `path`. A file that cannot be read counts as no
+    /// skill saved: the app then says nothing of its skill until the next save.
+    pub fn load(path: PathBuf) -> SavedSkill {
+        let (file, saved) = AppFile::load::<SkillFile>(path);
+        if let Some(lost) = file.lost() {
+            app_log::note(&format!("saved AI skill not read: {} (kept as {:?})", lost.detail, lost.kept_as));
+        }
+        SavedSkill { file: Mutex::new(file), saved: Mutex::new(saved.saved) }
+    }
+
+    /// Whether a skill was saved and this version's differs from it.
+    fn outdated(&self, current: &str) -> bool {
+        self.saved.lock().unwrap().as_deref().is_some_and(|saved| saved != current)
+    }
+
+    /// Keeps `fingerprint` as the skill saved.
+    fn store(&self, fingerprint: String) -> CmdResult<()> {
+        let file = self.file.lock().unwrap();
+        file.store(&SkillFile { saved: Some(fingerprint.clone()) })?;
+        *self.saved.lock().unwrap() = Some(fingerprint);
+        Ok(())
+    }
+}
+
+/// Writes the skill package where the quizmaster picks; false when they
+/// cancel. The package saved is remembered (`ai_skill_outdated`).
 #[tauri::command]
-pub async fn ai_save_skill(window: Window, picker: Picker) -> CmdResult<bool> {
+pub async fn ai_save_skill(window: Window, app: AppHandle, picker: Picker) -> CmdResult<bool> {
     let picker = Picker { file_name: Some(quiz_ai::skill::NAME.into()), ..picker };
     let Some(path) = dialogs::pick_save(window, picker, quiz_ai::skill::EXTENSION, None).await? else { return Ok(false) };
-    off_ui(move || Ok(quiz_ai::skill::write(&path).map(|()| true)?)).await
+    off_ui(move || {
+        quiz_ai::skill::write(&path)?;
+        app.state::<SavedSkill>().store(quiz_ai::skill::fingerprint())?;
+        Ok(true)
+    })
+    .await
+}
+
+/// Whether the skill the quizmaster saved last differs from this version's,
+/// as after an update that changed it: the copy uploaded to an assistant
+/// stays as it was, so it should be saved and uploaded again.
+#[tauri::command]
+pub fn ai_skill_outdated(saved: State<SavedSkill>) -> bool {
+    saved.outdated(&quiz_ai::skill::fingerprint())
 }
 
 /// Adds this app as an MCP server to Claude Desktop's configuration, working
@@ -81,6 +145,25 @@ pub async fn ai_connect_claude(window: Window, app: AppHandle, choose: bool) -> 
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+
+    #[test]
+    fn a_skill_is_outdated_only_once_saved_and_changed() {
+        let dir = std::env::temp_dir().join(format!("ai-skill-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join(SKILL_FILE);
+        let _ = std::fs::remove_file(&path);
+        let skill = SavedSkill::load(path.clone());
+        assert!(!skill.outdated("b"), "no skill saved yet");
+        skill.store("a".into()).unwrap();
+        assert!(!skill.outdated("a"));
+        assert!(skill.outdated("b"));
+        // Kept for the next start, as after an update.
+        assert!(SavedSkill::load(path.clone()).outdated("b"));
+        std::fs::write(&path, "{ broken").unwrap();
+        assert!(!SavedSkill::load(path).outdated("b"), "an unreadable file counts as no skill saved");
+    }
+
     /// The command line (`buzzdome-quiz mcp`) keeps the app's data out of
     /// its roots by the identifier quiz-ai knows, which must be the app's.
     #[test]

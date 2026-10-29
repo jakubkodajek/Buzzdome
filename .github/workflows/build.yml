@@ -1,11 +1,12 @@
 name: Build
 
-# Checks every push. Installers for Windows, macOS and Linux are built on
-# version tags (v*) and on demand ("Run workflow" in the Actions tab), not on
-# every merge, because runner minutes on a private repository are paid and
-# macOS minutes cost the most. Download them from the run's "Artifacts" section.
+# Checks every push to a branch. Unsigned test installers for Windows, macOS
+# and Linux are built on demand ("Run workflow" in the Actions tab), not on
+# every merge, as macOS minutes cost the most; download them from the run's
+# "Artifacts" section. Releases, built from v* tags, are release.yml's.
 on:
   push:
+    branches: ["**"]
   workflow_dispatch:
 
 # A newer push to a branch cancels the run it replaces; main runs every merge.
@@ -108,17 +109,17 @@ jobs:
         run: cargo test --workspace
 
   # The real app, clicked through as the quizmaster would (app/e2e).
-  # Windows (dearer minutes) on main, tags and "Run workflow", which can also
-  # be started on a branch.
+  # Windows (dearer minutes) on main and "Run workflow", which can also be
+  # started on a branch.
   e2e:
     uses: ./.github/workflows/e2e.yml
     with:
-      windows-runs: ${{ (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch') && 1 || 0 }}
+      windows-runs: ${{ (github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch') && 1 || 0 }}
 
   installers:
     # Not after e2e: a flaky E2E run must not hold back an installer before an event.
     needs: [check, windows-tests]
-    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
+    if: github.event_name == 'workflow_dispatch'
     strategy:
       fail-fast: false
       matrix:

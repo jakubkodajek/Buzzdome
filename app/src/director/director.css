@@ -392,6 +392,22 @@
   gap: 6px;
 }
 
+/* A newer version of the app is offered (`UpdateBanner`). */
+.update-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 12px;
+  color: #08325a;
+  background: #d6ebff;
+  border-bottom: 1px solid #8fc1ef;
+}
+
+.update-banner span {
+  flex: 1;
+  font-weight: 600;
+}
+
 .tab-body {
   flex: 1;
   min-height: 0;

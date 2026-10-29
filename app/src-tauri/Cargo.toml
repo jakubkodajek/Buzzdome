@@ -24,6 +24,8 @@ tauri = { version = "2", features = ["protocol-asset", "image-png"] }
 tauri-plugin-dialog = "2"
 # A second start shows the running app: two would share the show's journal.
 tauri-plugin-single-instance = "2"
+# Checks for, verifies and installs newer versions of the app (updates.rs).
+tauri-plugin-updater = "2"
 # Decodes the name of a file dropped into a window (an IPC header).
 percent-encoding = "2"
 # Lists the installed fonts for the editor's font picker.

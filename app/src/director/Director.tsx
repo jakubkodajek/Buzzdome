@@ -55,6 +55,8 @@ import { ResponsesTab } from "./ResponsesTab";
 import { ResultsTab } from "./ResultsTab";
 import { SettingsTab, useProjectorSettings, type ProjectorSettings } from "./SettingsTab";
 import { TeamsTab } from "./TeamsTab";
+import { AiSkillNotice } from "./AiSkillNotice";
+import { UpdateBanner } from "./UpdateBanner";
 import { confirmAction } from "../confirm";
 import { useMediaPlayer, type MediaPlayer } from "./useMediaPlayer";
 import { restartOutcome } from "./restart";
@@ -175,6 +177,8 @@ function DirectorLayout({ testRun, onEditor }: { testRun: boolean; onEditor: () 
         <NotSavedBanner />
         <LearnBanner />
         {view && beforeSlides(view.phase) && launch.on && <LaunchCheck view={view} quiz={quiz} projector={projector} onTab={setTab} />}
+        <UpdateBanner showRunning={view !== null} />
+        <AiSkillNotice showRunning={view !== null} />
         <div className="tab-body" role="tabpanel">
           <ThemeContext value={theme}>
             {/* A tab that fails to render keeps the rest of the window, and its keys, working. */}

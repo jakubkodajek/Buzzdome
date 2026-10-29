@@ -512,7 +512,7 @@ mod tests {
         for command in ["dispatch", "get_view", "close_host_window"] {
             assert!(projector.iter().any(|c| c == command), "the projector shows the show and its keys step it: {command}");
         }
-        for command in ["editor_save", "editor_open", "start_show_from_file", "start_show_from_recent", "receiver_select", "quit_app"] {
+        for command in ["editor_save", "editor_open", "start_show_from_file", "start_show_from_recent", "receiver_select", "quit_app", "update_check", "update_install"] {
             assert!(!projector.iter().any(|c| c == command), "the projector opens no file and changes no setting: {command}");
         }
     }

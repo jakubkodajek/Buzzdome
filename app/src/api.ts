@@ -1,6 +1,7 @@
-import { invoke } from "@tauri-apps/api/core";
+import { Channel, invoke } from "@tauri-apps/api/core";
 import type {
   AppError,
+  AvailableUpdate,
   BoardChange,
   Button,
   BuzzerId,
@@ -46,6 +47,7 @@ import type {
   ShowResults,
   SoundBoard,
   Theme,
+  UpdateProgress,
   ValidationError,
 } from "./types";
 
@@ -161,6 +163,18 @@ export const api = {
   lightsBlackout: (on: boolean) => invoke<void>("lights_blackout", { on }),
   /** The 512 channel values the lights show now. */
   lightsUniverse: () => invoke<number[]>("lights_universe"),
+  /** The newer version of the app the update server offers, if any; asked until it answers once a run. */
+  updateCheck: () => invoke<AvailableUpdate | null>("update_check"),
+  /**
+   * Downloads the update found, verifies it and installs it, telling
+   * `onProgress` how the download goes; the app then starts again in the
+   * new version. Refused while a show runs.
+   */
+  updateInstall: (onProgress: (progress: UpdateProgress) => void) => {
+    const progress = new Channel<UpdateProgress>();
+    progress.onmessage = onProgress;
+    return invoke<void>("update_install", { progress });
+  },
   // The editor's commands on a draft name it (`EditorDraft.id`): one that
   // another draft has replaced since is refused with `draftChanged`.
   /** The quiz editor's draft left from last time, if any. */
@@ -190,6 +204,8 @@ export const api = {
   editorTestRun: (draft: string, quiz: Quiz, from: number | null = null) => invoke<void>("editor_test_run", { draft, quiz, from }),
   /** Writes the skill package for chat assistants where the quizmaster picks; false when they cancel. */
   aiSaveSkill: (picker: Picker) => invoke<boolean>("ai_save_skill", { picker }),
+  /** Whether the skill package saved last differs from this version's, so it should be saved and uploaded again. */
+  aiSkillOutdated: () => invoke<boolean>("ai_skill_outdated"),
   /**
    * Adds the app to Claude Desktop as the MCP server it writes quizzes with, working in the Buzzdome folder of the
    * quizmaster's documents, or with `choose` in a folder they pick; says what changed, null when they cancel.
