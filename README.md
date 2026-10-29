@@ -65,9 +65,15 @@ the feature matrix is [`replica/features.csv`](replica/features.csv).
 
 ## Install
 
-There are no public releases. CI builds installers on version tags `v*`
-and on demand (GitHub › Actions › Build › Run workflow). Download them
-from the run's artifacts:
+Download the installer from the
+[Releases page](https://github.com/jakubkodajek/Buzzdome/releases): the
+Windows `.exe` (NSIS) or the universal macOS `.dmg`. An app installed from
+a release offers each newer release by itself
+([`docs/releasing.md`](docs/releasing.md)).
+
+Test builds between releases, Linux included, come from CI on demand
+(GitHub › Actions › Build › Run workflow). Download them from the run's
+artifacts:
 
 | Artifact | Contents |
 | --- | --- |
