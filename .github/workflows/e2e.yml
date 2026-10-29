@@ -153,9 +153,12 @@ jobs:
         run: |
           winget install --id gerardog.gsudo --exact --version "$env:GSUDO_VERSION" --scope machine --accept-source-agreements --accept-package-agreements --disable-interactivity
           # Where winget puts it depends on the package's installer: its own
-          # folder for an MSI, WinGet's package folder for a portable one.
+          # folder for an MSI, WinGet's package folder for a portable one. The
+          # portable one holds a gsudo.exe per CPU (arm64, x64, x86 folders).
           $roots = (Join-Path $env:ProgramFiles "gsudo"), (Join-Path $env:ProgramFiles "WinGet\Packages"), (Join-Path $env:LOCALAPPDATA "Microsoft\WinGet\Packages")
-          $exe = $roots | Where-Object { Test-Path $_ } | ForEach-Object { Get-ChildItem $_ -Recurse -Filter gsudo.exe -File -ErrorAction SilentlyContinue } | Select-Object -First 1
+          $cpu = @{ AMD64 = "x64"; ARM64 = "arm64"; x86 = "x86" }[$env:PROCESSOR_ARCHITECTURE]
+          $exe = $roots | Where-Object { Test-Path $_ } | ForEach-Object { Get-ChildItem $_ -Recurse -Filter gsudo.exe -File -ErrorAction SilentlyContinue } |
+            Where-Object { $_.Directory.Name -eq $cpu -or $_.Directory.Name -notin "arm64", "x64", "x86" } | Select-Object -First 1
           if (-not $exe) { throw "gsudo.exe not found under $($roots -join ', ')" }
           & $exe.FullName --version
           $exe.DirectoryName >> $env:GITHUB_PATH
