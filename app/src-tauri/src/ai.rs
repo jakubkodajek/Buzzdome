@@ -132,10 +132,9 @@ pub async fn ai_connect_claude(window: Window, app: AppHandle, choose: bool) -> 
             RootError::Unusable { path, source } => AppError::file(FileAction::Read, &path, source),
             RootError::NotAFolder(path) => AppError::file(FileAction::Read, &path, io::Error::from(io::ErrorKind::NotADirectory)),
         })?;
-        let config = claude_desktop::config_path().ok_or(AppError::ClaudeDesktopMissing)?;
         let command = std::env::current_exe().map_err(AppError::system)?;
-        claude_desktop::connect(&config, &command, &Roots::new(vec![root])).map(Some).map_err(|e| match e {
-            ConnectError::NotInstalled(_) => AppError::ClaudeDesktopMissing,
+        claude_desktop::connect(&claude_desktop::config_files(), &command, &Roots::new(vec![root])).map(Some).map_err(|e| match e {
+            ConnectError::NotInstalled => AppError::ClaudeDesktopMissing,
             ConnectError::NotAConfig(path) => AppError::ClaudeConfigUnreadable { path: path.display().to_string() },
             ConnectError::File(e) => e.into(),
         })

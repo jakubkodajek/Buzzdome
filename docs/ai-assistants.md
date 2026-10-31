@@ -44,7 +44,12 @@ Connecting adds the app to Claude Desktop's configuration file
 (`claude_desktop_config.json`: `%APPDATA%\Claude\` on Windows,
 `~/Library/Application Support/Claude/` on macOS) under `mcpServers`, as
 the command `<path of Buzzdome> --mcp --root <folder>`; everything else in
-the file stays. Claude Desktop starts that command when it starts and
+the file stays. Claude Desktop from the Windows installer at
+claude.ai/download is a packaged (MSIX) app, which reads its own copy of
+that folder, `%LOCALAPPDATA%\Packages\Claude_<id>\LocalCache\Roaming\Claude\`,
+whenever the file is there (anthropics/claude-code#26073), so on Windows
+Buzzdome adds itself to whichever of the two files Claude Desktop reads,
+to both when it cannot tell. Claude Desktop starts that command when it starts and
 talks to it over standard input and output. Started so, Buzzdome opens no
 window and does nothing else, and a show does not need it. After Buzzdome
 moves (a reinstall to another folder), connect again.

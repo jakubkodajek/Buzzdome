@@ -1028,7 +1028,14 @@ and has no rules of its own: what it accepts is what `quiz_file` and
   Claude Desktop's `claude_desktop_config.json` and keeps the rest (keys
   may come out in another order). It refuses a file that is not a JSON
   object, so nothing of the user's is lost, and makes no folder: without
-  Claude's folder, Claude Desktop is not installed. The folder is the
+  Claude's folder, Claude Desktop is not installed. On Windows
+  `config_files` finds the file in `%APPDATA%\Claude` and in each packaged
+  (MSIX) Claude Desktop's virtualized copy of it,
+  `%LOCALAPPDATA%\Packages\Claude_*\LocalCache\Roaming\Claude`, which the
+  packaged app reads first; the copy's file is left out while it is not
+  there and the real one is, as the packaged app then reads the real one
+  and a new copy would hide it. `connect` writes every file found, or none
+  when one of them is not a configuration. The folder is the
   `Buzzdome` folder of the quizmaster's documents, which the page makes,
   or one they pick (`ai_connect_claude`).
 - **Skill.** `skill::write` zips `SKILL.md` and `make_quiz.py` (both in
