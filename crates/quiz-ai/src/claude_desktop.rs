@@ -7,9 +7,9 @@
 //! On Windows the file has two homes. Claude Desktop from its classic
 //! installer keeps it in `Claude` in the roaming application data
 //! (`%APPDATA%`), the one place the page above names. The packaged (MSIX)
-//! Claude Desktop, which the Microsoft Store and the current installer set
-//! up, sees that folder through Windows' file system virtualization: the
-//! files it makes there go to its own copy of the folder,
+//! Claude Desktop, which the installer from claude.ai/download sets up,
+//! sees that folder through Windows' file system virtualization: the files
+//! it makes there go to its own copy of the folder,
 //! `Packages\Claude_<publisher>\LocalCache\Roaming\Claude` in the local
 //! application data (`%LOCALAPPDATA%`), opening a file looks in that copy
 //! first and in the real folder only when the copy has none, and files
@@ -35,7 +35,8 @@ const CONFIG_FILE: &str = "claude_desktop_config.json";
 /// Claude Desktop's folder in the application data.
 const CLAUDE_FOLDER: &str = "Claude";
 /// How the folder of a packaged Claude Desktop in `%LOCALAPPDATA%\Packages`
-/// starts: its package family name, `Claude_<publisher id>`.
+/// starts: its package family name, `Claude_<publisher id>`, which Windows
+/// compares ignoring case ("Package identity overview", learn.microsoft.com).
 const PACKAGE_PREFIX: &str = "Claude_";
 
 /// What connecting changed.
@@ -102,7 +103,7 @@ fn windows_config_files(roaming: Option<&Path>, local: Option<&Path>) -> Vec<Pat
         .into_iter()
         .flatten()
         .flatten()
-        .filter(|package| package.file_name().to_string_lossy().starts_with(PACKAGE_PREFIX))
+        .filter(|package| package.file_name().to_string_lossy().get(..PACKAGE_PREFIX.len()).is_some_and(|start| start.eq_ignore_ascii_case(PACKAGE_PREFIX)))
         .filter_map(|package| config_in(&package.path().join("LocalCache").join("Roaming").join(CLAUDE_FOLDER)))
         .filter(|config| config.is_file() || !real_exists);
     real.into_iter().chain(packaged).collect()
@@ -271,6 +272,16 @@ mod tests {
         assert_eq!(found(&roaming, &local), [real.join(CONFIG_FILE), packaged.join(CONFIG_FILE)], "its own file hides the real one");
         fs::remove_dir_all(&real).unwrap();
         assert_eq!(windows_config_files(None, Some(&local)), [packaged.join(CONFIG_FILE)]);
+    }
+
+    #[test]
+    fn a_packaged_claude_desktop_is_known_by_its_package_name_in_any_case() {
+        let (roaming, local, _) = windows_user("claude-windows-names");
+        let copy = |package: &str| local.join("Packages").join(package).join("LocalCache/Roaming").join(CLAUDE_FOLDER);
+        for package in ["CLAUDE_pzs8sxrjxfjjc", "ClaudeHelper_pzs8sxrjxfjjc"] {
+            fs::create_dir_all(copy(package)).unwrap();
+        }
+        assert_eq!(found(&roaming, &local), [copy("CLAUDE_pzs8sxrjxfjjc").join(CONFIG_FILE)]);
     }
 
     #[test]
