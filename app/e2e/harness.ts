@@ -24,7 +24,7 @@
 // (or BUZZDOME_APP naming one).
 
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
-import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync } from "node:fs";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -81,9 +81,13 @@ export async function waitFor<T>(what: string, check: () => Promise<T | false | 
   }
 }
 
-/** A folder for one app's data, kept across a restart of that app. */
+/**
+ * A folder for one app's data, kept across a restart of that app. Named by its
+ * real path, as the app names folders (`fs::canonicalize`): Windows may give the
+ * temp folder by its short 8.3 name (`RUNNER~1`), which the app would write out in full.
+ */
 export function dataFolder(): string {
-  return mkdtempSync(join(tmpdir(), "buzzdome-e2e-"));
+  return realpathSync.native(mkdtempSync(join(tmpdir(), "buzzdome-e2e-")));
 }
 
 /** Scripts the tests put into a page: catching errors, and answering the app's yes/no questions. */
