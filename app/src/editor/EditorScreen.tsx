@@ -43,7 +43,6 @@ import { formatImported, freshSlideId, setEditedTexts, setNotes, withFreshIds } 
 import { styleProperties } from "./style-properties";
 import { TableView } from "./TableView";
 import { Thumbnails } from "./Thumbnails";
-import { useAiActions } from "./useAiActions";
 import { useCategories } from "./useCategories";
 import { useDraftState, useQuizEditor, type QuizEditor } from "./useQuizEditor";
 import { useSheetActions } from "./useSheetActions";
@@ -176,7 +175,6 @@ function Studio({ editor, open, onExit }: { editor: QuizEditor; open: OpenQuiz |
     setBackstage(null);
     return imported.length;
   });
-  const ai = useAiActions();
   // The backend refuses what a show cannot play (not a category's problems,
   // say); what is to fix is then listed in File › Info.
   const testRun = (from?: number) =>
@@ -247,9 +245,6 @@ function Studio({ editor, open, onExit }: { editor: QuizEditor; open: OpenQuiz |
     importSheet: sheet.importSheet,
     sheetTemplate: sheet.sheetTemplate,
     exportSheet: sheet.exportSheet,
-    saveAiSkill: ai.saveAiSkill,
-    connectClaude: ai.connectClaude,
-    connectClaudeFolder: ai.connectClaudeFolder,
   };
 
   const backstageShown = open === null || backstage !== null;

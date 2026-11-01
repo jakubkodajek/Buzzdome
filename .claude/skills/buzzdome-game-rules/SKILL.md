@@ -43,8 +43,10 @@ reference app unless Jakub decided otherwise (`ROADMAP.md`, the spec).
 2. A change older apps cannot read safely bumps `SCHEMA_VERSION` and
    upgrades older files when they are read (`Quiz::from_json`).
 3. Update `docs/quiz-format.md`. The JSON Schema for AI assistants is
-   generated from the model (`quiz_ai::quiz_schema`); check that the skill
-   text in `crates/quiz-ai/src/skill/SKILL.md` still says what is true.
+   generated from the model (`quiz_ai::quiz_schema`), and `quiz-format.md`
+   is the guide the MCP server gives them; check that the default AI
+   instructions (`crates/quiz-ai/src/instructions/`) still say what is
+   true.
 4. Check `samples/demo-quiz.json` still opens, and the spreadsheet import
    and export (`quiz-core/src/sheet.rs`, `quiz-file/src/sheet.rs`) if the
    field belongs in a sheet.

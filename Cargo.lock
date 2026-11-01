@@ -3219,12 +3219,14 @@ name = "quiz-ai"
 version = "0.2.0"
 dependencies = [
  "base64 0.22.1",
+ "dirs",
  "quiz-core",
  "quiz-file",
  "schemars 1.2.2",
  "serde",
  "serde_json",
  "thiserror 2.0.21",
+ "toml_edit 0.25.15+spec-1.1.0",
  "ts-rs",
  "zip 9.0.0",
 ]
@@ -4804,6 +4806,7 @@ dependencies = [
  "indexmap 2.14.2",
  "toml_datetime 1.1.1+spec-1.1.0",
  "toml_parser",
+ "toml_writer",
  "winnow 1.0.4",
 ]
 

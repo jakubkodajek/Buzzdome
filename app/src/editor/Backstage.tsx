@@ -12,6 +12,7 @@ import { NO_CONTEXT, questionCount, settingsOf, soundsOf, welcomeOf } from "../q
 import { RecentFileList } from "../recent-files";
 import type { AllAnswered, Quiz, QuizSettings, QuizSounds, ValidationError, Welcome } from "../types";
 import type { Action, Actions } from "./actions";
+import { AiPage } from "./AiPage";
 import { MediaPicker, NumberBox, Select, Switch } from "./controls";
 import type { OpenQuiz } from "./editor-state";
 import { SoundsSettings } from "./SoundsSettings";
@@ -27,13 +28,9 @@ interface BackstageProps {
   /** Back to the quiz; null when there is no quiz to go back to. */
   onClose: (() => void) | null;
   /**
-   * The file's actions, questions from a spreadsheet, the template for one and the quiz as one (spec QZ-8),
-   * and what AI assistants write quizzes with.
+   * The file's actions, questions from a spreadsheet, the template for one and the quiz as one (spec QZ-8).
    */
-  actions: Pick<
-    Actions,
-    "newQuiz" | "save" | "saveAs" | "closeQuiz" | "exit" | "importSheet" | "sheetTemplate" | "exportSheet" | "saveAiSkill" | "connectClaude" | "connectClaudeFolder"
-  >;
+  actions: Pick<Actions, "newQuiz" | "save" | "saveAs" | "closeQuiz" | "exit" | "importSheet" | "sheetTemplate" | "exportSheet">;
   recentFiles: string[];
   /** Opens `recent`, a file in `recentFiles`, or one the quizmaster picks. */
   onOpenFile: (recent?: string) => void;
@@ -87,7 +84,7 @@ export function Backstage(props: BackstageProps) {
         <span className="backstage-gap" />
         {item(actions.exit)}
       </nav>
-      <div className="backstage-page">{open ? pageFor(shown, props, open) : shown === "ai" ? <AiPage {...props} /> : <OpenPage {...props} />}</div>
+      <div className="backstage-page">{open ? pageFor(shown, props, open) : shown === "ai" ? <AiPage /> : <OpenPage {...props} />}</div>
     </div>
   );
 }
@@ -105,7 +102,7 @@ function pageFor(page: BackstagePage, props: BackstageProps, open: OpenQuiz) {
     case "export":
       return <ExportPage {...props} />;
     case "ai":
-      return <AiPage {...props} />;
+      return <AiPage />;
   }
 }
 
@@ -339,33 +336,6 @@ function ExportPage({ actions }: BackstageProps) {
           {actions.exportSheet.label}
         </button>
         <p>{t("exportToSheetHint")}</p>
-      </div>
-    </>
-  );
-}
-
-function AiPage({ actions }: BackstageProps) {
-  const { t } = useApp();
-  return (
-    <>
-      <h1>{t("backstageAi")}</h1>
-      <p>{t("aiAssistantsHint")}</p>
-      <div className="backstage-task">
-        <div className="backstage-buttons">
-          <button type="button" className="browse" onClick={actions.connectClaude.run}>
-            {actions.connectClaude.label}
-          </button>
-          <button type="button" className="browse" onClick={actions.connectClaudeFolder.run}>
-            {actions.connectClaudeFolder.label}
-          </button>
-        </div>
-        <p>{t("connectClaudeHint")}</p>
-      </div>
-      <div className="backstage-task">
-        <button type="button" className="browse" onClick={actions.saveAiSkill.run}>
-          {actions.saveAiSkill.label}
-        </button>
-        <p>{t("saveAiSkillHint")}</p>
       </div>
     </>
   );

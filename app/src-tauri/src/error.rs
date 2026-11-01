@@ -134,17 +134,17 @@ pub enum AppError {
     NoQuestionColumn,
 
     // AI assistants.
-    /// Claude Desktop is not installed for this user, or not made for this system.
-    #[error("Claude Desktop is not installed")]
-    ClaudeDesktopMissing,
-    /// Claude Desktop's configuration file holds something else than its settings, so it is left as it is.
-    #[error("{path} is not a Claude Desktop configuration")]
-    ClaudeConfigUnreadable { path: String },
+    /// An AI app is not installed for this user: Claude Desktop, which is known by the folder it makes when it first starts.
+    #[error("{app} is not installed")]
+    AiAppMissing { app: String },
+    /// An AI app's configuration file holds something else than its settings, so it is left as it is.
+    #[error("{path} is not an AI app's configuration")]
+    AiConfigUnreadable { path: String },
     /// The folder chosen for an assistant holds or is inside the app's own data (shows, drafts, settings).
     #[error("{path} holds or is inside Buzzdome's own data")]
     AiFolderNotAllowed { path: String },
     /// The system names no documents folder for the quizmaster, where
-    /// Claude Desktop would work unless they choose another.
+    /// assistants work unless they choose another folder.
     #[error("the system has no documents folder")]
     NoDocumentsFolder,
 

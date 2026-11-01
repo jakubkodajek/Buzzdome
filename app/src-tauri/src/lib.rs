@@ -736,7 +736,7 @@ pub fn run() {
             app.asset_protocol_scope().allow_directory(library.root(), true)?;
             app.manage(library);
             app.manage(app_icon::AppIcon::load(app_data(app.handle(), app_icon::ICON_FILE)?));
-            app.manage(ai::SavedSkill::load(app_data(app.handle(), ai::SKILL_FILE)?));
+            app.manage(ai::SavedAiSettings::load(app_data(app.handle(), quiz_ai::settings::SETTINGS_FILE)?));
             app.manage(recent_files::RecentFiles::load(app_local_data(app.handle(), recent_files::RECENT_FILES)?));
             for window in app.webview_windows().values() {
                 app_icon::apply(app.handle(), window);
@@ -800,9 +800,11 @@ pub fn run() {
             editor::editor_export_sheet,
             editor::editor_close,
             editor_test_run,
-            ai::ai_save_skill,
-            ai::ai_skill_outdated,
-            ai::ai_connect_claude,
+            ai::ai_page,
+            ai::ai_choose_folder,
+            ai::ai_connect,
+            ai::ai_server_config,
+            ai::ai_set_instructions,
             hardware::receiver_info,
             hardware::receiver_devices,
             hardware::receiver_select,

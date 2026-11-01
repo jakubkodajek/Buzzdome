@@ -9,8 +9,9 @@ import type { StringKey, Translate } from "./i18n";
 import { mediaFileName } from "./media";
 import type {
   AppError,
-  ClaudeConnected,
-  ClaudeConnection,
+  AiConnected,
+  Assistant,
+  ConnectChange,
   FileAction,
   ImportIssue,
   MediaIssue,
@@ -78,8 +79,8 @@ const ERROR_KEYS: Record<Exclude<AppError["code"], WordedApart>, StringKey> = {
   spreadsheetTooComplex: "errSpreadsheetTooComplex",
   spreadsheetReaderFailed: "errSpreadsheetReaderFailed",
   noQuestionColumn: "errNoQuestionColumn",
-  claudeDesktopMissing: "errClaudeDesktopMissing",
-  claudeConfigUnreadable: "errClaudeConfigUnreadable",
+  aiAppMissing: "errAiAppMissing",
+  aiConfigUnreadable: "errAiConfigUnreadable",
   aiFolderNotAllowed: "errAiFolderNotAllowed",
   noDocumentsFolder: "errNoDocumentsFolder",
   notAMediaFile: "errNotAMediaFile",
@@ -440,13 +441,30 @@ export function outputErrorText(t: Translate, error: OutputError): string {
   return t(OUTPUT_ERROR_KEYS[error.problem], params(error));
 }
 
-const CLAUDE_CONNECTION_KEYS: Record<ClaudeConnection, StringKey> = {
-  added: "claudeConnected",
-  updated: "claudeReconnected",
-  unchanged: "claudeAlreadyConnected",
+const CONNECT_CHANGE_KEYS: Record<ConnectChange, StringKey> = {
+  added: "aiConnected",
+  updated: "aiReconnected",
+  unchanged: "aiAlreadyConnected",
 };
 
-/** What connecting Claude Desktop changed, where it may work, and what the quizmaster does next. */
-export function claudeConnectionText(t: Translate, connected: ClaudeConnected): string {
-  return t(CLAUDE_CONNECTION_KEYS[connected.connection], { folder: connected.folders.join(", ") });
+/**
+ * What connecting an AI app changed, where it works, and what the quizmaster does next on `platform`
+ * (`std::env::consts::OS`).
+ */
+export function aiConnectionText(t: Translate, connected: AiConnected, platform: string): string {
+  const said = t(CONNECT_CHANGE_KEYS[connected.change], { app: connected.name, folder: connected.folder });
+  // A running app keeps the folder it started with, also when its entry was already there.
+  return `${said} ${aiRestartText(t, connected.assistant, platform)}`;
+}
+
+/** How `assistant` starts using the server once it is connected, on `platform` (`std::env::consts::OS`). */
+export function aiRestartText(t: Translate, assistant: Assistant, platform: string): string {
+  switch (assistant) {
+    case "claudeDesktop":
+      return t(platform === "macos" ? "aiRestartClaudeMacos" : platform === "windows" ? "aiRestartClaudeWindows" : "aiRestartClaudeLinux");
+    case "antigravity":
+      return t("aiRestartAntigravity");
+    case "codex":
+      return t(platform === "macos" ? "aiRestartCodexMacos" : "aiRestartCodexOther");
+  }
 }

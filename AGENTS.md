@@ -20,7 +20,6 @@ Then read:
 | `buzzdome-game-rules` | change game rules, scoring or the quiz file format |
 | `buzzdome-ui-change` | change the Director, projector slides, editor or texts |
 | `buzzdome-hardware` | work on the buzzers, the receiver or the stage lights |
-| `buzzdome-quiz-authoring` | write or check a `.quiz` file from the repository |
 
 Never commit the reference manual copies or any vendor SDK file. The
 manual copies are every path `.gitignore` lists for it: `docs/` subfolders,

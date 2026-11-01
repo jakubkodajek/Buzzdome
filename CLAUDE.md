@@ -54,13 +54,13 @@ on `PATH` first (macOS dev machine).
 | lint UI (incl. React hooks rules) | `cd app && npm run lint` |
 | type-check and build UI | `cd app && npm run build` |
 | UI logic tests (editor history, draft queue, slide changes) | `cd app && npm test` |
-| E2E tests of the real app (Linux; needs `tauri-driver`, `webkit2gtk-driver`, `xvfb`, `xdotool`. Windows only on CI: they use the real app data) | `cargo build -p quiz-ai && cd app && npm run tauri build -- --debug --no-bundle && xvfb-run -a npm run e2e` |
+| E2E tests of the real app (Linux; needs `tauri-driver`, `webkit2gtk-driver`, `xvfb`, `xdotool`. Windows only on CI: they use the real app data) | `cd app && npm run tauri build -- --debug --no-bundle && xvfb-run -a npm run e2e` |
 | random shows / crash drills (more, or replay one) | `SOAK_SHOWS=5000 cargo test --release -p show-sim`; `SOAK_SEED=<n> cargo test -p buzzdome crash_drill` |
 | UI preview in a browser (mocked backend) | `cd app && npm run dev`, then `/preview.html?window=host&scene=running` (scenes in `app/src/dev/preview.tsx`) |
 | nightly soak and E2E | CI: `.github/workflows/nightly.yml` every night main changed, and on "Run workflow" |
 | test installers (unsigned) | CI: `.github/workflows/build.yml` on "Run workflow"; artifacts `buzzdome-windows`, `buzzdome-macos`, `buzzdome-linux` |
 | release (signed, offered to installed apps) | push an annotated tag `v<version>` of main: `.github/workflows/release.yml` (`docs/releasing.md`) |
-| quiz files for scripts and AI assistants (check, pack, unpack, schema, skill, MCP) | `cargo run -p quiz-ai -- <command>` (`docs/ai-assistants.md`) |
+| the app as an AI app's MCP server (no window; folder and instructions from `ai.json` in the app's data) | `target/debug/buzzdome --mcp` (`docs/ai-assistants.md`) |
 | receiver probe (no app) | `cargo run -p buzzers --example hid-monitor [-- VID:PID]` |
 | build installer | `cd app && npm run tauri build` (each OS builds its own installer) |
 
@@ -69,8 +69,8 @@ Layout: `crates/quiz-core` (model, game state machine, scoring, view),
 `crates/quiz-file` (`.quiz` files: ZIP with media, unpack cache, save;
 `sheet.rs` spreadsheet import and CSV export),
 `crates/quiz-ai` (quiz writing for AI assistants: the quiz JSON Schema, `workbench.rs` quiz folders,
-`mcp.rs` the MCP server, `roots.rs` the folders it may use, `skill.rs` the skill package, `claude_desktop.rs`,
-the `buzzdome-quiz` command line),
+`mcp.rs` the MCP server, `roots.rs` the folders it may use, `settings.rs` the folder and instructions the app keeps,
+`assistants.rs` connecting AI apps),
 `crates/buzzers` (driver trait, USB-HID receiver thread, protocols, learn mode, `clock.rs` show clock, `fake_receiver.rs` the E2E tests' fake receiver),
 `crates/lights` (stage lights: DMX outputs, looks, the lights thread, OSC and MIDI show messages),
 `app/src-tauri` (Tauri shell, session journal, `show_thread.rs` and `pump.rs` the show thread and its
@@ -130,8 +130,8 @@ UI conventions (keep one way of doing each thing):
 
 - `.claude/ARCHITECTURE.md`: the architecture in one page, its invariants
   and where to change what. `.claude/skills/buzzdome-*`: task checklists
-  (verify, backend command, game rules, UI change, hardware, quiz
-  authoring). `AGENTS.md` points other assistants here.
+  (verify, backend command, game rules, UI change, hardware).
+  `AGENTS.md` points other assistants here.
 - `ROADMAP.md`: phases, milestones and what is done.
 - `docs/specification.md`: requirements with IDs (buzzer link, themes, plugins).
   `docs/design.md`: architecture, buzzer stack. `docs/quiz-format.md`: the quiz

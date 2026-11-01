@@ -4,20 +4,19 @@
 //! needs to do that well:
 //!
 //! - the format's JSON Schema, generated from the quiz model (`quiz_schema`);
-//! - a skill package for chat assistants that run code in the cloud
-//!   (`skill`), with the format guide, the schema and a packing script;
-//! - an MCP server for desktop assistants (`mcp`), whose tools check, pack
-//!   and fill quiz folders on this computer (`workbench`), only in the
-//!   folders the quizmaster chose (`roots`);
-//! - the `buzzdome-quiz` command line over the same functions (src/main.rs).
+//! - an MCP server for AI apps on this computer (`mcp`), whose tools check,
+//!   pack and fill quiz folders (`workbench`), only in the folder the
+//!   quizmaster chose (`roots`), and give the quizmaster's own instructions
+//!   for every quiz (`settings`);
+//! - the AI apps' settings it adds itself to (`assistants`).
 //!
 //! Every check is the app's own: the tools read and write quizzes through
 //! `quiz_file`, so what they accept is what the editor and the show accept.
 
-pub mod claude_desktop;
+pub mod assistants;
 pub mod mcp;
 pub mod roots;
-pub mod skill;
+pub mod settings;
 pub mod workbench;
 
 /// The quiz file format, as the people who write quizzes by hand read it.

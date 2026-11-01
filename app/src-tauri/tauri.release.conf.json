@@ -1,6 +1,5 @@
 {
   "bundle": {
-    "createUpdaterArtifacts": true,
-    "externalBin": ["binaries/buzzdome-quiz"]
+    "createUpdaterArtifacts": true
   }
 }

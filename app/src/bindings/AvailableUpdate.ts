@@ -10,7 +10,7 @@ export type AvailableUpdate = { version: string,
  */
 notes: string, 
 /**
- * Claude Desktop runs this app's AI tools (`--mcp`), which it keeps
+ * An AI app runs this app's MCP server (`--mcp`), which it keeps
  * running in the old version until it is opened again.
  */
-claudeDesktop: boolean, };
+aiApps: boolean, };

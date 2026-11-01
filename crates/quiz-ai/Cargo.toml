@@ -1,12 +1,8 @@
 [package]
 name = "quiz-ai"
-description = "Quiz writing for AI assistants: the quiz file's JSON Schema, a skill package, an MCP server and the buzzdome-quiz command line."
+description = "Quiz writing for AI assistants: the quiz file's JSON Schema and the MCP server that AI apps write quizzes with."
 version.workspace = true
 edition.workspace = true
-
-[[bin]]
-name = "buzzdome-quiz"
-path = "src/main.rs"
 
 [dependencies]
 quiz-core = { path = "../quiz-core" }
@@ -18,5 +14,12 @@ thiserror.workspace = true
 ts-rs.workspace = true
 # Pictures for the assistant to look at (mcp.rs).
 base64 = "0.22"
-# The skill package (skill.rs), written as quiz-file writes quiz files.
+# The quizmaster's documents, where assistants work unless they choose
+# another folder (settings.rs), as the app names them.
+dirs = "7"
+# Codex's configuration, changed without losing its comments (assistants.rs).
+toml_edit = "0.25"
+
+[dev-dependencies]
+# Quiz files made by hand for the workbench's tests.
 zip = { version = "9", default-features = false, features = ["deflate-flate2-zlib-rs"] }

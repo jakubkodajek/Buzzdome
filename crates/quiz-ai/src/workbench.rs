@@ -1,7 +1,7 @@
-//! What an assistant does with quizzes on this computer, for the MCP tools
-//! and the command line alike. A quiz is worked on as a folder, `quiz.json`
-//! with its media in `media/` (docs/quiz-format.md), which the app opens as
-//! it is; `pack` makes a `.quiz` file of it to hand on or play.
+//! What an assistant does with quizzes on this computer, for the MCP tools.
+//! A quiz is worked on as a folder, `quiz.json` with its media in `media/`
+//! (docs/quiz-format.md), which the app opens as it is; `pack` makes a
+//! `.quiz` file of it to hand on or play.
 
 use quiz_core::{MediaKind, Quiz, ReadQuiz, SlideType, ValidationError};
 use quiz_file::{FileAction, MediaSource, QuizFileError, EXTENSION};

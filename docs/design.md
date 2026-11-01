@@ -994,10 +994,11 @@ and has no rules of its own: what it accepts is what `quiz_file` and
   names of the files without unpacking the media), `pack` is
   `quiz_file::save`, and `unpack` is `quiz_file::open_into`. A quiz is
   written only into a new folder, a quiz folder or one of media, and a
-  `.quiz` file is replaced only when asked. The MCP tools and the
-  `buzzdome-quiz` command line are thin layers over it.
-- **Roots.** The MCP tools work only in the folders given with
-  `--root` (`roots::Roots`), as the reference filesystem server does. A
+  `.quiz` file is replaced only when asked. The MCP tools are a thin
+  layer over it.
+- **Roots.** The MCP tools work only in the folder the quizmaster chose
+  (`roots::Roots`, from `AiSettings::roots`), as the reference filesystem
+  server works only in the folders on its command line. A
   path counts by its real path (`canonicalize` of the nearest part that is
   there, so links and junctions are followed), must be absolute and has
   no `..`. Inside a quiz folder, the workbench also refuses a
@@ -1006,9 +1007,7 @@ and has no rules of its own: what it accepts is what `quiz_file` and
   or writes there. A root that holds or is inside the app's data folders
   (`roots::app_data_dirs`: Tauri's data, local data and, on macOS, log
   folders for the bundle identifier) is refused, so no tool reaches the
-  show's journal, the drafts or the settings. The app passes its own
-  identifier; the command line uses `roots::APP_IDENTIFIER`, which a test
-  keeps equal to `tauri.conf.json`.
+  show's journal, the drafts or the settings, the AI settings among them.
 - **MCP server.** `mcp::serve` reads JSON-RPC 2.0 messages, one per line,
   from standard input and answers on standard output: `initialize` (the
   client's protocol version when it is one of `PROTOCOL_VERSIONS`), `ping`,
@@ -1016,44 +1015,68 @@ and has no rules of its own: what it accepts is what `quiz_file` and
   nine tools, no notifications of its own and no async runtime. A tool's
   failure is a result with `isError` for the assistant to act on; only an
   unknown method or tool is a protocol error. Every path goes through
-  `Roots::resolve`, and the instructions name the roots. The
+  `Roots::resolve`. The `initialize` instructions put first what the
+  assistant needs most, as Codex keeps their first 512 characters
+  (https://learn.chatgpt.com/docs/extend/mcp): call `quiz_format` first,
+  make a whole quiz from a topic alone, the roots, and a new folder for
+  each quiz in the first one. The
   app serves it when started with `--mcp`: `ai::serve_mcp_if_asked` runs
   first in `run`, before the single-instance plugin and any window, so it
   neither shows the running app nor touches its show, and ends the process
   when the assistant closes its input. On Windows the release build is a
   GUI program; standard input and output work all the same when the parent
   passes pipes, as the sheet reader (`sheet_reader.rs`) relies on too.
-- **Claude Desktop.** `claude_desktop::connect` adds
-  `mcpServers.buzzdome = { command: <the app>, args: ["--mcp", "--root", <folder>] }` to
-  Claude Desktop's `claude_desktop_config.json` and keeps the rest (keys
-  may come out in another order). It refuses a file that is not a JSON
-  object, so nothing of the user's is lost, and makes no folder: without
-  Claude's folder, Claude Desktop is not installed. On Windows
-  `config_files` finds the file in `%APPDATA%\Claude` and in each packaged
-  (MSIX) Claude Desktop's virtualized copy of it,
+- **Settings.** `settings::AiSettings` (`ai.json` in the app's data
+  folder, `SETTINGS_FILE`) holds the folder the assistant works in (none:
+  `Buzzdome` in the quizmaster's documents, `dirs::document_dir` as Tauri
+  names it, made when first used), the quizmaster's own instructions
+  (none: the default ones) and the language they last used the page in,
+  which the default instructions (`instructions/cs.md`, `instructions/en.md`)
+  follow. The app keeps it through `AppFile` (`ai::SavedAiSettings`); the
+  server only reads it (`AiSettings::read`, the defaults when it cannot):
+  the folder once when it starts, the instructions at every `quiz_format`
+  call, which gives them as its first block, so a change needs no
+  restart. Instructions equal to the defaults are kept as none, so the
+  defaults keep following the app; they are cut at
+  `MAX_INSTRUCTIONS_CHARS`. The data folders are never a root, so an
+  assistant cannot change its own folder or instructions.
+- **AI apps.** `assistants::Assistant` names the apps the page connects:
+  Claude Desktop, Antigravity and Codex. `config_files` gives each one's
+  settings file for this user (`docs/ai-assistants.md` lists them, with
+  sources) and `connect` writes the same entry to each,
+  `{ command: <the app>, args: ["--mcp"] }` (`ServerCommand`), under
+  `mcpServers` in JSON or `[mcp_servers.buzzdome]` in Codex's TOML
+  (`toml_edit`, which keeps the file's comments and layout). It sets
+  `command` and `args` in an entry already there and keeps its other keys
+  (`env`, `startup_timeout_sec`), keeps everything else in the file (JSON
+  keys may come out in another order), and refuses a file that is not a
+  configuration, so nothing of the user's is lost. `connect` writes every
+  file of the app or none, through a link to where it leads and with the
+  replaced file's mode (`write_atomic_keeping_mode`), and makes the file
+  and its folders when they are not there. Each app is found only by the
+  folder it makes when it first starts (`~/.gemini`, `CODEX_HOME` or
+  `~/.codex`, Claude Desktop's own): on Windows `config_files` finds
+  Claude Desktop's file in `%APPDATA%\Claude`, in each packaged (MSIX)
+  Claude Desktop's virtualized copy of it,
   `%LOCALAPPDATA%\Packages\Claude_*\LocalCache\Roaming\Claude`, which the
-  packaged app reads first; the copy's file is left out while it is not
-  there and the real one is, as the packaged app then reads the real one
-  and a new copy would hide it. `connect` writes every file found, or none
-  when one of them is not a configuration. The folder is the
-  `Buzzdome` folder of the quizmaster's documents, which the page makes,
-  or one they pick (`ai_connect_claude`).
-- **Skill.** `skill::write` zips `SKILL.md` and `make_quiz.py` (both in
-  `crates/quiz-ai/src/skill/`), `docs/quiz-format.md` and the schema into
-  one folder, as Claude takes a skill. Every file is `.md`, `.txt` or
-  `.py`, the schema JSON included, as Gemini refuses a skill with a file
-  type it does not take. The script is for the assistants'
-  sandboxes, which cannot run this app: standard library only, a JSON
-  Schema checker for the parts the schema uses, media present, and the
-  ZIP written as `quiz_file::save` writes it. Media are every text that
-  starts with `media/`, so a new media field needs no change there, and
-  only `media/<portable file name>` is packed. The schema gives media
-  fields the pattern `^media/` (`MEDIA_PATTERN`), which the script checks,
-  so a reference outside `media/` is reported too. `SKILL.md` gets the core's
-  answer limits and media types from `skill_md()`, never written by hand;
-  `.gitattributes` (`* text=auto eol=lf`) keeps it and the format guide LF
-  on every system. Its tests run it with Python
-  and open what it wrote with `workbench::check`.
+  packaged app reads first, and in each `%LOCALAPPDATA%\Claude-Data\claude_*`,
+  where users report current packaged builds keep it (undocumented,
+  anthropics/claude-code#103860); the copy's file is left out while it is
+  not there and the real one is, as the packaged app then reads the real
+  one and a new copy would hide it. `earlier_folder` reads the `--root`
+  folder an entry from 0.2.0 names, which the page takes as the folder
+  (`ai::adopt_earlier_folder`) while none was chosen. `state` says whether every file starts
+  this app (`Connected`), none names the server (`NotConnected`), or an
+  entry starts another program or a file lacks it (`Outdated`), such as
+  an entry an earlier version wrote with `--root`. `json_config` is the
+  entry for any other app, which the page copies.
+- **Page.** The editor's File › AI assistants page (`AiPage.tsx`) shows
+  the folder (`ai_choose_folder` picks and checks another), each app's
+  state, settings file and how to restart it on this system
+  (`aiRestartText`), Copy settings (`ai_server_config`), and the
+  instructions (`ai_set_instructions`, empty for the defaults).
+  `ai_connect` and `ai_server_config` keep the page's language and make
+  sure the folder can be a root before handing the entry out.
 
 ## 2. Buzzer link
 
@@ -1709,8 +1732,8 @@ section 3).
    theme picked in the editor, the stage lights driving an Art-Net node
    and sending OSC on this machine (the tests listen on its UDP ports), a
    fixture from the library, and the AI tools: the app as an MCP server
-   and the `buzzdome-quiz` command line writing quiz files the app then
-   plays.
+   writing quiz files the app then plays, and the AI page connecting Codex
+   and keeping the instructions.
    Buzzers with no hardware: a debug build
    given `BUZZDOME_FAKE_RECEIVER=<host:port>` lists a fake 303S receiver
    in place of USB-HID (`buzzers::fake_receiver`), which the test plugs
@@ -1745,7 +1768,7 @@ Releases the installed apps update to are built from a `v*` tag of main
 and published as GitHub releases of this repository by
 `.github/workflows/release.yml`, merging
 `tauri.release.conf.json` so the bundler signs the updater files with the
-release key and installs the `buzzdome-quiz` command line beside the app.
+release key.
 Its build job waits for Jakub's approval (the `release` environment's
 required reviewer), since the workflow file comes from the tagged commit. It runs no action from another repository, and publishes only
 updates that verify against the public key in the built commit for the
@@ -1755,11 +1778,9 @@ runs, since installing ends the app; `update_install` marks the show state
 as updating (`Inner::updating`, which `lock_for_new_show` refuses) while
 the new version goes in, so no show begins meanwhile without the lock
 being held across the installer, and a show begun during the download
-puts the update off until it ends. Claude Desktop, when connected,
-runs the old MCP server until it is opened again, which the install
-question says; a skill package saved before is compared with this
-version's (`ai::SavedSkill`), and the Director offers to save it again
-when an update changed it. Each
+puts the update off until it ends. A connected AI app runs the old MCP
+server until it is opened again, which the install question says
+(`AvailableUpdate::ai_apps`). Each
 download is verified against `plugins.updater.pubkey`, and its signature
 must name the version `latest.json` announces. Debug builds never ask.
 How to release: `docs/releasing.md`.
