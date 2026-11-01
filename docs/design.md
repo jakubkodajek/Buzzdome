@@ -1040,7 +1040,9 @@ and has no rules of its own: what it accepts is what `quiz_file` and
   or one they pick (`ai_connect_claude`).
 - **Skill.** `skill::write` zips `SKILL.md` and `make_quiz.py` (both in
   `crates/quiz-ai/src/skill/`), `docs/quiz-format.md` and the schema into
-  one folder, as Claude takes a skill. The script is for the assistants'
+  one folder, as Claude takes a skill. Every file is `.md`, `.txt` or
+  `.py`, the schema JSON included, as Gemini refuses a skill with a file
+  type it does not take. The script is for the assistants'
   sandboxes, which cannot run this app: standard library only, a JSON
   Schema checker for the parts the schema uses, media present, and the
   ZIP written as `quiz_file::save` writes it. Media are every text that

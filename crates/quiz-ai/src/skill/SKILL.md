@@ -12,8 +12,9 @@ quizmaster opens it in Buzzdome's editor, checks it and plays it.
 
 A quiz is a folder with `quiz.json` and its media in `media/`, packed into
 one `.quiz` file. The format is in `reference/quiz-format.md` and its JSON
-Schema in `reference/quiz.schema.json`. Read the format guide before you
-write the first quiz in a conversation.
+Schema in `{{SCHEMA}}` (JSON, saved as text so that every assistant
+takes the skill). Read the format guide before you write the first quiz in
+a conversation.
 
 ## Steps
 

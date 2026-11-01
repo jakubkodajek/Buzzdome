@@ -3,7 +3,7 @@
 
 A quiz folder holds quiz.json and the pictures, sounds and videos it uses in
 media/. This script checks quiz.json against the format's JSON Schema
-(reference/quiz.schema.json next to this script's folder) and that every
+(reference/quiz.schema.txt next to this script's folder) and that every
 media file it names is there, then writes the .quiz file: a ZIP with
 quiz.json and the media it uses. Buzzdome checks the rest when it opens the
 file and lists anything left to fix under File > Info.
@@ -20,7 +20,8 @@ import sys
 import zipfile
 from pathlib import Path
 
-SCHEMA = Path(__file__).resolve().parent.parent / "reference" / "quiz.schema.json"
+# JSON, saved as .txt because Gemini takes no .json file in a skill.
+SCHEMA = Path(__file__).resolve().parent.parent / "reference" / "quiz.schema.txt"
 MEDIA_PREFIX = "media/"
 # Characters some system refuses in a file name, besides control characters.
 FORBIDDEN_IN_NAMES = set('\\/:*?"<>|')

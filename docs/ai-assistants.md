@@ -118,14 +118,19 @@ File › AI assistants › Save the AI skill writes `buzzdome-quiz.zip`:
 buzzdome-quiz/
 ├── SKILL.md                  when and how to write a quiz
 ├── reference/quiz-format.md  the format guide
-├── reference/quiz.schema.json
+├── reference/quiz.schema.txt  the format's JSON Schema, as text
 └── scripts/make_quiz.py      checks a quiz folder and packs the .quiz file
 ```
 
 Upload it as a skill: in Claude, Customize › Skills › Upload a skill; in
 Gemini and ChatGPT, in their skills settings. Gemini wants `SKILL.md` in the
 main folder of what is uploaded: if it refuses the ZIP, unpack it and upload
-the `buzzdome-quiz` folder. The assistant then writes `quiz.json` in its sandbox, puts
+the `buzzdome-quiz` folder. It refuses a skill that holds a file of a type
+it does not take, and its Mac app's upload offers only PDF, CSV, PY, TXT and
+MD, so the schema is JSON saved as `.txt`; Google also warns that hidden
+files such as `.DS_Store` can make the upload fail
+(https://support.google.com/gemini/answer/17094296). A skill saved by an
+older Buzzdome has `quiz.schema.json`: save it again. The assistant then writes `quiz.json` in its sandbox, puts
 the files the quizmaster uploaded into `media/`, and runs
 `make_quiz.py`, which checks the quiz against the schema and its media and
 writes the `.quiz` file to download. It packs every text of the quiz that
