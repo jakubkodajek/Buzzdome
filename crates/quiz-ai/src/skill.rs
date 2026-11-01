@@ -3,7 +3,10 @@
 //! guide and schema, and a script that checks a quiz folder and packs it,
 //! since the assistant cannot run this app. It is uploaded as a ZIP with
 //! the skill's folder at its root, as Claude takes it; Gemini and ChatGPT
-//! take the same folder.
+//! take the same folder. Every file in it is of a type all three take:
+//! Gemini refuses the whole skill for one file of a type it does not take,
+//! and its Mac app's upload offers only PDF, CSV, PY, TXT and MD (seen in
+//! November 2026), so the JSON Schema goes in as text.
 
 use quiz_core::{AnswerMode, MediaKind};
 use quiz_file::{FileAction, QuizFileError};
@@ -16,6 +19,9 @@ use zip::{CompressionMethod, ZipWriter};
 pub const NAME: &str = "buzzdome-quiz";
 /// File extension of the package.
 pub const EXTENSION: &str = "zip";
+/// The JSON Schema's path in the skill's folder, as `.txt` (see above).
+/// `scripts/make_quiz.py` reads it from there.
+const SCHEMA: &str = "reference/quiz.schema.txt";
 
 const SKILL_MD: &str = include_str!("skill/SKILL.md");
 const MAKE_QUIZ_PY: &str = include_str!("skill/make_quiz.py");
@@ -35,6 +41,7 @@ fn skill_md() -> String {
         ("{{PICTURES}}", extensions(MediaKind::Image)),
         ("{{SOUNDS}}", extensions(MediaKind::Audio)),
         ("{{VIDEOS}}", extensions(MediaKind::Video)),
+        ("{{SCHEMA}}", SCHEMA.to_string()),
     ]
     .into_iter()
     .fold(SKILL_MD.to_string(), |text, (placeholder, value)| text.replace(placeholder, &value))
@@ -46,7 +53,7 @@ pub fn files() -> Vec<(String, String)> {
     [
         ("SKILL.md", skill_md()),
         ("reference/quiz-format.md", crate::FORMAT_GUIDE.to_string()),
-        ("reference/quiz.schema.json", schema),
+        (SCHEMA, schema),
         ("scripts/make_quiz.py", MAKE_QUIZ_PY.to_string()),
     ]
     .into_iter()
@@ -94,11 +101,20 @@ mod tests {
         let names = entry_names(&mut zip);
         assert_eq!(
             names,
-            ["buzzdome-quiz/SKILL.md", "buzzdome-quiz/reference/quiz-format.md", "buzzdome-quiz/reference/quiz.schema.json", "buzzdome-quiz/scripts/make_quiz.py"]
+            ["buzzdome-quiz/SKILL.md", "buzzdome-quiz/reference/quiz-format.md", "buzzdome-quiz/reference/quiz.schema.txt", "buzzdome-quiz/scripts/make_quiz.py"]
         );
         let mut schema = String::new();
-        zip.by_name("buzzdome-quiz/reference/quiz.schema.json").unwrap().read_to_string(&mut schema).unwrap();
+        zip.by_name("buzzdome-quiz/reference/quiz.schema.txt").unwrap().read_to_string(&mut schema).unwrap();
         assert_eq!(serde_json::from_str::<serde_json::Value>(&schema).unwrap(), crate::quiz_schema());
+        assert!(skill_md().contains("`reference/quiz.schema.txt`"));
+    }
+
+    #[test]
+    fn every_file_is_of_a_type_gemini_takes() {
+        for (path, _) in files() {
+            let extension = Path::new(&path).extension().and_then(|extension| extension.to_str());
+            assert!(matches!(extension, Some("md" | "txt" | "py")), "{path}");
+        }
     }
 
     #[test]
