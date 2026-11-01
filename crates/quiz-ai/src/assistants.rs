@@ -38,10 +38,10 @@
 //!
 //! Users report that the packaged Claude Desktop moved its data with an
 //! update in October 2026 (3.1623), to `Claude-Data\claude_<publisher>` in
-//! the local application data, where its Edit Config now opens the file
-//! (anthropics/claude-code#103860; Anthropic does not document it). So
-//! connecting writes that file too, beside the older ones, and the app is
-//! found whichever one it reads.
+//! the local application data (anthropics/claude-code#103860), and that its
+//! Edit Config then opens the configuration there (PixelHabits/mx#13).
+//! Anthropic does not document it. So connecting writes that file too,
+//! beside the older ones, and the app is found whichever one it reads.
 
 use crate::mcp::{MCP_ARG, SERVER_NAME};
 use quiz_file::{FileAction, QuizFileError};

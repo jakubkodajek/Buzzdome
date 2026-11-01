@@ -73,9 +73,10 @@ on Windows", https://learn.microsoft.com/en-us/windows/msix/desktop/desktop-to-u
 anthropics/claude-code#26073).
 
 Users report that an update in October 2026 (3.1623) moved the packaged
-app's data to `%LOCALAPPDATA%\Claude-Data\claude_pzs8sxrjxfjjc\`, where its
-Settings › Developer › Edit Config now opens `claude_desktop_config.json`
-(anthropics/claude-code#103860). Anthropic does not document it.
+app's data to `%LOCALAPPDATA%\Claude-Data\claude_pzs8sxrjxfjjc\`
+(anthropics/claude-code#103860), and that its Settings › Developer › Edit
+Config then opens `claude_desktop_config.json` there (PixelHabits/mx#13).
+Anthropic does not document it.
 
 So Buzzdome adds itself to every one of these files that Claude Desktop may
 read, as it cannot tell which one it does.
