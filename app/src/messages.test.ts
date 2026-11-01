@@ -120,13 +120,15 @@ describe("aiConnectionText", () => {
     folder: "C:\\Users\\Eva\\Documents\\Buzzdome",
   });
 
-  it("tells the quizmaster how to start the app again on their system only when its settings changed", () => {
+  it("tells the quizmaster how to start the app again on their system, as a running app keeps the folder it started with", () => {
     expect(aiConnectionText(en, connected("added"), "macos")).toBe(
       `Claude Desktop is connected and will work in C:\\Users\\Eva\\Documents\\Buzzdome. ${en("aiRestartClaudeMacos")}`,
     );
     expect(aiConnectionText(cs, connected("updated"), "windows")).toContain(cs("aiRestartClaudeWindows"));
     expect(aiConnectionText(en, connected("updated", "codex"), "windows")).toContain(en("aiRestartCodexOther"));
-    expect(aiConnectionText(en, connected("unchanged"), "windows")).toBe("Claude Desktop is connected already and works in C:\\Users\\Eva\\Documents\\Buzzdome.");
+    expect(aiConnectionText(en, connected("unchanged"), "windows")).toBe(
+      `Claude Desktop is connected already and will work in C:\\Users\\Eva\\Documents\\Buzzdome. ${en("aiRestartClaudeWindows")}`,
+    );
   });
 
   it("names the app that is missing and the settings file it left as it was", () => {

@@ -43,7 +43,7 @@ class McpClient {
   /** Starts `command` with `args` as an assistant starts its MCP server. */
   static start(command: string, args: string[]): McpClient {
     // The environment the app's own E2E launches use on Linux: data folders under the test's.
-    const env = WINDOWS ? process.env : { ...process.env, HOME: data, XDG_DATA_HOME: join(data, "share"), XDG_CONFIG_HOME: join(data, "config"), XDG_CACHE_HOME: join(data, "cache") };
+    const env = WINDOWS ? process.env : { ...process.env, HOME: data, XDG_DATA_HOME: join(data, "share"), XDG_CONFIG_HOME: join(data, "config"), XDG_CACHE_HOME: join(data, "cache"), CODEX_HOME: join(data, ".codex") };
     return new McpClient(spawn(command, args, { env, stdio: ["pipe", "pipe", "pipe"] }));
   }
 
@@ -154,6 +154,8 @@ describe("AI assistants write quizzes", () => {
     await app.press("quizEditor");
     await app.$(".studio, .backstage");
     if ((await app.count(".backstage")) === 0) await app.press("ribbonFile");
+    // Codex is installed here: the app knows it by its folder (CODEX_HOME, harness.ts).
+    if (!WINDOWS) mkdirSync(join(data, ".codex"), { recursive: true });
     await app.press({ text: t("backstageAi") });
     await app.seeText(t("aiAssistantsHint"));
     if (WINDOWS) {
@@ -163,12 +165,13 @@ describe("AI assistants write quizzes", () => {
       return;
     }
     await app.seeText(work);
-    // No Claude Desktop on a test machine: it cannot be connected.
+    // No Claude Desktop or Antigravity on a test machine: they cannot be connected.
     expect(await app.page.enabled(await app.$('[data-assistant="claudeDesktop"]'))).toBe(false);
+    expect(await app.page.enabled(await app.$('[data-assistant="antigravity"]'))).toBe(false);
     // Codex is connected in its configuration under the test's home.
     await app.page.click(await app.$('[data-assistant="codex"]'));
     await app.seeText(t("aiConnected", { app: "Codex", folder: work }));
-    const codex = readFileSync(join(process.env.CODEX_HOME ?? join(data, ".codex"), "config.toml"), "utf8");
+    const codex = readFileSync(join(data, ".codex", "config.toml"), "utf8");
     expect(codex).toContain("[mcp_servers.buzzdome]");
     expect(codex).toContain('"--mcp"');
     await app.seeText(t("aiConnectedState"));

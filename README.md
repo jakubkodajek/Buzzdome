@@ -121,7 +121,7 @@ A quiz is a single `.quiz` file: a ZIP with a versioned `quiz.json` and a
 | Who | How |
 | --- | --- |
 | Quizmasters using **Claude Desktop, Antigravity or Codex** | In Buzzdome, File › AI assistants › *Connect*. The app becomes the AI app's MCP server, limited to one folder; then type a topic in its chat. |
-| Quizmasters using **another AI app** that runs local MCP servers | File › AI assistants › *Copy settings*, then paste them into its MCP server settings. |
+| Quizmasters using **another AI app** that runs local MCP servers | File › AI assistants › *Copy settings*, then add its `buzzdome` entry to the app's MCP servers (`mcpServers` in most apps, `servers` in VS Code). |
 | AI coding assistants working **on this codebase** | Start with [`CLAUDE.md`](CLAUDE.md) (or [`AGENTS.md`](AGENTS.md)), then [`.claude/ARCHITECTURE.md`](.claude/ARCHITECTURE.md). Task checklists are in [`.claude/skills/`](.claude/skills). |
 
 Details are in [`docs/ai-assistants.md`](docs/ai-assistants.md).

@@ -17,14 +17,14 @@ capitals": the instructions in the app say how to make the rest.
 | Claude Desktop (Windows, macOS; Linux in beta) | File › AI assistants › Connect next to Claude Desktop. |
 | Antigravity | File › AI assistants › Connect next to Antigravity. |
 | Codex (the ChatGPT desktop app, the Codex command line and its IDE extension) | File › AI assistants › Connect next to Codex. |
-| Another app that runs local MCP servers | File › AI assistants › Copy settings, then paste them into its MCP server settings (`mcpServers`). |
+| Another app that runs local MCP servers | File › AI assistants › Copy settings, then add the `buzzdome` entry to its MCP servers (`mcpServers` in most apps, such as Cursor, https://cursor.com/docs/mcp; `servers` in VS Code's `mcp.json`, https://code.visualstudio.com/docs/agents/reference/mcp-configuration), keeping the servers already there. |
 
-Assistants in a web browser cannot use it: ChatGPT adds MCP servers only by
-URL over HTTP (OpenAI, "Custom MCP server",
-https://developers.openai.com/api/docs/guides/custom-mcp-server), and so
-does Gemini's web app (Google, "Connect and manage custom apps",
+Assistants in a web browser cannot use it: ChatGPT adds MCP servers by URL
+over HTTP or through OpenAI's Secure MCP Tunnel (OpenAI, "Custom MCP
+server", https://developers.openai.com/api/docs/guides/custom-mcp-server),
+and Gemini's web app by URL only (Google, "Connect and manage custom apps",
 https://support.google.com/gemini/answer/17209137). A desktop app that works
-offline offers no such URL.
+offline offers neither.
 
 ## Connecting
 
@@ -41,9 +41,13 @@ offline offers no such URL.
      local MCP servers", https://modelcontextprotocol.io/docs/develop/connect-local-servers).
      With its Developer Mode on, Developer › Reload MCP Configuration does
      the same without a restart (https://claude.com/docs/connectors/building/mcp-apps/troubleshooting).
-   - Antigravity: press Refresh in its MCP server settings
-     (https://antigravity.google/docs/mcp), or open it again.
-   - Codex: close the ChatGPT app or Codex and open it again.
+   - Antigravity: open Settings › Customizations and press Refresh under
+     Installed MCP Servers (https://antigravity.google/docs/mcp), or open it
+     again.
+   - Codex: quit the ChatGPT app (on macOS ⌘Q) and open it again, or start a
+     new Codex session in the command line or your editor. The Codex app is
+     part of the ChatGPT desktop app since 2026-07-09
+     (https://learn.chatgpt.com/docs/whats-new).
 5. Type a topic in the AI app's chat. It makes the quiz in a new folder in
    the Buzzdome folder and saves the `.quiz` file there.
 
@@ -56,7 +60,7 @@ does not need it.
 
 | AI app | Settings file | Entry |
 | --- | --- | --- |
-| Claude Desktop | macOS `~/Library/Application Support/Claude/claude_desktop_config.json`; Windows `%APPDATA%\Claude\claude_desktop_config.json`; Linux (in beta, https://code.claude.com/docs/en/desktop-linux) `~/.config/Claude/claude_desktop_config.json` (modelcontextprotocol.io, above) | `mcpServers.buzzdome` |
+| Claude Desktop | macOS `~/Library/Application Support/Claude/claude_desktop_config.json`; Windows `%APPDATA%\Claude\claude_desktop_config.json`; Linux (in beta, https://code.claude.com/docs/en/desktop-linux) `~/.config/Claude/claude_desktop_config.json`, inferred: Anthropic names `~/.config/Claude` for its logs only (https://claude.com/docs/third-party/claude-desktop/configuration-format) | `mcpServers.buzzdome` |
 | Antigravity | `~/.gemini/config/mcp_config.json` (https://antigravity.google/docs/mcp); on Windows `%USERPROFILE%\.gemini\config\mcp_config.json`, where `~` is the user's folder, which its documentation does not spell out | `mcpServers.buzzdome` |
 | Codex | `~/.codex/config.toml`, on Windows `%USERPROFILE%\.codex\config.toml`, or in the folder `CODEX_HOME` names (https://learn.chatgpt.com/docs/extend/mcp, https://learn.chatgpt.com/docs/config-file/config-advanced) | `[mcp_servers.buzzdome]` |
 
@@ -66,18 +70,32 @@ packaged (MSIX) app. It reads its own copy of its folder,
 (Anthropic names it, https://claude.com/docs/cowork/hipaa-setup), whenever
 the file is there (Microsoft, "Understanding how packaged desktop apps run
 on Windows", https://learn.microsoft.com/en-us/windows/msix/desktop/desktop-to-uwp-behind-the-scenes;
-anthropics/claude-code#26073), so Buzzdome adds itself to whichever of the
-two files Claude Desktop reads, to both when it cannot tell. Claude
-Desktop can only be connected once its folder is there, which it makes
-when it first starts; Antigravity's and Codex's files are made when they
-are not there yet.
+anthropics/claude-code#26073).
+
+Users report that an update in October 2026 (3.1623) moved the packaged
+app's data to `%LOCALAPPDATA%\Claude-Data\claude_pzs8sxrjxfjjc\`, where its
+Settings › Developer › Edit Config now opens `claude_desktop_config.json`
+(anthropics/claude-code#103860). Anthropic does not document it.
+
+So Buzzdome adds itself to every one of these files that Claude Desktop may
+read, as it cannot tell which one it does.
+
+Each app can be connected once it is installed and has been started once:
+Buzzdome knows it by the folder it makes then (Claude Desktop's above,
+`~/.gemini` for Antigravity, `~/.codex` or `CODEX_HOME` for Codex). The
+settings file itself is made when it is not there yet. A settings file that
+is a link to one kept elsewhere is changed where the link leads, and keeps
+its permissions.
 
 A row says *Needs connecting again* when the entry starts another program:
 Buzzdome moved (a reinstall to another folder), or an earlier version
-connected it with the folder on its command line. Connect it again.
+connected it with the folder on its command line. Connect it again. A
+folder chosen in Buzzdome 0.2.0, which its entry names, becomes the page's
+folder when the page opens, unless another was chosen since.
 
-The same entry by hand, which *Copy settings* gives with the app's real
-path:
+*Copy settings* gives the whole settings file with only this entry, with
+the app's real path. Add its `buzzdome` entry to the other app's settings
+rather than replacing them:
 
 ```json
 { "mcpServers": { "buzzdome": { "command": "C:\\Users\\Eva\\AppData\\Local\\Buzzdome\\buzzdome.exe", "args": ["--mcp"] } } }
@@ -159,3 +177,7 @@ a `.quiz` file.
 The MCP server is the app itself, so an update brings it along. An AI app
 keeps running the version it started until it is opened again: when one
 is connected, the Director's update question says so.
+
+From 0.2.0, which gave the server its folder on its command line, open
+File › AI assistants once and connect each app again: the page takes over
+the folder chosen then.

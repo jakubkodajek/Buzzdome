@@ -143,6 +143,8 @@ export class App {
       XDG_DATA_HOME: join(data, "share"),
       XDG_CONFIG_HOME: join(data, "config"),
       XDG_CACHE_HOME: join(data, "cache"),
+      // Codex's folder, which the app looks in before HOME's (ai.e2e.ts).
+      CODEX_HOME: join(data, ".codex"),
       // No session bus: the single-instance check would otherwise hand the
       // launch over to a Buzzdome the user has open, and the test would
       // drive that one.

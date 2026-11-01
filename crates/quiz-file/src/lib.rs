@@ -413,9 +413,26 @@ fn quiz_json(quiz: &Quiz) -> Result<String> {
 /// Replaces the file `dest` with `contents` so that a crash leaves either the
 /// old file or the new one, never a torn one.
 pub fn write_atomic(dest: &Path, contents: &[u8]) -> Result<()> {
+    write_new(dest, contents, None)
+}
+
+/// `write_atomic` for a file another app keeps, such as its settings: on
+/// Unix the new file gets the mode of the one it replaces, which may keep
+/// keys only its owner reads, before anything is written into it.
+pub fn write_atomic_keeping_mode(dest: &Path, contents: &[u8]) -> Result<()> {
+    let permissions = if cfg!(unix) { fs::metadata(dest).ok().map(|meta| meta.permissions()) } else { None };
+    write_new(dest, contents, permissions)
+}
+
+fn write_new(dest: &Path, contents: &[u8], permissions: Option<fs::Permissions>) -> Result<()> {
     replace_file(dest, |temp| {
         File::create(temp)
-            .and_then(|mut file| file.write_all(contents).and_then(|()| file.sync_all()))
+            .and_then(|mut file| {
+                if let Some(permissions) = permissions {
+                    file.set_permissions(permissions)?;
+                }
+                file.write_all(contents).and_then(|()| file.sync_all())
+            })
             .context(FileAction::Write, temp)
     })
 }

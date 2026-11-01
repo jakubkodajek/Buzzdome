@@ -453,7 +453,8 @@ const CONNECT_CHANGE_KEYS: Record<ConnectChange, StringKey> = {
  */
 export function aiConnectionText(t: Translate, connected: AiConnected, platform: string): string {
   const said = t(CONNECT_CHANGE_KEYS[connected.change], { app: connected.name, folder: connected.folder });
-  return connected.change === "unchanged" ? said : `${said} ${aiRestartText(t, connected.assistant, platform)}`;
+  // A running app keeps the folder it started with, also when its entry was already there.
+  return `${said} ${aiRestartText(t, connected.assistant, platform)}`;
 }
 
 /** How `assistant` starts using the server once it is connected, on `platform` (`std::env::consts::OS`). */

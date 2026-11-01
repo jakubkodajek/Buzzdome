@@ -6,15 +6,21 @@
 //! folder and the instructions from the app's settings (`settings`).
 //!
 //! - Claude Desktop: `mcpServers` in `claude_desktop_config.json`, in
-//!   Application Support on macOS, the roaming application data on Windows
-//!   and `~/.config` on Linux (in beta there), which it reads when it starts
-//!   ("Connect to local MCP servers", modelcontextprotocol.io).
+//!   Application Support on macOS and the roaming application data on
+//!   Windows, which it reads when it starts ("Connect to local MCP servers",
+//!   modelcontextprotocol.io). On Linux, in beta there, Anthropic names
+//!   `~/.config/Claude` for its logs only ("Configuration format",
+//!   claude.com/docs/third-party/claude-desktop/configuration-format); the
+//!   file is taken to be in that folder too.
 //! - Antigravity: `mcpServers` in `~/.gemini/config/mcp_config.json`
 //!   ("MCP", antigravity.google/docs/mcp).
 //! - Codex: a `[mcp_servers.<name>]` table in `~/.codex/config.toml`, which
 //!   the ChatGPT desktop app, the Codex command line and its IDE extension
 //!   share ("Model Context Protocol", learn.chatgpt.com/docs/extend/mcp).
 //!   `CODEX_HOME` moves the folder.
+//!
+//! Each app is known by the folder it makes when it first starts: one that
+//! is not installed has no configuration files.
 //!
 //! On Windows Claude Desktop's file has two homes. Claude Desktop from its
 //! classic installer keeps it in `Claude` in the roaming application data
@@ -29,6 +35,13 @@
 //! packaged desktop apps run on Windows", learn.microsoft.com). So the
 //! packaged app reads the configuration in its copy whenever there is one,
 //! which hides the real file (anthropics/claude-code#26073).
+//!
+//! Users report that the packaged Claude Desktop moved its data with an
+//! update in October 2026 (3.1623), to `Claude-Data\claude_<publisher>` in
+//! the local application data, where its Edit Config now opens the file
+//! (anthropics/claude-code#103860; Anthropic does not document it). So
+//! connecting writes that file too, beside the older ones, and the app is
+//! found whichever one it reads.
 
 use crate::mcp::{MCP_ARG, SERVER_NAME};
 use quiz_file::{FileAction, QuizFileError};
@@ -47,6 +60,12 @@ const CLAUDE_FOLDER: &str = "Claude";
 /// starts: its package family name, `Claude_<publisher id>`, which Windows
 /// compares ignoring case ("Package identity overview", learn.microsoft.com).
 const PACKAGE_PREFIX: &str = "Claude_";
+/// The folder in `%LOCALAPPDATA%` where current packaged Claude Desktops keep
+/// their data, one folder each, named after the package family in lower case.
+const CLAUDE_DATA: &str = "Claude-Data";
+/// The argument with which Buzzdome 0.2.0 gave the server a folder chosen in
+/// the app; the folder is now in the AI settings.
+const EARLIER_ROOT_ARG: &str = "--root";
 
 /// An AI app the app can add itself to.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -144,21 +163,25 @@ impl Assistant {
     }
 
     /// The configuration files the app reads for this user, which connecting
-    /// writes, and makes when they are not there yet. Claude Desktop's only
-    /// where its folder is, which it makes when it first starts, as there
-    /// are two on Windows (see the module's notes): none where it is not
-    /// installed.
+    /// writes, and makes when they are not there yet: none where the app is
+    /// not installed, as its folder is not there (see the module's notes).
     pub fn config_files(self) -> Vec<PathBuf> {
-        let var = |name| std::env::var_os(name).map(PathBuf::from).filter(|path| path.is_absolute());
+        self.config_files_with(&|name| std::env::var_os(name).map(PathBuf::from).filter(|path| path.is_absolute()))
+    }
+
+    /// `config_files`, with `var` giving the folder an environment variable
+    /// names.
+    fn config_files_with(self, var: &dyn Fn(&str) -> Option<PathBuf>) -> Vec<PathBuf> {
         let home = var(if cfg!(windows) { "USERPROFILE" } else { "HOME" });
+        let installed = |folder: PathBuf| folder.is_dir().then_some(folder);
         match self {
             Assistant::ClaudeDesktop if cfg!(windows) => windows_claude_configs(var("APPDATA").as_deref(), var("LOCALAPPDATA").as_deref()),
             Assistant::ClaudeDesktop => {
-                let data = if cfg!(target_os = "macos") { home.map(|home| home.join("Library/Application Support")) } else { home.map(|home| home.join(".config")) };
+                let data = if cfg!(target_os = "macos") { home.map(|home| home.join("Library").join("Application Support")) } else { home.map(|home| home.join(".config")) };
                 data.and_then(|data| claude_config_in(&data.join(CLAUDE_FOLDER))).into_iter().collect()
             }
-            Assistant::Antigravity => home.map(|home| home.join(".gemini/config/mcp_config.json")).into_iter().collect(),
-            Assistant::Codex => var("CODEX_HOME").or_else(|| home.map(|home| home.join(".codex"))).map(|folder| folder.join("config.toml")).into_iter().collect(),
+            Assistant::Antigravity => home.and_then(|home| installed(home.join(".gemini"))).map(|gemini| gemini.join("config").join("mcp_config.json")).into_iter().collect(),
+            Assistant::Codex => var("CODEX_HOME").or_else(|| home.map(|home| home.join(".codex"))).and_then(installed).map(|codex| codex.join("config.toml")).into_iter().collect(),
         }
     }
 
@@ -176,25 +199,46 @@ impl Assistant {
         }
         connect_in(self.format(), &configs, command)
     }
+
+    /// The folder that the app's entry gives the server with `--root`, as
+    /// Buzzdome 0.2.0 wrote it when the quizmaster chose a folder.
+    pub fn earlier_folder(self) -> Option<PathBuf> {
+        earlier_folder_in(self.format(), &self.config_files())
+    }
 }
 
 /// The files Claude Desktop reads on Windows, given the roaming (`roaming`)
-/// and local (`local`) application data: the file in the real folder,
-/// and the one in each packaged app's copy unless it is not there yet and
-/// the real one is, which the packaged app then reads instead (see the
-/// module's notes). Writing both keeps the app found whichever it reads.
+/// and local (`local`) application data: the file in the real folder; the
+/// one in each packaged app's copy of it, unless it is not there yet and the
+/// real one is, which the packaged app then reads instead; and the one in
+/// each packaged app's own data folder (see the module's notes). Writing
+/// them all keeps the app found whichever it reads.
 fn windows_claude_configs(roaming: Option<&Path>, local: Option<&Path>) -> Vec<PathBuf> {
     let real = roaming.and_then(|roaming| claude_config_in(&roaming.join(CLAUDE_FOLDER)));
     let real_exists = real.as_deref().is_some_and(Path::is_file);
-    let packages = local.and_then(|local| fs::read_dir(local.join("Packages")).ok());
-    let packaged = packages
+    let packaged_in = |folder: &str| local.map(|local| packaged_claude_folders(&local.join(folder))).unwrap_or_default();
+    let copies = packaged_in("Packages")
+        .into_iter()
+        .filter_map(|package| claude_config_in(&package.join("LocalCache").join("Roaming").join(CLAUDE_FOLDER)))
+        .filter(|config| config.is_file() || !real_exists);
+    let data = packaged_in(CLAUDE_DATA).into_iter().map(|folder| folder.join(CLAUDE_CONFIG));
+    real.into_iter().chain(copies).chain(data).collect()
+}
+
+/// The folders in `parent` named after a packaged Claude Desktop, whose
+/// names start with `PACKAGE_PREFIX` in any case, in order of name.
+fn packaged_claude_folders(parent: &Path) -> Vec<PathBuf> {
+    let named = |name: &str| name.get(..PACKAGE_PREFIX.len()).is_some_and(|start| start.eq_ignore_ascii_case(PACKAGE_PREFIX));
+    let mut folders: Vec<PathBuf> = fs::read_dir(parent)
         .into_iter()
         .flatten()
         .flatten()
-        .filter(|package| package.file_name().to_string_lossy().get(..PACKAGE_PREFIX.len()).is_some_and(|start| start.eq_ignore_ascii_case(PACKAGE_PREFIX)))
-        .filter_map(|package| claude_config_in(&package.path().join("LocalCache").join("Roaming").join(CLAUDE_FOLDER)))
-        .filter(|config| config.is_file() || !real_exists);
-    real.into_iter().chain(packaged).collect()
+        .filter(|entry| named(&entry.file_name().to_string_lossy()))
+        .map(|entry| entry.path())
+        .filter(|path| path.is_dir())
+        .collect();
+    folders.sort();
+    folders
 }
 
 /// The configuration file in Claude Desktop's folder `folder`, when the
@@ -225,13 +269,53 @@ fn connect_in(format: Format, configs: &[PathBuf], command: &ServerCommand) -> R
     let changes = configs.iter().map(|config| with_server(format, config, command)).collect::<Result<Vec<_>, _>>()?;
     for (config, (_, text)) in configs.iter().zip(&changes) {
         if let Some(text) = text {
-            if let Some(folder) = config.parent() {
+            let file = linked_file(config);
+            if let Some(folder) = file.parent() {
                 fs::create_dir_all(folder).map_err(|source| QuizFileError::Io { action: FileAction::CreateFolder, path: folder.to_path_buf(), source })?;
             }
-            quiz_file::write_atomic(config, text.as_bytes())?;
+            quiz_file::write_atomic_keeping_mode(&file, text.as_bytes())?;
         }
     }
     Ok(changes.iter().map(|(change, _)| *change).min().unwrap_or(ConnectChange::Unchanged))
+}
+
+/// The file that writing `config` changes: the one a link there leads to,
+/// as the user keeps it there (dotfiles kept in one folder), so that the
+/// link stays a link.
+fn linked_file(config: &Path) -> PathBuf {
+    if !fs::symlink_metadata(config).is_ok_and(|meta| meta.file_type().is_symlink()) {
+        return config.to_path_buf();
+    }
+    // A link to a file that is not there yet leads where it names.
+    fs::canonicalize(config)
+        .or_else(|_| fs::read_link(config).map(|target| config.parent().map_or_else(|| target.clone(), |folder| folder.join(&target))))
+        .unwrap_or_else(|_| config.to_path_buf())
+}
+
+/// The folder that the server's entry gives with `EARLIER_ROOT_ARG`, in the
+/// first of the configuration files `configs`, in `format`, that has one.
+fn earlier_folder_in(format: Format, configs: &[PathBuf]) -> Option<PathBuf> {
+    configs.iter().find_map(|config| {
+        let args = entry_args(format, &fs::read_to_string(config).ok()?)?;
+        let root = args.iter().position(|arg| arg == EARLIER_ROOT_ARG)?;
+        args.get(root + 1).map(PathBuf::from)
+    })
+}
+
+/// The arguments of the server's entry in the configuration text `text`.
+fn entry_args(format: Format, text: &str) -> Option<Vec<String>> {
+    match format {
+        Format::Json => {
+            let settings: Value = serde_json::from_str(text).ok()?;
+            let args = settings.get("mcpServers")?.get(SERVER_NAME)?.get("args")?.as_array()?;
+            args.iter().map(|arg| arg.as_str().map(String::from)).collect()
+        }
+        Format::Toml => {
+            let config: toml_edit::DocumentMut = text.parse().ok()?;
+            let args = config.get("mcp_servers")?.get(SERVER_NAME)?.get("args")?.as_array()?;
+            args.iter().map(|arg| arg.as_str().map(String::from)).collect()
+        }
+    }
 }
 
 /// What adding `command` to the configuration file `config` changes, and
@@ -458,13 +542,90 @@ mod tests {
     }
 
     #[test]
+    fn a_current_packaged_claude_desktop_is_found_in_its_data_folder() {
+        let (roaming, local, packaged) = windows_user("claude-windows-data");
+        let data = local.join(CLAUDE_DATA).join("claude_pzs8sxrjxfjjc");
+        fs::create_dir_all(&data).unwrap();
+        fs::create_dir_all(local.join(CLAUDE_DATA).join("logs")).unwrap();
+        fs::write(local.join(CLAUDE_DATA).join("claude_notes.txt"), "").unwrap();
+        assert_eq!(found(&roaming, &local), [data.join(CLAUDE_CONFIG)], "started once, its file not written yet");
+        let real = roaming.join(CLAUDE_FOLDER);
+        fs::create_dir_all(&real).unwrap();
+        fs::write(real.join(CLAUDE_CONFIG), "{}").unwrap();
+        fs::create_dir_all(&packaged).unwrap();
+        fs::write(packaged.join(CLAUDE_CONFIG), "{}").unwrap();
+        assert_eq!(found(&roaming, &local), [real.join(CLAUDE_CONFIG), packaged.join(CLAUDE_CONFIG), data.join(CLAUDE_CONFIG)], "the older homes are kept");
+    }
+
+    #[test]
     fn a_packaged_claude_desktop_is_known_by_its_package_name_in_any_case() {
         let (roaming, local, _) = windows_user("claude-windows-names");
         let copy = |package: &str| local.join("Packages").join(package).join("LocalCache/Roaming").join(CLAUDE_FOLDER);
         for package in ["CLAUDE_pzs8sxrjxfjjc", "ClaudeHelper_pzs8sxrjxfjjc"] {
             fs::create_dir_all(copy(package)).unwrap();
+            fs::create_dir_all(local.join(CLAUDE_DATA).join(package.to_lowercase())).unwrap();
         }
-        assert_eq!(found(&roaming, &local), [copy("CLAUDE_pzs8sxrjxfjjc").join(CLAUDE_CONFIG)]);
+        let data = local.join(CLAUDE_DATA).join("claude_pzs8sxrjxfjjc");
+        assert_eq!(found(&roaming, &local), [copy("CLAUDE_pzs8sxrjxfjjc").join(CLAUDE_CONFIG), data.join(CLAUDE_CONFIG)]);
+    }
+
+    #[test]
+    fn antigravity_and_codex_are_known_by_their_folders() {
+        let home = scratch("ai-apps-installed");
+        let codex_home = home.join("codex-home");
+        let files = |assistant: Assistant, codex_home_set: bool| {
+            assistant.config_files_with(&|name| match name {
+                "HOME" | "USERPROFILE" => Some(home.clone()),
+                "CODEX_HOME" if codex_home_set => Some(codex_home.clone()),
+                _ => None,
+            })
+        };
+        assert_eq!(files(Assistant::Antigravity, false), Vec::<PathBuf>::new(), "not installed");
+        assert_eq!(files(Assistant::Codex, false), Vec::<PathBuf>::new(), "not installed");
+        fs::create_dir_all(home.join(".gemini")).unwrap();
+        fs::create_dir_all(home.join(".codex")).unwrap();
+        assert_eq!(files(Assistant::Antigravity, false), [home.join(".gemini").join("config").join("mcp_config.json")]);
+        assert_eq!(files(Assistant::Codex, false), [home.join(".codex").join("config.toml")]);
+        assert_eq!(files(Assistant::Codex, true), Vec::<PathBuf>::new(), "CODEX_HOME names a folder that is not there");
+        fs::create_dir_all(&codex_home).unwrap();
+        assert_eq!(files(Assistant::Codex, true), [codex_home.join("config.toml")]);
+    }
+
+    #[test]
+    fn the_folder_an_earlier_entry_named_is_found() {
+        let dir = scratch("ai-earlier-folder");
+        let claude = [dir.join("missing").join(CLAUDE_CONFIG), dir.join(CLAUDE_CONFIG)];
+        assert_eq!(earlier_folder_in(Format::Json, &claude), None);
+        fs::write(&claude[1], r#"{ "mcpServers": { "buzzdome": { "command": "/b", "args": ["--mcp"] } } }"#).unwrap();
+        assert_eq!(earlier_folder_in(Format::Json, &claude), None);
+        fs::write(&claude[1], r#"{ "mcpServers": { "buzzdome": { "command": "/b", "args": ["--mcp", "--root", "D:\\Quizzes"] } } }"#).unwrap();
+        assert_eq!(earlier_folder_in(Format::Json, &claude), Some(PathBuf::from("D:\\Quizzes")));
+        let codex = [dir.join("config.toml")];
+        fs::write(&codex[0], "[mcp_servers.buzzdome]\ncommand = \"/b\"\nargs = [\"--mcp\", \"--root\", \"/q\"]\n").unwrap();
+        assert_eq!(earlier_folder_in(Format::Toml, &codex), Some(PathBuf::from("/q")));
+        fs::write(&codex[0], "[mcp_servers.buzzdome]\nargs = [\"--mcp\", \"--root\"]\n").unwrap();
+        assert_eq!(earlier_folder_in(Format::Toml, &codex), None);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_linked_configuration_is_written_where_the_link_leads_keeping_its_mode() {
+        use std::os::unix::fs::{symlink, PermissionsExt};
+        let dir = scratch("ai-config-link");
+        let dotfiles = dir.join("dotfiles");
+        fs::create_dir_all(&dotfiles).unwrap();
+        let (real, link) = (dotfiles.join("config.toml"), dir.join("config.toml"));
+        fs::write(&real, "model = \"gpt-5\"\n").unwrap();
+        fs::set_permissions(&real, fs::Permissions::from_mode(0o600)).unwrap();
+        symlink(&real, &link).unwrap();
+        assert_eq!(connect_in(Format::Toml, std::slice::from_ref(&link), &command("/b")).unwrap(), ConnectChange::Added);
+        assert!(fs::symlink_metadata(&link).unwrap().file_type().is_symlink(), "the link stays");
+        assert!(fs::read_to_string(&real).unwrap().contains("[mcp_servers.buzzdome]"));
+        assert_eq!(fs::metadata(&real).unwrap().permissions().mode() & 0o777, 0o600);
+        let (missing, dangling) = (dotfiles.join("claude.json"), dir.join(CLAUDE_CONFIG));
+        symlink(&missing, &dangling).unwrap();
+        connect_in(Format::Json, std::slice::from_ref(&dangling), &command("/b")).unwrap();
+        assert!(fs::symlink_metadata(&dangling).unwrap().file_type().is_symlink() && missing.is_file(), "a link to a file not there yet makes it");
     }
 
     #[test]

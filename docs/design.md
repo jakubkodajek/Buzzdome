@@ -1051,15 +1051,21 @@ and has no rules of its own: what it accepts is what `quiz_file` and
   (`env`, `startup_timeout_sec`), keeps everything else in the file (JSON
   keys may come out in another order), and refuses a file that is not a
   configuration, so nothing of the user's is lost. `connect` writes every
-  file of the app or none, and makes Antigravity's and Codex's file and
-  folders when they are not there. Claude Desktop is found only by its
-  folder, which it makes when it first starts: on Windows `config_files`
-  finds the file in `%APPDATA%\Claude` and in each packaged (MSIX) Claude
-  Desktop's virtualized copy of it,
+  file of the app or none, through a link to where it leads and with the
+  replaced file's mode (`write_atomic_keeping_mode`), and makes the file
+  and its folders when they are not there. Each app is found only by the
+  folder it makes when it first starts (`~/.gemini`, `CODEX_HOME` or
+  `~/.codex`, Claude Desktop's own): on Windows `config_files` finds
+  Claude Desktop's file in `%APPDATA%\Claude`, in each packaged (MSIX)
+  Claude Desktop's virtualized copy of it,
   `%LOCALAPPDATA%\Packages\Claude_*\LocalCache\Roaming\Claude`, which the
-  packaged app reads first; the copy's file is left out while it is not
-  there and the real one is, as the packaged app then reads the real one
-  and a new copy would hide it. `state` says whether every file starts
+  packaged app reads first, and in each `%LOCALAPPDATA%\Claude-Data\claude_*`,
+  where users report current packaged builds keep it (undocumented,
+  anthropics/claude-code#103860); the copy's file is left out while it is
+  not there and the real one is, as the packaged app then reads the real
+  one and a new copy would hide it. `earlier_folder` reads the `--root`
+  folder an entry from 0.2.0 names, which the page takes as the folder
+  (`ai::adopt_earlier_folder`) while none was chosen. `state` says whether every file starts
   this app (`Connected`), none names the server (`NotConnected`), or an
   entry starts another program or a file lacks it (`Outdated`), such as
   an entry an earlier version wrote with `--root`. `json_config` is the

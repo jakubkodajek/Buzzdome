@@ -127,10 +127,11 @@ pub struct AiConnected {
 
 #[tauri::command]
 pub async fn ai_page(app: AppHandle, language: Language) -> CmdResult<AiPage> {
-    let saved = app.state::<SavedAiSettings>();
-    let (settings, settings_error) = (saved.get(), saved.file.lock().unwrap().lost().cloned());
     let command = server_command()?;
     off_ui(move || {
+        adopt_earlier_folder(&app)?;
+        let saved = app.state::<SavedAiSettings>();
+        let (settings, settings_error) = (saved.get(), saved.file.lock().unwrap().lost().cloned());
         let info = |assistant: Assistant| AssistantInfo {
             assistant,
             name: assistant.name().into(),
@@ -202,6 +203,25 @@ pub async fn ai_set_instructions(state: State<'_, SavedAiSettings>, instructions
 /// version it started until it starts it again.
 pub fn connected_somewhere() -> bool {
     server_command().is_ok_and(|command| Assistant::ALL.iter().any(|assistant| assistant.state(&command) != ConnectionState::NotConnected))
+}
+
+/// Takes the folder chosen in Buzzdome 0.2.0, which an AI app's entry gives
+/// the server with `--root`, while none was chosen since: the server now
+/// takes it from the settings only, so it is kept across the update.
+fn adopt_earlier_folder(app: &AppHandle) -> CmdResult<()> {
+    let saved = app.state::<SavedAiSettings>();
+    if saved.get().folder.is_some() {
+        return Ok(());
+    }
+    let app_data = app_data_dirs(app);
+    let earlier = Assistant::ALL.into_iter().filter_map(Assistant::earlier_folder).find(|folder| roots::allow(folder, &app_data).is_ok());
+    if let Some(folder) = earlier {
+        app_log::note(&format!("AI folder taken from an earlier connection: {}", folder.display()));
+        saved.change(|settings| {
+            settings.folder.get_or_insert(folder);
+        })?;
+    }
+    Ok(())
 }
 
 /// Gets the settings ready for an AI app to start the server: keeps the

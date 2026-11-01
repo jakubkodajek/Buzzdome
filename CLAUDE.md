@@ -54,7 +54,7 @@ on `PATH` first (macOS dev machine).
 | lint UI (incl. React hooks rules) | `cd app && npm run lint` |
 | type-check and build UI | `cd app && npm run build` |
 | UI logic tests (editor history, draft queue, slide changes) | `cd app && npm test` |
-| E2E tests of the real app (Linux; needs `tauri-driver`, `webkit2gtk-driver`, `xvfb`, `xdotool`. Windows only on CI: they use the real app data) | `cargo build -p quiz-ai && cd app && npm run tauri build -- --debug --no-bundle && xvfb-run -a npm run e2e` |
+| E2E tests of the real app (Linux; needs `tauri-driver`, `webkit2gtk-driver`, `xvfb`, `xdotool`. Windows only on CI: they use the real app data) | `cd app && npm run tauri build -- --debug --no-bundle && xvfb-run -a npm run e2e` |
 | random shows / crash drills (more, or replay one) | `SOAK_SHOWS=5000 cargo test --release -p show-sim`; `SOAK_SEED=<n> cargo test -p buzzdome crash_drill` |
 | UI preview in a browser (mocked backend) | `cd app && npm run dev`, then `/preview.html?window=host&scene=running` (scenes in `app/src/dev/preview.tsx`) |
 | nightly soak and E2E | CI: `.github/workflows/nightly.yml` every night main changed, and on "Run workflow" |
@@ -130,8 +130,8 @@ UI conventions (keep one way of doing each thing):
 
 - `.claude/ARCHITECTURE.md`: the architecture in one page, its invariants
   and where to change what. `.claude/skills/buzzdome-*`: task checklists
-  (verify, backend command, game rules, UI change, hardware, quiz
-  authoring). `AGENTS.md` points other assistants here.
+  (verify, backend command, game rules, UI change, hardware).
+  `AGENTS.md` points other assistants here.
 - `ROADMAP.md`: phases, milestones and what is done.
 - `docs/specification.md`: requirements with IDs (buzzer link, themes, plugins).
   `docs/design.md`: architecture, buzzer stack. `docs/quiz-format.md`: the quiz
