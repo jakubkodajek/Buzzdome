@@ -1,64 +1,113 @@
 # Quizzes written by AI assistants
 
-An AI assistant can write a Buzzdome quiz: questions, answers, points,
-pictures, sounds and videos. It writes the quiz in the documented format
-([`quiz-format.md`](quiz-format.md)) and checks it with the app's own rules,
-and the quizmaster opens the result in the editor (File › Open), checks it
-and changes what they like before the show (spec QZ-12).
+An AI app on the quizmaster's computer can write a Buzzdome quiz:
+questions, answers, points, pictures, sounds and videos. The app is the AI
+app's MCP server (Model Context Protocol): its tools give the AI the
+quizmaster's instructions and the documented format
+([`quiz-format.md`](quiz-format.md)), find and show it the quizmaster's
+media, and write, check and pack the quiz with the app's own rules. The
+quizmaster opens the result in the editor (File › Open), checks it and
+changes what they like before the show (spec QZ-12).
 
-There are two ways, depending on the assistant:
+Connect an AI app once, then type a topic in its chat, such as "European
+capitals": the instructions in the app say how to make the rest.
 
-| Assistant | How | Media |
-| --- | --- | --- |
-| Claude Desktop (Windows, macOS) | The app is its MCP server: File › AI assistants › Connect Claude Desktop. | Taken from the folder the quizmaster gives it; Claude can look at pictures. |
-| Claude, Gemini or ChatGPT in the browser or their apps | The skill package: File › AI assistants › Save the AI skill, then upload it to the assistant as a skill. | Uploaded to the chat, or pictures the assistant makes; videos and the rest are added in the editor afterwards. |
+| AI app | How to connect |
+| --- | --- |
+| Claude Desktop (Windows, macOS; Linux in beta) | File › AI assistants › Connect next to Claude Desktop. |
+| Antigravity | File › AI assistants › Connect next to Antigravity. |
+| Codex (the ChatGPT desktop app, the Codex command line and its IDE extension) | File › AI assistants › Connect next to Codex. |
+| Another app that runs local MCP servers | File › AI assistants › Copy settings, then paste them into its MCP server settings (`mcpServers`). |
 
-Why two: in October 2026 only Claude Desktop runs an MCP server on the
-user's computer (as a `.mcpb` bundle or a configured command, Anthropic,
-"Build a desktop extension with MCPB",
-https://claude.com/docs/connectors/building/mcpb). ChatGPT adds MCP servers
-only by URL over HTTP (OpenAI, "Custom MCP server",
+Assistants in a web browser cannot use it: ChatGPT adds MCP servers only by
+URL over HTTP (OpenAI, "Custom MCP server",
 https://developers.openai.com/api/docs/guides/custom-mcp-server), and so
-does Gemini, in its web app and only in the US for now (Google, "Connect and
-manage custom apps", https://support.google.com/gemini/answer/17209137). A
-desktop app that works offline offers no such URL. Skills, a `SKILL.md` with
-the files it uses, all three take: Claude on every plan with code execution
-on (https://support.claude.com/en/articles/12512180), Gemini for personal
-accounts, with scripts that may not use the internet
-(https://support.google.com/gemini/answer/17094296), ChatGPT on Business,
-Enterprise and Edu plans (https://help.openai.com/en/articles/20001066).
+does Gemini's web app (Google, "Connect and manage custom apps",
+https://support.google.com/gemini/answer/17209137). A desktop app that works
+offline offers no such URL.
 
-## Claude Desktop
+## Connecting
 
-1. Install Claude Desktop and start it once.
-2. In Buzzdome, File › AI assistants › Connect Claude Desktop. Claude may
-   then work in the `Buzzdome` folder of your Documents, which this makes;
-   *Connect with another folder…* gives it another one instead.
-3. Put the pictures, sounds and videos for the quiz in that folder.
-4. Close Claude Desktop and open it again. Its tools list now has
-   Buzzdome.
-5. Ask, for example: "Write a pub quiz of three rounds about Czech films
-   with the pictures in the films folder, and save it as Films.quiz."
+1. Install the AI app and start it once.
+2. In Buzzdome, open File › AI assistants. The AI works only in the folder
+   shown there: the `Buzzdome` folder of your Documents, which the app
+   makes, unless you choose another with *Change…*. Put the pictures,
+   sounds and videos for your quizzes there.
+3. Press *Connect* next to the AI app. Its row then says *Connected*.
+4. Let the AI app read its new settings:
+   - Claude Desktop reads them when it starts. On macOS quit it with ⌘Q;
+     on Windows quit it from its icon by the clock (right click, Quit), as
+     closing its window keeps it running; then open it again ("Connect to
+     local MCP servers", https://modelcontextprotocol.io/docs/develop/connect-local-servers).
+     With its Developer Mode on, Developer › Reload MCP Configuration does
+     the same without a restart (https://claude.com/docs/connectors/building/mcp-apps/troubleshooting).
+   - Antigravity: press Refresh in its MCP server settings
+     (https://antigravity.google/docs/mcp), or open it again.
+   - Codex: close the ChatGPT app or Codex and open it again.
+5. Type a topic in the AI app's chat. It makes the quiz in a new folder in
+   the Buzzdome folder and saves the `.quiz` file there.
 
-Connecting adds the app to Claude Desktop's configuration file
-(`claude_desktop_config.json`: `%APPDATA%\Claude\` on Windows,
-`~/Library/Application Support/Claude/` on macOS) under `mcpServers`, as
-the command `<path of Buzzdome> --mcp --root <folder>`; everything else in
-the file stays. Claude Desktop from the Windows installer at
-claude.ai/download is a packaged (MSIX) app, which reads its own copy of
-that folder, `%LOCALAPPDATA%\Packages\Claude_<id>\LocalCache\Roaming\Claude\`,
-whenever the file is there (anthropics/claude-code#26073), so on Windows
-Buzzdome adds itself to whichever of the two files Claude Desktop reads,
-to both when it cannot tell. Claude Desktop starts that command when it starts and
-talks to it over standard input and output. Started so, Buzzdome opens no
-window and does nothing else, and a show does not need it. After Buzzdome
-moves (a reinstall to another folder), connect again.
+Connecting adds one entry, `buzzdome`, to the AI app's own settings file
+and keeps everything else in it (in Codex's TOML file its comments too):
+the app's path as the command, with `--mcp` as its only argument. The AI
+app starts that command and talks to it over standard input and output.
+Started so, Buzzdome opens no window and does nothing else, and a show
+does not need it.
 
-### What the assistant may touch
+| AI app | Settings file | Entry |
+| --- | --- | --- |
+| Claude Desktop | macOS `~/Library/Application Support/Claude/claude_desktop_config.json`; Windows `%APPDATA%\Claude\claude_desktop_config.json`; Linux (in beta, https://code.claude.com/docs/en/desktop-linux) `~/.config/Claude/claude_desktop_config.json` (modelcontextprotocol.io, above) | `mcpServers.buzzdome` |
+| Antigravity | `~/.gemini/config/mcp_config.json` (https://antigravity.google/docs/mcp); on Windows `%USERPROFILE%\.gemini\config\mcp_config.json`, where `~` is the user's folder, which its documentation does not spell out | `mcpServers.buzzdome` |
+| Codex | `~/.codex/config.toml`, on Windows `%USERPROFILE%\.codex\config.toml`, or in the folder `CODEX_HOME` names (https://learn.chatgpt.com/docs/extend/mcp, https://learn.chatgpt.com/docs/config-file/config-advanced) | `[mcp_servers.buzzdome]` |
 
-The tools read and write only inside the folders given with `--root`
-(more than one may be given), as the reference filesystem server touches
-only the folders on its command line
+Claude Desktop from the Windows installer at claude.ai/download is a
+packaged (MSIX) app. It reads its own copy of its folder,
+`%LOCALAPPDATA%\Packages\Claude_pzs8sxrjxfjjc\LocalCache\Roaming\Claude\`
+(Anthropic names it, https://claude.com/docs/cowork/hipaa-setup), whenever
+the file is there (Microsoft, "Understanding how packaged desktop apps run
+on Windows", https://learn.microsoft.com/en-us/windows/msix/desktop/desktop-to-uwp-behind-the-scenes;
+anthropics/claude-code#26073), so Buzzdome adds itself to whichever of the
+two files Claude Desktop reads, to both when it cannot tell. Claude
+Desktop can only be connected once its folder is there, which it makes
+when it first starts; Antigravity's and Codex's files are made when they
+are not there yet.
+
+A row says *Needs connecting again* when the entry starts another program:
+Buzzdome moved (a reinstall to another folder), or an earlier version
+connected it with the folder on its command line. Connect it again.
+
+The same entry by hand, which *Copy settings* gives with the app's real
+path:
+
+```json
+{ "mcpServers": { "buzzdome": { "command": "C:\\Users\\Eva\\AppData\\Local\\Buzzdome\\buzzdome.exe", "args": ["--mcp"] } } }
+```
+
+## Your instructions for quizzes
+
+The page's instructions say what a quiz looks like when the quizmaster
+gives only a topic: how many rounds and questions, which kinds, time and
+points, difficulty, and where to save it. The defaults are in the app's
+language (`crates/quiz-ai/src/instructions/`) and make three rounds of six
+questions; the quizmaster changes them in the page (up to 4000 characters)
+and *Restore default* brings the defaults back. What they ask for in the
+chat wins over them.
+
+The app keeps them in `ai.json` in its data folder, with the folder the AI
+works in. The server's `quiz_format` tool gives them first, before the
+format guide and the schema, and reads them each time it is called, so a
+change applies from the next quiz without restarting the AI app. When the
+AI app connects, the server tells it to call `quiz_format` before making a
+quiz and, given only a topic, to make the whole quiz by the instructions
+without asking. The format's rules are not part of the instructions: the
+tools check every quiz with the app's own rules whatever the instructions
+say.
+
+## What the assistant may touch
+
+The tools read and write only inside the folder chosen in the app, which
+the server reads from `ai.json` when it starts, as the reference
+filesystem server touches only the folders on its command line
 (https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem).
 The MCP specification leaves confirming each tool call to the assistant
 and asks the server to validate its inputs and control access
@@ -68,14 +117,15 @@ asking first:
 
 - A path must be absolute and without `..`, and it counts by where it
   really leads, once links are followed: a path through a link that leads
-  out of the roots is refused.
+  out of the folder is refused.
 - In a quiz folder, `quiz.json`, the `media` folder and every media file
   the quiz names must stay in the folder: a link or junction there that
   leads out of it is refused, so no tool reads, packs or writes through
   one.
 - Buzzdome's own data (the running show and its journal, editor drafts,
-  settings) is never a root: the app refuses a folder that holds it or is
-  inside it, and so the assistant cannot change a show, even by mistake.
+  settings, `ai.json` too) is never the folder: the app refuses a folder
+  that holds it or is inside it, and so the assistant cannot change a
+  show or its own folder and instructions, even by mistake.
 - `write_quiz` and `add_media` write only into a new or empty folder, a
   quiz folder (one with a `quiz.json`), or one with only media; never
   among other files.
@@ -85,22 +135,16 @@ asking first:
 - `look_at_picture` sends the assistant's model only a file that is a PNG,
   JPEG, GIF or WebP picture by its contents, not just by its name.
 
-The same entry by hand, for another assistant that runs local MCP servers:
-
-```json
-{ "mcpServers": { "buzzdome": { "command": "C:\\Users\\Eva\\AppData\\Local\\Buzzdome\\buzzdome.exe", "args": ["--mcp", "--root", "C:\\Users\\Eva\\Documents\\Buzzdome"] } } }
-```
-
-### Tools
+## Tools
 
 All paths are absolute, since the server does not know the assistant's
-working folder, and inside the roots. A quiz is worked on as a folder,
+working folder, and inside the folder. A quiz is worked on as a folder,
 `quiz.json` with its media in `media/`, which `save_quiz_file` packs into
 a `.quiz` file.
 
 | Tool | What it does |
 | --- | --- |
-| `quiz_format` | The format guide and the JSON Schema of `quiz.json`. |
+| `quiz_format` | The quizmaster's instructions, then the format guide and the JSON Schema of `quiz.json`. |
 | `list_media_files` | The pictures, sounds and videos in a folder and the folders in it (4 deep, the nearest 1000 files; folders it cannot read are passed over). |
 | `look_at_picture` | Shows the assistant a PNG, JPEG, GIF or WebP picture of up to 3 MB. |
 | `add_media` | Copies files into a quiz folder and returns their names in the quiz (`media/...`). |
@@ -110,71 +154,8 @@ a `.quiz` file.
 | `save_quiz_file` | Makes the `.quiz` file; refuses a quiz with problems, and an existing file unless `replace` is given. |
 | `unpack_quiz_file` | Unpacks a `.quiz` file into a new folder to change it. |
 
-## Chat assistants: the skill
-
-File › AI assistants › Save the AI skill writes `buzzdome-quiz.zip`:
-
-```text
-buzzdome-quiz/
-├── SKILL.md                  when and how to write a quiz
-├── reference/quiz-format.md  the format guide
-├── reference/quiz.schema.txt  the format's JSON Schema, as text
-└── scripts/make_quiz.py      checks a quiz folder and packs the .quiz file
-```
-
-Upload it as a skill: in Claude, Customize › Skills › Upload a skill; in
-Gemini and ChatGPT, in their skills settings. Gemini wants `SKILL.md` in the
-main folder of what is uploaded: if it refuses the ZIP, unpack it and upload
-the `buzzdome-quiz` folder. It refuses a skill that holds a file of a type
-it does not take, and its Mac app's upload offers only PDF, CSV, PY, TXT and
-MD, so the schema is JSON saved as `.txt`; Google also warns that hidden
-files such as `.DS_Store` can make the upload fail
-(https://support.google.com/gemini/answer/17094296). A skill saved by an
-older Buzzdome has `quiz.schema.json`: save it again. The assistant then writes `quiz.json` in its sandbox, puts
-the files the quizmaster uploaded into `media/`, and runs
-`make_quiz.py`, which checks the quiz against the schema and its media and
-writes the `.quiz` file to download. It packs every text of the quiz that
-starts with `media/`, whichever field holds it, and only as
-`media/<file name>` with a name every system stores, so nothing from
-outside the media folder goes into the file. A picture, sound, video or
-background that names a file outside `media/` is reported, since the
-schema says media references start with `media/`. The script uses only Python's standard
-library. It checks the quiz's shape, not every rule; the editor lists the
-rest under File › Info when the file opens, and the show refuses a quiz
-until they are fixed. A slide that needs a picture the assistant does not
-have gets a note starting with "TODO:" instead.
-
-Without code execution, the assistant writes `quiz.json` into the chat; the
-quizmaster saves it in a folder with a `media` folder next to it and opens
-that `quiz.json`.
-
-## Command line
-
-`buzzdome-quiz` (crate `quiz-ai`, `cargo run -p quiz-ai -- <command>`) does
-the same for scripts and for assistants that run commands, such as Claude
-Code:
-
-```text
-buzzdome-quiz check <folder or file>
-buzzdome-quiz pack <folder> <file.quiz> [--replace]
-buzzdome-quiz unpack <file.quiz> <folder>
-buzzdome-quiz schema
-buzzdome-quiz skill <file.zip>
-buzzdome-quiz mcp [--root <folder>]...
-```
-
-A release installs it beside the app: `%LOCALAPPDATA%\Buzzdome\buzzdome-quiz.exe`
-on Windows (the installer's default) and
-`/Applications/Buzzdome.app/Contents/MacOS/buzzdome-quiz` on macOS. The
-test installers of `build.yml` leave it out.
-
 ## After an update
 
-The app's updates bring the MCP server and the command line with them,
-since both are installed with the app (`docs/releasing.md`, "The AI
-tools"). Claude Desktop runs the old server until it is closed and opened
-again. On Windows, close an assistant that runs `buzzdome-quiz mcp`
-before updating: the installer does not end it, and the file it runs
-cannot be replaced while it runs. A skill uploaded to an assistant stays as it was saved: when an
-update changes it, the Director says so and offers to save it again, to
-upload in place of the old one.
+The MCP server is the app itself, so an update brings it along. An AI app
+keeps running the version it started until it is opened again: when one
+is connected, the Director's update question says so.

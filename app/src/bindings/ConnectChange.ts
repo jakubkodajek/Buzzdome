@@ -3,4 +3,4 @@
 /**
  * What connecting changed.
  */
-export type ClaudeConnection = "added" | "updated" | "unchanged";
+export type ConnectChange = "added" | "updated" | "unchanged";

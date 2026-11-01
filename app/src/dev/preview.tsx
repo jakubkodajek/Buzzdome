@@ -71,8 +71,6 @@ const saving = params.get("saving");
 const draft = params.get("draft");
 /** `available`: the update server offers a newer version; `installing`: it also downloads without end once asked. */
 const update = params.get("update");
-/** `outdated`: the AI skill saved before differs from this version's. */
-const skillOutdated = params.get("skill") === "outdated";
 /** `slide`: the fourth slide has no answers list, so it fails to render; `view`: the show's view has no players, so the Director's screen does. */
 const broken = params.get("broken");
 /** The slides, the fourth broken when asked (`broken`). */
@@ -80,6 +78,8 @@ const maybeBroken = (slides: Quiz["slides"]): Quiz["slides"] =>
   broken === "slide" ? slides.map((slide, i) => (i === 3 ? ({ ...slide, answers: null } as unknown as Quiz["slides"][number]) : slide)) : slides;
 /** The editor's drafts are numbered as the backend names their folders. */
 let drafts = 1;
+/** The quizmaster's own AI instructions; null while they are the default ones. */
+let aiInstructions: string | null = null;
 
 const NAMES = ["Kvízožrouti", "U Tří Lvů", "Mozkovna", "Hospodští géniové", "Tým Rychlík", "Bezejmenní", "Šprti", "Lvíčata"];
 
@@ -763,14 +763,33 @@ mockIPC(
       case "editor_export_sheet":
         called.push({ cmd, ...(payload as object) });
         return { media: 2, missing: ["media/gone.mp3"], refused: [] };
-      case "ai_save_skill":
+      case "ai_page":
+        return {
+          folder: "C:\\Users\\Eva\\Documents\\Buzzdome",
+          instructions: aiInstructions,
+          defaultInstructions: "When I give you only a topic, make the whole quiz without asking me anything.\n\n- 3 rounds of 6 questions.",
+          maxInstructionsChars: 4000,
+          assistants: [
+            { assistant: "claudeDesktop", name: "Claude Desktop", state: "connected", configFiles: ["C:\\Users\\Eva\\AppData\\Roaming\\Claude\\claude_desktop_config.json"] },
+            { assistant: "antigravity", name: "Antigravity", state: "outdated", configFiles: ["C:\\Users\\Eva\\.gemini\\config\\mcp_config.json"] },
+            { assistant: "codex", name: "Codex", state: "notConnected", configFiles: ["C:\\Users\\Eva\\.codex\\config.toml"] },
+          ],
+          settingsError: null,
+          platform: "windows",
+        };
+      case "ai_choose_folder":
+        called.push({ cmd });
+        return dialogAnswer();
+      case "ai_connect":
         called.push({ cmd, ...(payload as object) });
-        return true;
-      case "ai_skill_outdated":
-        return skillOutdated;
-      case "ai_connect_claude":
+        return { assistant: (payload as { assistant: string }).assistant, name: "Codex", change: "added", folder: "C:\\Users\\Eva\\Documents\\Buzzdome" };
+      case "ai_server_config":
         called.push({ cmd, ...(payload as object) });
-        return { connection: "added", folders: ["C:\\Users\\Eva\\Documents\\Buzzdome"] };
+        return JSON.stringify({ mcpServers: { buzzdome: { command: "C:\\Program Files\\Buzzdome\\buzzdome.exe", args: ["--mcp"] } } }, null, 2);
+      case "ai_set_instructions":
+        called.push({ cmd, ...(payload as object) });
+        aiInstructions = (payload as { instructions: string }).instructions || null;
+        return null;
       case "receiver_info":
         return {
           status: { kind: "error", problem: "cannotOpen", detail: "access denied" },
@@ -849,7 +868,7 @@ mockIPC(
       case "receiver_devices":
         return [];
       case "update_check":
-        return update ? { version: "0.2.0", notes: "Fixes the podium for shared places.\nThe Director offers newer versions.", claudeDesktop: true } : null;
+        return update ? { version: "0.2.0", notes: "Fixes the podium for shared places.\nThe Director offers newer versions.", aiApps: true } : null;
       case "update_install":
         called.push({ cmd });
         return update === "installing" ? new Promise(() => undefined) : Promise.reject({ code: "updateFailed", detail: "error sending request" });

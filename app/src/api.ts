@@ -1,13 +1,16 @@
 import { Channel, invoke } from "@tauri-apps/api/core";
+import type { Lang } from "./i18n";
 import type {
+  AiConnected,
+  AiPage,
   AppError,
+  Assistant,
   AvailableUpdate,
   BoardChange,
   Button,
   BuzzerId,
   BuzzerSeen,
   Category,
-  ClaudeConnected,
   ClockView,
   Command,
   Cue,
@@ -202,15 +205,16 @@ export const api = {
   editorClose: () => invoke<void>("editor_close"),
   /** Plays the editor's quiz as a show that is not kept for resuming, from the slide `from` if given. */
   editorTestRun: (draft: string, quiz: Quiz, from: number | null = null) => invoke<void>("editor_test_run", { draft, quiz, from }),
-  /** Writes the skill package for chat assistants where the quizmaster picks; false when they cancel. */
-  aiSaveSkill: (picker: Picker) => invoke<boolean>("ai_save_skill", { picker }),
-  /** Whether the skill package saved last differs from this version's, so it should be saved and uploaded again. */
-  aiSkillOutdated: () => invoke<boolean>("ai_skill_outdated"),
-  /**
-   * Adds the app to Claude Desktop as the MCP server it writes quizzes with, working in the Buzzdome folder of the
-   * quizmaster's documents, or with `choose` in a folder they pick; says what changed, null when they cancel.
-   */
-  aiConnectClaude: (choose: boolean) => invoke<ClaudeConnected | null>("ai_connect_claude", { choose }),
+  /** The AI assistants page: the folder, the instructions (defaults in `language`) and the AI apps it connects. */
+  aiPage: (language: Lang) => invoke<AiPage>("ai_page", { language }),
+  /** Lets the quizmaster pick the folder assistants work in; the folder, null when they cancel. */
+  aiChooseFolder: () => invoke<string | null>("ai_choose_folder"),
+  /** Adds the app to `assistant`'s settings as the MCP server it writes quizzes with; says what changed. */
+  aiConnect: (assistant: Assistant, language: Lang) => invoke<AiConnected>("ai_connect", { assistant, language }),
+  /** The settings with the app as an MCP server, to paste into another AI app. */
+  aiServerConfig: (language: Lang) => invoke<string>("ai_server_config", { language }),
+  /** Keeps the quizmaster's instructions for every quiz; empty gives the default ones back. */
+  aiSetInstructions: (instructions: string, language: Lang) => invoke<void>("ai_set_instructions", { instructions, language }),
 };
 
 /** Events the backend emits (`app.emit` in app/src-tauri), with their payloads. */

@@ -57,7 +57,7 @@ quiz-core (crates/quiz-core)    pure game state machine, rules, scoring, view
 | `crates/quiz-file` | `.quiz` files: ZIP with `quiz.json` and `media/`, unpack cache, atomic save, spreadsheet import and CSV export | Format: `docs/quiz-format.md`. |
 | `crates/buzzers` | `BuzzerDriver` trait, USB-HID receiver thread, protocols (`enjoy303s.rs` over `cp2110.rs`, `learned.rs`), edge filter, fastest-finger timer order, show clock, fake receiver for E2E | Read `replica/hardware.md` and `docs/design.md` §2 first. |
 | `crates/lights` | stage lights: setup checks, looks (`look.rs`), desk priority and fades, DMX frame formats, outputs, OSC and MIDI, the lights thread | A view of the show, never journaled (`docs/design.md` §7). |
-| `crates/quiz-ai` | quiz writing for AI assistants: JSON Schema, quiz folders, MCP server, skill package, the `buzzdome-quiz` CLI | `docs/ai-assistants.md`. |
+| `crates/quiz-ai` | quiz writing for AI assistants: JSON Schema, quiz folders, MCP server, the folder and instructions, connecting AI apps | `docs/ai-assistants.md`. |
 | `crates/show-sim` | random quizzes and shows for soak tests | Used by CI nightly. |
 | `app/src-tauri` | Tauri shell: commands, windows, show thread and event order (`show_thread.rs`, `pump.rs`), journal, editor draft, receiver setup, media player, themes, fonts, lights setup, log, crash drills | Module list in `CLAUDE.md`. |
 | `app/src` | React UI: `director/`, `host/` (slides), `editor/` (Studio), `theme/`, `audio/`, shared helpers | Conventions in `CLAUDE.md`. |
@@ -118,7 +118,7 @@ quiz-core (crates/quiz-core)    pure game state machine, rules, scoring, view
 | Change a game rule or the quiz format | `crates/quiz-core/src/game.rs`, `model.rs`, `docs/quiz-format.md` | `buzzdome-game-rules` |
 | Change a screen, the editor or a text | `app/src`, `i18n.ts`, `editor/slides.ts`, `host/SlideScreen.tsx` | `buzzdome-ui-change` |
 | Buzzers, receiver or stage lights | `crates/buzzers`, `crates/lights`, `docs/hardware-test.md` | `buzzdome-hardware` |
-| Write or check a quiz file | `crates/quiz-ai`, `docs/quiz-format.md` | `buzzdome-quiz-authoring` |
+| AI assistants: MCP tools, connecting AI apps, instructions | `crates/quiz-ai`, `app/src-tauri/src/ai.rs`, `editor/AiPage.tsx`, `docs/ai-assistants.md` | none |
 
 The skills are in `.claude/skills/<name>/SKILL.md`. Assistants that do not
 load skills can read them as plain checklists.

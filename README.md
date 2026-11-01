@@ -49,10 +49,11 @@ Windows first, with macOS and Linux too. Built with [Tauri 2](https://tauri.app)
   own sound library with a choice of sound per moment of the show.
 - **Stage lights.** DMX over USB interfaces, Art-Net and sACN, with looks
   that follow the show. OSC and MIDI messages go to other show software.
-- **AI quiz writing.** An assistant can write a quiz for you. Claude
-  Desktop connects to the app as an MCP server, and Claude, Gemini or
-  ChatGPT can use a skill package the app saves. There is also a
-  `buzzdome-quiz` command line (see [AI assistants](#ai-assistants)).
+- **AI quiz writing.** An AI app on your computer writes a whole quiz
+  from a topic you type. Buzzdome connects Claude Desktop, Antigravity and
+  Codex as their MCP server with one button, gives the settings for any
+  other app that runs local MCP servers, and keeps your own instructions
+  for every quiz (see [AI assistants](#ai-assistants)).
 - **Crash-safe shows.** Every step is journaled to disk before it is
   shown. A crashed or closed show resumes from the start screen.
 
@@ -119,9 +120,8 @@ A quiz is a single `.quiz` file: a ZIP with a versioned `quiz.json` and a
 
 | Who | How |
 | --- | --- |
-| Quizmasters using **Claude Desktop** | In Buzzdome, File › AI assistants › *Connect Claude Desktop*. The app becomes Claude's MCP server, limited to one folder. |
-| Quizmasters using **Claude, Gemini or ChatGPT** in a browser or their apps | File › AI assistants › *Save the AI skill*, then upload the ZIP to the assistant as a skill. |
-| Scripts and coding assistants | `cargo run -p quiz-ai -- check \| pack \| unpack \| schema \| skill \| mcp` |
+| Quizmasters using **Claude Desktop, Antigravity or Codex** | In Buzzdome, File › AI assistants › *Connect*. The app becomes the AI app's MCP server, limited to one folder; then type a topic in its chat. |
+| Quizmasters using **another AI app** that runs local MCP servers | File › AI assistants › *Copy settings*, then paste them into its MCP server settings. |
 | AI coding assistants working **on this codebase** | Start with [`CLAUDE.md`](CLAUDE.md) (or [`AGENTS.md`](AGENTS.md)), then [`.claude/ARCHITECTURE.md`](.claude/ARCHITECTURE.md). Task checklists are in [`.claude/skills/`](.claude/skills). |
 
 Details are in [`docs/ai-assistants.md`](docs/ai-assistants.md).
@@ -179,7 +179,7 @@ crates/quiz-core   game model, state machine, scoring, view (pure, no I/O)
 crates/quiz-file   .quiz files, media, spreadsheet import and export
 crates/buzzers     buzzer driver trait, USB-HID receiver, Enjoy 303S protocol
 crates/lights      stage lights: DMX, Art-Net, sACN, OSC, MIDI
-crates/quiz-ai     quiz JSON Schema, MCP server, AI skill, buzzdome-quiz CLI
+crates/quiz-ai     quiz JSON Schema, MCP server, connecting AI apps
 crates/show-sim    random quizzes and shows for soak tests
 app/src-tauri      Tauri shell: commands, windows, show thread, journal
 app/src            React UI: director/, host/ (slides), editor/ (Studio)
@@ -208,7 +208,7 @@ and the full design is [`docs/design.md`](docs/design.md).
 | [`docs/specification.md`](docs/specification.md) | requirements with IDs: buzzer link, themes, plugins, sounds, lights |
 | [`docs/design.md`](docs/design.md) | architecture, threads, buzzer stack and 303S protocol, lights, build and release |
 | [`docs/quiz-format.md`](docs/quiz-format.md) | the `.quiz` file format |
-| [`docs/ai-assistants.md`](docs/ai-assistants.md) | quizzes written by AI assistants: MCP, skill, CLI |
+| [`docs/ai-assistants.md`](docs/ai-assistants.md) | quizzes written by AI assistants: connecting AI apps, instructions, MCP tools |
 | [`docs/hardware-test.md`](docs/hardware-test.md) | checklist and results for the real receiver |
 | [`replica/hardware.md`](replica/hardware.md) | research on the buzzers, receiver and cable |
 | [`replica/recon.md`](replica/recon.md) | screens, flows and scoring rules the app follows |

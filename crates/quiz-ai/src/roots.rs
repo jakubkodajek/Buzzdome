@@ -1,21 +1,22 @@
 //! The folders an assistant may work in: the MCP tools read and write only
 //! inside them (AR1), as the reference filesystem server touches only the
-//! folders on its command line. The quizmaster picks them in the app
-//! (File > AI assistants), which passes them as `--root <folder>`. The app's
-//! own data (shows, drafts, settings) is never among them.
+//! folders on its command line. The quizmaster picks the folder in the app
+//! (File > AI assistants), which keeps it in the AI settings (`settings`),
+//! where the server reads it when it starts. The app's own data (shows,
+//! drafts, settings) is never among them.
 
 use std::fs;
 use std::io;
 use std::path::{Component, Path, PathBuf};
 
-/// The argument that names a folder the assistant may work in.
-pub const ROOT_ARG: &str = "--root";
-/// The app's bundle identifier, which names its data folders. The app reads
-/// its own from its configuration; a test there keeps the two the same.
-pub const APP_IDENTIFIER: &str = "cz.kodajek.quizshow";
+/// What the assistant does when it may work in no folder.
+const NO_FOLDER: &str = "ask the quizmaster to check the folder in Buzzdome (File > AI assistants), then to open this app again";
 
 #[derive(Debug, thiserror::Error)]
 pub enum RootError {
+    /// The system names no documents folder, where the default folder is.
+    #[error("the system names no documents folder")]
+    NoDocumentsFolder,
     #[error("{} cannot be used as a folder to work in: {source}", path.display())]
     Unusable { path: PathBuf, source: io::Error },
     #[error("{} is not a folder", .0.display())]
@@ -68,33 +69,9 @@ impl Roots {
         Roots(roots)
     }
 
-    /// The folders `--root` names among `args`, each allowed (`allow`), and
-    /// why the others are not.
-    pub fn from_args(args: &[impl AsRef<std::ffi::OsStr>], app_data: &[PathBuf]) -> (Roots, Vec<RootError>) {
-        let mut roots = Vec::new();
-        let mut refused = Vec::new();
-        let mut args = args.iter().map(AsRef::as_ref);
-        while let Some(arg) = args.next() {
-            if arg != ROOT_ARG {
-                continue;
-            }
-            match args.next().map(|folder| allow(Path::new(folder), app_data)) {
-                Some(Ok(root)) => roots.push(root),
-                Some(Err(error)) => refused.push(error),
-                None => {}
-            }
-        }
-        (Roots(roots), refused)
-    }
-
     /// The roots as the quizmaster writes them.
     pub fn folders(&self) -> Vec<PathBuf> {
         self.0.iter().cloned().map(plain).collect()
-    }
-
-    /// The `--root` arguments that give these roots.
-    pub fn args(&self) -> Vec<String> {
-        self.folders().iter().flat_map(|root| [ROOT_ARG.to_string(), root.display().to_string()]).collect()
     }
 
     /// The file or folder `path` names, when it is inside a root once links
@@ -115,7 +92,7 @@ impl Roots {
             return Ok(plain(real));
         }
         Err(match self.0.as_slice() {
-            [] => "Buzzdome lets you work in no folder: ask the quizmaster to connect you again in Buzzdome (File > AI assistants)".into(),
+            [] => format!("Buzzdome lets you work in no folder: {NO_FOLDER}"),
             _ => format!("{path} is outside the folders Buzzdome lets you work in: {}", self.describe()),
         })
     }
@@ -123,7 +100,7 @@ impl Roots {
     /// The roots in words, for the assistant.
     pub fn describe(&self) -> String {
         if self.0.is_empty() {
-            return "none: the quizmaster connects you again in Buzzdome (File > AI assistants) to choose one".into();
+            return format!("none: {NO_FOLDER}");
         }
         self.folders().iter().map(|root| root.display().to_string()).collect::<Vec<_>>().join(", ")
     }
@@ -178,10 +155,6 @@ mod tests {
     use super::*;
     use crate::workbench::tests::scratch;
 
-    fn text(path: &Path) -> String {
-        path.to_str().unwrap().to_string()
-    }
-
     #[test]
     fn only_paths_inside_a_root_are_given() {
         let dir = scratch("roots");
@@ -217,7 +190,7 @@ mod tests {
     #[test]
     fn the_apps_own_data_is_never_a_root() {
         let dir = scratch("roots-data");
-        let data = dir.join("data").join(APP_IDENTIFIER);
+        let data = dir.join("data").join("cz.kodajek.quizshow");
         fs::create_dir_all(data.join("sessions")).unwrap();
         let app_data = [data.clone()];
         assert!(matches!(allow(&data.join("sessions"), &app_data), Err(RootError::AppData { .. })));
@@ -226,17 +199,6 @@ mod tests {
         fs::write(dir.join("file"), b"x").unwrap();
         assert!(matches!(allow(&dir.join("file"), &app_data), Err(RootError::NotAFolder(_))));
         // Data that is not there yet is kept out as well.
-        assert!(matches!(allow(&dir, &[dir.join("later").join(APP_IDENTIFIER)]), Err(RootError::AppData { .. })));
-    }
-
-    #[test]
-    fn roots_come_from_the_arguments_and_go_back_to_them() {
-        let dir = scratch("roots-args");
-        fs::create_dir_all(dir.join("a")).unwrap();
-        let args = ["--mcp", ROOT_ARG, &text(&dir.join("a")), ROOT_ARG, &text(&dir.join("gone")), ROOT_ARG];
-        let (roots, refused) = Roots::from_args(&args, &[]);
-        assert_eq!(roots.folders().len(), 1);
-        assert_eq!(refused.len(), 1);
-        assert_eq!(roots.args(), [ROOT_ARG.to_string(), roots.folders()[0].display().to_string()]);
+        assert!(matches!(allow(&dir, &[dir.join("later").join("cz.kodajek.quizshow")]), Err(RootError::AppData { .. })));
     }
 }

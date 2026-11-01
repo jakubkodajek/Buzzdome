@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { translator } from "./i18n";
-import { awaitsAnswer, claudeConnectionText, errorText, importIssueText, placesText, problemText, protocolText, receiverProblemText, settingsLostText, thrownText } from "./messages";
+import type { AiConnected, Assistant, ConnectChange } from "./types";
+import { aiConnectionText, awaitsAnswer, errorText, importIssueText, placesText, problemText, protocolText, receiverProblemText, settingsLostText, thrownText } from "./messages";
 
 const cs = translator("cs");
 const en = translator("en");
@@ -111,18 +112,26 @@ describe("receiver texts", () => {
   });
 });
 
-describe("claudeConnectionText", () => {
-  it("tells the quizmaster to start Claude Desktop again only when its settings changed", () => {
-    const folders = ["C:\\Users\\Eva\\Documents\\Buzzdome"];
-    expect(claudeConnectionText(en, { connection: "added", folders })).toContain("Close it and open it again");
-    expect(claudeConnectionText(cs, { connection: "updated", folders })).toContain("Zavřete ho a otevřete znovu");
-    expect(claudeConnectionText(en, { connection: "unchanged", folders })).toBe(
-      "Claude Desktop is connected to this app already and may work in C:\\Users\\Eva\\Documents\\Buzzdome.",
-    );
+describe("aiConnectionText", () => {
+  const connected = (change: ConnectChange, assistant: Assistant = "claudeDesktop"): AiConnected => ({
+    assistant,
+    name: assistant === "codex" ? "Codex" : "Claude Desktop",
+    change,
+    folder: "C:\\Users\\Eva\\Documents\\Buzzdome",
   });
 
-  it("names the settings file it left as it was", () => {
-    expect(errorText(en, { code: "claudeConfigUnreadable", path: "C:\\c.json" })).toBe("Claude Desktop's settings (C:\\c.json) cannot be read, so they were left as they are.");
+  it("tells the quizmaster how to start the app again on their system only when its settings changed", () => {
+    expect(aiConnectionText(en, connected("added"), "macos")).toBe(
+      `Claude Desktop is connected and will work in C:\\Users\\Eva\\Documents\\Buzzdome. ${en("aiRestartClaudeMacos")}`,
+    );
+    expect(aiConnectionText(cs, connected("updated"), "windows")).toContain(cs("aiRestartClaudeWindows"));
+    expect(aiConnectionText(en, connected("updated", "codex"), "windows")).toContain(en("aiRestartCodexOther"));
+    expect(aiConnectionText(en, connected("unchanged"), "windows")).toBe("Claude Desktop is connected already and works in C:\\Users\\Eva\\Documents\\Buzzdome.");
+  });
+
+  it("names the app that is missing and the settings file it left as it was", () => {
+    expect(errorText(en, { code: "aiAppMissing", app: "Claude Desktop" })).toContain("Claude Desktop is not installed");
+    expect(errorText(en, { code: "aiConfigUnreadable", path: "C:\\c.json" })).toContain("(C:\\c.json) cannot be read, so they were left as they are.");
     expect(errorText(cs, { code: "aiFolderNotAllowed", path: "C:\\Users\\Eva" })).toContain("Složku C:\\Users\\Eva asistent dostat nemůže");
   });
 });

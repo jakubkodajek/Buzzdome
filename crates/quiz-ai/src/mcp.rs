@@ -1,15 +1,16 @@
 //! An MCP server (Model Context Protocol, modelcontextprotocol.io) over
-//! standard input and output, for desktop assistants such as Claude
-//! Desktop: its tools let the assistant read the quiz format, look at the
+//! standard input and output, for AI apps on this computer such as Claude
+//! Desktop, Antigravity or Codex: its tools let the assistant read the quiz format, look at the
 //! quizmaster's pictures, and write, check and pack quizzes on this
 //! computer (`workbench`), only in the folders the quizmaster lets it work
-//! in (`Roots`). The app serves it when started with `--mcp`, and so does
-//! `buzzdome-quiz mcp`, each with `--root <folder>` for each such folder.
+//! in (`Roots`), and give it the quizmaster's own instructions for every
+//! quiz (`settings`). The app serves it when started with `--mcp`.
 //!
 //! Messages are JSON-RPC 2.0, one per line. The server answers requests in
 //! order; it sends nothing of its own, so it needs no other thread.
 
 use crate::roots::Roots;
+use crate::settings::AiSettings;
 use crate::workbench::{self, Check, WorkError};
 use base64::Engine;
 use serde::Serialize;
@@ -22,20 +23,37 @@ use std::path::{Path, PathBuf};
 pub const PROTOCOL_VERSIONS: [&str; 3] = ["2025-06-18", "2025-03-26", "2024-11-05"];
 /// The server's name, as assistants show it.
 pub const SERVER_NAME: &str = "buzzdome";
+/// The argument that starts the app as the server.
+pub const MCP_ARG: &str = "--mcp";
 /// Longest message read, in bytes: a whole quiz with long texts stays far below it.
 const MAX_MESSAGE_BYTES: u64 = 32 << 20;
 
-/// What the assistant is told when it connects.
+/// What the assistant is told when it connects. What it needs most comes
+/// first: Codex tells clients to keep the first 512 characters
+/// self-contained ("Model Context Protocol", learn.chatgpt.com/docs/extend/mcp).
 fn instructions(roots: &Roots) -> String {
     format!(
         "Buzzdome is a desktop quiz show played with wireless buzzers. \
-To make a quiz: read the format with quiz_format, find the quizmaster's media with list_media_files \
-(look_at_picture shows you a picture), copy the ones the quiz uses into a new quiz folder with add_media, \
+Before you make a quiz, call quiz_format: it gives the quizmaster's own instructions for every quiz, then the quiz format. \
+When the quizmaster gives you only a topic, make the whole quiz by those instructions without asking. \
+You may work only in these folders: {}. Unless the quizmaster says otherwise, make each quiz in a new folder in the first of them. \
+To make a quiz: find the quizmaster's media with list_media_files (look_at_picture shows you a picture), \
+copy the media the quiz uses into its folder with add_media, \
 write the quiz with write_quiz and fix the problems it reports, then save_quiz_file makes the .quiz file \
-the quizmaster opens in Buzzdome (File > Open). Use absolute paths. You may work only in these folders: {}. \
-Ask the quizmaster where to work when they have not said.",
+the quizmaster opens in Buzzdome (File > Open). Use absolute paths.",
         roots.describe()
     )
+}
+
+/// What the server works with.
+pub struct Context {
+    /// The app's version, which the assistant is told.
+    pub version: String,
+    /// The folders the tools work in.
+    pub roots: Roots,
+    /// The AI settings file (`settings::SETTINGS_FILE`), read for the
+    /// quizmaster's instructions each time the assistant reads the format.
+    pub settings: PathBuf,
 }
 
 /// JSON-RPC error codes.
@@ -44,10 +62,8 @@ const INVALID_REQUEST: i64 = -32600;
 const METHOD_NOT_FOUND: i64 = -32601;
 const INVALID_PARAMS: i64 = -32602;
 
-/// Serves the protocol on `input` and `output` until the input ends, with
-/// the tools working in `roots`. `version` is the app's, which the
-/// assistant is told.
-pub fn serve(mut input: impl BufRead, mut output: impl Write, version: &str, roots: &Roots) -> io::Result<()> {
+/// Serves the protocol on `input` and `output` until the input ends.
+pub fn serve(mut input: impl BufRead, mut output: impl Write, context: &Context) -> io::Result<()> {
     loop {
         let mut line = Vec::new();
         if Read::take(&mut input, MAX_MESSAGE_BYTES + 1).read_until(b'\n', &mut line)? == 0 {
@@ -59,7 +75,7 @@ pub fn serve(mut input: impl BufRead, mut output: impl Write, version: &str, roo
         } else {
             match String::from_utf8(line) {
                 Ok(text) if text.trim().is_empty() => None,
-                Ok(text) => answer(text.trim(), version, roots),
+                Ok(text) => answer(text.trim(), context),
                 Err(_) => Some(failure(Value::Null, PARSE_ERROR, "the message is not UTF-8")),
             }
         };
@@ -94,7 +110,7 @@ fn write_message(output: &mut impl Write, message: &Value) -> io::Result<()> {
 }
 
 /// The reply to one message; none to a notification.
-pub fn answer(message: &str, version: &str, roots: &Roots) -> Option<Value> {
+pub fn answer(message: &str, context: &Context) -> Option<Value> {
     let Ok(message) = serde_json::from_str::<Value>(message) else {
         return Some(failure(Value::Null, PARSE_ERROR, "the message is not JSON"));
     };
@@ -106,10 +122,10 @@ pub fn answer(message: &str, version: &str, roots: &Roots) -> Option<Value> {
     let id = message.get("id")?.clone();
     let params = message.get("params").cloned().unwrap_or(Value::Null);
     let result = match method {
-        "initialize" => Ok(initialize(&params, version, roots)),
+        "initialize" => Ok(initialize(&params, context)),
         "ping" => Ok(json!({})),
         "tools/list" => Ok(json!({ "tools": TOOLS.iter().map(Tool::describe).collect::<Vec<_>>() })),
-        "tools/call" => call(&params, roots),
+        "tools/call" => call(&params, context),
         _ => Err((METHOD_NOT_FOUND, format!("no method {method}"))),
     };
     Some(match result {
@@ -122,25 +138,25 @@ fn failure(id: Value, code: i64, text: &str) -> Value {
     json!({ "jsonrpc": "2.0", "id": id, "error": { "code": code, "message": text } })
 }
 
-fn initialize(params: &Value, version: &str, roots: &Roots) -> Value {
+fn initialize(params: &Value, context: &Context) -> Value {
     let asked = params.get("protocolVersion").and_then(Value::as_str);
     let protocol = asked.filter(|asked| PROTOCOL_VERSIONS.contains(asked)).unwrap_or(PROTOCOL_VERSIONS[0]);
     json!({
         "protocolVersion": protocol,
         "capabilities": { "tools": {} },
-        "serverInfo": { "name": SERVER_NAME, "title": "Buzzdome", "version": version },
-        "instructions": instructions(roots),
+        "serverInfo": { "name": SERVER_NAME, "title": "Buzzdome", "version": context.version },
+        "instructions": instructions(&context.roots),
     })
 }
 
-fn call(params: &Value, roots: &Roots) -> Result<Value, (i64, String)> {
+fn call(params: &Value, context: &Context) -> Result<Value, (i64, String)> {
     let name = params.get("name").and_then(Value::as_str).unwrap_or_default();
     let Some(tool) = TOOLS.iter().find(|tool| tool.name == name) else {
         return Err((INVALID_PARAMS, format!("no tool {name}")));
     };
     let arguments = params.get("arguments").cloned().unwrap_or_else(|| json!({}));
     // A tool's failure is the assistant's to read and act on, not a protocol error.
-    Ok(match (tool.run)(&Arguments { values: arguments, roots }) {
+    Ok(match (tool.run)(&Arguments { values: arguments, context }) {
         Ok(content) => json!({ "content": content, "isError": false }),
         Err(text) => json!({ "content": [text_block(&text)], "isError": true }),
     })
@@ -150,7 +166,7 @@ fn call(params: &Value, roots: &Roots) -> Result<Value, (i64, String)> {
 /// Every path is one inside the roots (`Roots::resolve`).
 struct Arguments<'a> {
     values: Value,
-    roots: &'a Roots,
+    context: &'a Context,
 }
 
 impl Arguments<'_> {
@@ -160,13 +176,13 @@ impl Arguments<'_> {
 
     fn path(&self, name: &str) -> Result<PathBuf, String> {
         let path = self.get(name).and_then(Value::as_str).ok_or_else(|| format!("{name} is missing: give an absolute path"))?;
-        self.roots.resolve(Path::new(path))
+        self.context.roots.resolve(Path::new(path))
     }
 
     fn paths(&self, name: &str) -> Result<Vec<PathBuf>, String> {
         let paths = self.get(name).and_then(Value::as_array).ok_or_else(|| format!("{name} is missing: give a list of absolute paths"))?;
         let resolve = |value: &Value| match value.as_str() {
-            Some(path) => self.roots.resolve(Path::new(path)),
+            Some(path) => self.context.roots.resolve(Path::new(path)),
             None => Err(format!("{name} lists something that is not a path")),
         };
         paths.iter().map(resolve).collect()
@@ -223,14 +239,22 @@ fn path_property(description: &str) -> Value {
     json!({ "type": "string", "description": description })
 }
 
+/// How the quizmaster's instructions are given to the assistant.
+const QUIZMASTER_INSTRUCTIONS: &str =
+    "The quizmaster's instructions for every quiz, which they write in Buzzdome. Follow them; what the quizmaster asks for in the chat wins over them:";
+
 const TOOLS: [Tool; 9] = [
     Tool {
         name: "quiz_format",
         title: "Read the quiz format",
-        description: "The Buzzdome quiz file format: a guide to every field and the JSON Schema of quiz.json. Read it before writing a quiz.",
+        description: "The quizmaster's own instructions for every quiz, then the Buzzdome quiz file format: a guide to every field and the JSON Schema of quiz.json. Read it before writing a quiz.",
         read_only: true,
         input: || object(json!({}), &[]),
-        run: |_| Ok(vec![text_block(crate::FORMAT_GUIDE), text_block(&serde_json::to_string_pretty(&crate::quiz_schema()).expect("JSON serializes"))]),
+        run: |arguments| {
+            let settings = AiSettings::read(&arguments.context.settings);
+            let instructions = format!("{QUIZMASTER_INSTRUCTIONS}\n\n{}", settings.instructions());
+            Ok(vec![text_block(&instructions), text_block(crate::FORMAT_GUIDE), text_block(&serde_json::to_string_pretty(&crate::quiz_schema()).expect("JSON serializes"))])
+        },
     },
     Tool {
         name: "list_media_files",
@@ -374,13 +398,18 @@ mod tests {
     use super::*;
     use crate::workbench::tests::{quiz_with_picture, scratch, PNG};
 
-    /// The replies to `messages`, sent one per line, as a client reads them,
-    /// from a server that works in `roots`.
-    fn session(roots: &[&Path], messages: &[Value]) -> Vec<Value> {
+    /// A server that works in `roots`, with the settings in `settings`.
+    fn context(roots: &[&Path], settings: PathBuf) -> Context {
         let roots = Roots::new(roots.iter().map(|root| crate::roots::allow(root, &[]).unwrap()).collect());
+        Context { version: "1.2.3".into(), roots, settings }
+    }
+
+    /// The replies to `messages`, sent one per line, as a client reads them,
+    /// from a server that works in `roots`, without settings.
+    fn session(roots: &[&Path], messages: &[Value]) -> Vec<Value> {
         let input: String = messages.iter().map(|m| format!("{m}\n")).collect();
         let mut output = Vec::new();
-        serve(input.as_bytes(), &mut output, "1.2.3", &roots).unwrap();
+        serve(input.as_bytes(), &mut output, &context(roots, roots[0].join("no-settings.json"))).unwrap();
         String::from_utf8(output).unwrap().lines().map(|line| serde_json::from_str(line).unwrap()).collect()
     }
 
@@ -421,6 +450,30 @@ mod tests {
         assert!(write["$defs"]["Slide"].is_object());
         assert_eq!(replies[2], json!({ "jsonrpc": "2.0", "id": 3, "result": {} }));
         assert_eq!(replies[3]["result"]["protocolVersion"], PROTOCOL_VERSIONS[0]);
+    }
+
+    #[test]
+    fn the_format_starts_with_the_quizmasters_instructions_as_they_are_now() {
+        let dir = scratch("mcp-instructions");
+        let quizzes = dir.join("quizzes");
+        std::fs::create_dir_all(&quizzes).unwrap();
+        let settings = dir.join(crate::settings::SETTINGS_FILE);
+        let context = context(&[&quizzes], settings.clone());
+        let format = || {
+            let reply = answer(&call_tool(1, "quiz_format", json!({})).to_string(), &context).unwrap();
+            reply["result"]["content"].as_array().unwrap().iter().map(|block| block["text"].as_str().unwrap().to_string()).collect::<Vec<_>>()
+        };
+        let blocks = format();
+        assert_eq!(blocks.len(), 3);
+        assert!(blocks[0].starts_with(QUIZMASTER_INSTRUCTIONS) && blocks[0].ends_with(crate::settings::default_instructions(crate::settings::Language::En)), "{}", blocks[0]);
+        assert_eq!(blocks[1], crate::FORMAT_GUIDE);
+        std::fs::write(&settings, r#"{ "language": "cs" }"#).unwrap();
+        assert!(format()[0].ends_with(crate::settings::default_instructions(crate::settings::Language::Cs)), "the default ones in the quizmaster's language");
+        std::fs::write(&settings, r#"{ "instructions": "Two rounds for children." }"#).unwrap();
+        assert_eq!(format()[0], format!("{QUIZMASTER_INSTRUCTIONS}\n\nTwo rounds for children."), "read again, with no restart");
+        let initialize = answer(&request(2, "initialize", json!({})).to_string(), &context).unwrap();
+        let start: String = initialize["result"]["instructions"].as_str().unwrap().chars().take(512).collect();
+        assert!(start.contains("call quiz_format") && start.contains("only a topic") && start.contains(&context.roots.describe()), "{start}");
     }
 
     #[test]
@@ -520,7 +573,8 @@ mod tests {
         input.extend(vec![b'x'; MAX_MESSAGE_BYTES as usize + 10]);
         input.extend(b"\n{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"ping\"}\n");
         let mut output = Vec::new();
-        serve(&input[..], &mut output, "1", &Roots::default()).unwrap();
+        let context = Context { version: "1".into(), roots: Roots::default(), settings: PathBuf::new() };
+        serve(&input[..], &mut output, &context).unwrap();
         let replies: Vec<Value> = String::from_utf8(output).unwrap().lines().map(|l| serde_json::from_str(l).unwrap()).collect();
         let codes: Vec<&Value> = replies.iter().map(|r| &r["error"]["code"]).collect();
         assert_eq!(codes, [&json!(PARSE_ERROR), &json!(METHOD_NOT_FOUND), &json!(INVALID_PARAMS), &json!(INVALID_REQUEST), &Value::Null]);

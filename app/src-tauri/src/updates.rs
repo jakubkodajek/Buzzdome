@@ -7,7 +7,6 @@
 
 use crate::error::{AppError, CmdResult};
 use crate::{app_log, lock_show, off_ui, read_show};
-use quiz_ai::claude_desktop;
 use serde::Serialize;
 use std::time::Duration;
 use tauri::async_runtime::Mutex;
@@ -36,9 +35,9 @@ pub struct AvailableUpdate {
     /// What the release says changed, cut after `MAX_NOTES_CHARS`; empty
     /// when it says nothing.
     pub notes: String,
-    /// Claude Desktop runs this app's AI tools (`--mcp`), which it keeps
+    /// An AI app runs this app's MCP server (`--mcp`), which it keeps
     /// running in the old version until it is opened again.
-    pub claude_desktop: bool,
+    pub ai_apps: bool,
 }
 
 /// How much of an update has been downloaded.
@@ -90,8 +89,7 @@ async fn check(app: &AppHandle) -> tauri_plugin_updater::Result<Checked> {
 /// What the Director is told of `update`.
 fn available(update: &Update) -> AvailableUpdate {
     let notes = update.body.as_deref().unwrap_or_default().trim();
-    let claude_desktop = claude_desktop::is_connected(&claude_desktop::config_files());
-    AvailableUpdate { version: update.version.clone(), notes: notes.chars().take(MAX_NOTES_CHARS).collect(), claude_desktop }
+    AvailableUpdate { version: update.version.clone(), notes: notes.chars().take(MAX_NOTES_CHARS).collect(), ai_apps: crate::ai::connected_somewhere() }
 }
 
 /// Downloads the update the check found, verifies its signature and

@@ -2204,6 +2204,72 @@
   line-height: 1.45;
 }
 
+/* File › AI assistants (AiPage.tsx). */
+.ai-folder {
+  font-weight: 600;
+  word-break: break-all;
+}
+
+.ai-apps {
+  display: grid;
+  grid-template-columns: minmax(130px, auto) auto auto 1fr;
+  align-items: center;
+  gap: 8px 14px;
+  max-width: 820px;
+  margin: 10px 0 8px;
+}
+
+.ai-app {
+  display: contents;
+}
+
+.ai-app .browse {
+  min-width: 130px;
+  padding: 6px 12px;
+}
+
+.studio .chip.off {
+  color: var(--muted);
+  background: #eee;
+}
+
+.ai-app-hint {
+  grid-column: 1 / -1;
+  margin: -4px 0 6px;
+  font-size: 12px;
+  color: var(--muted);
+  word-break: break-all;
+}
+
+.ai-config {
+  max-width: 820px;
+  margin: 0 0 18px;
+  padding: 10px 12px;
+  overflow-x: auto;
+  font-size: 12px;
+  background: #f4f4f4;
+  user-select: text;
+}
+
+.studio .ai-instructions {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 820px;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.ai-instructions-buttons {
+  display: flex;
+  gap: 8px;
+  margin: 8px 0 24px;
+}
+
+.ai-instructions-buttons .browse {
+  padding: 8px 14px;
+}
+
 .import-notes-dialog {
   width: min(640px, 92vw);
 }
