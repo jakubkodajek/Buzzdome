@@ -1,7 +1,7 @@
-import { CrossIcon } from "../icons";
 import { useEffect, useRef, useState } from "react";
 import { ANSWER_LETTERS } from "../answers";
 import { useApp } from "../app-context";
+import { CrossIcon } from "../icons";
 import { hasTitle, isCorrect, SLIDE_TYPE_LABEL } from "../quiz";
 import type { QuestionSlide, Slide } from "../types";
 import { Dialog } from "./controls";

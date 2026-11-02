@@ -117,8 +117,9 @@
   cursor: default;
 }
 
-/* A button that shows only a sign, centred whatever the font. */
-.director .icon-button {
+/* The Lights tab's add and remove buttons: a sign alone, centred whatever
+   the font, as tall as the fields beside them (the team panel has its own). */
+.lights .icon-button {
   display: inline-grid;
   place-items: center;
   min-width: 30px;
@@ -126,7 +127,7 @@
   align-self: stretch;
 }
 
-.director .icon-button svg {
+.lights .icon-button svg {
   width: 12px;
   height: 12px;
 }
@@ -905,25 +906,24 @@
 }
 
 /* A message card: dark in both looks and over the editor alike, so it
-   reads the same wherever it lands; its edge and icon tell news from a
-   failure. */
+   reads the same wherever it lands; the dot's colour tells news, a
+   caution and a failure apart. */
 .toast {
   --tone: #3fb950;
 
   display: grid;
-  grid-template-columns: 20px minmax(0, 1fr) 24px;
+  grid-template-columns: 7px minmax(0, 1fr) 20px;
   align-items: start;
-  gap: 10px;
-  width: min(420px, calc(100vw - 32px));
-  padding: 10px 8px 10px 12px;
+  column-gap: 10px;
+  width: min(400px, calc(100vw - 32px));
+  padding: 10px 8px 10px 14px;
   font-size: 13px;
   line-height: 1.4;
-  color: #f2f2f2;
-  background: #2b2b2b;
-  border: 1px solid #444;
-  border-left: 4px solid var(--tone);
+  color: #ececec;
+  background: #262626;
+  border: 1px solid #3a3a3a;
   border-radius: 6px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
   pointer-events: auto;
   user-select: text;
   animation: toast-in 0.15s ease-out;
@@ -940,22 +940,23 @@
 @keyframes toast-in {
   from {
     opacity: 0;
-    transform: translateY(6px);
   }
 }
 
-/* The system's words or the file, apart: lighter on the dark card. */
 .toast .notice-body small {
-  color: #b4b4b4;
+  color: #a8a8a8;
+  opacity: 1;
 }
 
 .toast-close {
   display: grid;
   place-items: center;
-  width: 24px;
-  height: 24px;
+  width: 20px;
+  height: 20px;
+  /* Centred on the first line (18px). */
+  margin-top: -1px;
   padding: 0;
-  color: #b4b4b4;
+  color: #8a8a8a;
   background: none;
   border: none;
   border-radius: 4px;
@@ -964,12 +965,12 @@
 
 .toast-close:hover {
   color: #fff;
-  background: #3e3e3e;
+  background: #3a3a3a;
 }
 
 .toast-close svg {
-  width: 11px;
-  height: 11px;
+  width: 10px;
+  height: 10px;
 }
 
 /* Receiver tab */
@@ -1018,23 +1019,28 @@
   border: 1px solid var(--well-line);
 }
 
+/* The receiver's or the lights' state: plain text after a dot in its tone, like a notice. */
 .receiver-state {
+  --tone: var(--muted);
+
+  display: grid;
+  grid-template-columns: 7px minmax(0, 1fr);
+  align-items: start;
+  column-gap: 9px;
   margin: 4px 0;
-  padding: 8px 10px;
-  border-left: 4px solid var(--muted);
-  background: var(--well);
+  line-height: 1.4;
 }
 
 .receiver-state.connected {
-  border-left-color: var(--good);
+  --tone: var(--good);
 }
 
 .receiver-state.error {
-  border-left-color: var(--bad);
+  --tone: var(--bad);
 }
 
 .receiver-state.searching {
-  border-left-color: var(--accent);
+  --tone: var(--accent);
 }
 
 .buzzers-seen {

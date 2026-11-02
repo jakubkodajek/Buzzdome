@@ -5,7 +5,7 @@ import { useApp, useRun } from "../app-context";
 import { useBackendEvent, useLearnProgress } from "../hooks";
 import type { Translate } from "../i18n";
 import { awaitsAnswer, errorNotice, hex4, receiverStatusText, REMOTE_ACTIONS, remoteActionText, remoteKeyText, settingsLostNotice, vidPid } from "../messages";
-import { NoticeBox, type TonedNotice } from "../notice";
+import { NoticeBox, ToneDot, type TonedNotice } from "../notice";
 import type { Button, BuzzerSeen, DeviceInfo, Press, PressEvent, RawReport, ReceiverInfo, ReceiverStatus, RemoteAction, RemoteKey, RemoteKeyAction } from "../types";
 import { confirmAction } from "../confirm";
 import { BuzzerColours } from "./BuzzerColours";
@@ -119,7 +119,10 @@ export function ReceiverTab() {
         {info && !info.status ? (
           <NoticeBox notice={{ text: t("receiverUnavailable"), detail: info.initError ?? undefined }} />
         ) : (
-          <p className={`receiver-state ${stateClass(status)}`}>{status && receiverStatusText(t, status, info?.platform ?? "")}</p>
+          <p className={`receiver-state ${stateClass(status)}`}>
+            <ToneDot />
+            <span>{status && receiverStatusText(t, status, info?.platform ?? "")}</span>
+          </p>
         )}
         {status?.kind === "connected" && info && !info.chosen && <p className="muted">{t("receiverFoundAutomatically")}</p>}
         {status?.kind === "connected" && !status.hasLights && <p className="muted">{t("receiverNoLights")}</p>}

@@ -1,4 +1,3 @@
-import { AddIcon, MinusIcon } from "../icons";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import { useApp, useRun } from "../app-context";
@@ -29,8 +28,9 @@ import { NumberBox, Select, Switch } from "../editor/controls";
 import { calendarDay } from "../format";
 import { useLightsStatus } from "../hooks";
 import type { StringKey, Translate } from "../i18n";
+import { AddIcon, MinusIcon } from "../icons";
 import { errorNotice, outputErrorText, settingsLostNotice, setupErrorText, type Notice } from "../messages";
-import { NoticeBox } from "../notice";
+import { NoticeBox, ToneDot } from "../notice";
 import { CUE_LABEL } from "../phase";
 import type { Channel, Cue, Fixture, LibraryFixture, LibraryInfo, LibraryMatches, LibraryMode, LightsDevices, LightsInfo, LightsSetup, Look, LookEffect, OutputChoice, Stage } from "../types";
 import {
@@ -188,9 +188,12 @@ function LiveControl({ setup, change }: { setup: LightsSetup; change: Change }) 
     <fieldset>
       <legend>{t("lightsLive")}</legend>
       <p className={`receiver-state ${output?.kind === "connected" ? "connected" : output?.kind === "lost" ? "error" : ""}`}>
-        {output?.kind === "off" && t("lightsOff")}
-        {output?.kind === "connected" && t("lightsConnected", { name: output.name })}
-        {output?.kind === "lost" && t("lightsLost", { problem: outputErrorText(t, output.error) })}
+        <ToneDot />
+        <span>
+          {output?.kind === "off" && t("lightsOff")}
+          {output?.kind === "connected" && t("lightsConnected", { name: output.name })}
+          {output?.kind === "lost" && t("lightsLost", { problem: outputErrorText(t, output.error) })}
+        </span>
       </p>
       {status?.messages && <NoticeBox notice={{ text: t("lightsMessagesFailed", { problem: outputErrorText(t, status.messages) }) }} />}
       <div className="row">

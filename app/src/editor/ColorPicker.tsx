@@ -3,10 +3,10 @@
 // recent colours, and a custom colour with a pipette where the web view has
 // one.
 
-import { CrosshairIcon } from "../icons";
 import { useContext, useState, type CSSProperties, type KeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { useApp } from "../app-context";
 import { useLatest } from "../hooks";
+import { CrosshairIcon } from "../icons";
 import { cssColor, formatColor, fromHsv, parseColor, readColor, toHsv, type Hsv } from "../theme/color";
 import { useStore } from "../store";
 import type { Color } from "../types";

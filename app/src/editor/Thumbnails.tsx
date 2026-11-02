@@ -1,7 +1,7 @@
-import { AddIcon, ExclamationIcon } from "../icons";
 import { useEffect, useRef, useState, type MouseEvent } from "react";
 import { useApp } from "../app-context";
 import { SlideThumbnail } from "../host/SlideThumbnail";
+import { AddIcon, ExclamationIcon } from "../icons";
 import type { SlideContext } from "../quiz";
 import type { Quiz } from "../types";
 

@@ -55,7 +55,7 @@ function ToastCard({ toast, close }: { toast: Shown; close: (id: number) => void
   }, [close, id, ms]);
   return (
     <div className={`toast ${toast.tone}`} role={toast.tone === "error" ? "alert" : "status"}>
-      <NoticeContent notice={toast} tone={toast.tone} />
+      <NoticeContent notice={toast} />
       <button type="button" className="toast-close" title={t("closeMessage")} aria-label={t("closeMessage")} onClick={() => close(id)}>
         <CrossIcon />
       </button>

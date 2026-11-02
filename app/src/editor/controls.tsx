@@ -1,10 +1,10 @@
 // Small form controls of the editor, in the look of a desktop app.
 
-import { ChevronRightIcon, CrossIcon, MoreIcon } from "../icons";
 import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { ANSWER_LETTERS } from "../answers";
 import { useApp } from "../app-context";
 import { parseTrackTime, trackTime } from "../format";
+import { ChevronRightIcon, CrossIcon, MoreIcon } from "../icons";
 import { mediaFileName } from "../media";
 import { shortcutLabel, type Action } from "./actions";
 

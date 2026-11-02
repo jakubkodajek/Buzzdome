@@ -111,14 +111,14 @@ export function StageBackground(props: { layers: BackgroundLayer[]; mode?: Scree
   const fill = layers.find((layer) => layer.level === "fill");
   const show = mode === "show";
   const draw = (item: Drawn, playsHere: boolean) => {
-    const failed = () => {
+    const onFailed = () => {
       setFailed((current) => ({ root, urls: new Set(current.root === root ? current.urls : []).add(item.url) }));
       const once = `${root}\n${item.url}`;
       if (reported.has(once)) return;
       reported.add(once);
       fail(t(item.level === "theme" ? "themeBackgroundFailed" : "backgroundFailed", { file: item.name }));
     };
-    if (!item.video) return <img key={item.url} src={item.url} alt="" onError={failed} />;
+    if (!item.video) return <img key={item.url} src={item.url} alt="" onError={onFailed} />;
     return (
       <BackgroundVideo
         key={item.url}
@@ -127,7 +127,7 @@ export function StageBackground(props: { layers: BackgroundLayer[]; mode?: Scree
         loop={!show || item.options.repeat}
         muted={!show || item.options.muted}
         preload={show ? "auto" : "metadata"}
-        onError={failed}
+        onError={onFailed}
       />
     );
   };

@@ -68,11 +68,13 @@ draws slides without a show.
   in their words, and apart from it, its `detail`, the system's own words
   (without Rust's "(os error N)") or the file's path. `Display` on these
   types is for logs and tests only.
-- **How messages look.** Every message has one shape (`app/src/notice.tsx`):
-  a sign, the text, and under it, smaller, the detail. A failed command
+- **How messages look.** Every message has one plain shape
+  (`app/src/notice.tsx`): a small dot in its tone, the text, and under it,
+  smaller and quieter, the detail. No signs, tinted panels or coloured
+  edges (Jakub, 2026-11-02: minimal). A failed command
   or anything else that passes shows as a toast in a corner of the
   Director (`director/Toasts.tsx`): a dark card in both looks, which
-  closes with its cross. Its colour says what it tells: green for news
+  closes with its cross. Its dot says what it tells: green for news
   (`notify`); amber for done, but look at this, or not done though
   nothing broke (`caution`: a restart asked too late, an export without
   some of its media, a file too large to drop); red for a failure
@@ -80,8 +82,8 @@ draws slides without a show.
   stay longer the longer they are (7–15 s). What
   stays true for a while shows where it applies, as a `NoticeBox` (a
   settings file that did not read, a learning that failed, a lights
-  check), and saving that does not work as a red bar over the whole
-  window (`NotSavedBanner`). The projector shows no messages: it sends its
+  check), as plain text there, and saving that does not work as a red
+  bar over the whole window (`NotSavedBanner`). The projector shows no messages: it sends its
   own to the Director (`report_host_problem`).
 - **Step controls.** `GameView.controls` says which step commands (next,
   judge, pause, resume, end question, go to a slide or the final) the
