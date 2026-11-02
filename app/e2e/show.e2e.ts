@@ -171,7 +171,8 @@ describe("a show of the demo quiz", () => {
     const before = await app.view();
     await buzz(3, "big");
     await waitPhase("question:buzzed", 7);
-    expect(await app.hasButton("right")).toBe(true);
+    // The Director draws the buzz's buttons a moment after the view changes.
+    await app.button("right");
     expect(await app.hasButton("next")).toBe(false);
     await app.step("wrong");
     let running = await waitPhase("question:running", 7);
