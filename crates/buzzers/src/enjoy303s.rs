@@ -249,6 +249,9 @@ pub struct Enjoy303s {
     wanted: [Option<Light>; BUZZERS],
     /// The colour of each light (`Protocol::set_colours`).
     colours: LightColours,
+    /// Colours picked during a fastest-finger round, shown once it ends
+    /// (`set_colours`).
+    waiting_colours: Option<LightColours>,
     /// The colour each buzzer was last told to show, by slot: none until told.
     shown: [Option<u8>; BUZZERS],
     mode: BuzzerMode,
@@ -268,6 +271,7 @@ impl Default for Enjoy303s {
             opens: 0,
             wanted: [None; BUZZERS],
             colours: LightColours::default(),
+            waiting_colours: None,
             shown: [None; BUZZERS],
             mode: BuzzerMode::Off,
             dropped: Vec::new(),
@@ -361,8 +365,7 @@ impl Enjoy303s {
         // Any other code is no press, so nothing unknown ever buzzes.
         let &(button, _) = BUTTON_CODES.iter().find(|&&(_, c)| c == code >> 4)?;
         let press = Press::timed(buzzer, button, u32::from_le_bytes([t0, t1, t2, 0]));
-        let judged = matches!(self.mode, BuzzerMode::FastestFinger | BuzzerMode::Buzzed);
-        if judged && self.colours.not_ready(shade_of(shown)) {
+        if self.fastest_finger() && self.colours.not_ready(shade_of(shown)) {
             self.dropped.push(press);
             return None;
         }
@@ -421,6 +424,19 @@ impl Enjoy303s {
     fn repaint(&mut self) -> Vec<Report> {
         self.shown = [Some(OFF); BUZZERS];
         [Order::PaintAll(OFF).reports(), self.paint()].concat()
+    }
+
+    /// Whether a fastest-finger round runs, or its buzz is judged: presses
+    /// count only from buzzers that showed ready, in their timers' order.
+    fn fastest_finger(&self) -> bool {
+        matches!(self.mode, BuzzerMode::FastestFinger | BuzzerMode::Buzzed)
+    }
+
+    /// Shows the lights in `colours` from now on.
+    fn use_colours(&mut self, colours: LightColours) -> Vec<Report> {
+        self.colours = colours;
+        self.waiting_colours = None;
+        if self.stage == Stage::Open { self.paint() } else { Vec::new() }
     }
 
     /// Notes the lights these buzzers should show.
@@ -495,18 +511,29 @@ impl Protocol for Enjoy303s {
     }
 
     /// Kept until the receiver is open, then written: each buzzer whose
-    /// light now has another colour shows it (`paint`).
+    /// light now has another colour shows it (`paint`). In a fastest-finger
+    /// round they wait for its end (`encode_mode`): a buzzer that turned
+    /// another colour would count its timer from another moment than the
+    /// others', and a press made in the old colours would be judged by the
+    /// new ones.
     fn set_colours(&mut self, colours: &LightColours) -> Vec<Report> {
-        self.colours = *colours;
-        if self.stage == Stage::Open { self.paint() } else { Vec::new() }
+        if self.fastest_finger() {
+            self.waiting_colours = Some(*colours);
+            return Vec::new();
+        }
+        self.use_colours(*colours)
     }
 
     /// Kept for telling presses that count from those that cannot: the
     /// receiver takes presses all the time once open, so a late team still
     /// registers between questions (unverified: that `85` once is enough).
+    /// Colours picked during a fastest-finger round are shown once it ends.
     fn encode_mode(&mut self, mode: BuzzerMode) -> Vec<Report> {
         self.mode = mode;
-        Vec::new()
+        match self.waiting_colours {
+            Some(colours) if !self.fastest_finger() => self.use_colours(colours),
+            _ => Vec::new(),
+        }
     }
 
     fn has_lights(&self) -> bool {
@@ -920,6 +947,26 @@ mod tests {
         assert!(p.decode(&input(&press_message(0, 0x50, colour(false, 3, 2, 0), 300))).is_empty(), "answered, brightness aside");
         assert_eq!(p.decode(&input(&press_message(3, 0x50, LOCKED, 300))), [Press::timed(4, Button::Big, 300)]);
         assert_eq!(p.decode(&input(&press_message(2, 0x50, READY, 300))), [Press::timed(3, Button::Big, 300)]);
+    }
+
+    #[test]
+    fn a_new_colour_waits_for_the_fastest_finger_to_end() {
+        let (mut p, _) = opened();
+        p.encode_mode(BuzzerMode::FastestFinger);
+        p.encode_lights(&[(1, Light::Ready), (2, Light::Ready), (3, Light::Locked)]);
+        let purple = colour(true, 2, 0, 2);
+        let picked = LightColours { ready: Rgb::new(0x80, 0, 0x80), locked: Rgb::new(0, 0, 0xff), ..LightColours::default() };
+        // Nothing changes on the buzzers while the round runs, and their presses count by the colours they show.
+        assert!(p.set_colours(&picked).is_empty());
+        assert_eq!(p.decode(&input(&press_message(0, 0x50, READY, 300))), [Press::timed(1, Button::Big, 300)]);
+        assert!(p.decode(&input(&press_message(2, 0x50, LOCKED, 200))).is_empty());
+        assert!(p.encode_mode(BuzzerMode::Buzzed).is_empty(), "still the round");
+        // Picked again before it ends: the last colours win.
+        let picked = LightColours { locked: Rgb::BLACK, ..picked };
+        assert!(p.set_colours(&picked).is_empty());
+        // The round over, the buzzers take them: the ready ones with one order to all.
+        assert_eq!(serial(&p.encode_mode(BuzzerMode::Answers)), [all(purple), paint(2, OFF)]);
+        assert!(p.encode_mode(BuzzerMode::Off).is_empty(), "shown once");
     }
 
     #[test]

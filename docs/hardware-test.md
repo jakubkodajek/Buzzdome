@@ -370,7 +370,9 @@ press that leaves no line under "Raw data", and what came before it.
     answer" on (step 23) a press on a dark buzzer still changes its
     answer. In a fastest-finger question the winner turns orange and the
     others purple, and a press on a purple buzzer is not counted. Change a
-    colour while a question runs: the buzzers take it at once. For each
+    colour during an everyone-answers question: the buzzers take it at
+    once. Change one during a fastest-finger question: the buzzers keep
+    their colours until the question is over. For each
     colour, note whether the buzzer shows what the Receiver tab shows
     beside it (≈), dim colours most of all: only the defaults have been
     seen on the hardware. Then click "Default colours".

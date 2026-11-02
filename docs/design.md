@@ -1605,7 +1605,11 @@ colours to the receiver thread (`ReceiverHandle::set_colours`), which keeps
 them for every receiver that connects and passes them to the protocol
 (`Protocol::set_colours`) before the mode and lights when it sets one up;
 the 303S driver repaints the buzzers when they change, so a new colour
-shows at once, also mid-question. A 303S colour byte holds one brightness
+shows at once, also mid-question. Not in a fastest-finger round, nor while
+its buzz is judged: there the driver keeps the new colours until the mode
+leaves the round (`encode_mode`), as a buzzer that turned another colour
+would count its timer from another moment than the others (2.6), and a
+press made in the old colours would be judged by the new ones (2.4). A 303S colour byte holds one brightness
 bit and four levels a channel, so the driver shows a colour as the nearest
 shade it holds (`colours::Shade`): bright when a channel reaches 128, with
 levels 0, 85, 170 and 255, dim otherwise, with levels 0, 42, 84 and 127.

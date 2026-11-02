@@ -24,7 +24,7 @@ const LIGHT_HINTS: Record<Light, StringKey> = {
  * The colours offered first: each one the buzzers show as it is
  * (`colours::Shade`), black for off and dim white as the defaults have it.
  */
-export const COMMON_COLOURS: readonly { colour: Rgb; name: StringKey }[] = [
+const COMMON_COLOURS: readonly { colour: Rgb; name: StringKey }[] = [
   { colour: "#000000", name: "colorBlack" },
   { colour: "#2a2a2a", name: "colorDimWhite" },
   { colour: "#ffffff", name: "colorWhite" },
@@ -38,7 +38,7 @@ export const COMMON_COLOURS: readonly { colour: Rgb; name: StringKey }[] = [
 ];
 
 /** Whether two colours are the same, whatever the case of their hex digits. */
-export const sameColour = (a: Rgb, b: Rgb) => a.toLowerCase() === b.toLowerCase();
+const sameColour = (a: Rgb, b: Rgb) => a.toLowerCase() === b.toLowerCase();
 
 /**
  * Each light's colour on the buzzers, for every quiz (`LightColours`), with

@@ -95,8 +95,9 @@ fn a_test_plugs_the_receiver_in_presses_and_sees_the_lights() {
         .collect();
     assert_eq!(presses, [Press::timed(2, Button::Big, 120), Press::timed(1, Button::Big, 300)], "buzzer 3 is locked out");
 
-    // Colours picked anew: locked out, buzzer 3 shows purple, a colour no light has by default.
+    // Colours picked anew, shown once the round is over: locked out, buzzer 3 shows purple, a colour no light has by default.
     handle.set_colours(LightColours { locked: Rgb::new(0xaa, 0, 0xaa), ..LightColours::default() });
+    handle.set_mode(BuzzerMode::Answers);
     assert_eq!(test.wait_for(|_| true), json!({ "lights": [{ "buzzer": 3, "light": null, "colour": "#aa00aa" }] }));
 
     test.send(json!({ "remote": "tick" }));
