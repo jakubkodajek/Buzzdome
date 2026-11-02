@@ -1,6 +1,7 @@
 import { useMemo, useState, type MouseEvent } from "react";
 import { useApp } from "../app-context";
-import { errorText } from "../messages";
+import { errorNotice } from "../messages";
+import { NoticeBox, NotSavedBanner } from "../notice";
 import {
   BackIcon,
   CategoryIcon,
@@ -76,14 +77,21 @@ export function EditorScreen({ onTestRun, onExit }: { onTestRun: () => void; onE
   return <Studio editor={editor} open={state.status === "open" ? state : null} onExit={onExit} />;
 }
 
+/** Changes do not reach the draft on disk: over the whole editor until a write works again. */
+function DraftNotWritten({ problem }: { problem: unknown }) {
+  const { t } = useApp();
+  const { text, detail } = errorNotice(t, problem);
+  return <NotSavedBanner notice={{ text: t("draftNotWritten", { problem: text }), detail }} />;
+}
+
 /** The draft left from last time does not read: it stays until the quizmaster discards it. */
 function UnreadableDraft({ editor, error, onExit }: { editor: QuizEditor; error: unknown; onExit: () => void }) {
   const { t } = useApp();
   return (
     <div className="studio studio-loading">
-      <div className="draft-unreadable" role="alert">
+      <div className="draft-unreadable">
         <h2>{t("draftUnreadable")}</h2>
-        <p>{errorText(t, error)}</p>
+        <NoticeBox notice={errorNotice(t, error)} />
         <p>{t("draftUnreadableInfo")}</p>
         <div className="draft-unreadable-actions">
           <button type="button" onClick={editor.reload}>
@@ -318,9 +326,7 @@ function Studio({ editor, open, onExit }: { editor: QuizEditor; open: OpenQuiz |
             </button>
           </header>
           {editor.status.notWritten !== null && (
-            <div className="not-saved-banner" role="alert">
-              {t("draftNotWritten", { problem: errorText(t, editor.status.notWritten) })}
-            </div>
+            <DraftNotWritten problem={editor.status.notWritten} />
           )}
 
           {backstageShown ? (
@@ -333,6 +339,7 @@ function Studio({ editor, open, onExit }: { editor: QuizEditor; open: OpenQuiz |
               actions={actions}
               recentFiles={editor.recentFiles}
               onOpenFile={(recent) => void editor.openQuiz(recent).then(opened)}
+              onForgetFile={editor.forgetRecentFile}
               onTitle={(text) => editor.edit({ type: "setTitle", title: text }, "title")}
               onSettings={(settings) => editor.edit({ type: "setSettings", settings }, "settings")}
               onSounds={(sounds) => editor.edit({ type: "setSounds", sounds }, "sounds")}

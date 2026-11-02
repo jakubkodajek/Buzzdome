@@ -59,11 +59,26 @@ draws slides without a show.
 - **Errors and messages.** No Rust code sends the UI an English sentence.
   A failed command returns an `AppError` (`app/src-tauri/src/error.rs`): a
   code with parameters, such as `{ code: "file", action: "read", path,
-  detail }`. Quiz problems are `Problem`s (`quiz-core`), receiver failures
-  `ReceiverProblem`s and protocols `ProtocolKind`s (`buzzers`).
-  `app/src/messages.ts` words them in the quizmaster's language from
-  `i18n.ts`; `detail` fields carry the system's own message as it is.
-  `Display` on these types is for logs and tests only.
+  reason, detail }`, where `reason` (`FileReason`) names the causes a
+  quizmaster can act on (the file is gone, has no access, is open in
+  another program, the disk is full or read-only). Quiz problems are
+  `Problem`s (`quiz-core`), receiver failures `ReceiverProblem`s and
+  protocols `ProtocolKind`s (`buzzers`). `app/src/messages.ts` words them
+  in the quizmaster's language from `i18n.ts` as a `Notice`: what happened
+  in their words, and apart from it, its `detail`, the system's own words
+  (without Rust's "(os error N)") or the file's path. `Display` on these
+  types is for logs and tests only.
+- **How messages look.** Every message has one shape (`app/src/notice.tsx`):
+  a sign, the text, and under it, smaller, the detail. A failed command
+  or anything else that passes shows as a toast in a corner of the
+  Director (`director/Toasts.tsx`): a dark card in both looks, red for a
+  failure and green for news, which stays longer the longer it is
+  (7–15 s for a failure, 4 s for news) and closes with its cross. What
+  stays true for a while shows where it applies, as a `NoticeBox` (a
+  settings file that did not read, a learning that failed, a lights
+  check), and saving that does not work as a red bar over the whole
+  window (`NotSavedBanner`). The projector shows no messages: it sends its
+  own to the Director (`report_host_problem`).
 - **Step controls.** `GameView.controls` says which step commands (next,
   judge, pause, resume, end question, go to a slide or the final) the
   current step takes; `Game::controls` is checked against `apply` by a test
@@ -230,8 +245,12 @@ draws slides without a show.
   title, the backend turns into a portable file name), never named by a
   page: the recent quiz files, which the editor opens and the Director
   plays, are kept by the backend (`recent_files.rs`), and the page opens
-  one by its path, which has to be in that list; a file leaves the list
-  once it is gone from its folder. The
+  one by its path, which has to be in that list. A recent file that does
+  not open because it is missing leaves the list when its folder is still
+  there (`QuizFileGone`: it was deleted or moved); when its folder is
+  missing too, as on a drive that is not plugged in, it stays
+  (`QuizFileUnreachable`). The quizmaster takes any file off the list with
+  the cross beside it (`forget_recent_file`); the file itself stays. The
   pages confirm through the dialog plugin's `ask`
   (`confirm.ts`, with Yes and No in the UI's language); ESLint refuses `alert`, `confirm`, `prompt` and the
   plugin's file pickers.

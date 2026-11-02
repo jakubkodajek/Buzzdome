@@ -52,6 +52,7 @@ const COMMANDS: &[&str] = &[
     "editor_new",
     "editor_open",
     "recent_files",
+    "forget_recent_file",
     "editor_update",
     "editor_save",
     "editor_add_media",

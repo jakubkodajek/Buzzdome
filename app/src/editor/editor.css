@@ -2337,7 +2337,7 @@
   white-space: nowrap;
 }
 
-.studio .recent-list button {
+.studio .recent-list .recent-open {
   padding: 7px 10px;
 }
 

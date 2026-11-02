@@ -43,7 +43,7 @@ function storedSplit(): number {
  * acts on the file selected in the list, which a click on a pad selects too.
  */
 export function MediaPlayerTab({ player, sound, view }: { player: MediaPlayer; sound: SlideSound; view: GameView | null }) {
-  const { t, notify } = useApp();
+  const { t, warn } = useApp();
   const run = useRun();
   const report = useReport();
   const { library, now } = player;
@@ -87,7 +87,7 @@ export function MediaPlayerTab({ player, sound, view }: { player: MediaPlayer; s
     const references: string[] = [];
     for (const file of dropped) {
       if (file.size > MAX_DROPPED_MB * 2 ** 20) {
-        notify(t("mediaDropTooLarge", { name: file.name, mb: MAX_DROPPED_MB }));
+        warn(t("mediaDropTooLarge", { name: file.name, mb: MAX_DROPPED_MB }));
         continue;
       }
       try {

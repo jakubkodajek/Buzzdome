@@ -6,7 +6,8 @@ import { useCallback, useEffect, useState } from "react";
 import { api } from "../api";
 import { useApp, useRun } from "../app-context";
 import type { StringKey } from "../i18n";
-import { aiConnectionText, aiRestartText, settingsLostText } from "../messages";
+import { aiConnectionText, aiRestartText, settingsLostNotice } from "../messages";
+import { NoticeBox } from "../notice";
 import type { AiPage as AiPageInfo, AssistantInfo, ConnectionState } from "../types";
 
 const STATE_KEYS: Record<ConnectionState, StringKey> = {
@@ -16,7 +17,7 @@ const STATE_KEYS: Record<ConnectionState, StringKey> = {
 };
 
 export function AiPage() {
-  const { t, lang, notify } = useApp();
+  const { t, lang, notify, warn } = useApp();
   const run = useRun();
   const [page, setPage] = useState<AiPageInfo | null>(null);
   /** The instructions as the quizmaster is changing them; null while they are as saved. */
@@ -40,7 +41,8 @@ export function AiPage() {
           () => true,
           () => false,
         );
-        notify(t(copied ? "aiConfigCopied" : "aiConfigNotCopied"));
+        if (copied) notify(t("aiConfigCopied"));
+        else warn(t("aiConfigNotCopied"));
       }),
     );
   /** Keeps `text` as the quizmaster's instructions; empty gives the default ones back. */
@@ -60,9 +62,7 @@ export function AiPage() {
       <h1>{t("backstageAi")}</h1>
       <p className="backstage-hint">{t("aiAssistantsHint")}</p>
       {page.settingsError && (
-        <p className="bad-text">
-          {t("aiSettingsLost")} {settingsLostText(t, page.settingsError)}
-        </p>
+        <NoticeBox notice={settingsLostNotice(t, t("aiSettingsLost"), page.settingsError)} />
       )}
 
       <h2>{t("aiFolderTitle")}</h2>

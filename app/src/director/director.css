@@ -172,7 +172,7 @@
   margin-top: 4px;
 }
 
-.director .recent-list button {
+.director .recent-list .recent-open {
   padding: 6px 12px;
 }
 
@@ -268,13 +268,14 @@
   }
 }
 
+/* The command panel is dark in both looks. */
 .command-problem {
-  margin: 6px 12px;
-  padding: 8px 10px;
-  border-left: 4px solid var(--bad);
-  background: rgba(255, 255, 255, 0.06);
+  margin: 0 12px;
   color: #f2f2f2;
-  white-space: pre-line;
+}
+
+.command-problem .notice {
+  --tone: #ff6b5e;
 }
 
 /* Workspace */
@@ -548,13 +549,6 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
-}
-
-.teams-lost {
-  margin: 8px;
-  padding: 8px 10px;
-  border-left: 4px solid var(--bad);
-  background: var(--well);
 }
 
 .split {
@@ -898,14 +892,72 @@
   pointer-events: none;
 }
 
+/* A message card: dark in both looks and over the editor alike, so it
+   reads the same wherever it lands; its edge and icon tell news from a
+   failure. */
 .toast {
-  max-width: 420px;
-  padding: 10px 14px;
-  color: #fff;
-  background: var(--bad);
+  --tone: #3fb950;
+
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) 24px;
+  align-items: start;
+  gap: 10px;
+  width: min(420px, calc(100vw - 32px));
+  padding: 10px 8px 10px 12px;
+  font-size: 13px;
+  line-height: 1.4;
+  color: #f2f2f2;
+  background: #2b2b2b;
+  border: 1px solid #444;
+  border-left: 4px solid var(--tone);
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+  pointer-events: auto;
+  user-select: text;
+  animation: toast-in 0.15s ease-out;
+}
+
+.toast.error {
+  --tone: #ff6b5e;
+}
+
+.toast.warn {
+  --tone: #e3a33b;
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+/* The system's words or the file, apart: lighter on the dark card. */
+.toast .notice-body small {
+  color: #b4b4b4;
+}
+
+.toast-close {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  color: #b4b4b4;
+  background: none;
+  border: none;
   border-radius: 4px;
-  white-space: pre-line;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
+  cursor: pointer;
+}
+
+.toast-close:hover {
+  color: #fff;
+  background: #3e3e3e;
+}
+
+.toast-close svg {
+  width: 11px;
+  height: 11px;
 }
 
 /* Receiver tab */
@@ -1005,11 +1057,6 @@
   padding: 6px 10px;
   background: var(--accent-soft);
   border-radius: 4px;
-}
-
-.learn-message {
-  margin: 4px 0;
-  font-weight: 600;
 }
 
 .live-logs {

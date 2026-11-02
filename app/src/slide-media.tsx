@@ -89,7 +89,7 @@ interface Drawn {
  */
 export function StageBackground(props: { layers: BackgroundLayer[]; mode?: ScreenMode; onHold?: boolean; playing?: boolean }) {
   const { layers, mode = "show", onHold = false, playing = false } = props;
-  const { t, notify } = useApp();
+  const { t, warn } = useApp();
   const toUrl = useMediaUrl();
   // Another show or draft tries every file again, so a file mended since loads.
   const root = useContext(MediaRootContext);
@@ -116,7 +116,7 @@ export function StageBackground(props: { layers: BackgroundLayer[]; mode?: Scree
       const once = `${root}\n${item.url}`;
       if (reported.has(once)) return;
       reported.add(once);
-      notify(t(item.level === "theme" ? "themeBackgroundFailed" : "backgroundFailed", { file: item.name }));
+      warn(t(item.level === "theme" ? "themeBackgroundFailed" : "backgroundFailed", { file: item.name }));
     };
     if (!item.video) return <img key={item.url} src={item.url} alt="" onError={fail} />;
     return (

@@ -28,7 +28,8 @@ import { NumberBox, Select, Switch } from "../editor/controls";
 import { calendarDay } from "../format";
 import { useLightsStatus } from "../hooks";
 import type { StringKey, Translate } from "../i18n";
-import { errorText, outputErrorText, settingsLostText, setupErrorText } from "../messages";
+import { errorNotice, outputErrorText, settingsLostNotice, setupErrorText, type Notice } from "../messages";
+import { NoticeBox } from "../notice";
 import { CUE_LABEL } from "../phase";
 import type { Channel, Cue, Fixture, LibraryFixture, LibraryInfo, LibraryMatches, LibraryMode, LightsDevices, LightsInfo, LightsSetup, Look, LookEffect, OutputChoice, Stage } from "../types";
 import {
@@ -160,11 +161,9 @@ export function LightsTab() {
     <div className="lights">
       <LiveControl setup={setup} change={change} />
       {info.settingsError && (
-        <p className="receiver-state error">
-          {t("lightsSettingsLost")} {settingsLostText(t, info.settingsError)}
-        </p>
+        <NoticeBox notice={settingsLostNotice(t, t("lightsSettingsLost"), info.settingsError)} />
       )}
-      {info.refused && <p className="receiver-state error">{t("lightsRefusedKept", { problem: setupErrorText(t, info.refused) })}</p>}
+      {info.refused && <NoticeBox notice={{ text: t("lightsRefusedKept", { problem: setupErrorText(t, info.refused) }) }} />}
       <OutputSection output={setup.output} onChange={(output) => change((s) => ({ ...s, output }))} />
       <FixturesSection setup={setup} change={change} />
       <LooksSection setup={setup} change={change} />
@@ -192,7 +191,7 @@ function LiveControl({ setup, change }: { setup: LightsSetup; change: Change }) 
         {output?.kind === "connected" && t("lightsConnected", { name: output.name })}
         {output?.kind === "lost" && t("lightsLost", { problem: outputErrorText(t, output.error) })}
       </p>
-      {status?.messages && <p className="receiver-state error">{t("lightsMessagesFailed", { problem: outputErrorText(t, status.messages) })}</p>}
+      {status?.messages && <NoticeBox notice={{ text: t("lightsMessagesFailed", { problem: outputErrorText(t, status.messages) }) }} />}
       <div className="row">
         <button className={status?.blackout ? "blackout on" : "blackout"} aria-pressed={status?.blackout ?? false} onClick={() => run(api.lightsBlackout(!status?.blackout))}>
           {status?.blackout ? t("lightsBlackoutOn") : t("lightsBlackout")}
@@ -530,7 +529,7 @@ function LibraryPicker({ disabled, onAdd }: { disabled: boolean; onAdd: (name: s
           </>
         )}
       </div>
-      {chosen && chosen.check.length > 0 && <p className="receiver-state error">{t("lightsLibraryCheck", { labels: chosen.check.join(", ") })}</p>}
+      {chosen && chosen.check.length > 0 && <NoticeBox tone="warn" notice={{ text: t("lightsLibraryCheck", { labels: chosen.check.join(", ") }) }} />}
       {chosen && !followsLooks(chosen.channels) && <p className="muted">{t("lightsLibraryNoLook")}</p>}
       {shown && !model && (
         <>
@@ -674,7 +673,7 @@ function LookRow(props: { look: Look; fixtures: Fixture[]; onChange: (edit: Part
           <NumberBox label={t("lightsStrobeValue")} value={look.strobe} min={0} max={255} onChange={(strobe) => onChange({ strobe })} />
         </label>
       </div>
-      {(look.effect === "strobe" || look.strobe > 0) && <p className="receiver-state error">{t("lightsFlashingWarning")}</p>}
+      {(look.effect === "strobe" || look.strobe > 0) && <NoticeBox tone="warn" notice={{ text: t("lightsFlashingWarning") }} />}
       {fixtures.length > 0 && (
         <div className="row">
           <span>{t("lightsLookFixtures")}</span>
@@ -841,14 +840,14 @@ function MessagesSection({ setup, change }: { setup: LightsSetup; change: Change
 function Preview({ fixtures }: { fixtures: Fixture[] }) {
   const { t } = useApp();
   const [slots, setSlots] = useState<number[] | null>(null);
-  const [failed, setFailed] = useState<string | null>(null);
+  const [failed, setFailed] = useState<Notice | null>(null);
   useEffect(() => {
     let live = true;
     const read = () =>
       api
         .lightsUniverse()
         .then((next) => live && setSlots(next))
-        .catch((e) => live && setFailed(errorText(t, e)));
+        .catch((e) => live && setFailed(errorNotice(t, e)));
     read();
     const timer = window.setInterval(read, PREVIEW_EVERY_MS);
     return () => {
@@ -859,7 +858,7 @@ function Preview({ fixtures }: { fixtures: Fixture[] }) {
   return (
     <fieldset>
       <legend>{t("lightsPreview")}</legend>
-      {failed && <p className="receiver-state error">{failed}</p>}
+      {failed && <NoticeBox notice={failed} />}
       <div className="lights-swatches">
         {slots &&
           fixtures.map((fixture) => {

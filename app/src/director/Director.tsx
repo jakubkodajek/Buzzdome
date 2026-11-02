@@ -6,7 +6,8 @@ import { useSlideSound, type SlideSound } from "../audio/slide-sound";
 import { clockSeconds } from "../format";
 import { EditorScreen } from "../editor/EditorScreen";
 import { ErrorBoundary, RenderFailed } from "../error-boundary";
-import { errorText, isAppError } from "../messages";
+import { errorNotice, errorText, isAppError } from "../messages";
+import { NoticeBox, NotSavedBanner } from "../notice";
 import {
   useBackendEvent,
   useClock,
@@ -59,6 +60,7 @@ import { UpdateBanner } from "./UpdateBanner";
 import { confirmAction } from "../confirm";
 import { useMediaPlayer, type MediaPlayer } from "./useMediaPlayer";
 import { restartOutcome } from "./restart";
+import { ToastStack, useToasts } from "./Toasts";
 import { VirtualBuzzers } from "./VirtualBuzzers";
 import "./director.css";
 
@@ -67,42 +69,23 @@ type Tab = "questions" | "teams" | "responses" | "results" | "buzzers" | "media"
 /** The show controls, the quiz editor, or the show controls for a test run of the edited quiz. */
 type Screen = "show" | "editor" | "testRun";
 
-/** How long a message stays on screen. */
-const TOAST_MS = 4000;
-/** The most messages on screen at once; an older one makes way. */
-const MAX_TOASTS = 3;
-
 /** The quizmaster's window. */
 export function Director() {
-  const [toasts, setToasts] = useState<{ id: number; message: string }[]>([]);
-  const lastId = useRef(0);
-  // Each message stays its own time, so a second one does not hide the first.
-  const notify = useCallback((message: string) => {
-    const id = ++lastId.current;
-    setToasts((shown) => [...shown.filter((toast) => toast.message !== message), { id, message }].slice(-MAX_TOASTS));
-    setTimeout(() => setToasts((shown) => shown.filter((toast) => toast.id !== id)), TOAST_MS);
-  }, []);
-
+  const { toasts, show, close } = useToasts();
   return (
-    <AppProvider notify={notify}>
+    <AppProvider show={show}>
       <ThemesProvider>
         <DirectorScreens />
       </ThemesProvider>
-      <div className="toasts">
-        {toasts.map((toast) => (
-          <div key={toast.id} className="toast" role="alert">
-            {toast.message}
-          </div>
-        ))}
-      </div>
+      <ToastStack toasts={toasts} close={close} />
     </AppProvider>
   );
 }
 
 function DirectorScreens() {
-  const { t, notify } = useApp();
+  const { t, warn } = useApp();
   const [screen, setScreen] = useState<Screen>("show");
-  useBackendEvent("host-problem", (message) => notify(t("hostProblem", { message })));
+  useBackendEvent("host-problem", (message) => warn(t("hostProblem", { message })));
   // Provided above the show controls: their hooks (the slide sound) resolve media too.
   const mediaRoot = useMediaRoot();
   if (screen === "editor") {
@@ -110,7 +93,7 @@ function DirectorScreens() {
       // An editor that fails to render keeps the way back to the show.
       <ErrorBoundary
         fallback={(message, retry) => (
-          <RenderFailed t={t} text={t("partFailed", { message })} retry={retry}>
+          <RenderFailed t={t} text={t("partFailed")} detail={message} retry={retry}>
             <button onClick={() => setScreen("show")}>{t("backToDirector")}</button>
           </RenderFailed>
         )}
@@ -173,14 +156,14 @@ function DirectorLayout({ testRun, onEditor }: { testRun: boolean; onEditor: () 
             </button>
           ))}
         </nav>
-        <NotSavedBanner />
+        <ShowNotSaved />
         <LearnBanner />
         {view && beforeSlides(view.phase) && launch.on && <LaunchCheck view={view} quiz={quiz} projector={projector} onTab={setTab} />}
         <UpdateBanner showRunning={view !== null} />
         <div className="tab-body" role="tabpanel">
           <ThemeContext value={theme}>
             {/* A tab that fails to render keeps the rest of the window, and its keys, working. */}
-            <ErrorBoundary key={tab} fallback={(message, retry) => <RenderFailed t={t} text={t("partFailed", { message })} retry={retry} />}>
+            <ErrorBoundary key={tab} fallback={(message, retry) => <RenderFailed t={t} text={t("partFailed")} detail={message} retry={retry} />}>
               <TabBody
                 tab={tab}
                 view={view}
@@ -202,14 +185,22 @@ function DirectorLayout({ testRun, onEditor }: { testRun: boolean; onEditor: () 
 }
 
 /** Shown while the show's journal refuses writes, when nothing in the show changes, or a write does not finish. */
-function NotSavedBanner() {
+function ShowNotSaved() {
   const { t } = useApp();
   const problem = useShowNotSaved();
   if (!problem) return null;
+  const { text, detail } = errorNotice(t, problem);
+  // A write that hangs keeps the presses for when it finishes, as its own text says.
+  return <NotSavedBanner notice={{ text: problem.code === "saveHangs" ? text : t("notSavedBanner", { problem: text }), detail }} />;
+}
+
+/** Why the last show cannot be resumed, in the command panel under its button. */
+function ResumeProblem({ problem }: { problem: unknown }) {
+  const { t } = useApp();
+  const { text, detail } = errorNotice(t, problem);
   return (
-    <div className="not-saved-banner" role="alert">
-      {/* A write that hangs keeps the presses for when it finishes, as its own text says. */}
-      {problem.code === "saveHangs" ? errorText(t, problem) : t("notSavedBanner", { problem: errorText(t, problem) })}
+    <div className="command-problem">
+      <NoticeBox notice={{ text: t("resumeProblem", { problem: text }), detail }} />
     </div>
   );
 }
@@ -264,6 +255,7 @@ function TabBody({ tab, view, quiz, projector, look, launch, player, sound, show
 /** The show's tabs before a show: the recent quiz files, each starting a show in a click (spec SF-1). */
 function StartPane({ showStart }: { showStart: ShowStart }) {
   const { t } = useApp();
+  const run = useRun();
   const recent = useRecentFiles();
   // Read again either way: a file that is gone leaves the list.
   const open = (path: string) => showStart.start(() => api.startShowFromRecent(path).finally(recent.reload));
@@ -279,7 +271,7 @@ function StartPane({ showStart }: { showStart: ShowStart }) {
       {recent.files.length > 0 && (
         <>
           <h2>{t("recentFiles")}</h2>
-          <RecentFileList files={recent.files} disabled={showStart.starting} onOpen={open} />
+          <RecentFileList files={recent.files} disabled={showStart.starting} onOpen={open} onForget={(path) => run(recent.forget(path))} />
         </>
       )}
     </div>
@@ -362,7 +354,7 @@ function CommandPanel(props: {
   onEditor: () => void;
 }) {
   const { view, projector, sound, showStart, testRun, onEditor } = props;
-  const { t, notify } = useApp();
+  const { t, notify, warn } = useApp();
   const dispatch = useDispatch();
   const run = useRun();
   const last = useLastSession();
@@ -373,7 +365,7 @@ function CommandPanel(props: {
   const resume = () =>
     showStart.start(() => {
       setResumeProblem(null);
-      return api.resumeLastSession().then((warnings) => warnings.length > 0 && notify(warnings.map((w) => errorText(t, w)).join(" ")), setResumeProblem);
+      return api.resumeLastSession().then((warnings) => warnings.length > 0 && warn(warnings.map((w) => errorText(t, w)).join(" ")), setResumeProblem);
     });
   const problem = resumeProblem ?? last.problem;
 
@@ -413,11 +405,7 @@ function CommandPanel(props: {
               onClick={resume}
             />
           )}
-          {problem !== null && (
-            <p className="command-problem" role="alert">
-              {t("resumeProblem", { problem: errorText(t, problem) })}
-            </p>
-          )}
+          {problem !== null && <ResumeProblem problem={problem} />}
         </>
       ) : (
         <>

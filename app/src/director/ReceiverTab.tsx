@@ -4,7 +4,8 @@ import { api } from "../api";
 import { useApp, useRun } from "../app-context";
 import { useBackendEvent, useLearnProgress } from "../hooks";
 import type { Translate } from "../i18n";
-import { awaitsAnswer, errorText, hex4, receiverStatusText, REMOTE_ACTIONS, remoteActionText, remoteKeyText, settingsLostText, vidPid } from "../messages";
+import { awaitsAnswer, errorNotice, hex4, receiverStatusText, REMOTE_ACTIONS, remoteActionText, remoteKeyText, settingsLostNotice, vidPid } from "../messages";
+import { NoticeBox, type TonedNotice } from "../notice";
 import type { Button, BuzzerSeen, DeviceInfo, Press, PressEvent, RawReport, ReceiverInfo, ReceiverStatus, RemoteAction, RemoteKey, RemoteKeyAction } from "../types";
 import { confirmAction } from "../confirm";
 import { BuzzerColours } from "./BuzzerColours";
@@ -41,7 +42,8 @@ export function ReceiverTab() {
   const [pressedKey, setPressedKey] = useState<RemoteKey | null>(null);
   const [buzzer, setBuzzer] = useState(1);
   const [button, setButton] = useState<Button>("a");
-  const [message, setMessage] = useState<string | null>(null);
+  // What the last learning came to: the button learned, or why not.
+  const [learnt, setLearnt] = useState<TonedNotice | null>(null);
   const [udev, setUdev] = useState("");
 
   const reload = useCallback(() => {
@@ -96,7 +98,7 @@ export function ReceiverTab() {
   const finishLearn = async () => {
     try {
       const learned = await api.receiverLearnFinish();
-      setMessage(t("learned", { buzzer: learned.buzzer, button: buttonLabel(learned.button) }));
+      setLearnt({ tone: "info", text: t("learned", { buzzer: learned.buzzer, button: buttonLabel(learned.button) }) });
       // Move on to the next button, then the next buzzer.
       const i = BUTTONS.indexOf(button);
       if (i < BUTTONS.length - 1) setButton(BUTTONS[i + 1]);
@@ -106,7 +108,7 @@ export function ReceiverTab() {
       }
       reload();
     } catch (e) {
-      setMessage(errorText(t, e));
+      setLearnt({ tone: "error", ...errorNotice(t, e) });
     }
   };
 
@@ -115,18 +117,14 @@ export function ReceiverTab() {
       <fieldset>
         <legend>{t("receiverStatus")}</legend>
         {info && !info.status ? (
-          <p className="receiver-state error">
-            {t("receiverUnavailable")} {info.initError}
-          </p>
+          <NoticeBox notice={{ text: t("receiverUnavailable"), detail: info.initError ?? undefined }} />
         ) : (
           <p className={`receiver-state ${stateClass(status)}`}>{status && receiverStatusText(t, status, info?.platform ?? "")}</p>
         )}
         {status?.kind === "connected" && info && !info.chosen && <p className="muted">{t("receiverFoundAutomatically")}</p>}
         {status?.kind === "connected" && !status.hasLights && <p className="muted">{t("receiverNoLights")}</p>}
         {info?.settingsError && (
-          <p className="receiver-state error">
-            {t("receiverSettingsLost")} {settingsLostText(t, info.settingsError)}
-          </p>
+          <NoticeBox notice={settingsLostNotice(t, t("receiverSettingsLost"), info.settingsError)} />
         )}
         {info?.chosen && (
           <button title={t("findReceiverAutomaticallyHint")} onClick={() => run(api.receiverSelect(null).then(reload))}>
@@ -279,7 +277,7 @@ export function ReceiverTab() {
               <button
                 disabled={!connected}
                 onClick={() => {
-                  setMessage(null);
+                  setLearnt(null);
                   run(api.receiverLearnStart(buzzer, button));
                 }}
               >
@@ -294,7 +292,7 @@ export function ReceiverTab() {
               </button>
             </div>
           )}
-          {message && <p className="learn-message">{message}</p>}
+          {learnt && <NoticeBox notice={learnt} tone={learnt.tone} />}
         </fieldset>
       )}
 

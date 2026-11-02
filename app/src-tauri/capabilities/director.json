@@ -57,6 +57,7 @@
     "allow-editor-new",
     "allow-editor-open",
     "allow-recent-files",
+    "allow-forget-recent-file",
     "allow-editor-update",
     "allow-editor-save",
     "allow-editor-add-media",
