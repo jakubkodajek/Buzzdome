@@ -1669,7 +1669,13 @@ never go into the game themselves:
 - The Director does a key's action exactly as the keyboard key for that
   action (`commandForAction` in `keyboard.ts`): only when the step takes
   it, one step per press through the window's step guard, and journaled
-  like any command. Previous slide goes where `Game::previous` says
+  like any command. The one difference: Next does not end a running
+  question (`commandForRemote`). On the remote the key that starts a
+  question also goes on after it, so a press twice by mistake would end
+  the question as it starts, and an ended question cannot be asked again.
+  While it runs, End question (the target key, by default) or the
+  Director ends it; once everyone answered or the time is up, Next
+  reveals the answer as before. Previous slide goes where `Game::previous` says
   (`GameView.previousSlide`, `GoTo`): the slide before, or from the final
   ranking the last slide, and only between questions. A question that
   ended earlier in the show, closed or won by a fastest finger judged
