@@ -99,7 +99,8 @@ UI conventions (keep one way of doing each thing):
   through `useDispatch()` (`app/src/app-context.tsx`); language and `t` come
   from `useApp()`, and so do the quizmaster's messages: `notify` (green),
   `caution` (amber) and `fail` (red), all in the one plain shape of
-  `app/src/notice.tsx` (tone dot, text, detail). Icons are the SVG icons
+  `app/src/notice.tsx` (tone dot, text, detail; the not-saved banner is a
+  red bar without the dot). Icons are the SVG icons
   in `app/src/icons.tsx`, never typed glyphs. Rust never sends the UI an English sentence: errors are
   `AppError` codes with parameters (`app/src-tauri/src/error.rs`), quiz
   problems `Problem` codes, worded in `app/src/messages.ts` from `i18n.ts`.

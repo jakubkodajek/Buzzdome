@@ -26,13 +26,13 @@ gets. `CLAUDE.md` lists the conventions; this is the checklist.
    What stays true for a while is a `NoticeBox` where it applies, and
    saving that does not work is the `NotSavedBanner`; both are in
    `notice.tsx`. Every message keeps that one plain shape: a small tone
-   dot, the text, the detail under it. No signs, tinted panels or coloured
-   edges (`docs/design.md` §1.1, How messages look). The projector shows
+   dot, the text, the detail under it (the not-saved banner is a red bar
+   without the dot). No signs, tinted panels or coloured edges (`docs/design.md` §1.1, How messages look). The projector shows
    no messages; it reports them to the Director.
 5. **Icons.** Use or add a line icon in `icons.tsx` (inline SVG drawn for
    this app, centred in its 24 px box), never a typed glyph such as `+`,
-   `×`, `…` or `›`. An icon-only button centres its icon as a grid with
-   no padding.
+   `×`, `…` or `›`. An icon-only button centres its icon as a grid
+   (`place-items: center`), with even padding or none.
 6. **Shared helpers.** Use the existing one before writing a new one:
    `answers.ts`, `format.ts`, `quiz.ts`, `keyboard.ts`, `messages.ts`,
    `store.ts`, `theme/color.ts`.
