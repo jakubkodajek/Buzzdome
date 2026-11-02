@@ -53,18 +53,18 @@ quiz-core (crates/quiz-core)    pure game state machine, rules, scoring, view
 
 | Path | Owns | Notes |
 | --- | --- | --- |
-| `crates/quiz-core` | quiz model (`model.rs`, `SCHEMA_VERSION`), game state machine (`game.rs`, `RULES_VERSION`), view, scoring, themes, styles, spreadsheet rows, the stage (the show's moment the lights follow, `stage.rs`), sound board | Pure. Writes `app/src/bindings` (ts-rs) when tested. |
+| `crates/quiz-core` | quiz model (`model.rs`, `SCHEMA_VERSION`), game state machine (`game.rs`, `RULES_VERSION`), view, scoring, results after the show (`results.rs`), the welcome screen (`welcome.rs`), themes, styles, spreadsheet rows, the stage (the show's moment the lights follow, `stage.rs`), media player and sound board | Pure. Writes `app/src/bindings` (ts-rs) when tested. |
 | `crates/quiz-file` | `.quiz` files: ZIP with `quiz.json` and `media/`, unpack cache, atomic save, spreadsheet import and CSV export | Format: `docs/quiz-format.md`. |
-| `crates/buzzers` | `BuzzerDriver` trait, USB-HID receiver thread, protocols (`enjoy303s.rs` over `cp2110.rs`, `learned.rs`), light colours (`colours.rs`), edge filter, fastest-finger timer order, show clock, fake receiver for E2E | Read `replica/hardware.md` and `docs/design.md` §2 first. |
+| `crates/buzzers` | `BuzzerDriver` trait, USB-HID receiver thread, protocols (`enjoy303s.rs` over `cp2110.rs`, `learned.rs`), the colour of each light state as the quizmaster picks it (`colours.rs`, `LightColours`), the quizmaster's remote keys (`RemoteKey`), edge filter, fastest-finger timer order (`timer_order.rs`), show clock, fake receiver for E2E | Read `replica/hardware.md` and `docs/design.md` §2 first. |
 | `crates/lights` | stage lights: setup checks, looks (`look.rs`), desk priority and fades, DMX frame formats, outputs, OSC and MIDI, the lights thread | A view of the show, never journaled (`docs/design.md` §7). |
 | `crates/quiz-ai` | quiz writing for AI assistants: JSON Schema, quiz folders, MCP server, the folder and instructions, connecting AI apps | `docs/ai-assistants.md`. |
 | `crates/show-sim` | random quizzes and shows for soak tests | Used by CI nightly. |
-| `app/src-tauri` | Tauri shell: commands, windows, show thread and event order (`show_thread.rs`, `pump.rs`), journal, editor draft, receiver setup, media player, themes, fonts, lights setup, log, crash drills | Module list in `CLAUDE.md`. |
-| `app/src` | React UI: `director/`, `host/` (slides), `editor/` (Studio), `theme/`, `audio/`, shared helpers | Conventions in `CLAUDE.md`. |
+| `app/src-tauri` | Tauri shell: commands, windows, show thread and event order (`show_thread.rs`, `pump.rs`), journal (`session.rs`), error codes (`error.rs`), editor draft, file pickers (`dialogs.rs`), recent quiz files, receiver setup and buzzer colours (`hardware.rs`), what the remote's keys do (`remote.rs`), media player, themes, fonts, lights setup, AI assistants (`ai.rs`), app updates (`updates.rs`), log, crash drills (`crash_drill.rs`) | Module list in `CLAUDE.md`. |
+| `app/src` | React UI: `director/`, `host/` (slides), `editor/` (Studio), `theme/`, `audio/`, messages (`notice.tsx`), icons (`icons.tsx`), shared helpers | Conventions in `CLAUDE.md`. |
 | `app/e2e` | E2E tests of the real app through WebDriver | Linux locally, Windows on CI only. |
 | `app/src-tauri/themes/<id>/` | built-in theme packages (`theme.json`, fonts, pictures) | |
 | `samples/demo-quiz.json` | the demo quiz the app ships | |
-| `docs/` | our own specification, design, quiz format, AI assistants, hardware test | The reference manual copy there is gitignored. |
+| `docs/` | our own specification, design, quiz format, AI assistants, hardware test, releasing | The reference manual copy there is gitignored. |
 | `replica/` | recon of the reference app (screens, flows, scoring), feature matrix, buzzer research | `replica/sources/` and `replica/screens/` are gitignored. |
 
 ## Threads
@@ -117,8 +117,10 @@ quiz-core (crates/quiz-core)    pure game state machine, rules, scoring, view
 | Add or change a backend command | `app/src-tauri/build.rs`, `src/lib.rs`, `capabilities/`, `app/src/api.ts` | `buzzdome-backend-command` |
 | Change a game rule or the quiz format | `crates/quiz-core/src/game.rs`, `model.rs`, `docs/quiz-format.md` | `buzzdome-game-rules` |
 | Change a screen, the editor or a text | `app/src`, `i18n.ts`, `editor/slides.ts`, `host/SlideScreen.tsx` | `buzzdome-ui-change` |
-| Buzzers, receiver or stage lights | `crates/buzzers`, `crates/lights`, `docs/hardware-test.md` | `buzzdome-hardware` |
+| A message to the quizmaster, an icon | `useApp()` (`notify`, `caution`, `fail`), `notice.tsx`, `icons.tsx` | `buzzdome-ui-change` |
+| Buzzers, receiver, remote, buzzer colours or stage lights | `crates/buzzers`, `crates/lights`, `app/src-tauri/src/hardware.rs`, `remote.rs`, `docs/hardware-test.md` | `buzzdome-hardware` |
 | AI assistants: MCP tools, connecting AI apps, instructions | `crates/quiz-ai`, `app/src-tauri/src/ai.rs`, `editor/AiPage.tsx`, `docs/ai-assistants.md` | none |
+| Release a version, in-app updates | `version` in `app/src-tauri/tauri.conf.json`, `.github/workflows/release.yml`, `app/src-tauri/src/updates.rs`, `docs/releasing.md` | none (only Jakub's go-ahead pushes a tag) |
 
 The skills are in `.claude/skills/<name>/SKILL.md`. Assistants that do not
 load skills can read them as plain checklists.
@@ -131,13 +133,19 @@ load skills can read them as plain checklists.
 - `npm test` in `app/`: vitest for UI logic (editor history, draft queue,
   slide changes, keys, colours, audio maths).
 - `npm run e2e` in `app/`: the real app driven through `tauri-driver`
-  (Linux; Windows on CI only, because it wipes the real app data).
+  (Linux; Windows only on GitHub-hosted CI machines, because there the
+  tests use and wipe the real app data, `app/e2e/harness.ts`).
 - UI preview in a browser with a mocked backend: `cd app && npm run dev`,
   then open `/preview.html?window=<director|host>&scene=<name>`
   (scenes in `app/src/dev/preview.tsx`).
-- CI: `.github/workflows/build.yml` (check, Windows tests, installers),
-  `e2e.yml`, `nightly.yml` (30 000 random shows, 10 000 crash drills, E2E
-  repeated).
+- CI: `.github/workflows/build.yml` on every push (check, Windows tests,
+  and E2E through `e2e.yml`: Linux always, Windows only on main and on
+  "Run workflow"; installers only on "Run workflow"), `nightly.yml`
+  (30 000 random shows, 10 000 crash drills, E2E repeated) and
+  `release.yml` (signed release from a `v*` tag, `docs/releasing.md`).
+  A PR that touches `app/e2e` or Windows-only code needs a manual "Run
+  workflow" of Build on its branch before merging, as its own runs skip
+  Windows E2E.
 
 ## Boundaries
 

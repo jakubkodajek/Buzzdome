@@ -7,7 +7,11 @@ description: Runs Buzzdome's local checks (Rust tests and lints, UI lint, type-c
 
 Run the checks from the repository root. CI (`.github/workflows/build.yml`,
 `e2e.yml`) runs the same ones; GitHub Actions minutes are limited, so a PR
-should be green locally first.
+should be green locally first. A PR's own runs skip the Windows E2E tests
+(they run on main and on "Run workflow"), so a PR that touches `app/e2e`
+or Windows-only code also needs a manual "Run workflow" of Build on its
+branch before merging. Push first: a push cancels that branch's running
+manual Build.
 
 ## Setup (once per machine or container)
 

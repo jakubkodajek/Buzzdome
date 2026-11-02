@@ -70,7 +70,8 @@ draws slides without a show.
   types is for logs and tests only.
 - **How messages look.** Every message has one plain shape
   (`app/src/notice.tsx`): a small dot in its tone, the text, and under it,
-  smaller and quieter, the detail. No signs, tinted panels or coloured
+  smaller and quieter, the detail (the not-saved banner is a red bar
+  without the dot). No signs, tinted panels or coloured
   edges (Jakub, 2026-11-02: minimal). A failed command
   or anything else that passes shows as a toast in a corner of the
   Director (`director/Toasts.tsx`): a dark card in both looks, which
