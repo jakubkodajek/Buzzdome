@@ -64,7 +64,7 @@ on `PATH` first (macOS dev machine).
 | receiver probe (no app) | `cargo run -p buzzers --example hid-monitor [-- VID:PID]` |
 | build installer | `cd app && npm run tauri build` (each OS builds its own installer) |
 
-Layout: `crates/quiz-core` (model, game state machine, scoring, view),
+Layout: `crates/quiz-core` (model, game state machine, scoring, view, results, welcome screen),
 `crates/show-sim` (random quizzes and shows for the soak tests),
 `crates/quiz-file` (`.quiz` files: ZIP with media, unpack cache, save;
 `sheet.rs` spreadsheet import and CSV export),
@@ -73,8 +73,9 @@ Layout: `crates/quiz-core` (model, game state machine, scoring, view),
 `assistants.rs` connecting AI apps),
 `crates/buzzers` (driver trait, USB-HID receiver thread, protocols, light colours, learn mode, `clock.rs` show clock, `fake_receiver.rs` the E2E tests' fake receiver),
 `crates/lights` (stage lights: DMX outputs, looks, the lights thread, OSC and MIDI show messages),
-`app/src-tauri` (Tauri shell, session journal, `show_thread.rs` and `pump.rs` the show thread and its
-event order, `app_windows.rs` the Director and projector windows, `remote.rs` what the quizmaster's remote keys do, `app_log.rs` the log file, `editor.rs` draft, `sheet_reader.rs` spreadsheet reader process, `hardware.rs` receiver setup,
+`app/src-tauri` (Tauri shell, `session.rs` session journal, `crash_drill.rs` crash drills, `show_thread.rs` and `pump.rs` the show thread and its
+event order, `app_windows.rs` the Director and projector windows, `remote.rs` what the quizmaster's remote keys do, `app_log.rs` the log file, `editor.rs` draft,
+`dialogs.rs` file pickers, `recent_files.rs` recent quiz files, `sheet_reader.rs` spreadsheet reader process, `hardware.rs` receiver setup,
 `teams.rs` prepared team names, `media_player.rs` media library, player, volume and sound board,
 `themes.rs` built-in themes, `fonts.rs` installed fonts, `app_file.rs` settings files,
 `app_icon.rs` the windows' icon colour, `stage_lights.rs` the lights setup and what the show tells them,
@@ -96,7 +97,10 @@ UI conventions (keep one way of doing each thing):
   `app/src/api.ts`; components use the hooks in `app/src/hooks.ts`.
 - Errors from backend calls go through `useRun()` / `useReport()`, game commands
   through `useDispatch()` (`app/src/app-context.tsx`); language and `t` come
-  from `useApp()`. Rust never sends the UI an English sentence: errors are
+  from `useApp()`, and so do the quizmaster's messages: `notify` (green),
+  `caution` (amber) and `fail` (red), all in the one plain shape of
+  `app/src/notice.tsx` (tone dot, text, detail). Icons are the SVG icons
+  in `app/src/icons.tsx`, never typed glyphs. Rust never sends the UI an English sentence: errors are
   `AppError` codes with parameters (`app/src-tauri/src/error.rs`), quiz
   problems `Problem` codes, worded in `app/src/messages.ts` from `i18n.ts`.
 - Which step commands apply now comes from `GameView.controls` (`Game::controls`);
