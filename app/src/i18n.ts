@@ -156,7 +156,7 @@ const strings = {
     receiverLooking: "Hledám přijímač. Připojte ho k USB, aplikace ho najde sama.",
     receiverFoundAutomatically: "Přijímač se našel sám.",
     remoteKeys: "Ovladač moderátora",
-    remoteKeysHint: "Co dělá která klávesa ovladače během show. Stisknutá klávesa se tu zvýrazní, takže poznáte, která je která; zkoušejte to, než show začne, protože v otevřené show klávesa zároveň udělá svou akci. Další běžící otázku neukončí, aby ji omylem dvojí stisk neukončil hned po spuštění; ukončí ji Ukončit otázku.",
+    remoteKeysHint: "Co dělá která klávesa ovladače během show. Stisknutá klávesa se tu zvýrazní, takže poznáte, která je která; zkoušejte to, než show začne, protože v otevřené show klávesa zároveň udělá svou akci. Akce Další běžící otázku neukončí, aby ji dvojí stisk omylem neukončil hned po spuštění; ukončí ji akce Ukončit otázku.",
     remoteKeyPressed: "Naposledy stisknuto: {key}",
     remoteKeysReset: "Výchozí nastavení",
     remoteInLog: "ovladač: {keys}",

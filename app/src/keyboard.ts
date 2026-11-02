@@ -214,7 +214,9 @@ export function commandForAction(action: ShowAction, view: GameView): Command | 
  * The command a key of the quizmaster's remote stands for: its action's (`commandForAction`), except that Next
  * does not end a running question. On the remote one key starts a question and goes on after it, so a press
  * twice by mistake would end the question as it starts. While it runs, End question (the target key, by
- * default) or the Director ends it; once everyone answered or the time is up, Next goes on again.
+ * default) or the Director ends it; once the question has closed (everyone answered, the time is up, or End
+ * question), Next goes on again. With "Let the clock run out" a question keeps running after everyone answered,
+ * so Next waits for the time to be up.
  */
 export function commandForRemote(action: ShowAction, view: GameView): Command | null {
   const running = view.phase.phase === "question" && view.phase.step === "running";
