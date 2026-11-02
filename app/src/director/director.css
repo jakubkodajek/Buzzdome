@@ -1646,14 +1646,22 @@
    ColorPicker.tsx) take the dark look's colours from the --popup-* tokens;
    the light switches need their own. */
 
-.director.dark .lights {
+.director.dark .lights,
+.director.dark .receiver {
   --chequer: repeating-conic-gradient(#3a3a3a 0 25%, #2a2a2a 0 50%);
 }
 
 .director.dark .lights .switch,
-.director.dark .lights .swatch {
+.director.dark .lights .swatch,
+.director.dark .receiver .swatch {
   border-color: var(--control-line);
   background: var(--field);
+}
+
+/* Dark tiles, such as dim white, stand out from the dark look. */
+.director.dark .lights .color-tile,
+.director.dark .receiver .color-tile {
+  border-color: var(--control-line);
 }
 
 .director.dark .lights .switch:not(.on) .switch-knob {
@@ -1803,6 +1811,31 @@
 
 .remote-keys {
   max-width: 480px;
+}
+
+.buzzer-colours table {
+  max-width: 640px;
+}
+
+.buzzer-colours th small {
+  display: block;
+  font-weight: normal;
+}
+
+.buzzer-colours .color-box {
+  width: auto;
+  justify-content: flex-start;
+}
+
+.buzzer-shade {
+  white-space: nowrap;
+}
+
+.buzzer-shade .swatch-color {
+  display: inline-block;
+  width: 22px;
+  height: 18px;
+  vertical-align: middle;
 }
 
 /* Row headers: they scroll with their row. */

@@ -36,6 +36,15 @@ describe("errorText", () => {
     );
   });
 
+  it("names the lights of buzzer colours that were refused", () => {
+    expect(errorText(cs, { code: "buzzerColours", clash: { kind: "readyLike", light: "answered" } })).toBe(
+      "„Může odpovídat“ by na bzučáku vypadala stejně jako „Odpověděl“, a podle ní aplikace pozná, že stisk platí. Vyberte jinou barvu.",
+    );
+    expect(errorText(en, { code: "buzzerColours", clash: { kind: "readyDark" } })).toBe(
+      "“Can answer” cannot be black or nearly black: the app tells by it that a press counts.",
+    );
+  });
+
   it("shows anything else as it is", () => {
     expect(errorText(cs, "command not found")).toBe("command not found");
     expect(errorText(cs, new Error("boom"))).toBe("boom");

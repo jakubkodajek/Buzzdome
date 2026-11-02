@@ -215,8 +215,9 @@ passes nothing until the app has set the receiver up.
    answers (or five or six) next to the buzzers. In a question with
    answers A to D they do nothing, as only A to D answer or buzz there.
 
-With the Enjoy 303S also. The colours: ready blue, locked out dim white,
-first white, right green, wrong red, no question dark. Spare buzzers
+With the Enjoy 303S also. The default colours: ready blue, answered and
+locked out dim white, first white, right green, wrong red, no question
+dark (step 25 changes them). Spare buzzers
 switched on light with the others and join by pressing, as a late team
 (in a fastest-finger question, from the next question): keep them
 switched off. Times below are read from the exported
@@ -362,6 +363,19 @@ press that leaves no line under "Raw data", and what came before it.
     time is up, and stops while the clock is paused; the music fades away
     while a buzz waits for its verdict. Note whether the effects and the
     music are too loud or too soft against the quizmaster's voice.
+25. **Colours of your own.** In the Receiver tab, under "Buzzer colours",
+    set "Answered" to black, "Buzzed first" to orange and "Out of the
+    question" to purple. Expected: in an everyone-answers question each
+    buzzer goes dark once it answered, and with "Players can change their
+    answer" on (step 23) a press on a dark buzzer still changes its
+    answer. In a fastest-finger question the winner turns orange and the
+    others purple, and a press on a purple buzzer is not counted. Change a
+    colour during an everyone-answers question: the buzzers take it at
+    once. Change one during a fastest-finger question: the buzzers keep
+    their colours until the question is over. For each
+    colour, note whether the buzzer shows what the Receiver tab shows
+    beside it (≈), dim colours most of all: only the defaults have been
+    seen on the hardware. Then click "Default colours".
 
 ## 7. Failures
 

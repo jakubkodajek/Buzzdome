@@ -53,7 +53,7 @@ export function ColorBox(props: { label: string; value: Color | null; none?: str
 }
 
 /** A colour over a chequerboard, so its transparency shows; struck through for none. */
-function Swatch({ color }: { color: Color | null }) {
+export function Swatch({ color }: { color: Color | null }) {
   const css = color && cssColor(color);
   return <span className={color ? "swatch-color" : "swatch-color none"} style={css ? { backgroundImage: `linear-gradient(${css}, ${css}), var(--chequer)` } : undefined} />;
 }
@@ -168,13 +168,18 @@ function ColorPicker(props: { value: Color | null; none?: string; onPick: (color
           </button>
         )}
       </div>
-      {custom && <CustomColor value={value ?? "#FFFFFF"} onChange={onChange} />}
+      {custom && <CustomColor value={value ?? "#FFFFFF"} onChange={onChange} onDone={rememberColor} />}
     </div>
   );
 }
 
-/** The saturation and brightness square, the hue and opacity bars, and the hex code. */
-function CustomColor({ value, onChange }: { value: Color; onChange: (color: Color) => void }) {
+/**
+ * The saturation and brightness square, the hue and opacity bars, and the
+ * hex code; `opaque` leaves out the opacity bar. A drag reports the colour
+ * as it moves (`onChange`) and once let go (`onDone`).
+ */
+export function CustomColor(props: { value: Color; opaque?: boolean; onChange: (color: Color) => void; onDone?: (color: Color) => void }) {
+  const { value, opaque = false, onChange, onDone = () => {} } = props;
   const { t } = useApp();
   const parsed = parseColor(value) ?? { r: 255, g: 255, b: 255, a: 1 };
   // Kept apart from the value, so a grey or black keeps the hue it was given.
@@ -207,23 +212,25 @@ function CustomColor({ value, onChange }: { value: Color; onChange: (color: Colo
         x={hsv.s}
         y={1 - hsv.v}
         onMove={(x, y) => set({ ...hsv, s: x, v: 1 - y }, alpha)}
-        onDone={() => rememberColor(value)}
+        onDone={() => onDone(value)}
       />
       <Area
         className="color-bar hue"
         label={t("hue")}
         x={hsv.h / 360}
         onMove={(x) => set({ ...hsv, h: Math.min(359.9, x * 360) }, alpha)}
-        onDone={() => rememberColor(value)}
+        onDone={() => onDone(value)}
       />
-      <Area
-        className="color-bar opacity"
-        label={t("opacity")}
-        style={{ backgroundImage: `linear-gradient(to right, transparent, ${solid}), var(--chequer)` }}
-        x={alpha}
-        onMove={(x) => set(hsv, Math.round(x * 100) / 100)}
-        onDone={() => rememberColor(value)}
-      />
+      {!opaque && (
+        <Area
+          className="color-bar opacity"
+          label={t("opacity")}
+          style={{ backgroundImage: `linear-gradient(to right, transparent, ${solid}), var(--chequer)` }}
+          x={alpha}
+          onMove={(x) => set(hsv, Math.round(x * 100) / 100)}
+          onDone={() => onDone(value)}
+        />
+      )}
       <div className="color-custom-row">
         <Swatch color={value} />
         <HexField label={t("customColor")} value={value} placeholder="" onChange={onChange} />

@@ -19,6 +19,7 @@ import type {
   GameView,
   IconColor,
   LearnProgress,
+  LightColours,
   LightsDevices,
   LibraryMatches,
   LibraryInfo,
@@ -39,6 +40,7 @@ import type {
   Quiz,
   RawReport,
   ReceiverInfo,
+  Rgb,
   ReceiverStatus,
   RemoteAction,
   RemoteKey,
@@ -147,6 +149,12 @@ export const api = {
   receiverSetRemoteAction: (key: RemoteKey, action: RemoteAction) => invoke<void>("receiver_set_remote_action", { key, action }),
   /** Gives every key of the remote its default action again. */
   receiverResetRemote: () => invoke<void>("receiver_reset_remote"),
+  /** Shows each light on the buzzers in its colour in `colours` from now on; refused when ready does not stand out. */
+  receiverSetColours: (colours: LightColours) => invoke<void>("receiver_set_colours", { colours }),
+  /** Gives every light on the buzzers its default colour again. */
+  receiverResetColours: () => invoke<void>("receiver_reset_colours"),
+  /** Keeps `colours` at hand for picking buzzer colours. */
+  receiverSetMyColours: (colours: Rgb[]) => invoke<void>("receiver_set_my_colours", { colours }),
   /** Writes the receiver's recent reports to a file the quizmaster picks; false when they cancel. */
   receiverExportLog: (picker: Picker) => invoke<boolean>("receiver_export_log", { picker }),
   receiverUdevRule: () => invoke<string>("receiver_udev_rule"),

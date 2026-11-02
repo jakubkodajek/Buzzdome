@@ -50,7 +50,8 @@ Status keys: `[x]` done, `[~]` in progress, `[ ]` not started.
 - [x] Receiver tab with live presses, raw reports and log export; `hid-monitor` CLI
 - [x] First test with the real receiver: Enjoy 303S on Windows 11, buzzers 1 and 2, 2026-10-25 (`docs/hardware-test.md`, `docs/design.md` section 6)
 - [~] Vendor protocol: Enjoy 303S (RGB, Jakub's set) from Enjoy's SDK in `crates/buzzers/src/enjoy303s.rs`: presses with each buzzer's timer, fastest finger in the timers' order; passed the first test, still to test with every buzzer in a room, high buzzer numbers and on macOS. Its SDK has no battery level, and no message in the test carried one. The RF215 (dome) driver was dropped, as Jakub's set is the 303S
-- [~] Buzzer lights: ready, locked out, first, correct, wrong, in colour on the 303S; seen in the first test, still to read from the back of a room
+- [~] Buzzer lights: ready, answered, locked out, first, correct, wrong, in colour on the 303S; seen in the first test, still to read from the back of a room
+- [~] Buzzer colours of the quizmaster's own for each light, black for off, from a colour picker, a row of the most used colours and colours kept at hand (spec BZ-22); colours other than the defaults still to see on the hardware
 - [x] Buzzer registration (any press registers in the lobby); the receiver is found by itself, and the Receiver tab lists each buzzer as it is pressed
 - [~] The quizmaster's remote: all 12 keys drive the Director, each key's action chosen in the Receiver tab (spec BZ-21); the three arrows' codes to check on the hardware
 - [ ] Fallback: vendor keystroke mode through the keyboard driver

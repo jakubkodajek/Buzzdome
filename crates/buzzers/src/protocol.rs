@@ -1,6 +1,7 @@
 //! Receiver protocols: raw HID reports in, presses and remote keys out;
 //! lights and the buzzer mode in, reports out.
 
+use crate::colours::LightColours;
 use crate::enjoy303s::Enjoy303s;
 use crate::hid::{DeviceInfo, Report};
 use crate::learned::{LearnedMapping, LearnedProtocol};
@@ -70,6 +71,13 @@ pub trait Protocol: Send {
     /// light these, so a protocol with lights must override it.
     fn reset_lights(&mut self, lights: &[(BuzzerId, Light)]) -> Vec<Report> {
         self.encode_lights(lights)
+    }
+
+    /// Reports that show each light in its colour in `colours` from now on,
+    /// on the buzzers whose light changes colour: for receivers whose
+    /// buzzers show the colours the quizmaster picks.
+    fn set_colours(&mut self, _colours: &LightColours) -> Vec<Report> {
+        Vec::new()
     }
 
     /// Reports that tell the receiver `mode`, which changed: for receivers

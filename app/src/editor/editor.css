@@ -1223,7 +1223,8 @@
 /* Colour, gradient and font properties (ColorPicker.tsx, GradientPicker.tsx, FontPicker.tsx) */
 
 .studio,
-.lights {
+.lights,
+.receiver {
   /* Behind a colour, so its transparency shows; tiles of 10 px. */
   --chequer: repeating-conic-gradient(#d6d6d6 0 25%, #fff 0 50%);
 }
@@ -1239,7 +1240,8 @@
 }
 
 .studio .swatch,
-.lights .swatch {
+.lights .swatch,
+.receiver .swatch {
   flex: none;
   width: 26px;
   height: 22px;
@@ -1267,14 +1269,16 @@
 }
 
 .studio .hex-field,
-.lights .hex-field {
+.lights .hex-field,
+.receiver .hex-field {
   width: 88px;
   font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
   text-transform: uppercase;
 }
 
 .studio .hex-field::placeholder,
-.lights .hex-field::placeholder {
+.lights .hex-field::placeholder,
+.receiver .hex-field::placeholder {
   text-transform: none;
 }
 
@@ -1343,7 +1347,8 @@
 }
 
 .studio .color-tile,
-.lights .color-tile {
+.lights .color-tile,
+.receiver .color-tile {
   aspect-ratio: 1;
   padding: 0;
   border: 1px solid rgba(0, 0, 0, 0.18);
@@ -1352,8 +1357,10 @@
 
 .studio .color-tile:hover,
 .lights .color-tile:hover,
+.receiver .color-tile:hover,
 .studio .color-tile.selected,
-.lights .color-tile.selected {
+.lights .color-tile.selected,
+.receiver .color-tile.selected {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
 }

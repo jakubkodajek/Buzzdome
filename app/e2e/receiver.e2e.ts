@@ -3,14 +3,14 @@
 // test serves over TCP (`BUZZDOME_FAKE_RECEIVER`). Everything above the USB
 // device is real: automatic detection, the receiver thread, the 303S
 // protocol, the show. The test plugs the receiver in and out, presses
-// buttons with the buzzers' own timers, presses the quizmaster's remote, and
-// reads the colours the app sends.
+// buttons with the buzzers' own timers, presses the quizmaster's remote, picks
+// the buzzers' colours, and reads the colours the app sends.
 
 import { createServer, type Server, type Socket } from "node:net";
 import { createInterface } from "node:readline";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import type { Button, GameView, ReceiverInfo, RemoteKey } from "../src/types";
-import { App, sleep, waitFor } from "./harness";
+import { App, sleep, t, waitFor } from "./harness";
 
 /** How long a key of the remote sent again counts as the same press (crates/buzzers/src/edge.rs). */
 const REMOTE_REPEAT_MS = 700;
@@ -18,8 +18,10 @@ const REMOTE_REPEAT_MS = 700;
 /** The fake receiver's other end: commands to it, and the colours the app wrote. */
 class FakeReceiver {
   private socket: Socket | null = null;
-  /** Each buzzer's colour as the app last wrote it (a `Light` name, or null). */
+  /** Each buzzer's colour as the app last wrote it (the `Light` whose default colour it is, or null). */
   readonly lights = new Map<number, string | null>();
+  /** Each buzzer's colour as the app last wrote it, as `#rrggbb`. */
+  readonly colours = new Map<number, string>();
   readonly errors: string[] = [];
   private constructor(private readonly server: Server) {
     server.on("connection", (socket) => {
@@ -30,8 +32,11 @@ class FakeReceiver {
       const lines = createInterface({ input: socket });
       lines.on("error", () => lines.close());
       lines.on("line", (line) => {
-        const message = JSON.parse(line) as { lights?: { buzzer: number; light: string | null }[]; error?: string };
-        for (const lit of message.lights ?? []) this.lights.set(lit.buzzer, lit.light);
+        const message = JSON.parse(line) as { lights?: { buzzer: number; light: string | null; colour: string }[]; error?: string };
+        for (const lit of message.lights ?? []) {
+          this.lights.set(lit.buzzer, lit.light);
+          this.colours.set(lit.buzzer, lit.colour);
+        }
         if (message.error) this.errors.push(message.error);
       });
     });
@@ -260,6 +265,46 @@ describe("a simulated buzzer receiver", () => {
     await sleep(REMOTE_REPEAT_MS + 100);
     await fake.remote("trophy");
     await app.waitView("the leaderboard hidden", (v) => !v.leaderboardVisible);
+    expect(fake.errors).toEqual([]);
+    await app.assertHealthy();
+  });
+
+  test("the quizmaster's colours reach the buzzers: black turns off a buzzer that answered", async () => {
+    await app.press("endShow");
+    await waitFor("the show ended", async () => (await app.view()) === null);
+    // Picked in the Receiver tab, for every quiz: a colour from the row is chosen at once.
+    await app.tab("tabReceiver");
+    const pick = async (light: "lightAnswered" | "lightReady", colour: "colorBlack") => {
+      await app.page.click(await app.$(`button[aria-label="${t(light)}: ${t("chooseColor")}"]`));
+      await app.page.click(await app.$(`.color-picker button[aria-label="${t(colour)}"]`));
+    };
+    await pick("lightAnswered", "colorBlack");
+    await waitFor("answered saved as black", async () => (await info()).colours.answered === "#000000");
+    // Ready cannot be dark: the app tells by it that a press counts. The colours stay as they were.
+    await pick("lightReady", "colorBlack");
+    await app.seeText(t("coloursReadyDark", { ready: t("lightReady") }));
+    expect((await info()).colours).toMatchObject({ ready: "#0000ff", answered: "#000000" });
+
+    await app.press("demoQuiz");
+    await app.waitView("the lobby", (v) => v.phase.phase === "lobby");
+    for (const buzzer of [3, 7]) await fake.press(buzzer, "big");
+    await app.waitView("two players from the receiver", (v) => [3, 7].every((buzzer) => player(v, buzzer)));
+    await app.step("next");
+    await app.waitView("the first slide", (v) => v.slideIndex === 0);
+    await app.step("next");
+    await app.step("next");
+    await app.waitView("the first question running", (v) => v.slideIndex === 1 && v.phase.phase === "question" && v.phase.step === "running");
+    await buzzersReady(3, 7);
+    await fake.press(3, "b");
+    await app.waitView("one answer", (v) => v.answeredCount === 1);
+    await waitFor("buzzer 3 off once it answered", async () => fake.lights.get(3) === "off" && fake.colours.get(3) === "#000000");
+    expect(fake.lights.get(7)).toBe("ready");
+
+    // Back to the defaults: the buzzers show them at once, mid-question.
+    await app.press("buzzerColoursReset");
+    await waitFor("buzzer 3 dim white again", async () => fake.lights.get(3) === "locked" && fake.colours.get(3) === "#2a2a2a");
+    expect((await info()).colours.answered).toBe("#2a2a2a");
+    expect(fake.lights.get(7)).toBe("ready");
     expect(fake.errors).toEqual([]);
     await app.assertHealthy();
   });

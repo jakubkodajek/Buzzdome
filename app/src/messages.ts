@@ -11,9 +11,11 @@ import type {
   AppError,
   AiConnected,
   Assistant,
+  ColourClash,
   ConnectChange,
   FileAction,
   ImportIssue,
+  Light,
   MediaIssue,
   MediaKind,
   OutputError,
@@ -40,7 +42,7 @@ function params(fields: object): Params {
 }
 
 /** Codes worded with their own parameters, see `errorText`. */
-type WordedApart = "file" | "noSuchSlide" | "noSuchPad" | "notInLibrary" | "learnConflict" | "quizInvalid" | "journalBroken" | "lightsRefused";
+type WordedApart = "file" | "noSuchSlide" | "noSuchPad" | "notInLibrary" | "learnConflict" | "buzzerColours" | "quizInvalid" | "journalBroken" | "lightsRefused";
 
 const ERROR_KEYS: Record<Exclude<AppError["code"], WordedApart>, StringKey> = {
   noShow: "noShow",
@@ -149,6 +151,8 @@ export function errorText(t: Translate, error: unknown): string {
       return t("errNotInLibrary", { reference: mediaFileName(error.reference) });
     case "learnConflict":
       return t("errLearnConflict", { buzzer: error.buzzer, button: buttonLabel(error.button) });
+    case "buzzerColours":
+      return colourClashText(t, error.clash);
     case "journalBroken":
       return t("errJournalBroken", { resume: t("resume") });
     case "lightsRefused":
@@ -344,6 +348,27 @@ export const REMOTE_ACTIONS = Object.keys(REMOTE_ACTION_KEYS) as RemoteAction[];
 
 export function remoteActionText(t: Translate, action: RemoteAction): string {
   return t(REMOTE_ACTION_KEYS[action]);
+}
+
+const LIGHT_KEYS: Record<Light, StringKey> = {
+  off: "lightOff",
+  ready: "lightReady",
+  answered: "lightAnswered",
+  locked: "lightLocked",
+  first: "lightFirst",
+  correct: "lightCorrect",
+  wrong: "lightWrong",
+};
+
+/** A light of the buzzers, as the Receiver tab names it. */
+export function lightText(t: Translate, light: Light): string {
+  return t(LIGHT_KEYS[light]);
+}
+
+/** Why buzzer colours were refused. */
+export function colourClashText(t: Translate, clash: ColourClash): string {
+  const ready = lightText(t, "ready");
+  return clash.kind === "readyDark" ? t("coloursReadyDark", { ready }) : t("coloursReadyLike", { ready, light: lightText(t, clash.light) });
 }
 
 /** Whether the receiver has yet to answer its set-up: shown as still being looked for, not as connected. */
