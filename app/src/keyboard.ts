@@ -211,15 +211,29 @@ export function commandForAction(action: ShowAction, view: GameView): Command | 
 }
 
 /**
+ * The command a key of the quizmaster's remote stands for: its action's (`commandForAction`), except that Next
+ * does not end a running question. On the remote one key starts a question and goes on after it, so a press
+ * twice by mistake would end the question as it starts. While it runs, End question (the target key, by
+ * default) or the Director ends it; once the question has closed (everyone answered, the time is up, or End
+ * question), Next goes on again. With "Let the clock run out" a question keeps running after everyone answered,
+ * so Next waits for the time to be up.
+ */
+export function commandForRemote(action: ShowAction, view: GameView): Command | null {
+  const running = view.phase.phase === "question" && view.phase.step === "running";
+  return action === "next" && running ? null : commandForAction(action, view);
+}
+
+/**
  * The quizmaster's remote, in the Director only: a key does its action as the action's key on the keyboard
- * does (`useShortcuts`), one step per press (`useDispatch`), and `projector` opens or closes the projector.
+ * does (`useShortcuts`), but for Next in a running question (`commandForRemote`), one step per press
+ * (`useDispatch`), and `projector` opens or closes the projector.
  */
 export function useRemote(view: GameView | null, onToggleProjector: () => void) {
   const dispatch = useDispatch();
   useBackendEvent("receiver-remote", ({ action }) => {
     if (action === "nothing") return;
     if (action === "projector") return onToggleProjector();
-    const command = view && commandForAction(action, view);
+    const command = view && commandForRemote(action, view);
     if (command) dispatch(command);
   });
 }

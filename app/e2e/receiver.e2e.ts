@@ -233,6 +233,11 @@ describe("a simulated buzzer receiver", () => {
     await fake.remote("forward");
     await app.waitView("the clock running", (v) => v.phase.phase === "question" && v.phase.step === "running");
     await buzzersReady(3, 7);
+    // Next on the remote does not end the running question, as a second press by mistake would.
+    await app.stepPause();
+    await fake.remote("centre");
+    await app.stepPause();
+    expect(await app.view()).toMatchObject({ phase: { phase: "question", step: "running" } });
 
     await fake.press(7, "big", 150);
     await app.waitView("buzzer 7 buzzed", (v) => v.phase.phase === "question" && v.phase.step === "buzzed" && v.buzzed === 7);

@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 import { NO_CONTROLS, previewView } from "./host/preview";
 import { translator } from "./i18n";
 import { KEY_BUZZERS, PROJECTOR_COMMANDS } from "./bindings/ProjectorCommands";
-import { commandForAction, commandForKey, isFieldTarget, isHeldButtonPress, isPlainKey, isProjectorCloseKey, isTypingTarget, keyCombo, keyHint, KEYS } from "./keyboard";
-import type { Controls, GameView } from "./types";
+import { commandForAction, commandForKey, commandForRemote, isFieldTarget, isHeldButtonPress, isPlainKey, isProjectorCloseKey, isTypingTarget, keyCombo, keyHint, KEYS } from "./keyboard";
+import type { Controls, GameView, Phase } from "./types";
 
 const slide = { id: "q1", type: "billboard", title: "Round 1", text: "", notes: "", picture: null, video: null, sound: null, background: null } as const;
 
@@ -77,6 +77,26 @@ describe("commandForAction", () => {
     expect(commandForAction("playVideo", viewWith({ playVideo: true }))).toEqual({ type: "playVideo" });
     expect(commandForAction("playVideo", viewWith({ next: true }))).toBeNull();
     expect(commandForAction("projector", viewWith({ next: true, goTo: true }))).toBeNull();
+  });
+});
+
+describe("commandForRemote", () => {
+  const all: Controls = { next: true, judge: true, pauseClock: true, resumeClock: false, closeQuestion: true, playVideo: true, goTo: true, restartQuestion: true, setJoker: true };
+  const clock = { limitMs: 30_000, elapsedBeforeMs: 0, runningSinceMs: 0, pressesFromMs: 0 };
+  const inStep = (step: "ready" | "running" | "closed"): GameView => {
+    const phase: Phase = step === "running" ? { phase: "question", step, clock } : { phase: "question", step };
+    return { ...viewWith(all), phase };
+  };
+
+  it("does not end a running question with Next, so a second press by mistake cannot end it as it starts", () => {
+    expect(commandForRemote("next", inStep("running"))).toBeNull();
+    expect(commandForRemote("closeQuestion", inStep("running"))).toEqual({ type: "closeQuestion" });
+    expect(commandForRemote("clock", inStep("running"))).toEqual({ type: "pauseClock" });
+  });
+
+  it("goes on with Next as the keyboard does once the question is not running", () => {
+    for (const step of ["ready", "closed"] as const) expect(commandForRemote("next", inStep(step))).toEqual({ type: "next" });
+    expect(commandForRemote("next", viewWith(all))).toEqual(commandForKey(" ", viewWith(all)));
   });
 });
 
