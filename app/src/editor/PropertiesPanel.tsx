@@ -11,14 +11,14 @@ import {
 import { ANSWER_LETTERS } from "../answers";
 import { useApp } from "../app-context";
 import type { StringKey, Translate } from "../i18n";
-import { CrossIcon, GamepadIcon, PaletteIcon, PictureIcon, QuestionIcon, SlideIcon, SoundIcon, StarIcon, TimerIcon, VideoIcon } from "../icons";
+import { BracesIcon, CrossIcon, GamepadIcon, MoreIcon, PaletteIcon, PictureIcon, QuestionIcon, SlideIcon, SoundIcon, StarIcon, TextIcon, TimerIcon, VideoIcon } from "../icons";
 import { readPreference, writePreference } from "../preferences";
 import { SLIDE_TYPE_LABEL, slideTitle } from "../quiz";
 import { DEFAULT_TIMER, TIMER_LABEL } from "../timers";
 import type { Category, Slide } from "../types";
 import { keyCombo } from "../keyboard";
 import type { Action } from "./actions";
-import { ContextMenu, MixedContext } from "./controls";
+import { ContextMenu, Fold, MixedContext } from "./controls";
 import { answerIndex, type ElementId } from "./elements";
 import { withRows, type Page, type PageId, type Section } from "./property-pages";
 import {
@@ -49,10 +49,10 @@ const PAGE_TITLE: Record<PageId, StringKey> = {
 const PAGE_ICON: Record<PageId, ReactNode> = {
   gameplay: <GamepadIcon />,
   scoring: <StarIcon />,
-  text: <span className="text-icon">T</span>,
+  text: <TextIcon />,
   media: <PictureIcon />,
   design: <PaletteIcon />,
-  advanced: <span className="text-icon">{"{}"}</span>,
+  advanced: <BracesIcon />,
 };
 
 // The panel's own settings, kept per computer.
@@ -254,7 +254,7 @@ export function PropertiesPanel({ header, pages, mixed, copied, onCopy, focusSea
             setMenu({ x: box.left, y: box.bottom, row: null });
           }}
         >
-          …
+          <MoreIcon />
         </button>
       </header>
       <div className="props-search">
@@ -310,7 +310,7 @@ export function PropertiesPanel({ header, pages, mixed, copied, onCopy, focusSea
           return (
             <section key={section.title} className="props-section">
               <button type="button" className="props-section-title" aria-expanded={open} onClick={() => toggle(setFolded, section.title)}>
-                <span className={open ? "fold open" : "fold"}>›</span>
+                <Fold open={open} />
                 {t(section.title)}
               </button>
               {open && section.rows.filter((row) => showsAll || !row.rare).map((row) => renderRow(row))}
@@ -382,7 +382,7 @@ function RowLabel({ row, needle, fold }: { row: PropertyRow; needle: string; fol
   if (fold) {
     return (
       <button type="button" className="props-label props-fold" aria-expanded={fold.open} onClick={fold.toggle}>
-        <span className={fold.open ? "fold open" : "fold"}>›</span>
+        <Fold open={fold.open} />
         {text}
       </button>
     );
@@ -426,7 +426,7 @@ export function selectionHeader(t: Translate, slide: Slide, count: number, eleme
     case "question":
     case "title":
     case "text":
-      return { icon: <span className="text-icon">T</span>, title: t(ELEMENT_TITLE[element]), subtitle: slideTitle(slide) };
+      return { icon: <TextIcon />, title: t(ELEMENT_TITLE[element]), subtitle: slideTitle(slide) };
     case "picture":
       return { icon: <PictureIcon />, title: t("mediaPicture"), subtitle: slide.picture ?? "" };
     case "video":

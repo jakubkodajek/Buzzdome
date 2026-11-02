@@ -20,6 +20,36 @@ export function CrossIcon({ className }: IconProps) {
   );
 }
 
+/** A minus sign: one fewer. */
+export function MinusIcon({ className }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.2" strokeLinecap="round">
+      <path d="M5 12h14" />
+    </svg>
+  );
+}
+
+/** Three dots: more choices. */
+export function MoreIcon({ className }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="currentColor">
+      <circle cx="5" cy="12" r="2" />
+      <circle cx="12" cy="12" r="2" />
+      <circle cx="19" cy="12" r="2" />
+    </svg>
+  );
+}
+
+/** An exclamation mark: something to look at. */
+export function ExclamationIcon({ className }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="currentColor">
+      <rect x="10.25" y="3.5" width="3.5" height="11" rx="1.75" />
+      <circle cx="12" cy="18.6" r="2" />
+    </svg>
+  );
+}
+
 export function WarningIcon({ className }: IconProps) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
@@ -119,7 +149,7 @@ export function ScreenIcon({ className }: IconProps) {
 export function FolderIcon({ className }: IconProps) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinejoin="round">
-      <path d="M3 6.5a1.5 1.5 0 0 1 1.5-1.5H9l2 2.5h8.5A1.5 1.5 0 0 1 21 9v9.5a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 18.5z" />
+      <path d="M3 6a1.5 1.5 0 0 1 1.5-1.5H9L11 7h8.5A1.5 1.5 0 0 1 21 8.5V18a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 18z" />
     </svg>
   );
 }
@@ -145,8 +175,8 @@ export function SoundIcon({ className }: IconProps) {
 export function EditIcon({ className }: IconProps) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M4 20h4L19 9l-4-4L4 16v4z" />
-      <path d="M13.5 6.5l4 4" />
+      <path d="M4.5 19.5h4l11-11-4-4-11 11v4z" />
+      <path d="M14 6l4 4" />
     </svg>
   );
 }
@@ -173,8 +203,8 @@ export function SaveIcon(props: IconProps) {
 export function UndoIcon(props: IconProps) {
   return (
     <LineIcon {...props}>
-      <path d="M9 14L4 9l5-5" />
-      <path d="M4 9h11a5 5 0 0 1 0 10h-3" />
+      <path d="M9 14.5l-5-5 5-5" />
+      <path d="M4 9.5h11a5 5 0 0 1 0 10h-3" />
     </LineIcon>
   );
 }
@@ -182,8 +212,8 @@ export function UndoIcon(props: IconProps) {
 export function RedoIcon(props: IconProps) {
   return (
     <LineIcon {...props}>
-      <path d="M15 14l5-5-5-5" />
-      <path d="M20 9H9a5 5 0 0 0 0 10h3" />
+      <path d="M15 14.5l5-5-5-5" />
+      <path d="M20 9.5H9a5 5 0 0 0 0 10h3" />
     </LineIcon>
   );
 }
@@ -191,8 +221,8 @@ export function RedoIcon(props: IconProps) {
 export function SlideAddIcon(props: IconProps) {
   return (
     <LineIcon {...props}>
-      <rect x="3" y="5" width="14" height="10" rx="1" />
-      <path d="M19 15v6M16 18h6" />
+      <rect x="2.5" y="4" width="14" height="10" rx="1" />
+      <path d="M18.5 14v6M15.5 17h6" />
     </LineIcon>
   );
 }
@@ -228,8 +258,8 @@ export function TrimIcon(props: IconProps) {
 export function LoudnessIcon(props: IconProps) {
   return (
     <LineIcon {...props}>
-      <path d="M4 20V14M9 20V9M14 20V12M19 20V5" />
-      <path d="M2 10h20" strokeDasharray="2 2" />
+      <path d="M4.5 19.5v-6M9.5 19.5v-11M14.5 19.5v-8M19.5 19.5v-15" />
+      <path d="M3 9.5h18" strokeDasharray="2 2" />
     </LineIcon>
   );
 }
@@ -391,7 +421,7 @@ export function CategoryIcon(props: IconProps) {
 export function ChevronLeftIcon(props: IconProps) {
   return (
     <LineIcon {...props}>
-      <path d="M14.5 5.5 8 12l6.5 6.5" />
+      <path d="M15.25 5.5 8.75 12l6.5 6.5" />
     </LineIcon>
   );
 }
@@ -399,7 +429,36 @@ export function ChevronLeftIcon(props: IconProps) {
 export function ChevronRightIcon(props: IconProps) {
   return (
     <LineIcon {...props}>
-      <path d="M9.5 5.5 16 12l-6.5 6.5" />
+      <path d="M8.75 5.5 15.25 12l-6.5 6.5" />
+    </LineIcon>
+  );
+}
+
+/** A letter T: text. */
+export function TextIcon({ className }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="currentColor">
+      <path d="M4.5 4h15v4.5h-1.6l-.6-2.6h-4.3V18l2.2.4V20H8.8v-1.6L11 18V5.9H6.7l-.6 2.6H4.5z" />
+    </svg>
+  );
+}
+
+/** Braces: the advanced settings. */
+export function BracesIcon(props: IconProps) {
+  return (
+    <LineIcon {...props}>
+      <path d="M9 4C7 4 6 5 6 7v2.5C6 10.5 5.2 12 4 12c1.2 0 2 1.5 2 2.5V17c0 2 1 3 3 3" />
+      <path d="M15 4c2 0 3 1 3 3v2.5c0 1 .8 2.5 2 2.5-1.2 0-2 1.5-2 2.5V17c0 2-1 3-3 3" />
+    </LineIcon>
+  );
+}
+
+/** Cross hairs: a point picked on the screen. */
+export function CrosshairIcon(props: IconProps) {
+  return (
+    <LineIcon {...props}>
+      <circle cx="12" cy="12" r="6.5" />
+      <path d="M12 2.5v5M12 16.5v5M2.5 12h5M16.5 12h5" />
     </LineIcon>
   );
 }

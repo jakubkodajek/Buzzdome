@@ -4,6 +4,8 @@
 :root {
   --good: #1a8f4a;
   --bad: #c42b1c;
+  /* Something to look at that does not stop the show. */
+  --warn: #b25e00;
   --answer-0: #0b86d9;
   --answer-1: #ea6a0c;
   --answer-2: #45a51c;
@@ -85,7 +87,7 @@ body,
 }
 
 .notice.warn {
-  --tone: #c27400;
+  --tone: var(--warn);
 }
 
 .notice.info {

@@ -1,3 +1,4 @@
+import { AddIcon, MinusIcon } from "../icons";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import { useApp, useRun } from "../app-context";
@@ -420,20 +421,22 @@ function FixtureRow(props: { fixture: Fixture; clash: boolean; onChange: (edit: 
           </span>
         ))}
         <button
+          className="icon-button"
           title={t("lightsAddChannel")}
           aria-label={t("lightsAddChannel")}
           disabled={fixture.channels.length >= MAX_FIXTURE_CHANNELS || last >= UNIVERSE_SIZE}
           onClick={() => onChange({ channels: [...fixture.channels, { kind: "unused" }] })}
         >
-          +
+          <AddIcon />
         </button>
         <button
+          className="icon-button"
           title={t("lightsRemoveChannel")}
           aria-label={t("lightsRemoveChannel")}
           disabled={fixture.channels.length <= 1}
           onClick={() => onChange({ channels: fixture.channels.slice(0, -1), labels: fixture.labels.slice(0, fixture.channels.length - 1) })}
         >
-          −
+          <MinusIcon />
         </button>
       </div>
     </div>
@@ -633,15 +636,22 @@ function LookRow(props: { look: Look; fixtures: Fixture[]; onChange: (edit: Part
           />
         ))}
         <button
+          className="icon-button"
           aria-label={t("lightsAddColor")}
           title={t("lightsAddColor")}
           disabled={look.colors.length >= MAX_LOOK_COLORS}
           onClick={() => onChange({ colors: [...look.colors, look.colors[look.colors.length - 1] ?? "#FFFFFF"] })}
         >
-          +
+          <AddIcon />
         </button>
-        <button aria-label={t("lightsRemoveColor")} title={t("lightsRemoveColor")} disabled={look.colors.length <= 1} onClick={() => onChange({ colors: look.colors.slice(0, -1) })}>
-          −
+        <button
+          className="icon-button"
+          aria-label={t("lightsRemoveColor")}
+          title={t("lightsRemoveColor")}
+          disabled={look.colors.length <= 1}
+          onClick={() => onChange({ colors: look.colors.slice(0, -1) })}
+        >
+          <MinusIcon />
         </button>
       </div>
       <div className="row">

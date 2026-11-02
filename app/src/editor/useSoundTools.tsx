@@ -32,7 +32,7 @@ export interface SoundTools {
  * open and draws it.
  */
 export function useSoundTools(open: OpenQuiz | null, edit: (edit: Edit, mergeKey?: string) => void): SoundTools {
-  const { t, notify, warn } = useApp();
+  const { t, notify, fail } = useApp();
   const [trimOf, setTrimOf] = useState<{ id: string; media: "sound" | "video" } | null>(null);
   const [loudness, setLoudness] = useState(false);
   const quiz = open?.history.present ?? null;
@@ -53,7 +53,7 @@ export function useSoundTools(open: OpenQuiz | null, edit: (edit: Edit, mergeKey
       },
       (error: unknown) => {
         console.error("normalize:", error);
-        warn(t(LOUDNESS_STATUS_KEYS[unreadSound(error)], { minutes: MAX_DECODED_MINUTES }));
+        fail(t(LOUDNESS_STATUS_KEYS[unreadSound(error)], { minutes: MAX_DECODED_MINUTES }));
       },
     );
   };

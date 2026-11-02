@@ -17,7 +17,7 @@ const STATE_KEYS: Record<ConnectionState, StringKey> = {
 };
 
 export function AiPage() {
-  const { t, lang, notify, warn } = useApp();
+  const { t, lang, notify, fail } = useApp();
   const run = useRun();
   const [page, setPage] = useState<AiPageInfo | null>(null);
   /** The instructions as the quizmaster is changing them; null while they are as saved. */
@@ -42,7 +42,7 @@ export function AiPage() {
           () => false,
         );
         if (copied) notify(t("aiConfigCopied"));
-        else warn(t("aiConfigNotCopied"));
+        else fail(t("aiConfigNotCopied"));
       }),
     );
   /** Keeps `text` as the quizmaster's instructions; empty gives the default ones back. */

@@ -161,6 +161,7 @@
   height: 26px;
   display: grid;
   place-items: center;
+  padding: 0;
   border-radius: 2px;
 }
 
@@ -658,22 +659,35 @@
   display: grid;
   place-items: center;
   border-radius: 50%;
-  font-weight: 700;
   color: #fff;
   background: #c42b1c;
 }
 
+.thumbnail-problem svg {
+  width: 12px;
+  height: 12px;
+}
+
+/* Signs are drawn (icons.tsx), not typed: a typed "+" sits where its
+   font puts it, which is off centre in some fonts. */
 .studio .add-slide {
   flex: none;
   align-self: center;
+  display: grid;
+  place-items: center;
   width: 30px;
   height: 30px;
   margin: 6px 0 14px 22px;
+  padding: 0;
   border-radius: 50%;
-  font-size: 22px;
-  line-height: 1;
   color: #fff;
   background: #3aa34a;
+}
+
+.studio .add-slide svg {
+  width: 18px;
+  height: 18px;
+  stroke-width: 2.6;
 }
 
 .studio .add-slide:hover {
@@ -809,12 +823,6 @@
   height: 22px;
 }
 
-.text-icon {
-  font-weight: 700;
-  font-family: Georgia, serif;
-  font-size: 15px;
-}
-
 .props-heading {
   min-width: 0;
 }
@@ -864,19 +872,21 @@
   border-radius: 4px;
 }
 
-.props-search .mini svg {
-  width: 10px;
-  height: 10px;
-}
-
 .studio .props-options {
   align-self: flex-start;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 22px;
   margin-left: auto;
-  padding: 0 7px;
+  padding: 0;
   border-radius: 4px;
-  font-size: 16px;
-  line-height: 22px;
   color: var(--muted);
+}
+
+.props-options svg {
+  width: 16px;
+  height: 16px;
 }
 
 .studio .props-options:hover {
@@ -893,21 +903,35 @@
   color: var(--muted);
 }
 
+/* Six tabs and the open one's name fit the panel's 300px; a longer name
+   is cut short rather than pushing the last tab out of the panel. */
 .props-pages {
   display: flex;
-  gap: 4px;
+  gap: 2px;
   padding: 0 12px 6px;
   border-bottom: 1px solid #e6e6e6;
 }
 
 .props-pages button {
+  flex: none;
   display: flex;
   align-items: center;
   gap: 6px;
   height: 30px;
-  padding: 0 9px;
+  padding: 0 6px;
   border-radius: 5px;
   color: #444;
+}
+
+.props-pages button.active {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.props-pages button span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .props-pages button:hover {
@@ -920,6 +944,7 @@
 }
 
 .props-pages svg {
+  flex: none;
   width: 18px;
   height: 18px;
 }
@@ -950,10 +975,18 @@
 }
 
 .fold {
-  display: inline-block;
+  display: inline-grid;
+  place-items: center;
   width: 10px;
+  height: 10px;
   color: var(--muted);
   transition: transform 0.12s;
+}
+
+.fold svg {
+  width: 10px;
+  height: 10px;
+  stroke-width: 3;
 }
 
 .fold.open {
@@ -1599,12 +1632,19 @@
 
 .studio .mini {
   flex: none;
+  display: inline-grid;
+  place-items: center;
   width: 24px;
   height: 22px;
   padding: 0;
   border: 1px solid #c8c8c8;
   border-radius: 3px;
   background: #fafafa;
+}
+
+.studio .mini svg {
+  width: 12px;
+  height: 12px;
 }
 
 .studio .mini:hover:not(:disabled) {
@@ -1647,9 +1687,16 @@
 }
 
 .studio .dialog-close {
+  display: grid;
+  place-items: center;
   width: 44px;
   height: 32px;
-  font-size: 18px;
+  padding: 0;
+}
+
+.dialog-close svg {
+  width: 12px;
+  height: 12px;
 }
 
 .studio .dialog-close:hover {
@@ -2385,6 +2432,8 @@
   height: 22px;
   display: grid;
   place-items: center;
+  /* The icon is wider than what the button's own padding leaves. */
+  padding: 0;
   margin-left: -14px;
   color: #fff;
 }

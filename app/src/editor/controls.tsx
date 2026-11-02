@@ -1,5 +1,6 @@
 // Small form controls of the editor, in the look of a desktop app.
 
+import { ChevronRightIcon, CrossIcon, MoreIcon } from "../icons";
 import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { ANSWER_LETTERS } from "../answers";
 import { useApp } from "../app-context";
@@ -233,11 +234,11 @@ export function MediaPicker({ file, onChoose, onRemove, label }: { file: string 
         {mixed ? t("mixedValues") : file ? mediaFileName(file) : t("noFile")}
       </span>
       <button type="button" className="mini" aria-label={`${label}: ${t("chooseFile")}`} title={t("chooseFile")} onClick={onChoose}>
-        …
+        <MoreIcon />
       </button>
       {(file || mixed) && (
         <button type="button" className="mini" aria-label={`${label}: ${t("remove")}`} title={t("remove")} onClick={onRemove}>
-          ×
+          <CrossIcon />
         </button>
       )}
     </span>
@@ -247,6 +248,7 @@ export function MediaPicker({ file, onChoose, onRemove, label }: { file: string 
 /** A dialog over the window; Escape or the close button cancels. */
 export function Dialog(props: { title: string; onClose: () => void; children: ReactNode; footer: ReactNode; className?: string }) {
   const { title, onClose, children, footer, className } = props;
+  const { t } = useApp();
   const box = useRef<HTMLDivElement>(null);
   useEffect(() => {
     // Focus the control marked for it (a footer button too), or else the first field, so typing starts at once.
@@ -270,8 +272,8 @@ export function Dialog(props: { title: string; onClose: () => void; children: Re
       >
         <header className="dialog-title">
           <span>{title}</span>
-          <button type="button" className="dialog-close" aria-label="×" onClick={onClose}>
-            ×
+          <button type="button" className="dialog-close" aria-label={t("closeDialog")} title={t("closeDialog")} onClick={onClose}>
+            <CrossIcon />
           </button>
         </header>
         <div className="dialog-body">{children}</div>
@@ -359,5 +361,14 @@ export function ContextMenu({ x, y, items, onClose }: { x: number; y: number; it
         ),
       )}
     </Popup>
+  );
+}
+
+/** The sign of a section that folds open: it points down while open. */
+export function Fold({ open }: { open: boolean }) {
+  return (
+    <span className={open ? "fold open" : "fold"} aria-hidden="true">
+      <ChevronRightIcon />
+    </span>
   );
 }

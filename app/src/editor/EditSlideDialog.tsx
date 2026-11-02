@@ -1,3 +1,4 @@
+import { CrossIcon } from "../icons";
 import { useEffect, useRef, useState } from "react";
 import { ANSWER_LETTERS } from "../answers";
 import { useApp } from "../app-context";
@@ -146,7 +147,7 @@ function QuestionFields({ question, onChange }: { question: QuestionSlide; onCha
                 disabled={!used || removeAnswer(question, i) === question}
                 onClick={() => onChange(removeAnswer(question, i))}
               >
-                ×
+                <CrossIcon />
               </button>
             </div>
           );

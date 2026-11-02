@@ -1,3 +1,4 @@
+import { AddIcon, ExclamationIcon } from "../icons";
 import { useEffect, useRef, useState, type MouseEvent } from "react";
 import { useApp } from "../app-context";
 import { SlideThumbnail } from "../host/SlideThumbnail";
@@ -105,7 +106,7 @@ export function Thumbnails({ quiz, contexts, current, selected, problems, onSele
               />
               {problems.has(slide.id) && (
                 <span className="thumbnail-problem" title={t("slideHasProblems")}>
-                  !
+                  <ExclamationIcon />
                 </span>
               )}
             </div>
@@ -113,7 +114,7 @@ export function Thumbnails({ quiz, contexts, current, selected, problems, onSele
         ))}
       </ol>
       <button type="button" className="add-slide" title={t("newSlide")} aria-label={t("newSlide")} onClick={onAdd}>
-        +
+        <AddIcon />
       </button>
     </nav>
   );

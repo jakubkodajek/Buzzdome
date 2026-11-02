@@ -89,7 +89,7 @@ interface Drawn {
  */
 export function StageBackground(props: { layers: BackgroundLayer[]; mode?: ScreenMode; onHold?: boolean; playing?: boolean }) {
   const { layers, mode = "show", onHold = false, playing = false } = props;
-  const { t, warn } = useApp();
+  const { t, fail } = useApp();
   const toUrl = useMediaUrl();
   // Another show or draft tries every file again, so a file mended since loads.
   const root = useContext(MediaRootContext);
@@ -111,14 +111,14 @@ export function StageBackground(props: { layers: BackgroundLayer[]; mode?: Scree
   const fill = layers.find((layer) => layer.level === "fill");
   const show = mode === "show";
   const draw = (item: Drawn, playsHere: boolean) => {
-    const fail = () => {
+    const failed = () => {
       setFailed((current) => ({ root, urls: new Set(current.root === root ? current.urls : []).add(item.url) }));
       const once = `${root}\n${item.url}`;
       if (reported.has(once)) return;
       reported.add(once);
-      warn(t(item.level === "theme" ? "themeBackgroundFailed" : "backgroundFailed", { file: item.name }));
+      fail(t(item.level === "theme" ? "themeBackgroundFailed" : "backgroundFailed", { file: item.name }));
     };
-    if (!item.video) return <img key={item.url} src={item.url} alt="" onError={fail} />;
+    if (!item.video) return <img key={item.url} src={item.url} alt="" onError={failed} />;
     return (
       <BackgroundVideo
         key={item.url}
@@ -127,7 +127,7 @@ export function StageBackground(props: { layers: BackgroundLayer[]; mode?: Scree
         loop={!show || item.options.repeat}
         muted={!show || item.options.muted}
         preload={show ? "auto" : "metadata"}
-        onError={fail}
+        onError={failed}
       />
     );
   };

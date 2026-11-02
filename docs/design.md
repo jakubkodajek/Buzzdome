@@ -71,9 +71,13 @@ draws slides without a show.
 - **How messages look.** Every message has one shape (`app/src/notice.tsx`):
   a sign, the text, and under it, smaller, the detail. A failed command
   or anything else that passes shows as a toast in a corner of the
-  Director (`director/Toasts.tsx`): a dark card in both looks, red for a
-  failure and green for news, which stays longer the longer it is
-  (7–15 s for a failure, 4 s for news) and closes with its cross. What
+  Director (`director/Toasts.tsx`): a dark card in both looks, which
+  closes with its cross. Its colour says what it tells: green for news
+  (`notify`); amber for done, but look at this, or not done though
+  nothing broke (`caution`: a restart asked too late, an export without
+  some of its media, a file too large to drop); red for a failure
+  (`fail`, also what `useReport` shows). News stays 4 s; amber and red
+  stay longer the longer they are (7–15 s). What
   stays true for a while shows where it applies, as a `NoticeBox` (a
   settings file that did not read, a learning that failed, a lights
   check), and saving that does not work as a red bar over the whole

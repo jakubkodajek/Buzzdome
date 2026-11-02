@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import { api } from "./api";
 import { translator, useLang, type Lang, type Translate } from "./i18n";
 import { errorNotice, type Notice } from "./messages";
-import type { TonedNotice } from "./notice";
+import type { Tone, TonedNotice } from "./notice";
 import { createStepGuard, type StepGuard } from "./step-guard";
 import type { Command, GameView } from "./types";
 
@@ -10,10 +10,12 @@ interface AppContextValue {
   lang: Lang;
   setLang: (lang: Lang) => void;
   t: Translate;
-  /** Tells the quizmaster what was done. */
+  /** Tells the quizmaster what was done (green). */
   notify: (text: string) => void;
-  /** Tells the quizmaster what failed. */
-  warn: (notice: string | Notice) => void;
+  /** Tells the quizmaster what to look at: done only in part, or not done though nothing broke (amber). */
+  caution: (notice: string | Notice) => void;
+  /** Tells the quizmaster what failed (red). */
+  fail: (notice: string | Notice) => void;
   /** Lets one show step through per press or click, for the whole window (`useDispatch`). */
   steps: StepGuard;
 }
@@ -25,9 +27,8 @@ export function AppProvider({ show, children }: { show: (notice: TonedNotice) =>
   const [lang, setLang] = useLang();
   const [steps] = useState(createStepGuard);
   const value = useMemo(() => {
-    const notify = (text: string) => show({ tone: "info", text });
-    const warn = (notice: string | Notice) => show({ tone: "error", ...(typeof notice === "string" ? { text: notice } : notice) });
-    return { lang, setLang, t: translator(lang), notify, warn, steps };
+    const toned = (tone: Tone) => (notice: string | Notice) => show({ tone, ...(typeof notice === "string" ? { text: notice } : notice) });
+    return { lang, setLang, t: translator(lang), notify: toned("info"), caution: toned("warn"), fail: toned("error"), steps };
   }, [lang, setLang, show, steps]);
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 }
@@ -40,8 +41,8 @@ export function useApp(): AppContextValue {
 
 /** Shows a failed backend call to the quizmaster, in their language. */
 export function useReport(): (error: unknown) => void {
-  const { t, warn } = useApp();
-  return useCallback((error) => warn(errorNotice(t, error)), [t, warn]);
+  const { t, fail } = useApp();
+  return useCallback((error) => fail(errorNotice(t, error)), [t, fail]);
 }
 
 /** Runs a backend call; a failure is reported to the quizmaster, not thrown. */

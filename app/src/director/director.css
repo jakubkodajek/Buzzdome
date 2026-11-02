@@ -35,8 +35,6 @@
   --popup-line: #b9b9b9;
   --menu-hover: #dcebfb;
   --menu-hover-line: #9cc3ec;
-  /* Something to look at that does not stop the show (the check before it). */
-  --warn: #b25e00;
 
   display: grid;
   grid-template-columns: 210px minmax(0, 1fr);
@@ -117,6 +115,20 @@
 .director button:disabled {
   color: var(--disabled);
   cursor: default;
+}
+
+/* A button that shows only a sign, centred whatever the font. */
+.director .icon-button {
+  display: inline-grid;
+  place-items: center;
+  min-width: 30px;
+  padding: 0 8px;
+  align-self: stretch;
+}
+
+.director .icon-button svg {
+  width: 12px;
+  height: 12px;
 }
 
 .director select,

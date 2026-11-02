@@ -60,7 +60,7 @@ export interface QuizEditor {
  * a test show has started.
  */
 export function useQuizEditor(onTestRun: () => void): QuizEditor {
-  const { t, lang, warn } = useApp();
+  const { t, lang, caution } = useApp();
   const [state, dispatch] = useReducer(editorReducer, LOADING);
   const status = useSyncExternalStore(drafts.subscribe, drafts.getStatus);
   const report = useLatest(useReport());
@@ -107,7 +107,7 @@ export function useQuizEditor(onTestRun: () => void): QuizEditor {
     drafts.exclusive(operation, task).then(
       (result) => {
         if (result !== BUSY) return result;
-        warn(t("editorBusy"));
+        caution(t("editorBusy"));
         return false as const;
       },
       (error: unknown) => {

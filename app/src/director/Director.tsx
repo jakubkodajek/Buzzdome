@@ -83,9 +83,9 @@ export function Director() {
 }
 
 function DirectorScreens() {
-  const { t, warn } = useApp();
+  const { t, fail } = useApp();
   const [screen, setScreen] = useState<Screen>("show");
-  useBackendEvent("host-problem", (message) => warn(t("hostProblem", { message })));
+  useBackendEvent("host-problem", (message) => fail(t("hostProblem", { message })));
   // Provided above the show controls: their hooks (the slide sound) resolve media too.
   const mediaRoot = useMediaRoot();
   if (screen === "editor") {
@@ -354,7 +354,7 @@ function CommandPanel(props: {
   onEditor: () => void;
 }) {
   const { view, projector, sound, showStart, testRun, onEditor } = props;
-  const { t, notify, warn } = useApp();
+  const { t, notify, caution } = useApp();
   const dispatch = useDispatch();
   const run = useRun();
   const last = useLastSession();
@@ -365,7 +365,7 @@ function CommandPanel(props: {
   const resume = () =>
     showStart.start(() => {
       setResumeProblem(null);
-      return api.resumeLastSession().then((warnings) => warnings.length > 0 && warn(warnings.map((w) => errorText(t, w)).join(" ")), setResumeProblem);
+      return api.resumeLastSession().then((warnings) => warnings.length > 0 && caution(warnings.map((w) => errorText(t, w)).join(" ")), setResumeProblem);
     });
   const problem = resumeProblem ?? last.problem;
 
@@ -384,7 +384,7 @@ function CommandPanel(props: {
     const answered = (yes: boolean) => {
       const outcome = restartOutcome(yes, asked, latestView.current);
       if (outcome && "command" in outcome) dispatch(outcome.command);
-      else if (outcome) notify(t(outcome.notice));
+      else if (outcome) (outcome.tone === "warn" ? caution : notify)(t(outcome.notice));
     };
     run(confirmAction(t, t("restartQuestionConfirm")).then(answered));
   };

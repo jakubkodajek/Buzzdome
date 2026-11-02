@@ -34,18 +34,19 @@ describe("restartOutcome", () => {
     const revealed = viewIn({ phase: "question", step: "revealed", winner: null }, { next: true });
     // Another dialog's Yes restarted it already.
     const ready = viewIn({ phase: "question", step: "ready" }, { next: true });
-    expect(restartOutcome(true, asked, closed)).toEqual({ notice: "restartTooLate" });
-    expect(restartOutcome(true, asked, revealed)).toEqual({ notice: "restartTooLate" });
-    expect(restartOutcome(true, asked, ready)).toEqual({ notice: "restartAlreadyDone" });
-    expect(restartOutcome(true, asked, viewIn({ phase: "billboard" }, { next: true }))).toEqual({ notice: "restartMovedOn" });
-    expect(restartOutcome(true, asked, null)).toEqual({ notice: "restartMovedOn" });
+    expect(restartOutcome(true, asked, closed)).toEqual({ notice: "restartTooLate", tone: "warn" });
+    expect(restartOutcome(true, asked, revealed)).toEqual({ notice: "restartTooLate", tone: "warn" });
+    expect(restartOutcome(true, asked, ready)).toEqual({ notice: "restartAlreadyDone", tone: "info" });
+    expect(restartOutcome(true, asked, viewIn({ phase: "billboard" }, { next: true }))).toEqual({ notice: "restartMovedOn", tone: "warn" });
+    expect(restartOutcome(true, asked, null)).toEqual({ notice: "restartMovedOn", tone: "warn" });
   });
 
   it("never touches another question the show moved on to meanwhile", () => {
     const next = (phase: Phase, controls: Partial<Controls>) => ({ ...viewIn(phase, controls), slideIndex: 1 });
-    expect(restartOutcome(true, asked, next({ phase: "question", step: "ready" }, { next: true }))).toEqual({ notice: "restartMovedOn" });
+    expect(restartOutcome(true, asked, next({ phase: "question", step: "ready" }, { next: true }))).toEqual({ notice: "restartMovedOn", tone: "warn" });
     expect(restartOutcome(true, asked, next({ phase: "question", step: "running", clock }, { resumeClock: true, restartQuestion: true }))).toEqual({
       notice: "restartMovedOn",
+      tone: "warn",
     });
     expect(restartOutcome(false, asked, next({ phase: "question", step: "running", clock }, { resumeClock: true, restartQuestion: true }))).toBeNull();
   });
