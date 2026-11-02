@@ -71,7 +71,7 @@ describe("launchCheck", () => {
   it("warns that only the keyboard plays without a ready receiver, and calls a receiver error a problem", () => {
     const looking = item("receiver", { receiver: receiver({ kind: "looking" }) });
     expect(looking).toMatchObject({ state: "warn", fixes: ["receiverTab"] });
-    expect(looking?.text).toContain("Until then only the keyboard and the on-screen buzzers play.");
+    expect(looking?.text).toContain("Until then only the keyboard and the on-screen buzzers work.");
     const notAnswering = receiver({ kind: "connected", device, protocol: { type: "enjoy303s", answered: false }, hasLights: true, learnable: false });
     expect(item("receiver", { receiver: notAnswering })?.state).toBe("warn");
     expect(item("receiver", { receiver: receiver(null) })).toMatchObject({ state: "warn", text: t("receiverUnavailable") });

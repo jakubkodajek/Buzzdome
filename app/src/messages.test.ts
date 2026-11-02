@@ -60,7 +60,7 @@ describe("errorText", () => {
       "„Může odpovídat“ by na bzučáku vypadala stejně jako „Odpověděl“, a podle ní aplikace pozná, že stisk platí. Vyberte jinou barvu.",
     );
     expect(errorText(en, { code: "buzzerColours", clash: { kind: "readyDark" } })).toBe(
-      "“Can answer” cannot be black or nearly black: the app tells by it that a press counts.",
+      "“Can answer” cannot be black or nearly black: the app uses it to show that a press counts.",
     );
   });
 
@@ -85,7 +85,7 @@ describe("thrownText", () => {
 
 describe("problemText", () => {
   it("fills every occurrence of a parameter", () => {
-    expect(problemText(en, { code: "pointsOutOfRange", max: 5 })).toBe("Points must be between -5 and 5.");
+    expect(problemText(en, { code: "pointsOutOfRange", max: 5 })).toBe("Points must be between −5 and 5.");
   });
 
   it("says which media types a file may be", () => {
@@ -166,6 +166,6 @@ describe("aiConnectionText", () => {
   it("names the app that is missing and the settings file it left as it was", () => {
     expect(errorText(en, { code: "aiAppMissing", app: "Claude Desktop" })).toContain("Claude Desktop is not installed");
     expect(errorText(en, { code: "aiConfigUnreadable", path: "C:\\c.json" })).toContain("(C:\\c.json) cannot be read, so they were left as they are.");
-    expect(errorText(cs, { code: "aiFolderNotAllowed", path: "C:\\Users\\Eva" })).toContain("Složku C:\\Users\\Eva asistent dostat nemůže");
+    expect(errorText(cs, { code: "aiFolderNotAllowed", path: "C:\\Users\\Eva" })).toContain("Ke složce C:\\Users\\Eva asistent přístup dostat nemůže");
   });
 });
