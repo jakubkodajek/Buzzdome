@@ -18,7 +18,27 @@ gets. `CLAUDE.md` lists the conventions; this is the checklist.
 3. **Texts.** Every visible text is a key in `app/src/i18n.ts` with Czech
    (default) and English wording, read with `t` from `useApp()`. Backend
    codes are worded in `app/src/messages.ts`. No trademarked names
-   (`CLAUDE.md`, Rules).
+   (`CLAUDE.md`, Rules). Czech addresses the quizmaster formally
+   (vykání) and uses „…“, … and –; English is British (colour) and
+   writes 50% and ID. One thing keeps one word:
+
+   | English | Czech |
+   | --- | --- |
+   | Director | režie |
+   | quizmaster | moderátor |
+   | buzzer, big button | bzučák, velké tlačítko |
+   | receiver, remote | přijímač, ovladač |
+   | slide, projector | snímek, projektor |
+   | everyone-answers question | otázka, na kterou odpovídají všichni |
+   | fastest-finger question | otázka s rychlou odpovědí |
+   | theme | motiv (téma is a quiz's topic) |
+   | clock | časomíra |
+   | ranking, final ranking | pořadí, konečné pořadí |
+   | unsaved draft | rozpracovaný kvíz |
+   | automatically | automaticky (not sám or samo) |
+
+   The strings have no plural forms, so a Czech count follows a colon
+   ("počet kroků: {count}") or "a ještě {n}".
 4. **Messages.** Tell the quizmaster something with `notify` (green: done),
    `caution` (amber: done only in part, or not done though nothing broke)
    or `fail` (red: failed; also what `useReport()` shows), all from
