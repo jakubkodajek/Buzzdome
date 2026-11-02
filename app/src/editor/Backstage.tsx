@@ -34,6 +34,8 @@ interface BackstageProps {
   recentFiles: string[];
   /** Opens `recent`, a file in `recentFiles`, or one the quizmaster picks. */
   onOpenFile: (recent?: string) => void;
+  /** Takes a file off `recentFiles`. */
+  onForgetFile: (recent: string) => void;
   onTitle: (title: string) => void;
   onSettings: (settings: QuizSettings) => void;
   onSounds: (sounds: QuizSounds) => void;
@@ -341,7 +343,7 @@ function ExportPage({ actions }: BackstageProps) {
   );
 }
 
-function OpenPage({ recentFiles, onOpenFile }: BackstageProps) {
+function OpenPage({ recentFiles, onOpenFile, onForgetFile }: BackstageProps) {
   const { t } = useApp();
   return (
     <>
@@ -353,7 +355,7 @@ function OpenPage({ recentFiles, onOpenFile }: BackstageProps) {
       {recentFiles.length === 0 ? (
         <p className="muted">{t("noRecentFiles")}</p>
       ) : (
-        <RecentFileList files={recentFiles} onOpen={onOpenFile} />
+        <RecentFileList files={recentFiles} onOpen={onOpenFile} onForget={onForgetFile} />
       )}
     </>
   );

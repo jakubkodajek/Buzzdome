@@ -35,6 +35,8 @@ export interface QuizEditor {
   openQuiz: (recent?: string) => Promise<EditorDraft | false>;
   /** Quiz files opened, saved or played lately, newest first. */
   recentFiles: string[];
+  /** Takes a file off `recentFiles`; the file itself stays where it is. */
+  forgetRecentFile: (path: string) => void;
   save: () => Promise<boolean>;
   saveAs: () => Promise<boolean>;
   closeQuiz: () => Promise<boolean>;
@@ -58,12 +60,12 @@ export interface QuizEditor {
  * a test show has started.
  */
 export function useQuizEditor(onTestRun: () => void): QuizEditor {
-  const { t, lang, notify } = useApp();
+  const { t, lang, caution } = useApp();
   const [state, dispatch] = useReducer(editorReducer, LOADING);
   const status = useSyncExternalStore(drafts.subscribe, drafts.getStatus);
   const report = useLatest(useReport());
   // Kept by the backend, which opens only a recent file in its list.
-  const { files: recentFiles, reload: readRecentFiles } = useRecentFiles();
+  const { files: recentFiles, reload: readRecentFiles, forget: forgetRecentFile } = useRecentFiles();
   // The quiz the backend has; nothing is written back that came from it.
   const written = useRef<Quiz | null>(null);
   const [loads, setLoads] = useState(0);
@@ -105,7 +107,7 @@ export function useQuizEditor(onTestRun: () => void): QuizEditor {
     drafts.exclusive(operation, task).then(
       (result) => {
         if (result !== BUSY) return result;
-        notify(t("editorBusy"));
+        caution(t("editorBusy"));
         return false as const;
       },
       (error: unknown) => {
@@ -179,6 +181,7 @@ export function useQuizEditor(onTestRun: () => void): QuizEditor {
         return draft;
       }),
     recentFiles,
+    forgetRecentFile: (path) => void forgetRecentFile(path).catch(report.current),
     save: () => save(false),
     saveAs: () => save(true),
     closeQuiz: () => discard(mayDiscard),

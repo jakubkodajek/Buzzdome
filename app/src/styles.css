@@ -4,6 +4,8 @@
 :root {
   --good: #1a8f4a;
   --bad: #c42b1c;
+  /* Something to look at that does not stop the show. */
+  --warn: #b25e00;
   --answer-0: #0b86d9;
   --answer-1: #ea6a0c;
   --answer-2: #45a51c;
@@ -28,28 +30,86 @@ body,
   color: var(--good);
 }
 
-/* Saving does not work: the show's journal (Director) or the editor's draft. */
+/* Every message (`notice.tsx`): a small dot, what happened, and under it,
+   smaller, the system's words or the file it was about. A toast, the place
+   where the message applies or a banner over the window set the frame;
+   `--tone` colours the dot, on the first line (line-height 1.4). */
+.notice-dot {
+  width: 7px;
+  height: 7px;
+  margin-top: calc(0.7em - 3.5px);
+  border-radius: 50%;
+  background: var(--tone);
+}
+
+.notice-body {
+  min-width: 0;
+}
+
+.notice-body p {
+  margin: 0;
+  white-space: pre-line;
+}
+
+/* The system's words or the file, apart and quieter. A path has no spaces to wrap at. */
+.notice-body small {
+  display: block;
+  margin-top: 2px;
+  font-size: 0.92em;
+  opacity: 0.7;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
+/* A message kept where it applies (`NoticeBox`): plain text in the colours
+   of what is around it, its tone only in the dot. */
+.notice {
+  --tone: var(--bad);
+
+  display: grid;
+  grid-template-columns: 7px minmax(0, 1fr);
+  align-items: start;
+  column-gap: 9px;
+  margin: 6px 0;
+  line-height: 1.4;
+  text-align: left;
+}
+
+.notice.warn {
+  --tone: var(--warn);
+}
+
+.notice.info {
+  --tone: var(--good);
+}
+
+.notice-actions {
+  grid-column: 2;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+/* Saving does not work: the show's journal (Director) or the editor's
+   draft. A bar over the whole window, which nothing else may hide. */
 .not-saved-banner {
-  padding: 6px 12px;
+  padding: 7px 12px;
   font-weight: 600;
+  line-height: 1.4;
   color: #fff;
   background: var(--bad);
 }
 
+.not-saved-banner .notice-body small {
+  font-weight: 400;
+  opacity: 0.85;
+}
+
 /* A window or a part of it that failed to render (`RenderFailed`). */
 .render-failed {
-  padding: 30px;
-}
-
-.render-failed p {
-  color: var(--bad);
-  font-weight: 600;
-}
-
-.render-failed-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+  max-width: 640px;
+  padding: 24px;
 }
 
 /* A slide that failed to render, in the box it was drawn in (`SlideBoundary`). */

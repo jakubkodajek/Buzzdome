@@ -33,6 +33,7 @@ export type { Cue } from "./bindings/Cue";
 export type { DeviceInfo } from "./bindings/DeviceInfo";
 export type { EditorDraft } from "./bindings/EditorDraft";
 export type { FileAction } from "./bindings/FileAction";
+export type { FileReason } from "./bindings/FileReason";
 export type { FontName } from "./bindings/FontName";
 export type { GameView } from "./bindings/GameView";
 export type { Gradient } from "./bindings/Gradient";

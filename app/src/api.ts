@@ -82,6 +82,8 @@ export const api = {
   startShowFromRecent: (recent: string) => invoke<void>("start_show_from_recent", { recent }),
   /** Quiz files opened, saved or played lately, latest first. */
   recentFiles: () => invoke<string[]>("recent_files"),
+  /** Takes `path` off the recent quiz files; the file stays where it is. */
+  forgetRecentFile: (path: string) => invoke<void>("forget_recent_file", { path }),
   startDemoShow: () => invoke<void>("start_demo_show"),
   lastSession: () => invoke<SessionSummary | null>("last_session"),
   /** Resumes the last show; returns warnings when it runs but not quite as before (its media are missing, other rules). */

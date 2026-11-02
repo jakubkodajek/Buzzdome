@@ -4,7 +4,8 @@ import { useApp, useRun } from "../app-context";
 import { CustomColor, Swatch } from "../editor/ColorPicker";
 import { Popup } from "../editor/controls";
 import type { StringKey } from "../i18n";
-import { colourClashText, errorText, lightText } from "../messages";
+import { colourClashText, errorNotice, lightText, type Notice } from "../messages";
+import { NoticeBox } from "../notice";
 import type { Light, ReceiverInfo, Rgb } from "../types";
 
 /** The lights in the order a question shows them. */
@@ -48,14 +49,14 @@ const sameColour = (a: Rgb, b: Rgb) => a.toLowerCase() === b.toLowerCase();
 export function BuzzerColours({ info, reload }: { info: ReceiverInfo; reload: () => void }) {
   const { t } = useApp();
   const run = useRun();
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<Notice | null>(null);
   const choose = (light: Light, colour: Rgb) => {
     if (sameColour(colour, info.colours[light])) return;
     api
       .receiverSetColours({ ...info.colours, [light]: colour })
       .then(
         () => setError(null),
-        (e: unknown) => setError(errorText(t, e)),
+        (e: unknown) => setError(errorNotice(t, e)),
       )
       .finally(reload);
   };
@@ -63,7 +64,7 @@ export function BuzzerColours({ info, reload }: { info: ReceiverInfo; reload: ()
     <fieldset className="buzzer-colours">
       <legend>{t("buzzerColours")}</legend>
       <p className="muted">{t("buzzerColoursHint")}</p>
-      {info.coloursRefused && <p className="receiver-state error">{t("buzzerColoursRefusedKept", { problem: colourClashText(t, info.coloursRefused) })}</p>}
+      {info.coloursRefused && <NoticeBox notice={{ text: t("buzzerColoursRefusedKept", { problem: colourClashText(t, info.coloursRefused) }) }} />}
       <table className="grid">
         <tbody>
           {LIGHTS.map((light) => (
@@ -89,7 +90,7 @@ export function BuzzerColours({ info, reload }: { info: ReceiverInfo; reload: ()
           ))}
         </tbody>
       </table>
-      {error && <p className="receiver-state error">{error}</p>}
+      {error && <NoticeBox notice={error} />}
       <div className="row">
         <span className="spacer" />
         <button onClick={() => run(api.receiverResetColours().then(() => setError(null)).finally(reload))}>{t("buzzerColoursReset")}</button>

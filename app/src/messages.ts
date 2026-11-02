@@ -5,6 +5,7 @@
 import { buttonLabel } from "./answers";
 import { slotLabel } from "./audio/library";
 import { MEDIA_EXTENSIONS } from "./bindings/MediaExtensions";
+import { fileName } from "./format";
 import type { StringKey, Translate } from "./i18n";
 import { mediaFileName } from "./media";
 import type {
@@ -14,6 +15,7 @@ import type {
   ColourClash,
   ConnectChange,
   FileAction,
+  FileReason,
   ImportIssue,
   Light,
   MediaIssue,
@@ -73,6 +75,8 @@ const ERROR_KEYS: Record<Exclude<AppError["code"], WordedApart>, StringKey> = {
   tooManyEndRecords: "errTooManyEndRecords",
   noDraft: "errNoDraft",
   notRecent: "errNotRecent",
+  quizFileGone: "errQuizFileGone",
+  quizFileUnreachable: "errQuizFileUnreachable",
   draftChanged: "errDraftChanged",
   draftNotRead: "errDraftNotRead",
   notASpreadsheet: "errNotASpreadsheet",
@@ -113,6 +117,15 @@ const FILE_ACTION_KEYS: Record<FileAction, StringKey> = {
   delete: "errFileDelete",
 };
 
+const FILE_REASON_KEYS: Record<Exclude<FileReason, "other">, StringKey> = {
+  notFound: "fileNotFound",
+  notAFolder: "fileNotAFolder",
+  noAccess: "fileNoAccess",
+  inUse: "fileInUse",
+  diskFull: "fileDiskFull",
+  readOnly: "fileReadOnly",
+};
+
 /** Whether `value` is a backend error (an `AppError`), not one of Tauri's own or a script's. */
 export function isAppError(value: unknown): value is AppError {
   return typeof value === "object" && value !== null && "code" in value && typeof value.code === "string";
@@ -135,14 +148,44 @@ export function thrownText(error: unknown): string {
 }
 
 /**
+ * A message for the quizmaster: what happened, in their words, and apart
+ * from it the system's own words or the file concerned (`detail`), which
+ * help find the cause but are not theirs.
+ */
+export interface Notice {
+  text: string;
+  detail?: string;
+}
+
+/** The system's words without the error number Rust adds to them ("(os error 2)"). */
+export function systemWords(detail: string): string {
+  return detail.replace(/\s*\(os error -?\d+\)\s*$/, "").trim();
+}
+
+/**
  * A failed backend call for the quizmaster. Anything that is not an
  * `AppError` (a failure inside Tauri's own IPC, a script error) is shown as it is.
  */
+export function errorNotice(t: Translate, error: unknown): Notice {
+  if (!isAppError(error)) return { text: thrownText(error) };
+  if (error.code === "file") {
+    const text = t(FILE_ACTION_KEYS[error.action], { name: fileName(error.path) });
+    if (error.reason === "other") return { text, detail: `${error.path}: ${systemWords(error.detail)}` };
+    return { text: `${text} ${t(FILE_REASON_KEYS[error.reason])}`, detail: error.path };
+  }
+  const text = errorWords(t, error);
+  return "detail" in error ? { text, detail: systemWords(error.detail) } : { text };
+}
+
+/** A failed backend call in one line, for a message that has no room for its detail apart. */
 export function errorText(t: Translate, error: unknown): string {
-  if (!isAppError(error)) return thrownText(error);
+  const { text, detail } = errorNotice(t, error);
+  return detail ? `${text} (${detail})` : text;
+}
+
+/** The quizmaster's words for `error`, without its detail. */
+function errorWords(t: Translate, error: Exclude<AppError, { code: "file" }>): string {
   switch (error.code) {
-    case "file":
-      return t(FILE_ACTION_KEYS[error.action], params(error));
     case "noSuchSlide":
       return t("errNoSuchSlide", { slide: error.slide + 1 });
     case "noSuchPad":
@@ -261,7 +304,7 @@ const RECEIVER_PROBLEM_KEYS: Record<ReceiverProblem, StringKey> = {
  * what to check on `platform` (`std::env::consts::OS`).
  */
 export function receiverProblemText(t: Translate, problem: ReceiverProblem, detail: string, platform: string): string {
-  const text = t(RECEIVER_PROBLEM_KEYS[problem], { detail });
+  const text = t(RECEIVER_PROBLEM_KEYS[problem], { detail: systemWords(detail) });
   if (problem !== "cannotOpen") return text;
   const hint = platform === "linux" ? "receiverOpenHintLinux" : platform === "macos" ? "receiverOpenHintMacos" : "receiverOpenHintOther";
   return `${text} ${t(hint)}`;
@@ -292,10 +335,10 @@ export function receiverStatusText(t: Translate, status: ReceiverStatus, platfor
   }
 }
 
-/** Why a file the app keeps was not read, and what became of the file. */
-export function settingsLostText(t: Translate, lost: SettingsLost): string {
+/** `lead`, what was lost, with what became of the file the app keeps, and why it was not read apart. */
+export function settingsLostNotice(t: Translate, lead: string, lost: SettingsLost): Notice {
   const file = lost.keptAs === null ? t("settingsLeftUnread") : t("settingsKeptAs", { path: lost.keptAs });
-  return `${lost.detail} ${file}`;
+  return { text: `${lead} ${file}`, detail: systemWords(lost.detail) };
 }
 
 /** Which protocol reads the receiver. */
@@ -463,7 +506,7 @@ const OUTPUT_ERROR_KEYS: Record<OutputError["problem"], StringKey> = {
 
 /** Why a lights output or message target does not work. */
 export function outputErrorText(t: Translate, error: OutputError): string {
-  return t(OUTPUT_ERROR_KEYS[error.problem], params(error));
+  return t(OUTPUT_ERROR_KEYS[error.problem], params("detail" in error ? { ...error, detail: systemWords(error.detail) } : error));
 }
 
 const CONNECT_CHANGE_KEYS: Record<ConnectChange, StringKey> = {

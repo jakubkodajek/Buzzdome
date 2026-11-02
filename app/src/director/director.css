@@ -35,8 +35,6 @@
   --popup-line: #b9b9b9;
   --menu-hover: #dcebfb;
   --menu-hover-line: #9cc3ec;
-  /* Something to look at that does not stop the show (the check before it). */
-  --warn: #b25e00;
 
   display: grid;
   grid-template-columns: 210px minmax(0, 1fr);
@@ -119,6 +117,21 @@
   cursor: default;
 }
 
+/* The Lights tab's add and remove buttons: a sign alone, centred whatever
+   the font, as tall as the fields beside them (the team panel has its own). */
+.lights .icon-button {
+  display: inline-grid;
+  place-items: center;
+  min-width: 30px;
+  padding: 0 8px;
+  align-self: stretch;
+}
+
+.lights .icon-button svg {
+  width: 12px;
+  height: 12px;
+}
+
 .director select,
 .director input:not([type="checkbox"]) {
   padding: 3px 6px;
@@ -172,7 +185,7 @@
   margin-top: 4px;
 }
 
-.director .recent-list button {
+.director .recent-list .recent-open {
   padding: 6px 12px;
 }
 
@@ -268,13 +281,14 @@
   }
 }
 
+/* The command panel is dark in both looks. */
 .command-problem {
-  margin: 6px 12px;
-  padding: 8px 10px;
-  border-left: 4px solid var(--bad);
-  background: rgba(255, 255, 255, 0.06);
+  margin: 0 12px;
   color: #f2f2f2;
-  white-space: pre-line;
+}
+
+.command-problem .notice {
+  --tone: #ff6b5e;
 }
 
 /* Workspace */
@@ -548,13 +562,6 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
-}
-
-.teams-lost {
-  margin: 8px;
-  padding: 8px 10px;
-  border-left: 4px solid var(--bad);
-  background: var(--well);
 }
 
 .split {
@@ -898,14 +905,72 @@
   pointer-events: none;
 }
 
+/* A message card: dark in both looks and over the editor alike, so it
+   reads the same wherever it lands; the dot's colour tells news, a
+   caution and a failure apart. */
 .toast {
-  max-width: 420px;
-  padding: 10px 14px;
-  color: #fff;
-  background: var(--bad);
+  --tone: #3fb950;
+
+  display: grid;
+  grid-template-columns: 7px minmax(0, 1fr) 20px;
+  align-items: start;
+  column-gap: 10px;
+  width: min(400px, calc(100vw - 32px));
+  padding: 10px 8px 10px 14px;
+  font-size: 13px;
+  line-height: 1.4;
+  color: #ececec;
+  background: #262626;
+  border: 1px solid #3a3a3a;
+  border-radius: 6px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  pointer-events: auto;
+  user-select: text;
+  animation: toast-in 0.15s ease-out;
+}
+
+.toast.error {
+  --tone: #ff6b5e;
+}
+
+.toast.warn {
+  --tone: #e3a33b;
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+  }
+}
+
+.toast .notice-body small {
+  color: #a8a8a8;
+  opacity: 1;
+}
+
+.toast-close {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  /* Centred on the first line (18px). */
+  margin-top: -1px;
+  padding: 0;
+  color: #8a8a8a;
+  background: none;
+  border: none;
   border-radius: 4px;
-  white-space: pre-line;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
+  cursor: pointer;
+}
+
+.toast-close:hover {
+  color: #fff;
+  background: #3a3a3a;
+}
+
+.toast-close svg {
+  width: 10px;
+  height: 10px;
 }
 
 /* Receiver tab */
@@ -954,23 +1019,28 @@
   border: 1px solid var(--well-line);
 }
 
+/* The receiver's or the lights' state: plain text after a dot in its tone, like a notice. */
 .receiver-state {
+  --tone: var(--muted);
+
+  display: grid;
+  grid-template-columns: 7px minmax(0, 1fr);
+  align-items: start;
+  column-gap: 9px;
   margin: 4px 0;
-  padding: 8px 10px;
-  border-left: 4px solid var(--muted);
-  background: var(--well);
+  line-height: 1.4;
 }
 
 .receiver-state.connected {
-  border-left-color: var(--good);
+  --tone: var(--good);
 }
 
 .receiver-state.error {
-  border-left-color: var(--bad);
+  --tone: var(--bad);
 }
 
 .receiver-state.searching {
-  border-left-color: var(--accent);
+  --tone: var(--accent);
 }
 
 .buzzers-seen {
@@ -1005,11 +1075,6 @@
   padding: 6px 10px;
   background: var(--accent-soft);
   border-radius: 4px;
-}
-
-.learn-message {
-  margin: 4px 0;
-  font-weight: 600;
 }
 
 .live-logs {

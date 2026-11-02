@@ -463,7 +463,7 @@ async fn start_show_from_file(app: AppHandle, window: Window, picker: Picker) ->
 }
 
 /// Starts a show with the `recent` quiz file, which has to be in the list
-/// (`RecentFiles`). A file that is no longer there leaves the list.
+/// (`RecentFiles`).
 #[tauri::command]
 async fn start_show_from_recent(app: AppHandle, recent: String) -> CmdResult<()> {
     off_ui(move || {
@@ -475,7 +475,7 @@ async fn start_show_from_recent(app: AppHandle, recent: String) -> CmdResult<()>
 
 /// Opens the quiz file `path` and starts a show with it, one start at a
 /// time (`one_start`). The file goes first in the recent list once it
-/// opens, and leaves it once it is gone.
+/// opens; one that is not there is reported as such (`RecentFiles::explain`).
 fn start_show_from(app: &AppHandle, path: &Path) -> CmdResult<()> {
     one_start(&STARTING, || {
         let source_path = path.to_string_lossy().into_owned();
@@ -485,7 +485,7 @@ fn start_show_from(app: &AppHandle, path: &Path) -> CmdResult<()> {
             let _cache = QUIZZES_CACHE.lock().unwrap();
             quiz_file::open(path, &quizzes_cache(app)?)
         };
-        let package = opened.inspect_err(|_| recent.forget_if_gone(&source_path))?;
+        let package = opened.map_err(|e| recent.explain(&source_path, e.into()))?;
         recent.remember(&source_path);
         start_show(app, package.quiz, Some(source_path), Some(package.root))
     })
@@ -792,6 +792,7 @@ pub fn run() {
             editor::editor_new,
             editor::editor_open,
             recent_files::recent_files,
+            recent_files::forget_recent_file,
             editor::editor_update,
             editor::editor_save,
             editor::editor_add_media,

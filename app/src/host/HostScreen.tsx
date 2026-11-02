@@ -6,6 +6,7 @@ import { useBackendEvent, useClock, useGameView, useMediaRoot, useQuiz } from ".
 import { CheckIcon, CrossIcon } from "../icons";
 import { useProjectorCloseKeys, useShortcuts } from "../keyboard";
 import { MediaRootContext } from "../media";
+import type { TonedNotice } from "../notice";
 import { slideContext } from "../quiz";
 import { ThemeContext, ThemesProvider, useResolvedTheme } from "../theme/context";
 import { screenOf } from "../theme/themes";
@@ -17,10 +18,13 @@ import "./host.css";
 // The projector has nowhere to show errors; the Director shows them.
 export const reportToDirector = (message: string) => void api.reportHostProblem(message).catch(() => console.error(message));
 
+/** A projector message for the Director, which shows it as a failure. */
+const showOnDirector = ({ text, detail }: TonedNotice) => reportToDirector(detail ? `${text} (${detail})` : text);
+
 /** The projector. Renders the game state; owns nothing. */
 export function HostScreen() {
   return (
-    <AppProvider notify={reportToDirector}>
+    <AppProvider show={showOnDirector}>
       <ThemesProvider>
         <HostLayout />
       </ThemesProvider>

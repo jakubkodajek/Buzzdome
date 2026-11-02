@@ -56,7 +56,7 @@ function DirectorWindow({ lang, t }: { lang: Lang; t: Translate }) {
   return (
     <ErrorBoundary
       fallback={(message, retry) => (
-        <RenderFailed t={t} text={t("windowFailed", { message })} retry={retry}>
+        <RenderFailed t={t} text={t("windowFailed")} detail={message} retry={retry}>
           <button onClick={() => api.quitApp().catch(logProblem)}>{t("closeAppKeepShow")}</button>
         </RenderFailed>
       )}

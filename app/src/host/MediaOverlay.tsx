@@ -17,7 +17,7 @@ import type { NowPlaying } from "../types";
  * black, and the Director is told.
  */
 export function MediaOverlay() {
-  const { t, notify } = useApp();
+  const { t, fail } = useApp();
   const run = useRun();
   const library = useMediaLibrary();
   const heard = useNowPlaying();
@@ -25,7 +25,7 @@ export function MediaOverlay() {
   if (!library || !heard || !now || now.kind === "audio") return null;
   const url = mediaUrl(library.root, now.reference);
   const ended = (failed: boolean) => {
-    if (failed) notify(t("playerFileFailed", { file: mediaFileName(now.reference) }));
+    if (failed) fail(t("playerFileFailed", { file: mediaFileName(now.reference) }));
     run(api.mediaEnded(now.id));
   };
   return (

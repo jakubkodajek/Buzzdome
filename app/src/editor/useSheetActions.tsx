@@ -23,7 +23,7 @@ export interface SheetActions {
  * the sheet had that could not be taken over is listed.
  */
 export function useSheetActions(editor: QuizEditor, quiz: Quiz | null, insertImported: (slides: Slide[]) => number): SheetActions {
-  const { t, notify } = useApp();
+  const { t, notify, caution } = useApp();
   const [importNotes, setImportNotes] = useState<{ imported: number; notes: ImportNote[] } | null>(null);
   return {
     importSheet: {
@@ -51,15 +51,15 @@ export function useSheetActions(editor: QuizEditor, quiz: Quiz | null, insertImp
           if (!report) return;
           const missing = report.missing.map(mediaFileName).join(", ");
           const refused = report.refused.join(", ");
-          notify(
-            [
-              t("sheetExported", { n: quiz.slides.length, media: report.media }),
-              missing && t("sheetExportMissing", { files: missing }),
-              refused && t("sheetExportRefused", { files: refused }),
-            ]
-              .filter(Boolean)
-              .join(" "),
-          );
+          const text = [
+            t("sheetExported", { n: quiz.slides.length, media: report.media }),
+            missing && t("sheetExportMissing", { files: missing }),
+            refused && t("sheetExportRefused", { files: refused }),
+          ]
+            .filter(Boolean)
+            .join(" ");
+          // Done, but some media did not go along: worth a look.
+          (missing || refused ? caution : notify)(text);
         }),
     },
     windowOpen: importNotes !== null,

@@ -1,6 +1,7 @@
 import { useEffect, useRef, type MouseEvent } from "react";
 import { useApp } from "../app-context";
 import { SlideThumbnail } from "../host/SlideThumbnail";
+import { AddIcon } from "../icons";
 import { NO_CONTEXT } from "../quiz";
 import { ThemeContext } from "../theme/context";
 import type { Quiz, Theme } from "../types";
@@ -59,7 +60,7 @@ export function CategoryView({ quiz, categories, canvasTheme, onMenu }: Category
           ))}
         </ol>
         <button type="button" className="add-slide" title={actions.newCategory.label} aria-label={actions.newCategory.label} onClick={actions.newCategory.run}>
-          +
+          <AddIcon />
         </button>
       </nav>
       <div className="studio-center">

@@ -1,6 +1,7 @@
 import { Component, type ReactNode } from "react";
 import type { Translate } from "./i18n";
 import { thrownText } from "./messages";
+import { NoticeBox } from "./notice";
 
 interface Props {
   /** What shows instead of `children` after one failed to render, given the error's message and a way to try again. */
@@ -42,17 +43,18 @@ export class ErrorBoundary extends Component<Props, { message: string | null }> 
 }
 
 /**
- * What a window or a part of it shows after it failed to render:
- * `text` says so, with a button to try again; `children` adds other ways out.
+ * What a window or a part of it shows after it failed to render: `text`
+ * says so, `detail` is the error's message, with a button to try again;
+ * `children` adds other ways out.
  */
-export function RenderFailed({ t, text, retry, children }: { t: Translate; text: string; retry: () => void; children?: ReactNode }) {
+export function RenderFailed(props: { t: Translate; text: string; detail: string; retry: () => void; children?: ReactNode }) {
+  const { t, text, detail, retry, children } = props;
   return (
-    <div className="render-failed" role="alert">
-      <p>{text}</p>
-      <div className="render-failed-actions">
+    <div className="render-failed">
+      <NoticeBox notice={{ text, detail }}>
         <button onClick={retry}>{t("tryAgain")}</button>
         {children}
-      </div>
+      </NoticeBox>
     </div>
   );
 }

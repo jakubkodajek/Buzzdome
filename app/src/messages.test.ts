@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { translator } from "./i18n";
 import type { AiConnected, Assistant, ConnectChange } from "./types";
-import { aiConnectionText, awaitsAnswer, errorText, importIssueText, placesText, problemText, protocolText, receiverProblemText, settingsLostText, thrownText } from "./messages";
+import { aiConnectionText, awaitsAnswer, errorNotice, errorText, importIssueText, placesText, problemText, protocolText, receiverProblemText, settingsLostNotice, thrownText } from "./messages";
 
 const cs = translator("cs");
 const en = translator("en");
@@ -13,10 +13,29 @@ describe("errorText", () => {
     expect(errorText(en, { code: "tooLarge", maxMb: 4096 })).toBe("The quiz is larger than 4096 MB unpacked.");
   });
 
-  it("words each file action in its own sentence", () => {
-    const error = { code: "file", path: "/q/a.quiz", detail: "denied" } as const;
-    expect(errorText(cs, { ...error, action: "read" })).toBe("Soubor /q/a.quiz nejde přečíst: denied");
-    expect(errorText(en, { ...error, action: "createFolder" })).toBe("Cannot create the folder /q/a.quiz: denied");
+  it("words each file action in its own sentence, with the reason the quizmaster can act on", () => {
+    const error = { code: "file", path: "/q/a.quiz", reason: "noAccess", detail: "Permission denied (os error 13)" } as const;
+    expect(errorText(cs, { ...error, action: "read" })).toBe("Soubor a.quiz nejde přečíst. Systém k tomu aplikaci nedává oprávnění. (/q/a.quiz)");
+    expect(errorText(en, { ...error, action: "createFolder", reason: "diskFull" })).toBe("The folder a.quiz cannot be created. The disk is full. (/q/a.quiz)");
+  });
+
+  it("keeps the system's own words of a file failure it has no words for, without their error number", () => {
+    const error = { code: "file", action: "write", path: "C:\\q\\a.quiz", reason: "other", detail: "Invalid argument (os error 22)" } as const;
+    expect(errorNotice(en, error)).toEqual({ text: "The file a.quiz cannot be saved.", detail: "C:\\q\\a.quiz: Invalid argument" });
+  });
+
+  it("keeps the detail of any other failure apart from the quizmaster's words", () => {
+    const notice = errorNotice(en, { code: "showNotSaved", detail: "No space left on device (os error 28)" });
+    expect(notice.detail).toBe("No space left on device");
+    expect(notice.text).not.toContain("No space");
+    expect(errorNotice(cs, { code: "notNow" })).toEqual({ text: "V tomto kroku to nejde." });
+  });
+
+  it("says a recent quiz is gone, or where it was when its folder is away too", () => {
+    expect(errorText(cs, { code: "quizFileGone", name: "Hospoda.quiz" })).toBe(
+      "Kvíz Hospoda.quiz byl smazán nebo přesunut, a tak zmizel ze seznamu Naposledy otevřené.",
+    );
+    expect(errorText(en, { code: "quizFileUnreachable", name: "Hospoda.quiz", folder: "E:\\Quizzes" })).toContain("nor its folder E:\\Quizzes can be found.");
   });
 
   it("names the button that resumes a show as the Director labels it", () => {
@@ -100,7 +119,7 @@ describe("receiver texts", () => {
   it("adds what to check on the platform when the receiver cannot be opened", () => {
     expect(receiverProblemText(en, "cannotOpen", "denied", "linux")).toContain("udev rule");
     expect(receiverProblemText(en, "cannotOpen", "denied", "macos")).toContain("Input Monitoring");
-    expect(receiverProblemText(en, "connectionLost", "gone", "linux")).toBe("The receiver connection was lost (gone). Reconnecting…");
+    expect(receiverProblemText(en, "connectionLost", "gone (os error 19)", "linux")).toBe("The receiver connection was lost (gone). Reconnecting…");
   });
 
   it("names the protocol", () => {
@@ -113,11 +132,15 @@ describe("receiver texts", () => {
     expect(awaitsAnswer({ type: "rawOnly" })).toBe(false);
   });
 
-  it("says where a file that was not read went, or that it was left alone", () => {
-    expect(settingsLostText(en, { detail: "bad json", keptAs: "/d/receiver.json.broken" })).toBe("bad json The old file was kept as /d/receiver.json.broken.");
-    expect(settingsLostText(en, { detail: "in use", keptAs: null })).toBe(
-      "in use The file was left as it is and is not written over until the app starts again.",
-    );
+  it("says where a file that was not read went, or that it was left alone, with why apart", () => {
+    expect(settingsLostNotice(en, "Lost.", { detail: "bad json", keptAs: "/d/receiver.json.broken" })).toEqual({
+      text: "Lost. The old file was kept as /d/receiver.json.broken.",
+      detail: "bad json",
+    });
+    expect(settingsLostNotice(en, "Lost.", { detail: "in use (os error 32)", keptAs: null })).toEqual({
+      text: "Lost. The file was left as it is and is not written over until the app starts again.",
+      detail: "in use",
+    });
   });
 });
 

@@ -70,6 +70,8 @@ const resume = params.get("resume");
 const saving = params.get("saving");
 /** `unreadable`: the editor's draft does not read; `failing`: writing it fails, as on a full disk; `busy`: a sheet import does not finish. */
 const draft = params.get("draft");
+/** `recent=gone`: the recent quiz files are no longer where they were, as after they were deleted. */
+const recentGone = params.get("recent") === "gone";
 /** `available`: the update server offers a newer version; `installing`: it also downloads without end once asked. */
 const update = params.get("update");
 /** `slide`: the fourth slide has no answers list, so it fails to render; `view`: the show's view has no players, so the Director's screen does. */
@@ -605,7 +607,12 @@ function changeBoard(change: BoardChange) {
 const dialogAnswer = () => (window as unknown as { dialogAnswer?: string }).dialogAnswer ?? null;
 
 /** The quiz files the editor opened lately, as the backend keeps them. */
+/** The recent quiz files; the quizmaster takes them off (`forget_recent_file`), and gone ones leave by themselves. */
 const RECENT_FILES = ["C:\\Kvizy\\hospodsky-kviz.quiz", "C:\\Kvizy\\firemni-vecirek.quiz"];
+const forgetRecent = (path: string) => {
+  const at = RECENT_FILES.indexOf(path);
+  if (at >= 0) RECENT_FILES.splice(at, 1);
+};
 
 mockIPC(
   (cmd, payload) => {
@@ -722,10 +729,18 @@ mockIPC(
       case "editor_new":
         return { id: `draft-${++drafts}`, quiz: { ...editorQuiz, title: (payload as { title: string }).title, slides: [] }, sourcePath: null, unsaved: false, mediaRoot: "/src/dev/", problems: [], dropped: [] };
       case "recent_files":
-        return RECENT_FILES;
-      case "start_show_from_recent":
+        return [...RECENT_FILES];
+      case "forget_recent_file":
+        forgetRecent((payload as { path: string }).path);
+        return null;
+      case "start_show_from_recent": {
         called.push({ cmd, ...(payload as object) });
-        return RECENT_FILES.includes((payload as { recent: string }).recent) ? null : Promise.reject({ code: "notRecent" });
+        const path = (payload as { recent: string }).recent;
+        if (!RECENT_FILES.includes(path)) return Promise.reject({ code: "notRecent" });
+        if (!recentGone) return null;
+        forgetRecent(path);
+        return Promise.reject({ code: "quizFileGone", name: path.split("\\").pop() });
+      }
       case "editor_close":
         called.push({ cmd });
         return null;
@@ -745,7 +760,7 @@ mockIPC(
       }
       case "editor_update":
         called.push({ cmd, ...(payload as object) });
-        if (draft === "failing") return Promise.reject({ code: "file", action: "write", path: "C:\\Users\\q\\AppData\\Local\\cz.kodajek.quizshow\\editor\\draft-1\\quiz.json", detail: "No space left on device (os error 28)" });
+        if (draft === "failing") return Promise.reject({ code: "file", action: "write", path: "C:\\Users\\q\\AppData\\Local\\cz.kodajek.quizshow\\editor\\draft-1\\quiz.json", reason: "diskFull", detail: "No space left on device (os error 28)" });
         return [];
       case "editor_save":
         called.push({ cmd, ...(payload as object) });

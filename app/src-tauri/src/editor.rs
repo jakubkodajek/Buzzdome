@@ -262,7 +262,8 @@ pub async fn editor_new(app: AppHandle, title: String) -> CmdResult<EditorDraft>
 
 /// Opens a quiz file in place of the draft: the `recent` file, which has to
 /// be in the list (`RecentFiles`), or one the quizmaster picks (none when
-/// they cancel). A recent file that is no longer there leaves the list.
+/// they cancel). A file that is not there is reported as such
+/// (`RecentFiles::explain`).
 /// Refused during a show (`refuse_during_show`).
 #[tauri::command]
 pub async fn editor_open(app: AppHandle, window: Window, recent: Option<String>, picker: Picker) -> CmdResult<Option<EditorDraft>> {
@@ -277,7 +278,7 @@ pub async fn editor_open(app: AppHandle, window: Window, recent: Option<String>,
         refuse_during_show(app)?;
         let (folder, root) = new_draft_folder(dir)?;
         let source_path = path.to_string_lossy().into_owned();
-        let opened = quiz_file::open_into(&path, &root).inspect_err(|_| app.state::<RecentFiles>().forget_if_gone(&source_path))?;
+        let opened = quiz_file::open_into(&path, &root).map_err(|e| app.state::<RecentFiles>().explain(&source_path, e.into()))?;
         // A quiz that opening changed has to be saved to keep the change.
         let pointer = Pointer { folder, source_path: Some(source_path.clone()), unsaved: opened.changed, dropped: opened.dropped };
         switch_to(app, dir, &pointer)?;

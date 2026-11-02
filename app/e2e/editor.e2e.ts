@@ -226,18 +226,41 @@ describe("the quiz editor", () => {
     await app.assertHealthy();
   });
 
-  test.skipIf(process.platform !== "linux")("a recent quiz whose file is gone leaves the list, and no show starts", async () => {
-    const file = join(data, "saved-quiz.quiz");
+  test.skipIf(process.platform !== "linux")("the cross takes a quiz off the recent list and leaves its file; a recent quiz that is gone says so and leaves the list", async () => {
+    const name = "saved-quiz.quiz";
+    const file = join(data, name);
+    const listed = async () => (await app.page.findAllXPath(`//ul[contains(@class, "recent-list")]//button[contains(normalize-space(.), "${name}")]`)).length > 0;
     await app.answerQuestions(true);
     await app.press("endShow");
     await waitFor("the show to end", async () => (await app.view()) === null);
     await app.tab("tabQuestions");
     await app.seeText(t("recentFiles"));
+    expect(await listed()).toBe(true);
+
+    await app.page.click(await app.$(`.recent-forget[aria-label="${t("forgetRecentFile")}: ${name}"]`));
+    await waitFor("the quiz off the list", async () => !(await listed()));
+    expect(existsSync(file)).toBe(true);
+    expect(await app.view()).toBeNull();
+
+    // Played again, it is back on the list.
+    await app.press("openQuiz");
+    await app.pickFile(file);
+    await app.waitView("the quiz's show", () => true);
+    await app.answerQuestions(true);
+    await app.press("endShow");
+    await waitFor("the show to end", async () => (await app.view()) === null);
+    await waitFor("the quiz back on the list", listed);
+
     renameSync(file, `${file}.moved`);
     try {
-      await app.press({ text: "saved-quiz.quiz" });
-      await waitFor("the file gone from the list", async () => !(await app.bodyText()).includes("saved-quiz.quiz"));
+      await app.press({ text: name });
+      await app.seeText(t("errQuizFileGone", { name }));
+      expect(await app.count(".toast.error")).toBe(1);
+      await waitFor("the file gone from the list", async () => !(await listed()));
       expect(await app.view()).toBeNull();
+      // The message closes with its cross, before its time runs out.
+      await app.page.click(await app.$(".toast-close"));
+      await waitFor("the message closed", async () => (await app.count(".toast")) === 0);
       expect(await app.count(".render-failed")).toBe(0);
     } finally {
       renameSync(`${file}.moved`, file);

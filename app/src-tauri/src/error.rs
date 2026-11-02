@@ -10,6 +10,7 @@ use lights::setup::SetupError;
 use quiz_core::{BoardError, BuzzerId, Button, GameError, QuizJsonError, SheetError, ValidationError, MAX_TEAMS};
 use quiz_file::{FileAction, QuizFileError};
 use serde::Serialize;
+use std::io;
 use std::path::Path;
 use ts_rs::TS;
 
@@ -82,8 +83,9 @@ pub enum AppError {
     MediaFolderRefused { folder: String },
 
     // Quiz files and the editor.
+    /// `detail` is the system's own words, for a `reason` the UI cannot word.
     #[error("cannot {action:?} {path}: {detail}")]
-    File { action: FileAction, path: String, detail: String },
+    File { action: FileAction, path: String, reason: FileReason, detail: String },
     #[error("the file is not a quiz file: {detail}")]
     NotAQuizFile { detail: String },
     #[error("the quiz file has no quiz.json")]
@@ -112,6 +114,14 @@ pub enum AppError {
     /// The recent file the editor was asked to open is not in the list.
     #[error("the file is no longer in the recent files")]
     NotRecent,
+    /// The recent quiz file `name` is gone from its folder, and so from
+    /// the recent list.
+    #[error("the quiz file {name} is no longer there")]
+    QuizFileGone { name: String },
+    /// The recent quiz file `name` cannot be found, nor its folder `folder`:
+    /// it may be on a drive that is not plugged in. It stays on the list.
+    #[error("the quiz file {name} cannot be found, nor its folder {folder}")]
+    QuizFileUnreachable { name: String, folder: String },
     /// The editor opened another quiz since the command was given.
     #[error("another quiz was opened in the editor meanwhile")]
     DraftChanged,
@@ -226,10 +236,48 @@ pub enum AppError {
 
 pub type CmdResult<T> = Result<T, AppError>;
 
+/// Why a file could not be read or written, in the cases the quizmaster
+/// can do something about.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
+#[serde(rename_all = "camelCase")]
+pub enum FileReason {
+    /// The file, or its folder, is not there.
+    NotFound,
+    /// A folder was expected and the path is something else.
+    NotAFolder,
+    /// The system refuses the app.
+    NoAccess,
+    /// Another program holds the file open.
+    InUse,
+    DiskFull,
+    ReadOnly,
+    /// Any other failure: the UI shows the system's words.
+    Other,
+}
+
+impl FileReason {
+    pub fn of(error: &io::Error) -> FileReason {
+        // Windows: ERROR_SHARING_VIOLATION and ERROR_LOCK_VIOLATION, a file another program holds.
+        if cfg!(windows) && matches!(error.raw_os_error(), Some(32 | 33)) {
+            return FileReason::InUse;
+        }
+        match error.kind() {
+            io::ErrorKind::NotFound => FileReason::NotFound,
+            io::ErrorKind::NotADirectory => FileReason::NotAFolder,
+            io::ErrorKind::PermissionDenied => FileReason::NoAccess,
+            io::ErrorKind::ResourceBusy => FileReason::InUse,
+            io::ErrorKind::StorageFull => FileReason::DiskFull,
+            io::ErrorKind::ReadOnlyFilesystem => FileReason::ReadOnly,
+            _ => FileReason::Other,
+        }
+    }
+}
+
 impl AppError {
     /// A file operation that failed with `error`.
-    pub fn file(action: FileAction, path: &Path, error: impl ToString) -> AppError {
-        AppError::File { action, path: path.display().to_string(), detail: error.to_string() }
+    pub fn file(action: FileAction, path: &Path, error: io::Error) -> AppError {
+        AppError::File { action, path: path.display().to_string(), reason: FileReason::of(&error), detail: error.to_string() }
     }
 
     pub fn system(error: impl ToString) -> AppError {
@@ -349,10 +397,19 @@ mod tests {
         let json = |e: AppError| serde_json::to_value(e).unwrap();
         assert_eq!(json(AppError::NotNow), serde_json::json!({ "code": "notNow" }));
         assert_eq!(json(AppError::TooLarge { max_mb: 4096 }), serde_json::json!({ "code": "tooLarge", "maxMb": 4096 }));
-        let file = AppError::file(FileAction::CreateFolder, Path::new("x"), "denied");
+        let file = AppError::file(FileAction::CreateFolder, Path::new("x"), io::Error::new(io::ErrorKind::PermissionDenied, "denied"));
         assert_eq!(
             json(file),
-            serde_json::json!({ "code": "file", "action": "createFolder", "path": "x", "detail": "denied" })
+            serde_json::json!({ "code": "file", "action": "createFolder", "path": "x", "reason": "noAccess", "detail": "denied" })
         );
+    }
+
+    #[test]
+    fn a_file_failure_names_its_reason_when_the_quizmaster_can_act_on_it() {
+        let reason = |kind| FileReason::of(&io::Error::from(kind));
+        assert_eq!(reason(io::ErrorKind::NotFound), FileReason::NotFound);
+        assert_eq!(reason(io::ErrorKind::PermissionDenied), FileReason::NoAccess);
+        assert_eq!(reason(io::ErrorKind::StorageFull), FileReason::DiskFull);
+        assert_eq!(reason(io::ErrorKind::InvalidData), FileReason::Other);
     }
 }

@@ -6,10 +6,11 @@
 import { useContext, useState, type CSSProperties, type KeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { useApp } from "../app-context";
 import { useLatest } from "../hooks";
+import { CrosshairIcon } from "../icons";
 import { cssColor, formatColor, fromHsv, parseColor, readColor, toHsv, type Hsv } from "../theme/color";
 import { useStore } from "../store";
 import type { Color } from "../types";
-import { MixedContext, Popup } from "./controls";
+import { Fold, MixedContext, Popup } from "./controls";
 import { recentColors, rememberColor, SHADES, STANDARD_COLORS } from "./palette";
 
 /** The colour property's control. `none` names the empty value (the theme's colour); without it there is none. */
@@ -159,12 +160,12 @@ function ColorPicker(props: { value: Color | null; none?: string; onPick: (color
       )}
       <div className="color-custom-title">
         <button type="button" className="props-section-title" aria-expanded={custom} onClick={() => setCustom(!custom)}>
-          <span className={custom ? "fold open" : "fold"}>›</span>
+          <Fold open={custom} />
           {t("customColor")}
         </button>
         {EyeDropper && (
           <button type="button" className="mini" title={t("pickFromScreen")} aria-label={t("pickFromScreen")} onClick={() => void pipette()}>
-            ⌖
+            <CrosshairIcon />
           </button>
         )}
       </div>

@@ -5,7 +5,8 @@ import { MAX_NAME_CHARS } from "../bindings/Constants";
 import { confirmAction } from "../confirm";
 import { seconds, signed } from "../format";
 import { usePreparedTeams, useTeamsLost } from "../hooks";
-import { settingsLostText } from "../messages";
+import { settingsLostNotice } from "../messages";
+import { NoticeBox } from "../notice";
 import type { BuzzerId, Command, GameView, SettingsLost } from "../types";
 import { BuzzerChip, TeamList } from "./TeamList";
 
@@ -32,9 +33,7 @@ function TeamsLost({ lost }: { lost: SettingsLost | null }) {
   const { t } = useApp();
   if (!lost) return null;
   return (
-    <p className="teams-lost">
-      {t("teamsLost")} {settingsLostText(t, lost)}
-    </p>
+    <NoticeBox notice={settingsLostNotice(t, t("teamsLost"), lost)} />
   );
 }
 

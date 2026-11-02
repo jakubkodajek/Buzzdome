@@ -1,8 +1,12 @@
 import type { StringKey } from "../i18n";
 import type { Command, GameView } from "../types";
 
-/** What answering "Restart the question?" does: a command to give, a notice to show, or nothing. */
-export type RestartOutcome = { command: Command } | { notice: StringKey } | null;
+/**
+ * What answering "Restart the question?" does: a command to give, a notice
+ * to show, or nothing. A notice that the question did not start again is
+ * a caution (`warn`); one that it already had is news (`info`).
+ */
+export type RestartOutcome = { command: Command } | { notice: StringKey; tone: "info" | "warn" } | null;
 
 /** The question a restart was asked for: its slide, and whether asking paused its clock. */
 export type RestartAsked = { slideIndex: number; pausedClock: boolean };
@@ -20,7 +24,8 @@ export function restartOutcome(yes: boolean, asked: RestartAsked, now: GameView 
   const same = now !== null && now.slideIndex === asked.slideIndex ? now : null;
   if (!yes) return asked.pausedClock && same?.controls.resumeClock ? { command: { type: "resumeClock" } } : null;
   if (same?.controls.restartQuestion) return { command: { type: "restartQuestion" } };
-  return { notice: tooLateNotice(same) };
+  const notice = tooLateNotice(same);
+  return { notice, tone: notice === "restartAlreadyDone" ? "info" : "warn" };
 }
 
 /** Why the question asked about no longer starts again, worded from where it is now: none once the show left it. */
