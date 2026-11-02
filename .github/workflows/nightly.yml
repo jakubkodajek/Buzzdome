@@ -45,6 +45,12 @@ jobs:
     if: needs.changed.outputs.run == 'true'
     runs-on: ubuntu-22.04
     timeout-minutes: 120
+    # The release profile aborts on panic, but tests unwind. The app's
+    # integration tests run its binary, so a release test build would mix the
+    # two and fail ("requires panic strategy `abort`"). Tests here get release
+    # speed with unwinding panics.
+    env:
+      CARGO_PROFILE_RELEASE_PANIC: unwind
     steps:
       - uses: actions/checkout@v4
         with:
