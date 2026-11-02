@@ -24,7 +24,7 @@
 // (or BUZZDOME_APP naming one).
 
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
-import { mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -44,6 +44,22 @@ const WINDOWS_DATA = WINDOWS ? [join(process.env.APPDATA ?? "", "cz.kodajek.quiz
 
 /** How long a step may take to show before a test fails. */
 const STEP_TIMEOUT_MS = 10_000;
+/**
+ * How long the app may take to show its Director once started. A first start
+ * on empty app data makes a new web view profile, which a busy CI machine has
+ * taken 36 s over (BF35); a step's budget is for an app already running.
+ */
+const LAUNCH_TIMEOUT_MS = 60_000;
+
+/** Where a failed test keeps what the app showed (setup.ts); CI uploads it. */
+export const OUTPUT = fileURLToPath(new URL("../e2e-output/", import.meta.url));
+
+/** Thrown once the app has ended: waiting longer cannot change it. */
+export class AppNotRunning extends Error {
+  constructor() {
+    super("the app is not running");
+  }
+}
 
 /** The labels of the windows, as `app_windows.rs` names them. */
 export type WindowLabel = "director" | "host";
@@ -74,6 +90,7 @@ export async function waitFor<T>(what: string, check: () => Promise<T | false | 
       const value = await check();
       if (value !== false && value !== null && value !== undefined) return value;
     } catch (error) {
+      if (error instanceof AppNotRunning) throw error;
       last = error;
     }
     if (Date.now() > until) throw new Error(`timed out waiting for ${what}${last ? `: ${String(last)}` : ""}`);
@@ -161,8 +178,10 @@ export class App {
     try {
       await waitFor("tauri-driver", () => fetch(`${app.base}/status`).then((r) => r.ok), 20_000);
       app.session = await Session.start(app.base, { browserName: "wry", "tauri:options": { application: APP } });
-      await app.inWindow("director", () => app.$("button"));
+      await app.window("director", LAUNCH_TIMEOUT_MS);
+      await app.$("button", LAUNCH_TIMEOUT_MS);
     } catch (error) {
+      await app.keepLaunch(error);
       // Nothing of a launch that failed half-way stays running.
       await app.crash();
       throw error;
@@ -171,12 +190,48 @@ export class App {
   }
 
   get page(): Session {
-    if (!this.session) throw new Error("the app is not running");
+    if (!this.session) throw new AppNotRunning();
     return this.session;
   }
 
+  /** Whether the app's session is still open, so its windows can be read. */
+  get alive(): boolean {
+    return this.session !== null;
+  }
+
+  /**
+   * Keeps what a launch that failed got to: each window's handle, URL, title
+   * and screenshot, and the app's log file, in OUTPUT. Best effort: whatever
+   * cannot be read is noted and the rest kept.
+   */
+  private async keepLaunch(error: unknown): Promise<void> {
+    const folder = join(OUTPUT, `launch-${Date.now()}`);
+    mkdirSync(folder, { recursive: true });
+    const notes = [`launch failed: ${String(error)}`];
+    try {
+      const handles = this.session ? await this.session.windowHandles() : [];
+      notes.push(this.session ? `windows: ${handles.length}` : "no WebDriver session");
+      for (const [index, handle] of handles.entries()) {
+        try {
+          await this.page.switchToWindow(handle);
+          const where = await this.page.execute<string>("return location.href + ' ' + (window.__TAURI_INTERNALS__?.metadata?.currentWindow?.label ?? '?');");
+          notes.push(`${handle}: ${where}, title "${await this.page.title()}"`);
+          writeFileSync(join(folder, `window-${index}.png`), Buffer.from(await this.page.screenshot(), "base64"));
+        } catch (reading) {
+          notes.push(`${handle}: ${String(reading)}`);
+        }
+      }
+    } catch (reading) {
+      notes.push(`windows: ${String(reading)}`);
+    }
+    const log = join(appLogFolder(this.data), "buzzdome.log");
+    if (existsSync(log)) copyFileSync(log, join(folder, "buzzdome.log"));
+    else notes.push(`no log at ${log}`);
+    writeFileSync(join(folder, "launch.txt"), `${notes.join("\n")}\n`);
+  }
+
   /** Switches to the window labelled `label` (the Director or the projector), set up for the tests. */
-  async window(label: WindowLabel): Promise<void> {
+  async window(label: WindowLabel, timeoutMs = STEP_TIMEOUT_MS): Promise<void> {
     const found = await waitFor(`the ${label} window`, async () => {
       for (const handle of await this.page.windowHandles()) {
         await this.page.switchToWindow(handle);
@@ -184,7 +239,7 @@ export class App {
         if (current === label) return handle;
       }
       return null;
-    });
+    }, timeoutMs);
     await this.page.switchToWindow(found);
     await this.page.execute(PAGE_SETUP);
   }
@@ -200,13 +255,13 @@ export class App {
   }
 
   /** The first element `css` matches that is shown, waiting for one. */
-  $(css: string): Promise<ElementRef> {
+  $(css: string, timeoutMs = STEP_TIMEOUT_MS): Promise<ElementRef> {
     return waitFor(`an element ${css}`, async () => {
       for (const element of await this.page.findAll(css)) {
         if (await this.page.displayed(element)) return element;
       }
       return null;
-    });
+    }, timeoutMs);
   }
 
   /** How many shown elements `css` matches now. */
@@ -524,6 +579,14 @@ function killApp(data: string): void {
       // Gone already.
     }
   }
+}
+
+/**
+ * The folder of the app's log file (`app_log.rs`): Tauri's `app_log_dir`, the
+ * app's LocalAppData folder on Windows and its XDG data folder on Linux.
+ */
+function appLogFolder(data: string): string {
+  return join(WINDOWS ? WINDOWS_DATA[1] : join(data, "share", "cz.kodajek.quizshow"), "logs");
 }
 
 /** Empties the real app data on Windows, which only a CI machine's tests use (see the header). */
