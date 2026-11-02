@@ -6,7 +6,8 @@
 //! - [`hid`]: a minimal USB-HID backend trait, implemented with `hidapi` in
 //!   production and with fakes in tests.
 //! - [`protocol`]: turns raw input reports into presses, and the buzzer mode
-//!   and lights into reports. Vendor protocols plug in here ([`enjoy303s`],
+//!   and lights, in the colours the quizmaster picks ([`colours`]), into
+//!   reports. Vendor protocols plug in here ([`enjoy303s`],
 //!   over the [`cp2110`] bridge); for other receivers, [`learned`] maps
 //!   reports recorded from real presses.
 //! - [`receiver`]: owns one receiver on an I/O thread: connect, read, decode,
@@ -18,6 +19,7 @@
 //! See `docs/design.md` and `replica/hardware.md`.
 
 pub mod clock;
+pub mod colours;
 pub mod cp2110;
 pub mod edge;
 pub mod enjoy303s;

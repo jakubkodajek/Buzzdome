@@ -26,6 +26,11 @@ function receiver(status: ReceiverStatus | null): ReceiverInfo {
     recent: [],
     buzzers: [],
     remote: [],
+    colours: { off: "#000000", ready: "#0000ff", answered: "#2a2a2a", locked: "#2a2a2a", first: "#ffffff", correct: "#00ff00", wrong: "#ff0000" },
+    shownColours: { off: "#000000", ready: "#0000ff", answered: "#2a2a2a", locked: "#2a2a2a", first: "#ffffff", correct: "#00ff00", wrong: "#ff0000" },
+    coloursRefused: null,
+    myColours: [],
+    maxMyColours: 16,
     platform: "windows",
   };
 }

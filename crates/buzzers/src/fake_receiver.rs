@@ -23,12 +23,15 @@
 //!
 //! To the test:
 //!
-//! - `{"lights": [{"buzzer": 7, "light": "locked"}]}`: buzzers the app
-//!   coloured anew with one write, with the `Light` each shows now (null
-//!   for a colour the app never sets). A colour sent to all at once lists
-//!   all 64 buzzers.
+//! - `{"lights": [{"buzzer": 7, "light": "locked", "colour": "#2a2a2a"}]}`:
+//!   buzzers the app coloured anew with one write, with the `Light` whose
+//!   colour each shows now in the default colours (null for a colour no
+//!   light has; `colours::LightColours`), and that colour as on screen
+//!   (`colours::Shade::rgb`). A colour sent to all at once lists all 64
+//!   buzzers.
 //! - `{"error": "…"}`: a line that was not understood.
 
+use crate::colours::Rgb;
 use crate::cp2110;
 use crate::enjoy303s::{self, SimulatedReceiver};
 use crate::hid::{DeviceInfo, HidBackend, HidDevice};
@@ -66,6 +69,14 @@ enum Event {
 struct Lit {
     buzzer: BuzzerId,
     light: Option<Light>,
+    colour: Rgb,
+}
+
+impl Lit {
+    /// `buzzer` showing the colour byte `colour`.
+    fn new(buzzer: BuzzerId, colour: u8) -> Lit {
+        Lit { buzzer, light: enjoy303s::light_of(colour), colour: enjoy303s::shade_of(colour).rgb() }
+    }
 }
 
 #[derive(Default)]
@@ -240,7 +251,7 @@ impl HidDevice for OpenCable {
 
     fn write(&mut self, data: &[u8]) -> Result<usize, DriverError> {
         let mut cable = self.cable()?;
-        let lit: Vec<Lit> = cable.receiver.hear(cp2110::received(data)).into_iter().map(|(buzzer, light)| Lit { buzzer, light }).collect();
+        let lit: Vec<Lit> = cable.receiver.hear(cp2110::received(data)).into_iter().map(|(buzzer, colour)| Lit::new(buzzer, colour)).collect();
         if !lit.is_empty() {
             cable.tell(&Event::Lights(lit));
         }
@@ -275,7 +286,8 @@ mod tests {
         assert!(matches!(press, Command::Press(p) if p == Press::timed(7, quiz_core::Button::Big, 120)));
         assert!(matches!(serde_json::from_str(r#"{"plug": false}"#).unwrap(), Command::Plug(false)));
         assert!(matches!(serde_json::from_str(r#"{"remote": "playPause"}"#).unwrap(), Command::Remote(RemoteKey::PlayPause)));
-        let lights = Event::Lights(vec![Lit { buzzer: 7, light: Some(Light::Locked) }, Lit { buzzer: 8, light: None }]);
-        assert_eq!(serde_json::to_string(&lights).unwrap(), r#"{"lights":[{"buzzer":7,"light":"locked"},{"buzzer":8,"light":null}]}"#);
+        let lights = Event::Lights(vec![Lit::new(7, 0x15), Lit::new(8, 0x7f), Lit::new(9, 0x78)]);
+        let json = r##"{"lights":[{"buzzer":7,"light":"locked","colour":"#2a2a2a"},{"buzzer":8,"light":"first","colour":"#ffffff"},{"buzzer":9,"light":null,"colour":"#ffaa00"}]}"##;
+        assert_eq!(serde_json::to_string(&lights).unwrap(), json);
     }
 }

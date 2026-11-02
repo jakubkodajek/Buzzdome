@@ -7,6 +7,7 @@ import type { Translate } from "../i18n";
 import { awaitsAnswer, errorText, hex4, receiverStatusText, REMOTE_ACTIONS, remoteActionText, remoteKeyText, settingsLostText, vidPid } from "../messages";
 import type { Button, BuzzerSeen, DeviceInfo, Press, PressEvent, RawReport, ReceiverInfo, ReceiverStatus, RemoteAction, RemoteKey, RemoteKeyAction } from "../types";
 import { confirmAction } from "../confirm";
+import { BuzzerColours } from "./BuzzerColours";
 
 const LOG_LEN = 40;
 
@@ -24,7 +25,7 @@ const stateClass = (status: ReceiverStatus | null) => {
 
 /**
  * Receiver setup and diagnostics: pick the USB receiver, see which buzzers it hears, choose what the remote's keys
- * do, watch its raw data, teach buttons.
+ * do and the buzzers' colours, watch its raw data, teach buttons.
  */
 export function ReceiverTab() {
   const { t } = useApp();
@@ -186,6 +187,8 @@ export function ReceiverTab() {
           <button onClick={() => run(api.receiverResetRemote().then(reload))}>{t("remoteKeysReset")}</button>
         </div>
       </fieldset>
+
+      {info && <BuzzerColours info={info} reload={reload} />}
 
       <fieldset>
         <legend>{t("devices")}</legend>

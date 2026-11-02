@@ -7,6 +7,7 @@
 //! like everything else.
 
 use buzzers::clock::ShowClock;
+use buzzers::colours::{ColourClash, LightColours, Rgb};
 use buzzers::hid::{udev_rule, DeviceInfo, DeviceSelector, HidBackend};
 use buzzers::hidapi_backend::HidapiBackend;
 use buzzers::DriverError;
@@ -25,7 +26,7 @@ use quiz_file::FileAction;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 use std::collections::{BTreeMap, VecDeque};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::mpsc::Sender;
 use std::sync::{Arc, Mutex, MutexGuard};
 use tauri::{AppHandle, Emitter, Manager, Window};
@@ -34,6 +35,8 @@ const SETTINGS_FILE: &str = "receiver.json";
 const RAW_LOG_LEN: usize = 2000;
 /// How many recent reports the Receiver tab gets when it opens.
 const RAW_LOG_SNAPSHOT: usize = 50;
+/// How many colours the quizmaster can keep at hand for picking.
+const MAX_MY_COLOURS: usize = 16;
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -47,6 +50,12 @@ struct ReceiverSettings {
     /// What the keys of the quizmaster's remote do.
     #[serde(default)]
     remote: RemoteKeys,
+    /// The colour of each light on the buzzers.
+    #[serde(default)]
+    colours: LightColours,
+    /// Colours kept at hand for picking (`MAX_MY_COLOURS`).
+    #[serde(default)]
+    my_colours: Vec<Rgb>,
 }
 
 #[derive(Debug, Clone, Serialize, TS)]
@@ -91,6 +100,14 @@ pub struct ReceiverInfo {
     buzzers: Vec<BuzzerSeen>,
     /// Every key of the quizmaster's remote with what it does.
     remote: Vec<RemoteKeyAction>,
+    /// The colour of each light, and as the buzzers show it (`Shade`).
+    colours: LightColours,
+    shown_colours: LightColours,
+    /// Why the colours kept were not used, if so: the defaults are.
+    colours_refused: Option<ColourClash>,
+    my_colours: Vec<Rgb>,
+    /// How many colours can be kept at hand (`MAX_MY_COLOURS`).
+    max_my_colours: usize,
     platform: &'static str,
 }
 
@@ -117,6 +134,8 @@ pub struct Hardware {
     raw_log: Mutex<VecDeque<RawReport>>,
     /// The buzzers heard since the receiver connected.
     seen: Mutex<BTreeMap<BuzzerId, BuzzerSeen>>,
+    /// Why the colours kept were not used, until others are picked.
+    colours_refused: Mutex<Option<ColourClash>>,
 }
 
 /// The system's USB-HID, or in a debug build whose environment names an
@@ -137,14 +156,14 @@ impl Hardware {
     /// (`show_thread`), and wait there until that thread starts.
     pub fn start(app: &AppHandle, events: Sender<ShowEvent>, clock: ShowClock) -> Hardware {
         let settings_path = app.path().app_data_dir().map(|d| d.join(SETTINGS_FILE)).unwrap_or_else(|_| SETTINGS_FILE.into());
-        // Unreadable settings are reported in the Receiver tab: learned buttons are gone until learned again.
-        let (settings_file, settings) = AppFile::load::<ReceiverSettings>(settings_path);
+        let (settings_file, settings, colours_refused) = load_settings(settings_path);
         let remembered = choice(settings.receiver.clone());
+        let colours = settings.colours;
         let settings = Arc::new(Mutex::new(settings));
 
         let backend = match usb_backend() {
             Ok(b) => b,
-            Err(e) => return Hardware::without_usb(settings_file, settings, Some(e.to_string())),
+            Err(e) => return Hardware::without_usb(settings_file, settings, colours_refused, Some(e.to_string())),
         };
 
         let resolver_settings = settings.clone();
@@ -152,13 +171,19 @@ impl Hardware {
             protocol::for_device(&resolver_settings.lock().unwrap().learned, device)
         });
         let (handle, _join) = receiver::spawn(backend.clone(), resolver, events, ReceiverConfig::new(clock));
+        handle.set_colours(colours);
         handle.select(remembered);
-        Hardware { backend: Some(backend), handle: Some(handle), ..Hardware::without_usb(settings_file, settings, None) }
+        Hardware { backend: Some(backend), handle: Some(handle), ..Hardware::without_usb(settings_file, settings, colours_refused, None) }
     }
 
     /// The receiver's settings with no USB-HID, which failed with
     /// `init_error` if it did.
-    fn without_usb(settings_file: AppFile, settings: Arc<Mutex<ReceiverSettings>>, init_error: Option<String>) -> Hardware {
+    fn without_usb(
+        settings_file: AppFile,
+        settings: Arc<Mutex<ReceiverSettings>>,
+        colours_refused: Option<ColourClash>,
+        init_error: Option<String>,
+    ) -> Hardware {
         Hardware {
             backend: None,
             handle: None,
@@ -169,6 +194,7 @@ impl Hardware {
             learn: Mutex::new(None),
             raw_log: Mutex::new(VecDeque::new()),
             seen: Mutex::new(BTreeMap::new()),
+            colours_refused: Mutex::new(colours_refused),
         }
     }
 
@@ -206,6 +232,18 @@ impl Hardware {
         heard.into_values().collect()
     }
 
+    /// Stores `colours`, which pass their check, and shows the lights in
+    /// them, in the change so the colours shown are the ones stored.
+    fn use_colours(&self, colours: LightColours) -> CmdResult<()> {
+        let change = self.change_settings();
+        change.store(ReceiverSettings { colours, ..change.settings() })?;
+        *self.colours_refused.lock().unwrap() = None;
+        if let Some(handle) = self.handle.as_ref() {
+            handle.set_colours(colours);
+        }
+        Ok(())
+    }
+
     fn connected_device(&self) -> Option<DeviceInfo> {
         match self.handle.as_ref()?.status() {
             ReceiverStatus::Connected { device, .. } => Some(device),
@@ -236,6 +274,31 @@ impl SettingsChange<'_> {
         *self.hw.settings.lock().unwrap() = settings;
         Ok(())
     }
+}
+
+/// The settings kept at `path`. Unreadable ones are reported in the
+/// Receiver tab: learned buttons are gone until learned again. So are
+/// colours the buzzers do not tell ready apart in, and the defaults used
+/// (`LightColours::check`).
+fn load_settings(path: PathBuf) -> (AppFile, ReceiverSettings, Option<ColourClash>) {
+    let (settings_file, mut settings) = AppFile::load::<ReceiverSettings>(path);
+    let colours_refused = settings.colours.check().err();
+    if colours_refused.is_some() {
+        settings.colours = LightColours::default();
+    }
+    settings.my_colours = at_hand(std::mem::take(&mut settings.my_colours));
+    (settings_file, settings, colours_refused)
+}
+
+/// `colours` to keep at hand: each once, the first `MAX_MY_COLOURS`.
+fn at_hand(colours: Vec<Rgb>) -> Vec<Rgb> {
+    let mut kept: Vec<Rgb> = Vec::new();
+    for colour in colours {
+        if kept.len() < MAX_MY_COLOURS && !kept.contains(&colour) {
+            kept.push(colour);
+        }
+    }
+    kept
 }
 
 /// What the receiver thread uses for the receiver chosen in the settings.
@@ -342,6 +405,11 @@ pub fn receiver_info(hw: tauri::State<Hardware>) -> ReceiverInfo {
         recent: log.iter().skip(skip).cloned().collect(),
         buzzers,
         remote: settings.remote.all(),
+        colours: settings.colours,
+        shown_colours: settings.colours.shown(),
+        colours_refused: *hw.colours_refused.lock().unwrap(),
+        my_colours: settings.my_colours,
+        max_my_colours: MAX_MY_COLOURS,
         platform: std::env::consts::OS,
     }
 }
@@ -464,6 +532,32 @@ pub async fn receiver_reset_remote(app: AppHandle) -> CmdResult<()> {
     .await
 }
 
+/// Shows each light in its colour in `colours` from now on (also after
+/// restarts), as long as the buzzers tell ready apart in them
+/// (`LightColours::check`).
+#[tauri::command]
+pub async fn receiver_set_colours(app: AppHandle, colours: LightColours) -> CmdResult<()> {
+    colours.check().map_err(|clash| AppError::BuzzerColours { clash })?;
+    off_ui(move || app.state::<Hardware>().use_colours(colours)).await
+}
+
+/// Gives every light its default colour again.
+#[tauri::command]
+pub async fn receiver_reset_colours(app: AppHandle) -> CmdResult<()> {
+    off_ui(move || app.state::<Hardware>().use_colours(LightColours::default())).await
+}
+
+/// Keeps `colours` at hand for picking from now on (`at_hand`).
+#[tauri::command]
+pub async fn receiver_set_my_colours(app: AppHandle, colours: Vec<Rgb>) -> CmdResult<()> {
+    off_ui(move || {
+        let hw = app.state::<Hardware>();
+        let change = hw.change_settings();
+        change.store(ReceiverSettings { my_colours: at_hand(colours), ..change.settings() })
+    })
+    .await
+}
+
 /// Writes the recent raw reports to a text file the quizmaster picks, e.g.
 /// to attach to a bug report or to work out the receiver's protocol; false
 /// when they cancel.
@@ -525,9 +619,9 @@ mod tests {
         assert_eq!(learn.map(|r| (r.buzzer, r.button)), Some((3, Button::A)));
     }
 
-    fn hardware(settings_path: std::path::PathBuf) -> Hardware {
-        let (settings_file, settings) = AppFile::load(settings_path);
-        Hardware::without_usb(settings_file, Arc::new(Mutex::new(settings)), None)
+    fn hardware(settings_path: PathBuf) -> Hardware {
+        let (settings_file, settings, colours_refused) = load_settings(settings_path);
+        Hardware::without_usb(settings_file, Arc::new(Mutex::new(settings)), colours_refused, None)
     }
 
     fn stored(hw: &Hardware, settings: ReceiverSettings) -> CmdResult<()> {
@@ -566,6 +660,34 @@ mod tests {
         assert_eq!(fine.change_settings().settings().receiver, receiver());
         assert_eq!(hardware(dir.join(SETTINGS_FILE)).change_settings().settings().receiver, receiver());
         std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn colours_the_buzzers_cannot_tell_ready_apart_in_are_not_used() {
+        let dir = std::env::temp_dir().join(format!("receiver-colours-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join(SETTINGS_FILE);
+        let picked = LightColours { answered: Rgb::BLACK, ..LightColours::default() };
+        std::fs::write(&path, r##"{"colours": {"answered": "#000000", "wrong": "#0000ff"}, "remote": {"tick": "nothing"}}"##).unwrap();
+        let hw = hardware(path.clone());
+        let clash = ColourClash::ReadyLike { light: quiz_core::Light::Wrong };
+        assert_eq!(*hw.colours_refused.lock().unwrap(), Some(clash));
+        let settings = hw.change_settings().settings();
+        assert_eq!(settings.colours, LightColours::default(), "the defaults, nothing else");
+        assert_eq!(settings.remote.action(RemoteKey::Tick), RemoteAction::Nothing);
+
+        hw.use_colours(picked).unwrap();
+        assert_eq!(*hw.colours_refused.lock().unwrap(), None);
+        let again = hardware(path);
+        assert_eq!((again.change_settings().settings().colours, *again.colours_refused.lock().unwrap()), (picked, None));
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn colours_kept_at_hand_are_each_kept_once_and_not_too_many() {
+        let colour = |n: u8| Rgb::new(n, 0, 0);
+        assert_eq!(at_hand(vec![colour(1), colour(2), colour(1)]), [colour(1), colour(2)]);
+        assert_eq!(at_hand((0..40).map(colour).collect()), (0..MAX_MY_COLOURS as u8).map(colour).collect::<Vec<_>>());
     }
 
     #[test]

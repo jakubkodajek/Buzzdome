@@ -55,7 +55,7 @@ quiz-core (crates/quiz-core)    pure game state machine, rules, scoring, view
 | --- | --- | --- |
 | `crates/quiz-core` | quiz model (`model.rs`, `SCHEMA_VERSION`), game state machine (`game.rs`, `RULES_VERSION`), view, scoring, themes, styles, spreadsheet rows, the stage (the show's moment the lights follow, `stage.rs`), sound board | Pure. Writes `app/src/bindings` (ts-rs) when tested. |
 | `crates/quiz-file` | `.quiz` files: ZIP with `quiz.json` and `media/`, unpack cache, atomic save, spreadsheet import and CSV export | Format: `docs/quiz-format.md`. |
-| `crates/buzzers` | `BuzzerDriver` trait, USB-HID receiver thread, protocols (`enjoy303s.rs` over `cp2110.rs`, `learned.rs`), edge filter, fastest-finger timer order, show clock, fake receiver for E2E | Read `replica/hardware.md` and `docs/design.md` §2 first. |
+| `crates/buzzers` | `BuzzerDriver` trait, USB-HID receiver thread, protocols (`enjoy303s.rs` over `cp2110.rs`, `learned.rs`), light colours (`colours.rs`), edge filter, fastest-finger timer order, show clock, fake receiver for E2E | Read `replica/hardware.md` and `docs/design.md` §2 first. |
 | `crates/lights` | stage lights: setup checks, looks (`look.rs`), desk priority and fades, DMX frame formats, outputs, OSC and MIDI, the lights thread | A view of the show, never journaled (`docs/design.md` §7). |
 | `crates/quiz-ai` | quiz writing for AI assistants: JSON Schema, quiz folders, MCP server, the folder and instructions, connecting AI apps | `docs/ai-assistants.md`. |
 | `crates/show-sim` | random quizzes and shows for soak tests | Used by CI nightly. |

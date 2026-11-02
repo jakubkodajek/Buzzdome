@@ -1345,8 +1345,9 @@ between the two could go wrong mid-show.
   log only), so nothing unknown ever buzzes (code 6, a key F the buzzers
   do not have, included). In fastest finger, and while
   its buzz is judged, a press from a buzzer that was not ready is dropped
-  too, by the colour it showed: dark, locked, first, right or wrong,
-  brightness aside. It was pressed when the game would not take it, and
+  too, by the colour it showed: dark, or the colour of any light but
+  ready, brightness aside, in the colours the quizmaster picked
+  (2.7). It was pressed when the game would not take it, and
   arriving just after the step changed, before the receiver thread heard
   of it, it must not count in the next step either: a team hammering its
   locked buzzer while another team's answer is judged must not win as the
@@ -1549,8 +1550,8 @@ neither can slip in between the other's check and its start.
 
 `Game::apply` returns `Effect::Lights` with the light state of every affected
 buzzer, from one function (`Game::light_of`): ready while a player can press,
-locked once they answered or another player buzzed, first for the buzz being
-judged, dark while a question is closed, and the result from the reveal. A
+answered once they answered an everyone-answers question, locked once
+another player buzzed (or they sit out), first for the buzz being judged, dark while a question is closed, and the result from the reveal. A
 buzz judged wrong shows wrong while the others get the lights of the step
 that follows (ready again, or dark when it closed the question), until the
 next step's lights: another buzz, the question's close or its reveal. A
@@ -1577,10 +1578,10 @@ active protocol and writes the reports. Light failures are logged and never
 block the show. With the learned or raw protocol, `has_lights()` is false and
 the Director says "this receiver does not light the buzzers yet".
 
-The 303S shows them as colours: ready blue, locked dim white (Jakub's
-choice, told apart from the red of a wrong answer next to it), first
-white, right green, wrong red, off dark (`enjoy303s.rs`); no two share a
-colour byte. Locked and first are both white, told apart by brightness
+The 303S shows them as colours, by default: ready blue, answered and
+locked dim white (Jakub's choice, told apart from the red of a wrong
+answer next to it), first white, right green, wrong red, off dark
+(`LightColours::default` in `crates/buzzers/src/colours.rs`). Locked and first are both white, told apart by brightness
 alone, told apart at arm's length in the 2026-10-25 test, and Jakub kept
 dim white for locked after it (both read as white on the hardware;
 an early note of them as purple was a misreading, 2026-10-26). A light that goes to all buzzers at once reaches spare
@@ -1588,6 +1589,29 @@ buzzers too, which the app never lit and so show whatever went to all
 last: in a fastest-finger round they light ready, so a spare's press
 registers a late team, which plays from the next question as any player
 who joins then.
+
+The quizmaster picks each light's colour in the Receiver tab (specification
+BZ-22), for every quiz, so a buzzer can go dark once its player answered,
+say. The colours (`LightColours`, `#rrggbb` each) are kept per computer
+with the receiver's settings in `receiver.json`, with the colours the
+quizmaster keeps at hand for picking (`myColours`, up to 16). The app tells
+by the colour a press showed whether the buzzer was ready (2.4), so ready
+may not be dark nor look like any other light, brightness aside
+(`LightColours::check`): a choice that breaks it is refused with a message
+(`AppError::BuzzerColours`), and colours read from the file that break it
+are left for the defaults, which the Receiver tab says. Other lights may
+share a colour (answered and locked do by default). The shell hands the
+colours to the receiver thread (`ReceiverHandle::set_colours`), which keeps
+them for every receiver that connects and passes them to the protocol
+(`Protocol::set_colours`) before the mode and lights when it sets one up;
+the 303S driver repaints the buzzers when they change, so a new colour
+shows at once, also mid-question. A 303S colour byte holds one brightness
+bit and four levels a channel, so the driver shows a colour as the nearest
+shade it holds (`colours::Shade`): bright when a channel reaches 128, with
+levels 0, 85, 170 and 255, dim otherwise, with levels 0, 42, 84 and 127.
+The Receiver tab shows that shade beside each colour. Only the default
+colours were seen on the hardware (`docs/hardware-test.md`); the others
+follow from the SDK's byte layout.
 
 The driver also gets what the buzzers take as a whole. `Game::buzzer_mode`
 derives it from the same phase as the lights: `BuzzerMode` is off, register
@@ -1807,8 +1831,6 @@ them.
   `storage.set` becomes a new `Command::PluginState` so it is journaled and
   replayed. Events (`slide.shown`, `buzzer.pressed`, ...) are derived from the
   game state and the press stream the app already emits.
-- **Light colours** move from the protocol into the theme
-  (`buzzerColors`), passed to `encode_lights` for RGB buzzers.
 - **Sounds** (spec section 10). Cues already come out of the core as effects.
   The shell maps each cue to a file (show setting, else theme, else built-in)
   and plays it with a Rust audio library chosen when this is built, so

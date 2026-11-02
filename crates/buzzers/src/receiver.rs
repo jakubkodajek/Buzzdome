@@ -13,6 +13,7 @@
 //! whenever one is plugged in (`ReceiverChoice::Automatic`).
 
 use crate::clock::ShowClock;
+use crate::colours::LightColours;
 use crate::edge::EdgeFilter;
 use crate::hid::{DeviceInfo, DeviceSelector, HidBackend, HidDevice, Report};
 use crate::protocol::{self, Protocol, ProtocolKind, ProtocolResolver};
@@ -163,6 +164,7 @@ enum Control {
     Lights(Vec<(BuzzerId, Light)>),
     /// Every buzzer dark, then these lights.
     ResetLights(Vec<(BuzzerId, Light)>),
+    Colours(LightColours),
     Mode(BuzzerMode),
     ReloadProtocol,
     Shutdown,
@@ -191,6 +193,12 @@ impl ReceiverHandle {
     /// receiver connects (`BuzzerDriver::reset_lights`).
     pub fn reset_lights(&self, lights: Vec<(BuzzerId, Light)>) {
         let _ = self.tx.send(Control::ResetLights(lights));
+    }
+
+    /// Shows each light in its colour in `colours` from now on, on every
+    /// receiver that connects too (`Protocol::set_colours`).
+    pub fn set_colours(&self, colours: LightColours) {
+        let _ = self.tx.send(Control::Colours(colours));
     }
 
     /// Puts the buzzers in `mode`, now or once a receiver connects.
@@ -267,6 +275,7 @@ pub fn spawn<E: From<ReceiverEvent> + Send + 'static>(
         order,
         mode: BuzzerMode::Off,
         lights: BTreeMap::new(),
+        colours: LightColours::default(),
         outbox: VecDeque::new(),
         next_write: Instant::now(),
     };
@@ -303,9 +312,11 @@ struct Worker<E> {
     next_try: Instant,
     edge: EdgeFilter,
     order: TimerOrder,
-    /// The mode and lights the buzzers should show, as the app last set them.
+    /// The mode and lights the buzzers should show, and the lights'
+    /// colours, as the app last set them.
     mode: BuzzerMode,
     lights: BTreeMap<BuzzerId, Light>,
+    colours: LightColours,
     /// Reports waiting to be written, in order.
     outbox: VecDeque<Report>,
     next_write: Instant,
@@ -375,6 +386,13 @@ impl<E: From<ReceiverEvent>> Worker<E> {
                     self.queue(reports);
                 }
             }
+            Control::Colours(colours) => {
+                self.colours = colours;
+                if let Some(conn) = self.conn.as_mut() {
+                    let reports = conn.protocol.set_colours(&colours);
+                    self.queue(reports);
+                }
+            }
             Control::Mode(mode) => {
                 if mode == self.mode {
                     return;
@@ -441,7 +459,8 @@ impl<E: From<ReceiverEvent>> Worker<E> {
         self.next_write = Instant::now() + self.config.write_gap;
         // Every light as a reset: nothing says what the buzzers kept.
         let lights: Vec<_> = self.lights.iter().map(|(&buzzer, &light)| (buzzer, light)).collect();
-        let mut shown = conn.protocol.encode_mode(self.mode);
+        let mut shown = conn.protocol.set_colours(&self.colours);
+        shown.extend(conn.protocol.encode_mode(self.mode));
         shown.extend(conn.protocol.reset_lights(&lights));
         let status = connected_status(&conn);
         self.conn = Some(conn);

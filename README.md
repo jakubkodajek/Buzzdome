@@ -33,8 +33,9 @@ Windows first, with macOS and Linux too. Built with [Tauri 2](https://tauri.app)
   and a final podium.
 - **Wireless buzzers.** The app drives the Enjoy 303S RGB buzzers (up to 64
   per receiver) over their USB receiver. Fastest-finger order comes from
-  each buzzer's own timer, and the buzzer lights show ready, locked, first,
-  right and wrong in colour. The quizmaster's remote drives the Director.
+  each buzzer's own timer, and the buzzer lights show ready, answered,
+  locked, first, right and wrong, each in a colour the quizmaster can pick
+  (black turns a buzzer off). The quizmaster's remote drives the Director.
   Keyboard and on-screen buzzers always work, with or without hardware.
 - **Quiz editor (Studio).** Ribbon, slide thumbnails, a live slide canvas,
   a properties panel and a table view. Undo, a crash-safe draft and a test

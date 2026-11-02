@@ -2,6 +2,7 @@
 //! the real receiver thread and 303S protocol.
 
 use buzzers::clock::ShowClock;
+use buzzers::colours::{LightColours, Rgb};
 use buzzers::fake_receiver::FakeReceiver;
 use buzzers::protocol::{self, ProtocolKind};
 use buzzers::receiver::{spawn, ReceiverChoice, ReceiverConfig, ReceiverEvent, ReceiverHandle, ReceiverStatus};
@@ -80,7 +81,7 @@ fn a_test_plugs_the_receiver_in_presses_and_sees_the_lights() {
     handle.set_lights(vec![(1, Light::Ready), (2, Light::Ready), (3, Light::Locked)]);
     // Ready for two goes to all at once, then buzzer 3 is locked out.
     test.wait_for(|v| light_of(v, 64).is_some_and(|l| l == "ready"));
-    assert_eq!(test.wait_for(|_| true), json!({ "lights": [{ "buzzer": 3, "light": "locked" }] }));
+    assert_eq!(test.wait_for(|_| true), json!({ "lights": [{ "buzzer": 3, "light": "locked", "colour": "#2a2a2a" }] }));
 
     // The later press has the lower timer: the buzzers' order wins.
     test.send(json!({ "press": { "buzzer": 1, "button": "big", "timer": 300 } }));
@@ -93,6 +94,10 @@ fn a_test_plugs_the_receiver_in_presses_and_sees_the_lights() {
         })
         .collect();
     assert_eq!(presses, [Press::timed(2, Button::Big, 120), Press::timed(1, Button::Big, 300)], "buzzer 3 is locked out");
+
+    // Colours picked anew: locked out, buzzer 3 shows purple, a colour no light has by default.
+    handle.set_colours(LightColours { locked: Rgb::new(0xaa, 0, 0xaa), ..LightColours::default() });
+    assert_eq!(test.wait_for(|_| true), json!({ "lights": [{ "buzzer": 3, "light": null, "colour": "#aa00aa" }] }));
 
     test.send(json!({ "remote": "tick" }));
     assert!(matches!(wait_for(&rx, |e| matches!(e, ReceiverEvent::Remote { .. })), ReceiverEvent::Remote { key: RemoteKey::Tick, .. }));

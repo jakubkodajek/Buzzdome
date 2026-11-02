@@ -14,6 +14,7 @@
 //! the moment its colour last changed (`Press::timer`, `timer_order`).
 //! What that first test did not check says so where it matters.
 
+use crate::colours::{LightColours, Shade};
 use crate::cp2110;
 use crate::hid::{DeviceInfo, Report};
 use crate::protocol::{Protocol, ProtocolKind};
@@ -76,38 +77,30 @@ const fn colour(bright: bool, red: u8, green: u8, blue: u8) -> u8 {
     ((bright as u8) << 6) | (red << 4) | (green << 2) | blue
 }
 
-/// The red, green and blue of a colour byte, without its brightness or
-/// the top bit.
-const fn rgb(colour: u8) -> u8 {
-    colour & 0x3f
-}
-
+/// Every buzzer dark, whatever its lights' colours: what a buzzer the app
+/// does not light shows.
 const OFF: u8 = colour(false, 0, 0, 0);
-const READY: u8 = colour(true, 0, 0, 3);
-/// Dim white, which the red of a wrong answer next to it is told apart from.
-const LOCKED: u8 = colour(false, 1, 1, 1);
-const FIRST: u8 = colour(true, 3, 3, 3);
-const CORRECT: u8 = colour(true, 0, 3, 0);
-const WRONG: u8 = colour(true, 3, 0, 0);
 
-/// The colours of a buzzer that is not ready: one pressed showing any of
-/// them is out of the round (`Enjoy303s::press_in`).
-const NOT_READY: [u8; 5] = [OFF, LOCKED, FIRST, CORRECT, WRONG];
-
-fn colour_of(light: Light) -> u8 {
-    match light {
-        Light::Off => OFF,
-        Light::Ready => READY,
-        Light::Locked => LOCKED,
-        Light::First => FIRST,
-        Light::Correct => CORRECT,
-        Light::Wrong => WRONG,
-    }
+/// The colour byte of `shade`.
+fn byte(shade: Shade) -> u8 {
+    colour(shade.bright, shade.red, shade.green, shade.blue)
 }
 
-/// The light a colour byte shows, if the app sets it.
-fn light_of(colour: u8) -> Option<Light> {
-    Light::ALL.into_iter().find(|&light| colour_of(light) == colour)
+/// The shade a colour byte shows, without the top bit.
+pub(crate) fn shade_of(colour: u8) -> Shade {
+    Shade { bright: colour & 0x40 != 0, red: (colour >> 4) & 3, green: (colour >> 2) & 3, blue: colour & 3 }
+}
+
+/// The colour byte of `light` in `colours`.
+fn colour_of(colours: &LightColours, light: Light) -> u8 {
+    byte(colours.shade(light))
+}
+
+/// The light a colour byte shows in the default colours, if any: the first
+/// in `Light::ALL`, so dim white reads as locked, not answered.
+pub(crate) fn light_of(colour: u8) -> Option<Light> {
+    let colours = LightColours::default();
+    Light::ALL.into_iter().find(|&light| colour_of(&colours, light) == colour)
 }
 
 /// Where a buzzer's colour is kept: none for a buzzer the receiver does not take.
@@ -252,8 +245,10 @@ pub struct Enjoy303s {
     asked_ms: Option<u64>,
     /// How many times open was asked since connect was answered.
     opens: u32,
-    /// The colour each buzzer should show, by slot, as the app last set it.
-    wanted: [Option<u8>; BUZZERS],
+    /// The light each buzzer should show, by slot, as the app last set it.
+    wanted: [Option<Light>; BUZZERS],
+    /// The colour of each light (`Protocol::set_colours`).
+    colours: LightColours,
     /// The colour each buzzer was last told to show, by slot: none until told.
     shown: [Option<u8>; BUZZERS],
     mode: BuzzerMode,
@@ -272,6 +267,7 @@ impl Default for Enjoy303s {
             asked_ms: None,
             opens: 0,
             wanted: [None; BUZZERS],
+            colours: LightColours::default(),
             shown: [None; BUZZERS],
             mode: BuzzerMode::Off,
             dropped: Vec::new(),
@@ -354,10 +350,10 @@ impl Enjoy303s {
     /// showing a result must not count when it arrives just after the step
     /// changed, before the mode did, and its timer counts from another
     /// moment. Brightness aside, as the buzzer may report its own, and a
-    /// colour the app never sets lets the press through, as what the
-    /// buzzer reports is unverified; one that reads as dark does not, which
-    /// the hardware test checks. Elsewhere the game decides, and any buzzer
-    /// can register.
+    /// colour no light has lets the press through, as what the buzzer
+    /// reports is unverified; one that reads as dark does not, which the
+    /// hardware test checks (`LightColours::not_ready`). Elsewhere the game
+    /// decides, and any buzzer can register.
     fn press_in(&mut self, payload: &[u8]) -> Option<Press> {
         let [_, radio_id, code, shown, t0, t1, t2, ..] = *payload else { return None };
         let buzzer = BuzzerId::from(radio_id) + 1;
@@ -366,7 +362,7 @@ impl Enjoy303s {
         let &(button, _) = BUTTON_CODES.iter().find(|&&(_, c)| c == code >> 4)?;
         let press = Press::timed(buzzer, button, u32::from_le_bytes([t0, t1, t2, 0]));
         let judged = matches!(self.mode, BuzzerMode::FastestFinger | BuzzerMode::Buzzed);
-        if judged && NOT_READY.iter().any(|&c| rgb(c) == rgb(shown)) {
+        if judged && self.colours.not_ready(shade_of(shown)) {
             self.dropped.push(press);
             return None;
         }
@@ -387,23 +383,25 @@ impl Enjoy303s {
     /// too. No buzzer turns ready alone while others already count: a player
     /// switched on mid-round joins at the next one (`quiz_core::Game`).
     fn paint(&mut self) -> Vec<Report> {
-        let changed: Vec<usize> = (0..BUZZERS).filter(|&i| self.wanted[i].is_some() && self.wanted[i] != self.shown[i]).collect();
-        let wanted = self.wanted.iter().flatten();
+        let ready = colour_of(&self.colours, Light::Ready);
+        let colours = self.wanted.map(|light| light.map(|light| colour_of(&self.colours, light)));
+        let changed: Vec<usize> = (0..BUZZERS).filter(|&i| colours[i].is_some() && colours[i] != self.shown[i]).collect();
+        let wanted = colours.iter().flatten();
         let others = |c: u8| wanted.clone().filter(|&&w| w != c).count();
-        let any_ready = wanted.clone().any(|&c| c == READY);
-        let turning_ready = changed.iter().filter(|&&i| self.wanted[i] == Some(READY)).count();
+        let any_ready = wanted.clone().any(|&c| c == ready);
+        let turning_ready = changed.iter().filter(|&&i| colours[i] == Some(ready)).count();
         let common = if turning_ready > 1 {
-            Some(READY)
+            Some(ready)
         } else {
-            let candidates = wanted.clone().copied().filter(|&c| c == READY || !any_ready);
+            let candidates = wanted.clone().copied().filter(|&c| c == ready || !any_ready);
             candidates.min_by_key(|&c| others(c)).filter(|&c| 1 + others(c) < changed.len())
         };
         let orders: Vec<Order> = match common {
             Some(common) => {
-                let own = (0..BUZZERS).filter_map(|i| self.wanted[i].filter(|&w| w != common).map(|w| Order::Paint(i, w)));
+                let own = (0..BUZZERS).filter_map(|i| colours[i].filter(|&w| w != common).map(|w| Order::Paint(i, w)));
                 std::iter::once(Order::PaintAll(common)).chain(own).collect()
             }
-            None => changed.into_iter().filter_map(|i| self.wanted[i].map(|w| Order::Paint(i, w))).collect(),
+            None => changed.into_iter().filter_map(|i| colours[i].map(|w| Order::Paint(i, w))).collect(),
         };
         for order in &orders {
             match *order {
@@ -425,11 +423,11 @@ impl Enjoy303s {
         [Order::PaintAll(OFF).reports(), self.paint()].concat()
     }
 
-    /// Notes the colours these buzzers should show.
+    /// Notes the lights these buzzers should show.
     fn want(&mut self, lights: &[(BuzzerId, Light)]) {
         for &(buzzer, light) in lights {
             if let Some(i) = slot(buzzer) {
-                self.wanted[i] = Some(colour_of(light));
+                self.wanted[i] = Some(light);
             }
         }
     }
@@ -496,6 +494,13 @@ impl Protocol for Enjoy303s {
         if self.stage == Stage::Open { self.repaint() } else { Vec::new() }
     }
 
+    /// Kept until the receiver is open, then written: each buzzer whose
+    /// light now has another colour shows it (`paint`).
+    fn set_colours(&mut self, colours: &LightColours) -> Vec<Report> {
+        self.colours = *colours;
+        if self.stage == Stage::Open { self.paint() } else { Vec::new() }
+    }
+
     /// Kept for telling presses that count from those that cannot: the
     /// receiver takes presses all the time once open, so a late team still
     /// registers between questions (unverified: that `85` once is enough).
@@ -531,9 +536,8 @@ impl Default for SimulatedReceiver {
 
 impl SimulatedReceiver {
     /// Reads what the app sent, answers it, and returns the buzzers it
-    /// coloured anew, with the light each shows: none for a colour the app
-    /// never sets.
-    pub(crate) fn hear(&mut self, bytes: &[u8]) -> Vec<(BuzzerId, Option<Light>)> {
+    /// coloured anew, with the colour byte each shows.
+    pub(crate) fn hear(&mut self, bytes: &[u8]) -> Vec<(BuzzerId, u8)> {
         let mut changed = BTreeMap::new();
         for payload in messages(TO_RECEIVER, &mut self.pending, bytes) {
             let painted = match Order::read(&payload) {
@@ -551,7 +555,7 @@ impl SimulatedReceiver {
             };
             for (slot, colour) in painted {
                 if self.shown[slot].replace(colour) != Some(colour) {
-                    changed.insert(slot as BuzzerId + 1, light_of(colour));
+                    changed.insert(slot as BuzzerId + 1, colour);
                 }
             }
         }
@@ -599,6 +603,7 @@ impl SimulatedReceiver {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::colours::Rgb;
 
     /// The serial bytes of `reports`, one message per report.
     fn serial(reports: &[Report]) -> Vec<Vec<u8>> {
@@ -624,6 +629,20 @@ mod tests {
     fn press_message(radio_id: u8, code: u8, shown: u8, timer: u32) -> Vec<u8> {
         let t = timer.to_le_bytes();
         message(&[PRESS, radio_id, code, shown, t[0], t[1], t[2], 0, 0, 0])
+    }
+
+    /// The colour bytes of the default colours, which the buzzers showed
+    /// before the quizmaster could pick them.
+    const READY: u8 = colour(true, 0, 0, 3);
+    /// Dim white.
+    const LOCKED: u8 = colour(false, 1, 1, 1);
+    const FIRST: u8 = colour(true, 3, 3, 3);
+    const CORRECT: u8 = colour(true, 0, 3, 0);
+    const WRONG: u8 = colour(true, 3, 0, 0);
+
+    /// The red, green and blue of a colour byte, without its brightness or the top bit.
+    const fn rgb(colour: u8) -> u8 {
+        colour & 0x3f
     }
 
     const CONNECT: [u8; 6] = [0x35, 0x96, 0x02, 0x10, 0x00, 0x10];
@@ -856,14 +875,51 @@ mod tests {
     }
 
     #[test]
-    fn the_colours_differ_by_more_than_brightness() {
-        let colours = [OFF, READY, LOCKED, FIRST, CORRECT, WRONG];
-        for (i, a) in colours.iter().enumerate() {
-            for b in &colours[i + 1..] {
+    fn the_default_colours_are_those_the_buzzers_always_showed() {
+        let colours = LightColours::default();
+        let bytes = Light::ALL.map(|light| colour_of(&colours, light));
+        assert_eq!(bytes, [OFF, READY, LOCKED, LOCKED, FIRST, CORRECT, WRONG], "{:?}", Light::ALL);
+        // Apart from answered and locked, they differ by more than brightness.
+        let apart = [OFF, READY, LOCKED, FIRST, CORRECT, WRONG];
+        for (i, a) in apart.iter().enumerate() {
+            for b in &apart[i + 1..] {
                 assert_ne!(rgb(*a), rgb(*b), "{a:#04x} and {b:#04x}");
             }
         }
-        assert!(!NOT_READY.iter().any(|&c| rgb(c) == rgb(READY)));
+        assert_eq!(light_of(LOCKED), Some(Light::Locked));
+        assert_eq!(light_of(colour(true, 3, 2, 0)), None, "a colour no light has");
+    }
+
+    #[test]
+    fn a_colour_byte_is_the_shade_it_shows() {
+        for c in 0..0x80 {
+            assert_eq!(byte(shade_of(c)), c, "{c:#04x}");
+        }
+        assert_eq!(shade_of(0x80 | READY), shade_of(READY), "the top bit aside");
+    }
+
+    #[test]
+    fn the_buzzers_show_the_colours_the_quizmaster_picks() {
+        let mut p = Enjoy303s::default();
+        let picked = LightColours { answered: Rgb::BLACK, locked: Rgb::new(0x80, 0, 0x80), ..LightColours::default() };
+        assert!(p.set_colours(&picked).is_empty(), "kept until open");
+        p.encode_lights(&[(1, Light::Answered), (2, Light::Locked), (3, Light::Ready)]);
+        p.decode(&input(&message(&[CONNECTED, 0x00])));
+        p.follow_up(0);
+        p.decode(&input(&message(&[OPENED, 0x01])));
+        let purple = colour(true, 2, 0, 2);
+        // Answered is black now: buzzer 1 stays as dark as all were made.
+        assert_eq!(serial(&p.follow_up(0)), [START.to_vec(), all(OFF), paint(1, purple), paint(2, READY)]);
+        // Colours picked anew: only the buzzers whose light changed colour are told.
+        let picked = LightColours { answered: Rgb::new(0xff, 0xaa, 0), ..picked };
+        assert_eq!(serial(&p.set_colours(&picked)), [paint(0, colour(true, 3, 2, 0))]);
+        assert!(p.set_colours(&picked).is_empty(), "the same again");
+        // A press counts by the colours in use: purple is locked out now, the old dim white is a colour no light has.
+        p.encode_mode(BuzzerMode::FastestFinger);
+        assert!(p.decode(&input(&press_message(1, 0x50, purple, 300))).is_empty());
+        assert!(p.decode(&input(&press_message(0, 0x50, colour(false, 3, 2, 0), 300))).is_empty(), "answered, brightness aside");
+        assert_eq!(p.decode(&input(&press_message(3, 0x50, LOCKED, 300))), [Press::timed(4, Button::Big, 300)]);
+        assert_eq!(p.decode(&input(&press_message(2, 0x50, READY, 300))), [Press::timed(3, Button::Big, 300)]);
     }
 
     #[test]
@@ -974,6 +1030,7 @@ mod tests {
         serial(&reports.iter().filter(|r| matches!(r, Report::Output(_))).cloned().collect::<Vec<_>>())
             .iter()
             .flat_map(|bytes| receiver.hear(bytes))
+            .map(|(buzzer, colour)| (buzzer, light_of(colour)))
             .collect()
     }
 

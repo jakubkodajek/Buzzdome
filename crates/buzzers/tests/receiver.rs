@@ -2,6 +2,7 @@
 //! lights, fastest-finger order, unplug and replug.
 
 use buzzers::clock::ShowClock;
+use buzzers::colours::{LightColours, Rgb};
 use buzzers::cp2110;
 use buzzers::enjoy303s::Enjoy303s;
 use buzzers::hid::{DeviceInfo, DeviceSelector, HidBackend, HidDevice, Report};
@@ -108,10 +109,12 @@ impl HidDevice for FakeDevice {
 /// Test protocol: [0x01, buzzer, button 0..=4] is a press and [0x7e] the
 /// receiver's answer, which calls for [0x06, 0x01]. Set up with feature
 /// [0x30] and output [0x03, 0x01]; lights -> [0x02, buzzer, light], a
-/// reset -> [0x05] and the lights, a mode -> [0x04, mode].
+/// reset -> [0x05] and the lights, a mode -> [0x04, mode], colours other
+/// than those it shows -> [0x07, green of ready].
 struct TestProtocol {
     answered: bool,
     follow: Vec<Report>,
+    colours: LightColours,
 }
 
 fn mode_byte(mode: BuzzerMode) -> u8 {
@@ -169,6 +172,11 @@ impl Protocol for TestProtocol {
         vec![Report::Output(vec![0x04, mode_byte(mode)])]
     }
 
+    fn set_colours(&mut self, colours: &LightColours) -> Vec<Report> {
+        let changed = std::mem::replace(&mut self.colours, *colours) != *colours;
+        if changed { vec![Report::Output(vec![0x07, colours.ready.green])] } else { vec![] }
+    }
+
     fn has_lights(&self) -> bool {
         true
     }
@@ -209,7 +217,7 @@ fn start(backend: &FakeBackend) -> (ReceiverHandle, Receiver<ReceiverEvent>) {
 /// once when `answered`, else once it sends [0x7e].
 fn start_with(backend: &FakeBackend, config: ReceiverConfig, answered: bool) -> (ReceiverHandle, Receiver<ReceiverEvent>) {
     let (tx, rx) = mpsc::channel();
-    let resolver = Arc::new(move |_: &DeviceInfo| Box::new(TestProtocol { answered, follow: Vec::new() }) as Box<dyn Protocol>);
+    let resolver = Arc::new(move |_: &DeviceInfo| Box::new(TestProtocol { answered, follow: Vec::new(), colours: LightColours::default() }) as Box<dyn Protocol>);
     let (handle, _join) = spawn(Arc::new(backend.clone()), resolver, tx, config);
     (handle, rx)
 }
@@ -316,6 +324,33 @@ fn shows_the_lights_and_mode_set_before_the_receiver_connected_and_again_after_r
     wait_for(&rx, is_connected);
     assert_eq!(written_after_init(&backend, 4), shown);
     assert_eq!(backend.0.lock().unwrap().features.len(), 2, "set up again");
+    handle.shutdown();
+}
+
+#[test]
+fn the_lights_colours_reach_every_receiver_that_connects() {
+    let backend = FakeBackend::default();
+    let (handle, rx) = start(&backend);
+    let picked = LightColours { ready: Rgb::new(0, 0x80, 0xff), ..LightColours::default() };
+    handle.set_colours(picked);
+    handle.set_lights(vec![(3, Light::Ready)]);
+    handle.select(ReceiverChoice::Device(selector()));
+    backend.0.lock().unwrap().plugged = true;
+    wait_for(&rx, is_connected);
+    let shown = [vec![0x07, 0x80], vec![0x04, 0], vec![0x05], vec![0x02, 3, Light::Ready as u8]];
+    assert_eq!(written_after_init(&backend, 4), shown, "the colours before the lights");
+    // Picked anew while connected: they go to the receiver at once.
+    handle.set_colours(LightColours { ready: Rgb::new(0, 0x40, 0xff), ..picked });
+    assert_eq!(written_after_init(&backend, 5)[4], [0x07, 0x40]);
+
+    {
+        let mut w = backend.0.lock().unwrap();
+        w.break_link = true;
+        w.written.clear();
+    }
+    wait_for(&rx, |e| matches!(e, ReceiverEvent::Status(ReceiverStatus::Error { .. })));
+    wait_for(&rx, is_connected);
+    assert_eq!(written_after_init(&backend, 4)[0], [0x07, 0x40], "the colours in use, after replugging");
     handle.shutdown();
 }
 

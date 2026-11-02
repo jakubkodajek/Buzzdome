@@ -4,6 +4,7 @@
 //! message, which the UI shows as it is.
 
 use crate::session::{NotSaved, ResumeError};
+use buzzers::colours::ColourClash;
 use buzzers::learned::LearnError;
 use lights::setup::SetupError;
 use quiz_core::{BoardError, BuzzerId, Button, GameError, QuizJsonError, SheetError, ValidationError, MAX_TEAMS};
@@ -175,6 +176,9 @@ pub enum AppError {
     LearnInconsistent,
     #[error("these presses look the same as buzzer {buzzer} button {button:?}")]
     LearnConflict { buzzer: BuzzerId, button: Button },
+    /// Colours with which the buzzers do not tell ready apart (`LightColours::check`).
+    #[error("the buzzer colours were refused: {clash}")]
+    BuzzerColours { clash: ColourClash },
 
     // The stage lights.
     /// A lights setup that does not pass its checks (`LightsSetup::check`).

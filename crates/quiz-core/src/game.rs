@@ -101,19 +101,23 @@ impl Button {
 pub enum Light {
     Off,
     Ready,
+    /// Out of the question: a fastest-finger buzz judged wrong, another
+    /// player buzzed, or the player is switched off.
     Locked,
+    /// Answered an everyone-answers question, waiting for its reveal.
+    Answered,
     First,
     Correct,
     Wrong,
 }
 
 impl Light {
-    pub const ALL: [Light; 6] = [Light::Off, Light::Ready, Light::Locked, Light::First, Light::Correct, Light::Wrong];
+    pub const ALL: [Light; 7] = [Light::Off, Light::Ready, Light::Locked, Light::Answered, Light::First, Light::Correct, Light::Wrong];
 }
 
 /// Stops compiling when a light is added: add it to `Light::ALL` too, then here.
 const _: fn(Light) = |light| match light {
-    Light::Off | Light::Ready | Light::Locked | Light::First | Light::Correct | Light::Wrong => {}
+    Light::Off | Light::Ready | Light::Locked | Light::Answered | Light::First | Light::Correct | Light::Wrong => {}
 };
 
 /// What the buzzers take in the current step, as a whole: for receivers
@@ -965,8 +969,9 @@ impl Game {
     }
 
     /// The light a switched-on buzzer shows in the current step: ready while
-    /// its player can press (before the slides, to register), locked once they
-    /// answered or answered wrong or another player buzzed, first for the
+    /// its player can press (before the slides, to register), answered once
+    /// they answered an everyone-answers question, locked once they buzzed
+    /// wrong or sit out or another player buzzed, first for the
     /// buzz being judged, and from the reveal the result: right or wrong
     /// for the players an everyone-answers question counted, right for the
     /// fastest finger judged right. Dark otherwise, also once a question
@@ -976,8 +981,13 @@ impl Game {
         match &self.phase {
             Phase::Welcome | Phase::Lobby => Light::Ready,
             Phase::Question(QuestionStep::Running { .. }) => {
-                let done = self.responses.contains_key(&buzzer) || self.sits_out(buzzer);
-                if done { Light::Locked } else { Light::Ready }
+                if self.responses.contains_key(&buzzer) {
+                    Light::Answered
+                } else if self.sits_out(buzzer) {
+                    Light::Locked
+                } else {
+                    Light::Ready
+                }
             }
             Phase::Question(QuestionStep::Buzzed { buzzer: first, .. }) => {
                 if *first == buzzer { Light::First } else { Light::Locked }

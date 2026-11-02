@@ -71,7 +71,7 @@ Layout: `crates/quiz-core` (model, game state machine, scoring, view),
 `crates/quiz-ai` (quiz writing for AI assistants: the quiz JSON Schema, `workbench.rs` quiz folders,
 `mcp.rs` the MCP server, `roots.rs` the folders it may use, `settings.rs` the folder and instructions the app keeps,
 `assistants.rs` connecting AI apps),
-`crates/buzzers` (driver trait, USB-HID receiver thread, protocols, learn mode, `clock.rs` show clock, `fake_receiver.rs` the E2E tests' fake receiver),
+`crates/buzzers` (driver trait, USB-HID receiver thread, protocols, light colours, learn mode, `clock.rs` show clock, `fake_receiver.rs` the E2E tests' fake receiver),
 `crates/lights` (stage lights: DMX outputs, looks, the lights thread, OSC and MIDI show messages),
 `app/src-tauri` (Tauri shell, session journal, `show_thread.rs` and `pump.rs` the show thread and its
 event order, `app_windows.rs` the Director and projector windows, `remote.rs` what the quizmaster's remote keys do, `app_log.rs` the log file, `editor.rs` draft, `sheet_reader.rs` spreadsheet reader process, `hardware.rs` receiver setup,

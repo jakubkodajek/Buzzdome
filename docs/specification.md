@@ -118,7 +118,7 @@ fixed.
 | BZ-7 | Learn mode: for a chosen buzzer number and button, the user presses the button at least twice; the app derives a signature (which bytes matter) and stores it per receiver model. Conflicting signatures are refused with a message. While learning, presses do not reach the game. | done |
 | BZ-8 | Diagnostics: the Director shows live presses and the raw reports (hex) with what they decoded to, and exports the raw log to a text file that can be sent to a developer. | done |
 | BZ-9 | A command-line monitor (`hid-monitor`) lists devices and prints raw reports with timestamps, without the app. | done |
-| BZ-10 | Lights follow the game: ready, locked out, first to buzz, correct, wrong (table 4.3). Dome buzzers use their fixed colours; RGB buzzers use the colours in table 4.3. | done for the 303S, in the colours of table 4.3, checked on the hardware on 2026-10-25 (white and dim white told apart at arm's length); every buzzer goes dark when a show begins or ends; dome buzzers are not driven |
+| BZ-10 | Lights follow the game: ready, answered, locked out, first to buzz, correct, wrong (table 4.3). Dome buzzers use their fixed colours; RGB buzzers use the colours the quizmaster picked (BZ-22), by default those of table 4.3. | done for the 303S, in the colours of table 4.3, checked on the hardware on 2026-10-25 (white and dim white told apart at arm's length); every buzzer goes dark when a show begins or ends; dome buzzers are not driven |
 | BZ-11 | Up to 100 dome buzzers or 64 RGB buzzers on one receiver (the receiver's own limits, see `replica/hardware.md`). Up to about 50 are used at our events. | to verify on hardware |
 | BZ-12 | Keyboard and on-screen virtual buzzers work at the same time as the receiver, so a missing buzzer can be replaced mid-show. | done |
 | BZ-13 | If another program (for example the vendor's software) holds the receiver, the error says so. | done |
@@ -130,18 +130,22 @@ fixed.
 | BZ-19 | Which buttons buzz in a fastest-finger question follows its answers (Jakub, 2026-10-21): where it has one to four answers, the answer buttons A to D do, so the first press is also the player's answer, and the Director and the projector show the letter pressed; with no answers, or with E and F, which are read out, the big button does. The quizmaster judges either way. A player who joins while a fastest-finger question is under way (switched on, or new to the show by a press or by being added) plays from the next question, as the others' buzzer timers count from the question's start; in other questions they play at once. | done (rules version 5; shows begun before take any button and let a joining player buzz at once) |
 | BZ-20 | With no receiver chosen, the app takes a receiver whose protocol it knows (the Enjoy 303S's cable) by itself as soon as it is plugged in, also mid-show, with no click (Jakub, 2026-10-25). One chosen in the Receiver tab is kept until the quizmaster lets the app find it by itself again. | done |
 | BZ-21 | The quizmaster's remote (the Galaxy set's 12 keys) drives the show (Jakub, 2026-10-26): each key does one show action the quizmaster chooses in the Receiver tab, the same as its key on the keyboard or button in the Director: next, previous slide, pause or go on, end question, right, wrong, leaderboard, play video, open or close the projector, or nothing. The keys have defaults (`docs/design.md` 2.10), and the Receiver tab shows which key was pressed last. Back between questions goes to the slide before; a question that ended earlier in the show (closed, or won by a fastest finger) comes back with its answer shown and its scores kept, so Back then Forward never asks it twice. | done; the three arrows' codes to check on the hardware |
+| BZ-22 | The quizmaster picks the colour of each light of RGB buzzers (table 4.3) in the Receiver tab, for every quiz (Jakub, 2026-11-02): any colour (a colour square with its hex code), one from a row of the most used colours, black among them to turn the buzzer off (so a player sees their answer is in), or one of their own colours kept at hand (up to 16). Each light shows the nearest shade the buzzers can show beside it, and the buzzers take a new colour at once, also mid-question. Ready may not be dark nor look like another light on the buzzer, brightness aside, as the app tells by the colour a press showed whether it counts (`docs/design.md` 2.4); such a colour is refused with a message, and colours kept that fail this check are left for the defaults, with a message in the Receiver tab. A button brings back the defaults. | done; how the buzzers show colours other than the defaults is not checked on the hardware (`docs/hardware-test.md`) |
 
 ### 4.3 Light states
 
 `Light` values come from the game core (`crates/quiz-core`). The RGB colours
-are this app's defaults and will become part of the theme (section 5). The
-303S's protocol has no flashing, so each light has a colour of its own.
+are this app's defaults; the quizmaster can change each of them (BZ-22),
+for every quiz, so they are not part of the theme (the theme's
+`buzzerColors`, section 5, are not used for the lights). The 303S's
+protocol has no flashing, so each light has a colour of its own.
 
 | Game situation | `Light` | Dome buzzer | RGB buzzer |
 | --- | --- | --- | --- |
 | no question running | `Off` | off | off |
 | buzzer may press | `Ready` | green | blue |
-| out for this question (pressed wrong, or another team is answering) | `Locked` | red | dim white (Jakub's choice, told apart from wrong) |
+| answered an everyone-answers question, before the reveal | `Answered` | red | dim white (black turns it off, BZ-22) |
+| out for this question (pressed wrong, another team is answering, or switched off) | `Locked` | red | dim white (Jakub's choice, told apart from wrong) |
 | pressed first | `First` | white, flashing | white |
 | answer judged correct | `Correct` | green, flashing | green |
 | answer judged wrong | `Wrong` | red, flashing | red |
