@@ -1,6 +1,6 @@
 ---
 name: buzzdome-hardware
-description: Works on Buzzdome's wireless buzzers (Enjoy 303S receiver over the 10c4:1819 CP2110 cable), learn mode, the quizmaster's remote, or the stage lights (DMX, Art-Net, sACN, OSC, MIDI). Use before touching crates/buzzers, crates/lights or their shell modules.
+description: Works on Buzzdome's wireless buzzers (Enjoy 303S receiver over the 10c4:1819 CP2110 cable), their light colours, learn mode, the quizmaster's remote, or the stage lights (DMX, Art-Net, sACN, OSC, MIDI). Use before touching crates/buzzers, crates/lights or their shell modules.
 ---
 
 # Buzzers, receiver and stage lights
@@ -13,8 +13,8 @@ journaled.
 
 - `replica/hardware.md`: what is known about the buzzers and the receiver.
 - `docs/design.md` §2 (buzzer link: layers, receiver thread, 303S
-  protocol, learn mode, press to screen, lights, remote) and §7 (stage
-  lights).
+  protocol, learn mode, press to screen, lights and their colours,
+  remote) and §7 (stage lights).
 - `docs/hardware-test.md`: the checklist for the real receiver, with
   what was verified on 2026-10-25 and what is still open.
 
@@ -29,6 +29,27 @@ journaled.
   press came from (`Command::Press`). Keep each change inside one layer.
 - **Document what the receiver reports** in `docs/design.md` §2.4 and the
   test plan, marked verified or not.
+
+## Where things are
+
+- **Light states** (`quiz_core::Light`: off, ready, locked, answered,
+  first, correct, wrong) are decided by the game (`Game::light_of`,
+  `Effect::Lights`); the driver only shows them.
+- **Light colours** are the quizmaster's, per computer, picked in the
+  Receiver tab (`director/BuzzerColours.tsx`): `LightColours` in
+  `crates/buzzers/src/colours.rs`, kept in `receiver.json` by
+  `app/src-tauri/src/hardware.rs`, handed to the receiver thread with
+  `ReceiverHandle::set_colours`. Black is a dark buzzer. Ready must stay
+  distinct (`LightColours::check`), as the app tells from the colour a
+  press showed whether the buzzer was ready.
+- **The remote**: the 303S protocol reads its keys as `RemoteKey`
+  (`crates/buzzers/src/lib.rs`); what each key does in a show is
+  `app/src-tauri/src/remote.rs`, carried out by the Director like the
+  same keyboard key (`keyboard.ts`). Keys never go into the game
+  themselves.
+- **Learn mode** (`learned.rs`) is for receivers whose protocol the app
+  does not know. It is hidden for the 303S and cannot work on its
+  CP2110 cable.
 
 ## Tools
 
