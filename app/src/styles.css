@@ -30,11 +30,10 @@ body,
   color: var(--good);
 }
 
-/* Every message (`notice.tsx`): a sign, what happened, and under it,
-   smaller, the system's words or the file it was about. A toast, a box
+/* Every message (`notice.tsx`): a small dot, what happened, and under it,
+   smaller, the system's words or the file it was about. A toast, the place
    where the message applies or a banner over the window set the frame;
-   `--tone` colours the sign and the edge. */
-/* A notice's tone: a small dot on its first line (line-height 1.4). */
+   `--tone` colours the dot, on the first line (line-height 1.4). */
 .notice-dot {
   width: 7px;
   height: 7px;

@@ -33,7 +33,7 @@ describe("errorText", () => {
 
   it("says a recent quiz is gone, or where it was when its folder is away too", () => {
     expect(errorText(cs, { code: "quizFileGone", name: "Hospoda.quiz" })).toBe(
-      "Kvíz Hospoda.quiz byl smazán nebo přesunut, a tak zmizel z nedávných.",
+      "Kvíz Hospoda.quiz byl smazán nebo přesunut, a tak zmizel ze seznamu Naposledy otevřené.",
     );
     expect(errorText(en, { code: "quizFileUnreachable", name: "Hospoda.quiz", folder: "E:\\Quizzes" })).toContain("nor its folder E:\\Quizzes can be found.");
   });
