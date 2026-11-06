@@ -33,6 +33,16 @@ use ts_rs::TS;
 use zip::write::SimpleFileOptions;
 use zip::{CompressionMethod, ZipArchive, ZipWriter};
 
+/// Whether `path` is written as a network or device path: it starts with
+/// two separators (`\\server\share`, `//server/share`, `\\?\UNC\`,
+/// `\\.\`, `\\?\`) or with `\??\`. Windows would contact the server,
+/// and sign in to it with the user's credentials, just to look such a path
+/// up, so it is judged by its text before any file is looked at.
+pub fn network_or_device(path: &str) -> bool {
+    let mut start = path.chars();
+    matches!((start.next(), start.next()), (Some('\\' | '/'), Some('\\' | '/' | '?')))
+}
+
 /// File extension of quiz files.
 pub const EXTENSION: &str = "quiz";
 /// What a quiz opens from: a quiz file, or a plain quiz JSON.

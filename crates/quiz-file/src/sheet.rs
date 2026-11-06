@@ -125,8 +125,7 @@ enum Found {
 /// contact the server, and sign in to it, just to see whether the file is
 /// there.
 fn find_media(folder: &Path, file: &str) -> Found {
-    let mut start = file.chars();
-    let network = matches!((start.next(), start.next()), (Some('\\' | '/'), Some('\\' | '/' | '?')));
+    let network = crate::network_or_device(file);
     // A sheet made on Windows may name subfolders with backslashes.
     let portable = if cfg!(windows) { file.to_string() } else { file.replace('\\', "/") };
     let said = folder.join(&portable);

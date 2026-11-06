@@ -80,14 +80,18 @@ impl Roots {
     /// does not know) and without `..`. A path that is not there yet is
     /// judged by the nearest folder above it that is.
     ///
-    /// A network or device path (`network_or_device`) is refused before any
-    /// file is looked at, unless a root is on a network share: on Windows
-    /// looking it up would contact the server and sign in to it with the
-    /// user's credentials, whoever told the assistant the path.
+    /// A network or device path (`quiz_file::network_or_device`) is refused
+    /// before any file is looked at, unless it is on the share of a root
+    /// (`share_of`): on Windows looking it up would contact the server and
+    /// sign in to it with the user's credentials, whoever told the assistant
+    /// the path.
     pub fn resolve(&self, given: &Path) -> Result<PathBuf, String> {
         let path = given.display();
-        if network_or_device(given) && !self.0.iter().any(|root| on_a_share(root)) {
-            return Err(format!("{path} is a network or device path: use a path on this computer"));
+        if quiz_file::network_or_device(&given.as_os_str().to_string_lossy()) {
+            let share = share_of(given);
+            if share.is_none() || !self.0.iter().any(|root| share_of(root) == share) {
+                return Err(format!("{path} is a network or device path: use a path on this computer"));
+            }
         }
         if !given.is_absolute() {
             return Err(format!("{path} is not an absolute path"));
@@ -114,22 +118,23 @@ impl Roots {
     }
 }
 
-/// Whether `path` is written as a network or device path: it starts with
-/// two separators (`\\server\share`, `//server/share`, `\\?\UNC\`,
-/// `\\.\`) or with `\??\`, as `quiz_file`'s spreadsheet import tells
-/// them too.
-fn network_or_device(path: &Path) -> bool {
+/// The `server\share` a network path names, in lower case (Windows
+/// compares them so): from `\\?\UNC\server\share`, as a root's real path
+/// reads, or `\\server\share` and `//server/share`, as written. None for a
+/// local or device path (`\\?\C:\`, `\\.\pipe`, `\??\`).
+fn share_of(path: &Path) -> Option<String> {
     let text = path.as_os_str().to_string_lossy();
-    let mut start = text.chars();
-    matches!((start.next(), start.next()), (Some('\\' | '/'), Some('\\' | '/' | '?')))
-}
-
-/// Whether the root, a real path (`allow`), is on a network share: on
-/// Windows `\\?\UNC\server\share`, or `\\server\share` as written;
-/// a folder on a drive is `\\?\C:\`.
-fn on_a_share(root: &Path) -> bool {
-    let text = root.as_os_str().to_string_lossy();
-    text.starts_with(r"\\?\UNC\") || (network_or_device(root) && !text.starts_with(r"\\?\") && !text.starts_with(r"\\.\"))
+    let separators = |c: char| c == '\\' || c == '/';
+    let rest = match text.get(..8) {
+        Some(head) if head.eq_ignore_ascii_case(r"\\?\UNC\") => &text[8..],
+        _ if quiz_file::network_or_device(&text) && !text[1..].starts_with(['?', '.']) && !text[2..].starts_with(['?', '.']) => &text[2..],
+        _ => return None,
+    };
+    let mut parts = rest.split(separators);
+    match (parts.next(), parts.next()) {
+        (Some(server), Some(share)) if !server.is_empty() && !share.is_empty() => Some(format!("{server}\\{share}").to_lowercase()),
+        _ => None,
+    }
 }
 
 /// `path` with links followed: the real path of the nearest part of it that
@@ -208,8 +213,20 @@ mod tests {
             let refused = roots.resolve(Path::new(given)).unwrap_err();
             assert!(refused.contains("network or device path"), "{given}: {refused}");
         }
-        assert!(on_a_share(Path::new(r"\\?\UNC\host\share\quizzes")) && on_a_share(Path::new(r"\\host\share")));
-        assert!(!on_a_share(Path::new(r"\\?\C:\Users\me\Quizzes")) && !on_a_share(&dir));
+        let host = Some(r"host\share".to_string());
+        assert_eq!(share_of(Path::new(r"\\?\UNC\Host\Share\quizzes")), host);
+        assert_eq!(share_of(Path::new(r"\\host\share")), host);
+        assert_eq!(share_of(Path::new("//host/share/x.png")), host);
+        for local in [r"\\?\C:\Users\me\Quizzes", r"\\.\pipe\x", r"\??\C:\x.png", r"\\host", r"C:\x"] {
+            assert_eq!(share_of(Path::new(local)), None, "{local}");
+        }
+        assert_eq!(share_of(&dir), None);
+        // With a root on a share, a path on another share is still refused by its text.
+        let on_share = Roots(vec![PathBuf::from(r"\\?\UNC\host\share\quizzes")]);
+        for given in [r"\\other\share\x.png", r"\\host\other\x.png", r"\\.\pipe\x"] {
+            let refused = on_share.resolve(Path::new(given)).unwrap_err();
+            assert!(refused.contains("network or device path"), "{given}: {refused}");
+        }
     }
 
     #[cfg(unix)]
