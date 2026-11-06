@@ -11,7 +11,7 @@
 
 use quiz_core::{
     AllAnswered, AnswerMode, Button, Command, CorrectAnswer, Effect, Game, GameError, Light, Phase, Question, QuestionStep, Quiz,
-    QuizSettings, Slide, SlideContent, Stamped, VideoClip, FULL_SHARE, MAX_AFTER_REVEAL_DELAY_S, MAX_ALL_ANSWERED_DELAY_S, MAX_ANSWERS, MAX_EVERYONE_ANSWERS,
+    QuizSettings, ReadAloud, Slide, SlideContent, Stamped, VideoClip, FULL_SHARE, MAX_AFTER_REVEAL_DELAY_S, MAX_ALL_ANSWERED_DELAY_S, MAX_ANSWERS, MAX_EVERYONE_ANSWERS,
     MAX_JOKERS, MAX_POINTS, MAX_TEAMS, MIN_EVERYONE_ANSWERS, REPLAYS_AS_PLAYED_FROM, RULES_VERSION,
 };
 use std::collections::BTreeMap;
@@ -110,6 +110,10 @@ pub fn random_quiz(rng: &mut Rng) -> Quiz {
         hide_buzz_points: rng.chance(30),
         answer_chart: rng.chance(30),
         jokers: if rng.chance(50) { rng.between(1, u64::from(MAX_JOKERS)) as u8 } else { 0 },
+        // The voice is the Director's alone; only whether the clock waits for it changes the show.
+        read_aloud: *rng.pick(&[ReadAloud::Off, ReadAloud::Question]),
+        clock_after_reading: rng.chance(50),
+        ..QuizSettings::default()
     };
     // Now and then the show opens on a welcome screen.
     quiz.welcome.on = rng.chance(30);
@@ -166,6 +170,7 @@ fn step_commands(game: &Game, rng: &mut Rng) -> Vec<Command> {
         Command::ResumeClock,
         Command::CloseQuestion,
         Command::RestartQuestion,
+        Command::ReadingDone { slide: game.slide_index() },
         Command::PlayVideo,
         Command::GoToFinal,
         Command::GoTo { slide: rng.index(slides + 2) },
@@ -183,6 +188,7 @@ fn quizmaster_weight(command: &Command) -> u64 {
         Command::ResumeClock => 12,
         Command::PauseClock => 8,
         Command::CloseQuestion => 6,
+        Command::ReadingDone { .. } => 10,
         Command::RestartQuestion | Command::PlayVideo => 4,
         Command::GoTo { .. } => 3,
         _ => 1,
@@ -199,6 +205,8 @@ fn offered(game: &Game, command: &Command) -> Option<bool> {
         Command::ResumeClock => c.resume_clock,
         Command::CloseQuestion => c.close_question,
         Command::RestartQuestion => c.restart_question,
+        // Not a button: the Director sends it whenever a reading ends, and the show ignores one it does not wait for.
+        Command::ReadingDone { slide } => return (c.reading_done && *slide == game.slide_index()).then_some(true),
         Command::PlayVideo => c.play_video,
         Command::GoToFinal | Command::StartOver | Command::ResetScores => c.go_to,
         Command::GoTo { slide } => c.go_to && *slide < game.quiz().slides.len(),
@@ -560,13 +568,12 @@ impl Show {
                     }
                 }
             }
-            _ => {
-                if rng.chance(50) {
-                    Command::ShowLeaderboard { visible: rng.chance(50) }
-                } else {
-                    Command::PlayVideo
-                }
-            }
+            _ => match rng.between(0, 2) {
+                0 => Command::ShowLeaderboard { visible: rng.chance(50) },
+                1 => Command::PlayVideo,
+                // A reading that ended late, for any slide.
+                _ => Command::ReadingDone { slide: rng.index(game.quiz().slides.len() + 1) },
+            },
         }
     }
 

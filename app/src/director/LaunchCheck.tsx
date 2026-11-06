@@ -3,11 +3,12 @@ import { api } from "../api";
 import { useApp, useRun } from "../app-context";
 import { defaultChoice } from "../audio/library";
 import { useSoundPreview } from "../audio/show-sounds";
-import { DEFAULT_QUIZ_SOUNDS } from "../bindings/Constants";
+import { DEFAULT_QUIZ_SETTINGS, DEFAULT_QUIZ_SOUNDS } from "../bindings/Constants";
 import { useBackendEvent, usePlayerVolume, useProjectorWindow, useReceiverInfo, useShowDiskSpace } from "../hooks";
 import type { StringKey } from "../i18n";
 import { CheckIcon, CrossIcon, QuestionIcon, WarningIcon } from "../icons";
-import { soundsOf } from "../quiz";
+import { LANGUAGE_LABEL, settingsOf, soundsOf } from "../quiz";
+import { usePreparing, useSystemVoice } from "../audio/read-aloud";
 import type { GameView, Quiz } from "../types";
 import { launchCheck, projectorScreen, type CheckFix, type CheckPart, type CheckState, type Muted, type SoundTry } from "./launch-check";
 import type { ProjectorSettings } from "./SettingsTab";
@@ -38,6 +39,7 @@ const PART_LABEL: Record<CheckPart, StringKey> = {
   buzzers: "launchPartBuzzers",
   projector: "launchPartProjector",
   sound: "launchPartSound",
+  voice: "launchPartVoice",
   disk: "launchPartDisk",
 };
 
@@ -71,7 +73,11 @@ function LaunchCheckPanel({ view, quiz, projector, onTab, onHide }: LaunchCheckP
   const muted: Muted = playerVolume === 0 ? "player" : sounds.effectsVolume === 0 ? "quiz" : null;
   const [sound, setSound] = useState<SoundTry>("notPlayed");
 
-  const items = launchCheck(t, { receiver, view, projector: projectorWindow, muted, sound, freeDiskBytes });
+  const preparing = usePreparing();
+  const language = quiz ? settingsOf(quiz).language : DEFAULT_QUIZ_SETTINGS.language;
+  const systemVoice = useSystemVoice(language);
+  const voice = { preparing, systemVoice: systemVoice && systemVoice.name, language: t(LANGUAGE_LABEL[language]) };
+  const items = launchCheck(t, { receiver, view, projector: projectorWindow, muted, sound, freeDiskBytes, voice });
   const open = items.filter((item) => item.state !== "ok").length;
 
   const fix = (action: CheckFix) => {

@@ -1,6 +1,6 @@
 Když napíšu jen téma, udělej celý kvíz a na nic se neptej. Co napíšu v chatu (víc kol, lehčí otázky, kvíz pro děti), má přednost před těmito pravidly.
 
-- Kvíz napiš v jazyce, kterým ti píšu.
+- Kvíz napiš v jazyce, kterým ti píšu, a nastav na něj `settings.language` (`cs` nebo `en`), aby ho hlas předčítal v tomto jazyce.
 - 3 kola po 6 otázkách na dané téma. Každé kolo začni snímkem billboard s jeho názvem a ukonči snímkem endOfRound. Kvíz ukonči snímkem final.
 - V každém kole 4 otázky, na které odpovídají všichni (mode everyone), a 2 otázky s rychlou odpovědí (mode fastestFinger), každá se 4 odpověďmi.
 - Otázky, na které odpovídají všichni: 20 sekund a 100 bodů, které s časem klesají na 50. Otázky s rychlou odpovědí: 15 sekund, 200 bodů a za špatnou odpověď 100 bodů dolů.

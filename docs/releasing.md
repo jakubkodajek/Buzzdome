@@ -88,6 +88,26 @@ only the runner's own tools and the app's locked dependencies, installed
 without their install scripts: whoever could change such an action could
 take the key and sign an update every installed app accepts.
 
+## The voice libraries
+
+`crates/voice` links prebuilt sherpa-onnx libraries (with ONNX Runtime)
+into the app. The `sherpa-onnx-sys` build script would download them from
+sherpa-onnx's GitHub releases without checking them, so every workflow that
+builds Rust first runs `.github/scripts/sherpa-onnx-libs.sh` (in
+`release.yml` directly, elsewhere through `.github/actions/voice-libs`
+after the Rust cache): it downloads this runner's archives, refuses one
+whose SHA-256 is not the one written in the script, removes the libraries
+a cache may have kept unpacked in `target/sherpa-onnx-prebuilt` (the build
+script links those without looking at the archive), and points the build
+at the checked archives (`SHERPA_ONNX_ARCHIVE_DIR`, named for the run, so
+the build script runs again and unpacks them). Raising `sherpa-onnx` in `Cargo.lock` changes
+the archives' names, so the script fails until their new hashes are
+written into it: download each archive, check it, and write its
+`sha256sum`. A local build that cannot download (a proxy) works the same
+way: run the script and export the folder it names. Only on CI does it
+remove `target/sherpa-onnx-prebuilt`: locally the folder's name does not
+change, so the build script would not run again to unpack the libraries.
+
 ## Code signing
 
 The release key signs updates only. The installers themselves are not

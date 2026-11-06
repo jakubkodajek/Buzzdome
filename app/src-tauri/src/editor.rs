@@ -184,7 +184,8 @@ fn prune(app: &AppHandle, dir: &Path, keep: Option<&Path>) {
 /// quiz file, copying a video, reading a sheet) during a show, whose journal
 /// must not wait for the disk behind it. The Director offers the editor
 /// only when no show runs; this holds also for a command already on its way.
-fn refuse_during_show(app: &AppHandle) -> CmdResult<()> {
+/// The voice model's download is refused alike (`read_aloud.rs`).
+pub(crate) fn refuse_during_show(app: &AppHandle) -> CmdResult<()> {
     if show_running(app) {
         return Err(AppError::ShowRunning);
     }

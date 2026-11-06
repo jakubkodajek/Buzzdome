@@ -70,6 +70,9 @@ jobs:
         with:
           key: nightly
 
+      # The native voice libraries, checked against their pinned SHA-256 (docs/releasing.md).
+      - uses: ./.github/actions/voice-libs
+
       # Tauri embeds the built UI, so it must exist before the shell compiles.
       - name: Build the UI
         working-directory: app

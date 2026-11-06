@@ -17,6 +17,11 @@ pub const MAX_ALL_ANSWERED_DELAY_S: u8 = 10;
 pub const DEFAULT_AFTER_REVEAL_DELAY_S: u8 = 5;
 /// Longest wait, in seconds, before the show goes on from a question's answer.
 pub const MAX_AFTER_REVEAL_DELAY_S: u8 = 60;
+/// Highest voice number of the app's voice model (voices 0 to this).
+pub const MAX_VOICE: u8 = 9;
+/// The first voice that sounds male: the ones before it sound female
+/// (the quiz file's contract, `docs/quiz-format.md`).
+pub const FIRST_MALE_VOICE: u8 = 5;
 /// Most jokers a player can have in a show.
 pub const MAX_JOKERS: u8 = 5;
 
@@ -104,6 +109,29 @@ pub struct QuizSettings {
     #[schemars(with = "u8")]
     #[ts(as = "u8")]
     pub jokers: u8,
+    /// The language the quiz is written in, for the voice that reads it out.
+    #[serde(with = "crate::style::lenient_or_default")]
+    #[schemars(with = "QuizLanguage")]
+    #[ts(as = "QuizLanguage")]
+    pub language: QuizLanguage,
+    /// The Director reads each question out in a voice of `language` when
+    /// it comes on screen; the quizmaster can stop it or have it read again.
+    #[serde(with = "crate::style::lenient_or_default")]
+    #[schemars(with = "ReadAloud")]
+    #[ts(as = "ReadAloud")]
+    pub read_aloud: ReadAloud,
+    /// Which of the voice model's voices reads, up to `MAX_VOICE`.
+    #[serde(with = "voice")]
+    #[schemars(with = "u8")]
+    #[ts(as = "u8")]
+    pub voice: u8,
+    /// A question that starts as shown and is read out waits for the
+    /// reading to end before its clock starts (`Command::ReadingDone`);
+    /// by default the clock runs while the voice reads.
+    #[serde(with = "crate::style::lenient_or_default")]
+    #[schemars(with = "bool")]
+    #[ts(as = "bool")]
+    pub clock_after_reading: bool,
 }
 
 impl Default for QuizSettings {
@@ -122,6 +150,10 @@ impl Default for QuizSettings {
             hide_buzz_points: false,
             answer_chart: false,
             jokers: 0,
+            language: QuizLanguage::Cs,
+            read_aloud: ReadAloud::Off,
+            voice: 0,
+            clock_after_reading: false,
         }
     }
 }
@@ -172,6 +204,36 @@ impl AllAnswered {
     }
 }
 
+/// The language a quiz is written in, by its ISO 639-1 code: the ones the
+/// app's voices read (the voice model has more, which can be added here).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, TS, JsonSchema)]
+#[ts(export)]
+#[serde(rename_all = "lowercase")]
+pub enum QuizLanguage {
+    #[default]
+    Cs,
+    En,
+}
+
+impl QuizLanguage {
+    /// Every language, in the order the quizmaster picks from.
+    pub const ALL: [QuizLanguage; 2] = [QuizLanguage::Cs, QuizLanguage::En];
+}
+
+/// What of a question the Director reads out when it comes on screen.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, TS, JsonSchema)]
+#[ts(export)]
+#[serde(rename_all = "camelCase")]
+pub enum ReadAloud {
+    /// Nothing is read out.
+    #[default]
+    Off,
+    /// The question's text.
+    Question,
+    /// The question's text, then each answer with its letter.
+    QuestionAndAnswers,
+}
+
 /// A step the show takes by itself: once everyone answered (`AllAnswered`),
 /// or once a question's answer was shown (`QuizSettings::next_after_reveal`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
@@ -211,6 +273,7 @@ pub(crate) use count_up_to;
 count_up_to!(all_answered_delay, super::DEFAULT_ALL_ANSWERED_DELAY_S, super::MAX_ALL_ANSWERED_DELAY_S);
 count_up_to!(after_reveal_delay, super::DEFAULT_AFTER_REVEAL_DELAY_S, super::MAX_AFTER_REVEAL_DELAY_S);
 count_up_to!(jokers, 0, super::MAX_JOKERS);
+count_up_to!(voice, 0, super::MAX_VOICE);
 
 #[cfg(test)]
 mod tests {
@@ -234,6 +297,10 @@ mod tests {
         assert_eq!(read(r#"{ "allAnsweredDelayS": -1 }"#).all_answered_delay_s, DEFAULT_ALL_ANSWERED_DELAY_S);
         assert_eq!(read(r#"{ "allAnswered": "reveal" }"#).all_answered, AllAnswered::Reveal);
         assert!(read(r#"{ "hideAnswer": true, "changeAnswer": 1 }"#).hide_answer);
+        let speech = read(r#"{ "language": "tlh", "readAloud": "sing" }"#);
+        assert_eq!((speech.language, speech.read_aloud), (QuizLanguage::Cs, ReadAloud::Off));
+        assert_eq!(read(r#"{ "language": "en", "readAloud": "question" }"#).language, QuizLanguage::En);
+        assert_eq!((read(r#"{ "voice": 12 }"#).voice, read(r#"{ "voice": "M1" }"#).voice), (MAX_VOICE, 0));
     }
 
     #[test]
@@ -275,11 +342,15 @@ mod tests {
             hide_buzz_points: true,
             answer_chart: true,
             jokers: 2,
+            language: QuizLanguage::En,
+            read_aloud: ReadAloud::QuestionAndAnswers,
+            voice: 4,
+            clock_after_reading: true,
         };
         let json = serde_json::to_string(&settings).unwrap();
         assert_eq!(
             json,
-            r#"{"startOnNext":true,"allAnswered":"nextSlide","allAnsweredDelayS":7,"nextAfterReveal":true,"nextAfterRevealDelayS":30,"runClockOut":true,"hideAnswer":true,"changeAnswer":true,"oneBuzz":true,"noAnswerPenalty":true,"hideBuzzPoints":true,"answerChart":true,"jokers":2}"#
+            r#"{"startOnNext":true,"allAnswered":"nextSlide","allAnsweredDelayS":7,"nextAfterReveal":true,"nextAfterRevealDelayS":30,"runClockOut":true,"hideAnswer":true,"changeAnswer":true,"oneBuzz":true,"noAnswerPenalty":true,"hideBuzzPoints":true,"answerChart":true,"jokers":2,"language":"en","readAloud":"questionAndAnswers","voice":4,"clockAfterReading":true}"#
         );
         assert_eq!(read(&json), settings);
     }

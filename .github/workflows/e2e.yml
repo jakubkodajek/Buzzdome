@@ -54,6 +54,9 @@ jobs:
         with:
           key: e2e
 
+      # The native voice libraries, checked against their pinned SHA-256 (docs/releasing.md).
+      - uses: ./.github/actions/voice-libs
+
       - name: Install tauri-driver
         run: cargo install tauri-driver --locked --version "$TAURI_DRIVER_VERSION"
 
@@ -109,6 +112,9 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: e2e-windows
+
+      # The native voice libraries, checked against their pinned SHA-256 (docs/releasing.md).
+      - uses: ./.github/actions/voice-libs
 
       - name: Install tauri-driver
         run: cargo install tauri-driver --locked --version "$env:TAURI_DRIVER_VERSION"

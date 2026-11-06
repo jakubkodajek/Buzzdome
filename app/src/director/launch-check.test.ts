@@ -47,6 +47,7 @@ const ready: LaunchFacts = {
   muted: null,
   sound: "heard",
   freeDiskBytes: 50 * GB,
+  voice: { preparing: { state: "off" }, systemVoice: "Microsoft Jakub", language: "Czech" },
 };
 
 /** The check's item for `part` with `facts` changed from a ready show. */
@@ -125,5 +126,17 @@ describe("launchCheck", () => {
     expect(item("disk", { freeDiskBytes: 50 * 1024 ** 2 })?.state).toBe("problem");
     expect(item("disk", { freeDiskBytes: undefined })?.state).toBe("todo");
     expect(item("disk", { freeDiskBytes: null })).toBeUndefined();
+  });
+
+  it("leaves reading out when the quiz does not read, and tells how far the clips are", () => {
+    const voice = (preparing: LaunchFacts["voice"]["preparing"], ...system: [string | null | undefined] | []) =>
+      item("voice", { voice: { preparing, systemVoice: system.length > 0 ? system[0] : "Microsoft Jakub", language: "Czech" } });
+    expect(voice({ state: "off" })).toBeUndefined();
+    expect(voice({ state: "rendering", done: 3, total: 20 })).toMatchObject({ state: "todo", text: "Preparing the questions to be read: 3 of 20." });
+    expect(voice({ state: "ready", total: 20 })?.state).toBe("ok");
+    expect(voice({ state: "failed", failed: 3, total: 20 })?.state).toBe("warn");
+    expect(voice({ state: "noModel" })).toMatchObject({ state: "warn", fixes: [] });
+    expect(voice({ state: "noModel" }, null)).toMatchObject({ state: "problem", fixes: [] });
+    expect(voice({ state: "noModel" }, undefined)?.state).toBe("problem");
   });
 });

@@ -96,6 +96,10 @@
     "allow-lights-blackout",
     "allow-lights-universe",
     "allow-update-check",
-    "allow-update-install"
+    "allow-update-install",
+    "allow-voice-model",
+    "allow-voice-install",
+    "allow-voice-remove",
+    "allow-voice-clip"
   ]
 }

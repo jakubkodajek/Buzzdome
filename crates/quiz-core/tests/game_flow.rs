@@ -4,7 +4,7 @@ use quiz_core::{
 };
 use quiz_core::game::FINAL_LAST_STEP;
 use quiz_core::view::{AnswerResults, AutoStepView, BuzzState, BuzzView};
-use quiz_core::{AllAnswered, AutoStep, QuizSettings, SoundSlot};
+use quiz_core::{AllAnswered, AutoStep, QuizSettings, ReadAloud, SoundSlot};
 
 /// A question; a fastest-finger one is answered aloud, so the big button
 /// buzzes in (`a_fastest_finger_question_with_answers_a_to_d_buzzes_with_them`).
@@ -2477,6 +2477,58 @@ fn a_question_starts_its_clock_as_it_is_shown() {
     assert!(!kept.game.starts_as_shown());
     kept.run(0, Command::Next).unwrap();
     assert_eq!(step(&kept.game), QuestionStep::Ready);
+}
+
+#[test]
+fn a_question_read_out_can_start_its_clock_once_the_reading_ends() {
+    let slides = vec![question("q1", AnswerMode::Everyone), question("q2", AnswerMode::Everyone)];
+    let mut quiz = Quiz::new("Test", slides);
+    quiz.settings.read_aloud = ReadAloud::Question;
+    let mut runs = Show { game: Game::new(quiz.clone()), journal: Vec::new() };
+    assert!(!runs.game.waits_for_reading(), "by default the clock runs while the voice reads");
+    runs.run(0, Command::Next).unwrap();
+    assert!(matches!(step(&runs.game), QuestionStep::Running { .. }));
+
+    quiz.settings.clock_after_reading = true;
+    let mut show = Show { game: Game::new(quiz.clone()), journal: Vec::new() };
+    show.press(0, 1, Button::Big);
+    let shown = show.run(1_000, Command::Next).unwrap();
+    assert_eq!(step(&show.game), QuestionStep::Ready, "it waits for the reading");
+    assert_eq!(Effect::lights(&shown), [(1, Light::Off)], "dark while it is read");
+    assert!(show.game.controls().reading_done && show.game.controls().next);
+    // A reading of another slide changes nothing.
+    assert_eq!(show.run(2_000, Command::ReadingDone { slide: 1 }).unwrap(), []);
+    assert_eq!(step(&show.game), QuestionStep::Ready);
+    let effects = show.run(3_000, Command::ReadingDone { slide: 0 }).unwrap();
+    assert!(effects.contains(&Effect::Sound { cue: Cue::ClockStart }));
+    assert_eq!(Effect::light_frames(&effects), [vec![(1, Light::Ready)]], "ready in a change of its own");
+    assert_eq!(show.game.view(3_000).clock.map(|clock| clock.remaining_ms), Some(Some(10_000)), "the clock starts as the reading ends");
+    assert!(!show.game.controls().reading_done);
+    // Once it runs, a reading that ends late is ignored.
+    assert_eq!(show.run(4_000, Command::ReadingDone { slide: 0 }).unwrap(), []);
+
+    // A restarted question waits for Next, not for the reading.
+    show.run(5_000, Command::RestartQuestion).unwrap();
+    assert!(!show.game.controls().reading_done);
+    show.run(6_000, Command::ReadingDone { slide: 0 }).unwrap();
+    assert_eq!(step(&show.game), QuestionStep::Ready);
+    // Next starts a question waiting for its reading as well.
+    show.run(7_000, Command::Next).unwrap();
+    show.run(8_000, Command::CloseQuestion).unwrap();
+    show.run(9_000, Command::Next).unwrap();
+    show.run(10_000, Command::Next).unwrap();
+    assert_eq!((show.game.slide_index(), step(&show.game)), (1, QuestionStep::Ready));
+    show.run(11_000, Command::Next).unwrap();
+    assert!(matches!(step(&show.game), QuestionStep::Running { .. }));
+    assert_eq!(Game::replay(quiz.clone(), &show.journal, RULES_VERSION), show.game);
+
+    // Without reading, or with Next starting every question, nothing waits.
+    let mut silent = quiz.clone();
+    silent.settings.read_aloud = ReadAloud::Off;
+    assert!(!Game::new(silent).waits_for_reading());
+    let mut on_next = quiz;
+    on_next.settings.start_on_next = true;
+    assert!(!Game::new(on_next).waits_for_reading());
 }
 
 #[test]

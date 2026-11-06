@@ -252,6 +252,12 @@ pub enum Command {
     /// (`Game::recovery_command`): its score changes are taken back, and it
     /// waits for `Next` to start its clock. Refused once it closed.
     RestartQuestion,
+    /// The Director finished reading out the question on `slide`, or has
+    /// nothing to read: a question shown waiting for it
+    /// (`Controls::reading_done`) starts its clock. Ignored otherwise, as
+    /// when Next started it first or the show left the slide.
+    #[serde(rename_all = "camelCase")]
+    ReadingDone { slide: usize },
     JudgeRight,
     JudgeWrong,
     #[serde(rename_all = "camelCase")]
@@ -341,6 +347,10 @@ pub struct Controls {
     /// or between questions for the next (`Game::joker_slide`); for each
     /// player as `Game::can_set_joker` says.
     pub set_joker: bool,
+    /// `ReadingDone`: the question on screen was shown waiting for its
+    /// reading to end (`QuizSettings::clock_after_reading`); Next starts
+    /// it as well.
+    pub reading_done: bool,
 }
 
 /// A countdown that can pause. `limit_ms == None` means untimed.
@@ -639,6 +649,9 @@ pub struct Game {
     /// How many times the quizmaster started the current slide's video
     /// (`Command::PlayVideo`); the projector starts it whenever this grows.
     video_plays: u32,
+    /// The question on screen was shown waiting for the Director to read it
+    /// out before its clock starts (`Command::ReadingDone`).
+    awaiting_reading: bool,
     /// How many steps the show has taken (`same_step`). A window sends the
     /// one it shows with a command meant for it, which is dropped once the
     /// show has taken another: one step per press, also when the show took
@@ -672,6 +685,7 @@ impl Game {
             leaderboard_visible: false,
             teams: Vec::new(),
             video_plays: 0,
+            awaiting_reading: false,
             step_no: 0,
             rules_version: RULES_VERSION,
         }
@@ -948,6 +962,7 @@ impl Game {
             go_to: self.can_jump(),
             restart_question: self.question_restartable(),
             set_joker: self.jokers_open(),
+            reading_done: self.awaiting_reading,
         }
     }
 
@@ -1263,6 +1278,13 @@ impl Game {
                     }
                 }
                 Ok(self.enter_slide(self.slide))
+            }
+            Command::ReadingDone { slide } => {
+                if !self.awaiting_reading || *slide != self.slide {
+                    return Ok(vec![]);
+                }
+                // Its buzzers went dark as it was shown, so they turn ready in a change of their own.
+                Ok(self.start_clock(now))
             }
             Command::JudgeRight => self.judge(true, now),
             Command::JudgeWrong => self.judge(false, now),
@@ -1663,17 +1685,30 @@ impl Game {
     }
 
     /// Goes on to slide `index` as Next or a jump does: a question there
-    /// starts its clock at once when it starts as shown (`starts_as_shown`).
+    /// starts its clock at once when it starts as shown (`starts_as_shown`),
+    /// or once it was read out when it waits for that (`waits_for_reading`).
     /// Its buzzers still go dark first, in a light change of their own
     /// before the one that turns them ready, so a fastest-finger round
     /// starts every buzzer's timer from a change (`docs/design.md` 2.6).
     fn show_slide(&mut self, index: usize, now: u64) -> Vec<Effect> {
         let mut effects = self.enter_slide(index);
-        if self.phase == Phase::Question(QuestionStep::Ready) && self.starts_as_shown() {
-            effects.push(Effect::LightBreak);
-            effects.extend(self.start_clock(now));
+        if self.phase == Phase::Question(QuestionStep::Ready) {
+            if self.waits_for_reading() {
+                self.awaiting_reading = true;
+            } else if self.starts_as_shown() {
+                effects.push(Effect::LightBreak);
+                effects.extend(self.start_clock(now));
+            }
         }
         effects
+    }
+
+    /// Whether a question that starts as shown first waits for the Director
+    /// to read it out (`QuizSettings::clock_after_reading`), when the quiz
+    /// reads questions out.
+    pub fn waits_for_reading(&self) -> bool {
+        let settings = &self.quiz.settings;
+        self.starts_as_shown() && settings.clock_after_reading && settings.read_aloud != crate::ReadAloud::Off
     }
 
     /// Whether a question's clock starts as Next or a jump shows it, from
@@ -1686,6 +1721,7 @@ impl Game {
 
     /// Starts the clock of the question on screen: it takes answers from now.
     fn start_clock(&mut self, now: u64) -> Vec<Effect> {
+        self.awaiting_reading = false;
         let limit = self.question().and_then(Question::time_limit_ms);
         self.phase = Phase::Question(QuestionStep::Running { clock: Clock::start(limit, now) });
         vec![self.lights_now(), Effect::Sound { cue: Cue::ClockStart }]
@@ -1739,6 +1775,7 @@ impl Game {
         self.auto_step_from = None;
         self.leaderboard_visible = false;
         self.video_plays = 0;
+        self.awaiting_reading = false;
         self.slide = index;
         self.phase = phase;
         vec![self.lights_now()]

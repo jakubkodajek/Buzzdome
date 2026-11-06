@@ -3,5 +3,6 @@
 
 fn main() {
     buzzdome_lib::sheet_reader::serve_if_asked();
+    buzzdome_lib::read_aloud::serve_if_asked();
     buzzdome_lib::run()
 }
