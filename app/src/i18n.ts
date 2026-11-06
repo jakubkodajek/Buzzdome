@@ -512,7 +512,7 @@ const strings = {
     readAloudOff: "Ne",
     readAloudQuestion: "Jen otázku",
     readAloudQuestionAndAnswers: "Otázku i odpovědi",
-    readAloudHint: "Když se otázka objeví, režie ji automaticky přečte vybraným hlasem, z reproduktorů režie jako ostatní zvuky show. Snímek s vlastním zvukem nebo videem se automaticky nečte. Čtení skončí, když někdo zabzučí, otázka skončí nebo se ukáže správná odpověď; tlačítkem v režii ho zastavíte nebo pustíte znovu.",
+    readAloudHint: "Když se otázka objeví, režie ji automaticky přečte vybraným hlasem, z reproduktorů režie jako ostatní zvuky show. Snímek s vlastním zvukem (ať hraje hned, s časem, nebo ho pustíte) nebo s videem, které hraje samo, se automaticky nečte; přečte se tlačítkem. Čtení skončí, když někdo zabzučí, otázka skončí nebo se ukáže správná odpověď; tlačítkem v režii ho zastavíte nebo pustíte znovu.",
     voiceChoice: "Hlas",
     voiceFemale: "Ženský hlas {n}",
     voiceMale: "Mužský hlas {n}",
@@ -1077,6 +1077,7 @@ const strings = {
     errNoUpdate: "Novější verze aplikace nebyla nalezena.",
     errUpdateFailed: "Aktualizace se nepodařila.",
     errUpdateInstalling: "Instaluje se nová verze aplikace, show teď začít nemůže.",
+    errVoiceInstalling: "Instaluje se hlas pro předčítání, show začne až po dokončení.",
     errSystem: "Systém akci odmítl.",
     // Quiz problems (Problem, MediaIssue).
     problemDuplicateSlideId: "Snímek má stejné ID jako jiný snímek.",
@@ -1861,7 +1862,7 @@ const strings = {
     readAloudOff: "Off",
     readAloudQuestion: "The question only",
     readAloudQuestionAndAnswers: "The question and its answers",
-    readAloudHint: "When a question comes on screen, the Director automatically reads it out in the chosen voice, through the Director's speakers like the show's other sounds. A slide with its own sound or video is not read automatically. Reading stops when someone buzzes, the question ends or its answer is shown; a button in the Director stops it or reads it again.",
+    readAloudHint: "When a question comes on screen, the Director automatically reads it out in the chosen voice, through the Director's speakers like the show's other sounds. A slide with its own sound (whether it plays at once, with the clock or when you play it) or with a video that plays by itself is not read automatically; the button reads it. Reading stops when someone buzzes, the question ends or its answer is shown; a button in the Director stops it or reads it again.",
     voiceChoice: "Voice",
     voiceFemale: "Female voice {n}",
     voiceMale: "Male voice {n}",
@@ -2425,6 +2426,7 @@ const strings = {
     errNoUpdate: "No newer version of the app was found.",
     errUpdateFailed: "Updating the app failed.",
     errUpdateInstalling: "A new version of the app is being installed, so no show can begin now.",
+    errVoiceInstalling: "The reading voice is being installed; a show can begin once it is done.",
     errSystem: "The system refused.",
     // Quiz problems (Problem, MediaIssue).
     problemDuplicateSlideId: "The slide has the same ID as another slide.",

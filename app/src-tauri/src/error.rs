@@ -242,6 +242,9 @@ pub enum AppError {
     /// A new version of the app is being installed, which ends the app.
     #[error("a new version of the app is being installed")]
     UpdateInstalling,
+    /// The voice model is being put in place, which stops the voice process.
+    #[error("the voice model is being installed")]
+    VoiceInstalling,
 
     // Windows and the operating system.
     /// The system gave the app no folder for its data (team names, sessions, the media library).

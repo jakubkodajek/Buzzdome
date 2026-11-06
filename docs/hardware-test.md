@@ -435,6 +435,14 @@ installer, then on the Mac, that nothing it should allow is blocked:
 5. In File › Quiz settings › Sounds and music, pick one of the app's
    effects, one of its pieces of music and a sound file of your own, and
    play each with its play button. Expected: all three play.
+6. In Settings › Voices, play a Czech and an English sample, then download
+   the voice. Expected: the samples play before the download, and the
+   download shows its progress again after switching to another tab and
+   back. Then start a show with a quiz whose reading aloud is on and step
+   to a question. Expected: the voice reads it, and the projector and the
+   show do not stall while it renders. On Windows, also open Reliability
+   Monitor (`perfmon /rel`): no "Buzzdome stopped working" entry for the
+   voice process, and no Windows error dialog appeared at any point.
 
 A step that fails here and not in a dev build is the policy blocking it:
 note the step and attach `buzzdome.log`, where each window notes what the

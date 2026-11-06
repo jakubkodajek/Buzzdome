@@ -67,6 +67,10 @@ struct Inner {
     /// A new version of the app is being installed, which ends the app, so
     /// no show may begin (`updates::install`).
     updating: bool,
+    /// The voice model is being put in place, which stops the voice
+    /// process and fills its folder, so no show may begin
+    /// (`voice::voice_install`).
+    voice_unpacking: bool,
 }
 
 impl Inner {
@@ -83,17 +87,21 @@ impl Inner {
             began_ms: 0,
             close_request: app_windows::CloseRequest::default(),
             updating: false,
+            voice_unpacking: false,
         }
     }
 
-    /// Refuses a new show while one runs or a new version of the app is
-    /// being installed.
+    /// Refuses a new show while one runs, a new version of the app is
+    /// being installed or the voice model is put in place.
     fn may_start_show(&self) -> CmdResult<()> {
         if self.game.is_some() {
             return Err(AppError::ShowRunning);
         }
         if self.updating {
             return Err(AppError::UpdateInstalling);
+        }
+        if self.voice_unpacking {
+            return Err(AppError::VoiceInstalling);
         }
         Ok(())
     }
@@ -119,7 +127,8 @@ struct AppState(Mutex<Inner>);
 /// last told (`stage_lights`), taken under this one with every change.
 /// The updates lock (`updates::Updates`) is taken before this one and
 /// never under it; installing an update does not hold this one, but marks
-/// it (`Inner::updating`) so that no show begins meanwhile.
+/// it (`Inner::updating`) so that no show begins meanwhile. Putting the
+/// voice model in place marks it the same way (`Inner::voice_unpacking`).
 fn lock_show(app: &AppHandle) -> MutexGuard<'_, Inner> {
     app.state::<AppState>().inner().0.lock().unwrap()
 }
@@ -855,12 +864,15 @@ mod tests {
     use std::time::Instant;
 
     #[test]
-    fn no_show_begins_while_one_runs_or_an_update_installs() {
+    fn no_show_begins_while_one_runs_or_an_update_or_the_voice_installs() {
         let mut inner = Inner::new();
         assert_eq!(inner.may_start_show(), Ok(()));
         inner.updating = true;
         assert_eq!(inner.may_start_show(), Err(AppError::UpdateInstalling));
         inner.updating = false;
+        inner.voice_unpacking = true;
+        assert_eq!(inner.may_start_show(), Err(AppError::VoiceInstalling));
+        inner.voice_unpacking = false;
         inner.game = Some(Game::new(Quiz::new("Quiz", Vec::new())));
         assert_eq!(inner.may_start_show(), Err(AppError::ShowRunning));
     }

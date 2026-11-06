@@ -233,6 +233,14 @@ pub fn serve_if_asked() {
         return;
     }
     let Some(root) = args.next() else { std::process::exit(2) };
+    // A crash here ends this process quietly: the app notices the voice is
+    // gone, and no Windows error dialog waits on the quizmaster's screen.
+    #[cfg(windows)]
+    // SAFETY: SetErrorMode only changes how this process reports errors.
+    unsafe {
+        use windows_sys::Win32::System::Diagnostics::Debug::{SetErrorMode, SEM_FAILCRITICALERRORS, SEM_NOGPFAULTERRORBOX};
+        SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX);
+    }
     // Rendering gives way to the show (the Windows process starts below normal).
     #[cfg(unix)]
     // SAFETY: nice only changes this process's priority.
@@ -262,14 +270,19 @@ pub async fn voice_install(app: AppHandle, progress: Channel<VoiceDownload>) -> 
         refuse_during_show(&app)?;
         let state = app.state::<Voice>();
         let _installing = state.installing.lock().unwrap();
+        // A second request, given while the first one downloaded, finds it done.
+        if voice::model::installed(&state.root) {
+            return Ok(state.model());
+        }
         fs::create_dir_all(&state.root).map_err(|e| AppError::file(FileAction::CreateFolder, &state.root, e))?;
         let archive = state.root.join(format!("{}.download", MODEL.id));
         let downloaded = download(&archive, |done| {
             let _ = progress.send(done);
         });
         // A show started while it downloaded: its journal keeps the disk,
-        // and its clips the voice process.
-        let installed = downloaded.and_then(|sha| refuse_during_show(&app).map(|()| sha)).and_then(|sha| {
+        // and its clips the voice process. None starts while it unpacks.
+        let installed = downloaded.and_then(|sha| {
+            let _unpacking = Unpacking::begin(&app)?;
             state.stop();
             voice::model::unpack(&archive, &sha, &state.root).map_err(voice_error)
         });
@@ -279,6 +292,29 @@ pub async fn voice_install(app: AppHandle, progress: Channel<VoiceDownload>) -> 
         Ok(state.model())
     })
     .await
+}
+
+/// Marks the show state while the voice model is put in place, so that no
+/// show begins meanwhile (`Inner::voice_unpacking`); the mark goes when
+/// this does, however unpacking ends.
+struct Unpacking<'a>(&'a AppHandle);
+
+impl<'a> Unpacking<'a> {
+    /// Marks it, unless a show runs.
+    fn begin(app: &'a AppHandle) -> CmdResult<Unpacking<'a>> {
+        let mut inner = crate::lock_show(app);
+        if inner.game.is_some() {
+            return Err(AppError::ShowRunning);
+        }
+        inner.voice_unpacking = true;
+        Ok(Unpacking(app))
+    }
+}
+
+impl Drop for Unpacking<'_> {
+    fn drop(&mut self) {
+        crate::lock_show(self.0).voice_unpacking = false;
+    }
 }
 
 /// Removes the voice model and the clips made with it. Refused during a show.

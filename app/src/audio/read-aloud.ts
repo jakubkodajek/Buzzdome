@@ -310,10 +310,15 @@ export interface ReadAloudControl {
   stop: () => void;
 }
 
-/** Whether `slide` plays sound of its own as it opens, which the voice would talk over. */
-function soundsOnOpen(slide: Slide): boolean {
+/**
+ * Whether `slide` has sound of its own that the voice would talk over: a
+ * sound, however it starts (on the slide, with the clock, which runs as the
+ * question shows, or when the quizmaster plays it), or a video that plays
+ * by itself and is heard. Such a slide is read only when asked.
+ */
+export function soundsItself(slide: Slide): boolean {
   const video = slide.video;
-  return slide.sound?.start === "onSlide" || (video !== null && !video.muted && video.volume > 0);
+  return (slide.sound !== null && slide.sound.volume > 0) || (video !== null && video.autoplay && !video.muted && video.volume > 0);
 }
 
 /**
@@ -341,7 +346,7 @@ export function useReadAloud(view: GameView | null, quiz: Quiz | null): ReadAlou
   // A question coming on is read once, unless its slide sounds itself.
   const slideIndex = view?.slideIndex ?? null;
   const onQuestion = slide?.type === "question";
-  const auto = what !== "off" && slide !== null && !soundsOnOpen(slide);
+  const auto = what !== "off" && slide !== null && !soundsItself(slide);
   const arrived = useLatest(() => auto && read());
   useEffect(() => {
     if (!onQuestion) return;

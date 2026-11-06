@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { DEFAULT_QUIZ_SETTINGS } from "../bindings/Constants";
 import { translator } from "../i18n";
 import type { Quiz, QuizSettings, Slide } from "../types";
-import { pickSystemVoice, questionLines, sampleUrl, spokenText, VOICES, voiceLine, voiceName, type SystemVoice } from "./read-aloud";
+import { pickSystemVoice, questionLines, sampleUrl, soundsItself, spokenText, VOICES, voiceLine, voiceName, type SystemVoice } from "./read-aloud";
 
 const settings: QuizSettings = {
   ...DEFAULT_QUIZ_SETTINGS,
@@ -99,5 +99,24 @@ describe("voices", () => {
       "Male voice 5",
     ]);
     for (const language of ["cs", "en"] as const) for (const v of VOICES) expect(sampleUrl(language, v), `${language}-${v}`).not.toBeNull();
+  });
+});
+
+describe("soundsItself", () => {
+  const sound = (start: "onSlide" | "withClock" | "onDemand", volume = 80) =>
+    ({ file: "a.mp3", start, repeat: false, volume, part: { fromMs: 0, toMs: null } }) as unknown as NonNullable<Slide["sound"]>;
+  const video = (autoplay: boolean, muted = false) => ({ file: "v.mp4", autoplay, muted, volume: 80, introPauseMs: 0 }) as unknown as NonNullable<Slide["video"]>;
+  const slide = (change: Partial<Slide>) => ({ ...question("Co hraje?", []), ...change }) as Slide;
+
+  it("leaves a slide with its own sound, however it starts, to be read when asked", () => {
+    expect(soundsItself(slide({}))).toBe(false);
+    for (const start of ["onSlide", "withClock", "onDemand"] as const) expect(soundsItself(slide({ sound: sound(start) })), start).toBe(true);
+    expect(soundsItself(slide({ sound: sound("withClock", 0) }))).toBe(false);
+  });
+
+  it("counts a video only when it plays by itself and is heard", () => {
+    expect(soundsItself(slide({ video: video(true) }))).toBe(true);
+    expect(soundsItself(slide({ video: video(false) }))).toBe(false);
+    expect(soundsItself(slide({ video: video(true, true) }))).toBe(false);
   });
 });

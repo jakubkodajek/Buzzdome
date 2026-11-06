@@ -100,6 +100,7 @@ const ERROR_KEYS: Record<Exclude<AppError["code"], WordedApart>, StringKey> = {
   noUpdate: "errNoUpdate",
   updateFailed: "errUpdateFailed",
   updateInstalling: "errUpdateInstalling",
+  voiceInstalling: "errVoiceInstalling",
   noDataFolder: "errNoDataFolder",
   system: "errSystem",
   libraryDownload: "errLibraryDownload",

@@ -1,13 +1,24 @@
-import { useState } from "react";
 import { api } from "../api";
-import { useApp, useReport } from "../app-context";
+import { useApp, useRun } from "../app-context";
 import { setVoiceModel, useVoiceModel, useVoiceSample, VOICES, voiceName } from "../audio/read-aloud";
 import { QUIZ_LANGUAGES } from "../bindings/Constants";
 import { confirmAction } from "../confirm";
 import { diskSize } from "../format";
 import { PlayIcon, StopIcon } from "../icons";
 import { LANGUAGE_LABEL } from "../quiz";
+import { createStore, useStore } from "../store";
 import type { VoiceDownload } from "../types";
+
+// How far the download or removal got: null while unpacking or removing,
+// undefined when nothing is under way. Kept outside the tab, so that it
+// shows again when the quizmaster comes back to the tab meanwhile.
+const progress = createStore<VoiceDownload | null | undefined>(undefined);
+
+/** Runs `call` with the progress shown as `null` until it ends. */
+function whileBusy<T>(call: () => Promise<T>): Promise<T> {
+  progress.set(null);
+  return call().finally(() => progress.set(undefined));
+}
 
 /**
  * The voices questions are read in (spec SN-10): a sample of each voice in
@@ -16,36 +27,22 @@ import type { VoiceDownload } from "../types";
  */
 export function VoicesSettings({ showRunning }: { showRunning: boolean }) {
   const { t } = useApp();
-  const report = useReport();
+  const run = useRun();
   const model = useVoiceModel();
   const sample = useVoiceSample();
-  // Null while unpacking, undefined when nothing is being downloaded.
-  const [progress, setProgress] = useState<VoiceDownload | null | undefined>(undefined);
+  const done = useStore(progress);
   // The download writes much to the disk the show is saved to (design §1.1).
-  const busy = progress !== undefined || showRunning;
+  const busy = done !== undefined || showRunning;
 
-  const install = () => {
-    setProgress(null);
-    api
-      .voiceInstall((done) => setProgress(done.received < done.total ? done : null))
-      .then(setVoiceModel, report)
-      .finally(() => setProgress(undefined));
-  };
-  const remove = () => {
-    void confirmAction(t, t("voicesRemoveConfirm")).then((yes) => {
-      if (!yes) return;
-      setProgress(null);
-      api
-        .voiceRemove()
-        .then(setVoiceModel, report)
-        .finally(() => setProgress(undefined));
-    });
-  };
+  const install = () =>
+    run(whileBusy(() => api.voiceInstall((got) => progress.set(got.received < got.total ? got : null))).then(setVoiceModel));
+  const remove = () =>
+    run(confirmAction(t, t("voicesRemoveConfirm")).then((yes) => (yes ? whileBusy(api.voiceRemove).then(setVoiceModel) : undefined)));
   const status = () => {
-    if (progress === null) return t("voicesUnpacking");
-    if (progress)
+    if (done === null) return t("voicesUnpacking");
+    if (done)
       return t("voicesDownloading", {
-        percent: Math.floor((100 * progress.received) / progress.total),
+        percent: Math.floor((100 * done.received) / done.total),
       });
     return t(model?.installed ? "voicesInstalled" : "voicesNotInstalled");
   };
