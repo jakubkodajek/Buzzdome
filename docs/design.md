@@ -851,6 +851,16 @@ packages users will install are read the same way.
   plays as before. Space pressed as the reveal comes is meant for the step
   before and is dropped (one step per press, above), so it does not also
   leave the slide.
+- **Question start (QZ-11).** From rules version 7 a question's clock
+  starts as Next or a jump shows it (`Game::show_slide`), as in the
+  reference app, so the players can answer at once and one press goes
+  from question to question; the remote's Next still does nothing while
+  a question runs (`commandForRemote`). `startOnNext` brings back the
+  step of Next that started it (`QuestionStep::Ready`). A question
+  restarted (`RestartQuestion`, also after a crash) always waits for
+  Next, so the quizmaster first sees where the show stands. A show begun
+  under an older version keeps the step (`rules_version`), so its
+  journal replays as it was played.
 - **Other quiz settings (QZ-11).** `runClockOut` keeps a timed question
   running once nobody is left to answer (`Game::closes_as_answered`); its
   time up then closes it as everyone answered, so `allAnswered` applies.
@@ -1516,7 +1526,10 @@ order (2.4), so the timers say who pressed first however the radio delivered
 the presses. A timer starts again only when the colour really changes, so
 every fastest-finger round starts with a change on every buzzer that can
 buzz in it: a question always opens dark (`QuestionStep::Ready`, also when
-it is restarted) and turns ready from there, a round that goes on after a
+it is restarted) and turns ready from there; one whose clock starts as it
+is shown (rules version 7, `Game::starts_as_shown`) sends the dark and the
+ready as two changes, one after the other (`Effect::LightBreak`,
+`Effect::light_frames`), a round that goes on after a
 wrong answer turns ready from locked, and when the receiver comes back or
 a show begins or resumes every buzzer goes dark before it lights (2.4,
 2.7). A guard test in `quiz-core` and a check in every simulated show

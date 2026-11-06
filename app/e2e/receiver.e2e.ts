@@ -22,6 +22,8 @@ class FakeReceiver {
   readonly lights = new Map<number, string | null>();
   /** Each buzzer's colour as the app last wrote it, as `#rrggbb`. */
   readonly colours = new Map<number, string>();
+  /** Every light the app wrote to each buzzer, in order. */
+  readonly written = new Map<number, (string | null)[]>();
   readonly errors: string[] = [];
   private constructor(private readonly server: Server) {
     server.on("connection", (socket) => {
@@ -36,6 +38,7 @@ class FakeReceiver {
         for (const lit of message.lights ?? []) {
           this.lights.set(lit.buzzer, lit.light);
           this.colours.set(lit.buzzer, lit.colour);
+          this.written.set(lit.buzzer, [...(this.written.get(lit.buzzer) ?? []), lit.light]);
         }
         if (message.error) this.errors.push(message.error);
       });
@@ -137,7 +140,7 @@ describe("a simulated buzzer receiver", () => {
 
     await app.step("next");
     await app.waitView("the first slide", (v) => v.slideIndex === 0);
-    await app.step("next");
+    // One Next shows the question with its clock running.
     await app.step("next");
     await app.waitView("the first question running", (v) => v.slideIndex === 1 && v.phase.phase === "question" && v.phase.step === "running");
     // Everyone may answer: their buzzers light up as ready.
@@ -158,10 +161,9 @@ describe("a simulated buzzer receiver", () => {
     await app.tab("tabQuestions");
     await app.page.click(await app.$(".slide-grid tbody tr:nth-child(8) td:nth-child(1)"));
     await app.answerQuestions(true);
+    // The jump shows the question with its clock running; the buzzers go dark, then ready, so their timers start together.
     await app.step("goToSelected");
-    await app.waitView("slide 8", (v) => v.slideIndex === 7);
-    await app.step("next");
-    await app.waitView("the clock running", (v) => v.phase.phase === "question" && v.phase.step === "running");
+    await app.waitView("slide 8 running", (v) => v.slideIndex === 7 && v.phase.phase === "question" && v.phase.step === "running");
     await buzzersReady(7, 12);
     // Buzzer 7 delivered second, but pressed sooner by its own clock. The receiver delivers presses made
     // at the same moment within the app's timer window (`ReceiverConfig::timer_window`), so they go together.
@@ -230,14 +232,16 @@ describe("a simulated buzzer receiver", () => {
     await app.waitView("the first slide", (v) => v.slideIndex === 0);
     await app.tab("tabQuestions");
     await app.page.click(await app.$(".slide-grid tbody tr:nth-child(8) td:nth-child(1)"));
+    fake.written.clear();
     await app.step("goToSelected");
-    await app.waitView("slide 8", (v) => v.slideIndex === 7);
-    // Dark since the lobby lit them ready, so that ready below is the round's.
-    await waitFor("buzzers 3 and 7 dark", async () => [3, 7].every((buzzer) => fake.lights.get(buzzer) === "off"));
-    await app.stepPause();
-    await fake.remote("forward");
-    await app.waitView("the clock running", (v) => v.phase.phase === "question" && v.phase.step === "running");
+    // The question's clock starts as the jump shows it.
+    await app.waitView("slide 8 running", (v) => v.slideIndex === 7 && v.phase.phase === "question" && v.phase.step === "running");
     await buzzersReady(3, 7);
+    // Dark first, as the lobby lit them ready, so that ready is the round's and starts their timers.
+    expect([3, 7].map((buzzer) => fake.written.get(buzzer))).toEqual([
+      ["off", "ready"],
+      ["off", "ready"],
+    ]);
     // Next on the remote does not end the running question, as a second press by mistake would.
     await app.stepPause();
     await fake.remote("centre");
@@ -291,7 +295,6 @@ describe("a simulated buzzer receiver", () => {
     await app.waitView("two players from the receiver", (v) => [3, 7].every((buzzer) => player(v, buzzer)));
     await app.step("next");
     await app.waitView("the first slide", (v) => v.slideIndex === 0);
-    await app.step("next");
     await app.step("next");
     await app.waitView("the first question running", (v) => v.slideIndex === 1 && v.phase.phase === "question" && v.phase.step === "running");
     await buzzersReady(3, 7);

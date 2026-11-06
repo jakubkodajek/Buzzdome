@@ -35,7 +35,10 @@ pub type BuzzerId = u16;
 /// joins at the next question. 6: a question that ended earlier in the
 /// show comes back with its answer shown when the show goes to it again
 /// (`Game::closed_questions`), so it is never asked and scored twice.
-pub const RULES_VERSION: u32 = 6;
+/// 7: a question's clock starts as Next or a jump shows the question
+/// (`Game::starts_as_shown`), unless the quiz's settings keep the step of
+/// Next that started it (`QuizSettings::start_on_next`).
+pub const RULES_VERSION: u32 = 7;
 
 /// The oldest `RULES_VERSION` whose shows replay today as they were played:
 /// every later change applies only to shows begun under it
@@ -174,6 +177,9 @@ impl Cue {
 pub enum Effect {
     Lights { lights: Vec<(BuzzerId, Light)> },
     Sound { cue: Cue },
+    /// The lights set before this reach the buzzers before those set after
+    /// it, as a change of their own (`Effect::light_frames`).
+    LightBreak,
 }
 
 impl Effect {
@@ -188,6 +194,13 @@ impl Effect {
             }
         }
         lights.into_iter().collect()
+    }
+
+    /// The lights `effects` set, in the changes the buzzers are to see one
+    /// after the other: one change (`lights`) for the effects between two
+    /// `LightBreak`s, none for those that set no light.
+    pub fn light_frames(effects: &[Effect]) -> Vec<Vec<(BuzzerId, Light)>> {
+        effects.split(|effect| *effect == Effect::LightBreak).map(Effect::lights).filter(|frame| !frame.is_empty()).collect()
     }
 }
 
@@ -1070,9 +1083,9 @@ impl Game {
                 if *slide >= self.quiz.slides.len() {
                     return Err(GameError::NoSuchSlide(*slide));
                 }
-                self.jump_to(*slide)
+                self.jump_to(*slide, now)
             }
-            Command::GoToFinal => self.jump_to(self.final_index()),
+            Command::GoToFinal => self.jump_to(self.final_index(), now),
             Command::StartOver => {
                 if !self.can_jump() {
                     return Err(GameError::NotNow);
@@ -1444,7 +1457,7 @@ impl Game {
     fn next(&mut self, now: u64) -> Result<Vec<Effect>, GameError> {
         if self.next_leaves_slide() {
             let following = self.following().ok_or(GameError::NotNow)?;
-            return Ok(self.enter_slide(following));
+            return Ok(self.show_slide(following, now));
         }
         match self.phase.clone() {
             Phase::Welcome => {
@@ -1453,11 +1466,7 @@ impl Game {
             }
             Phase::Lobby | Phase::Billboard | Phase::Explanation | Phase::EndOfRound => Err(GameError::NotNow),
             Phase::Question(step) => match step {
-                QuestionStep::Ready => {
-                    let limit = self.question().and_then(Question::time_limit_ms);
-                    self.phase = Phase::Question(QuestionStep::Running { clock: Clock::start(limit, now) });
-                    Ok(vec![self.lights_now(), Effect::Sound { cue: Cue::ClockStart }])
-                }
+                QuestionStep::Ready => Ok(self.start_clock(now)),
                 QuestionStep::Running { .. } => Ok(self.close_question()),
                 QuestionStep::Buzzed { .. } => Err(GameError::NotNow),
                 QuestionStep::Closed => {
@@ -1481,11 +1490,40 @@ impl Game {
         self.quiz.final_slide().unwrap_or(self.quiz.slides.len())
     }
 
-    fn jump_to(&mut self, index: usize) -> Result<Vec<Effect>, GameError> {
+    fn jump_to(&mut self, index: usize, now: u64) -> Result<Vec<Effect>, GameError> {
         if !self.can_jump() {
             return Err(GameError::NotNow);
         }
-        Ok(self.enter_slide(index))
+        Ok(self.show_slide(index, now))
+    }
+
+    /// Goes on to slide `index` as Next or a jump does: a question there
+    /// starts its clock at once when it starts as shown (`starts_as_shown`).
+    /// Its buzzers still go dark first, in a light change of their own
+    /// before the one that turns them ready, so a fastest-finger round
+    /// starts every buzzer's timer from a change (`docs/design.md` 2.6).
+    fn show_slide(&mut self, index: usize, now: u64) -> Vec<Effect> {
+        let mut effects = self.enter_slide(index);
+        if self.phase == Phase::Question(QuestionStep::Ready) && self.starts_as_shown() {
+            effects.push(Effect::LightBreak);
+            effects.extend(self.start_clock(now));
+        }
+        effects
+    }
+
+    /// Whether a question's clock starts as Next or a jump shows it, from
+    /// rules version 7, unless the quiz keeps the step of Next that starts
+    /// it (`QuizSettings::start_on_next`). A question restarted
+    /// (`RestartQuestion`, also after a crash) always waits for Next.
+    pub fn starts_as_shown(&self) -> bool {
+        self.rules_version >= 7 && !self.quiz.settings.start_on_next
+    }
+
+    /// Starts the clock of the question on screen: it takes answers from now.
+    fn start_clock(&mut self, now: u64) -> Vec<Effect> {
+        let limit = self.question().and_then(Question::time_limit_ms);
+        self.phase = Phase::Question(QuestionStep::Running { clock: Clock::start(limit, now) });
+        vec![self.lights_now(), Effect::Sound { cue: Cue::ClockStart }]
     }
 
     /// Whether `GoTo`, `GoToFinal`, `StartOver` and `ResetScores` apply: not

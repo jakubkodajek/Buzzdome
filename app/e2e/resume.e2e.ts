@@ -48,7 +48,6 @@ describe("a show killed mid-way resumes", () => {
     for (const buzzer of [1, 2, 3]) await buzz(buzzer, "big");
     await app.waitView("three players", (view) => view.players.length === 3);
     await nextTo("billboard");
-    await nextTo("question:ready");
     await nextTo("question:running");
     await buzz(1, "b");
     await buzz(2, "a");
@@ -83,8 +82,7 @@ describe("a show killed mid-way resumes", () => {
     // To the first fastest-finger question.
     await app.answerQuestions(true);
     let view = (await app.view())!;
-    while (view.slideIndex < 7 || step(view) !== "question:ready") view = await nextAny();
-    await nextTo("question:running");
+    while (view.slideIndex < 7 || step(view) !== "question:running") view = await nextAny();
     await app.tab("tabBuzzers");
     await buzz(2, "big");
     await app.waitView("buzzed", (v) => step(v) === "question:buzzed");

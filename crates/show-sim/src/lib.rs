@@ -97,6 +97,7 @@ pub fn random_quiz(rng: &mut Rng) -> Quiz {
     }
     let mut quiz = Quiz::new("Simulace", slides);
     quiz.settings = QuizSettings {
+        start_on_next: rng.chance(30),
         all_answered: *rng.pick(&[AllAnswered::Wait, AllAnswered::Reveal, AllAnswered::NextSlide]),
         all_answered_delay_s: rng.between(0, u64::from(MAX_ALL_ANSWERED_DELAY_S)) as u8,
         next_after_reveal: rng.chance(30),
@@ -347,9 +348,15 @@ impl Show {
         // Every buzzer ready in a fastest-finger round that begins showed
         // another light just before: the buzzes are ordered by the buzzers'
         // timers, and an Enjoy 303S buzzer's starts again only when its
-        // colour changes (docs/design.md, 2.6).
+        // colour changes (docs/design.md, 2.6). A change can light the
+        // buzzers more than once (`Effect::light_frames`): what counts is the
+        // light each showed before the last time.
         if after.buzzer_mode() == BuzzerMode::FastestFinger && before.buzzer_mode() != BuzzerMode::FastestFinger {
-            let was: BTreeMap<_, _> = before.lights().into_iter().collect();
+            let mut was: BTreeMap<_, _> = before.lights().into_iter().collect();
+            let frames = result.as_ref().map(|effects| Effect::light_frames(effects)).unwrap_or_default();
+            for frame in frames.iter().take(frames.len().saturating_sub(1)) {
+                was.extend(frame.iter().copied());
+            }
             for (buzzer, light) in after.lights() {
                 assert!(light != Light::Ready || was.get(&buzzer) != Some(&Light::Ready), "buzzer {buzzer} was ready already as a round began: {stamped:?}");
             }

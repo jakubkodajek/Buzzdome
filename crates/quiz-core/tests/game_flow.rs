@@ -25,8 +25,17 @@ fn question(id: &str, mode: AnswerMode) -> Slide {
     )
 }
 
+/// A quiz of `slides` whose questions start their clock with Next
+/// (`stepped`), as most tests step through a question's start.
 fn quiz(slides: Vec<Slide>) -> Quiz {
-    Quiz::new("Test", slides)
+    Quiz { settings: stepped(), ..Quiz::new("Test", slides) }
+}
+
+/// The default settings but for a question's clock, which waits for Next
+/// (`QuizSettings::start_on_next`); `a_question_starts_its_clock_as_it_is_shown`
+/// tests the default.
+fn stepped() -> QuizSettings {
+    QuizSettings { start_on_next: true, ..QuizSettings::default() }
 }
 
 /// Applies commands and keeps the journal, like the app does.
@@ -1472,7 +1481,7 @@ fn a_name_is_the_same_however_its_accents_are_encoded() {
 
 /// A show of `slides` whose quiz takes `all_answered` after `delay_s`.
 fn show_with(slides: Vec<Slide>, all_answered: AllAnswered, delay_s: u8) -> Show {
-    show_with_settings(slides, QuizSettings { all_answered, all_answered_delay_s: delay_s, ..QuizSettings::default() })
+    show_with_settings(slides, QuizSettings { all_answered, all_answered_delay_s: delay_s, ..stepped() })
 }
 
 /// A show of `slides` whose quiz has `settings`.
@@ -1811,9 +1820,9 @@ fn back_goes_to_the_slide_before_but_not_out_of_a_question_in_play() {
     assert_eq!(show.game.previous(), Some(1), "from the final ranking back to the last slide");
 }
 
-/// A show of `slides` whose quiz has the default settings but for `change`.
+/// A show of `slides` whose quiz has the `stepped` settings but for `change`.
 fn show_setting(slides: Vec<Slide>, change: impl FnOnce(&mut QuizSettings)) -> Show {
-    let mut settings = QuizSettings::default();
+    let mut settings = stepped();
     change(&mut settings);
     show_with_settings(slides, settings)
 }
@@ -1945,7 +1954,7 @@ fn no_answer_can_cost_the_penalty() {
 #[test]
 fn the_windows_get_the_quiz_settings_with_the_view() {
     let show = Show::new(vec![question("q1", AnswerMode::Everyone)]);
-    assert_eq!(show.game.view(0).settings, QuizSettings::default());
+    assert_eq!(show.game.view(0).settings, stepped());
     let show = show_setting(vec![question("q1", AnswerMode::FastestFinger)], |s| {
         s.hide_answer = true;
         s.hide_buzz_points = true;
@@ -2241,4 +2250,50 @@ fn a_buzzer_that_joins_with_a_press_that_does_not_count_is_lit() {
     // The big button answers nothing in a question of answers A to D.
     assert_eq!(show.press(1_000, 9, Button::Big), [Effect::Lights { lights: vec![(9, Light::Ready)] }]);
     assert!(show.game.lights().contains(&(9, Light::Ready)));
+}
+
+#[test]
+fn a_question_starts_its_clock_as_it_is_shown() {
+    let slides = vec![question("q1", AnswerMode::FastestFinger), question("q2", AnswerMode::Everyone)];
+    let mut show = Show { game: Game::new(Quiz::new("Test", slides.clone())), journal: Vec::new() };
+    assert!(show.game.starts_as_shown(), "the default");
+    show.press(0, 1, Button::Big);
+    let effects = show.run(1_000, Command::Next).unwrap();
+    assert!(matches!(step(&show.game), QuestionStep::Running { .. }));
+    assert_eq!(show.game.buzzer_mode(), BuzzerMode::FastestFinger);
+    // Dark first, then ready, in a change of its own: the buzzer was ready in the lobby.
+    assert_eq!(Effect::light_frames(&effects), [vec![(1, Light::Off)], vec![(1, Light::Ready)]]);
+    assert_eq!(Effect::lights(&effects), [(1, Light::Ready)]);
+    assert!(effects.contains(&Effect::Sound { cue: Cue::ClockStart }));
+    assert_eq!(show.game.view(1_000).clock.map(|clock| clock.remaining_ms), Some(Some(10_000)), "the whole time is left");
+
+    // A restarted question, also after a crash, waits for Next.
+    show.run(2_000, Command::RestartQuestion).unwrap();
+    assert_eq!(step(&show.game), QuestionStep::Ready);
+    show.run(3_000, Command::Next).unwrap();
+    assert!(matches!(step(&show.game), QuestionStep::Running { .. }));
+    show.run(4_000, Command::CloseQuestion).unwrap();
+    show.run(5_000, Command::Next).unwrap();
+
+    // Next from the answer shows the next question running, and so does a jump.
+    show.run(6_000, Command::Next).unwrap();
+    assert_eq!(show.game.slide_index(), 1);
+    assert!(matches!(step(&show.game), QuestionStep::Running { .. }));
+    show.press(7_000, 1, Button::B);
+    assert_eq!(step(&show.game), QuestionStep::Closed, "answered at once");
+    let mut jumped = Show { game: Game::new(Quiz::new("Test", slides.clone())), journal: Vec::new() };
+    jumped.run(0, Command::GoTo { slide: 1 }).unwrap();
+    assert!(matches!(step(&jumped.game), QuestionStep::Running { .. }));
+
+    // A show begun under rules version 6 replays with the step of Next it had.
+    assert_eq!(Game::replay(Quiz::new("Test", slides.clone()), &show.journal, RULES_VERSION), show.game);
+    let older = Game::replay(Quiz::new("Test", slides.clone()), &show.journal[..2], 6);
+    assert!(!older.starts_as_shown());
+    assert_eq!(step(&older), QuestionStep::Ready);
+
+    // The quiz can keep that step.
+    let mut kept = Show { game: Game::new(quiz(slides)), journal: Vec::new() };
+    assert!(!kept.game.starts_as_shown());
+    kept.run(0, Command::Next).unwrap();
+    assert_eq!(step(&kept.game), QuestionStep::Ready);
 }
