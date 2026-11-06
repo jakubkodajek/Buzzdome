@@ -144,7 +144,12 @@ pub struct PlayerView {
 #[ts(export)]
 #[serde(rename_all = "camelCase")]
 pub struct JokerView {
+    /// On the current question, as the projector shows it.
     pub on: bool,
+    /// On the question a joker played now goes on (`Game::joker_slide`):
+    /// the current one, or between questions the next; what the
+    /// quizmaster's switch shows and changes.
+    pub chosen: bool,
     pub left: u8,
     pub can_change: bool,
 }
@@ -211,8 +216,9 @@ impl Game {
                 locked_out: self.locked_out().contains(&p.buzzer),
                 joins_next: self.joins_next().contains(&p.buzzer),
                 joker: {
+                    let chosen = self.joker_chosen(p.buzzer);
                     let on = self.plays_joker(p.buzzer);
-                    JokerView { on, left: self.jokers_left(p.buzzer), can_change: self.can_set_joker(p.buzzer, !on) }
+                    JokerView { on, chosen, left: self.jokers_left(p.buzzer), can_change: self.can_set_joker(p.buzzer, !chosen) }
                 },
                 delta: self.delta(p.buzzer),
             })

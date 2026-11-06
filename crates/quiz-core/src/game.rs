@@ -35,7 +35,10 @@ pub type BuzzerId = u16;
 /// joins at the next question. 6: a question that ended earlier in the
 /// show comes back with its answer shown when the show goes to it again
 /// (`Game::closed_questions`), so it is never asked and scored twice.
-pub const RULES_VERSION: u32 = 6;
+/// 7: a question's clock starts as Next or a jump shows the question
+/// (`Game::starts_as_shown`), unless the quiz's settings keep the step of
+/// Next that started it (`QuizSettings::start_on_next`).
+pub const RULES_VERSION: u32 = 7;
 
 /// The oldest `RULES_VERSION` whose shows replay today as they were played:
 /// every later change applies only to shows begun under it
@@ -174,6 +177,9 @@ impl Cue {
 pub enum Effect {
     Lights { lights: Vec<(BuzzerId, Light)> },
     Sound { cue: Cue },
+    /// The lights set before this reach the buzzers before those set after
+    /// it, as a change of their own (`Effect::light_frames`).
+    LightBreak,
 }
 
 impl Effect {
@@ -188,6 +194,13 @@ impl Effect {
             }
         }
         lights.into_iter().collect()
+    }
+
+    /// The lights `effects` set, in the changes the buzzers are to see one
+    /// after the other: one change (`lights`) for the effects between two
+    /// `LightBreak`s, none for those that set no light.
+    pub fn light_frames(effects: &[Effect]) -> Vec<Vec<(BuzzerId, Light)>> {
+        effects.split(|effect| *effect == Effect::LightBreak).map(Effect::lights).filter(|frame| !frame.is_empty()).collect()
     }
 }
 
@@ -244,8 +257,10 @@ pub enum Command {
     /// it is, with the jokers played and the questions that ended. Refused
     /// as `GoTo` is.
     ResetScores,
-    /// The player plays their joker on the current question (`on`), or
-    /// takes it back (`QuizSettings::jokers`, `Game::can_set_joker`).
+    /// The player plays their joker (`on`), or takes it back, on the
+    /// question it goes on now (`Game::joker_slide`): the current one, or
+    /// between questions the next (`QuizSettings::jokers`,
+    /// `Game::can_set_joker`).
     #[serde(rename_all = "camelCase")]
     SetJoker { buzzer: BuzzerId, on: bool },
     #[serde(rename_all = "camelCase")]
@@ -304,8 +319,9 @@ pub struct Controls {
     /// results are on screen; a show begun before rules version 4 also
     /// restarts it closed, until its answer is shown.
     pub restart_question: bool,
-    /// `SetJoker`: in a quiz with jokers, before the current question ends;
-    /// for each player as `Game::can_set_joker` says.
+    /// `SetJoker`: in a quiz with jokers, before the current question ends,
+    /// or between questions for the next (`Game::joker_slide`); for each
+    /// player as `Game::can_set_joker` says.
     pub set_joker: bool,
 }
 
@@ -573,7 +589,8 @@ pub struct Game {
     /// again would score it twice.
     closed_questions: BTreeSet<usize>,
     /// The questions players play their joker on, as (slide, buzzer): the
-    /// ones that ended, and the current one (`QuizSettings::jokers`).
+    /// ones that ended, and the current or next one (`joker_slide`,
+    /// `QuizSettings::jokers`).
     jokers: BTreeSet<(usize, BuzzerId)>,
     /// When the step the quiz's settings take by itself (`pending_step`)
     /// began to count down: when the current question closed for having
@@ -855,24 +872,56 @@ impl Game {
         }
     }
 
-    /// Whether jokers can be played now: in a quiz with jokers, while the
-    /// current question waits to start or runs.
+    /// Whether jokers can be played now: in a quiz with jokers, while a
+    /// question takes them (`joker_slide`).
     fn jokers_open(&self) -> bool {
-        let before_the_end = matches!(self.phase, Phase::Question(QuestionStep::Ready | QuestionStep::Running { .. }));
-        self.quiz.settings.jokers > 0 && before_the_end
+        self.quiz.settings.jokers > 0 && self.joker_slide().is_some()
+    }
+
+    /// The question a joker played now goes on: the current one while it
+    /// waits to start or runs. From rules version 7, whose questions start
+    /// as they are shown (`starts_as_shown`), also between questions: on
+    /// the slide before a question that has not ended (the lobby, a
+    /// billboard announcing it, an explanation, the end of a round, or the
+    /// answer of the question before), the question Next shows next.
+    pub fn joker_slide(&self) -> Option<usize> {
+        match self.phase {
+            Phase::Question(QuestionStep::Ready | QuestionStep::Running { .. }) => Some(self.slide),
+            Phase::Welcome
+            | Phase::Lobby
+            | Phase::Billboard
+            | Phase::Explanation
+            | Phase::EndOfRound
+            | Phase::Question(QuestionStep::Revealed { .. })
+                if self.rules_version >= 7 =>
+            {
+                let next = self.following()?;
+                let question = matches!(self.quiz.slides.get(next).map(|s| &s.content), Some(SlideContent::Question(_)));
+                (question && !self.closed_questions.contains(&next)).then_some(next)
+            }
+            _ => None,
+        }
     }
 
     /// Whether the player's joker can be played (`on`) or taken back now:
     /// while jokers can be played (`jokers_open`), as long as the question
     /// gave the player nothing yet, and to play it, with one left.
     pub fn can_set_joker(&self, buzzer: BuzzerId, on: bool) -> bool {
-        let open = self.jokers_open() && self.players.contains_key(&buzzer) && self.mark(buzzer).is_none();
-        open && (!on || self.plays_joker(buzzer) || self.jokers_left(buzzer) > 0)
+        let Some(slide) = self.joker_slide().filter(|_| self.quiz.settings.jokers > 0) else { return false };
+        let given = slide == self.slide && self.mark(buzzer).is_some();
+        let open = self.players.contains_key(&buzzer) && !given;
+        open && (!on || self.jokers.contains(&(slide, buzzer)) || self.jokers_left(buzzer) > 0)
     }
 
     /// Whether the player plays their joker on the current question.
     pub fn plays_joker(&self, buzzer: BuzzerId) -> bool {
         self.jokers.contains(&(self.slide, buzzer))
+    }
+
+    /// Whether the player's joker is on the question a joker played now
+    /// goes on (`joker_slide`); false when none takes one.
+    pub fn joker_chosen(&self, buzzer: BuzzerId) -> bool {
+        self.joker_slide().is_some_and(|slide| self.jokers.contains(&(slide, buzzer)))
     }
 
     /// The jokers the player has left in the show (`QuizSettings::jokers`).
@@ -1070,9 +1119,9 @@ impl Game {
                 if *slide >= self.quiz.slides.len() {
                     return Err(GameError::NoSuchSlide(*slide));
                 }
-                self.jump_to(*slide)
+                self.jump_to(*slide, now)
             }
-            Command::GoToFinal => self.jump_to(self.final_index()),
+            Command::GoToFinal => self.jump_to(self.final_index(), now),
             Command::StartOver => {
                 if !self.can_jump() {
                     return Err(GameError::NotNow);
@@ -1164,13 +1213,11 @@ impl Game {
             }
             Command::SetJoker { buzzer, on } => {
                 self.player_mut(*buzzer)?;
-                if !self.can_set_joker(*buzzer, *on) {
-                    return Err(GameError::NotNow);
-                }
+                let slide = self.joker_slide().filter(|_| self.can_set_joker(*buzzer, *on)).ok_or(GameError::NotNow)?;
                 if *on {
-                    self.jokers.insert((self.slide, *buzzer));
+                    self.jokers.insert((slide, *buzzer));
                 } else {
-                    self.jokers.remove(&(self.slide, *buzzer));
+                    self.jokers.remove(&(slide, *buzzer));
                 }
                 Ok(vec![])
             }
@@ -1444,7 +1491,7 @@ impl Game {
     fn next(&mut self, now: u64) -> Result<Vec<Effect>, GameError> {
         if self.next_leaves_slide() {
             let following = self.following().ok_or(GameError::NotNow)?;
-            return Ok(self.enter_slide(following));
+            return Ok(self.show_slide(following, now));
         }
         match self.phase.clone() {
             Phase::Welcome => {
@@ -1453,11 +1500,7 @@ impl Game {
             }
             Phase::Lobby | Phase::Billboard | Phase::Explanation | Phase::EndOfRound => Err(GameError::NotNow),
             Phase::Question(step) => match step {
-                QuestionStep::Ready => {
-                    let limit = self.question().and_then(Question::time_limit_ms);
-                    self.phase = Phase::Question(QuestionStep::Running { clock: Clock::start(limit, now) });
-                    Ok(vec![self.lights_now(), Effect::Sound { cue: Cue::ClockStart }])
-                }
+                QuestionStep::Ready => Ok(self.start_clock(now)),
                 QuestionStep::Running { .. } => Ok(self.close_question()),
                 QuestionStep::Buzzed { .. } => Err(GameError::NotNow),
                 QuestionStep::Closed => {
@@ -1481,11 +1524,40 @@ impl Game {
         self.quiz.final_slide().unwrap_or(self.quiz.slides.len())
     }
 
-    fn jump_to(&mut self, index: usize) -> Result<Vec<Effect>, GameError> {
+    fn jump_to(&mut self, index: usize, now: u64) -> Result<Vec<Effect>, GameError> {
         if !self.can_jump() {
             return Err(GameError::NotNow);
         }
-        Ok(self.enter_slide(index))
+        Ok(self.show_slide(index, now))
+    }
+
+    /// Goes on to slide `index` as Next or a jump does: a question there
+    /// starts its clock at once when it starts as shown (`starts_as_shown`).
+    /// Its buzzers still go dark first, in a light change of their own
+    /// before the one that turns them ready, so a fastest-finger round
+    /// starts every buzzer's timer from a change (`docs/design.md` 2.6).
+    fn show_slide(&mut self, index: usize, now: u64) -> Vec<Effect> {
+        let mut effects = self.enter_slide(index);
+        if self.phase == Phase::Question(QuestionStep::Ready) && self.starts_as_shown() {
+            effects.push(Effect::LightBreak);
+            effects.extend(self.start_clock(now));
+        }
+        effects
+    }
+
+    /// Whether a question's clock starts as Next or a jump shows it, from
+    /// rules version 7, unless the quiz keeps the step of Next that starts
+    /// it (`QuizSettings::start_on_next`). A question restarted
+    /// (`RestartQuestion`, also after a crash) always waits for Next.
+    pub fn starts_as_shown(&self) -> bool {
+        self.rules_version >= 7 && !self.quiz.settings.start_on_next
+    }
+
+    /// Starts the clock of the question on screen: it takes answers from now.
+    fn start_clock(&mut self, now: u64) -> Vec<Effect> {
+        let limit = self.question().and_then(Question::time_limit_ms);
+        self.phase = Phase::Question(QuestionStep::Running { clock: Clock::start(limit, now) });
+        vec![self.lights_now(), Effect::Sound { cue: Cue::ClockStart }]
     }
 
     /// Whether `GoTo`, `GoToFinal`, `StartOver` and `ResetScores` apply: not
@@ -1519,13 +1591,13 @@ impl Game {
     /// kept of the slide left: its answers, score changes, waiting step,
     /// leaderboard and video plays.
     fn enter(&mut self, index: usize, phase: Phase) -> Vec<Effect> {
-        // A joker stays on a question that ended, and on one asked again
-        // from its start (`RestartQuestion`); one left before it ended is
-        // not spent.
-        let left = self.slide;
-        if index != left && !self.closed_questions.contains(&left) {
-            self.jokers.retain(|&(slide, _)| slide != left);
-        }
+        // A joker stays on a question that ended, on one asked again from
+        // its start (`RestartQuestion`) and on the one entered, played for
+        // it between questions (`joker_slide`); one left before it ended,
+        // or played for a question the show then did not go to, is not
+        // spent.
+        let closed = &self.closed_questions;
+        self.jokers.retain(|&(slide, _)| slide == index || closed.contains(&slide));
         // The question left stands as asked; one asked again from its start was taken back.
         self.asked.extend(self.asking.take());
         self.responses.clear();

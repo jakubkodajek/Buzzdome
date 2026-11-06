@@ -102,7 +102,7 @@ mod tests {
         for buzzer in 1..=31 {
             game.apply(&Stamped { at_ms: 0, command: Command::Press { buzzer, button: Button::Big } }).unwrap();
         }
-        game.apply(&Stamped { at_ms: 0, command: Command::Next }).unwrap();
+        // The question starts as it is shown.
         game.apply(&Stamped { at_ms: 1_000, command: Command::Next }).unwrap();
         // Time is up at 11 s. Thirty presses came in during its last second, but
         // the thread only gets to them two seconds later.

@@ -22,6 +22,8 @@ class FakeReceiver {
   readonly lights = new Map<number, string | null>();
   /** Each buzzer's colour as the app last wrote it, as `#rrggbb`. */
   readonly colours = new Map<number, string>();
+  /** Every light the app wrote to each buzzer, in order. */
+  readonly written = new Map<number, (string | null)[]>();
   readonly errors: string[] = [];
   private constructor(private readonly server: Server) {
     server.on("connection", (socket) => {
@@ -36,6 +38,7 @@ class FakeReceiver {
         for (const lit of message.lights ?? []) {
           this.lights.set(lit.buzzer, lit.light);
           this.colours.set(lit.buzzer, lit.colour);
+          this.written.set(lit.buzzer, [...(this.written.get(lit.buzzer) ?? []), lit.light]);
         }
         if (message.error) this.errors.push(message.error);
       });
@@ -97,6 +100,12 @@ const player = (view: GameView, buzzer: number) => view.players.find((p) => p.bu
  * lights (lib.rs `light_buzzers`), so from then on it takes the round's presses: one sent as soon as
  * the view says the clock runs can reach it before, in the step before's mode.
  */
+/**
+ * Lets a fastest-finger round run for `timer` ms and a little more: the app drops a buzz whose own timer
+ * is longer than the round has run, as one pressed before the round (receiver.rs `stale_buzzes`).
+ */
+const roundRuns = (timer: number) => sleep(timer + 100);
+
 const buzzersReady = (...buzzers: number[]) =>
   waitFor(`buzzers ${buzzers.join(", ")} ready`, async () => buzzers.every((buzzer) => fake.lights.get(buzzer) === "ready"));
 
@@ -137,7 +146,7 @@ describe("a simulated buzzer receiver", () => {
 
     await app.step("next");
     await app.waitView("the first slide", (v) => v.slideIndex === 0);
-    await app.step("next");
+    // One Next shows the question with its clock running.
     await app.step("next");
     await app.waitView("the first question running", (v) => v.slideIndex === 1 && v.phase.phase === "question" && v.phase.step === "running");
     // Everyone may answer: their buzzers light up as ready.
@@ -158,13 +167,13 @@ describe("a simulated buzzer receiver", () => {
     await app.tab("tabQuestions");
     await app.page.click(await app.$(".slide-grid tbody tr:nth-child(8) td:nth-child(1)"));
     await app.answerQuestions(true);
+    // The jump shows the question with its clock running; the buzzers go dark, then ready, so their timers start together.
     await app.step("goToSelected");
-    await app.waitView("slide 8", (v) => v.slideIndex === 7);
-    await app.step("next");
-    await app.waitView("the clock running", (v) => v.phase.phase === "question" && v.phase.step === "running");
+    await app.waitView("slide 8 running", (v) => v.slideIndex === 7 && v.phase.phase === "question" && v.phase.step === "running");
     await buzzersReady(7, 12);
     // Buzzer 7 delivered second, but pressed sooner by its own clock. The receiver delivers presses made
     // at the same moment within the app's timer window (`ReceiverConfig::timer_window`), so they go together.
+    await roundRuns(400);
     await fake.pressTogether({ buzzer: 12, button: "big", timer: 400 }, { buzzer: 7, button: "big", timer: 150 });
     const buzzed = await app.waitView("a buzz", (v) => v.phase.phase === "question" && v.phase.step === "buzzed");
     expect(buzzed.buzzed).toBe(7);
@@ -175,6 +184,7 @@ describe("a simulated buzzer receiver", () => {
     await app.waitView("the clock running again", (v) => v.phase.phase === "question" && v.phase.step === "running");
     await waitFor("buzzer 7 shown wrong", async () => fake.lights.get(7) === "wrong");
     await fake.press(7, "big", 10);
+    await roundRuns(500);
     await fake.press(3, "big", 500);
     const next = await app.waitView("the next buzz", (v) => v.phase.phase === "question" && v.phase.step === "buzzed");
     expect(next.buzzed).toBe(3);
@@ -203,6 +213,10 @@ describe("a simulated buzzer receiver", () => {
   });
 
   test("the quizmaster's remote steps the show, judges a fastest finger and shows the leaderboard", async () => {
+    // Slide 9 started as it was shown, and a question in play cannot be left: restarted, it waits for Next.
+    await app.answerQuestions(true);
+    await app.step("restartQuestion");
+    await app.waitView("slide 9 waiting", (v) => v.slideIndex === 8 && v.phase.phase === "question" && v.phase.step === "ready");
     // Back from the slide after the fastest finger: it comes back answered, keeps its scores and takes no presses.
     const before = await app.waitView("a way back to slide 8", (v) => v.previousSlide === 7);
     const scores = before.players.map((p) => [p.buzzer, p.score]);
@@ -216,7 +230,7 @@ describe("a simulated buzzer receiver", () => {
     await app.stepPause();
     expect(await app.view()).toMatchObject({ slideIndex: 7, buzzed: back.buzzed, phase: { phase: "question", step: "revealed" } });
     await fake.remote("forward");
-    await app.waitView("slide 9 again", (v) => v.slideIndex === 8);
+    await app.waitView("slide 9 again, running", (v) => v.slideIndex === 8 && v.phase.phase === "question" && v.phase.step === "running");
 
     // A new show, for a fastest finger nobody has answered yet.
     await app.press("endShow");
@@ -225,31 +239,32 @@ describe("a simulated buzzer receiver", () => {
     await app.waitView("the lobby", (v) => v.phase.phase === "lobby");
     for (const buzzer of [3, 7]) await fake.press(buzzer, "big");
     await app.waitView("two players from the receiver", (v) => [3, 7].every((buzzer) => player(v, buzzer)));
-    await app.stepPause();
-    await fake.remote("forward");
-    await app.waitView("the first slide", (v) => v.slideIndex === 0);
+    await buzzersReady(3, 7);
+    // Straight from the lobby, where the buzzers are lit ready.
     await app.tab("tabQuestions");
     await app.page.click(await app.$(".slide-grid tbody tr:nth-child(8) td:nth-child(1)"));
+    fake.written.clear();
     await app.step("goToSelected");
-    await app.waitView("slide 8", (v) => v.slideIndex === 7);
-    // Dark since the lobby lit them ready, so that ready below is the round's.
-    await waitFor("buzzers 3 and 7 dark", async () => [3, 7].every((buzzer) => fake.lights.get(buzzer) === "off"));
-    await app.stepPause();
-    await fake.remote("forward");
-    await app.waitView("the clock running", (v) => v.phase.phase === "question" && v.phase.step === "running");
-    await buzzersReady(3, 7);
+    // The question's clock starts as the jump shows it.
+    await app.waitView("slide 8 running", (v) => v.slideIndex === 7 && v.phase.phase === "question" && v.phase.step === "running");
+    // Dark first, as the lobby lit them ready, so that ready is the round's and starts their timers. They
+    // were ready before the jump, so wait for the writes, never for the light.
+    const writes = () => [3, 7].map((buzzer) => JSON.stringify(fake.written.get(buzzer) ?? []));
+    await waitFor("buzzers 3 and 7 dark, then ready", async () => writes().every((w) => w === JSON.stringify(["off", "ready"])));
     // Next on the remote does not end the running question, as a second press by mistake would.
     await app.stepPause();
     await fake.remote("centre");
     await app.stepPause();
     expect(await app.view()).toMatchObject({ phase: { phase: "question", step: "running" } });
 
+    await roundRuns(150);
     await fake.press(7, "big", 150);
     await app.waitView("buzzer 7 buzzed", (v) => v.phase.phase === "question" && v.phase.step === "buzzed" && v.buzzed === 7);
     await app.stepPause();
     await fake.remote("cross");
     await app.waitView("the clock running again", (v) => v.phase.phase === "question" && v.phase.step === "running");
     await waitFor("buzzer 7 shown wrong", async () => fake.lights.get(7) === "wrong");
+    await roundRuns(300);
     await fake.press(3, "big", 300);
     await app.waitView("buzzer 3 buzzed", (v) => v.phase.phase === "question" && v.phase.step === "buzzed" && v.buzzed === 3);
     await app.stepPause();
@@ -291,7 +306,6 @@ describe("a simulated buzzer receiver", () => {
     await app.waitView("two players from the receiver", (v) => [3, 7].every((buzzer) => player(v, buzzer)));
     await app.step("next");
     await app.waitView("the first slide", (v) => v.slideIndex === 0);
-    await app.step("next");
     await app.step("next");
     await app.waitView("the first question running", (v) => v.slideIndex === 1 && v.phase.phase === "question" && v.phase.step === "running");
     await buzzersReady(3, 7);

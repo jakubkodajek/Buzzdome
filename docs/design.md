@@ -851,6 +851,16 @@ packages users will install are read the same way.
   plays as before. Space pressed as the reveal comes is meant for the step
   before and is dropped (one step per press, above), so it does not also
   leave the slide.
+- **Question start (QZ-11).** From rules version 7 a question's clock
+  starts as Next or a jump shows it (`Game::show_slide`), as in the
+  reference app, so the players can answer at once and one press goes
+  from question to question; the remote's Next still does nothing while
+  a question runs (`commandForRemote`). `startOnNext` brings back the
+  step of Next that started it (`QuestionStep::Ready`). A question
+  restarted (`RestartQuestion`, also after a crash) always waits for
+  Next, so the quizmaster first sees where the show stands. A show begun
+  under an older version keeps the step (`rules_version`), so its
+  journal replays as it was played.
 - **Other quiz settings (QZ-11).** `runClockOut` keeps a timed question
   running once nobody is left to answer (`Game::closes_as_answered`); its
   time up then closes it as everyone answered, so `allAnswered` applies.
@@ -873,12 +883,16 @@ packages users will install are read the same way.
   pairs, and a joker is spent when it is played. `SetJoker` plays or takes
   back the current question's while it is ready or running and has given
   the player nothing (`Game::can_set_joker`, no mark of theirs in
-  `asking`), so a joker always covers all or nothing of what the question
+  `asking`); from rules version 7, whose questions start as they are
+  shown, also the next question's on the slide before it (the lobby, a
+  billboard announcing it, an explanation, an end of round, or the
+  answer of the question before; `Game::joker_slide`), so a joker always covers all or nothing of what the question
   gives. `credit` doubles the points, gain or penalty, and the player's
   mark keeps the doubled amount, so `RestartQuestion` takes back what was
-  given and the joker stays on the question asked again. Leaving a question before it ended
-  (`enter_slide` to another slide) drops its pairs, as the question was
-  never asked. The command is journaled like any other and only exists in
+  given and the joker stays on the question asked again. Entering a slide
+  keeps only the pairs of questions that ended and of the slide entered:
+  a question left before it ended, or one played for that the show then
+  did not go to, was never asked. The command is journaled like any other and only exists in
   shows played since, so no rules version is needed.
 - **Reset scores and start over (SF-9).** `ResetScores` sets every
   player's `score`, `total_answer_ms` and `adjusted` to zero and empties
@@ -1516,7 +1530,14 @@ order (2.4), so the timers say who pressed first however the radio delivered
 the presses. A timer starts again only when the colour really changes, so
 every fastest-finger round starts with a change on every buzzer that can
 buzz in it: a question always opens dark (`QuestionStep::Ready`, also when
-it is restarted) and turns ready from there, a round that goes on after a
+it is restarted) and turns ready from there; one whose clock starts as it
+is shown (rules version 7, `Game::starts_as_shown`) sends the dark and the
+ready as two changes, one after the other (`Effect::LightBreak`,
+`Effect::light_frames`). A press made just before such a round, still
+showing the lobby's ready, could reach the receiver thread once its mode is
+fastest finger; the thread drops a buzz whose timer is longer than the
+round has run plus `ROUND_SLACK_MS` (40 ms, the 36 ms report tick), as its
+light changed before the round (`Worker::stale_buzzes`). A round that goes on after a
 wrong answer turns ready from locked, and when the receiver comes back or
 a show begins or resumes every buzzer goes dark before it lights (2.4,
 2.7). A guard test in `quiz-core` and a check in every simulated show

@@ -136,9 +136,11 @@ describe("the quiz editor", () => {
     expect(await app.view()).toBeNull();
   });
 
-  test("the quiz's settings show the right answer by itself once everyone answered", async () => {
+  test("the quiz's settings start the clock with Next and show the right answer by itself once everyone answered", async () => {
     await app.press("ribbonFile");
     await app.press("quizSettings");
+    // A question's clock otherwise starts as it is shown; this one waits until two players registered.
+    await app.page.click(await app.$(`button[role="switch"][aria-label="${t("startOnNext")}"]`));
     await app.page.click(await app.$(`select[aria-label="${t("allAnswered")}"] option[value="reveal"]`));
     const delay = await app.$(`input[aria-label="${t("allAnsweredDelay")}"]`);
     await app.page.clear(delay);

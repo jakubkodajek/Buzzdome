@@ -101,7 +101,7 @@ function players(overrides: Partial<PlayerView>[] = []): PlayerView[] {
     lockedOut: false,
     joinsNext: false,
     delta: null,
-    joker: { on: false, left: 0, canChange: false },
+    joker: { on: false, chosen: false, left: 0, canChange: false },
     ...overrides[i],
   }));
   return list;
@@ -252,7 +252,7 @@ const SCENES: Record<string, GameView | null> = {
   jokers: view({
     phase: { phase: "question", step: "running", clock: { limitMs: 20000, elapsedBeforeMs: 0, runningSinceMs: 0, pressesFromMs: 0 } },
     clock: { limitMs: 20000, remainingMs: 12400, elapsedMs: 7600, running: true, points: 81 },
-    players: players(answered.map((a, i) => ({ ...a, joker: { on: i === 1 || i === 3, left: i === 1 || i === 3 ? 1 : 2, canChange: true } }))),
+    players: players(answered.map((a, i) => ({ ...a, joker: { on: i === 1 || i === 3, chosen: i === 1 || i === 3, left: i === 1 || i === 3 ? 1 : 2, canChange: true } }))),
     answeredCount: 4,
     controls: { ...NO_CONTROLS, next: true, pauseClock: true, closeQuestion: true, restartQuestion: true, setJoker: true },
     settings: { ...DEFAULT_QUIZ_SETTINGS, jokers: 2 },
@@ -261,7 +261,7 @@ const SCENES: Record<string, GameView | null> = {
     phase: { phase: "question", step: "revealed", winner: 3 },
     slideIndex: 7,
     slide: quiz.slides[7],
-    players: players([{}, {}, { delta: 258, joker: { on: true, left: 0, canChange: false } }]),
+    players: players([{}, {}, { delta: 258, joker: { on: true, chosen: true, left: 0, canChange: false } }]),
     settings: { ...DEFAULT_QUIZ_SETTINGS, jokers: 1 },
   }),
   ffRevealed: view({

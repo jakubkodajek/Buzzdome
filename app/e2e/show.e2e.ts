@@ -74,7 +74,7 @@ describe("a show of the demo quiz", () => {
   test("everyone answers: the projector keeps the answer until the reveal", async () => {
     await next("billboard", 0);
     await onProjector(() => app.seeText("1. kolo: Česko"));
-    await next("question:ready", 1);
+    // One Next shows the question with its clock running: the players can answer at once.
     await next("question:running", 1);
     await onProjector(async () => {
       await app.seeText("Které město je hlavním městem Moravskoslezského kraje?");
@@ -103,7 +103,6 @@ describe("a show of the demo quiz", () => {
   });
 
   test("a second answer of the same buzzer does not count", async () => {
-    await next("question:ready", 2);
     await next("question:running", 2);
     await buzz(2, "c");
     await app.waitView("one answer", (view) => view.answeredCount === 1);
@@ -131,7 +130,6 @@ describe("a show of the demo quiz", () => {
   });
 
   test("Restart question asks, then clears the answers given", async () => {
-    await next("question:ready", 3);
     await next("question:running", 3);
     await buzz(2, "a");
     await app.waitView("one answer", (view) => view.answeredCount === 1);
@@ -165,7 +163,6 @@ describe("a show of the demo quiz", () => {
 
   test("fastest finger: a wrong buzz locks out, the next buzz is judged right", async () => {
     await next("billboard", 6);
-    await next("question:ready", 7);
     await next("question:running", 7);
     await onProjector(() => app.seeText(t("waitingForBuzz")));
     const before = await app.view();
@@ -201,7 +198,6 @@ describe("a show of the demo quiz", () => {
   });
 
   test("keyboard buzzers buzz too", async () => {
-    await next("question:ready", 8);
     await next("question:running", 8);
     await app.stepKeys("2");
     const buzzed = await waitPhase("question:buzzed", 8);
@@ -214,7 +210,6 @@ describe("a show of the demo quiz", () => {
   });
 
   test("fastest finger with answers A to D: the letter pressed first buzzes in", async () => {
-    await next("question:ready", 9);
     await next("question:running", 9);
     // Here A to D buzz, the big button does not (BZ-19).
     await buzz(1, "big");

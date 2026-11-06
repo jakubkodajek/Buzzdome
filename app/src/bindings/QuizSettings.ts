@@ -3,6 +3,12 @@ import type { AllAnswered } from "./AllAnswered";
 
 export type QuizSettings = { 
 /**
+ * A question shown waits for the quizmaster's Next to start its clock
+ * and take answers; by default they start as the question is shown
+ * (`Game::starts_as_shown`).
+ */
+startOnNext: boolean, 
+/**
  * What the show does once a question has nobody left to answer.
  */
 allAnswered: AllAnswered, 

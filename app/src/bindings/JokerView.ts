@@ -5,4 +5,14 @@
  * many they have left, and whether the quizmaster can play it or take it
  * back now (`Game::can_set_joker`).
  */
-export type JokerView = { on: boolean, left: number, canChange: boolean, };
+export type JokerView = { 
+/**
+ * On the current question, as the projector shows it.
+ */
+on: boolean, 
+/**
+ * On the question a joker played now goes on (`Game::joker_slide`):
+ * the current one, or between questions the next; what the
+ * quizmaster's switch shows and changes.
+ */
+chosen: boolean, left: number, canChange: boolean, };
