@@ -9,7 +9,7 @@ import { CheckIcon, CrossIcon, PeopleIcon, QuestionIcon, TrophyIcon } from "../i
 import { rightAnswers, type QuestionPosition, type SlideContext } from "../quiz";
 import { SlideMedia, type ScreenMode } from "../slide-media";
 import { styleOf, textStyleCss, type StyledText } from "../theme/slide-style";
-import type { AnswerResults, ClockView, GameView, PlayerView, QuestionSlide, Slide } from "../types";
+import type { AnswerResults, BuzzView, ClockView, GameView, PlayerView, QuestionSlide, Slide } from "../types";
 import { podiumBlocks } from "./podium";
 import { chartShares } from "./answer-chart";
 import { Timer } from "./Timer";
@@ -206,6 +206,9 @@ function QuestionScreen(props: {
   const buzzPoints = barPlayer?.delta ?? 0;
   const jokers = enabled.filter((p) => p.joker.on);
   const buzzBar = question.mode === "fastestFinger" && step !== "ready";
+  // Several buzzes in the question: the bar shows them all in the order they came (rules version 8 queues them).
+  const turns = question.mode === "fastestFinger" && (step === "running" || step === "buzzed" || barPlayer) ? view.buzzes : [];
+  const queue = turns.length > 1 || (turns.length === 1 && !barPlayer);
 
   return (
     <div className={hasMedia ? "question-screen has-media" : "question-screen"}>
@@ -257,7 +260,20 @@ function QuestionScreen(props: {
         </div>
       )}
 
-      {question.mode === "fastestFinger" && barPlayer && (
+      {queue && (
+        <div className="buzz-bar buzz-queue">
+          <ol className="buzz-turns">
+            {turns.map((turn) => (
+              <BuzzTurn key={turn.buzzer} turn={turn} view={view} />
+            ))}
+          </ol>
+          {barPlayer?.joker.on && <span className="buzz-joker">{t("jokerTimes")}</span>}
+          {buzzPoints !== 0 && !(show && view.settings.hideBuzzPoints) && (
+            <span className={`buzz-delta ${buzzPoints > 0 ? "plus" : "minus"}`}>{signed(buzzPoints)}</span>
+          )}
+        </div>
+      )}
+      {question.mode === "fastestFinger" && barPlayer && !queue && (
         <div className="buzz-bar">
           <span className="buzz-name">{playerName(t, barPlayer)}</span>
           {buzzedAnswer !== null && <span className={`buzz-answer answer-${buzzedAnswer}`}>{ANSWER_LETTERS[buzzedAnswer]}</span>}
@@ -267,7 +283,7 @@ function QuestionScreen(props: {
           )}
         </div>
       )}
-      {question.mode === "fastestFinger" && step === "running" && !barPlayer && <div className="buzz-bar idle">{t("waitingForBuzz")}</div>}
+      {question.mode === "fastestFinger" && step === "running" && !barPlayer && !queue && <div className="buzz-bar idle">{t("waitingForBuzz")}</div>}
       {question.mode === "fastestFinger" && step === "closed" && remaining === 0 && <div className="buzz-bar idle">{t("timeUp")}</div>}
       {!buzzBar && jokers.length > 0 && (
         <div className="joker-strip">
@@ -276,6 +292,25 @@ function QuestionScreen(props: {
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * One buzz in the projector's queue: the team's name, crossed out once
+ * judged wrong, ticked once right, lit while it answers. Its answer letter
+ * shows once its turn came, never while it waits.
+ */
+function BuzzTurn({ turn, view }: { turn: BuzzView; view: GameView }) {
+  const { t } = useApp();
+  const player = view.players.find((p) => p.buzzer === turn.buzzer);
+  const letter = turn.state === "waiting" ? null : answerIndex(turn.button);
+  return (
+    <li className={`buzz-turn ${turn.state}`}>
+      <span className="buzz-turn-name">{player ? playerName(t, player) : turn.buzzer}</span>
+      {letter !== null && <span className={`buzz-turn-answer answer-${letter}`}>{ANSWER_LETTERS[letter]}</span>}
+      {turn.state === "wrong" && <CrossIcon className="buzz-turn-mark" />}
+      {turn.state === "right" && <CheckIcon className="buzz-turn-mark" />}
+    </li>
   );
 }
 

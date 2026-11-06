@@ -861,6 +861,22 @@ packages users will install are read the same way.
   Next, so the quizmaster first sees where the show stands. A show begun
   under an older version keeps the step (`rules_version`), so its
   journal replays as it was played.
+- **Buzz queue (BZ-23).** From rules version 8 a press that buzzes in
+  while another buzz is judged (`QuestionStep::Buzzed`) is queued
+  (`PressPlay::Queue`, `Game::buzzes`) without a sound, so the team
+  answering is not drowned out. `JudgeWrong` locks the team out and,
+  unless that leaves nobody to answer (`closes_as_answered`, also
+  `oneBuzz`), judges the next buzz waiting (`Game::next_in_turn`) with
+  the clock still paused; a team switched off meanwhile is passed over,
+  and one switched on again plays from the next question (BZ-19). Once
+  nobody waits the clock goes on without moving `presses_from_ms`, so a
+  press made during the judging and applied just after still counts.
+  `JudgeRight` lights the others locked. A buzz's points and answer time
+  are the paused clock's, as before. `GameView.buzzes` gives the windows
+  every buzz with its state (`BuzzState`); the projector's bar
+  (`host/SlideScreen.tsx`, `BuzzTurn`) lists them once there are two, or
+  one judged wrong, and shows a waiting team's letter only once its turn
+  came.
 - **Other quiz settings (QZ-11).** `runClockOut` keeps a timed question
   running once nobody is left to answer (`Game::closes_as_answered`); its
   time up then closes it as everyone answered, so `allAnswered` applies.
@@ -1533,11 +1549,21 @@ ready as two changes, one after the other (`Effect::LightBreak`,
 showing the lobby's ready, could reach the receiver thread once its mode is
 fastest finger; the thread drops a buzz whose timer is longer than the
 round has run plus `ROUND_SLACK_MS` (40 ms, the 36 ms report tick), as its
-light changed before the round (`Worker::stale_buzzes`). A round that goes on after a
-wrong answer turns ready from locked, and when the receiver comes back or
+light changed before the round (`Worker::stale_buzzes`), also while a buzz
+of the round is judged. A round that goes on after a
+wrong answer turns ready from locked (before rules version 8), and when the receiver comes back or
 a show begins or resumes every buzzer goes dark before it lights (2.4,
 2.7). A guard test in `quiz-core` and a check in every simulated show
-(`show-sim`) hold the game to it. A buzzer that missed an order to all
+(`show-sim`) hold the game to it. From rules version 8 a buzz no longer
+locks the others: every buzz of a question waits its turn
+(`Game::queues_buzzes`, BZ-23), so the buzzers that have not buzzed stay
+ready, their colour and so their timers unchanged, from the question's
+start to its end, and every buzz of the question is ordered against the
+first by the same timers. The receiver thread holds timed presses for the
+window while a buzz is judged too (`BuzzerMode::takes_buzzes`), so near
+ties in the queue keep the timers' order; the show-sim check also holds
+that within a round the ready buzzers turn ready again all together or
+none does. A buzzer that missed an order to all
 would keep counting from its earlier change and lose a near tie; the
 receiver confirms such an order, not each buzzer's taking it, and the test
 saw none missed. The receiver reports on a 36 ms tick, lower IDs first,
@@ -1593,8 +1619,11 @@ neither can slip in between the other's check and its start.
 
 `Game::apply` returns `Effect::Lights` with the light state of every affected
 buzzer, from one function (`Game::light_of`): ready while a player can press,
-answered once they answered an everyone-answers question, locked once
-another player buzzed (or they sit out), first for the buzz being judged, dark while a question is closed, and the result from the reveal. A
+answered once they answered an everyone-answers question or buzzed to
+wait their turn, locked once they sit out (and, before rules version 8,
+once another player buzzed), first for the buzz being judged, dark while a
+question is closed, and the result from the reveal; the others stay ready
+while a buzz is judged, as they can still buzz in (BZ-23). A
 buzz judged wrong shows wrong while the others get the lights of the step
 that follows (ready again, or dark when it closed the question), until the
 next step's lights: another buzz, the question's close or its reveal. A

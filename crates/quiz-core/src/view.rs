@@ -1,6 +1,6 @@
 //! What the windows render: a read-only snapshot of the game at one moment.
 
-use crate::game::{same_name, BuzzerId, Button, Controls, Game, Phase, QuestionStep, Response};
+use crate::game::{same_name, Buzz, BuzzerId, Button, Controls, Game, Phase, QuestionStep, Response};
 use crate::model::{AnswerMode, Slide};
 use crate::settings::{AutoStep, QuizSettings};
 use crate::sounds::SoundSlot;
@@ -43,6 +43,10 @@ pub struct GameView {
     /// is closed; none when it counted nobody, as `answer_counts`.
     pub results: Option<AnswerResults>,
     pub buzzed: Option<BuzzerId>,
+    /// Fastest finger: the question's buzzes in the order the show took
+    /// them, with how each stands (`Game::buzzes`); a buzz passed over, as
+    /// its player was switched off, is left out.
+    pub buzzes: Vec<BuzzView>,
     pub leaderboard_visible: bool,
     /// The quizmaster commands the current step takes.
     pub controls: Controls,
@@ -62,6 +66,32 @@ pub struct GameView {
     pub music: Option<SoundSlot>,
     /// What the welcome screen shows, while the show is on it (`Phase::Welcome`).
     pub welcome: Option<Welcome>,
+}
+
+/// A buzz in the current fastest-finger question and how it stands.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
+#[serde(rename_all = "camelCase")]
+pub struct BuzzView {
+    pub buzzer: BuzzerId,
+    /// The button pressed, the player's answer where the question's answers
+    /// each have one. The projector shows it only once its turn came.
+    pub button: Button,
+    pub state: BuzzState,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
+#[serde(rename_all = "camelCase")]
+pub enum BuzzState {
+    /// Judged wrong.
+    Wrong,
+    /// Being judged: the player answers.
+    Answering,
+    /// Waiting its turn (`Game::queues_buzzes`).
+    Waiting,
+    /// Judged right: the player won the question.
+    Right,
 }
 
 /// A step the show takes by itself, for the Director to show coming.
@@ -186,6 +216,19 @@ impl Game {
         Some(counts)
     }
 
+    /// How a buzz of the current question stands, none when it was passed over.
+    fn buzz_state(&self, buzz: &Buzz) -> Option<BuzzState> {
+        match self.phase() {
+            _ if self.locked_out().contains(&buzz.buzzer) => Some(BuzzState::Wrong),
+            Phase::Question(QuestionStep::Buzzed { buzzer, .. }) if *buzzer == buzz.buzzer => Some(BuzzState::Answering),
+            Phase::Question(QuestionStep::Revealed { winner: Some(winner) }) if *winner == buzz.buzzer => Some(BuzzState::Right),
+            Phase::Question(QuestionStep::Running { .. } | QuestionStep::Buzzed { .. }) if self.waits_turn(buzz.buzzer) => {
+                Some(BuzzState::Waiting)
+            }
+            _ => None,
+        }
+    }
+
     /// The question closed and counted somebody, so it has results to show.
     fn has_results(&self) -> bool {
         let closed = matches!(self.phase(), Phase::Question(QuestionStep::Closed | QuestionStep::Revealed { .. }));
@@ -237,6 +280,11 @@ impl Game {
                 Phase::Question(QuestionStep::Buzzed { buzzer, .. }) => Some(*buzzer),
                 _ => None,
             },
+            buzzes: self
+                .buzzes()
+                .iter()
+                .filter_map(|buzz| Some(BuzzView { buzzer: buzz.buzzer, button: buzz.button, state: self.buzz_state(buzz)? }))
+                .collect(),
             leaderboard_visible: self.leaderboard_visible(),
             controls: self.controls(),
             on_hold: self.on_hold(),

@@ -179,10 +179,21 @@ describe("a simulated buzzer receiver", () => {
     expect(buzzed.buzzed).toBe(7);
     await waitFor("buzzer 7 lit as first", async () => fake.lights.get(7) === "first");
 
-    // Wrong: buzzer 7 shows it (until the next step, game.rs `light_of`), and its next press does nothing.
+    // Buzzer 12 pressed with it, so it waits its turn (BZ-23), lit as answered: dim white by default, as locked is.
+    await waitFor("buzzer 12 waiting its turn", async () => fake.colours.get(12) === "#2a2a2a");
+    expect((await app.view())!.buzzes.map((b) => [b.buzzer, b.state])).toEqual([
+      [7, "answering"],
+      [12, "waiting"],
+    ]);
+
+    // Wrong: buzzer 7 shows it (until the next step, game.rs `light_of`) and buzzer 12 answers, the clock still stopped.
+    await app.step("wrong");
+    const turn = await app.waitView("buzzer 12's turn", (v) => v.phase.phase === "question" && v.phase.step === "buzzed" && v.buzzed === 12);
+    expect(turn.clock?.running).toBe(false);
+    await waitFor("buzzer 7 shown wrong and 12 first", async () => fake.lights.get(7) === "wrong" && fake.lights.get(12) === "first");
+    // Wrong again: nobody waits, so the clock goes on, and buzzer 7's next press does nothing.
     await app.step("wrong");
     await app.waitView("the clock running again", (v) => v.phase.phase === "question" && v.phase.step === "running");
-    await waitFor("buzzer 7 shown wrong", async () => fake.lights.get(7) === "wrong");
     await fake.press(7, "big", 10);
     await roundRuns(500);
     await fake.press(3, "big", 500);

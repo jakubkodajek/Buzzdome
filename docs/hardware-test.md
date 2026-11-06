@@ -228,14 +228,15 @@ press that leaves no line under "Raw data", and what came before it.
 
 6. **Fastest finger.** When a fastest-finger question starts, every buzzer
    turns blue at the same moment. When one presses, it turns white and the
-   others dim white. Note what each light did, and whether the lights change
+   others stay blue, as they can still buzz in to wait their turn (step
+   12). Note what each light did, and whether the lights change
    later than the press by a delay you can see (film it in slow motion if
    unsure): the app takes all 64 buzzer IDs, which the vendor's guide says
    slows the lights. The winner may show dim white for a moment before
    white; note it if that is long enough to see. Let buzzers 2, 3 and 4,
    and one numbered 5 or higher, each win once: exactly the winner turns
    white each time, none of the others. On the stage, in its light, check
-   that the winner's white and everyone else's dim white are easy to tell
+   that the winner's white and the others' blue and dim white are easy to tell
    apart from the back of the room, and that the letter on the projector's
    buzz bar can be read.
 7. **The colour a press shows.** For one buzz of step 6, find its "Raw
@@ -295,14 +296,19 @@ press that leaves no line under "Raw data", and what came before it.
     the players hammer their big buttons in the lobby while Next is
     pressed: no buzz comes from a press made in the lobby (it shows as not
     counted under "Presses"), and the first press once blue buzzes.
-12. While a buzz is judged, the other players keep hammering their
-    buttons; then judge it wrong. Expected: that buzzer turns red, the
-    others turn blue again together; no press made while they were dim
-    white counts, not even one made just before Wrong was clicked, and the
-    first press once they are blue does. The one judged wrong cannot buzz
-    again. It may turn blue for a moment before its red, as the order that
-    lights the others reaches every buzzer: note whether you can see that,
-    and for how long (slow motion), as the app takes all 64 IDs.
+12. **The queue.** While one team's buzz is judged, three other teams
+    press one after the other, two of them almost together. Expected:
+    each turns dim white as it presses and joins the projector's bar in
+    the order they pressed, the near tie in the order the players think
+    is right; the clock stays stopped. Judge wrong: that buzzer turns red,
+    the next team in the bar turns white and the clock still stands, and
+    no buzzer still blue blinks or changes. Judge each wrong in turn:
+    once nobody waits, the clock goes on, and the first press of a blue
+    buzzer buzzes in. Note the order the Raw data's timers give for the
+    presses made during the judging: they must count from the question's
+    start (larger than those of the first buzz), as the blue buzzers'
+    colour never changed (design 2.6). A team judged wrong, or waiting,
+    cannot buzz again.
 13. Judge a buzz right. Expected: that buzzer turns green.
 14. **Which buttons buzz.** A fastest-finger question with answers A to D
     (slide 10 of the demo quiz): A to D buzz in, and the letter pressed
