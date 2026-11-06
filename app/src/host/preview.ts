@@ -33,6 +33,7 @@ function nobodyPlays(quizTitle: string, slideCount: number): Omit<GameView, "sli
     answerCounts: null,
     results: null,
     buzzed: null,
+    buzzes: [],
     leaderboardVisible: false,
     controls: NO_CONTROLS,
     onHold: false,

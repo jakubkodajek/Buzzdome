@@ -47,7 +47,9 @@ export function phaseLabel(t: Translate, view: GameView): string {
           const name = player ? playerName(t, player) : String(phase.buzzer);
           // Buzzed in with an answer button: that is the answer to judge.
           const answer = answerIndex(phase.button);
-          return answer === null ? t("buzzed", { name }) : t("buzzedAnswer", { name, letter: ANSWER_LETTERS[answer] });
+          const buzzed = answer === null ? t("buzzed", { name }) : t("buzzedAnswer", { name, letter: ANSWER_LETTERS[answer] });
+          const waiting = view.buzzes.filter((buzz) => buzz.state === "waiting").length;
+          return waiting > 0 ? `${buzzed} · ${t("buzzesWaiting", { n: waiting })}` : buzzed;
         }
         case "closed":
           return t("closed");

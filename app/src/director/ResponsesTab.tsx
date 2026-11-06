@@ -1,26 +1,59 @@
 import { buttonLabel } from "../answers";
 import { useApp } from "../app-context";
 import { seconds } from "../format";
-import { playerName } from "../i18n";
-import type { AnswerResults, GameView } from "../types";
+import { playerName, type StringKey } from "../i18n";
+import type { AnswerResults, BuzzState, GameView } from "../types";
+
+/** How a buzz stands, in words. */
+const BUZZ_STATE = { wrong: "wrong", answering: "buzzAnswering", waiting: "buzzWaiting", right: "right" } as const satisfies Record<BuzzState, StringKey>;
 
 /**
  * Answers of the current question as they arrive, fastest first, and once
- * an everyone-answers question closes, how the players it counted did.
+ * an everyone-answers question closes, how the players it counted did. In
+ * fastest finger, every buzz in the order it came, with how it stands.
  */
 export function ResponsesTab({ view }: { view: GameView }) {
   const { t } = useApp();
   const responses = view.players
     .flatMap((p) => (p.answer === null ? [] : [{ player: p, answer: p.answer }]))
     .sort((a, b) => (a.player.answerMs ?? 0) - (b.player.answerMs ?? 0));
-  const none = responses.length === 0 && view.buzzed === null;
+  const none = responses.length === 0 && view.buzzes.length === 0;
 
   return (
     <div className="responses-tab">
       {view.results && <ResultStrip results={view.results} />}
-      {none ? (
-        <p className="empty">{t("noResponses")}</p>
-      ) : (
+      {view.buzzes.length > 0 && (
+        <div className="table-wrap">
+          <table className="grid">
+            <thead>
+              <tr>
+                <th>{t("colTurn")}</th>
+                <th>{t("colBuzzer")}</th>
+                <th>{t("name")}</th>
+                <th>{t("colResponse")}</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {view.buzzes.map((buzz, i) => {
+                const player = view.players.find((p) => p.buzzer === buzz.buzzer);
+                const tone = buzz.state === "right" ? "good-text strong" : buzz.state === "answering" ? "strong" : buzz.state === "wrong" ? "muted" : "";
+                return (
+                  <tr key={buzz.buzzer} className={buzz.state === "answering" ? "current" : ""}>
+                    <td className="num">{i + 1}</td>
+                    <td className="num">{buzz.buzzer}</td>
+                    <td>{player ? playerName(t, player) : buzz.buzzer}</td>
+                    <td>{buttonLabel(buzz.button)}</td>
+                    <td className={tone}>{t(BUZZ_STATE[buzz.state])}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {none && <p className="empty">{t("noResponses")}</p>}
+      {responses.length > 0 && (
         <div className="table-wrap">
           <table className="grid">
             <thead>
