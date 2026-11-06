@@ -19,7 +19,7 @@ TEXTS: dict[str, str] = {
     "cs": "Vítejte u kvízu! Která řeka protéká Prahou? A: Vltava. B: Labe.",
     "en": "Welcome to the quiz! Which river flows through London? A: The Thames. B: The Severn.",
 }
-VOICES = 10
+VOICES = 10  # quiz_core::MAX_VOICE + 1 (crates/quiz-core/src/settings.rs)
 # As the app renders (crates/voice/src/engine.rs).
 STEPS = 8
 

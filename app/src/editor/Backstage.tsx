@@ -1,60 +1,24 @@
 import { useApp, useRun } from "../app-context";
-import {
-  useVoiceModel,
-  useVoicePreview,
-  useVoiceSample,
-  voiceLine,
-  voiceName,
-  VOICES,
-} from "../audio/read-aloud";
-import { linearGain, playerLevel } from "../audio/clip-player";
-import { usePlayerVolume } from "../hooks";
+import { useVoiceGain, useVoiceModel, useVoicePreview, useVoiceSample, voiceLine, voiceName, VOICES } from "../audio/read-aloud";
 import { welcomePreviewView } from "../host/preview";
 import { SlideScreen } from "../host/SlideScreen";
 import { Stage } from "../host/Stage";
 import { BackIcon, PlayIcon, StopIcon } from "../icons";
 import { keyHint, KEYS } from "../keyboard";
 import { problemText } from "../messages";
-import {
-  MAX_AFTER_REVEAL_DELAY_S,
-  MAX_ALL_ANSWERED_DELAY_S,
-  MAX_JOKERS,
-  QUIZ_LANGUAGES,
-} from "../bindings/Constants";
+import { MAX_AFTER_REVEAL_DELAY_S, MAX_ALL_ANSWERED_DELAY_S, MAX_JOKERS, QUIZ_LANGUAGES } from "../bindings/Constants";
 import type { StringKey } from "../i18n";
 import type { MediaKind } from "../media";
-import {
-  LANGUAGE_LABEL,
-  NO_CONTEXT,
-  questionCount,
-  settingsOf,
-  soundsOf,
-  welcomeOf,
-} from "../quiz";
+import { LANGUAGE_LABEL, NO_CONTEXT, questionCount, settingsOf, soundsOf, welcomeOf } from "../quiz";
 import { RecentFileList } from "../recent-files";
-import type {
-  AllAnswered,
-  Quiz,
-  QuizLanguage,
-  QuizSettings,
-  QuizSounds,
-  ReadAloud,
-  ValidationError,
-  Welcome,
-} from "../types";
+import type { AllAnswered, Quiz, QuizLanguage, QuizSettings, QuizSounds, ReadAloud, ValidationError, Welcome } from "../types";
 import type { Action, Actions } from "./actions";
 import { AiPage } from "./AiPage";
 import { MediaPicker, NumberBox, Select, Switch } from "./controls";
 import type { OpenQuiz } from "./editor-state";
 import { SoundsSettings } from "./SoundsSettings";
 
-export type BackstagePage =
-  | "info"
-  | "settings"
-  | "open"
-  | "import"
-  | "export"
-  | "ai";
+export type BackstagePage = "info" | "settings" | "open" | "import" | "export" | "ai";
 
 interface BackstageProps {
   /** The open quiz; null when none is open. */
@@ -67,17 +31,7 @@ interface BackstageProps {
   /**
    * The file's actions, questions from a spreadsheet, the template for one and the quiz as one (spec QZ-8).
    */
-  actions: Pick<
-    Actions,
-    | "newQuiz"
-    | "save"
-    | "saveAs"
-    | "closeQuiz"
-    | "exit"
-    | "importSheet"
-    | "sheetTemplate"
-    | "exportSheet"
-  >;
+  actions: Pick<Actions, "newQuiz" | "save" | "saveAs" | "closeQuiz" | "exit" | "importSheet" | "sheetTemplate" | "exportSheet">;
   recentFiles: string[];
   /** Opens `recent`, a file in `recentFiles`, or one the quizmaster picks. */
   onOpenFile: (recent?: string) => void;
@@ -102,22 +56,12 @@ export function Backstage(props: BackstageProps) {
   const { t } = useApp();
   const shown = open || WITHOUT_QUIZ.includes(page) ? page : "open";
   const item = (action: Action) => (
-    <button
-      type="button"
-      className="backstage-item"
-      disabled={action.disabled}
-      onClick={action.run}
-    >
+    <button type="button" className="backstage-item" disabled={action.disabled} onClick={action.run}>
       {action.label}
     </button>
   );
   const pageItem = (id: BackstagePage, label: string) => (
-    <button
-      type="button"
-      className={shown === id ? "backstage-item active" : "backstage-item"}
-      disabled={!open && !WITHOUT_QUIZ.includes(id)}
-      onClick={() => onPage(id)}
-    >
+    <button type="button" className={shown === id ? "backstage-item active" : "backstage-item"} disabled={!open && !WITHOUT_QUIZ.includes(id)} onClick={() => onPage(id)}>
       {label}
     </button>
   );
@@ -126,13 +70,7 @@ export function Backstage(props: BackstageProps) {
     <div className="backstage">
       <nav className="backstage-menu">
         {onClose && (
-          <button
-            type="button"
-            className="backstage-back"
-            aria-label={t("backToQuiz")}
-            title={t("backToQuiz")}
-            onClick={onClose}
-          >
+          <button type="button" className="backstage-back" aria-label={t("backToQuiz")} title={t("backToQuiz")} onClick={onClose}>
             <BackIcon />
           </button>
         )}
@@ -149,15 +87,7 @@ export function Backstage(props: BackstageProps) {
         <span className="backstage-gap" />
         {item(actions.exit)}
       </nav>
-      <div className="backstage-page">
-        {open ? (
-          pageFor(shown, props, open)
-        ) : shown === "ai" ? (
-          <AiPage />
-        ) : (
-          <OpenPage {...props} />
-        )}
-      </div>
+      <div className="backstage-page">{open ? pageFor(shown, props, open) : shown === "ai" ? <AiPage /> : <OpenPage {...props} />}</div>
     </div>
   );
 }
@@ -179,12 +109,7 @@ function pageFor(page: BackstagePage, props: BackstageProps, open: OpenQuiz) {
   }
 }
 
-function InfoPage({
-  open,
-  unsaved,
-  onTitle,
-  onShowSlide,
-}: BackstageProps & { open: OpenQuiz }) {
+function InfoPage({ open, unsaved, onTitle, onShowSlide }: BackstageProps & { open: OpenQuiz }) {
   const { t } = useApp();
   const quiz = open.history.present;
   return (
@@ -192,11 +117,7 @@ function InfoPage({
       <h1>{t("info")}</h1>
       <label className="field">
         <span>{t("quizTitle")}</span>
-        <input
-          value={quiz.title}
-          placeholder={t("untitledQuiz")}
-          onChange={(e) => onTitle(e.target.value)}
-        />
+        <input value={quiz.title} placeholder={t("untitledQuiz")} onChange={(e) => onTitle(e.target.value)} />
       </label>
       <dl className="info-list">
         <dt>{t("file")}</dt>
@@ -213,21 +134,13 @@ function InfoPage({
       {open.problems.length === 0 ? (
         <p className="good-text">{t("noProblems")}</p>
       ) : (
-        <ProblemList
-          problems={open.problems}
-          quiz={quiz}
-          onShowSlide={onShowSlide}
-        />
+        <ProblemList problems={open.problems} quiz={quiz} onShowSlide={onShowSlide} />
       )}
       {open.dropped.length > 0 && (
         <>
           <h2>{t("leftOut", { n: open.dropped.length })}</h2>
           <p>{t("leftOutHint")}</p>
-          <ProblemList
-            problems={open.dropped}
-            quiz={quiz}
-            onShowSlide={onShowSlide}
-          />
+          <ProblemList problems={open.dropped} quiz={quiz} onShowSlide={onShowSlide} />
         </>
       )}
     </>
@@ -242,21 +155,12 @@ const ALL_ANSWERED_LABEL: Record<AllAnswered, StringKey> = {
 };
 
 /** How the show runs, for the whole quiz (spec QZ-11); each question has its own time, points and answers. */
-function SettingsPage({
-  open,
-  onSettings,
-  onSounds,
-  onWelcome,
-  onPickMedia,
-}: BackstageProps & { open: OpenQuiz }) {
+function SettingsPage({ open, onSettings, onSounds, onWelcome, onPickMedia }: BackstageProps & { open: OpenQuiz }) {
   const { t } = useApp();
   const quiz = open.history.present;
   const settings = settingsOf(quiz);
-  const set = (change: Partial<QuizSettings>) =>
-    onSettings({ ...settings, ...change });
-  const options = (Object.keys(ALL_ANSWERED_LABEL) as AllAnswered[]).map(
-    (value): [AllAnswered, string] => [value, t(ALL_ANSWERED_LABEL[value])],
-  );
+  const set = (change: Partial<QuizSettings>) => onSettings({ ...settings, ...change });
+  const options = (Object.keys(ALL_ANSWERED_LABEL) as AllAnswered[]).map((value): [AllAnswered, string] => [value, t(ALL_ANSWERED_LABEL[value])]);
   const hold = { key: keyHint(t, KEYS.clock) };
   return (
     <>
@@ -266,12 +170,7 @@ function SettingsPage({
       <h3>{t("settingsFlow")}</h3>
       <div className="field">
         <span>{t("allAnswered")}</span>
-        <Select
-          label={t("allAnswered")}
-          value={settings.allAnswered}
-          options={options}
-          onChange={(allAnswered) => set({ allAnswered })}
-        />
+        <Select label={t("allAnswered")} value={settings.allAnswered} options={options} onChange={(allAnswered) => set({ allAnswered })} />
       </div>
       {settings.allAnswered !== "wait" && (
         <div className="field">
@@ -287,12 +186,7 @@ function SettingsPage({
         </div>
       )}
       <p className="backstage-hint">{t("allAnsweredHint", hold)}</p>
-      <SettingSwitch
-        label={t("runClockOut")}
-        hint={t("runClockOutHint")}
-        checked={settings.runClockOut}
-        onChange={(runClockOut) => set({ runClockOut })}
-      />
+      <SettingSwitch label={t("runClockOut")} hint={t("runClockOutHint")} checked={settings.runClockOut} onChange={(runClockOut) => set({ runClockOut })} />
       <SettingSwitch
         label={t("nextAfterReveal")}
         hint={t("nextAfterRevealHint", hold)}
@@ -313,18 +207,8 @@ function SettingsPage({
         </div>
       )}
       <h3>{t("settingsAnswers")}</h3>
-      <SettingSwitch
-        label={t("changeAnswer")}
-        hint={t("changeAnswerHint")}
-        checked={settings.changeAnswer}
-        onChange={(changeAnswer) => set({ changeAnswer })}
-      />
-      <SettingSwitch
-        label={t("oneBuzz")}
-        hint={t("oneBuzzHint")}
-        checked={settings.oneBuzz}
-        onChange={(oneBuzz) => set({ oneBuzz })}
-      />
+      <SettingSwitch label={t("changeAnswer")} hint={t("changeAnswerHint")} checked={settings.changeAnswer} onChange={(changeAnswer) => set({ changeAnswer })} />
+      <SettingSwitch label={t("oneBuzz")} hint={t("oneBuzzHint")} checked={settings.oneBuzz} onChange={(oneBuzz) => set({ oneBuzz })} />
       <SettingSwitch
         label={t("noAnswerPenalty")}
         hint={t("noAnswerPenaltyHint")}
@@ -333,275 +217,128 @@ function SettingsPage({
       />
       <div className="field">
         <span>{t("jokers")}</span>
-        <NumberBox
-          label={t("jokers")}
-          value={settings.jokers}
-          min={0}
-          max={MAX_JOKERS}
-          onChange={(jokers) => set({ jokers })}
-        />
+        <NumberBox label={t("jokers")} value={settings.jokers} min={0} max={MAX_JOKERS} onChange={(jokers) => set({ jokers })} />
       </div>
       <p className="backstage-hint">{t("jokersHint")}</p>
       <h3>{t("settingsProjector")}</h3>
-      <SettingSwitch
-        label={t("showAnswer")}
-        hint={t("showAnswerHint")}
-        checked={!settings.hideAnswer}
-        onChange={(show) => set({ hideAnswer: !show })}
-      />
+      <SettingSwitch label={t("showAnswer")} hint={t("showAnswerHint")} checked={!settings.hideAnswer} onChange={(show) => set({ hideAnswer: !show })} />
       <SettingSwitch
         label={t("showBuzzPoints")}
         hint={t("showBuzzPointsHint")}
         checked={!settings.hideBuzzPoints}
         onChange={(show) => set({ hideBuzzPoints: !show })}
       />
-      <SettingSwitch
-        label={t("answerChart")}
-        hint={t("answerChartHint")}
-        checked={settings.answerChart}
-        onChange={(answerChart) => set({ answerChart })}
-      />
+      <SettingSwitch label={t("answerChart")} hint={t("answerChartHint")} checked={settings.answerChart} onChange={(answerChart) => set({ answerChart })} />
       <ReadAloudSettings quiz={quiz} settings={settings} set={set} />
-      <WelcomeSettings
-        quiz={quiz}
-        onWelcome={onWelcome}
-        onPickMedia={onPickMedia}
-      />
-      <SoundsSettings
-        sounds={soundsOf(quiz)}
-        onSounds={onSounds}
-        onPickFile={() => onPickMedia(["audio"])}
-      />
+      <WelcomeSettings quiz={quiz} onWelcome={onWelcome} onPickMedia={onPickMedia} />
+      <SoundsSettings sounds={soundsOf(quiz)} onSounds={onSounds} onPickFile={() => onPickMedia(["audio"])} />
     </>
   );
 }
 
 /** What of a question can be read out. */
-const READ_ALOUD_LABEL: Record<ReadAloud, StringKey> = {
-  off: "readAloudOff",
-  question: "readAloudQuestion",
-  questionAndAnswers: "readAloudQuestionAndAnswers",
-};
+const READ_ALOUD_LABEL: Record<ReadAloud, StringKey> = { off: "readAloudOff", question: "readAloudQuestion", questionAndAnswers: "readAloudQuestionAndAnswers" };
 
 /** Reading questions aloud (spec SN-10): what is read, in which language, by which voice. */
-function ReadAloudSettings({
-  quiz,
-  settings,
-  set,
-}: {
-  quiz: Quiz;
-  settings: QuizSettings;
-  set: (change: Partial<QuizSettings>) => void;
-}) {
+function ReadAloudSettings({ quiz, settings, set }: { quiz: Quiz; settings: QuizSettings; set: (change: Partial<QuizSettings>) => void }) {
   const { t } = useApp();
   const run = useRun();
   const model = useVoiceModel();
   const preview = useVoicePreview();
   const sample = useVoiceSample();
-  const level = playerLevel(usePlayerVolume());
-  const reads = (Object.keys(READ_ALOUD_LABEL) as ReadAloud[]).map(
-    (value): [ReadAloud, string] => [value, t(READ_ALOUD_LABEL[value])],
-  );
-  const languages = QUIZ_LANGUAGES.map((value): [QuizLanguage, string] => [
-    value,
-    t(LANGUAGE_LABEL[value]),
-  ]);
-  const voices = VOICES.map((value): [number, string] => [
-    value,
-    voiceName(t, value),
-  ]);
+  const gain = useVoiceGain(quiz);
+  const reads = (Object.keys(READ_ALOUD_LABEL) as ReadAloud[]).map((value): [ReadAloud, string] => [value, t(READ_ALOUD_LABEL[value])]);
+  const languages = QUIZ_LANGUAGES.map((value): [QuizLanguage, string] => [value, t(LANGUAGE_LABEL[value])]);
+  const voices = VOICES.map((value): [number, string] => [value, voiceName(t, value)]);
   const trying = preview.playing || sample.playing !== null;
   const tryVoice = () => {
     if (trying) {
       preview.stop();
       return sample.stop();
     }
-    if (!model?.installed)
-      return sample.play(settings.language, settings.voice);
+    if (!model?.installed) return sample.play(settings.language, settings.voice);
     // The first question, as the show reads it; read in full even while reading is off.
-    const what =
-      settings.readAloud === "off" ? "questionAndAnswers" : settings.readAloud;
-    const line = quiz.slides
-      .map((slide) => voiceLine(slide, settings, what))
-      .find((found) => found !== null);
+    const what = settings.readAloud === "off" ? "questionAndAnswers" : settings.readAloud;
+    const line = quiz.slides.map((slide) => voiceLine(slide, settings, what)).find((found) => found !== null);
     if (!line) return sample.play(settings.language, settings.voice);
-    run(
-      preview.play(line, linearGain(soundsOf(quiz).effectsVolume, 0) * level),
-    );
+    run(preview.play(line, gain));
   };
   return (
     <>
       <h3>{t("settingsVoice")}</h3>
       <div className="field">
         <span>{t("readAloud")}</span>
-        <Select
-          label={t("readAloud")}
-          value={settings.readAloud}
-          options={reads}
-          onChange={(readAloud) => set({ readAloud })}
-        />
+        <Select label={t("readAloud")} value={settings.readAloud} options={reads} onChange={(readAloud) => set({ readAloud })} />
       </div>
       <p className="backstage-hint">{t("readAloudHint")}</p>
       <div className="field">
         <span>{t("quizLanguage")}</span>
-        <Select
-          label={t("quizLanguage")}
-          value={settings.language}
-          options={languages}
-          onChange={(language) => set({ language })}
-        />
+        <Select label={t("quizLanguage")} value={settings.language} options={languages} onChange={(language) => set({ language })} />
       </div>
       <p className="backstage-hint">{t("quizLanguageHint")}</p>
       <div className="field">
         <span>{t("voiceChoice")}</span>
         <div className="voice-choice">
-          <Select
-            label={t("voiceChoice")}
-            value={settings.voice}
-            options={voices}
-            onChange={(voice) => set({ voice })}
-          />
-          <button
-            type="button"
-            className="mini"
-            aria-label={t(trying ? "stopTryVoice" : "tryVoice")}
-            title={t(trying ? "stopTryVoice" : "tryVoice")}
-            onClick={tryVoice}
-          >
+          <Select label={t("voiceChoice")} value={settings.voice} options={voices} onChange={(voice) => set({ voice })} />
+          <button type="button" className="mini" aria-label={t(trying ? "stopTryVoice" : "tryVoice")} title={t(trying ? "stopTryVoice" : "tryVoice")} onClick={tryVoice}>
             {trying ? <StopIcon /> : <PlayIcon />}
           </button>
         </div>
       </div>
-      {model && !model.installed && (
-        <p className="backstage-hint">{t("voiceNotDownloaded")}</p>
-      )}
+      {model && !model.installed && <p className="backstage-hint">{t("voiceNotDownloaded")}</p>}
     </>
   );
 }
 
 /** The welcome screen the show opens on (spec SF-3), drawn as the projector will show it. */
-function WelcomeSettings({
-  quiz,
-  onWelcome,
-  onPickMedia,
-}: {
-  quiz: Quiz;
-  onWelcome: (welcome: Welcome) => void;
-  onPickMedia: (kinds: MediaKind[]) => Promise<string | null>;
-}) {
+function WelcomeSettings({ quiz, onWelcome, onPickMedia }: { quiz: Quiz; onWelcome: (welcome: Welcome) => void; onPickMedia: (kinds: MediaKind[]) => Promise<string | null> }) {
   const { t } = useApp();
   const welcome = welcomeOf(quiz);
-  const set = (change: Partial<Welcome>) =>
-    onWelcome({ ...welcome, ...change });
-  const text = (
-    label: string,
-    value: string,
-    change: (text: string) => Partial<Welcome>,
-    placeholder?: string,
-  ) => (
+  const set = (change: Partial<Welcome>) => onWelcome({ ...welcome, ...change });
+  const text = (label: string, value: string, change: (text: string) => Partial<Welcome>, placeholder?: string) => (
     <label>
       <span>{label}</span>
-      <input
-        value={value}
-        placeholder={placeholder}
-        onChange={(e) => set(change(e.target.value))}
-      />
+      <input value={value} placeholder={placeholder} onChange={(e) => set(change(e.target.value))} />
     </label>
   );
-  const file = (
-    label: string,
-    value: string | null,
-    kinds: MediaKind[],
-    change: (file: string | null) => Partial<Welcome>,
-  ) => (
+  const file = (label: string, value: string | null, kinds: MediaKind[], change: (file: string | null) => Partial<Welcome>) => (
     <>
       <span>{label}</span>
-      <MediaPicker
-        label={label}
-        file={value}
-        onChoose={() =>
-          void onPickMedia(kinds).then(
-            (picked) => picked && set(change(picked)),
-          )
-        }
-        onRemove={() => set(change(null))}
-      />
+      <MediaPicker label={label} file={value} onChoose={() => void onPickMedia(kinds).then((picked) => picked && set(change(picked)))} onRemove={() => set(change(null))} />
     </>
   );
   const view = welcomePreviewView(welcome, quiz.title, quiz.slides.length);
   return (
     <>
       <h2>{t("welcomeScreen")}</h2>
-      <SettingSwitch
-        label={t("welcomeOn")}
-        hint={t("welcomeOnHint", { key: keyHint(t, KEYS.next) })}
-        checked={welcome.on}
-        onChange={(on) => set({ on })}
-      />
+      <SettingSwitch label={t("welcomeOn")} hint={t("welcomeOnHint", { key: keyHint(t, KEYS.next) })} checked={welcome.on} onChange={(on) => set({ on })} />
       <div className="welcome-fields">
-        {text(
-          t("welcomeHeading"),
-          welcome.heading,
-          (heading) => ({ heading }),
-          quiz.title,
-        )}
+        {text(t("welcomeHeading"), welcome.heading, (heading) => ({ heading }), quiz.title)}
         {file(t("welcomeLogo"), welcome.logo, ["image"], (logo) => ({ logo }))}
-        {file(
-          t("welcomeIntro"),
-          welcome.intro,
-          ["image", "video"],
-          (intro) => ({ intro }),
-        )}
+        {file(t("welcomeIntro"), welcome.intro, ["image", "video"], (intro) => ({ intro }))}
         {text(t("welcomeFooter"), welcome.footer, (footer) => ({ footer }))}
       </div>
       <p className="backstage-hint">{t("welcomeIntroHint")}</p>
-      <Stage
-        className="thumbnail-stage welcome-preview"
-        screen="welcome"
-        slide={null}
-        mode="thumbnail"
-      >
-        <SlideScreen
-          view={view}
-          context={NO_CONTEXT}
-          clock={null}
-          mode="thumbnail"
-        />
+      <Stage className="thumbnail-stage welcome-preview" screen="welcome" slide={null} mode="thumbnail">
+        <SlideScreen view={view} context={NO_CONTEXT} clock={null} mode="thumbnail" />
       </Stage>
     </>
   );
 }
 
 /** A setting that is on or off, with what it does. */
-function SettingSwitch(props: {
-  label: string;
-  hint: string;
-  checked: boolean;
-  onChange: (on: boolean) => void;
-}) {
+function SettingSwitch(props: { label: string; hint: string; checked: boolean; onChange: (on: boolean) => void }) {
   return (
     <div className="setting-switch">
       <span>{props.label}</span>
-      <Switch
-        label={props.label}
-        checked={props.checked}
-        onChange={props.onChange}
-      />
+      <Switch label={props.label} checked={props.checked} onChange={props.onChange} />
       <p className="backstage-hint">{props.hint}</p>
     </div>
   );
 }
 
 /** Problems with the slide each is on, which shows that slide. */
-function ProblemList({
-  problems,
-  quiz,
-  onShowSlide,
-}: {
-  problems: ValidationError[];
-  quiz: Quiz;
-  onShowSlide: (id: string) => void;
-}) {
+function ProblemList({ problems, quiz, onShowSlide }: { problems: ValidationError[]; quiz: Quiz; onShowSlide: (id: string) => void }) {
   const { t } = useApp();
   const slideNumber = new Map(quiz.slides.map((slide, i) => [slide.id, i + 1]));
   return (
@@ -612,11 +349,7 @@ function ProblemList({
         return (
           <li key={i}>
             {id !== null && n !== undefined ? (
-              <button
-                type="button"
-                className="link"
-                onClick={() => onShowSlide(id)}
-              >
+              <button type="button" className="link" onClick={() => onShowSlide(id)}>
                 {t("slide", { n, total: quiz.slides.length })}
               </button>
             ) : (
@@ -636,23 +369,13 @@ function ImportPage({ actions }: BackstageProps) {
     <>
       <h1>{t("backstageImport")}</h1>
       <div className="backstage-task">
-        <button
-          type="button"
-          className="browse"
-          disabled={actions.importSheet.disabled}
-          onClick={actions.importSheet.run}
-        >
+        <button type="button" className="browse" disabled={actions.importSheet.disabled} onClick={actions.importSheet.run}>
           {actions.importSheet.label}
         </button>
         <p>{t("importFromSheetHint")}</p>
       </div>
       <div className="backstage-task">
-        <button
-          type="button"
-          className="browse"
-          disabled={actions.sheetTemplate.disabled}
-          onClick={actions.sheetTemplate.run}
-        >
+        <button type="button" className="browse" disabled={actions.sheetTemplate.disabled} onClick={actions.sheetTemplate.run}>
           {actions.sheetTemplate.label}
         </button>
         <p>{t("saveSheetTemplateHint")}</p>
@@ -667,12 +390,7 @@ function ExportPage({ actions }: BackstageProps) {
     <>
       <h1>{t("backstageExport")}</h1>
       <div className="backstage-task">
-        <button
-          type="button"
-          className="browse"
-          disabled={actions.exportSheet.disabled}
-          onClick={actions.exportSheet.run}
-        >
+        <button type="button" className="browse" disabled={actions.exportSheet.disabled} onClick={actions.exportSheet.run}>
           {actions.exportSheet.label}
         </button>
         <p>{t("exportToSheetHint")}</p>
@@ -693,11 +411,7 @@ function OpenPage({ recentFiles, onOpenFile, onForgetFile }: BackstageProps) {
       {recentFiles.length === 0 ? (
         <p className="muted">{t("noRecentFiles")}</p>
       ) : (
-        <RecentFileList
-          files={recentFiles}
-          onOpen={onOpenFile}
-          onForget={onForgetFile}
-        />
+        <RecentFileList files={recentFiles} onOpen={onOpenFile} onForget={onForgetFile} />
       )}
     </>
   );

@@ -3,79 +3,78 @@ import type { AllAnswered } from "./AllAnswered";
 import type { QuizLanguage } from "./QuizLanguage";
 import type { ReadAloud } from "./ReadAloud";
 
-export type QuizSettings = {
-  /**
-   * What the show does once a question has nobody left to answer.
-   */
-  allAnswered: AllAnswered;
-  /**
-   * Seconds it waits before it does it, up to `MAX_ALL_ANSWERED_DELAY_S`;
-   * the quizmaster can step in meanwhile.
-   */
-  allAnsweredDelayS: number;
-  /**
-   * Once a question's answer is shown, the show goes on to the next
-   * slide by itself after `next_after_reveal_delay_s`; the quizmaster
-   * can step in meanwhile.
-   */
-  nextAfterReveal: boolean;
-  /**
-   * Up to `MAX_AFTER_REVEAL_DELAY_S`.
-   */
-  nextAfterRevealDelayS: number;
-  /**
-   * A timed question's clock runs to its end even once nobody is left
-   * to answer; the question then closes as everyone having answered it.
-   */
-  runClockOut: boolean;
-  /**
-   * The projector does not mark a question's right answers when they
-   * are shown, so the quizmaster can tell them; the Director still does.
-   */
-  hideAnswer: boolean;
-  /**
-   * In an everyone-answers question a player can change their answer
-   * while it runs: their last answer counts, with its time.
-   */
-  changeAnswer: boolean;
-  /**
-   * A fastest-finger question takes one buzz: once it is judged wrong,
-   * nobody else can buzz in.
-   */
-  oneBuzz: boolean;
-  /**
-   * In an everyone-answers question a player who gives no answer loses
-   * the question's penalty, as for a wrong answer.
-   */
-  noAnswerPenalty: boolean;
-  /**
-   * The projector does not show what a fastest-finger buzz won or lost;
-   * the leaderboard shows the scores.
-   */
-  hideBuzzPoints: boolean;
-  /**
-   * Once an everyone-answers question's answer is shown, the projector
-   * draws on each answer a bar for the share of the players the question
-   * counted who gave it: an answer chart.
-   */
-  answerChart: boolean;
-  /**
-   * Jokers each player has for the show, up to `MAX_JOKERS`; none by
-   * default. A player's joker doubles what one question gives them,
-   * the penalty too; the quizmaster plays it before the question ends.
-   */
-  jokers: number;
-  /**
-   * The language the quiz is written in, for the voice that reads it out.
-   */
-  language: QuizLanguage;
-  /**
-   * The Director reads each question out in a voice of `language` when
-   * it comes on screen; the quizmaster can stop it or have it read again.
-   */
-  readAloud: ReadAloud;
-  /**
-   * Which of the voice model's voices reads, up to `MAX_VOICE`.
-   */
-  voice: number;
-};
+export type QuizSettings = { 
+/**
+ * What the show does once a question has nobody left to answer.
+ */
+allAnswered: AllAnswered, 
+/**
+ * Seconds it waits before it does it, up to `MAX_ALL_ANSWERED_DELAY_S`;
+ * the quizmaster can step in meanwhile.
+ */
+allAnsweredDelayS: number, 
+/**
+ * Once a question's answer is shown, the show goes on to the next
+ * slide by itself after `next_after_reveal_delay_s`; the quizmaster
+ * can step in meanwhile.
+ */
+nextAfterReveal: boolean, 
+/**
+ * Up to `MAX_AFTER_REVEAL_DELAY_S`.
+ */
+nextAfterRevealDelayS: number, 
+/**
+ * A timed question's clock runs to its end even once nobody is left
+ * to answer; the question then closes as everyone having answered it.
+ */
+runClockOut: boolean, 
+/**
+ * The projector does not mark a question's right answers when they
+ * are shown, so the quizmaster can tell them; the Director still does.
+ */
+hideAnswer: boolean, 
+/**
+ * In an everyone-answers question a player can change their answer
+ * while it runs: their last answer counts, with its time.
+ */
+changeAnswer: boolean, 
+/**
+ * A fastest-finger question takes one buzz: once it is judged wrong,
+ * nobody else can buzz in.
+ */
+oneBuzz: boolean, 
+/**
+ * In an everyone-answers question a player who gives no answer loses
+ * the question's penalty, as for a wrong answer.
+ */
+noAnswerPenalty: boolean, 
+/**
+ * The projector does not show what a fastest-finger buzz won or lost;
+ * the leaderboard shows the scores.
+ */
+hideBuzzPoints: boolean, 
+/**
+ * Once an everyone-answers question's answer is shown, the projector
+ * draws on each answer a bar for the share of the players the question
+ * counted who gave it: an answer chart.
+ */
+answerChart: boolean, 
+/**
+ * Jokers each player has for the show, up to `MAX_JOKERS`; none by
+ * default. A player's joker doubles what one question gives them,
+ * the penalty too; the quizmaster plays it before the question ends.
+ */
+jokers: number, 
+/**
+ * The language the quiz is written in, for the voice that reads it out.
+ */
+language: QuizLanguage, 
+/**
+ * The Director reads each question out in a voice of `language` when
+ * it comes on screen; the quizmaster can stop it or have it read again.
+ */
+readAloud: ReadAloud, 
+/**
+ * Which of the voice model's voices reads, up to `MAX_VOICE`.
+ */
+voice: number, };

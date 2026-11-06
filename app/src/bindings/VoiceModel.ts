@@ -3,14 +3,12 @@
 /**
  * Whether the voice model is there, for the settings and the check before a show.
  */
-export type VoiceModel = {
-  installed: boolean;
-  /**
-   * The download's size.
-   */
-  bytes: number;
-  /**
-   * How many voices it has, numbered from 0.
-   */
-  voices: number;
-};
+export type VoiceModel = { installed: boolean, 
+/**
+ * The download's size.
+ */
+bytes: number, 
+/**
+ * How many voices it has, numbered from 0.
+ */
+voices: number, };

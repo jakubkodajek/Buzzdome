@@ -729,25 +729,12 @@
   font-size: 12px;
 }
 
-.dot-0 {
-  background: var(--answer-0);
-}
-.dot-1 {
-  background: var(--answer-1);
-}
-.dot-2 {
-  background: var(--answer-2);
-}
-.dot-3 {
-  background: var(--answer-3);
-  color: #2b2400;
-}
-.dot-4 {
-  background: var(--answer-4);
-}
-.dot-5 {
-  background: var(--answer-5);
-}
+.dot-0 { background: var(--answer-0); }
+.dot-1 { background: var(--answer-1); }
+.dot-2 { background: var(--answer-2); }
+.dot-3 { background: var(--answer-3); color: #2b2400; }
+.dot-4 { background: var(--answer-4); }
+.dot-5 { background: var(--answer-5); }
 
 .preview-media {
   display: flex;
@@ -948,18 +935,10 @@
   padding: 2px 8px;
 }
 
-.director .key-a {
-  border-color: var(--answer-0);
-}
-.director .key-b {
-  border-color: var(--answer-1);
-}
-.director .key-c {
-  border-color: var(--answer-2);
-}
-.director .key-d {
-  border-color: var(--answer-3);
-}
+.director .key-a { border-color: var(--answer-0); }
+.director .key-b { border-color: var(--answer-1); }
+.director .key-c { border-color: var(--answer-2); }
+.director .key-d { border-color: var(--answer-3); }
 
 .toasts {
   position: fixed;
@@ -1620,9 +1599,7 @@
   color: #fff;
   text-align: left;
   background: color-mix(in srgb, var(--pad) 35%, #1a1a1a);
-  transition:
-    box-shadow 0.15s,
-    background 0.15s;
+  transition: box-shadow 0.15s, background 0.15s;
 }
 
 .director button.pad:not(.playing):hover:not(:disabled) {
@@ -1633,9 +1610,7 @@
 .director button.pad.playing {
   border-color: #fff;
   background: var(--pad);
-  box-shadow:
-    0 0 18px 2px var(--pad),
-    inset 0 0 12px rgba(255, 255, 255, 0.45);
+  box-shadow: 0 0 18px 2px var(--pad), inset 0 0 12px rgba(255, 255, 255, 0.45);
 }
 
 .director button.pad.paused {
@@ -1690,30 +1665,14 @@
   background: rgba(255, 255, 255, 0.9);
 }
 
-.director .pad-red {
-  --pad: #d93a3a;
-}
-.director .pad-orange {
-  --pad: #e8812a;
-}
-.director .pad-yellow {
-  --pad: #d6b61e;
-}
-.director .pad-green {
-  --pad: #3ca84a;
-}
-.director .pad-teal {
-  --pad: #1f9e99;
-}
-.director .pad-blue {
-  --pad: #2f74d0;
-}
-.director .pad-purple {
-  --pad: #8a4fd0;
-}
-.director .pad-pink {
-  --pad: #d24f9b;
-}
+.director .pad-red { --pad: #d93a3a; }
+.director .pad-orange { --pad: #e8812a; }
+.director .pad-yellow { --pad: #d6b61e; }
+.director .pad-green { --pad: #3ca84a; }
+.director .pad-teal { --pad: #1f9e99; }
+.director .pad-blue { --pad: #2f74d0; }
+.director .pad-purple { --pad: #8a4fd0; }
+.director .pad-pink { --pad: #d24f9b; }
 
 /* The pad colour and grid size pickers */
 
@@ -2019,8 +1978,7 @@
     background: none;
   }
 
-  .director:has(.results-tab)
-    :is(.command-panel, .tabs, .not-saved-banner, .learn-banner, .status-bar),
+  .director:has(.results-tab) :is(.command-panel, .tabs, .not-saved-banner, .learn-banner, .status-bar),
   .results-tab > .toolbar {
     display: none;
   }

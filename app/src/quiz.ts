@@ -1,24 +1,6 @@
-import {
-  DEFAULT_QUIZ_SETTINGS,
-  DEFAULT_QUIZ_SOUNDS,
-  DEFAULT_WELCOME,
-  FULL_SHARE,
-  SLIDE_PLAYS,
-} from "./bindings/Constants";
+import { DEFAULT_QUIZ_SETTINGS, DEFAULT_QUIZ_SOUNDS, DEFAULT_WELCOME, FULL_SHARE, SLIDE_PLAYS } from "./bindings/Constants";
 import type { StringKey, Translate } from "./i18n";
-import type {
-  Picker,
-  Plays,
-  QuestionSlide,
-  Quiz,
-  QuizLanguage,
-  QuizSettings,
-  QuizSounds,
-  Slide,
-  SlideType,
-  TitledSlide,
-  Welcome,
-} from "./types";
+import type { Picker, Plays, QuestionSlide, Quiz, QuizLanguage, QuizSettings, QuizSounds, Slide, SlideType, TitledSlide, Welcome } from "./types";
 
 /** The wording of a picker for quiz files (a quiz file, or a plain quiz JSON to open), offering `fileName` (without the extension) to save as. */
 export function quizPicker(t: Translate, fileName?: string): Picker {
@@ -46,13 +28,10 @@ export function sameFields<T extends object>(a: T, b: T): boolean {
   return [...keys].every((key) => a[key] === b[key]);
 }
 
-/** How each kind of slide is named in the UI. */
 /** What each quiz language is called. */
-export const LANGUAGE_LABEL: Record<QuizLanguage, StringKey> = {
-  cs: "languageCs",
-  en: "languageEn",
-};
+export const LANGUAGE_LABEL: Record<QuizLanguage, StringKey> = { cs: "languageCs", en: "languageEn" };
 
+/** How each kind of slide is named in the UI. */
 export const SLIDE_TYPE_LABEL: Record<SlideType, StringKey> = {
   billboard: "typeBillboard",
   question: "typeQuestion",
@@ -67,11 +46,7 @@ export function slideTitle(slide: Slide): string {
 }
 
 export function hasTitle(slide: Slide): slide is TitledSlide {
-  return (
-    slide.type === "billboard" ||
-    slide.type === "endOfRound" ||
-    slide.type === "final"
-  );
+  return slide.type === "billboard" || slide.type === "endOfRound" || slide.type === "final";
 }
 
 /**
@@ -88,14 +63,9 @@ export function plays(type: SlideType): Plays {
  * a fully right one); null for a wrong answer. A fastest-finger question
  * gives all of them (`Question::share_of` in quiz-core).
  */
-export function shareOf(
-  question: Pick<QuestionSlide, "correct" | "mode">,
-  index: number,
-): number | null {
+export function shareOf(question: Pick<QuestionSlide, "correct" | "mode">, index: number): number | null {
   const share = question.correct.find((c) => c.answer === index)?.share ?? null;
-  return share !== null && question.mode === "fastestFinger"
-    ? FULL_SHARE
-    : share;
+  return share !== null && question.mode === "fastestFinger" ? FULL_SHARE : share;
 }
 
 /** A right answer of a question, by its index, with its share of the points in percent. */
@@ -108,19 +78,14 @@ export interface RightAnswer {
  * The question's right answers in their order, each with the share it
  * gives (`shareOf`); a marked answer the question does not have is none.
  */
-export function rightAnswers(
-  question: Pick<QuestionSlide, "answers" | "correct" | "mode">,
-): RightAnswer[] {
+export function rightAnswers(question: Pick<QuestionSlide, "answers" | "correct" | "mode">): RightAnswer[] {
   return question.answers.flatMap((_, answer) => {
     const share = shareOf(question, answer);
     return share === null ? [] : [{ answer, share }];
   });
 }
 
-export function isCorrect(
-  question: Pick<QuestionSlide, "correct">,
-  index: number,
-): boolean {
+export function isCorrect(question: Pick<QuestionSlide, "correct">, index: number): boolean {
   return question.correct.some((c) => c.answer === index);
 }
 
@@ -184,10 +149,7 @@ export function slideContext(quiz: Quiz | null, index: number): SlideContext {
 
 /** Whether a slide shows the same in both contexts. */
 export function sameContext(a: SlideContext, b: SlideContext): boolean {
-  const samePosition = (
-    x: QuestionPosition | null,
-    y: QuestionPosition | null,
-  ) => x?.n === y?.n && x?.total === y?.total;
+  const samePosition = (x: QuestionPosition | null, y: QuestionPosition | null) => x?.n === y?.n && x?.total === y?.total;
   return (
     samePosition(a.position, b.position) &&
     a.explains?.question === b.explains?.question &&

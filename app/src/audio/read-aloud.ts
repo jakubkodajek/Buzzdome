@@ -26,6 +26,7 @@ import type {
   VoiceModel,
 } from "../types";
 import { ClipPlayer, linearGain, playerLevel } from "./clip-player";
+import { playBundled, type Playing } from "./show-audio";
 
 /** The language tag a system voice of each quiz language has, region included. */
 export const SPEECH_TAGS: Record<QuizLanguage, string> = {
@@ -200,9 +201,12 @@ export type Preparing =
   | { state: "noModel" }
   | { state: "rendering"; done: number; total: number }
   | { state: "ready"; total: number }
-  | { state: "failed"; done: number; total: number };
+  /** Done, but `failed` of the clips could not be rendered: the system voice reads those. */
+  | { state: "failed"; failed: number; total: number };
 
 const preparing = createStore<Preparing>({ state: "off" });
+/** How often preparing looks again whether the question being asked is over. */
+const WAIT_WHILE_ASKING_MS = 500;
 
 export function usePreparing(): Preparing {
   return useStore(preparing);
@@ -213,7 +217,7 @@ export function usePreparing(): Preparing {
  * one after another, while the show with `quiz` runs. A clip that cannot
  * be rendered is read by the system voice.
  */
-export function usePrepareVoice(quiz: Quiz | null) {
+export function usePrepareVoice(quiz: Quiz | null, view: GameView | null) {
   const model = useVoiceModel();
   const on = quiz !== null && settingsOf(quiz).readAloud !== "off";
   const lines = useMemo(
@@ -221,6 +225,9 @@ export function usePrepareVoice(quiz: Quiz | null) {
     [on, quiz],
   );
   const installed = model?.installed ?? null;
+  // Rendering takes CPU the show needs while a question is asked: it waits until the question is over.
+  const step = view?.phase.phase === "question" ? view.phase.step : null;
+  const asking = useLatest(step === "ready" || step === "running");
   useEffect(() => {
     if (!on) return preparing.set({ state: "off" });
     if (installed === null) return;
@@ -228,22 +235,20 @@ export function usePrepareVoice(quiz: Quiz | null) {
     let cancelled = false;
     const total = lines.length;
     void (async () => {
+      let failed = 0;
       for (let done = 0; done < total; done++) {
+        while (asking.current && !cancelled) await new Promise((resume) => setTimeout(resume, WAIT_WHILE_ASKING_MS));
         if (cancelled) return;
         preparing.set({ state: "rendering", done, total });
-        try {
-          await api.voiceClip(lines[done], true);
-        } catch {
-          if (!cancelled) preparing.set({ state: "failed", done, total });
-          return;
-        }
+        // One clip that fails is read by the system voice; the rest are still rendered.
+        await api.voiceClip(lines[done], true).catch(() => failed++);
       }
-      if (!cancelled) preparing.set({ state: "ready", total });
+      if (!cancelled) preparing.set(failed > 0 ? { state: "failed", failed, total } : { state: "ready", total });
     })();
     return () => {
       cancelled = true;
     };
-  }, [on, installed, lines]);
+  }, [on, installed, lines, asking]);
 }
 
 /** Something that speaks until it ends or is stopped. */
@@ -380,9 +385,7 @@ export function useReadAloud(
   const slide = view?.slide ?? null;
   const line = settings ? voiceLine(slide, settings) : null;
   const system = useSystemVoice(settings?.language ?? "cs");
-  const sounds = quiz ? soundsOf(quiz) : DEFAULT_QUIZ_SOUNDS;
-  const gain =
-    linearGain(sounds.effectsVolume, 0) * playerLevel(usePlayerVolume());
+  const gain = useVoiceGain(quiz);
   const step = view?.phase.phase === "question" ? view.phase.step : null;
   const asking = step === "ready" || step === "running";
   const available = what !== "off" && line !== null && asking;
@@ -414,17 +417,23 @@ export function useReadAloud(
   return { available, speaking, read, stop };
 }
 
+/** How loud the voice reads: as the quiz's effects, at the player's volume. */
+export function useVoiceGain(quiz: Quiz | null): number {
+  const sounds = quiz ? soundsOf(quiz) : DEFAULT_QUIZ_SOUNDS;
+  return linearGain(sounds.effectsVolume, 0) * playerLevel(usePlayerVolume());
+}
+
 /** Plays one voice sample at a time, as loud as the player's volume. */
 export function useVoiceSample(): {
   playing: string | null;
   play: (language: QuizLanguage, voice: number) => void;
   stop: () => void;
 } {
-  const clip = useRef<ClipPlayer | null>(null);
+  const clip = useRef<Playing | null>(null);
   const [playing, setPlaying] = useState<string | null>(null);
   const level = useLatest(playerLevel(usePlayerVolume()));
   const stop = useCallback(() => {
-    clip.current?.dispose();
+    clip.current?.stop();
     clip.current = null;
     setPlaying(null);
   }, []);
@@ -433,11 +442,8 @@ export function useVoiceSample(): {
       stop();
       const url = sampleUrl(language, voice);
       if (!url) return;
-      const sample = new ClipPlayer(url, level.current);
-      sample.onEnd = stop;
-      clip.current = sample;
+      clip.current = playBundled(url, level.current, stop);
       setPlaying(`${language}-${voice}`);
-      sample.play({ fromMs: 0, toMs: null });
     },
     [stop, level],
   );

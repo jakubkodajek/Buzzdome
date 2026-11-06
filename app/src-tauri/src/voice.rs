@@ -9,6 +9,7 @@
 //! when a clip is not there.
 
 use crate::error::{AppError, CmdResult};
+use crate::editor::refuse_during_show;
 use crate::{app_log, off_ui};
 use quiz_file::FileAction;
 use serde::Serialize;
@@ -37,8 +38,17 @@ const CLIPS_FOLDER: &str = "voice-clips";
 const LOAD_TIMEOUT: Duration = Duration::from_secs(60);
 /// How long one clip may take: a long question with six answers takes a few
 /// seconds on a laptop's CPU [no source - measured in a 4-core container:
-/// 10 s of speech in about 2 s].
-const CLIP_TIMEOUT: Duration = Duration::from_secs(60);
+/// 10 s of speech in about 2 s], so this much and a little more for each
+/// character, as the longest (`voice::MAX_TEXT_CHARS`) take minutes to say.
+const CLIP_TIMEOUT: Duration = Duration::from_secs(20);
+const CLIP_TIMEOUT_PER_CHAR: Duration = Duration::from_millis(60);
+/// Windows' below-normal priority class (`BELOW_NORMAL_PRIORITY_CLASS`):
+/// the voice process gives way to the show.
+#[cfg(windows)]
+const BELOW_NORMAL_PRIORITY_CLASS: u32 = 0x0000_4000;
+/// How much the voice process lowers its priority on macOS and Linux.
+#[cfg(unix)]
+const NICENESS: i32 = 10;
 /// Redirects followed, each over HTTPS only (GitHub sends release files
 /// on to its file host).
 const MAX_REDIRECTS: u32 = 5;
@@ -143,21 +153,23 @@ struct VoiceProcess {
 
 impl VoiceProcess {
     fn start(exe: &Path, root: &Path) -> CmdResult<VoiceProcess> {
-        let mut child = Command::new(exe)
-            .arg(VOICE)
-            .arg(root)
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::null())
-            .spawn()
-            .map_err(|_| AppError::VoiceFailed)?;
+        let mut command = Command::new(exe);
+        command.arg(VOICE).arg(root).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::null());
+        #[cfg(windows)]
+        std::os::windows::process::CommandExt::creation_flags(&mut command, BELOW_NORMAL_PRIORITY_CLASS);
+        let mut child = command.spawn().map_err(|_| AppError::VoiceFailed)?;
         let requests = child.stdin.take().expect("the voice process's input is piped");
         let output = child.stdout.take().expect("the voice process's output is piped");
         let (send, replies) = mpsc::channel();
         thread::spawn(move || {
             for line in BufReader::new(output).lines() {
                 let Ok(line) = line else { break };
-                let Ok(reply) = serde_json::from_str::<Reply>(&line) else { break };
+                // A line that is not a reply (a native library writing to the
+                // output) is passed over, so the replies after it still arrive.
+                let Ok(reply) = serde_json::from_str::<Reply>(&line) else {
+                    app_log::note(&format!("voice: not a reply: {}", line.chars().take(200).collect::<String>()));
+                    continue;
+                };
                 if send.send(reply).is_err() {
                     break;
                 }
@@ -177,8 +189,9 @@ impl VoiceProcess {
         text.push('\n');
         self.requests.write_all(text.as_bytes()).and_then(|()| self.requests.flush()).map_err(|_| AppError::VoiceFailed)?;
         let started = Instant::now();
-        let reply = self.reply(CLIP_TIMEOUT)?;
-        app_log::note(&format!("voice: {} chars in {} ms, {reply:?}", line.words().chars().count(), started.elapsed().as_millis()));
+        let chars = line.words().chars().count();
+        let reply = self.reply(CLIP_TIMEOUT + CLIP_TIMEOUT_PER_CHAR * chars as u32)?;
+        app_log::note(&format!("voice: {chars} chars in {} ms, {reply:?}", started.elapsed().as_millis()));
         Ok(reply == Reply::Written)
     }
 
@@ -205,6 +218,12 @@ pub fn serve_if_asked() {
         return;
     }
     let Some(root) = args.next() else { std::process::exit(2) };
+    // Rendering gives way to the show (the Windows process starts below normal).
+    #[cfg(unix)]
+    // SAFETY: nice only changes this process's priority.
+    unsafe {
+        libc::nice(NICENESS);
+    }
     let Ok(engine) = voice::engine::Engine::load(Path::new(&root)) else {
         std::process::exit(1);
     };
@@ -220,10 +239,12 @@ pub async fn voice_model(app: AppHandle) -> CmdResult<VoiceModel> {
 
 /// Downloads the voice model, checks it and unpacks it, telling `progress`
 /// how the download goes. A model already there is kept until the new one
-/// is whole.
+/// is whole. Refused during a show, as the editor's large files are
+/// (`refuse_during_show`): the journal shares the disk.
 #[tauri::command]
 pub async fn voice_install(app: AppHandle, progress: Channel<VoiceDownload>) -> CmdResult<VoiceModel> {
     off_ui(move || {
+        refuse_during_show(&app)?;
         let state = app.state::<Voice>();
         let _installing = state.installing.lock().unwrap();
         fs::create_dir_all(&state.root).map_err(|e| AppError::file(FileAction::CreateFolder, &state.root, e))?;
@@ -243,10 +264,11 @@ pub async fn voice_install(app: AppHandle, progress: Channel<VoiceDownload>) -> 
     .await
 }
 
-/// Removes the voice model and the clips made with it.
+/// Removes the voice model and the clips made with it. Refused during a show.
 #[tauri::command]
 pub async fn voice_remove(app: AppHandle) -> CmdResult<VoiceModel> {
     off_ui(move || {
+        refuse_during_show(&app)?;
         let state = app.state::<Voice>();
         let _installing = state.installing.lock().unwrap();
         state.stop();
@@ -267,7 +289,7 @@ pub async fn voice_remove(app: AppHandle) -> CmdResult<VoiceModel> {
 pub async fn voice_clip(app: AppHandle, line: Line, render: bool) -> CmdResult<Option<String>> {
     off_ui(move || {
         let exe = || std::env::current_exe().map_err(|_| AppError::VoiceFailed);
-        let clip = app.state::<Voice>().clip(&line, render, exe)?;
+        let clip = app.state::<Voice>().clip(&line.checked(), render, exe)?;
         Ok(clip.map(|path| path.to_string_lossy().into_owned()))
     })
     .await
@@ -301,7 +323,8 @@ fn agent() -> ureq::Agent {
 
 fn voice_error(e: voice::VoiceError) -> AppError {
     match e {
-        voice::VoiceError::Download(detail) | voice::VoiceError::Disk(detail) => AppError::VoiceDownload { detail },
+        voice::VoiceError::Download(detail) => AppError::VoiceDownload { detail },
+        voice::VoiceError::Disk(detail) => AppError::VoiceDisk { detail },
         voice::VoiceError::Damaged => AppError::VoiceDamaged,
         voice::VoiceError::Load | voice::VoiceError::Render => AppError::VoiceFailed,
     }

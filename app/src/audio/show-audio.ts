@@ -260,6 +260,32 @@ class Stream {
   }
 }
 
+/** Plays one of the app's own sounds (bundled with it, such as a voice sample) once at `gain` straight to the speakers, read whole as the show's are. */
+export function playBundled(url: string, gain: number, onEnd: () => void): Playing {
+  let stopped = false;
+  let playing: Round | null = null;
+  read(url).then((buffer) => {
+    if (stopped) return;
+    const context = audioContext();
+    const out = new GainNode(context, { gain: Math.max(0, gain) });
+    out.connect(context.destination);
+    playing = startRound(context, buffer, out, context.currentTime, 0);
+    playing.source.addEventListener("ended", () => {
+      out.disconnect();
+      if (!stopped) onEnd();
+    });
+  }, (e: unknown) => {
+    failed(url)(e);
+    if (!stopped) onEnd();
+  });
+  return {
+    stop: () => {
+      stopped = true;
+      if (playing) stopRound(playing, CUT_S);
+    },
+  };
+}
+
 /** A sound read whole, playing through a level of its own, so that it can fade. */
 interface Round {
   source: AudioBufferSourceNode;

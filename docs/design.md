@@ -1120,17 +1120,30 @@ letter from `answers.ts`).
   only the model's own files into a staging folder that then replaces the
   model's folder in `<app local data>/voice/`. Samples of every voice in
   both languages ship with the UI (`audio/voices/`), so the quizmaster
-  chooses before downloading.
+  chooses before downloading. The download (and removing the model) is
+  refused during a show, as the editor's large files are: it writes
+  about 270 MB to the disk the journal is on. Settings › Voices says that
+  the model is Supertone's under OpenRAIL-M, whose use rules ask that
+  machine-made speech be disclosed: the quizmaster tells the players a
+  synthetic voice reads.
 - **Engine and process.** The engine is sherpa-onnx's Rust binding over
   ONNX Runtime, linked statically (on Windows the MT runtime, which Tauri
-  links the app with too). It runs only in the voice process, the app
+  links the app with too). The libraries are prebuilt archives checked
+  against hashes pinned in `.github/scripts/sherpa-onnx-libs.sh` before
+  any CI build (`docs/releasing.md`). It runs only in the voice process, the app
   started again with `--voice <folder>` (`voice::serve_if_asked` in
   `main.rs`, as the sheet reader): native code failing there ends that
   process, never a show. The app writes one JSON request per line (the
   line to say and the file to write) and reads one reply per line
-  (`voice::server`); the process loads the model once and stays up. A
-  load past 60 s or a clip past 60 s ends it, and the next clip starts
-  another.
+  (`voice::server`); a line that is not a reply is logged and passed
+  over. The process loads the model once and stays up. It gives way to
+  the show: it starts below normal priority (Windows) or lowers its own
+  (`nice`, macOS and Linux), and the engine takes at most two CPU threads.
+  A load past 60 s, or a clip past 20 s and 60 ms for each character, ends
+  it, and the next clip starts another. The locks in `voice.rs` are taken
+  in one order, the model's install lock and then the process's; the show
+  thread takes neither, and a window's line is checked first (its words
+  only, a voice the model has).
 - **Clips.** A clip is a 16-bit mono WAV in `<app local data>/voice-clips/`,
   named by the SHA-256 of what it says and how (render version, model,
   language, voice, words), so an edited question gets a new clip and an
@@ -1138,7 +1151,10 @@ letter from `answers.ts`).
   renamed. The Director's asset scope includes the folder.
 - **Show.** Once a show with reading on is loaded, the Director renders
   the clip of each question not kept yet, one after another
-  (`usePrepareVoice`; the check before a show shows how far). When a
+  (`usePrepareVoice`; the check before a show shows how far), pausing
+  while a question is asked (`ready` or `running`) so as not to take CPU
+  from it. A clip that fails is left to the system voice and the rest are
+  still rendered; the check says how many failed. When a
   question comes on screen (`ready`), `useReadAloud` asks for its kept
   clip only (`voice_clip` with `render: false`, a file check) and plays
   it like the slide's sound, at the effects' volume times the player's;
@@ -1146,7 +1162,10 @@ letter from `answers.ts`).
   Speech API, a voice on the computer before one that needs the
   internet). The music ducks while it reads. A buzz, the question's end or
   answer, or leaving the slide stops it; nothing of it is journaled, as it
-  never changes the show.
+  never changes the show. The question on screen is read again when the
+  Director's window is laid out again (after a crash and resume, on
+  coming back from the editor). The question's clock runs while it is
+  read (Jakub's choice, 2026-11-06).
 
 ## 2. Buzzer link
 

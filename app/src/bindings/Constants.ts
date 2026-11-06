@@ -3,17 +3,8 @@
 export const MAX_ANSWERS = 6;
 export const MAX_EVERYONE_ANSWERS = 4;
 export const MIN_EVERYONE_ANSWERS = 2;
-export const ANSWER_LIMITS = {
-  everyone: { fewest: 2, most: 4 },
-  fastestFinger: { fewest: 0, most: 6 },
-};
-export const SLIDE_PLAYS = {
-  billboard: { clockAndReveal: false, pictureAndVideo: true },
-  endOfRound: { clockAndReveal: false, pictureAndVideo: false },
-  explanation: { clockAndReveal: false, pictureAndVideo: true },
-  final: { clockAndReveal: false, pictureAndVideo: false },
-  question: { clockAndReveal: true, pictureAndVideo: true },
-};
+export const ANSWER_LIMITS = {"everyone":{"fewest":2,"most":4},"fastestFinger":{"fewest":0,"most":6}};
+export const SLIDE_PLAYS = {"billboard":{"clockAndReveal":false,"pictureAndVideo":true},"endOfRound":{"clockAndReveal":false,"pictureAndVideo":false},"explanation":{"clockAndReveal":false,"pictureAndVideo":true},"final":{"clockAndReveal":false,"pictureAndVideo":false},"question":{"clockAndReveal":true,"pictureAndVideo":true}};
 export const DEFAULT_TIME_LIMIT_S = 20;
 export const DEFAULT_POINTS = 10;
 export const MAX_POINTS = 100000;
@@ -42,92 +33,18 @@ export const MAX_FONT_NAME_CHARS = 64;
 export const MAX_TRANSPARENCY = 100;
 export const MAX_CATEGORY_NAME_CHARS = 40;
 export const FULL_SHARE = 100;
-export const DEFAULT_QUIZ_SETTINGS = {
-  allAnswered: "wait",
-  allAnsweredDelayS: 3,
-  nextAfterReveal: false,
-  nextAfterRevealDelayS: 5,
-  runClockOut: false,
-  hideAnswer: false,
-  changeAnswer: false,
-  oneBuzz: false,
-  noAnswerPenalty: false,
-  hideBuzzPoints: false,
-  answerChart: false,
-  jokers: 0,
-  language: "cs",
-  readAloud: "off",
-  voice: 0,
-} as const;
+export const DEFAULT_QUIZ_SETTINGS = {"allAnswered":"wait","allAnsweredDelayS":3,"nextAfterReveal":false,"nextAfterRevealDelayS":5,"runClockOut":false,"hideAnswer":false,"changeAnswer":false,"oneBuzz":false,"noAnswerPenalty":false,"hideBuzzPoints":false,"answerChart":false,"jokers":0,"language":"cs","readAloud":"off","voice":0} as const;
 export const MAX_ALL_ANSWERED_DELAY_S = 10;
 export const MAX_AFTER_REVEAL_DELAY_S = 60;
 export const MAX_JOKERS = 5;
 export const MAX_VOICE = 9;
-export const QUIZ_LANGUAGES = ["cs", "en"] as const;
+export const QUIZ_LANGUAGES = ["cs","en"] as const;
 export const LAST_SECONDS_MS = 5000;
-export const DEFAULT_QUIZ_SOUNDS = {
-  slots: {},
-  effectsVolume: 100,
-  musicVolume: 50,
-} as const;
-export const DEFAULT_WELCOME = {
-  on: false,
-  heading: "",
-  logo: null,
-  intro: null,
-  footer: "",
-} as const;
+export const DEFAULT_QUIZ_SOUNDS = {"slots":{},"effectsVolume":100,"musicVolume":50} as const;
+export const DEFAULT_WELCOME = {"on":false,"heading":"","logo":null,"intro":null,"footer":""} as const;
 export const MAX_SOUND_VOLUME = 100;
-export const SOUND_SLOTS = [
-  "clockStart",
-  "countdown",
-  "buzz",
-  "correct",
-  "wrong",
-  "timeUp",
-  "reveal",
-  "leaderboard",
-  "place",
-  "winner",
-  "lobbyMusic",
-  "betweenMusic",
-  "clockMusic",
-  "buildUpMusic",
-  "winnerMusic",
-] as const;
-export const EFFECT_SLOTS = [
-  "clockStart",
-  "countdown",
-  "buzz",
-  "correct",
-  "wrong",
-  "timeUp",
-  "reveal",
-  "leaderboard",
-  "place",
-  "winner",
-] as const;
-export const MUSIC_SLOTS = [
-  "lobbyMusic",
-  "betweenMusic",
-  "clockMusic",
-  "buildUpMusic",
-  "winnerMusic",
-] as const;
-export const STAGES = [
-  "noShow",
-  "lobby",
-  "billboard",
-  "explanation",
-  "endOfRound",
-  "questionReady",
-  "answering",
-  "lastSeconds",
-  "buzzed",
-  "closed",
-  "revealed",
-  "leaderboard",
-  "finalBuildUp",
-  "winner",
-] as const;
-export const ANSWER_BUTTONS = ["a", "b", "c", "d"] as const;
+export const SOUND_SLOTS = ["clockStart","countdown","buzz","correct","wrong","timeUp","reveal","leaderboard","place","winner","lobbyMusic","betweenMusic","clockMusic","buildUpMusic","winnerMusic"] as const;
+export const EFFECT_SLOTS = ["clockStart","countdown","buzz","correct","wrong","timeUp","reveal","leaderboard","place","winner"] as const;
+export const MUSIC_SLOTS = ["lobbyMusic","betweenMusic","clockMusic","buildUpMusic","winnerMusic"] as const;
+export const STAGES = ["noShow","lobby","billboard","explanation","endOfRound","questionReady","answering","lastSeconds","buzzed","closed","revealed","leaderboard","finalBuildUp","winner"] as const;
+export const ANSWER_BUTTONS = ["a","b","c","d"] as const;

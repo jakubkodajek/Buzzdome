@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { api } from "../api";
 import { useApp, useReport } from "../app-context";
+import { useGameView } from "../hooks";
 import {
   setVoiceModel,
   useVoiceModel,
@@ -29,7 +30,9 @@ export function VoicesSettings() {
   const [progress, setProgress] = useState<VoiceDownload | null | undefined>(
     undefined,
   );
-  const busy = progress !== undefined;
+  // The download writes much to the disk the show is saved to (design §1.1).
+  const showRunning = useGameView() !== null;
+  const busy = progress !== undefined || showRunning;
 
   const install = () => {
     setProgress(null);
@@ -78,6 +81,8 @@ export function VoicesSettings() {
           </button>
         )}
       </div>
+      {showRunning && <p className="muted">{t("voicesDuringShow")}</p>}
+      <p className="muted">{t("voicesLicence")}</p>
       {QUIZ_LANGUAGES.map((language) => (
         <section
           key={language}

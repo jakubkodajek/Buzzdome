@@ -11,13 +11,7 @@ import { installBrowserGuard } from "../browser-guard";
 import { setBodyText } from "../editor/slides";
 import { rightAnswers } from "../quiz";
 import { answerShares, NO_CONTROLS } from "../host/preview";
-import {
-  ANSWER_BUTTONS,
-  DEFAULT_QUIZ_SETTINGS,
-  MAX_BOARD_COLUMNS,
-  MAX_BOARD_ROWS,
-  MAX_PLAYER_VOLUME,
-} from "../bindings/Constants";
+import { ANSWER_BUTTONS, DEFAULT_QUIZ_SETTINGS, MAX_BOARD_COLUMNS, MAX_BOARD_ROWS, MAX_PLAYER_VOLUME } from "../bindings/Constants";
 import type {
   Background,
   BoardChange,
@@ -84,28 +78,13 @@ const update = params.get("update");
 const broken = params.get("broken");
 /** The slides, the fourth broken when asked (`broken`). */
 const maybeBroken = (slides: Quiz["slides"]): Quiz["slides"] =>
-  broken === "slide"
-    ? slides.map((slide, i) =>
-        i === 3
-          ? ({ ...slide, answers: null } as unknown as Quiz["slides"][number])
-          : slide,
-      )
-    : slides;
+  broken === "slide" ? slides.map((slide, i) => (i === 3 ? ({ ...slide, answers: null } as unknown as Quiz["slides"][number]) : slide)) : slides;
 /** The editor's drafts are numbered as the backend names their folders. */
 let drafts = 1;
 /** The quizmaster's own AI instructions; null while they are the default ones. */
 let aiInstructions: string | null = null;
 
-const NAMES = [
-  "Kvízožrouti",
-  "U Tří Lvů",
-  "Mozkovna",
-  "Hospodští géniové",
-  "Tým Rychlík",
-  "Bezejmenní",
-  "Šprti",
-  "Lvíčata",
-];
+const NAMES = ["Kvízožrouti", "U Tří Lvů", "Mozkovna", "Hospodští géniové", "Tým Rychlík", "Bezejmenní", "Šprti", "Lvíčata"];
 
 function players(overrides: Partial<PlayerView>[] = []): PlayerView[] {
   const list = NAMES.map((name, i) => ({
@@ -160,43 +139,16 @@ const VIDEO: VideoClip = {
 /** A slide's own look: a gradient behind it, a left-aligned serif headline, see-through answers. */
 const STYLE: SlideStyle = {
   fill: { from: "#0B1E3F", to: "#3A6EA5CC", kind: "diagonal" },
-  headline: {
-    color: "#FFCC00",
-    font: "Georgia",
-    size: 80,
-    italic: true,
-    align: "left",
-    shadowColor: "#FF000080",
-  },
-  text: {
-    underline: true,
-    fill: { from: "#00000099", to: "#00000033", kind: "horizontal" },
-  },
-  answers: {
-    fill: { from: "#FFFFFF", to: "#B8C8D8", kind: "vertical" },
-    color: "#102030",
-    transparency: 20,
-    align: "left",
-    bold: false,
-  },
+  headline: { color: "#FFCC00", font: "Georgia", size: 80, italic: true, align: "left", shadowColor: "#FF000080" },
+  text: { underline: true, fill: { from: "#00000099", to: "#00000033", kind: "horizontal" } },
+  answers: { fill: { from: "#FFFFFF", to: "#B8C8D8", kind: "vertical" }, color: "#102030", transparency: 20, align: "left", bold: false },
 };
 
 /** A welcome screen with everything on it. */
-const WELCOME: Welcome = {
-  on: true,
-  heading: "Páteční kvíz",
-  logo: "media/landscape.svg",
-  intro: "media/landscape.svg",
-  footer: "Začínáme ve 20:00, týmy po čtyřech",
-};
+const WELCOME: Welcome = { on: true, heading: "Páteční kvíz", logo: "media/landscape.svg", intro: "media/landscape.svg", footer: "Začínáme ve 20:00, týmy po čtyřech" };
 
 /** A picture behind a slide, with the options a new background gets. */
-const BACKGROUND: Background = {
-  file: "media/landscape.svg",
-  repeat: true,
-  muted: true,
-  sync: false,
-};
+const BACKGROUND: Background = { file: "media/landscape.svg", repeat: true, muted: true, sync: false };
 
 function view(partial: Partial<GameView>): GameView {
   const shown: Omit<GameView, "answerShares"> = {
@@ -243,10 +195,7 @@ const SCENES: Record<string, GameView | null> = {
   lobby: view({
     phase: { phase: "lobby" },
     slide: null,
-    players: players([{}, {}, { name: "" }, { name: "" }, { name: "" }]).slice(
-      0,
-      5,
-    ),
+    players: players([{}, {}, { name: "" }, { name: "" }, { name: "" }]).slice(0, 5),
     teams: [
       { name: NAMES[0], buzzer: 1 },
       { name: "Pivní rytíři", buzzer: null },
@@ -257,44 +206,15 @@ const SCENES: Record<string, GameView | null> = {
   // The screen the show opens on: the logo by the heading, the intro picture, the footer.
   welcome: view({ phase: { phase: "welcome" }, slide: null, welcome: WELCOME }),
   // The same with the intro video, looping without its sound.
-  welcomeVideo: view({
-    phase: { phase: "welcome" },
-    slide: null,
-    welcome: { ...WELCOME, intro: VIDEO.file },
-  }),
-  billboard: view({
-    phase: { phase: "billboard" },
-    slideIndex: 0,
-    slide: quiz.slides[0],
-  }),
+  welcomeVideo: view({ phase: { phase: "welcome" }, slide: null, welcome: { ...WELCOME, intro: VIDEO.file } }),
+  billboard: view({ phase: { phase: "billboard" }, slideIndex: 0, slide: quiz.slides[0] }),
   ready: view({}),
   running: view({
-    phase: {
-      phase: "question",
-      step: "running",
-      clock: {
-        limitMs: 20000,
-        elapsedBeforeMs: 0,
-        runningSinceMs: 0,
-        pressesFromMs: 0,
-      },
-    },
-    clock: {
-      limitMs: 20000,
-      remainingMs: 12400,
-      elapsedMs: 7600,
-      running: true,
-      points: 81,
-    },
+    phase: { phase: "question", step: "running", clock: { limitMs: 20000, elapsedBeforeMs: 0, runningSinceMs: 0, pressesFromMs: 0 } },
+    clock: { limitMs: 20000, remainingMs: 12400, elapsedMs: 7600, running: true, points: 81 },
     players: players(answered),
     answeredCount: 4,
-    controls: {
-      ...NO_CONTROLS,
-      next: true,
-      pauseClock: true,
-      closeQuestion: true,
-      restartQuestion: true,
-    },
+    controls: { ...NO_CONTROLS, next: true, pauseClock: true, closeQuestion: true, restartQuestion: true },
   }),
   closed: view({
     phase: { phase: "question", step: "closed" },
@@ -307,9 +227,7 @@ const SCENES: Record<string, GameView | null> = {
   revealed: view({
     phase: { phase: "question", step: "revealed", winner: null },
     results: { right: 2, wrong: 2, none: 1 },
-    players: players(
-      answered.map((a, i) => ({ ...a, delta: [84, 80, 0, 0, 0][i] || null })),
-    ),
+    players: players(answered.map((a, i) => ({ ...a, delta: [84, 80, 0, 0, 0][i] || null }))),
     answeredCount: 4,
     answerCounts: [1, 2, 1, 0],
   }),
@@ -317,87 +235,33 @@ const SCENES: Record<string, GameView | null> = {
   chart: view({
     phase: { phase: "question", step: "revealed", winner: null },
     results: { right: 2, wrong: 2, none: 1 },
-    players: players(
-      answered.map((a, i) => ({ ...a, delta: [84, 80, 0, 0, 0][i] || null })),
-    ),
+    players: players(answered.map((a, i) => ({ ...a, delta: [84, 80, 0, 0, 0][i] || null }))),
     answeredCount: 4,
     answerCounts: [1, 2, 1, 0],
     settings: { ...DEFAULT_QUIZ_SETTINGS, answerChart: true },
   }),
   buzzed: view({
-    phase: {
-      phase: "question",
-      step: "buzzed",
-      buzzer: 3,
-      button: "big",
-      clock: {
-        limitMs: 30000,
-        elapsedBeforeMs: 4300,
-        runningSinceMs: null,
-        pressesFromMs: 0,
-      },
-    },
+    phase: { phase: "question", step: "buzzed", buzzer: 3, button: "big", clock: { limitMs: 30000, elapsedBeforeMs: 4300, runningSinceMs: null, pressesFromMs: 0 } },
     slideIndex: 7,
     slide: quiz.slides[7],
-    clock: {
-      limitMs: 30000,
-      remainingMs: 25700,
-      elapsedMs: 4300,
-      running: false,
-      points: 129,
-    },
+    clock: { limitMs: 30000, remainingMs: 25700, elapsedMs: 4300, running: false, points: 129 },
     buzzed: 3,
     controls: { ...NO_CONTROLS, judge: true, restartQuestion: true },
   }),
   // Two teams play their joker on the running question; the Director's Teams tab plays them.
   jokers: view({
-    phase: {
-      phase: "question",
-      step: "running",
-      clock: {
-        limitMs: 20000,
-        elapsedBeforeMs: 0,
-        runningSinceMs: 0,
-        pressesFromMs: 0,
-      },
-    },
-    clock: {
-      limitMs: 20000,
-      remainingMs: 12400,
-      elapsedMs: 7600,
-      running: true,
-      points: 81,
-    },
-    players: players(
-      answered.map((a, i) => ({
-        ...a,
-        joker: {
-          on: i === 1 || i === 3,
-          left: i === 1 || i === 3 ? 1 : 2,
-          canChange: true,
-        },
-      })),
-    ),
+    phase: { phase: "question", step: "running", clock: { limitMs: 20000, elapsedBeforeMs: 0, runningSinceMs: 0, pressesFromMs: 0 } },
+    clock: { limitMs: 20000, remainingMs: 12400, elapsedMs: 7600, running: true, points: 81 },
+    players: players(answered.map((a, i) => ({ ...a, joker: { on: i === 1 || i === 3, left: i === 1 || i === 3 ? 1 : 2, canChange: true } }))),
     answeredCount: 4,
-    controls: {
-      ...NO_CONTROLS,
-      next: true,
-      pauseClock: true,
-      closeQuestion: true,
-      restartQuestion: true,
-      setJoker: true,
-    },
+    controls: { ...NO_CONTROLS, next: true, pauseClock: true, closeQuestion: true, restartQuestion: true, setJoker: true },
     settings: { ...DEFAULT_QUIZ_SETTINGS, jokers: 2 },
   }),
   ffJoker: view({
     phase: { phase: "question", step: "revealed", winner: 3 },
     slideIndex: 7,
     slide: quiz.slides[7],
-    players: players([
-      {},
-      {},
-      { delta: 258, joker: { on: true, left: 0, canChange: false } },
-    ]),
+    players: players([{}, {}, { delta: 258, joker: { on: true, left: 0, canChange: false } }]),
     settings: { ...DEFAULT_QUIZ_SETTINGS, jokers: 1 },
   }),
   ffRevealed: view({
@@ -412,44 +276,20 @@ const SCENES: Record<string, GameView | null> = {
     slide: quiz.slides[8],
     players: players([{}, {}, { delta: 150 }]),
   }),
-  sixAnswersPicture: view({
-    slideIndex: 8,
-    slide: { ...quiz.slides[8], picture: "media/landscape.svg" },
-  }),
-  explanation: view({
-    phase: { phase: "explanation" },
-    slideIndex: 4,
-    slide: quiz.slides[4],
-  }),
-  leaderboard: view({
-    phase: { phase: "endOfRound" },
-    slideIndex: 5,
-    slide: quiz.slides[5],
-  }),
+  sixAnswersPicture: view({ slideIndex: 8, slide: { ...quiz.slides[8], picture: "media/landscape.svg" } }),
+  explanation: view({ phase: { phase: "explanation" }, slideIndex: 4, slide: quiz.slides[4] }),
+  leaderboard: view({ phase: { phase: "endOfRound" }, slideIndex: 5, slide: quiz.slides[5] }),
   overlay: view({ leaderboardVisible: true }),
-  final3: view({
-    phase: { phase: "final", step: 3 },
-    slideIndex: quiz.slides.length,
-    slide: null,
-  }),
+  final3: view({ phase: { phase: "final", step: 3 }, slideIndex: quiz.slides.length, slide: null }),
   // Two winners share first place and two teams third (1, 1, 3, 3): no second place.
   finalShared: view({
     phase: { phase: "final", step: 3 },
     slideIndex: quiz.slides.length,
     slide: null,
-    players: players([
-      { score: 420, rank: 1 },
-      { score: 420, rank: 1 },
-      { score: 395, rank: 3 },
-      { score: 395, rank: 3 },
-    ]),
+    players: players([{ score: 420, rank: 1 }, { score: 420, rank: 1 }, { score: 395, rank: 3 }, { score: 395, rank: 3 }]),
   }),
   // The demo quiz's final slide, with the winners' music to play on demand.
-  finalSlide: view({
-    phase: { phase: "final", step: 3 },
-    slideIndex: quiz.slides.length - 1,
-    slide: { ...quiz.slides[quiz.slides.length - 1], sound: SONG },
-  }),
+  finalSlide: view({ phase: { phase: "final", step: 3 }, slideIndex: quiz.slides.length - 1, slide: { ...quiz.slides[quiz.slides.length - 1], sound: SONG } }),
   picture: view({
     phase: { phase: "question", step: "ready" },
     slide: { ...quiz.slides[1], picture: "media/landscape.svg", sound: SONG },
@@ -459,78 +299,23 @@ const SCENES: Record<string, GameView | null> = {
     phase: { phase: "question", step: "revealed", winner: null },
     slide: { ...quiz.slides[1], picture: "media/landscape.svg", sound: SONG },
   }),
-  billboardPicture: view({
-    phase: { phase: "billboard" },
-    slideIndex: 0,
-    slide: { ...quiz.slides[0], picture: "media/landscape.svg" },
-  }),
-  background: view({
-    phase: { phase: "billboard" },
-    slideIndex: 0,
-    slide: { ...quiz.slides[0], background: BACKGROUND },
-  }),
+  billboardPicture: view({ phase: { phase: "billboard" }, slideIndex: 0, slide: { ...quiz.slides[0], picture: "media/landscape.svg" } }),
+  background: view({ phase: { phase: "billboard" }, slideIndex: 0, slide: { ...quiz.slides[0], background: BACKGROUND } }),
   // A question's video in each step, with its effect fading over the answer time.
-  videoReady: view({
-    slideIndex: 2,
-    slide: { ...quiz.slides[2], video: VIDEO },
-  }),
+  videoReady: view({ slideIndex: 2, slide: { ...quiz.slides[2], video: VIDEO } }),
   videoRunning: view({
     slideIndex: 2,
     slide: { ...quiz.slides[2], video: VIDEO },
-    phase: {
-      phase: "question",
-      step: "running",
-      clock: {
-        limitMs: 20000,
-        elapsedBeforeMs: 0,
-        runningSinceMs: 0,
-        pressesFromMs: 0,
-      },
-    },
-    clock: {
-      limitMs: 20000,
-      remainingMs: 12000,
-      elapsedMs: 8000,
-      running: true,
-      points: 81,
-    },
-    controls: {
-      ...NO_CONTROLS,
-      next: true,
-      pauseClock: true,
-      closeQuestion: true,
-      playVideo: true,
-      restartQuestion: true,
-    },
+    phase: { phase: "question", step: "running", clock: { limitMs: 20000, elapsedBeforeMs: 0, runningSinceMs: 0, pressesFromMs: 0 } },
+    clock: { limitMs: 20000, remainingMs: 12000, elapsedMs: 8000, running: true, points: 81 },
+    controls: { ...NO_CONTROLS, next: true, pauseClock: true, closeQuestion: true, playVideo: true, restartQuestion: true },
   }),
   videoBlur: view({
     slideIndex: 2,
     slide: { ...quiz.slides[2], video: { ...VIDEO, effect: "blur" } },
-    phase: {
-      phase: "question",
-      step: "running",
-      clock: {
-        limitMs: 20000,
-        elapsedBeforeMs: 0,
-        runningSinceMs: 0,
-        pressesFromMs: 0,
-      },
-    },
-    clock: {
-      limitMs: 20000,
-      remainingMs: 10000,
-      elapsedMs: 10000,
-      running: false,
-      points: 81,
-    },
-    controls: {
-      ...NO_CONTROLS,
-      next: true,
-      resumeClock: true,
-      closeQuestion: true,
-      playVideo: true,
-      restartQuestion: true,
-    },
+    phase: { phase: "question", step: "running", clock: { limitMs: 20000, elapsedBeforeMs: 0, runningSinceMs: 0, pressesFromMs: 0 } },
+    clock: { limitMs: 20000, remainingMs: 10000, elapsedMs: 10000, running: false, points: 81 },
+    controls: { ...NO_CONTROLS, next: true, resumeClock: true, closeQuestion: true, playVideo: true, restartQuestion: true },
   }),
   videoClosed: view({
     slideIndex: 2,
@@ -539,51 +324,26 @@ const SCENES: Record<string, GameView | null> = {
     onHold: true,
     controls: { ...NO_CONTROLS, next: true, goTo: true, playVideo: true },
   }),
-  videoRevealed: view({
-    slideIndex: 2,
-    slide: { ...quiz.slides[2], video: VIDEO },
-    phase: { phase: "question", step: "revealed", winner: null },
-    onHold: true,
-  }),
+  videoRevealed: view({ slideIndex: 2, slide: { ...quiz.slides[2], video: VIDEO }, phase: { phase: "question", step: "revealed", winner: null }, onHold: true }),
   // A video that waits for the quizmaster, before and after Play video.
   videoWaiting: view({
     phase: { phase: "billboard" },
     slideIndex: 0,
-    slide: {
-      ...quiz.slides[0],
-      video: { ...VIDEO, autoplay: false, effect: null },
-    },
+    slide: { ...quiz.slides[0], video: { ...VIDEO, autoplay: false, effect: null } },
     controls: { ...NO_CONTROLS, next: true, playVideo: true, goTo: true },
   }),
   videoPlayed: view({
     phase: { phase: "billboard" },
     slideIndex: 0,
-    slide: {
-      ...quiz.slides[0],
-      video: { ...VIDEO, autoplay: false, effect: null },
-    },
+    slide: { ...quiz.slides[0], video: { ...VIDEO, autoplay: false, effect: null } },
     controls: { ...NO_CONTROLS, next: true, playVideo: true, goTo: true },
     videoPlays: 1,
     autoStep: null,
     settings: DEFAULT_QUIZ_SETTINGS,
   }),
-  brokenBackground: view({
-    phase: { phase: "billboard" },
-    slideIndex: 0,
-    slide: {
-      ...quiz.slides[0],
-      background: { ...BACKGROUND, file: "media/missing.png" },
-    },
-  }),
+  brokenBackground: view({ phase: { phase: "billboard" }, slideIndex: 0, slide: { ...quiz.slides[0], background: { ...BACKGROUND, file: "media/missing.png" } } }),
   styled: view({ slide: { ...quiz.slides[1], style: STYLE } }),
-  styledBillboard: view({
-    phase: { phase: "billboard" },
-    slideIndex: 0,
-    slide: {
-      ...setBodyText(quiz.slides[0], "Zeměpis a historie"),
-      style: STYLE,
-    },
-  }),
+  styledBillboard: view({ phase: { phase: "billboard" }, slideIndex: 0, slide: { ...setBodyText(quiz.slides[0], "Zeměpis a historie"), style: STYLE } }),
 };
 
 /**
@@ -597,99 +357,43 @@ function previewResults(shown: GameView, asked: Quiz): ShowResults {
     if (slide.type === "endOfRound") round += 1;
     if (slide.type !== "question") return [];
     const rightButton = ANSWER_BUTTONS[rightAnswers(slide)[0]?.answer ?? 0];
-    const wrongButton =
-      ANSWER_BUTTONS.find((button) => button !== rightButton) ?? "a";
+    const wrongButton = ANSWER_BUTTONS.find((button) => button !== rightButton) ?? "a";
     return [
       {
         slide: index,
         round,
-        marks: (shown.players ?? []).flatMap(
-          (player, i): ShowResults["questions"][number]["marks"] => {
-            const pick = (i + index) % 4;
-            if (pick === 3)
-              return i % 2 === 0
-                ? []
-                : [
-                    [
-                      player.buzzer,
-                      { answer: null, right: false, points: -10, joker: false },
-                    ],
-                  ];
-            const right = pick !== 2;
-            const joker = right && i === 0 && index === 1;
-            const points = right ? (100 - i * 6) * (joker ? 2 : 1) : -10;
-            return [
-              [
-                player.buzzer,
-                {
-                  answer: {
-                    button: right ? rightButton : wrongButton,
-                    elapsedMs: 1800 + 650 * i + 90 * index,
-                  },
-                  right,
-                  points,
-                  joker,
-                },
-              ],
-            ];
-          },
-        ),
+        marks: (shown.players ?? []).flatMap((player, i): ShowResults["questions"][number]["marks"] => {
+          const pick = (i + index) % 4;
+          if (pick === 3) return i % 2 === 0 ? [] : [[player.buzzer, { answer: null, right: false, points: -10, joker: false }]];
+          const right = pick !== 2;
+          const joker = right && i === 0 && index === 1;
+          const points = right ? (100 - i * 6) * (joker ? 2 : 1) : -10;
+          return [[player.buzzer, { answer: { button: right ? rightButton : wrongButton, elapsedMs: 1800 + 650 * i + 90 * index }, right, points, joker }]];
+        }),
       },
     ];
   });
-  const rounds =
-    Math.max(0, ...questions.map((question) => question.round)) + 1;
+  const rounds = Math.max(0, ...questions.map((question) => question.round)) + 1;
   const players = (shown.players ?? []).map((player) => {
-    const marks = questions.flatMap((question) =>
-      question.marks
-        .filter(([buzzer]) => buzzer === player.buzzer)
-        .map(([, mark]) => ({ round: question.round, mark })),
-    );
-    const byRound = Array.from({ length: rounds }, (_, r) =>
-      marks
-        .filter((m) => m.round === r)
-        .reduce((sum, m) => sum + m.mark.points, 0),
-    );
+    const marks = questions.flatMap((question) => question.marks.filter(([buzzer]) => buzzer === player.buzzer).map(([, mark]) => ({ round: question.round, mark })));
+    const byRound = Array.from({ length: rounds }, (_, r) => marks.filter((m) => m.round === r).reduce((sum, m) => sum + m.mark.points, 0));
     const adjusted = player.buzzer === 3 ? 5 : 0;
     const score = byRound.reduce((sum, points) => sum + points, adjusted);
-    const totalAnswerMs = marks.reduce(
-      (sum, m) => sum + (m.mark.right ? (m.mark.answer?.elapsedMs ?? 0) : 0),
-      0,
-    );
-    return {
-      buzzer: player.buzzer,
-      name: player.name,
-      rank: null as number | null,
-      score,
-      totalAnswerMs,
-      rounds: byRound,
-      adjusted,
-    };
+    const totalAnswerMs = marks.reduce((sum, m) => sum + (m.mark.right ? (m.mark.answer?.elapsedMs ?? 0) : 0), 0);
+    return { buzzer: player.buzzer, name: player.name, rank: null as number | null, score, totalAnswerMs, rounds: byRound, adjusted };
   });
-  players.sort(
-    (a, b) => b.score - a.score || a.totalAnswerMs - b.totalAnswerMs,
-  );
+  players.sort((a, b) => b.score - a.score || a.totalAnswerMs - b.totalAnswerMs);
   players.forEach((player, i) => (player.rank = i + 1));
   return { questions, rounds, players };
 }
 
 // The quiz as the scene's view shows it (scenes may add media to a slide).
 const found = SCENES[scene] ?? null;
-const current =
-  found && timer && found.slide
-    ? {
-        ...found,
-        slide: { ...found.slide, style: { ...found.slide.style, timer } },
-      }
-    : found;
+const current = found && timer && found.slide ? { ...found, slide: { ...found.slide, style: { ...found.slide.style, timer } } } : found;
 const sceneQuiz: Quiz = {
   ...quiz,
   theme,
-  slides: maybeBroken(
-    quiz.slides.map((slide, i) =>
-      current?.slide && i === current.slideIndex ? current.slide : slide,
-    ),
-  ),
+  slides: maybeBroken(quiz.slides.map((slide, i) => (current?.slide && i === current.slideIndex ? current.slide : slide))),
 };
 
 // The quiz the editor opens: the demo quiz, with media on its first two questions.
@@ -697,31 +401,15 @@ const editorQuiz: Quiz = {
   ...quiz,
   theme,
   slides: maybeBroken(
-    quiz.slides.map((slide, i) =>
-      i === 1
-        ? { ...slide, picture: "media/landscape.svg", sound: SONG }
-        : i === 2
-          ? { ...slide, video: VIDEO }
-          : slide,
-    ),
+    quiz.slides.map((slide, i) => (i === 1 ? { ...slide, picture: "media/landscape.svg", sound: SONG } : i === 2 ? { ...slide, video: VIDEO } : slide)),
   ),
   // A category with a looping background video, for the Categories view.
   categories: [
     {
       id: "c-films",
       name: "Filmy",
-      background: {
-        file: "media/clip.webm",
-        repeat: true,
-        muted: true,
-        sync: false,
-      },
-      style: {
-        headline: { color: "#ffd54a", bold: true },
-        answers: {
-          fill: { from: "#3a1c71", to: "#d76d77", kind: "horizontal" },
-        },
-      },
+      background: { file: "media/clip.webm", repeat: true, muted: true, sync: false },
+      style: { headline: { color: "#ffd54a", bold: true }, answers: { fill: { from: "#3a1c71", to: "#d76d77", kind: "horizontal" } } },
     },
   ],
 };
@@ -734,17 +422,7 @@ const dispatched: unknown[] = [];
 /** What the stand-in spreadsheet import gives. */
 const SHEET_IMPORT: SheetImport = {
   slides: [
-    {
-      id: "import-1",
-      notes: "",
-      picture: null,
-      video: null,
-      sound: null,
-      background: null,
-      type: "billboard",
-      title: "Kolo 2",
-      text: "Filmy",
-    },
+    { id: "import-1", notes: "", picture: null, video: null, sound: null, background: null, type: "billboard", title: "Kolo 2", text: "Filmy" },
     {
       id: "import-2",
       notes: "",
@@ -765,14 +443,8 @@ const SHEET_IMPORT: SheetImport = {
     },
   ],
   notes: [
-    {
-      issue: { code: "unknownCategory", name: "Hudba" },
-      places: [{ sheet: "Kolo 2", row: 1 }],
-    },
-    {
-      issue: { code: "fileNotFound", file: "ridley.jpg" },
-      places: [{ sheet: "Kolo 2", row: 3 }],
-    },
+    { issue: { code: "unknownCategory", name: "Hudba" }, places: [{ sheet: "Kolo 2", row: 1 }] },
+    { issue: { code: "fileNotFound", file: "ridley.jpg" }, places: [{ sheet: "Kolo 2", row: 3 }] },
   ],
 };
 
@@ -781,84 +453,24 @@ const called: unknown[] = [];
 (window as unknown as { called: unknown[] }).called = called;
 /** A venue's lights for the Lights tab: two fixtures, three looks. */
 /** The buzzers' default colours (`colours::LightColours`). */
-const BUZZER_COLOURS: LightColours = {
-  off: "#000000",
-  ready: "#0000ff",
-  answered: "#2a2a2a",
-  locked: "#2a2a2a",
-  first: "#ffffff",
-  correct: "#00ff00",
-  wrong: "#ff0000",
-};
+const BUZZER_COLOURS: LightColours = { off: "#000000", ready: "#0000ff", answered: "#2a2a2a", locked: "#2a2a2a", first: "#ffffff", correct: "#00ff00", wrong: "#ff0000" };
 
 const LIGHTS_SETUP: LightsSetup = {
   output: { kind: "artNet", host: "255.255.255.255", universe: 0 },
   fixtures: [
-    {
-      id: 1,
-      name: "PAR vlevo",
-      address: 1,
-      channels: [
-        { kind: "red" },
-        { kind: "green" },
-        { kind: "blue" },
-        { kind: "white" },
-      ],
-      labels: [],
-    },
+    { id: 1, name: "PAR vlevo", address: 1, channels: [{ kind: "red" }, { kind: "green" }, { kind: "blue" }, { kind: "white" }], labels: [] },
     {
       id: 2,
       name: "PAR vpravo",
       address: 9,
-      channels: [
-        { kind: "dimmer" },
-        { kind: "red" },
-        { kind: "green" },
-        { kind: "blue" },
-        { kind: "shutter", open: 10, closed: 0 },
-        { kind: "fixed", value: 0 },
-        { kind: "unused" },
-      ],
+      channels: [{ kind: "dimmer" }, { kind: "red" }, { kind: "green" }, { kind: "blue" }, { kind: "shutter", open: 10, closed: 0 }, { kind: "fixed", value: 0 }, { kind: "unused" }],
       labels: ["Dimmer", "Red", "Green", "Blue", "Shutter", "Mode", "Speed"],
     },
   ],
   looks: [
-    {
-      id: 1,
-      name: "Uvítání",
-      colors: ["#FF8800", "#AA00FF"],
-      intensity: 80,
-      effect: "chase",
-      stepMs: 1500,
-      fadeMs: 1000,
-      fixtures: [],
-      strobe: 0,
-      channels: [],
-    },
-    {
-      id: 2,
-      name: "Otázka",
-      colors: ["#0050FF"],
-      intensity: 100,
-      effect: "static",
-      stepMs: 1000,
-      fadeMs: 500,
-      fixtures: [],
-      strobe: 0,
-      channels: [],
-    },
-    {
-      id: 3,
-      name: "Správně",
-      colors: ["#00FF40"],
-      intensity: 100,
-      effect: "pulse",
-      stepMs: 500,
-      fadeMs: 0,
-      fixtures: [2],
-      strobe: 0,
-      channels: [{ address: 100, value: 255 }],
-    },
+    { id: 1, name: "Uvítání", colors: ["#FF8800", "#AA00FF"], intensity: 80, effect: "chase", stepMs: 1500, fadeMs: 1000, fixtures: [], strobe: 0, channels: [] },
+    { id: 2, name: "Otázka", colors: ["#0050FF"], intensity: 100, effect: "static", stepMs: 1000, fadeMs: 500, fixtures: [], strobe: 0, channels: [] },
+    { id: 3, name: "Správně", colors: ["#00FF40"], intensity: 100, effect: "pulse", stepMs: 500, fadeMs: 0, fixtures: [2], strobe: 0, channels: [{ address: 100, value: 255 }] },
   ],
   stages: { lobby: 1, questionReady: 2, answering: 2 },
   flashes: { correct: { look: 3, ms: 1500 } },
@@ -879,130 +491,64 @@ const LIBRARY: MediaLibrary = {
     { reference: "media/landscape.svg", kind: "image" },
   ],
 };
-const filePad = (
-  reference: string,
-  label = "",
-  color: Pad["color"] = null,
-): Pad => ({ source: { type: "file", reference }, label, color });
+const filePad = (reference: string, label = "", color: Pad["color"] = null): Pad => ({ source: { type: "file", reference }, label, color });
 let board: SoundBoard = {
   rows: 3,
   columns: 4,
   click: "stop",
   arranged: true,
-  pads: Array.from(
-    { length: MAX_BOARD_ROWS * MAX_BOARD_COLUMNS },
-    (_, place): Pad => {
-      const pads: Record<number, Pad> = {
-        0: filePad("media/jingle.wav"),
-        1: filePad("media/applause.wav", "Potlesk", "green"),
-        2: filePad("media/clip.webm"),
-        3: filePad("media/landscape.svg"),
-        [MAX_BOARD_COLUMNS]: {
-          source: { type: "slideSound" },
-          label: "",
-          color: null,
-        },
-        [MAX_BOARD_COLUMNS + 1]: {
-          source: { type: "slideVideo" },
-          label: "",
-          color: null,
-        },
-      };
-      return pads[place] ?? { source: null, label: "", color: null };
-    },
-  ),
+  pads: Array.from({ length: MAX_BOARD_ROWS * MAX_BOARD_COLUMNS }, (_, place): Pad => {
+    const pads: Record<number, Pad> = {
+      0: filePad("media/jingle.wav"),
+      1: filePad("media/applause.wav", "Potlesk", "green"),
+      2: filePad("media/clip.webm"),
+      3: filePad("media/landscape.svg"),
+      [MAX_BOARD_COLUMNS]: { source: { type: "slideSound" }, label: "", color: null },
+      [MAX_BOARD_COLUMNS + 1]: { source: { type: "slideVideo" }, label: "", color: null },
+    };
+    return pads[place] ?? { source: null, label: "", color: null };
+  }),
 };
 /** The backend's show clock, which reads nothing like the wall clock, as in the app. */
 const showClockMs = () => Math.round(performance.now());
 let nowPlaying: NowPlaying | null =
-  playing === "picture"
-    ? {
-        id: 1,
-        reference: "media/landscape.svg",
-        kind: "image",
-        positionMs: 0,
-        sinceMs: showClockMs(),
-      }
-    : playing === "video"
-      ? {
-          id: 1,
-          reference: "media/clip.webm",
-          kind: "video",
-          positionMs: 3_000,
-          sinceMs: showClockMs(),
-        }
-      : playing === "broken"
-        ? {
-            id: 1,
-            reference: "media/broken.png",
-            kind: "image",
-            positionMs: 0,
-            sinceMs: showClockMs(),
-          }
-        : null;
+  playing === "picture" ? { id: 1, reference: "media/landscape.svg", kind: "image", positionMs: 0, sinceMs: showClockMs() }
+  : playing === "video" ? { id: 1, reference: "media/clip.webm", kind: "video", positionMs: 3_000, sinceMs: showClockMs() }
+  : playing === "broken" ? { id: 1, reference: "media/broken.png", kind: "image", positionMs: 0, sinceMs: showClockMs() }
+  : null;
 const mediaNow = (): MediaNow => ({ now: nowPlaying, atMs: showClockMs() });
 
 /** A rough stand-in for the backend's media player (`quiz_core::MediaPlayer`), enough to click through the tab. */
 function control(command: PlayerCommand) {
   const at = showClockMs();
   const start = (reference: string) => {
-    const kind =
-      LIBRARY.files.find((file) => file.reference === reference)?.kind ??
-      "audio";
-    nowPlaying = {
-      id: (nowPlaying?.id ?? 0) + 1,
-      reference,
-      kind,
-      positionMs: 0,
-      sinceMs: at,
-    };
+    const kind = LIBRARY.files.find((file) => file.reference === reference)?.kind ?? "audio";
+    nowPlaying = { id: (nowPlaying?.id ?? 0) + 1, reference, kind, positionMs: 0, sinceMs: at };
   };
-  const position = (now: NowPlaying) =>
-    now.positionMs + (now.sinceMs === null ? 0 : at - now.sinceMs);
+  const position = (now: NowPlaying) => now.positionMs + (now.sinceMs === null ? 0 : at - now.sinceMs);
   switch (command.type) {
     case "play":
-      if (
-        nowPlaying?.reference === command.reference &&
-        nowPlaying.sinceMs === null
-      )
-        nowPlaying = { ...nowPlaying, sinceMs: at };
+      if (nowPlaying?.reference === command.reference && nowPlaying.sinceMs === null) nowPlaying = { ...nowPlaying, sinceMs: at };
       else start(command.reference);
       break;
     case "pad": {
       const source = board.pads[command.pad].source;
       if (source?.type !== "file") break;
       if (nowPlaying?.reference !== source.reference) start(source.reference);
-      else if (nowPlaying.sinceMs === null)
-        nowPlaying = { ...nowPlaying, sinceMs: at };
+      else if (nowPlaying.sinceMs === null) nowPlaying = { ...nowPlaying, sinceMs: at };
       else if (board.click === "stop") nowPlaying = null;
       else if (board.click === "restart") start(source.reference);
-      else
-        nowPlaying = {
-          ...nowPlaying,
-          positionMs: position(nowPlaying),
-          sinceMs: null,
-        };
+      else nowPlaying = { ...nowPlaying, positionMs: position(nowPlaying), sinceMs: null };
       break;
     }
     case "pause":
-      if (nowPlaying)
-        nowPlaying = {
-          ...nowPlaying,
-          positionMs: position(nowPlaying),
-          sinceMs: null,
-        };
+      if (nowPlaying) nowPlaying = { ...nowPlaying, positionMs: position(nowPlaying), sinceMs: null };
       break;
     case "resume":
-      if (nowPlaying?.sinceMs === null)
-        nowPlaying = { ...nowPlaying, sinceMs: at };
+      if (nowPlaying?.sinceMs === null) nowPlaying = { ...nowPlaying, sinceMs: at };
       break;
     case "rewind":
-      if (nowPlaying)
-        nowPlaying = {
-          ...nowPlaying,
-          positionMs: 0,
-          sinceMs: nowPlaying.sinceMs === null ? null : at,
-        };
+      if (nowPlaying) nowPlaying = { ...nowPlaying, positionMs: 0, sinceMs: nowPlaying.sinceMs === null ? null : at };
       break;
     case "stop":
       nowPlaying = null;
@@ -1044,10 +590,7 @@ function changeBoard(change: BoardChange) {
       board = { ...board, pads, arranged: true };
       break;
     case "place":
-      pads[change.pad] = {
-        ...pads[change.pad],
-        source: { type: "file", reference: change.references[0] },
-      };
+      pads[change.pad] = { ...pads[change.pad], source: { type: "file", reference: change.references[0] } };
       board = { ...board, pads, arranged: true };
       break;
     case "clearPad":
@@ -1061,15 +604,11 @@ function changeBoard(change: BoardChange) {
 }
 
 /** What a dialog answers, a check sets as `window.dialogAnswer` (a file picked, or "Yes"); cancelled otherwise. */
-const dialogAnswer = () =>
-  (window as unknown as { dialogAnswer?: string }).dialogAnswer ?? null;
+const dialogAnswer = () => (window as unknown as { dialogAnswer?: string }).dialogAnswer ?? null;
 
 /** The quiz files the editor opened lately, as the backend keeps them. */
 /** The recent quiz files; the quizmaster takes them off (`forget_recent_file`), and gone ones leave by themselves. */
-const RECENT_FILES = [
-  "C:\\Kvizy\\hospodsky-kviz.quiz",
-  "C:\\Kvizy\\firemni-vecirek.quiz",
-];
+const RECENT_FILES = ["C:\\Kvizy\\hospodsky-kviz.quiz", "C:\\Kvizy\\firemni-vecirek.quiz"];
 const forgetRecent = (path: string) => {
   const at = RECENT_FILES.indexOf(path);
   if (at >= 0) RECENT_FILES.splice(at, 1);
@@ -1122,21 +661,12 @@ mockIPC(
         void emit("media-volume", playerVolume);
         return null;
       case "prepared_teams":
-        return current
-          ? current.teams.map((team) => team.name)
-          : PREPARED_TEAMS;
+        return current ? current.teams.map((team) => team.name) : PREPARED_TEAMS;
       case "teams_lost":
         // `?teamsLost` shows the notice for saved names that could not be read.
-        return params.has("teamsLost")
-          ? {
-              detail: "expected value at line 1 column 1",
-              keptAs: "C:\\Data\\teams.json.broken",
-            }
-          : null;
+        return params.has("teamsLost") ? { detail: "expected value at line 1 column 1", keptAs: "C:\\Data\\teams.json.broken" } : null;
       case "get_view":
-        return broken === "view" && current
-          ? { ...current, players: null }
-          : current;
+        return broken === "view" && current ? { ...current, players: null } : current;
       case "get_quiz":
         return sceneQuiz;
       case "show_results":
@@ -1150,20 +680,8 @@ mockIPC(
         return null;
       case "list_monitors":
         return [
-          {
-            id: "Built-in Display@0,0",
-            name: "Built-in Display",
-            width: 2560,
-            height: 1600,
-            director: true,
-          },
-          {
-            id: "Projector@2560,0",
-            name: "Projector",
-            width: 1920,
-            height: 1080,
-            director: false,
-          },
+          { id: "Built-in Display@0,0", name: "Built-in Display", width: 2560, height: 1600, director: true },
+          { id: "Projector@2560,0", name: "Projector", width: 1920, height: 1080, director: false },
         ];
       case "quit_app":
       case "close_declined":
@@ -1189,75 +707,27 @@ mockIPC(
         // Their files are served by Vite from src-tauri/themes.
         return BUILTIN_THEMES;
       case "installed_fonts":
-        return [
-          "Arial",
-          "Courier New",
-          "DejaVu Sans",
-          "Georgia",
-          "Impact",
-          "Times New Roman",
-          "Verdana",
-        ];
+        return ["Arial", "Courier New", "DejaVu Sans", "Georgia", "Impact", "Times New Roman", "Verdana"];
       case "media_root":
         // Served by Vite from this folder (see the convertFileSrc mock below).
         return "/src/dev/";
       case "show_disk_space":
         return 120 * 1024 ** 3;
       case "show_not_saved":
-        if (saving === "full")
-          return {
-            code: "showNotSaved",
-            detail: "No space left on device (os error 28)",
-          };
+        if (saving === "full") return { code: "showNotSaved", detail: "No space left on device (os error 28)" };
         if (saving === "hangs") return { code: "saveHangs" };
         return saving === "broken" ? { code: "journalBroken" } : null;
       case "resume_last_session":
-        if (resume === "failing")
-          return Promise.reject({
-            code: "showNotSaved",
-            detail: "No space left on device (os error 28)",
-          });
+        if (resume === "failing") return Promise.reject({ code: "showNotSaved", detail: "No space left on device (os error 28)" });
         return [];
       case "last_session":
-        if (resume === "damaged")
-          return Promise.reject({ code: "journalDamaged", line: 58 });
-        return {
-          meta: {
-            quizTitle: quiz.title,
-            sourcePath: null,
-            startedMs: Date.now() - 3_600_000,
-          },
-          commandCount: 57,
-        };
+        if (resume === "damaged") return Promise.reject({ code: "journalDamaged", line: 58 });
+        return { meta: { quizTitle: quiz.title, sourcePath: null, startedMs: Date.now() - 3_600_000 }, commandCount: 57 };
       case "editor_load":
-        if (draft === "unreadable")
-          return Promise.reject({
-            code: "draftNotRead",
-            detail: "expected value at line 1 column 1",
-          });
-        return {
-          id: "draft-1",
-          quiz: editorQuiz,
-          sourcePath: "C:\\Kvizy\\hospodsky-kviz.quiz",
-          unsaved: false,
-          mediaRoot: "/src/dev/",
-          problems: [],
-          dropped: [],
-        };
+        if (draft === "unreadable") return Promise.reject({ code: "draftNotRead", detail: "expected value at line 1 column 1" });
+        return { id: "draft-1", quiz: editorQuiz, sourcePath: "C:\\Kvizy\\hospodsky-kviz.quiz", unsaved: false, mediaRoot: "/src/dev/", problems: [], dropped: [] };
       case "editor_new":
-        return {
-          id: `draft-${++drafts}`,
-          quiz: {
-            ...editorQuiz,
-            title: (payload as { title: string }).title,
-            slides: [],
-          },
-          sourcePath: null,
-          unsaved: false,
-          mediaRoot: "/src/dev/",
-          problems: [],
-          dropped: [],
-        };
+        return { id: `draft-${++drafts}`, quiz: { ...editorQuiz, title: (payload as { title: string }).title, slides: [] }, sourcePath: null, unsaved: false, mediaRoot: "/src/dev/", problems: [], dropped: [] };
       case "recent_files":
         return [...RECENT_FILES];
       case "forget_recent_file":
@@ -1266,14 +736,10 @@ mockIPC(
       case "start_show_from_recent": {
         called.push({ cmd, ...(payload as object) });
         const path = (payload as { recent: string }).recent;
-        if (!RECENT_FILES.includes(path))
-          return Promise.reject({ code: "notRecent" });
+        if (!RECENT_FILES.includes(path)) return Promise.reject({ code: "notRecent" });
         if (!recentGone) return null;
         forgetRecent(path);
-        return Promise.reject({
-          code: "quizFileGone",
-          name: path.split("\\").pop(),
-        });
+        return Promise.reject({ code: "quizFileGone", name: path.split("\\").pop() });
       }
       case "editor_close":
         called.push({ cmd });
@@ -1282,56 +748,32 @@ mockIPC(
         // As a file from an older version opens: what this one leaves out is listed.
         const [first, , third] = editorQuiz.slides;
         const dropped = [
-          {
-            slideId: first.id,
-            problem: { code: "styleUnread", path: "style.headline.color" },
-          },
+          { slideId: first.id, problem: { code: "styleUnread", path: "style.headline.color" } },
           { slideId: third.id, problem: { code: "mediaOnRanking" } },
         ];
         // A recent file, else the file picked (see `dialogAnswer`).
         const recent = (payload as { recent: string | null }).recent;
-        if (recent !== null && !RECENT_FILES.includes(recent))
-          return Promise.reject({ code: "notRecent" });
+        if (recent !== null && !RECENT_FILES.includes(recent)) return Promise.reject({ code: "notRecent" });
         const path = recent ?? dialogAnswer();
         if (!path) return null;
-        return {
-          id: `draft-${++drafts}`,
-          quiz: editorQuiz,
-          sourcePath: path,
-          unsaved: true,
-          mediaRoot: "/src/dev/",
-          problems: [],
-          dropped,
-        };
+        return { id: `draft-${++drafts}`, quiz: editorQuiz, sourcePath: path, unsaved: true, mediaRoot: "/src/dev/", problems: [], dropped };
       }
       case "editor_update":
         called.push({ cmd, ...(payload as object) });
-        if (draft === "failing")
-          return Promise.reject({
-            code: "file",
-            action: "write",
-            path: "C:\\Users\\q\\AppData\\Local\\cz.kodajek.quizshow\\editor\\draft-1\\quiz.json",
-            reason: "diskFull",
-            detail: "No space left on device (os error 28)",
-          });
+        if (draft === "failing") return Promise.reject({ code: "file", action: "write", path: "C:\\Users\\q\\AppData\\Local\\cz.kodajek.quizshow\\editor\\draft-1\\quiz.json", reason: "diskFull", detail: "No space left on device (os error 28)" });
         return [];
       case "editor_save":
         called.push({ cmd, ...(payload as object) });
         return "C:\\Kvizy\\hospodsky-kviz.quiz";
       case "plugin:dialog|message": {
         // "Yes" is the first button, which the app words itself.
-        const custom = (
-          payload as { buttons?: { OkCancelCustom?: [string, string] } }
-        ).buttons?.OkCancelCustom;
+        const custom = (payload as { buttons?: { OkCancelCustom?: [string, string] } }).buttons?.OkCancelCustom;
         const answer = dialogAnswer();
         return answer === "Yes" && custom ? custom[0] : answer;
       }
       case "editor_category_name": {
         // A stand-in: the backend also skips the names taken.
-        const { categories, base } = payload as {
-          categories: unknown[];
-          base: string;
-        };
+        const { categories, base } = payload as { categories: unknown[]; base: string };
         return `${base} ${categories.length + 1}`;
       }
       case "editor_import_sheet":
@@ -1344,30 +786,12 @@ mockIPC(
         return {
           folder: "C:\\Users\\Eva\\Documents\\Buzzdome",
           instructions: aiInstructions,
-          defaultInstructions:
-            "When I give you only a topic, make the whole quiz without asking me anything.\n\n- 3 rounds of 6 questions.",
+          defaultInstructions: "When I give you only a topic, make the whole quiz without asking me anything.\n\n- 3 rounds of 6 questions.",
           maxInstructionsChars: 4000,
           assistants: [
-            {
-              assistant: "claudeDesktop",
-              name: "Claude Desktop",
-              state: "connected",
-              configFiles: [
-                "C:\\Users\\Eva\\AppData\\Roaming\\Claude\\claude_desktop_config.json",
-              ],
-            },
-            {
-              assistant: "antigravity",
-              name: "Antigravity",
-              state: "outdated",
-              configFiles: ["C:\\Users\\Eva\\.gemini\\config\\mcp_config.json"],
-            },
-            {
-              assistant: "codex",
-              name: "Codex",
-              state: "notConnected",
-              configFiles: ["C:\\Users\\Eva\\.codex\\config.toml"],
-            },
+            { assistant: "claudeDesktop", name: "Claude Desktop", state: "connected", configFiles: ["C:\\Users\\Eva\\AppData\\Roaming\\Claude\\claude_desktop_config.json"] },
+            { assistant: "antigravity", name: "Antigravity", state: "outdated", configFiles: ["C:\\Users\\Eva\\.gemini\\config\\mcp_config.json"] },
+            { assistant: "codex", name: "Codex", state: "notConnected", configFiles: ["C:\\Users\\Eva\\.codex\\config.toml"] },
           ],
           settingsError: null,
           platform: "windows",
@@ -1377,49 +801,22 @@ mockIPC(
         return dialogAnswer();
       case "ai_connect":
         called.push({ cmd, ...(payload as object) });
-        return {
-          assistant: (payload as { assistant: string }).assistant,
-          name: "Codex",
-          change: "added",
-          folder: "C:\\Users\\Eva\\Documents\\Buzzdome",
-        };
+        return { assistant: (payload as { assistant: string }).assistant, name: "Codex", change: "added", folder: "C:\\Users\\Eva\\Documents\\Buzzdome" };
       case "ai_server_config":
         called.push({ cmd, ...(payload as object) });
-        return JSON.stringify(
-          {
-            mcpServers: {
-              buzzdome: {
-                command: "C:\\Program Files\\Buzzdome\\buzzdome.exe",
-                args: ["--mcp"],
-              },
-            },
-          },
-          null,
-          2,
-        );
+        return JSON.stringify({ mcpServers: { buzzdome: { command: "C:\\Program Files\\Buzzdome\\buzzdome.exe", args: ["--mcp"] } } }, null, 2);
       case "ai_set_instructions":
         called.push({ cmd, ...(payload as object) });
-        aiInstructions =
-          (payload as { instructions: string }).instructions || null;
+        aiInstructions = (payload as { instructions: string }).instructions || null;
         return null;
       case "receiver_info":
         return {
-          status: {
-            kind: "error",
-            problem: "cannotOpen",
-            detail: "access denied",
-          },
+          status: { kind: "error", problem: "cannotOpen", detail: "access denied" },
           initError: null,
           settingsError: null,
           chosen: null,
           learnedButtons: 0,
-          learn: {
-            active: false,
-            buzzer: null,
-            button: null,
-            samples: 0,
-            canSave: false,
-          },
+          learn: { active: false, buzzer: null, button: null, samples: 0, canSave: false },
           recent: [],
           buzzers: [
             { buzzer: 1, button: "big", atMs: 1_792_921_670_000 },
@@ -1439,34 +836,15 @@ mockIPC(
             { key: "cross", action: "judgeWrong" },
             { key: "tick", action: "judgeRight" },
           ],
-          colours: {
-            ...BUZZER_COLOURS,
-            answered: "#000000",
-            locked: "#8040c0",
-          },
-          shownColours: {
-            ...BUZZER_COLOURS,
-            answered: "#000000",
-            locked: "#aa55aa",
-          },
+          colours: { ...BUZZER_COLOURS, answered: "#000000", locked: "#8040c0" },
+          shownColours: { ...BUZZER_COLOURS, answered: "#000000", locked: "#aa55aa" },
           coloursRefused: null,
           myColours: ["#ff8000", "#8040c0"],
           maxMyColours: 16,
           platform: "linux",
         };
       case "lights_info":
-        return {
-          setup: LIGHTS_SETUP,
-          status: {
-            output: { kind: "connected", name: "Art-Net 255.255.255.255" },
-            messages: null,
-            look: 2,
-            hold: null,
-            blackout: false,
-          },
-          settingsError: null,
-          refused: null,
-        };
+        return { setup: LIGHTS_SETUP, status: { output: { kind: "connected", name: "Art-Net 255.255.255.255" }, messages: null, look: 2, hold: null, blackout: false }, settingsError: null, refused: null };
       case "lights_universe": {
         // The first fixture in the "Question" blue, the second in red.
         const slots = new Array<number>(512).fill(0);
@@ -1482,36 +860,11 @@ mockIPC(
               name: "LED Par 7",
               key: "example/led-par-7",
               modes: [
-                {
-                  name: "3-channel",
-                  channels: [
-                    { kind: "red" },
-                    { kind: "green" },
-                    { kind: "blue" },
-                  ],
-                  labels: ["Red", "Green", "Blue"],
-                  check: [],
-                },
+                { name: "3-channel", channels: [{ kind: "red" }, { kind: "green" }, { kind: "blue" }], labels: ["Red", "Green", "Blue"], check: [] },
                 {
                   name: "7-channel",
-                  channels: [
-                    { kind: "dimmerRange", dark: 0, bright: 240 },
-                    { kind: "red" },
-                    { kind: "green" },
-                    { kind: "blue" },
-                    { kind: "shutter", open: 10, closed: 0 },
-                    { kind: "unused" },
-                    { kind: "unused" },
-                  ],
-                  labels: [
-                    "Dimmer / Strobe",
-                    "Red",
-                    "Green",
-                    "Blue",
-                    "Shutter",
-                    "Program",
-                    "Strobe Speed",
-                  ],
+                  channels: [{ kind: "dimmerRange", dark: 0, bright: 240 }, { kind: "red" }, { kind: "green" }, { kind: "blue" }, { kind: "shutter", open: 10, closed: 0 }, { kind: "unused" }, { kind: "unused" }],
+                  labels: ["Dimmer / Strobe", "Red", "Green", "Blue", "Shutter", "Program", "Strobe Speed"],
                   check: ["Strobe Speed"],
                 },
               ],
@@ -1527,13 +880,9 @@ mockIPC(
             name: "Open Fixture Library (MIT)",
             copyright: "Copyright (c) 2017 Florian & Felix Edelmann",
             url: "https://open-fixture-library.org",
-            origin:
-              cmd === "lights_library_update"
-                ? { kind: "downloaded" }
-                : { kind: "builtIn", commit: "66a6843" },
+            origin: cmd === "lights_library_update" ? { kind: "downloaded" } : { kind: "builtIn", commit: "66a6843" },
             dateMs: Date.UTC(2026, 9, 20),
-            licence:
-              "MIT License\n\nCopyright (c) 2017 Florian & Felix Edelmann\n\nPermission is hereby granted, free of charge, …",
+            licence: "MIT License\n\nCopyright (c) 2017 Florian & Felix Edelmann\n\nPermission is hereby granted, free of charge, …",
           },
           models: 623,
           modes: 2828,
@@ -1546,34 +895,14 @@ mockIPC(
       case "voice_clip":
         return null;
       case "lights_devices":
-        return {
-          outputs: [
-            {
-              choice: { kind: "enttecPro", port: "COM4" },
-              label: "COM4 (FTDI)",
-            },
-          ],
-          midiPorts: ["loopMIDI Port"],
-        };
+        return { outputs: [{ choice: { kind: "enttecPro", port: "COM4" }, label: "COM4 (FTDI)" }], midiPorts: ["loopMIDI Port"] };
       case "receiver_devices":
         return [];
       case "update_check":
-        return update
-          ? {
-              version: "0.2.0",
-              notes:
-                "Fixes the podium for shared places.\nThe Director offers newer versions.",
-              aiApps: true,
-            }
-          : null;
+        return update ? { version: "0.2.0", notes: "Fixes the podium for shared places.\nThe Director offers newer versions.", aiApps: true } : null;
       case "update_install":
         called.push({ cmd });
-        return update === "installing"
-          ? new Promise(() => undefined)
-          : Promise.reject({
-              code: "updateFailed",
-              detail: "error sending request",
-            });
+        return update === "installing" ? new Promise(() => undefined) : Promise.reject({ code: "updateFailed", detail: "error sending request" });
       case "plugin:app|version":
         return "0.1.0";
       case "receiver_udev_rule":
@@ -1587,11 +916,7 @@ mockIPC(
 );
 
 // The real app loads media through Tauri's asset protocol; here Vite serves them.
-(
-  window as unknown as {
-    __TAURI_INTERNALS__: { convertFileSrc: (path: string) => string };
-  }
-).__TAURI_INTERNALS__.convertFileSrc = (path) => path;
+(window as unknown as { __TAURI_INTERNALS__: { convertFileSrc: (path: string) => string } }).__TAURI_INTERNALS__.convertFileSrc = (path) => path;
 
 // As `main.tsx` does, so the preview acts as the app does.
 installBrowserGuard(window);

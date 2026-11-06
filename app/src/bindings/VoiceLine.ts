@@ -4,11 +4,8 @@ import type { QuizLanguage } from "./QuizLanguage";
 /**
  * What to say, and how: one clip.
  */
-export type VoiceLine = {
-  text: string;
-  language: QuizLanguage;
-  /**
-   * The model's voice, from 0.
-   */
-  voice: number;
-};
+export type VoiceLine = { text: string, language: QuizLanguage, 
+/**
+ * The model's voice, from 0.
+ */
+voice: number, };

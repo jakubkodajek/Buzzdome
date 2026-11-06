@@ -31,14 +31,10 @@ const strings = {
     resumeClock: "Pokračovat",
     endQuestion: "Ukončit otázku",
     restartQuestion: "Spustit otázku znovu",
-    restartQuestionConfirm:
-      "Spustit otázku znovu? Odpovědi a body z ní se vezmou zpět a otázka počká, až ji spustíte. Ruční úpravy skóre zůstanou.",
-    restartTooLate:
-      "Otázka se mezitím uzavřela a na plátně jsou její výsledky, a tak už znovu nezačne.",
-    restartAlreadyDone:
-      "Otázka už mezitím začala znovu a čeká, až ji spustíte.",
-    restartMovedOn:
-      "Show mezitím přešla od otázky dál, a tak otázka už znovu nezačne.",
+    restartQuestionConfirm: "Spustit otázku znovu? Odpovědi a body z ní se vezmou zpět a otázka počká, až ji spustíte. Ruční úpravy skóre zůstanou.",
+    restartTooLate: "Otázka se mezitím uzavřela a na plátně jsou její výsledky, a tak už znovu nezačne.",
+    restartAlreadyDone: "Otázka už mezitím začala znovu a čeká, až ji spustíte.",
+    restartMovedOn: "Show mezitím přešla od otázky dál, a tak otázka už znovu nezačne.",
     leaderboard: "Pořadí",
     goTo: "Přejít na…",
     notes: "Poznámky",
@@ -53,20 +49,16 @@ const strings = {
     teamNames: "Názvy týmů",
     dropBuzzer: "sem přetáhněte bzučák",
     unpairTeam: "Zrušit spárování",
-    teamsBeforeShow:
-      "Názvy týmů si připravte předem, zůstanou i pro další show. Bzučáky s nimi spárujete, až show začne.",
+    teamsBeforeShow: "Názvy týmů si připravte předem, zůstanou i pro další show. Bzučáky s nimi spárujete, až show začne.",
     removeTeam: "Odebrat tým",
     teamNamePlaceholder: "Název týmu",
     addTeam: "Přidat",
     importTeams: "Načíst ze souboru…",
-    importTeamsHint:
-      "Textový soubor s jedním názvem na řádek nebo CSV (názvy v prvním sloupci).",
-    pairHint:
-      "Přetáhněte číslo bzučáku na název týmu, nebo klikněte na číslo a pak na název.",
+    importTeamsHint: "Textový soubor s jedním názvem na řádek nebo CSV (názvy v prvním sloupci).",
+    pairHint: "Přetáhněte číslo bzučáku na název týmu, nebo klikněte na číslo a pak na název.",
     virtualBuzzers: "Virtuální bzučáky",
     count: "Počet",
-    keyboardHint:
-      "Klávesy 1–0 = velké tlačítko hráčů 1–10. Mezerník = další, Y/N = správně/špatně, P = pauza, S = pořadí.",
+    keyboardHint: "Klávesy 1–0 = velké tlačítko hráčů 1–10. Mezerník = další, Y/N = správně/špatně, P = pauza, S = pořadí.",
     lobby: "Registrace",
     lobbyHint: "Stiskněte libovolné tlačítko na svém bzučáku",
     registered: "Přihlášeno: {n}",
@@ -108,34 +100,28 @@ const strings = {
     tabMedia: "Přehrávač médií",
     // The media player and sound board (director/MediaPlayerTab.tsx).
     mediaAdd: "Přidat",
-    mediaAddHint:
-      "Zkopíruje obrázky, zvuky a videa do knihovny tohoto počítače",
+    mediaAddHint: "Zkopíruje obrázky, zvuky a videa do knihovny tohoto počítače",
     mediaRemove: "Odebrat",
-    mediaRemoveConfirm:
-      "Odebrat {name} z knihovny? Kopie souboru se smaže, původní soubor zůstane.",
+    mediaRemoveConfirm: "Odebrat {name} z knihovny? Kopie souboru se smaže, původní soubor zůstane.",
     mediaPlay: "Přehrát",
     mediaStop: "Zastavit",
     mediaRewind: "Na začátek",
     playerVolume: "Hlasitost přehrávače",
     appIcon: "Ikona aplikace",
-    appIconHint:
-      "Ikona oken a jejich tlačítek na hlavním panelu. Zástupci na ploše a v nabídce Start a Dock v macOS mají vždy oranžovou.",
+    appIconHint: "Ikona oken a jejich tlačítek na hlavním panelu. Zástupci na ploše a v nabídce Start a Dock v macOS mají vždy oranžovou.",
     iconOrange: "Oranžová",
     iconBlue: "Modrá",
     iconGreen: "Zelená",
     iconPurple: "Fialová",
     iconRed: "Červená",
     iconYellow: "Žlutá",
-    playerVolumeHint:
-      "Hlasitost všeho, co show přehrává: zvuků a videí ze snímků i z přehrávače a zvukových signálů. Mění se hned, i když něco hraje.",
+    playerVolumeHint: "Hlasitost všeho, co show přehrává: zvuků a videí ze snímků i z přehrávače a zvukových signálů. Mění se hned, i když něco hraje.",
     mediaShowList: "Seznam",
     mediaShowBoard: "Zvukový panel",
     mediaSearch: "Hledat v knihovně",
-    mediaEmpty:
-      "Knihovna je prázdná. Přidejte soubory tlačítkem Přidat, nebo je sem přetáhněte ze složky.",
+    mediaEmpty: "Knihovna je prázdná. Přidejte soubory tlačítkem Přidat, nebo je sem přetáhněte ze složky.",
     mediaNoMatch: "Hledání neodpovídá žádný soubor.",
-    mediaDropTooLarge:
-      "Soubor {name} je na přetažení moc velký (nad {mb} MB). Přidejte ho tlačítkem Přidat.",
+    mediaDropTooLarge: "Soubor {name} je na přetažení moc velký (nad {mb} MB). Přidejte ho tlačítkem Přidat.",
     mediaDivider: "Přetažením změníte šířku seznamu",
     padSlideSound: "Zvuk snímku",
     padSlideVideo: "Video snímku",
@@ -155,10 +141,8 @@ const strings = {
     boardClickPause: "Kliknutí na hrající tlačítko ho pozastaví a znovu spustí",
     boardFill: "Doplnit prázdná tlačítka",
     boardClear: "Vyprázdnit všechna tlačítka",
-    boardClearConfirm:
-      "Vyprázdnit všechna tlačítka zvukového panelu? Soubory zůstanou v knihovně.",
-    boardHint:
-      "Soubory sem přetáhněte ze seznamu nebo ze složky; přetažením tlačítka na jiné je prohodíte. Pravým tlačítkem myši nastavíte tlačítko i panel.",
+    boardClearConfirm: "Vyprázdnit všechna tlačítka zvukového panelu? Soubory zůstanou v knihovně.",
+    boardHint: "Soubory sem přetáhněte ze seznamu nebo ze složky; přetažením tlačítka na jiné je prohodíte. Pravým tlačítkem myši nastavíte tlačítko i panel.",
     colorRed: "Červená",
     colorOrange: "Oranžová",
     colorYellow: "Žlutá",
@@ -172,40 +156,32 @@ const strings = {
     colorWhite: "Bílá",
     receiverStatus: "Stav přijímače",
     receiverOff: "Přijímač je zavřený.",
-    receiverLooking:
-      "Hledám přijímač. Připojte ho k USB, aplikace ho najde automaticky.",
+    receiverLooking: "Hledám přijímač. Připojte ho k USB, aplikace ho najde automaticky.",
     receiverFoundAutomatically: "Přijímač se našel automaticky.",
     remoteKeys: "Ovladač moderátora",
-    remoteKeysHint:
-      "Co dělá která klávesa ovladače během show. Stisknutá klávesa se tu zvýrazní, takže poznáte, která je která; zkoušejte to, než show začne, protože v otevřené show klávesa zároveň udělá svou akci. Akce Další běžící otázku neukončí, aby ji dvojí stisk omylem neukončil hned po spuštění; ukončí ji akce Ukončit otázku.",
+    remoteKeysHint: "Co dělá která klávesa ovladače během show. Stisknutá klávesa se tu zvýrazní, takže poznáte, která je která; zkoušejte to, než show začne, protože v otevřené show klávesa zároveň udělá svou akci. Akce Další běžící otázku neukončí, aby ji dvojí stisk omylem neukončil hned po spuštění; ukončí ji akce Ukončit otázku.",
     remoteKeyPressed: "Naposledy stisknuto: {key}",
     remoteKeysReset: "Výchozí nastavení",
     buzzerColours: "Barvy bzučáků",
-    buzzerColoursHint:
-      "Jakou barvou svítí bzučák v kterém stavu, pro všechny kvízy. Černá bzučák zhasne, takže hráč třeba po odpovědi jasně pozná, že má odtipováno. Bzučák ukáže nejbližší odstín, který umí (≈). U otázky s rychlou odpovědí se nové barvy na bzučácích ukážou, až skončí.",
+    buzzerColoursHint: "Jakou barvou svítí bzučák v kterém stavu, pro všechny kvízy. Černá bzučák zhasne, takže hráč třeba po odpovědi jasně pozná, že má odtipováno. Bzučák ukáže nejbližší odstín, který umí (≈). U otázky s rychlou odpovědí se nové barvy na bzučácích ukážou, až skončí.",
     buzzerShade: "Na bzučáku přibližně",
     buzzerColoursReset: "Výchozí barvy",
-    buzzerColoursRefusedKept:
-      "Uložené barvy bzučáků neprošly kontrolou, a tak se použily výchozí: {problem}",
+    buzzerColoursRefusedKept: "Uložené barvy bzučáků neprošly kontrolou, a tak se použily výchozí: {problem}",
     coloursCommon: "Nejpoužívanější",
     coloursMine: "Moje barvy",
     coloursMineNone: "Zatím žádné.",
     coloursKeep: "Přidat do mých barev",
     coloursForget: "Odebrat z mých barev",
-    coloursReadyDark:
-      "„{ready}“ nesmí být černá ani skoro černá: podle ní aplikace pozná, že stisk platí.",
-    coloursReadyLike:
-      "„{ready}“ by na bzučáku vypadala stejně jako „{light}“, a podle ní aplikace pozná, že stisk platí. Vyberte jinou barvu.",
+    coloursReadyDark: "„{ready}“ nesmí být černá ani skoro černá: podle ní aplikace pozná, že stisk platí.",
+    coloursReadyLike: "„{ready}“ by na bzučáku vypadala stejně jako „{light}“, a podle ní aplikace pozná, že stisk platí. Vyberte jinou barvu.",
     lightOff: "Mezi otázkami",
     lightOffHint: "Mimo otázku a po vyhodnocení u hráče, který neodpověděl",
     lightReady: "Může odpovídat",
     lightReadyHint: "Otázka běží a hráč může stisknout",
     lightAnswered: "Odpověděl",
-    lightAnsweredHint:
-      "Odpověděl na otázku, na kterou odpovídají všichni, a čeká na vyhodnocení",
+    lightAnsweredHint: "Odpověděl na otázku, na kterou odpovídají všichni, a čeká na vyhodnocení",
     lightLocked: "Vyřazen z otázky",
-    lightLockedHint:
-      "Špatně zabzučel, zabzučel jiný hráč, je vypnutý nebo otázku s rychlou odpovědí vyhrál jiný",
+    lightLockedHint: "Špatně zabzučel, zabzučel jiný hráč, je vypnutý nebo otázku s rychlou odpovědí vyhrál jiný",
     lightFirst: "Zabzučel první",
     lightFirstHint: "Čeká, jak moderátor jeho odpověď posoudí",
     lightCorrect: "Správná odpověď",
@@ -240,45 +216,34 @@ const strings = {
     receiverNotReady:
       "Kabel {name} ({id}) je připojený, ale přijímač {protocol} ještě není připravený. Zkontrolujte jeho napájecí adaptér a kabel RJ45; když to nepomůže, odpojte přijímači na chvíli napájení. Aplikace se ptá dál.",
     receiverNoLights: "Tento protokol neumí ovládat světla bzučáků.",
-    receiverSettingsLost:
-      "Uložené nastavení přijímače nešlo přečíst, naučená tlačítka je potřeba naučit znovu.",
+    receiverSettingsLost: "Uložené nastavení přijímače nešlo přečíst, naučená tlačítka je potřeba naučit znovu.",
     learnBanner: "Učím tlačítko bzučáku: stisky se ve hře nepočítají.",
-    notSavedBanner:
-      "{problem} Dokud ukládání nefunguje, stisky ani příkazy se nepočítají.",
+    notSavedBanner: "{problem} Dokud ukládání nefunguje, stisky ani příkazy se nepočítají.",
     updateAvailable: "Je k dispozici nová verze aplikace {version}.",
     updateInstall: "Nainstalovat a restartovat",
-    updateConfirm:
-      "Nainstalovat verzi {version}? Aplikace se zavře, nainstaluje ji a znovu se spustí.",
-    updateRestartAiApps:
-      "AI aplikace, které Buzzdome používají (Claude Desktop, Antigravity, Codex), pak zavřete a otevřete znovu, aby používaly novou verzi.",
+    updateConfirm: "Nainstalovat verzi {version}? Aplikace se zavře, nainstaluje ji a znovu se spustí.",
+    updateRestartAiApps: "AI aplikace, které Buzzdome používají (Claude Desktop, Antigravity, Codex), pak zavřete a otevřete znovu, aby používaly novou verzi.",
     updateNotes: "Co je nového:",
     updateDownloading: "Stahuji verzi {version}…",
     updateDownloadingPercent: "Stahuji verzi {version}… {percent} %",
-    updateInstalling:
-      "Instaluji verzi {version}, aplikace se za chvíli spustí znovu…",
-    receiverUnavailable:
-      "USB-HID není na tomto počítači k dispozici. Fungují jen virtuální bzučáky a klávesnice.",
+    updateInstalling: "Instaluji verzi {version}, aplikace se za chvíli spustí znovu…",
+    receiverUnavailable: "USB-HID není na tomto počítači k dispozici. Fungují jen virtuální bzučáky a klávesnice.",
     devices: "Zařízení USB-HID",
     refresh: "Obnovit",
     useReceiver: "Použít",
     inUse: "Používá se",
     reconnectReceiver: "Připojit znovu",
-    reconnectReceiverHint:
-      "Znovu otevře přijímač a nastaví ho, jako by se kabel vytáhl a zase zastrčil. Hodí se, když přijímač přestal reagovat, třeba po vytažení kabelu na jeho straně.",
+    reconnectReceiverHint: "Znovu otevře přijímač a nastaví ho, jako by se kabel vytáhl a zase zastrčil. Hodí se, když přijímač přestal reagovat, třeba po vytažení kabelu na jeho straně.",
     findReceiverAutomatically: "Hledat přijímač automaticky",
-    findReceiverAutomaticallyHint:
-      "Zapomene vybraný přijímač a použije první, jehož protokol aplikace zná, jakmile se připojí.",
-    devicesHint:
-      "Přijímač, jehož protokol aplikace zná, se použije automaticky; jiný vyberte tlačítkem Použít. Tip: odpojte přijímač, obnovte seznam, připojte ho a obnovte znovu. Nový řádek je přijímač. Klávesnice a myši operační systém aplikacím nepůjčí.",
+    findReceiverAutomaticallyHint: "Zapomene vybraný přijímač a použije první, jehož protokol aplikace zná, jakmile se připojí.",
+    devicesHint: "Přijímač, jehož protokol aplikace zná, se použije automaticky; jiný vyberte tlačítkem Použít. Tip: odpojte přijímač, obnovte seznam, připojte ho a obnovte znovu. Nový řádek je přijímač. Klávesnice a myši operační systém aplikacím nepůjčí.",
     buzzersSeen: "Bzučáky",
-    buzzersSeenHint:
-      "Stiskněte velké tlačítko na každém bzučáku: objeví se tu, jakmile ho přijímač zachytí, s posledním tlačítkem a časem.",
+    buzzersSeenHint: "Stiskněte velké tlačítko na každém bzučáku: objeví se tu, jakmile ho přijímač zachytí, s posledním tlačítkem a časem.",
     noBuzzersSeen: "Zatím žádný bzučák.",
     keyboardDevice: "klávesnice/myš",
     noDevices: "Nenalezeno žádné zařízení.",
     liveInput: "Živý vstup",
-    liveHint:
-      "Stiskněte tlačítka na bzučácích. Vlevo rozpoznané stisky, vpravo surová data z přijímače.",
+    liveHint: "Stiskněte tlačítka na bzučácích. Vlevo rozpoznané stisky, vpravo surová data z přijímače.",
     presses: "Stisky",
     rawReports: "Surová data",
     droppedNotReady: "nezapočteno, bzučák nebyl připravený",
@@ -286,13 +251,11 @@ const strings = {
     pressTimer: "časovač {timer}",
     exportLog: "Uložit záznam do souboru…",
     learnTitle: "Naučit tlačítka",
-    learnHint:
-      "Dokud aplikace nezná protokol přijímače, naučí se ho z vašich stisků: vyberte bzučák a tlačítko, klikněte na Začít a stiskněte to tlačítko 3×, pomalu. Opakujte pro každé tlačítko, které používáte. Naučeno tlačítek: {n}.",
+    learnHint: "Dokud aplikace nezná protokol přijímače, naučí se ho z vašich stisků: vyberte bzučák a tlačítko, klikněte na Začít a stiskněte to tlačítko 3×, pomalu. Opakujte pro každé tlačítko, které používáte. Naučeno tlačítek: {n}.",
     learnStart: "Začít",
     learnSave: "Uložit",
     learnCancel: "Zrušit",
-    learnPress:
-      "Stiskněte {button} na bzučáku {buzzer} třikrát… zaznamenáno: {n}",
+    learnPress: "Stiskněte {button} na bzučáku {buzzer} třikrát… zaznamenáno: {n}",
     learnForget: "Zapomenout naučená tlačítka",
     learnForgetConfirm: "Opravdu zapomenout všechna naučená tlačítka?",
     linuxAccess: "Linux: přístup bez roota (pravidlo udev)",
@@ -310,11 +273,9 @@ const strings = {
     colBuzzer: "Bzučák",
     colLastResponse: "Poslední odpověď",
     colTotalTime: "Celkový čas",
-    colTotalTimeHint:
-      "Jak dlouho trvaly hráčovy správné odpovědi dohromady; při stejném skóre rozhoduje o pořadí",
+    colTotalTimeHint: "Jak dlouho trvaly hráčovy správné odpovědi dohromady; při stejném skóre rozhoduje o pořadí",
     colJoker: "Žolík",
-    colJokerHint:
-      "Žolík zdvojnásobí, co hráči dá tato otázka, i srážku. Žolíka jde zahrát nebo vzít zpět, než otázka hráči něco dá a než skončí.",
+    colJokerHint: "Žolík zdvojnásobí, co hráči dá tato otázka, i srážku. Žolíka jde zahrát nebo vzít zpět, než otázka hráči něco dá a než skončí.",
     jokerPlay: "×2",
     jokersLeft: "zbývá: {n}",
     colResponse: "Odpověď",
@@ -323,15 +284,13 @@ const strings = {
     colPlace: "Místo",
     colRound: "{n}. kolo",
     colAdjusted: "Úpravy",
-    colAdjustedHint:
-      "Body, které moderátor hráči ručně přidal nebo ubral na kartě Týmy",
+    colAdjustedHint: "Body, které moderátor hráči ručně přidal nebo ubral na kartě Týmy",
     colTotalTimeSeconds: "Celkový čas (s)",
     resultsRanking: "Pořadí",
     resultsQuestions: "Otázky",
     resultsExport: "Exportovat do CSV",
     resultsPrint: "Vytisknout nebo uložit PDF",
-    resultsPrintHint:
-      "Otevře tiskový dialog systému, ve kterém jde výsledky uložit i jako PDF.",
+    resultsPrintHint: "Otevře tiskový dialog systému, ve kterém jde výsledky uložit i jako PDF.",
     resultsFileName: "Výsledky – {title}",
     resultsSaved: "Výsledky jsou uložené.",
     noQuestionsAsked: "Zatím nepadla žádná otázka.",
@@ -345,15 +304,12 @@ const strings = {
     yes: "Ano",
     no: "Ne",
     endShow: "Ukončit show",
-    endShowConfirm:
-      "Opravdu ukončit show? V poslední show půjde pokračovat, dokud nezačne jiná.",
+    endShowConfirm: "Opravdu ukončit show? V poslední show půjde pokračovat, dokud nezačne jiná.",
     goToSelected: "Přejít na vybraný snímek",
     goToFinal: "Přejít na konec",
-    goToFinalConfirm:
-      "Opravdu přeskočit zbývající snímky a ukázat konečné pořadí?",
+    goToFinalConfirm: "Opravdu přeskočit zbývající snímky a ukázat konečné pořadí?",
     startOver: "Začít show znovu",
-    startOverConfirm:
-      "Začít show znovu od registrace? Hráči, jejich jména a týmy zůstanou; skóre i výsledky se vynulují, zahrané žolíky se vrátí a všechny otázky se položí znovu. Chcete-li výsledky mít, nejdřív je exportujte na kartě Výsledky.",
+    startOverConfirm: "Začít show znovu od registrace? Hráči, jejich jména a týmy zůstanou; skóre i výsledky se vynulují, zahrané žolíky se vrátí a všechny otázky se položí znovu. Chcete-li výsledky mít, nejdřív je exportujte na kartě Výsledky.",
     layout: "Rozvržení:",
     layoutHorizontal: "Vedle sebe",
     layoutVertical: "Pod sebou",
@@ -362,18 +318,15 @@ const strings = {
     disable: "Vyřadit",
     enable: "Zařadit",
     resetScores: "Vynulovat skóre",
-    resetScoresConfirm:
-      "Vynulovat skóre a celkový čas všech hráčů? Show zůstane, kde je, a zahrané žolíky i odehrané otázky platí dál. Výsledky dosavadních otázek se smažou; chcete-li je mít, nejdřív je exportujte na kartě Výsledky.",
+    resetScoresConfirm: "Vynulovat skóre a celkový čas všech hráčů? Show zůstane, kde je, a zahrané žolíky i odehrané otázky platí dál. Výsledky dosavadních otázek se smažou; chcete-li je mít, nejdřív je exportujte na kartě Výsledky.",
     directorLook: "Vzhled režie",
-    directorLookHint:
-      "Tmavý vzhled v zatemněném sále neoslňuje. Projektor si ponechá vzhled podle motivu kvízu.",
+    directorLookHint: "Tmavý vzhled v zatemněném sále neoslňuje. Projektor si ponechá vzhled podle motivu kvízu.",
     lookLight: "Světlý",
     lookDark: "Tmavý",
     lookSystem: "Podle systému",
     launchCheck: "Kontrola před show",
     launchCheckShow: "Ukazovat před začátkem show",
-    launchCheckHint:
-      "Než show udělá první krok, ukáže se pod kartami, jestli je připravený přijímač, bzučáky, projektor, zvuk a disk. Show se dá spustit i tak.",
+    launchCheckHint: "Než show udělá první krok, ukáže se pod kartami, jestli je připravený přijímač, bzučáky, projektor, zvuk a disk. Show se dá spustit i tak.",
     launchAllReady: "Vše připraveno.",
     launchOpen: "K dořešení: {n}",
     launchHide: "Skrýt",
@@ -383,36 +336,27 @@ const strings = {
     launchPartSound: "Zvuk",
     launchPartDisk: "Disk",
     launchChecking: "Zjišťuji…",
-    launchKeyboardOnly:
-      "Do té doby fungují jen klávesnice a bzučáky na obrazovce.",
+    launchKeyboardOnly: "Do té doby fungují jen klávesnice a bzučáky na obrazovce.",
     launchMore: "a ještě {n}",
-    launchTeamsUnpaired:
-      "Týmy bez bzučáku ({n} z {total}): {names}. Přihlášeno bzučáků: {players}.",
+    launchTeamsUnpaired: "Týmy bez bzučáku ({n} z {total}): {names}. Přihlášeno bzučáků: {players}.",
     launchTeamsPaired: "Každý tým má bzučák. Přihlášeno bzučáků: {players}.",
-    launchNoBuzzers:
-      "Zatím se nepřihlásil žádný bzučák. Bzučák se přihlásí stiskem kteréhokoli tlačítka.",
+    launchNoBuzzers: "Zatím se nepřihlásil žádný bzučák. Bzučák se přihlásí stiskem kteréhokoli tlačítka.",
     launchBuzzersRegistered: "Přihlášeno bzučáků: {players}.",
     launchProjectorClosed: "Projektor není otevřený, sál nic nevidí.",
-    launchProjectorOneScreen:
-      "Je připojená jen jedna obrazovka, takže projektor je v okně na obrazovce režie. Připojte projektor.",
-    launchProjectorOnDirector:
-      "Projektor je na obrazovce režie, ne na své vlastní.",
+    launchProjectorOneScreen: "Je připojená jen jedna obrazovka, takže projektor je v okně na obrazovce režie. Připojte projektor.",
+    launchProjectorOnDirector: "Projektor je na obrazovce režie, ne na své vlastní.",
     launchProjectorWindowed: "Projektor je v okně, ne přes celou obrazovku.",
     launchProjectorReady: "Přes celou obrazovku, na své vlastní obrazovce.",
     launchOpenProjector: "Otevřít projektor",
     launchPlaceProjector: "Na celou obrazovku projektoru",
-    launchSoundPlayerMuted:
-      "Hlasitost přehrávače médií je na nule, show nebude slyšet.",
-    launchSoundQuizMuted:
-      "Hlasitost efektů tohoto kvízu je nula (Soubor › Nastavení kvízu).",
+    launchSoundPlayerMuted: "Hlasitost přehrávače médií je na nule, show nebude slyšet.",
+    launchSoundQuizMuted: "Hlasitost efektů tohoto kvízu je nula (Soubor › Nastavení kvízu).",
     launchSoundTry: "Zahrajte zkušební zvuk a poslechněte si ho v sále.",
-    launchSoundPlayed:
-      "Byl zkušební zvuk v sále slyšet? Pokud ne, zkontrolujte reproduktory a zvukový výstup systému.",
+    launchSoundPlayed: "Byl zkušební zvuk v sále slyšet? Pokud ne, zkontrolujte reproduktory a zvukový výstup systému.",
     launchSoundHeard: "Zvuk je v sále slyšet.",
     launchPlaySound: "Zahrát zkušební zvuk",
     launchSoundHeardButton: "Ano, je slyšet",
-    launchDiskFull:
-      "Na disku zbývá jen {size}. Show se nemusí dát uložit: uvolněte místo.",
+    launchDiskFull: "Na disku zbývá jen {size}. Show se nemusí dát uložit: uvolněte místo.",
     launchDiskLow: "Na disku zbývá {size}. Na show to stačí, ale místa ubývá.",
     launchDiskFree: "Na disku je volno {size}.",
     joinsNext: "od další otázky",
@@ -436,8 +380,7 @@ const strings = {
     textPlaceholder: "Text pod nadpisem",
     explanationPlaceholder: "Sem napište, proč je odpověď správná",
     questionNumber: "Otázka {n}",
-    noQuestionToExplain:
-      "Před tímto snímkem v kole není otázka. Ukáže se jen vysvětlení.",
+    noQuestionToExplain: "Před tímto snímkem v kole není otázka. Ukáže se jen vysvětlení.",
     newQuiz: "Nový",
     saveQuiz: "Uložit",
     saveQuizAs: "Uložit jako…",
@@ -450,22 +393,17 @@ const strings = {
     untitledQuiz: "Kvíz bez názvu",
     discardChanges: "Kvíz „{title}“ má neuložené změny. Zahodit je?",
     draftUnreadable: "Rozpracovaný kvíz z minula nejde otevřít",
-    draftUnreadableInfo:
-      "Zůstává uložený, dokud ho nezahodíte. Můžete to zkusit znovu, třeba až uvolníte místo na disku nebo spustíte novější verzi aplikace.",
+    draftUnreadableInfo: "Zůstává uložený, dokud ho nezahodíte. Můžete to zkusit znovu, třeba až uvolníte místo na disku nebo spustíte novější verzi aplikace.",
     discardDraft: "Zahodit rozpracovaný kvíz",
-    discardUnreadableDraft:
-      "Zahodit rozpracovaný kvíz? Jeho neuložené změny nepůjde vrátit.",
-    draftNotWritten:
-      "{problem} Změny se zatím neukládají; aplikace to zkouší znovu.",
-    editorBusy:
-      "Editor ještě pracuje se souborem kvízu. Zkuste to znovu, až skončí.",
+    discardUnreadableDraft: "Zahodit rozpracovaný kvíz? Jeho neuložené změny nepůjde vrátit.",
+    draftNotWritten: "{problem} Změny se zatím neukládají; aplikace to zkouší znovu.",
+    editorBusy: "Editor ještě pracuje se souborem kvízu. Zkuste to znovu, až skončí.",
     quizTitle: "Název kvízu",
     duplicate: "Duplikovat",
     deleteSlide: "Smazat",
     moveUp: "Posunout nahoru",
     moveDown: "Posunout dolů",
-    noSlides:
-      "Kvíz zatím nemá žádné snímky. Přidejte otázku nebo informační snímek.",
+    noSlides: "Kvíz zatím nemá žádné snímky. Přidejte otázku nebo informační snímek.",
     loading: "Načítám…",
     slideTitleField: "Nadpis",
     slideTextField: "Text",
@@ -490,8 +428,7 @@ const strings = {
     problems: "Problémy: {n}",
     noProblems: "Kvíz je připravený ke hraní.",
     leftOut: "Vynecháno při otevření: {n}",
-    leftOutHint:
-      "Soubor obsahoval i to, co kvíz nemůže použít. Uložením se to ze souboru odstraní.",
+    leftOutHint: "Soubor obsahoval i to, co kvíz nemůže použít. Uložením se to ze souboru odstraní.",
     notSavedYet: "Zatím neuloženo",
     unsaved: "neuložené změny",
     ribbonFile: "Soubor",
@@ -540,44 +477,34 @@ const strings = {
     backToQuiz: "Zpět ke kvízu",
     info: "Informace",
     quizSettings: "Nastavení kvízu",
-    quizSettingsHint:
-      "Čas, body a odpovědi má každá otázka ve svých vlastnostech. Tady je to, co platí pro celý kvíz.",
+    quizSettingsHint: "Čas, body a odpovědi má každá otázka ve svých vlastnostech. Tady je to, co platí pro celý kvíz.",
     advancedSettings: "Pokročilé",
     allAnswered: "Když všichni odpoví",
     allAnsweredWait: "Počkat na moderátora",
     allAnsweredReveal: "Ukázat správnou odpověď",
     allAnsweredNextSlide: "Přejít na další snímek",
     allAnsweredDelay: "Prodleva",
-    allAnsweredHint:
-      "Platí i pro otázku s rychlou odpovědí, na kterou všichni odpověděli špatně. Otázka, kterou ukončí moderátor nebo čas dřív, než všichni odpovědí, čeká na Další. Během prodlevy může moderátor dát Další, nebo krok zastavit tlačítkem Počkat (klávesa {key}).",
+    allAnsweredHint: "Platí i pro otázku s rychlou odpovědí, na kterou všichni odpověděli špatně. Otázka, kterou ukončí moderátor nebo čas dřív, než všichni odpovědí, čeká na Další. Během prodlevy může moderátor dát Další, nebo krok zastavit tlačítkem Počkat (klávesa {key}).",
     settingsFlow: "Průběh otázky",
     runClockOut: "Nechat čas doběhnout, i když už všichni odpověděli",
-    runClockOutHint:
-      "Jen u otázek s časem. Otázka se zavře až koncem času a pak platí, co je nastavené pro „Když všichni odpoví“.",
+    runClockOutHint: "Jen u otázek s časem. Otázka se zavře až koncem času a pak platí, co je nastavené pro „Když všichni odpoví“.",
     nextAfterReveal: "Po ukázání odpovědi přejít automaticky na další snímek",
     nextAfterRevealDelay: "Odpověď zůstane na plátně",
-    nextAfterRevealHint:
-      "Po každé ukázané odpovědi, i po správné rychlé odpovědi. Moderátor může dát Další dřív, nebo krok zastavit tlačítkem Počkat (klávesa {key}).",
+    nextAfterRevealHint: "Po každé ukázané odpovědi, i po správné rychlé odpovědi. Moderátor může dát Další dřív, nebo krok zastavit tlačítkem Počkat (klávesa {key}).",
     settingsAnswers: "Odpovědi a body",
     changeAnswer: "Hráč smí změnit odpověď, dokud otázka běží",
-    changeAnswerHint:
-      "U otázek, na které odpovídají všichni, platí poslední odpověď a její čas. Otázka se zavře, jakmile odpovědí všichni; se zapnutou volbou „Nechat čas doběhnout“ mohou hráči odpověď měnit až do konce času.",
+    changeAnswerHint: "U otázek, na které odpovídají všichni, platí poslední odpověď a její čas. Otázka se zavře, jakmile odpovědí všichni; se zapnutou volbou „Nechat čas doběhnout“ mohou hráči odpověď měnit až do konce času.",
     oneBuzz: "Rychlá odpověď: jen jeden pokus na otázku",
-    oneBuzzHint:
-      "Po špatné odpovědi už nikdo další nemůže zabzučet a otázka se zavře.",
+    oneBuzzHint: "Po špatné odpovědi už nikdo další nemůže zabzučet a otázka se zavře.",
     noAnswerPenalty: "Srážka bodů i za neodpovězení",
-    noAnswerPenaltyHint:
-      "U otázek, na které odpovídají všichni, ztratí hráč, který neodpoví, tolik bodů jako za špatnou odpověď.",
+    noAnswerPenaltyHint: "U otázek, na které odpovídají všichni, ztratí hráč, který neodpoví, tolik bodů jako za špatnou odpověď.",
     settingsProjector: "Projektor",
     showAnswer: "Označit správnou odpověď na projektoru",
-    showAnswerHint:
-      "Vypnuté: projektor správnou odpověď neoznačí a moderátor ji řekne sám. Režie ji ukazuje vždy.",
+    showAnswerHint: "Vypnuté: projektor správnou odpověď neoznačí a moderátor ji řekne sám. Režie ji ukazuje vždy.",
     showBuzzPoints: "Ukazovat body za rychlou odpověď",
-    showBuzzPointsHint:
-      "Vypnuté: projektor u bzučáku neukáže získané ani ztracené body; skóre diváci uvidí až v pořadí.",
+    showBuzzPointsHint: "Vypnuté: projektor u bzučáku neukáže získané ani ztracené body; skóre diváci uvidí až v pořadí.",
     answerChart: "Graf odpovědí po odhalení",
-    answerChartHint:
-      "Zapnuté: když projektor u otázky, na kterou odpovídají všichni, ukáže správnou odpověď, nakreslí u každé odpovědi pruh podle toho, jaká část hráčů ji zvolila.",
+    answerChartHint: "Zapnuté: když projektor u otázky, na kterou odpovídají všichni, ukáže správnou odpověď, nakreslí u každé odpovědi pruh podle toho, jaká část hráčů ji zvolila.",
     settingsVoice: "Předčítání",
     quizLanguage: "Jazyk kvízu",
     quizLanguageHint: "V tomto jazyce hlas čte otázky.",
@@ -585,56 +512,47 @@ const strings = {
     readAloudOff: "Ne",
     readAloudQuestion: "Jen otázku",
     readAloudQuestionAndAnswers: "Otázku i odpovědi",
-    readAloudHint:
-      "Když se otázka objeví, režie ji automaticky přečte vybraným hlasem, z reproduktorů režie jako ostatní zvuky show. Snímek s vlastním zvukem nebo videem se automaticky nečte. Čtení skončí, když někdo zabzučí, otázka skončí nebo se ukáže správná odpověď; tlačítkem v režii ho zastavíte nebo pustíte znovu.",
+    readAloudHint: "Když se otázka objeví, režie ji automaticky přečte vybraným hlasem, z reproduktorů režie jako ostatní zvuky show. Snímek s vlastním zvukem nebo videem se automaticky nečte. Čtení skončí, když někdo zabzučí, otázka skončí nebo se ukáže správná odpověď; tlačítkem v režii ho zastavíte nebo pustíte znovu.",
     voiceChoice: "Hlas",
     voiceFemale: "Ženský hlas {n}",
     voiceMale: "Mužský hlas {n}",
     tryVoice: "Vyzkoušet hlas",
     stopTryVoice: "Zastavit",
-    voiceNotDownloaded:
-      "Hlasy nejsou stažené, a tak zatím čte hlas systému. Stáhnete je v režii na kartě Nastavení › Hlasy pro předčítání; Vyzkoušet hlas zatím pustí ukázku.",
-    voiceMissing:
-      "V systému není hlas, který mluví jazykem kvízu ({language}). Stáhněte hlasy v režii (Nastavení › Hlasy pro předčítání).",
+    voiceNotDownloaded: "Hlasy nejsou stažené, a tak zatím čte hlas systému. Stáhnete je v režii na kartě Nastavení › Hlasy pro předčítání; Vyzkoušet hlas zatím pustí ukázku.",
+    voiceMissing: "V systému není hlas, který mluví jazykem kvízu ({language}). Stáhněte hlasy v režii (Nastavení › Hlasy pro předčítání).",
     readQuestion: "Přečíst otázku",
     stopReading: "Zastavit čtení",
     voices: "Hlasy pro předčítání",
-    voicesHint:
-      "Poslechněte si ukázky. Všechny hlasy jsou v jednom souboru (asi {size}): stáhnou se najednou a pak fungují i bez internetu. Hlas pro kvíz vyberete v editoru v Soubor › Nastavení kvízu.",
+    voicesHint: "Poslechněte si ukázky. Všechny hlasy jsou v jednom souboru (asi {size}): stáhnou se najednou a pak fungují i bez internetu. Hlas pro kvíz vyberete v editoru v Soubor › Nastavení kvízu.",
+    voicesLicence: "Hlasy jsou model Supertonic 3 od firmy Supertone pod licencí OpenRAIL-M. Řeč je strojově vytvořená: řekněte hráčům, že otázky čte syntetický hlas, a nepoužívejte ho k napodobení skutečné osoby.",
     voicesInstalled: "Hlasy jsou stažené.",
-    voicesNotInstalled:
-      "Hlasy nejsou stažené. Do té doby čte otázky hlas systému.",
+    voicesNotInstalled: "Hlasy nejsou stažené. Do té doby čte otázky hlas systému.",
     voicesDownload: "Stáhnout hlasy",
     voicesDownloading: "Stahuji hlasy: {percent} %",
     voicesUnpacking: "Rozbaluji hlasy…",
     voicesRemove: "Odebrat hlasy",
-    voicesRemoveConfirm:
-      "Odebrat stažené hlasy? Otázky pak bude číst hlas systému.",
+    voicesRemoveConfirm: "Odebrat stažené hlasy? Otázky pak bude číst hlas systému.",
     playSample: "Přehrát ukázku",
     stopSample: "Zastavit ukázku",
     launchPartVoice: "Předčítání",
     launchVoiceReady: "Otázky jsou připravené k přečtení ({total}).",
     launchVoiceRendering: "Připravuji otázky k přečtení: {done} z {total}.",
-    launchVoiceFailed: "Hlas nejde použít, otázky přečte hlas systému.",
-    launchVoiceSystem:
-      "Hlasy nejsou stažené, otázky přečte hlas systému {name}.",
+    launchVoiceFailed: "Hlas nepřipravil {failed} z {total} otázek, ty přečte hlas systému.",
+    launchVoiceSystem: "Hlasy nejsou stažené, otázky přečte hlas systému {name}.",
     languageCs: "Čeština",
     languageEn: "Angličtina",
     welcomeScreen: "Uvítací obrazovka",
     welcomeOn: "Začít show uvítací obrazovkou",
-    welcomeOnHint:
-      "Zapnuté: před registrací bzučáků ukáže projektor nadpis s logem, úvodní obrázek nebo video a text dole; přitom hraje hudba pro chvíli „Před začátkem show“. Další ({key}) přejde na registraci. Bzučák stisknutý mezitím se zaregistruje.",
+    welcomeOnHint: "Zapnuté: před registrací bzučáků ukáže projektor nadpis s logem, úvodní obrázek nebo video a text dole; přitom hraje hudba pro chvíli „Před začátkem show“. Další ({key}) přejde na registraci. Bzučák stisknutý mezitím se zaregistruje.",
     welcomeHeading: "Nadpis",
     welcomeLogo: "Logo",
     welcomeIntro: "Úvodní obrázek nebo video",
     welcomeIntroHint: "Video hraje dokola bez zvuku.",
     welcomeFooter: "Text dole",
     jokers: "Žolíky pro každého hráče",
-    jokersHint:
-      "0 = bez žolíků. Hráč ohlásí žolíka před otázkou a moderátor ho zahraje v režii na kartě Týmy; žolík zdvojnásobí body z té otázky, i srážku za špatnou odpověď.",
+    jokersHint: "0 = bez žolíků. Hráč ohlásí žolíka před otázkou a moderátor ho zahraje v režii na kartě Týmy; žolík zdvojnásobí body z té otázky, i srážku za špatnou odpověď.",
     soundsAndMusic: "Zvuky a hudba",
-    soundsHint:
-      "Hrají v okně režie. Každá chvíle show může hrát zvuk z knihovny aplikace, vlastní zvukový soubor kvízu, nebo nic. Hudba hraje dokola, ztiší se, když hraje zvuk snímku, video nebo přehrávač médií, a mlčí, když čas stojí nebo se čeká na verdikt.",
+    soundsHint: "Hrají v okně režie. Každá chvíle show může hrát zvuk z knihovny aplikace, vlastní zvukový soubor kvízu, nebo nic. Hudba hraje dokola, ztiší se, když hraje zvuk snímku, video nebo přehrávač médií, a mlčí, když čas stojí nebo se čeká na verdikt.",
     soundEffects: "Efekty",
     soundMusic: "Hudba",
     effectsVolume: "Hlasitost efektů",
@@ -697,8 +615,7 @@ const strings = {
     importFromSheetHint:
       "Otázky z tabulky Excelu (.xlsx, .xls), OpenDocument (.ods) nebo CSV se vloží za vybraný snímek. První řádek nese názvy sloupců: Q (otázka), A1–A6 (odpovědi; správná je ta v [hranatých závorkách], jinak A1 a odpovědi se zamíchají), P1 (obrázek), NOTES (poznámky), SOUND, VIDEO, BACKGROUND, BACKGROUND-VIDEO, ANSWER-TIME, POINTS-START, POINTS-END a PENALTY-POINTS-START. Každý list sešitu je jedno kolo. Soubory médií se hledají vedle tabulky.",
     saveSheetTemplate: "Uložit šablonu…",
-    saveSheetTemplateHint:
-      "Soubor CSV se všemi sloupci a ukázkovými řádky, který otevře Excel.",
+    saveSheetTemplateHint: "Soubor CSV se všemi sloupci a ukázkovými řádky, který otevře Excel.",
     exportToSheet: "Exportovat do Excelu…",
     exportToSheetHint:
       "Uloží snímky jako soubor CSV, který otevře Excel a který jde znovu importovat. Obrázky, zvuky a videa se uloží vedle něj pod svými jmény, každý jednou.",
@@ -718,12 +635,10 @@ const strings = {
     aiFolderTitle: "1. Složka pro kvízy",
     aiFolderHint:
       "AI aplikace pracují jen v této složce: berou z ní vaše obrázky, zvuky a videa a ukládají do ní kvízy. Jinde v počítači nic nečtou ani nezapisují. Aplikace, které už běží, začnou novou složku používat, až je otevřete znovu.",
-    aiNoFolder:
-      "Systém nemá pro váš účet složku Dokumenty, a tak složku zvolte sami.",
+    aiNoFolder: "Systém nemá pro váš účet složku Dokumenty, a tak složku zvolte sami.",
     aiChooseFolder: "Změnit…",
     aiAppsTitle: "2. Připojte AI aplikaci",
-    aiAppsHint:
-      "Připojení zapíše Buzzdome do nastavení aplikace. Když Buzzdome přesunete nebo přeinstalujete jinam, připojte ji znovu.",
+    aiAppsHint: "Připojení zapíše Buzzdome do nastavení aplikace. Když Buzzdome přesunete nebo přeinstalujete jinam, připojte ji znovu.",
     aiConnect: "Připojit",
     aiConnectAgain: "Připojit znovu",
     aiConnectedState: "Připojeno",
@@ -736,8 +651,7 @@ const strings = {
       "Aplikaci, která umí místní MCP servery, připojíte tak, že do jejích MCP serverů přidáte položku buzzdome z tohoto nastavení (ve většině aplikací pod mcpServers, ve VS Code pod servers) a aplikaci otevřete znovu. Ostatní servery v jejím nastavení nechte.",
     aiCopyConfig: "Zkopírovat nastavení",
     aiConfigCopied: "Nastavení je ve schránce.",
-    aiConfigNotCopied:
-      "Nastavení nejde zkopírovat automaticky: označte ho níže a zkopírujte.",
+    aiConfigNotCopied: "Nastavení nejde zkopírovat automaticky: označte ho níže a zkopírujte.",
     aiInstructionsTitle: "3. Vaše pokyny pro kvízy",
     aiInstructionsHint:
       "AI se jimi řídí u každého kvízu, a tak v chatu stačí napsat téma. Co napíšete v chatu, má přednost. Uložené pokyny platí od dalšího kvízu, bez restartu aplikace.",
@@ -745,65 +659,42 @@ const strings = {
     aiDefaultInstructions: "Vrátit výchozí",
     aiInstructionsSaved: "Pokyny jsou uložené.",
     aiSettingsLost: "Nastavení AI nešlo přečíst, a tak platí výchozí.",
-    aiConnected:
-      "Aplikace {app} je připojená a bude pracovat ve složce {folder}.",
-    aiReconnected:
-      "Aplikace {app} teď spouští tento Buzzdome a bude pracovat ve složce {folder}.",
-    aiAlreadyConnected:
-      "Aplikace {app} už je připojená a bude pracovat ve složce {folder}.",
+    aiConnected: "Aplikace {app} je připojená a bude pracovat ve složce {folder}.",
+    aiReconnected: "Aplikace {app} teď spouští tento Buzzdome a bude pracovat ve složce {folder}.",
+    aiAlreadyConnected: "Aplikace {app} už je připojená a bude pracovat ve složce {folder}.",
     aiRestartClaudeMacos: "Pak Claude Desktop ukončete (⌘Q) a otevřete znovu.",
-    aiRestartClaudeWindows:
-      "Pak Claude Desktop ukončete přes jeho ikonu u hodin (pravé tlačítko, Quit) a otevřete znovu: po zavření okna totiž běží dál.",
+    aiRestartClaudeWindows: "Pak Claude Desktop ukončete přes jeho ikonu u hodin (pravé tlačítko, Quit) a otevřete znovu: po zavření okna totiž běží dál.",
     aiRestartClaudeLinux: "Pak Claude Desktop ukončete a otevřete znovu.",
-    aiRestartAntigravity:
-      "Pak v Antigravity otevřete Settings › Customizations a u Installed MCP Servers stiskněte Refresh, nebo Antigravity otevřete znovu.",
-    aiRestartCodexMacos:
-      "Pak aplikaci ChatGPT ukončete (⌘Q) a otevřete znovu, nebo v příkazové řádce či editoru začněte novou relaci Codexu.",
-    aiRestartCodexOther:
-      "Pak aplikaci ChatGPT ukončete a otevřete znovu, nebo v příkazové řádce či editoru začněte novou relaci Codexu.",
+    aiRestartAntigravity: "Pak v Antigravity otevřete Settings › Customizations a u Installed MCP Servers stiskněte Refresh, nebo Antigravity otevřete znovu.",
+    aiRestartCodexMacos: "Pak aplikaci ChatGPT ukončete (⌘Q) a otevřete znovu, nebo v příkazové řádce či editoru začněte novou relaci Codexu.",
+    aiRestartCodexOther: "Pak aplikaci ChatGPT ukončete a otevřete znovu, nebo v příkazové řádce či editoru začněte novou relaci Codexu.",
     importRow: "řádek {rows}",
     importRows: "řádky {rows}",
     importSheetRows: "list „{sheet}“, {rows}",
     importMore: "a ještě {n}",
     importNoQuestionColumn: "List bez sloupce Q se přeskočil.",
-    importUnknownColumn:
-      "Sloupec {column} aplikace nezná, jeho hodnoty se nepřevzaly.",
-    importUnsupportedColumn:
-      "Sloupec {column} aplikace zatím nepodporuje, jeho hodnoty se nepřevzaly.",
+    importUnknownColumn: "Sloupec {column} aplikace nezná, jeho hodnoty se nepřevzaly.",
+    importUnsupportedColumn: "Sloupec {column} aplikace zatím nepodporuje, jeho hodnoty se nepřevzaly.",
     importDuplicateColumn: "Druhý sloupec {column} se nepřevzal.",
     importSecondLanguage: "Text za || (druhý jazyk) se nepřevzal.",
-    importLinkedFile:
-      "Soubory označené {L} se do kvízu zkopírovaly: soubor kvízu nese svá média vždy s sebou.",
-    importSlideTypeNotSupported:
-      "Typ snímku {prefix} aplikace nemá, snímek se importoval jako informační snímek se svým textem.",
+    importLinkedFile: "Soubory označené {L} se do kvízu zkopírovaly: soubor kvízu nese svá média vždy s sebou.",
+    importSlideTypeNotSupported: "Typ snímku {prefix} aplikace nemá, snímek se importoval jako informační snímek se svým textem.",
     importTestQuestion: "Zkušební otázka {T} je otázka bez bodů.",
-    importQualifierNotSupported:
-      "Označení {qualifier} v předponě otázky se nepřevzalo.",
-    importNotEveryone:
-      "Otázka s {answers} odpověďmi, na kterou odpovídají všichni (EA), se na tlačítka A–D nevejde, a tak je z ní otázka s rychlou odpovědí.",
-    importAnswersLeftOut:
-      "Odpovědi u snímku, který není otázka, se nepřevzaly.",
-    importUnknownCategory:
-      "Kategorii „{name}“ kvíz nemá, snímek zůstal bez kategorie. Vytvořte ji v zobrazení Kategorie a import zopakujte.",
-    importPictureAndVideo:
-      "Obrázek i video: snímek ukazuje jedno z nich, obrázek se nepřevzal.",
+    importQualifierNotSupported: "Označení {qualifier} v předponě otázky se nepřevzalo.",
+    importNotEveryone: "Otázka s {answers} odpověďmi, na kterou odpovídají všichni (EA), se na tlačítka A–D nevejde, a tak je z ní otázka s rychlou odpovědí.",
+    importAnswersLeftOut: "Odpovědi u snímku, který není otázka, se nepřevzaly.",
+    importUnknownCategory: "Kategorii „{name}“ kvíz nemá, snímek zůstal bez kategorie. Vytvořte ji v zobrazení Kategorie a import zopakujte.",
+    importPictureAndVideo: "Obrázek i video: snímek ukazuje jedno z nich, obrázek se nepřevzal.",
     importTwoBackgrounds: "Obrázek i video na pozadí: použilo se video.",
-    importMediaOnRanking:
-      "Obrázek nebo video u konce kola nebo konečného pořadí se nepřevzaly.",
+    importMediaOnRanking: "Obrázek nebo video u konce kola nebo konečného pořadí se nepřevzaly.",
     importWrongMediaType: "Soubor {file} nejde použít ve sloupci {column}.",
-    importBadValue:
-      "Hodnota „{value}“ ve sloupci {column} není platné číslo, zůstala výchozí.",
-    importUnknownSetting:
-      "Nastavení {setting} ve sloupci {column} aplikace nezná.",
-    importBadSetting:
-      "Nastavení {setting}={value} ve sloupci {column} je neplatné, zůstalo výchozí.",
-    importSettingNotUsed:
-      "Nastavení {setting} ve sloupci {column} se tu nepoužije.",
+    importBadValue: "Hodnota „{value}“ ve sloupci {column} není platné číslo, zůstala výchozí.",
+    importUnknownSetting: "Nastavení {setting} ve sloupci {column} aplikace nezná.",
+    importBadSetting: "Nastavení {setting}={value} ve sloupci {column} je neplatné, zůstalo výchozí.",
+    importSettingNotUsed: "Nastavení {setting} ve sloupci {column} se tu nepoužije.",
     importFileNotFound: "Soubor {file} se nenašel.",
-    importFileOutsideSheetFolder:
-      "Soubor {file} je mimo složku tabulky. Zkopíroval se do kvízu, zkontrolujte, že tam patří.",
-    importNetworkPath:
-      "Soubor {file} je na síťové cestě, kterou aplikace nečte, a vedle tabulky není. Zkopírujte ho k tabulce.",
+    importFileOutsideSheetFolder: "Soubor {file} je mimo složku tabulky. Zkopíroval se do kvízu, zkontrolujte, že tam patří.",
+    importNetworkPath: "Soubor {file} je na síťové cestě, kterou aplikace nečte, a vedle tabulky není. Zkopírujte ho k tabulce.",
     templateFileName: "sablona-otazek",
     templateRound: "Kolo 1",
     templateRoundText: "Zeměpis",
@@ -812,8 +703,7 @@ const strings = {
     templateAnswer2: "Lyon",
     templateAnswer3: "Marseille",
     templateAnswer4: "Nice",
-    templateQuestionNotes:
-      "Správná odpověď je v hranatých závorkách. Bez nich je správná A1 a aplikace odpovědi zamíchá.",
+    templateQuestionNotes: "Správná odpověď je v hranatých závorkách. Bez nich je správná A1 a aplikace odpovědi zamíchá.",
     templateOpen: "Kolik obyvatel má Paříž?",
     templateOpenNotes: "Bez odpovědí: hráči odpovídají nahlas.",
     templateExplanation: "Paříž leží na řece Seině.",
@@ -852,8 +742,7 @@ const strings = {
     clearSearch: "Zrušit hledání",
     moreOptions: "Další možnosti",
     fewerOptions: "Méně možností",
-    dragToChange:
-      "Tažením do stran změníte hodnotu (Shift rychleji, Alt pomaleji)",
+    dragToChange: "Tažením do stran změníte hodnotu (Shift rychleji, Alt pomaleji)",
     selectAllSlides: "Vybrat všechny snímky",
     findProperty: "Hledat vlastnost",
     pageGameplay: "Hra",
@@ -873,28 +762,22 @@ const strings = {
     sectionTimer: "Časomíra",
     sectionMetadata: "Údaje",
     propType: "Typ",
-    descType:
-      "Otázka, informační snímek, vysvětlení odpovědi nebo konec kola s pořadím. Při změně typu zůstane text, poznámky a média.",
+    descType: "Otázka, informační snímek, vysvětlení odpovědi nebo konec kola s pořadím. Při změně typu zůstane text, poznámky a média.",
     propId: "ID",
     descId: "Jednoznačný identifikátor snímku v souboru kvízu. Nemění se.",
     propAnswerTime: "Čas na odpověď",
-    descAnswerTime:
-      "Kolik sekund mají hráči na odpověď. 0 = bez časomíry, otázku ukončí moderátor.",
+    descAnswerTime: "Kolik sekund mají hráči na odpověď. 0 = bez časomíry, otázku ukončí moderátor.",
     propEveryoneAnswers: "Odpovídají všichni",
-    descEveryoneAnswers:
-      "Zapnuto: všichni odpovídají tlačítky a body dostane každý, kdo odpoví správně. Vypnuto: rychlá odpověď – odpovídá ten, kdo stiskne první, a moderátor odpověď posoudí.",
+    descEveryoneAnswers: "Zapnuto: všichni odpovídají tlačítky a body dostane každý, kdo odpoví správně. Vypnuto: rychlá odpověď – odpovídá ten, kdo stiskne první, a moderátor odpověď posoudí.",
     propAnswerCount: "Počet odpovědí",
-    descAnswerCount:
-      "Kolik možností otázka nabízí. Odpovídají-li všichni, dvě až čtyři (jedna na každé tlačítko A–D); při rychlé odpovědi až šest.",
+    descAnswerCount: "Kolik možností otázka nabízí. Odpovídají-li všichni, dvě až čtyři (jedna na každé tlačítko A–D); při rychlé odpovědi až šest.",
     propCorrectAnswer: "Správné odpovědi",
     descCorrectAnswer:
       "Které možnosti jsou správné. Může jich být víc. Odpovídají-li všichni, může každá dát jen část bodů (nastavíte u odpovědi). Rychlá odpověď nemusí mít žádnou, pak rozhodne moderátor, a správná dá vždy všechny body.",
     propPointsStart: "Body na začátku",
-    descPointsStart:
-      "Body za správnou odpověď (s klesajícími body ve chvíli, kdy se spustí časomíra).",
+    descPointsStart: "Body za správnou odpověď (s klesajícími body ve chvíli, kdy se spustí časomíra).",
     propFalling: "Body klesají s časem",
-    descFalling:
-      "Body s časomírou plynule klesají až na hodnotu Body na konci. Bez časomíry zůstávají stejné.",
+    descFalling: "Body s časomírou plynule klesají až na hodnotu Body na konci. Bez časomíry zůstávají stejné.",
     propPointsEnd: "Body na konci",
     descPointsEnd: "Body za správnou odpověď v posledním okamžiku časomíry.",
     propPenalty: "Srážka za chybu",
@@ -902,39 +785,30 @@ const strings = {
     descQuestionText: "Otázka, jak ji uvidí hráči.",
     descTitle: "Nadpis snímku.",
     descBodyText: "Text pod nadpisem informačního snímku.",
-    descExplanation:
-      "Proč je odpověď správná. Na snímku je pod otázkou a její správnou odpovědí.",
-    descExplains:
-      "Otázka, kterou snímek vysvětluje: nejbližší otázka před ním ve stejném kole.",
-    descNotes:
-      "Poznámky pro moderátora, hráči je neuvidí. Režie je ukazuje u snímku.",
+    descExplanation: "Proč je odpověď správná. Na snímku je pod otázkou a její správnou odpovědí.",
+    descExplains: "Otázka, kterou snímek vysvětluje: nejbližší otázka před ním ve stejném kole.",
+    descNotes: "Poznámky pro moderátora, hráči je neuvidí. Režie je ukazuje u snímku.",
     propAnswerText: "Text odpovědi",
     descAnswerText: "Text této možnosti.",
     propIsCorrect: "Správná",
     descIsCorrect: "Tato možnost je jednou ze správných odpovědí.",
     propShare: "Podíl bodů",
-    descShare:
-      "Kolik procent bodů otázky dá tato správná odpověď, třeba 50 % za skoro přesnou. Jen u otázky, na kterou odpovídají všichni.",
+    descShare: "Kolik procent bodů otázky dá tato správná odpověď, třeba 50 % za skoro přesnou. Jen u otázky, na kterou odpovídají všichni.",
     descRemoveAnswer: "Odebere tuto možnost, další se posunou.",
     propPicture: "Obrázek",
     descPicture: "Obrázek na snímku. Snímek má buď obrázek, nebo video.",
     propVideo: "Video",
     descVideo: "Video na snímku místo obrázku.",
-    descVideoAutoplay:
-      "Video se spustí automaticky po úvodní pauze. Jinak ho spustí moderátor tlačítkem Přehrát video v režii.",
+    descVideoAutoplay: "Video se spustí automaticky po úvodní pauze. Jinak ho spustí moderátor tlačítkem Přehrát video v režii.",
     propIntroPause: "Úvodní pauza",
-    descIntroPause:
-      "Za kolik sekund po zobrazení snímku se video spustí, aby moderátor stihl přečíst otázku.",
+    descIntroPause: "Za kolik sekund po zobrazení snímku se video spustí, aby moderátor stihl přečíst otázku.",
     descVideoVolume: "Hlasitost videa v procentech.",
     propSpeed: "Rychlost",
     descSpeed: "Rychlost přehrávání v procentech; 100 % je normální rychlost.",
-    descVideoPart:
-      "Která část videa hraje. Soubor se nemění; úsek se nastavuje v okně Střih.",
-    descVideoReplay:
-      "Po odhalení odpovědi video jednou přehraje úsek k opakování; ten se nastavuje v okně Střih.",
+    descVideoPart: "Která část videa hraje. Soubor se nemění; úsek se nastavuje v okně Střih.",
+    descVideoReplay: "Po odhalení odpovědi video jednou přehraje úsek k opakování; ten se nastavuje v okně Střih.",
     propEffect: "Efekt",
-    descEffect:
-      "Na začátku otázky video zakryje a s ubíhajícím časem na odpověď mizí, takže hráči vidí čím dál víc.",
+    descEffect: "Na začátku otázky video zakryje a s ubíhajícím časem na odpověď mizí, takže hráči vidí čím dál víc.",
     effectNone: "Žádný",
     effectBlur: "Rozmazání",
     effectMosaic: "Mozaika",
@@ -942,8 +816,7 @@ const strings = {
     descVideoRepeat: "Video se po skončení přehraje znovu.",
     propSound: "Zvuk",
     descSound: "Hudba nebo zvuk ke snímku.",
-    descSoundStart:
-      "Kdy se zvuk spustí: s otevřením snímku, se spuštěním časomíry nebo ručně tlačítkem v režii.",
+    descSoundStart: "Kdy se zvuk spustí: s otevřením snímku, se spuštěním časomíry nebo ručně tlačítkem v režii.",
     descSoundRepeat: "Zvuk hraje dokola, dokud je snímek na projektoru.",
     descVolume: "Hlasitost zvuku v procentech.",
     propBackground: "Pozadí",
@@ -957,38 +830,32 @@ const strings = {
     newCategory: "Nová kategorie",
     deleteCategory: "Odstranit kategorii",
     reapplyCategory: "Použít znovu na snímky",
-    categoryReapplied:
-      "Kategorie {name}: vzhled se znovu použil na snímky ({n}).",
+    categoryReapplied: "Kategorie {name}: vzhled se znovu použil na snímky ({n}).",
     previousCategory: "Předchozí kategorie",
     nextCategory: "Další kategorie",
     categoryNumber: "Kategorie {n} / {total}",
     categorySlides: "Snímků: {n}",
     categoryHint: "Vzhled, který kategorie dá snímkům",
     noCategories: "Kvíz zatím nemá žádnou kategorii.",
-    noCategoriesHint:
-      "Kategorie je pojmenovaný vzhled: pozadí (i video), barvy a písma. Vytvořte ji a pak ji na kartě Návrh použijte na vybrané snímky.",
-    categoryViewNote:
-      "Kategorie dává snímkům vzhled. Otázky se upravují v grafickém zobrazení.",
+    noCategoriesHint: "Kategorie je pojmenovaný vzhled: pozadí (i video), barvy a písma. Vytvořte ji a pak ji na kartě Návrh použijte na vybrané snímky.",
+    categoryViewNote: "Kategorie dává snímkům vzhled. Otázky se upravují v grafickém zobrazení.",
     saveAsCategory: "Uložit vzhled jako kategorii",
     editCategories: "Upravit kategorie",
     applyCategory: "Použít kategorii {name} na vybrané snímky",
     sectionCategory: "Kategorie",
     sectionHeadlineLook: "Vzhled otázky a nadpisu",
     propCategory: "Kategorie",
-    descCategory:
-      "Kategorie, jejíž vzhled snímek převzal. Volba kategorie dá snímku její pozadí, barvy a písma; obrázek, video a zvuk snímku zůstanou. Volba Žádná jen zruší vazbu a vzhled nechá.",
+    descCategory: "Kategorie, jejíž vzhled snímek převzal. Volba kategorie dá snímku její pozadí, barvy a písma; obrázek, video a zvuk snímku zůstanou. Volba Žádná jen zruší vazbu a vzhled nechá.",
     noCategory: "Žádná",
     propCategoryName: "Název",
-    descCategoryName:
-      "Pod tímto názvem se kategorie nabízí a podle něj ji najde sloupec CAT při importu z tabulky. Dvě kategorie se nesmí jmenovat stejně, velikost písmen se nerozlišuje.",
+    descCategoryName: "Pod tímto názvem se kategorie nabízí a podle něj ji najde sloupec CAT při importu z tabulky. Dvě kategorie se nesmí jmenovat stejně, velikost písmen se nerozlišuje.",
     // A slide's look over its theme (QZ-9): pickers of colours, gradients and fonts.
     sectionQuestionLook: "Vzhled otázky",
     sectionTitleLook: "Vzhled nadpisu",
     sectionTextLook: "Vzhled textu",
     sectionAnswersLook: "Vzhled všech odpovědí",
     propGradient: "Přechod",
-    descSlideGradient:
-      "Barevný přechod za snímkem. Platí, jen když snímek nemá obrázek ani video na pozadí.",
+    descSlideGradient: "Barevný přechod za snímkem. Platí, jen když snímek nemá obrázek ani video na pozadí.",
     descTextGradient: "Barevný přechod v rámečku za textem.",
     descAnswerGradient: "Barevný přechod panelu odpovědi.",
     gradientFrom: "Od",
@@ -996,8 +863,7 @@ const strings = {
     gradientTo: "Do",
     descGradientTo: "Barva, kterou přechod končí.",
     gradientKind: "Typ",
-    descGradientKind:
-      "Kudy přechod vede: svisle, vodorovně, šikmo nebo od středu.",
+    descGradientKind: "Kudy přechod vede: svisle, vodorovně, šikmo nebo od středu.",
     gradientVertical: "Svislý",
     gradientHorizontal: "Vodorovný",
     gradientDiagonal: "Šikmý dolů",
@@ -1007,13 +873,11 @@ const strings = {
     choosePreset: "Vybrat hotový přechod",
     gradientPresets: "Hotové přechody",
     myGradients: "Moje přechody",
-    myGradientsHint:
-      "Přechod přidáte kliknutím pravým tlačítkem na vlastnost Přechod (nejvýš pět).",
+    myGradientsHint: "Přechod přidáte kliknutím pravým tlačítkem na vlastnost Přechod (nejvýš pět).",
     addToMyGradients: "Přidat do mých přechodů",
     removeFromMyGradients: "Odebrat z mých přechodů",
     propFont: "Písmo",
-    descFont:
-      "Písmo textu, jeho velikost vůči motivu, tučné písmo, kurzíva a podtržení.",
+    descFont: "Písmo textu, jeho velikost vůči motivu, tučné písmo, kurzíva a podtržení.",
     themeFont: "Písmo motivu",
     chooseFont: "Vybrat písmo",
     searchFonts: "Hledat písmo",
@@ -1061,30 +925,23 @@ const strings = {
     descAnswerTransparency: "Jak moc je panel odpovědi průhledný.",
     // Sound part, replay and loudness (SN-8, SN-9); background video options (BG-1).
     propSoundPart: "Úsek",
-    descSoundPart:
-      "Která část souboru hraje. Soubor se nemění; úsek se nastavuje v okně Střih.",
+    descSoundPart: "Která část souboru hraje. Soubor se nemění; úsek se nastavuje v okně Střih.",
     wholeTrack: "Celá stopa",
     trackEnd: "konec",
     trimAction: "Střih…",
     propReplay: "Opakovat po odhalení odpovědi",
-    descReplay:
-      "Po odhalení odpovědi zvuk jednou přehraje úsek k opakování; ten se nastavuje v okně Střih.",
+    descReplay: "Po odhalení odpovědi zvuk jednou přehraje úsek k opakování; ten se nastavuje v okně Střih.",
     propReplayDelay: "Zpoždění opakování",
-    descReplayDelay:
-      "Za kolik sekund po odhalení odpovědi se úsek k opakování přehraje.",
+    descReplayDelay: "Za kolik sekund po odhalení odpovědi se úsek k opakování přehraje.",
     propGain: "Zisk hlasitosti",
-    descGain:
-      "Zesílení nebo zeslabení zvuku v dB navíc k hlasitosti: hlasitost umí jen ztlumit, zisk i zesílit. Nastavuje ho vyrovnání hlasitosti.",
+    descGain: "Zesílení nebo zeslabení zvuku v dB navíc k hlasitosti: hlasitost umí jen ztlumit, zisk i zesílit. Nastavuje ho vyrovnání hlasitosti.",
     normalizeAction: "Vyrovnat",
-    descNormalize:
-      "Změří úsek, který hraje, a nastaví zisk na cílovou hlasitost naposledy zvolenou v okně Vyrovnat hlasitost.",
+    descNormalize: "Změří úsek, který hraje, a nastaví zisk na cílovou hlasitost naposledy zvolenou v okně Vyrovnat hlasitost.",
     normalizeAll: "Vyrovnat hlasitost",
     normalizeDone: "Hlasitost vyrovnána, zisk {gain} dB. Zpět Ctrl+Z.",
-    normalizeLimited:
-      "Hlasitost vyrovnána jen zčásti, zisk {gain} dB, aby se zvuk nepřebudil. Zpět Ctrl+Z.",
+    normalizeLimited: "Hlasitost vyrovnána jen zčásti, zisk {gain} dB, aby se zvuk nepřebudil. Zpět Ctrl+Z.",
     propBackgroundSync: "Synchronizovat s kvízem",
-    descBackgroundSync:
-      "Video pozadí se pozastaví, když hráč odpovídá, časomíra stojí nebo otázka skončila.",
+    descBackgroundSync: "Video pozadí se pozastaví, když hráč odpovídá, časomíra stojí nebo otázka skončila.",
     descBackgroundRepeat: "Video pozadí hraje dokola.",
     descBackgroundMuted: "Video pozadí hraje bez zvuku.",
     playBackground: "Přehrát video pozadí",
@@ -1098,8 +955,7 @@ const strings = {
     trimPlayback: "Přehrávání",
     trimReplayPart: "Opakování",
     trimFailed: "Zvuk se nepodařilo načíst.",
-    trimTooLong:
-      "Zvuk je delší než {minutes} minut nebo je soubor příliš velký (třeba WAV v lepší kvalitě než 48 kHz/16 bitů), a tak se kvůli paměti nenačítá celý. Stříhat ani vyrovnat ho nejde.",
+    trimTooLong: "Zvuk je delší než {minutes} minut nebo je soubor příliš velký (třeba WAV v lepší kvalitě než 48 kHz/16 bitů), a tak se kvůli paměti nenačítá celý. Stříhat ani vyrovnat ho nejde.",
     trimScroll: "Posunout zobrazený úsek",
     trimStart: "Začátek",
     trimEnd: "Konec",
@@ -1109,14 +965,12 @@ const strings = {
     trimSetStart: "Nastavit začátek",
     trimSetEnd: "Nastavit konec",
     trimFit: "Zobrazit celé",
-    trimHint:
-      "Tažením vyberete úsek, kliknutím umístíte kurzor. Kolečko myši přibližuje, Shift + kolečko posouvá.",
+    trimHint: "Tažením vyberete úsek, kliknutím umístíte kurzor. Kolečko myši přibližuje, Shift + kolečko posouvá.",
     trimVideoTitle: "Střih videa – {name}",
     trimVideoFailed: "Video se nepodařilo načíst.",
     trimPosition: "Pozice ve videu",
     trimPlayFromPosition: "Přehrát odsud",
-    trimVideoHint:
-      "Posuvníkem najdete místo ve videu, I a O tam nastaví začátek a konec úseku. Soubor se nemění.",
+    trimVideoHint: "Posuvníkem najdete místo ve videu, I a O tam nastaví začátek a konec úseku. Soubor se nemění.",
     loudnessTarget: "Cílová hlasitost",
     loudnessStandard: "Standardní (−16 LUFS)",
     loudnessQuieter: "Tišší (−18 LUFS)",
@@ -1137,8 +991,7 @@ const strings = {
     loudnessSilent: "Ticho, není co měřit",
     loudnessTooShort: "Příliš krátký na změření",
     loudnessFailed: "Soubor nejde přečíst",
-    loudnessTooLong:
-      "Příliš dlouhý nebo velký na měření (nejvýš {minutes} min)",
+    loudnessTooLong: "Příliš dlouhý nebo velký na měření (nejvýš {minutes} min)",
     layoutsCommon: "Časté",
     layouts2: "2 odpovědi",
     layouts3: "3 odpovědi",
@@ -1160,23 +1013,16 @@ const strings = {
     errTooManyTeams: "Týmů může být nejvýš {max}.",
     errShowNotSaved: "Show nejde uložit na disk, a tak se změna neprovedla.",
     errShowNotRead: "Poslední show nejde načíst.",
-    errJournalBroken:
-      "Show se po chybě zápisu přestala ukládat na disk, a tak se tato změna neprovedla. Ukončete show a pokračujte v ní tlačítkem {resume}; změna, jejíž zápis selhal, v ní pak může být.",
-    errShowStopped:
-      "Show přestala reagovat. Restartujte aplikaci a pokračujte v poslední show.",
+    errJournalBroken: "Show se po chybě zápisu přestala ukládat na disk, a tak se tato změna neprovedla. Ukončete show a pokračujte v ní tlačítkem {resume}; změna, jejíž zápis selhal, v ní pak může být.",
+    errShowStopped: "Show přestala reagovat. Restartujte aplikaci a pokračujte v poslední show.",
     errNotFromProjector: "Tento příkaz z projektoru nejde dát.",
-    errShowBusy:
-      "Show ještě ukládá předchozí krok, protože disk neodpovídá. Tento krok se neprovedl, zkuste ho znovu.",
+    errShowBusy: "Show ještě ukládá předchozí krok, protože disk neodpovídá. Tento krok se neprovedl, zkuste ho znovu.",
     errSaveHangs:
       "Ukládání show na disk nedoběhlo, disk neodpovídá. Krok, který se ukládá, se provede, až zápis doběhne, proto ho nezadávejte znovu. Další příkazy se zatím odmítnou; stisky se započítají, až zápis doběhne.",
-    errJournalDamaged:
-      "Řádek {line} deníku poslední show nejde přečíst: zapsala ho novější verze aplikace, nebo je poškozený. Deník zůstal beze změny.",
-    errFileLeftUnread:
-      "Soubor {path} při spuštění nešel přečíst, a proto se nepřepíše. Zavřete program, který ho drží, a spusťte aplikaci znovu.",
-    errRulesChanged:
-      "Show začala v jiné verzi aplikace. Pokračuje, ale body se mohou mírně lišit.",
-    errMediaFolderRefused:
-      "Média show jsou ve složce {folder}, ze které aplikace nepromítá. Show pokračuje bez nich.",
+    errJournalDamaged: "Řádek {line} deníku poslední show nejde přečíst: zapsala ho novější verze aplikace, nebo je poškozený. Deník zůstal beze změny.",
+    errFileLeftUnread: "Soubor {path} při spuštění nešel přečíst, a proto se nepřepíše. Zavřete program, který ho drží, a spusťte aplikaci znovu.",
+    errRulesChanged: "Show začala v jiné verzi aplikace. Pokračuje, ale body se mohou mírně lišit.",
+    errMediaFolderRefused: "Média show jsou ve složce {folder}, ze které aplikace nepromítá. Show pokračuje bez nich.",
     errFileRead: "Soubor {name} nejde přečíst.",
     errFileWrite: "Soubor {name} nejde uložit.",
     errFileCreateFolder: "Složku {name} nejde vytvořit.",
@@ -1191,68 +1037,47 @@ const strings = {
     errNotAQuizFile: "Soubor není kvíz.",
     errMissingQuizJson: "V souboru kvízu chybí quiz.json.",
     errBadQuizJson: "Kvíz (quiz.json) nejde přečíst.",
-    errNewerSchema:
-      "Kvíz je z novější verze aplikace (formát {found}, tato verze zná nejvýš {supported}). Aktualizujte aplikaci.",
+    errNewerSchema: "Kvíz je z novější verze aplikace (formát {found}, tato verze zná nejvýš {supported}). Aktualizujte aplikaci.",
     errTooLarge: "Kvíz je po rozbalení větší než {maxMb} MB.",
-    errQuizJsonTooLarge:
-      "Text kvízu (quiz.json) je větší než {maxMb} MB, takový kvíz se nedá otevřít ani uložit.",
+    errQuizJsonTooLarge: "Text kvízu (quiz.json) je větší než {maxMb} MB, takový kvíz se nedá otevřít ani uložit.",
     errTooManyFiles: "Kvíz má víc než {max} souborů.",
-    errTooManyEndRecords:
-      "Soubor není kvíz: má víc než {max} koncových záznamů ZIP.",
+    errTooManyEndRecords: "Soubor není kvíz: má víc než {max} koncových záznamů ZIP.",
     errQuizInvalid: "Kvíz nejde přehrát, počet problémů: {n}. {first}",
-    backgroundFailed:
-      "Pozadí {file} nejde načíst, místo něj je vidět pozadí motivu.",
-    playerFileFailed:
-      "Soubor {file} z přehrávače médií nejde zobrazit, přehrávač ho proto zastavil.",
+    backgroundFailed: "Pozadí {file} nejde načíst, místo něj je vidět pozadí motivu.",
+    playerFileFailed: "Soubor {file} z přehrávače médií nejde zobrazit, přehrávač ho proto zastavil.",
     themeBackgroundFailed: "Pozadí motivu {file} nejde načíst.",
-    themeNotInstalled:
-      "Motiv {id} není nainstalovaný, kvíz se zobrazuje ve výchozím.",
+    themeNotInstalled: "Motiv {id} není nainstalovaný, kvíz se zobrazuje ve výchozím.",
     hostProblem: "Projektor: {message}",
     errNoDraft: "V editoru není otevřený žádný kvíz.",
     errNotRecent: "Soubor už v seznamu Naposledy otevřené není.",
-    errQuizFileGone:
-      "Kvíz {name} byl smazán nebo přesunut, a tak zmizel ze seznamu Naposledy otevřené.",
-    errQuizFileUnreachable:
-      "Kvíz {name} ani jeho složka {folder} teď nejsou k nalezení. Je-li na odpojeném disku, připojte ho, jinak ho odeberte křížkem.",
+    errQuizFileGone: "Kvíz {name} byl smazán nebo přesunut, a tak zmizel ze seznamu Naposledy otevřené.",
+    errQuizFileUnreachable: "Kvíz {name} ani jeho složka {folder} teď nejsou k nalezení. Je-li na odpojeném disku, připojte ho, jinak ho odeberte křížkem.",
     errDraftChanged: "V editoru se mezitím otevřel jiný kvíz.",
     errDraftNotRead: "Rozpracovaný kvíz z minula nejde přečíst.",
-    errNotAMediaFile:
-      "{name} není obrázek, zvuk ani video, které aplikace umí přehrát.",
+    errNotAMediaFile: "{name} není obrázek, zvuk ani video, které aplikace umí přehrát.",
     errNotInLibrary: "{reference} v knihovně médií není.",
     errNoSuchPad: "Tlačítko {pad} na zvukovém panelu není.",
     errNotASpreadsheet: "Soubor nejde přečíst jako tabulku.",
-    errSpreadsheetTooLarge:
-      "Tabulka je moc velká: nejvýš {maxMb} MB, {maxTextMb} MB textu, {maxRows} řádků a {maxColumns} sloupců.",
-    errSpreadsheetTooComplex:
-      "Tabulka je na přečtení moc složitá: potřebovala by víc než {maxMb} MB paměti. Uložte ji v Excelu jako .xlsx, nebo jako CSV.",
-    errSpreadsheetReaderFailed:
-      "Tabulku se nepodařilo přečíst: soubor je nejspíš poškozený. Uložte ho v Excelu znovu, nebo jako CSV.",
-    errNoQuestionColumn:
-      "Tabulka nemá sloupec Q s otázkami. Její první řádek musí obsahovat názvy sloupců jako v šabloně.",
-    errAiAppMissing:
-      "Aplikace {app} není v tomto počítači nainstalovaná. Nainstalujte ji, jednou spusťte a zkuste to znovu.",
-    errAiConfigUnreadable:
-      "Nastavení AI aplikace ({path}) nejde přečíst, a tak zůstalo, jak bylo. Opravte ho, nebo použijte tlačítko Zkopírovat nastavení.",
-    errAiFolderNotAllowed:
-      "Ke složce {path} asistent přístup dostat nemůže: obsahuje vlastní data Buzzdome (show, rozpracované kvízy, nastavení), nebo je v nich. Zvolte jinou.",
-    errNoDocumentsFolder:
-      "Systém nemá pro váš účet složku Dokumenty. Zvolte složku pro AI aplikace sami.",
+    errSpreadsheetTooLarge: "Tabulka je moc velká: nejvýš {maxMb} MB, {maxTextMb} MB textu, {maxRows} řádků a {maxColumns} sloupců.",
+    errSpreadsheetTooComplex: "Tabulka je na přečtení moc složitá: potřebovala by víc než {maxMb} MB paměti. Uložte ji v Excelu jako .xlsx, nebo jako CSV.",
+    errSpreadsheetReaderFailed: "Tabulku se nepodařilo přečíst: soubor je nejspíš poškozený. Uložte ho v Excelu znovu, nebo jako CSV.",
+    errNoQuestionColumn: "Tabulka nemá sloupec Q s otázkami. Její první řádek musí obsahovat názvy sloupců jako v šabloně.",
+    errAiAppMissing: "Aplikace {app} není v tomto počítači nainstalovaná. Nainstalujte ji, jednou spusťte a zkuste to znovu.",
+    errAiConfigUnreadable: "Nastavení AI aplikace ({path}) nejde přečíst, a tak zůstalo, jak bylo. Opravte ho, nebo použijte tlačítko Zkopírovat nastavení.",
+    errAiFolderNotAllowed: "Ke složce {path} asistent přístup dostat nemůže: obsahuje vlastní data Buzzdome (show, rozpracované kvízy, nastavení), nebo je v nich. Zvolte jinou.",
+    errNoDocumentsFolder: "Systém nemá pro váš účet složku Dokumenty. Zvolte složku pro AI aplikace sami.",
     errUsbUnavailable: "USB-HID není na tomto počítači k dispozici.",
     errUsbListFailed: "Seznam USB zařízení nejde načíst.",
     errReceiverNotConnected: "Nejdřív připojte přijímač.",
-    errReceiverNotLearnable:
-      "Protokol tohoto přijímače aplikace zná, tlačítka se učit nemusí.",
+    errReceiverNotLearnable: "Protokol tohoto přijímače aplikace zná, tlačítka se učit nemusí.",
     errLearnNotStarted: "Učení nebylo zahájeno.",
     errLearnTooFewPresses: "Stiskněte tlačítko aspoň {min}× (nejlépe 3×).",
     errLearnInconsistent: "Zaznamenané stisky se liší délkou. Zkuste to znovu.",
-    errLearnConflict:
-      "Tyto stisky vypadají stejně jako bzučák {buzzer}, tlačítko {button}. Zkuste to znovu, nebo naučte znovu to tlačítko.",
-    errNoDataFolder:
-      "Systém aplikaci nedal složku pro data, takže data nelze uložit. Zkontrolujte, že má váš uživatelský účet domovskou složku.",
+    errLearnConflict: "Tyto stisky vypadají stejně jako bzučák {buzzer}, tlačítko {button}. Zkuste to znovu, nebo naučte znovu to tlačítko.",
+    errNoDataFolder: "Systém aplikaci nedal složku pro data, takže data nelze uložit. Zkontrolujte, že má váš uživatelský účet domovskou složku.",
     errNoUpdate: "Novější verze aplikace nebyla nalezena.",
     errUpdateFailed: "Aktualizace se nepodařila.",
-    errUpdateInstalling:
-      "Instaluje se nová verze aplikace, show teď začít nemůže.",
+    errUpdateInstalling: "Instaluje se nová verze aplikace, show teď začít nemůže.",
     errSystem: "Systém akci odmítl.",
     // Quiz problems (Problem, MediaIssue).
     problemDuplicateSlideId: "Snímek má stejné ID jako jiný snímek.",
@@ -1262,52 +1087,35 @@ const strings = {
     problemSoundPartEmpty: "Úsek zvuku končí dřív, než začne.",
     problemVideoVolume: "Hlasitost videa je v procentech, 0 až 100.",
     problemVideoPartEmpty: "Úsek videa končí dřív, než začne.",
-    problemReplayDelayTooLong:
-      "Opakování může začít nejvýš {max} s po odhalení odpovědi.",
-    problemVideoSpeedOutOfRange:
-      "Rychlost videa musí být mezi {min} a {max} %.",
-    problemIntroPauseTooLong:
-      "Video může začít nejvýš {max} s po zobrazení snímku.",
-    problemSoundReplayNotOnQuestion:
-      "Opakovat úsek zvuku po odhalení odpovědi umí jen otázka.",
-    problemVideoReplayNotOnQuestion:
-      "Opakovat úsek videa po odhalení odpovědi umí jen otázka.",
-    problemWithClockNotOnQuestion:
-      "Hrát zvuk s časomírou umí jen otázka, jiný snímek časomíru nemá.",
-    problemEffectNotOnQuestion:
-      "Efekt videa slábne s časem na odpověď, takže patří jen k otázce.",
-    problemMediaOnRanking:
-      "Konec kola a konečné pořadí ukazují pořadí, ne obrázek ani video.",
+    problemReplayDelayTooLong: "Opakování může začít nejvýš {max} s po odhalení odpovědi.",
+    problemVideoSpeedOutOfRange: "Rychlost videa musí být mezi {min} a {max} %.",
+    problemIntroPauseTooLong: "Video může začít nejvýš {max} s po zobrazení snímku.",
+    problemSoundReplayNotOnQuestion: "Opakovat úsek zvuku po odhalení odpovědi umí jen otázka.",
+    problemVideoReplayNotOnQuestion: "Opakovat úsek videa po odhalení odpovědi umí jen otázka.",
+    problemWithClockNotOnQuestion: "Hrát zvuk s časomírou umí jen otázka, jiný snímek časomíru nemá.",
+    problemEffectNotOnQuestion: "Efekt videa slábne s časem na odpověď, takže patří jen k otázce.",
+    problemMediaOnRanking: "Konec kola a konečné pořadí ukazují pořadí, ne obrázek ani video.",
     problemStyleUnread: "Hodnota vzhledu {path} nejde přečíst.",
-    problemCategoryStyleUnread:
-      "Hodnota vzhledu {path} kategorie {name} nejde přečíst.",
+    problemCategoryStyleUnread: "Hodnota vzhledu {path} kategorie {name} nejde přečíst.",
     problemThemeUnread: "Motiv kvízu nejde přečíst, kvíz má výchozí vzhled.",
     problemCategoryMedia: "Kategorie {name}, {file}: {issue}",
     problemSoundMedia: "Zvuk pro chvíli „{moment}“, {file}: {issue}",
     problemWelcomeMedia: "{place} uvítací obrazovky, {file}: {issue}",
-    problemMediaNameClash:
-      "{file} a {other} se liší jen velikostí písmen nebo zápisem diakritiky, a tak je macOS bere jako jeden soubor (Windows, liší-li se velikostí písmen).",
+    problemMediaNameClash: "{file} a {other} se liší jen velikostí písmen nebo zápisem diakritiky, a tak je macOS bere jako jeden soubor (Windows, liší-li se velikostí písmen).",
     problemUnknownCategory: "Snímek odkazuje na kategorii, kterou kvíz nemá.",
-    problemDuplicateCategoryId:
-      "Kategorie {name} má stejné ID jako jiná kategorie.",
-    problemCategoryIdInvalid:
-      "Kategorie {name} má prázdné ID, nebo delší než {max} znaků.",
+    problemDuplicateCategoryId: "Kategorie {name} má stejné ID jako jiná kategorie.",
+    problemCategoryIdInvalid: "Kategorie {name} má prázdné ID, nebo delší než {max} znaků.",
     problemCategoryUnnamed: "Kategorie nemá název.",
     problemCategoryNameTooLong: "Název kategorie může mít nejvýš {max} znaků.",
     problemCategoryNameTaken: "Dvě kategorie se jmenují {name}.",
-    problemSoundGainOutOfRange:
-      "Zisk hlasitosti musí být mezi {min} a {max} dB.",
+    problemSoundGainOutOfRange: "Zisk hlasitosti musí být mezi {min} a {max} dB.",
     problemTooManyAnswers: "Příliš mnoho odpovědí, nejvýš {max}.",
-    problemTooFewAnswers:
-      "Otázka, na kterou odpovídají všichni, potřebuje aspoň {min} odpovědi.",
-    problemNoCorrectAnswer:
-      "Otázka, na kterou odpovídají všichni, potřebuje správnou odpověď.",
+    problemTooFewAnswers: "Otázka, na kterou odpovídají všichni, potřebuje aspoň {min} odpovědi.",
+    problemNoCorrectAnswer: "Otázka, na kterou odpovídají všichni, potřebuje správnou odpověď.",
     problemCorrectOutOfRange: "Správná odpověď ukazuje mimo seznam odpovědí.",
     problemCorrectTwice: "Jedna odpověď je mezi správnými dvakrát.",
-    problemShareOutOfRange:
-      "Podíl bodů za správnou odpověď musí být od 1 do {max} %.",
-    problemShareNotOnEveryone:
-      "Část bodů může dát jen otázka, na kterou odpovídají všichni. U rychlé odpovědi dá každá správná odpověď všechny body.",
+    problemShareOutOfRange: "Podíl bodů za správnou odpověď musí být od 1 do {max} %.",
+    problemShareNotOnEveryone: "Část bodů může dát jen otázka, na kterou odpovídají všichni. U rychlé odpovědi dá každá správná odpověď všechny body.",
     problemPointsOutOfRange: "Body musí být mezi −{max} a {max}.",
     problemPenaltyOutOfRange: "Srážka za chybu musí být mezi 0 a {max}.",
     problemTimeLimitTooLong: "Časový limit může být nejvýš {max} s.",
@@ -1322,21 +1130,14 @@ const strings = {
     // Receiver states.
     receiverCannotList: "Seznam USB zařízení nejde načíst ({detail}).",
     receiverCannotOpen: "Přijímač nejde otevřít ({detail}).",
-    receiverConnectionLost:
-      "Spojení s přijímačem se přerušilo ({detail}). Připojuji znovu…",
-    receiverWriteFailed:
-      "Zápis do přijímače selhal ({detail}). Připojuji znovu…",
-    receiverOpenHintLinux:
-      "V Linuxu nainstalujte pravidlo udev ze záložky Přijímač, aby váš uživatel mohl zařízení otevřít.",
-    receiverOpenHintMacos:
-      "V macOS povolte aplikaci v Nastavení systému › Soukromí a zabezpečení › Sledování vstupu, pokud o to systém požádá.",
-    receiverOpenHintOther:
-      "Zavřete jiné programy, které mohou přijímač používat (například kvízový software výrobce).",
+    receiverConnectionLost: "Spojení s přijímačem se přerušilo ({detail}). Připojuji znovu…",
+    receiverWriteFailed: "Zápis do přijímače selhal ({detail}). Připojuji znovu…",
+    receiverOpenHintLinux: "V Linuxu nainstalujte pravidlo udev ze záložky Přijímač, aby váš uživatel mohl zařízení otevřít.",
+    receiverOpenHintMacos: "V macOS povolte aplikaci v Nastavení systému › Soukromí a zabezpečení › Sledování vstupu, pokud o to systém požádá.",
+    receiverOpenHintOther: "Zavřete jiné programy, které mohou přijímač používat (například kvízový software výrobce).",
     settingsKeptAs: "Původní soubor je uložen jako {path}.",
-    settingsLeftUnread:
-      "Soubor zůstal, jak byl, a do dalšího spuštění aplikace se nepřepíše.",
-    teamsLost:
-      "Uložené názvy týmů nešlo přečíst, aplikace se spustila bez nich.",
+    settingsLeftUnread: "Soubor zůstal, jak byl, a do dalšího spuštění aplikace se nepřepíše.",
+    teamsLost: "Uložené názvy týmů nešlo přečíst, aplikace se spustila bez nich.",
     protocolRawOnly: "jen surová data",
     protocolLearned: "naučená tlačítka ({buttons})",
     protocolEnjoy303s: "Enjoy 303S",
@@ -1346,8 +1147,7 @@ const strings = {
     monitor: "Monitor",
     monitorAuto: "Jiný než ten s režií",
     monitorDirector: "zde je režie",
-    quitDuringShow:
-      "Show běží. Přesto aplikaci zavřít? Show zůstane uložená a půjde v ní pokračovat.",
+    quitDuringShow: "Show běží. Přesto aplikaci zavřít? Show zůstane uložená a půjde v ní pokračovat.",
     partFailed: "Tuto část se nepodařilo zobrazit.",
     windowFailed: "Okno se nepodařilo zobrazit.",
     closeAppKeepShow: "Zavřít aplikaci (rozehraná show zůstane uložená)",
@@ -1371,8 +1171,7 @@ const strings = {
     menuWindow: "Okno",
     menuMinimize: "Minimalizovat",
     menuMaximize: "Zvětšit",
-    projectorFailed:
-      "Jeho obrazovku se nepodařilo zobrazit: {message}. Zavřete ho a znovu otevřete klávesou M.",
+    projectorFailed: "Jeho obrazovku se nepodařilo zobrazit: {message}. Zavřete ho a znovu otevřete klávesou M.",
     slideNotShown: "Snímek se nepodařilo zobrazit: {message}",
     tryAgain: "Zkusit znovu",
     tabLights: "Světla",
@@ -1388,10 +1187,8 @@ const strings = {
     lightsHold: "Podržet look",
     lightsFollowShow: "— podle show —",
     lightsMaster: "Celkový jas",
-    lightsSettingsLost:
-      "Nastavení světel nešlo přečíst, a tak se začalo znovu.",
-    lightsRefusedKept:
-      "Uložené nastavení světel neprošlo kontrolou, a tak se použilo výchozí: {problem}",
+    lightsSettingsLost: "Nastavení světel nešlo přečíst, a tak se začalo znovu.",
+    lightsRefusedKept: "Uložené nastavení světel neprošlo kontrolou, a tak se použilo výchozí: {problem}",
     lightsOutput: "Výstup DMX",
     lightsInterface: "Rozhraní",
     lightsOutputNone: "Žádné (jen náhled)",
@@ -1400,26 +1197,20 @@ const strings = {
     lightsOutputArtNet: "Art-Net (síť)",
     lightsOutputSacn: "sACN / E1.31 (síť)",
     lightsOutputSoundSwitch: "SoundSwitch Micro DMX (experimentální)",
-    lightsSoundSwitchHint:
-      "SoundSwitch svůj protokol nezveřejňuje. Buzzdome ho zná z nezávislého open-source projektu a s tímto rozhraním ještě nebyl vyzkoušený. Před show zavřete program SoundSwitch: rozhraní může používat jen jeden program.",
-    lightsOpenDmxHint:
-      "U Open DMX USB časuje signál počítač; pokud světla blikají, zkuste rozhraní typu DMX USB Pro.",
+    lightsSoundSwitchHint: "SoundSwitch svůj protokol nezveřejňuje. Buzzdome ho zná z nezávislého open-source projektu a s tímto rozhraním ještě nebyl vyzkoušený. Před show zavřete program SoundSwitch: rozhraní může používat jen jeden program.",
+    lightsOpenDmxHint: "U Open DMX USB časuje signál počítač; pokud světla blikají, zkuste rozhraní typu DMX USB Pro.",
     lightsPort: "Port",
     lightsFind: "Hledat rozhraní",
     lightsFound: "Nalezená rozhraní",
-    lightsNoneFound:
-      "Žádné USB-DMX rozhraní se nenašlo. Síťové výstupy (Art-Net, sACN) žádné rozhraní nepotřebují.",
+    lightsNoneFound: "Žádné USB-DMX rozhraní se nenašlo. Síťové výstupy (Art-Net, sACN) žádné rozhraní nepotřebují.",
     lightsUse: "Použít",
     lightsHost: "Adresa",
-    lightsArtNetHostHint:
-      "IPv4 adresa uzlu nebo 255.255.255.255 či 2.255.255.255 pro všechny uzly v síti.",
+    lightsArtNetHostHint: "IPv4 adresa uzlu nebo 255.255.255.255 či 2.255.255.255 pro všechny uzly v síti.",
     lightsUniverse: "Univerzum",
     lightsSacnHost: "IPv4 adresa (prázdná = multicast)",
-    lightsFlashingWarning:
-      "Pozor: rychlé blikání může u části diváků vyvolat epileptický záchvat. Buzzdome nebliká rychleji než dvakrát za sekundu, ale stroboskop svítidla bliká vlastní rychlostí podle hodnoty kanálu: nastavte ji podle návodu nejvýš na 2–3 záblesky za sekundu.",
+    lightsFlashingWarning: "Pozor: rychlé blikání může u části diváků vyvolat epileptický záchvat. Buzzdome nebliká rychleji než dvakrát za sekundu, ale stroboskop svítidla bliká vlastní rychlostí podle hodnoty kanálu: nastavte ji podle návodu nejvýš na 2–3 záblesky za sekundu.",
     lightsFixtures: "Svítidla",
-    lightsFixturesHint:
-      "Každé svítidlo má DMX adresu (svůj první kanál) a pořadí kanálů podle návodu, v režimu, ve kterém je na svítidle nastavené.",
+    lightsFixturesHint: "Každé svítidlo má DMX adresu (svůj první kanál) a pořadí kanálů podle návodu, v režimu, ve kterém je na svítidle nastavené.",
     lightsAddFixture: "Přidat svítidlo",
     lightsNewFixture: "Svítidlo {n}",
     lightsName: "Název",
@@ -1434,8 +1225,7 @@ const strings = {
     lightsPresetRgbw: "RGBW (4 kanály)",
     lightsPresetDimmerRgb: "Stmívač + RGB (4 kanály)",
     lightsPresetDimmerRgbStrobe: "Stmívač + RGB + stroboskop (5 kanálů)",
-    lightsPresetPar7:
-      "LED par, 7 kanálů (stmívač, RGB, stroboskop, program, rychlost)",
+    lightsPresetPar7: "LED par, 7 kanálů (stmívač, RGB, stroboskop, program, rychlost)",
     lightsPresetDimmerRgbwStrobe: "Stmívač + RGBW + stroboskop (6 kanálů)",
     lightsPresetDimmer: "Jen stmívač (1 kanál)",
     lightsChannelDimmer: "Stmívač",
@@ -1455,32 +1245,25 @@ const strings = {
     lightsLibraryMode: "DMX režim",
     lightsLibraryModeName: "{name} · {n} kan.",
     lightsLibraryModes: "režimy: {n}",
-    lightsLibraryNone:
-      "Žádný model neodpovídá. Svítidlo přidejte z předvolby a kanály nastavte podle návodu.",
+    lightsLibraryNone: "Žádný model neodpovídá. Svítidlo přidejte z předvolby a kanály nastavte podle návodu.",
     lightsLibraryMore: "Zobrazeno {shown} z {total}, zpřesněte hledání.",
-    lightsLibraryHint:
-      "Vyberte stejný DMX režim, jaký je nastavený na svítidle. Barvy, stmívač a závěrka se řídí looky; ostatní kanály (pohyb, gobo, programy, mlha) zůstanou podle knihovny ve výchozí poloze, ve které nespouštějí stroboskop ani programy, a jde je nastavit pevnou hodnotou nebo v dalších kanálech looku. Lasery v knihovně nejsou: ty patří obsluze, ne automatickým lookům. Data knihovny nemusí sedět na každý kus: před akcí svítidlo vyzkoušejte.",
-    lightsLibraryCheck:
-      "Podle knihovny mohou tyto kanály i v klidu blikat nebo spustit program: {labels}. Před akcí je vyzkoušejte na svítidle a případně nastavte pevnou hodnotu podle návodu.",
+    lightsLibraryHint: "Vyberte stejný DMX režim, jaký je nastavený na svítidle. Barvy, stmívač a závěrka se řídí looky; ostatní kanály (pohyb, gobo, programy, mlha) zůstanou podle knihovny ve výchozí poloze, ve které nespouštějí stroboskop ani programy, a jde je nastavit pevnou hodnotou nebo v dalších kanálech looku. Lasery v knihovně nejsou: ty patří obsluze, ne automatickým lookům. Data knihovny nemusí sedět na každý kus: před akcí svítidlo vyzkoušejte.",
+    lightsLibraryCheck: "Podle knihovny mohou tyto kanály i v klidu blikat nebo spustit program: {labels}. Před akcí je vyzkoušejte na svítidle a případně nastavte pevnou hodnotu podle návodu.",
     lightsLibraryCredit: "Knihovna: {source}, {copyright}, {url}.",
     lightsLibraryLicence: "Licence knihovny",
-    lightsLibraryNoLook:
-      "Tento režim looky nerozsvítí: podle knihovny nemá stmívač, barvy ani závěrku, svítidlo svítí jen svými programy nebo spínači. Ty jde nastavit pevnou hodnotou nebo v dalších kanálech looku.",
+    lightsLibraryNoLook: "Tento režim looky nerozsvítí: podle knihovny nemá stmívač, barvy ani závěrku, svítidlo svítí jen svými programy nebo spínači. Ty jde nastavit pevnou hodnotou nebo v dalších kanálech looku.",
     lightsLibraryBuiltIn: "Vestavěná knihovna: {models} modelů, data z {date}.",
-    lightsLibraryDownloaded:
-      "Stažená knihovna: {models} modelů, stažena {date}.",
+    lightsLibraryDownloaded: "Stažená knihovna: {models} modelů, stažena {date}.",
     lightsLibraryUpdated: "Předtím jich bylo {before}.",
     lightsLibraryUpdate: "Aktualizovat z internetu",
     lightsLibraryUpdating: "Stahuji…",
-    lightsLibraryUpdateHint:
-      "Stáhne aktuální svítidla z Open Fixture Library (potřebuje internet, může trvat i minutu). Projdou stejnými pravidly jako vestavěná: lasery vynechá, kanály nenechá v klidu blikat.",
+    lightsLibraryUpdateHint: "Stáhne aktuální svítidla z Open Fixture Library (potřebuje internet, může trvat i minutu). Projdou stejnými pravidly jako vestavěná: lasery vynechá, kanály nenechá v klidu blikat.",
     lightsLibraryReset: "Vrátit vestavěnou",
     lightsChannelFixed: "Pevná hodnota",
     lightsChannelUnused: "Nepoužitý",
     lightsFixedValue: "Hodnota",
     lightsLooks: "Looky",
-    lightsLooksHint:
-      "Look říká, jak světla svítí: barvy, jas a efekt. Tlačítkem Podržet si look vyzkoušíte.",
+    lightsLooksHint: "Look říká, jak světla svítí: barvy, jas a efekt. Tlačítkem Podržet si look vyzkoušíte.",
     lightsAddLook: "Přidat look",
     lightsNewLook: "Look {n}",
     lightsColors: "Barvy",
@@ -1499,13 +1282,11 @@ const strings = {
     lightsAllFixtures: "Svítí všechna svítidla.",
     lightsStrobeValue: "Hodnota stroboskopu",
     lightsExtraChannels: "Další kanály",
-    lightsExtraChannelsHint:
-      "adresa=hodnota oddělené čárkou, např. mlhovač 100=255",
+    lightsExtraChannelsHint: "adresa=hodnota oddělené čárkou, např. mlhovač 100=255",
     lightsHoldLook: "Podržet",
     lightsRelease: "Pustit",
     lightsWhen: "Kdy co svítí",
-    lightsWhenHint:
-      "Každá chvíle show má svůj look; bez looku zůstane svítit ten předchozí.",
+    lightsWhenHint: "Každá chvíle show má svůj look; bez looku zůstane svítit ten předchozí.",
     lightsKeep: "— nechat předchozí —",
     lightsStageNoShow: "Bez show",
     lightsStageLobby: "Registrace hráčů",
@@ -1522,8 +1303,7 @@ const strings = {
     lightsStageFinalBuildUp: "Vyhlášení: napětí",
     lightsStageWinner: "Vyhlášení: vítěz",
     lightsFlashes: "Záblesky",
-    lightsFlashesHint:
-      "V těchto chvílích se na chvíli rozsvítí look a pak se světla vrátí.",
+    lightsFlashesHint: "V těchto chvílích se na chvíli rozsvítí look a pak se světla vrátí.",
     lightsNoFlash: "— bez záblesku —",
     lightsFlashLength: "Délka",
     cueClockStart: "Start odpočtu",
@@ -1536,41 +1316,33 @@ const strings = {
     cuePlace: "Místo v konečném pořadí",
     cueWinner: "Vítěz",
     lightsMessages: "Zprávy pro jiné programy (OSC, MIDI)",
-    lightsMessagesHint:
-      "Buzzdome posílá každou chvíli show jako zprávu OSC (/buzzdome/stage/…, /buzzdome/cue/…, /buzzdome/slide, /buzzdome/buzz, /buzzdome/show/start a /end) a jako notu MIDI, takže na ni může reagovat světelný, DJ nebo zvukový program.",
+    lightsMessagesHint: "Buzzdome posílá každou chvíli show jako zprávu OSC (/buzzdome/stage/…, /buzzdome/cue/…, /buzzdome/slide, /buzzdome/buzz, /buzzdome/show/start a /end) a jako notu MIDI, takže na ni může reagovat světelný, DJ nebo zvukový program.",
     lightsOsc: "OSC přes UDP",
     lightsMidi: "MIDI",
     lightsMidiPort: "Výstup MIDI",
     lightsMidiChannel: "Kanál",
-    lightsMidiNotes:
-      "Noty: chvíle show od {stage}, záblesky od {cue}, začátek show {start}, konec {end}, přihlášení {buzz}; číslo snímku jako Program Change.",
+    lightsMidiNotes: "Noty: chvíle show od {stage}, záblesky od {cue}, začátek show {start}, konec {end}, přihlášení {buzz}; číslo snímku jako Program Change.",
     lightsNoMidiPorts: "Žádný výstup MIDI se nenašel.",
     lightsPreview: "Náhled",
     lightsChannelValue: "Kanál {n}: {value}",
     errLightsRefused: "Nastavení světel nejde uložit: {problem}.",
-    errVoiceDownload:
-      "Hlas nejde stáhnout. Zkontrolujte připojení k internetu a zkuste to znovu.",
-    errVoiceDamaged:
-      "Stažený hlas je poškozený, a proto se nepoužije. Zkuste ho stáhnout znovu.",
-    errVoiceMissing: "Hlas zatím není stažený (Soubor › Nastavení kvízu).",
+    errVoiceDownload: "Hlas nejde stáhnout. Zkontrolujte připojení k internetu a zkuste to znovu.",
+    errVoiceDamaged: "Stažený hlas je poškozený, a proto se nepoužije. Zkuste ho stáhnout znovu.",
+    errVoiceMissing: "Hlasy zatím nejsou stažené (režie, Nastavení › Hlasy pro předčítání).",
+    errVoiceDisk: "Hlasy nejde uložit na disk: {detail}.",
+    voicesDuringShow: "Během show hlasy nejde stáhnout ani odebrat, aby disk stíhal ukládat show.",
     errVoiceFailed: "Hlas teď nejde použít, otázky čte hlas systému.",
-    errLibraryDownload:
-      "Knihovnu svítidel nejde stáhnout. Zůstává ta dosavadní.",
-    errLibraryRedirected:
-      "Knihovnu svítidel nejde stáhnout: stránka ji přesměrovala jinam ({to}). Zůstává ta dosavadní.",
-    errLibraryNotRead:
-      "Staženou knihovnu svítidel nejde přečíst. Zůstává ta dosavadní.",
-    errLibraryFormatChanged:
-      "Open Fixture Library má nový formát (verze {version}), který tato verze aplikace nezná. Zůstává dosavadní knihovna; nová svítidla přinese aktualizace aplikace.",
-    errLibraryTooSmall:
-      "Stažená knihovna má jen {models} modelů (očekáváno aspoň {least}), stažení se asi nepovedlo celé. Zůstává ta dosavadní.",
+    errLibraryDownload: "Knihovnu svítidel nejde stáhnout. Zůstává ta dosavadní.",
+    errLibraryRedirected: "Knihovnu svítidel nejde stáhnout: stránka ji přesměrovala jinam ({to}). Zůstává ta dosavadní.",
+    errLibraryNotRead: "Staženou knihovnu svítidel nejde přečíst. Zůstává ta dosavadní.",
+    errLibraryFormatChanged: "Open Fixture Library má nový formát (verze {version}), který tato verze aplikace nezná. Zůstává dosavadní knihovna; nová svítidla přinese aktualizace aplikace.",
+    errLibraryTooSmall: "Stažená knihovna má jen {models} modelů (očekáváno aspoň {least}), stažení se asi nepovedlo celé. Zůstává ta dosavadní.",
     lightsProblemTooMany: "příliš mnoho položek ({what})",
     lightsProblemOutOfRange: "hodnota mimo rozsah ({what})",
     lightsProblemSameId: "dvě položky se stejným číslem ({what})",
     lightsProblemMissing: "look nebo záblesk odkazuje na něco, co už není",
     lightsProblemPastUniverse: "svítidlo „{name}“ přesahuje kanál 512",
-    lightsProblemNotIpv4:
-      "„{host}“ není IPv4 adresa (např. 192.168.1.20); názvy počítačů se nepoužívají",
+    lightsProblemNotIpv4: "„{host}“ není IPv4 adresa (např. 192.168.1.20); názvy počítačů se nepoužívají",
     lightsPartFixture: "svítidla",
     lightsPartChannel: "kanály",
     lightsPartLook: "looky",
@@ -1579,10 +1351,8 @@ const strings = {
     lightsPartOutput: "výstup",
     lightsPartMessage: "zprávy",
     lightsPartMaster: "celkový jas",
-    lightsOutputNotAvailable:
-      "Rozhraní není připojené, nebo ho používá jiný program ({detail}).",
-    lightsOutputNotFound:
-      "Rozhraní není připojené, nebo ho používá jiný program.",
+    lightsOutputNotAvailable: "Rozhraní není připojené, nebo ho používá jiný program ({detail}).",
+    lightsOutputNotFound: "Rozhraní není připojené, nebo ho používá jiný program.",
     lightsOutputUnknownHost: "{host} není IPv4 adresa.",
     lightsOutputSendFailed: "Odeslání selhalo ({detail}).",
     lightsOutputSentPart: "Rozhraní přijalo jen {written} z {of} bajtů.",
@@ -1607,21 +1377,15 @@ const strings = {
     wrong: "Wrong",
     pause: "Pause",
     holdAutoStep: "Hold",
-    autoStepReveal:
-      "The right answer shows automatically when the bar runs out.",
-    autoStepNextSlide:
-      "The next slide comes automatically when the bar runs out.",
+    autoStepReveal: "The right answer shows automatically when the bar runs out.",
+    autoStepNextSlide: "The next slide comes automatically when the bar runs out.",
     resumeClock: "Resume",
     endQuestion: "End question",
     restartQuestion: "Restart question",
-    restartQuestionConfirm:
-      "Restart the question? Its answers and points are taken back, and it waits for you to start it. Manual score changes stay.",
-    restartTooLate:
-      "The question closed meanwhile and its results are on screen, so it does not start again.",
-    restartAlreadyDone:
-      "The question was restarted meanwhile and waits for you to start it.",
-    restartMovedOn:
-      "The show moved on from the question meanwhile, so it does not start again.",
+    restartQuestionConfirm: "Restart the question? Its answers and points are taken back, and it waits for you to start it. Manual score changes stay.",
+    restartTooLate: "The question closed meanwhile and its results are on screen, so it does not start again.",
+    restartAlreadyDone: "The question was restarted meanwhile and waits for you to start it.",
+    restartMovedOn: "The show moved on from the question meanwhile, so it does not start again.",
     leaderboard: "Leaderboard",
     goTo: "Go to…",
     notes: "Notes",
@@ -1636,20 +1400,16 @@ const strings = {
     teamNames: "Team names",
     dropBuzzer: "drop a buzzer here",
     unpairTeam: "Unpair",
-    teamsBeforeShow:
-      "Prepare the team names ahead; they stay for the next shows too. Pair the buzzers with them once the show starts.",
+    teamsBeforeShow: "Prepare the team names ahead; they stay for the next shows too. Pair the buzzers with them once the show starts.",
     removeTeam: "Remove team",
     teamNamePlaceholder: "Team name",
     addTeam: "Add",
     importTeams: "Load from file…",
-    importTeamsHint:
-      "A text file with one name per line, or CSV (names in the first column).",
-    pairHint:
-      "Drag a buzzer number onto a team name, or click the number and then the name.",
+    importTeamsHint: "A text file with one name per line, or CSV (names in the first column).",
+    pairHint: "Drag a buzzer number onto a team name, or click the number and then the name.",
     virtualBuzzers: "Virtual buzzers",
     count: "Count",
-    keyboardHint:
-      "Keys 1–0 = big button of players 1–10. Space = next, Y/N = right/wrong, P = pause, S = leaderboard.",
+    keyboardHint: "Keys 1–0 = big button of players 1–10. Space = next, Y/N = right/wrong, P = pause, S = leaderboard.",
     lobby: "Registration",
     lobbyHint: "Press any button on your buzzer",
     registered: "Registered: {n}",
@@ -1691,34 +1451,28 @@ const strings = {
     tabMedia: "Media player",
     // The media player and sound board (director/MediaPlayerTab.tsx).
     mediaAdd: "Add",
-    mediaAddHint:
-      "Copies pictures, sounds and videos into this computer's library",
+    mediaAddHint: "Copies pictures, sounds and videos into this computer's library",
     mediaRemove: "Remove",
-    mediaRemoveConfirm:
-      "Remove {name} from the library? Its copy is deleted; the original file stays.",
+    mediaRemoveConfirm: "Remove {name} from the library? Its copy is deleted; the original file stays.",
     mediaPlay: "Play",
     mediaStop: "Stop",
     mediaRewind: "Rewind",
     playerVolume: "Player volume",
     appIcon: "App icon",
-    appIconHint:
-      "The icon of the windows and their taskbar buttons. Shortcuts on the desktop and in the Start menu, and the macOS Dock, always show the orange one.",
+    appIconHint: "The icon of the windows and their taskbar buttons. Shortcuts on the desktop and in the Start menu, and the macOS Dock, always show the orange one.",
     iconOrange: "Orange",
     iconBlue: "Blue",
     iconGreen: "Green",
     iconPurple: "Purple",
     iconRed: "Red",
     iconYellow: "Yellow",
-    playerVolumeHint:
-      "The volume of everything the show plays: the slides' and the player's sounds and videos, and the sound cues. It changes at once, even while something is playing.",
+    playerVolumeHint: "The volume of everything the show plays: the slides' and the player's sounds and videos, and the sound cues. It changes at once, even while something is playing.",
     mediaShowList: "List",
     mediaShowBoard: "Sound board",
     mediaSearch: "Search the library",
-    mediaEmpty:
-      "The library is empty. Add files with Add, or drag them here from a folder.",
+    mediaEmpty: "The library is empty. Add files with Add, or drag them here from a folder.",
     mediaNoMatch: "No file matches the search.",
-    mediaDropTooLarge:
-      "{name} is too large to drop (over {mb} MB). Add it with Add.",
+    mediaDropTooLarge: "{name} is too large to drop (over {mb} MB). Add it with Add.",
     mediaDivider: "Drag to change the width of the list",
     padSlideSound: "Slide sound",
     padSlideVideo: "Slide video",
@@ -1738,10 +1492,8 @@ const strings = {
     boardClickPause: "Clicking a playing pad pauses and resumes it",
     boardFill: "Fill empty pads",
     boardClear: "Clear all pads",
-    boardClearConfirm:
-      "Clear all pads of the sound board? The files stay in the library.",
-    boardHint:
-      "Drag files here from the list or a folder; drag a pad onto another to swap them. Right-click to set up a pad or the board.",
+    boardClearConfirm: "Clear all pads of the sound board? The files stay in the library.",
+    boardHint: "Drag files here from the list or a folder; drag a pad onto another to swap them. Right-click to set up a pad or the board.",
     colorRed: "Red",
     colorOrange: "Orange",
     colorYellow: "Yellow",
@@ -1755,41 +1507,32 @@ const strings = {
     colorWhite: "White",
     receiverStatus: "Receiver status",
     receiverOff: "The receiver is closed.",
-    receiverLooking:
-      "Looking for a receiver. Plug it into USB and the app finds it automatically.",
+    receiverLooking: "Looking for a receiver. Plug it into USB and the app finds it automatically.",
     receiverFoundAutomatically: "The receiver was found automatically.",
     remoteKeys: "Quizmaster's remote",
-    remoteKeysHint:
-      "What each key of the remote does in a show. The key you press lights up here, so you can tell which is which; try them before you start a show, as in an open show a key also does its action. Next does not end a running question, so pressing it twice by mistake cannot end the question as it starts; End question does.",
+    remoteKeysHint: "What each key of the remote does in a show. The key you press lights up here, so you can tell which is which; try them before you start a show, as in an open show a key also does its action. Next does not end a running question, so pressing it twice by mistake cannot end the question as it starts; End question does.",
     remoteKeyPressed: "Last pressed: {key}",
     remoteKeysReset: "Defaults",
     buzzerColours: "Buzzer colours",
-    buzzerColoursHint:
-      "Which colour a buzzer shows in which state, for every quiz. Black turns the buzzer off, so after answering, say, a player clearly sees their answer is in. A buzzer shows the nearest shade it can (≈). During a fastest-finger question, new colours show on the buzzers once it is over.",
+    buzzerColoursHint: "Which colour a buzzer shows in which state, for every quiz. Black turns the buzzer off, so after answering, say, a player clearly sees their answer is in. A buzzer shows the nearest shade it can (≈). During a fastest-finger question, new colours show on the buzzers once it is over.",
     buzzerShade: "On the buzzer, roughly",
     buzzerColoursReset: "Default colours",
-    buzzerColoursRefusedKept:
-      "The saved buzzer colours did not pass the check, so the defaults are used: {problem}",
+    buzzerColoursRefusedKept: "The saved buzzer colours did not pass the check, so the defaults are used: {problem}",
     coloursCommon: "Most used",
     coloursMine: "My colours",
     coloursMineNone: "None yet.",
     coloursKeep: "Add to my colours",
     coloursForget: "Remove from my colours",
-    coloursReadyDark:
-      "“{ready}” cannot be black or nearly black: the app uses it to show that a press counts.",
-    coloursReadyLike:
-      "“{ready}” would look the same as “{light}” on the buzzer, and the app uses it to show that a press counts. Pick another colour.",
+    coloursReadyDark: "“{ready}” cannot be black or nearly black: the app uses it to show that a press counts.",
+    coloursReadyLike: "“{ready}” would look the same as “{light}” on the buzzer, and the app uses it to show that a press counts. Pick another colour.",
     lightOff: "Between questions",
-    lightOffHint:
-      "Outside a question, and after the reveal for a player who did not answer",
+    lightOffHint: "Outside a question, and after the reveal for a player who did not answer",
     lightReady: "Can answer",
     lightReadyHint: "The question runs and the player may press",
     lightAnswered: "Answered",
-    lightAnsweredHint:
-      "Answered an everyone-answers question, waiting for the reveal",
+    lightAnsweredHint: "Answered an everyone-answers question, waiting for the reveal",
     lightLocked: "Out of the question",
-    lightLockedHint:
-      "Buzzed wrong, another player buzzed, switched off, or another player won the fastest-finger question",
+    lightLockedHint: "Buzzed wrong, another player buzzed, switched off, or another player won the fastest-finger question",
     lightFirst: "Buzzed first",
     lightFirstHint: "Waiting for the quizmaster to judge the answer",
     lightCorrect: "Right answer",
@@ -1824,45 +1567,34 @@ const strings = {
     receiverNotReady:
       "The cable {name} ({id}) is connected, but the {protocol} receiver is not ready yet. Check its power adapter and the RJ45 cable; if that does not help, unplug the receiver's power for a moment. The app keeps asking.",
     receiverNoLights: "This protocol cannot drive the buzzer lights.",
-    receiverSettingsLost:
-      "The saved receiver settings could not be read; learned buttons need to be learned again.",
+    receiverSettingsLost: "The saved receiver settings could not be read; learned buttons need to be learned again.",
     learnBanner: "Learning a buzzer button: presses do not count in the show.",
-    notSavedBanner:
-      "{problem} Until saving works, presses and commands do not count.",
+    notSavedBanner: "{problem} Until saving works, presses and commands do not count.",
     updateAvailable: "A new version of the app, {version}, is available.",
     updateInstall: "Install and restart",
-    updateConfirm:
-      "Install version {version}? The app closes, installs it and starts again.",
-    updateRestartAiApps:
-      "Then close the AI apps that use Buzzdome (Claude Desktop, Antigravity, Codex) and open them again for them to use the new version.",
+    updateConfirm: "Install version {version}? The app closes, installs it and starts again.",
+    updateRestartAiApps: "Then close the AI apps that use Buzzdome (Claude Desktop, Antigravity, Codex) and open them again for them to use the new version.",
     updateNotes: "What's new:",
     updateDownloading: "Downloading version {version}…",
     updateDownloadingPercent: "Downloading version {version}… {percent}%",
-    updateInstalling:
-      "Installing version {version}; the app will start again in a moment…",
-    receiverUnavailable:
-      "USB-HID is not available on this computer. Only virtual buzzers and the keyboard work.",
+    updateInstalling: "Installing version {version}; the app will start again in a moment…",
+    receiverUnavailable: "USB-HID is not available on this computer. Only virtual buzzers and the keyboard work.",
     devices: "USB-HID devices",
     refresh: "Refresh",
     useReceiver: "Use",
     inUse: "In use",
     reconnectReceiver: "Reconnect",
-    reconnectReceiverHint:
-      "Opens the receiver again and sets it up, as if the cable were unplugged and plugged back in. Use it when the receiver has stopped responding, say after its cable was pulled out at the receiver end.",
+    reconnectReceiverHint: "Opens the receiver again and sets it up, as if the cable were unplugged and plugged back in. Use it when the receiver has stopped responding, say after its cable was pulled out at the receiver end.",
     findReceiverAutomatically: "Find the receiver automatically",
-    findReceiverAutomaticallyHint:
-      "Forgets the chosen receiver and uses the first one whose protocol the app knows, as soon as it is plugged in.",
-    devicesHint:
-      "A receiver whose protocol the app knows is used automatically; pick any other with Use. Tip: unplug the receiver, refresh, plug it in and refresh again. The new row is the receiver. The OS does not let apps read keyboards and mice.",
+    findReceiverAutomaticallyHint: "Forgets the chosen receiver and uses the first one whose protocol the app knows, as soon as it is plugged in.",
+    devicesHint: "A receiver whose protocol the app knows is used automatically; pick any other with Use. Tip: unplug the receiver, refresh, plug it in and refresh again. The new row is the receiver. The OS does not let apps read keyboards and mice.",
     buzzersSeen: "Buzzers",
-    buzzersSeenHint:
-      "Press the big button on each buzzer: it shows here as soon as the receiver hears it, with its last button and the time.",
+    buzzersSeenHint: "Press the big button on each buzzer: it shows here as soon as the receiver hears it, with its last button and the time.",
     noBuzzersSeen: "No buzzer yet.",
     keyboardDevice: "keyboard/mouse",
     noDevices: "No devices found.",
     liveInput: "Live input",
-    liveHint:
-      "Press buzzer buttons. Recognised presses on the left, raw receiver data on the right.",
+    liveHint: "Press buzzer buttons. Recognised presses on the left, raw receiver data on the right.",
     presses: "Presses",
     rawReports: "Raw data",
     droppedNotReady: "not counted, the buzzer was not ready",
@@ -1870,8 +1602,7 @@ const strings = {
     pressTimer: "timer {timer}",
     exportLog: "Save log to a file…",
     learnTitle: "Teach buttons",
-    learnHint:
-      "Until the app knows the receiver's protocol, it learns it from your presses: pick a buzzer and button, click Start and press that button 3 times, slowly. Repeat for every button you use. Learned buttons: {n}.",
+    learnHint: "Until the app knows the receiver's protocol, it learns it from your presses: pick a buzzer and button, click Start and press that button 3 times, slowly. Repeat for every button you use. Learned buttons: {n}.",
     learnStart: "Start",
     learnSave: "Save",
     learnCancel: "Cancel",
@@ -1893,11 +1624,9 @@ const strings = {
     colBuzzer: "Buzzer",
     colLastResponse: "Last response",
     colTotalTime: "Total time",
-    colTotalTimeHint:
-      "How long the player's right answers took in total; breaks ties in the ranking",
+    colTotalTimeHint: "How long the player's right answers took in total; breaks ties in the ranking",
     colJoker: "Joker",
-    colJokerHint:
-      "A joker doubles what this question gives the player, the penalty too. It can be played or taken back before the question gives the player anything and before it ends.",
+    colJokerHint: "A joker doubles what this question gives the player, the penalty too. It can be played or taken back before the question gives the player anything and before it ends.",
     jokerPlay: "×2",
     jokersLeft: "{n} left",
     colResponse: "Response",
@@ -1905,15 +1634,13 @@ const strings = {
     colPlace: "Place",
     colRound: "Round {n}",
     colAdjusted: "Adjustments",
-    colAdjustedHint:
-      "Points the quizmaster added or took away by hand in the Teams tab",
+    colAdjustedHint: "Points the quizmaster added or took away by hand in the Teams tab",
     colTotalTimeSeconds: "Total time (s)",
     resultsRanking: "Ranking",
     resultsQuestions: "Questions",
     resultsExport: "Export to CSV",
     resultsPrint: "Print or save a PDF",
-    resultsPrintHint:
-      "Opens the system's print dialog, which can also save the results as a PDF.",
+    resultsPrintHint: "Opens the system's print dialog, which can also save the results as a PDF.",
     resultsFileName: "Results – {title}",
     resultsSaved: "The results are saved.",
     noQuestionsAsked: "No question has been asked yet.",
@@ -1927,15 +1654,12 @@ const strings = {
     yes: "Yes",
     no: "No",
     endShow: "End show",
-    endShowConfirm:
-      "Really end the show? It can be resumed until another show starts.",
+    endShowConfirm: "Really end the show? It can be resumed until another show starts.",
     goToSelected: "Go to selected slide",
     goToFinal: "Go to the end",
-    goToFinalConfirm:
-      "Really skip the remaining slides and show the final ranking?",
+    goToFinalConfirm: "Really skip the remaining slides and show the final ranking?",
     startOver: "Start the show over",
-    startOverConfirm:
-      "Start the show over from registration? The players, their names and the teams stay; the scores and the results go back to zero, the jokers played come back and every question is asked again. To keep the results, export them in the Results tab first.",
+    startOverConfirm: "Start the show over from registration? The players, their names and the teams stay; the scores and the results go back to zero, the jokers played come back and every question is asked again. To keep the results, export them in the Results tab first.",
     layout: "Layout:",
     layoutHorizontal: "Horizontal",
     layoutVertical: "Vertical",
@@ -1944,18 +1668,15 @@ const strings = {
     disable: "Disable",
     enable: "Enable",
     resetScores: "Reset scores",
-    resetScoresConfirm:
-      "Reset every player's score and total time to zero? The show stays where it is, and the jokers played and the questions played stand. The results of the questions so far are cleared; to keep them, export them in the Results tab first.",
+    resetScoresConfirm: "Reset every player's score and total time to zero? The show stays where it is, and the jokers played and the questions played stand. The results of the questions so far are cleared; to keep them, export them in the Results tab first.",
     directorLook: "Director look",
-    directorLookHint:
-      "The dark look does not dazzle in a darkened hall. The projector keeps the quiz theme's look.",
+    directorLookHint: "The dark look does not dazzle in a darkened hall. The projector keeps the quiz theme's look.",
     lookLight: "Light",
     lookDark: "Dark",
     lookSystem: "Same as system",
     launchCheck: "Check before the show",
     launchCheckShow: "Show it before the show starts",
-    launchCheckHint:
-      "Until the show takes its first step, the Director shows below the tabs whether the receiver, buzzers, projector, sound and disk are ready. The show can start anyway.",
+    launchCheckHint: "Until the show takes its first step, the Director shows below the tabs whether the receiver, buzzers, projector, sound and disk are ready. The show can start anyway.",
     launchAllReady: "All ready.",
     launchOpen: "To sort out: {n}",
     launchHide: "Hide",
@@ -1965,39 +1686,28 @@ const strings = {
     launchPartSound: "Sound",
     launchPartDisk: "Disk",
     launchChecking: "Checking…",
-    launchKeyboardOnly:
-      "Until then only the keyboard and the on-screen buzzers work.",
+    launchKeyboardOnly: "Until then only the keyboard and the on-screen buzzers work.",
     launchMore: "and {n} more",
-    launchTeamsUnpaired:
-      "Teams without a buzzer ({n} of {total}): {names}. Buzzers registered: {players}.",
-    launchTeamsPaired:
-      "Every team has a buzzer. Buzzers registered: {players}.",
-    launchNoBuzzers:
-      "No buzzer has registered yet. A buzzer registers with a press of any button.",
+    launchTeamsUnpaired: "Teams without a buzzer ({n} of {total}): {names}. Buzzers registered: {players}.",
+    launchTeamsPaired: "Every team has a buzzer. Buzzers registered: {players}.",
+    launchNoBuzzers: "No buzzer has registered yet. A buzzer registers with a press of any button.",
     launchBuzzersRegistered: "Buzzers registered: {players}.",
     launchProjectorClosed: "The projector is not open: the hall sees nothing.",
-    launchProjectorOneScreen:
-      "Only one screen is connected, so the projector is a window on the Director's screen. Connect the projector.",
-    launchProjectorOnDirector:
-      "The projector is on the Director's screen, not on a screen of its own.",
+    launchProjectorOneScreen: "Only one screen is connected, so the projector is a window on the Director's screen. Connect the projector.",
+    launchProjectorOnDirector: "The projector is on the Director's screen, not on a screen of its own.",
     launchProjectorWindowed: "The projector is a window, not full screen.",
     launchProjectorReady: "Full screen, on a screen of its own.",
     launchOpenProjector: "Open the projector",
     launchPlaceProjector: "Full screen on the projector",
-    launchSoundPlayerMuted:
-      "The media player's volume is at zero: the show will not be heard.",
-    launchSoundQuizMuted:
-      "This quiz's effects volume is zero (File › Quiz settings).",
+    launchSoundPlayerMuted: "The media player's volume is at zero: the show will not be heard.",
+    launchSoundQuizMuted: "This quiz's effects volume is zero (File › Quiz settings).",
     launchSoundTry: "Play a test sound and listen for it in the hall.",
-    launchSoundPlayed:
-      "Was the test sound heard in the hall? If not, check the speakers and the system's sound output.",
+    launchSoundPlayed: "Was the test sound heard in the hall? If not, check the speakers and the system's sound output.",
     launchSoundHeard: "The sound is heard in the hall.",
     launchPlaySound: "Play a test sound",
     launchSoundHeardButton: "Yes, heard it",
-    launchDiskFull:
-      "Only {size} left on the disk. The show may not be saved: free some space.",
-    launchDiskLow:
-      "{size} left on the disk. Enough for the show, but space is running low.",
+    launchDiskFull: "Only {size} left on the disk. The show may not be saved: free some space.",
+    launchDiskLow: "{size} left on the disk. Enough for the show, but space is running low.",
     launchDiskFree: "{size} free on the disk.",
     joinsNext: "from the next question",
     selectedPlayers: "Selected: {n}",
@@ -2020,8 +1730,7 @@ const strings = {
     textPlaceholder: "Text under the title",
     explanationPlaceholder: "Type why the answer is right",
     questionNumber: "Question {n}",
-    noQuestionToExplain:
-      "No question comes before this slide in its round. Only the explanation is shown.",
+    noQuestionToExplain: "No question comes before this slide in its round. Only the explanation is shown.",
     newQuiz: "New",
     saveQuiz: "Save",
     saveQuizAs: "Save as…",
@@ -2034,15 +1743,11 @@ const strings = {
     untitledQuiz: "Untitled quiz",
     discardChanges: "“{title}” has unsaved changes. Discard them?",
     draftUnreadable: "The unsaved draft from last time cannot be opened",
-    draftUnreadableInfo:
-      "It is kept until you discard it. You can try again, say once there is room on the disk or in a newer version of the app.",
+    draftUnreadableInfo: "It is kept until you discard it. You can try again, say once there is room on the disk or in a newer version of the app.",
     discardDraft: "Discard the unsaved draft",
-    discardUnreadableDraft:
-      "Discard the unsaved draft? Its changes cannot be brought back.",
-    draftNotWritten:
-      "{problem} Changes are not being kept; the app keeps trying.",
-    editorBusy:
-      "The editor is still working on the quiz file. Try again once it is done.",
+    discardUnreadableDraft: "Discard the unsaved draft? Its changes cannot be brought back.",
+    draftNotWritten: "{problem} Changes are not being kept; the app keeps trying.",
+    editorBusy: "The editor is still working on the quiz file. Try again once it is done.",
     quizTitle: "Quiz title",
     duplicate: "Duplicate",
     deleteSlide: "Delete",
@@ -2073,8 +1778,7 @@ const strings = {
     problems: "Problems: {n}",
     noProblems: "The quiz is ready to play.",
     leftOut: "Left out on opening: {n}",
-    leftOutHint:
-      "The file also contained things the quiz cannot use. Saving removes them from the file.",
+    leftOutHint: "The file also contained things the quiz cannot use. Saving removes them from the file.",
     notSavedYet: "Not saved yet",
     unsaved: "unsaved changes",
     ribbonFile: "File",
@@ -2123,45 +1827,34 @@ const strings = {
     backToQuiz: "Back to the quiz",
     info: "Info",
     quizSettings: "Quiz settings",
-    quizSettingsHint:
-      "Time, points and answers are set on each question, in its properties. These settings apply to the whole quiz.",
+    quizSettingsHint: "Time, points and answers are set on each question, in its properties. These settings apply to the whole quiz.",
     advancedSettings: "Advanced",
     allAnswered: "When everyone has answered",
     allAnsweredWait: "Wait for the quizmaster",
     allAnsweredReveal: "Show the right answer",
     allAnsweredNextSlide: "Go on to the next slide",
     allAnsweredDelay: "Delay",
-    allAnsweredHint:
-      "This also applies to a fastest-finger question everyone answered wrong. A question that the quizmaster or the clock ends before everyone has answered waits for Next. During the delay the quizmaster can press Next, or stop the step with Hold (key {key}).",
+    allAnsweredHint: "This also applies to a fastest-finger question everyone answered wrong. A question that the quizmaster or the clock ends before everyone has answered waits for Next. During the delay the quizmaster can press Next, or stop the step with Hold (key {key}).",
     settingsFlow: "Question flow",
     runClockOut: "Let the clock run out even when everyone has answered",
-    runClockOutHint:
-      "Only for timed questions. The question closes when its time is up, and then what is set for “When everyone has answered” applies.",
-    nextAfterReveal:
-      "After the answer is shown, go on to the next slide automatically",
+    runClockOutHint: "Only for timed questions. The question closes when its time is up, and then what is set for “When everyone has answered” applies.",
+    nextAfterReveal: "After the answer is shown, go on to the next slide automatically",
     nextAfterRevealDelay: "The answer stays on screen",
-    nextAfterRevealHint:
-      "After every answer shown, including a fastest-finger answer judged right. The quizmaster can press Next sooner, or stop the step with Hold (key {key}).",
+    nextAfterRevealHint: "After every answer shown, including a fastest-finger answer judged right. The quizmaster can press Next sooner, or stop the step with Hold (key {key}).",
     settingsAnswers: "Answers and points",
     changeAnswer: "Players can change their answer while the question runs",
-    changeAnswerHint:
-      "In everyone-answers questions the last answer counts, with its time. The question closes once everyone has answered; with “Let the clock run out” on, players can change it until the time is up.",
+    changeAnswerHint: "In everyone-answers questions the last answer counts, with its time. The question closes once everyone has answered; with “Let the clock run out” on, players can change it until the time is up.",
     oneBuzz: "Fastest finger: one attempt per question",
-    oneBuzzHint:
-      "After a wrong answer nobody else can buzz in, and the question closes.",
+    oneBuzzHint: "After a wrong answer nobody else can buzz in, and the question closes.",
     noAnswerPenalty: "Penalty for no answer too",
-    noAnswerPenaltyHint:
-      "In everyone-answers questions a player who does not answer loses as many points as for a wrong answer.",
+    noAnswerPenaltyHint: "In everyone-answers questions a player who does not answer loses as many points as for a wrong answer.",
     settingsProjector: "Projector",
     showAnswer: "Mark the right answer on the projector",
-    showAnswerHint:
-      "Off: the projector does not mark the right answer, and the quizmaster announces it. The Director always shows it.",
+    showAnswerHint: "Off: the projector does not mark the right answer, and the quizmaster announces it. The Director always shows it.",
     showBuzzPoints: "Show fastest-finger points",
-    showBuzzPointsHint:
-      "Off: the projector does not show the points a buzz won or lost; the audience sees the scores only on the leaderboard.",
+    showBuzzPointsHint: "Off: the projector does not show the points a buzz won or lost; the audience sees the scores only on the leaderboard.",
     answerChart: "Answer chart after the reveal",
-    answerChartHint:
-      "On: when the projector shows an everyone-answers question's right answer, it draws a bar on each answer for the share of the players who chose it.",
+    answerChartHint: "On: when the projector shows an everyone-answers question's right answer, it draws a bar on each answer for the share of the players who chose it.",
     settingsVoice: "Reading aloud",
     quizLanguage: "Quiz language",
     quizLanguageHint: "The voice reads the questions in this language.",
@@ -2169,58 +1862,47 @@ const strings = {
     readAloudOff: "Off",
     readAloudQuestion: "The question only",
     readAloudQuestionAndAnswers: "The question and its answers",
-    readAloudHint:
-      "When a question comes on screen, the Director automatically reads it out in the chosen voice, through the Director's speakers like the show's other sounds. A slide with its own sound or video is not read automatically. Reading stops when someone buzzes, the question ends or its answer is shown; a button in the Director stops it or reads it again.",
+    readAloudHint: "When a question comes on screen, the Director automatically reads it out in the chosen voice, through the Director's speakers like the show's other sounds. A slide with its own sound or video is not read automatically. Reading stops when someone buzzes, the question ends or its answer is shown; a button in the Director stops it or reads it again.",
     voiceChoice: "Voice",
     voiceFemale: "Female voice {n}",
     voiceMale: "Male voice {n}",
     tryVoice: "Try the voice",
     stopTryVoice: "Stop",
-    voiceNotDownloaded:
-      "The voices are not downloaded, so the system voice reads for now. Download them in the Director, Settings tab › Voices for reading aloud; until then Try the voice plays a sample.",
-    voiceMissing:
-      "The system has no voice that speaks the quiz's language ({language}). Download the voices in the Director (Settings › Voices for reading aloud).",
+    voiceNotDownloaded: "The voices are not downloaded, so the system voice reads for now. Download them in the Director, Settings tab › Voices for reading aloud; until then Try the voice plays a sample.",
+    voiceMissing: "The system has no voice that speaks the quiz's language ({language}). Download the voices in the Director (Settings › Voices for reading aloud).",
     readQuestion: "Read the question",
     stopReading: "Stop reading",
     voices: "Voices for reading aloud",
-    voicesHint:
-      "Listen to the samples. All the voices are in one file (about {size}): they download together and then work without the internet. Choose a quiz's voice in the editor, File › Quiz settings.",
+    voicesHint: "Listen to the samples. All the voices are in one file (about {size}): they download together and then work without the internet. Choose a quiz's voice in the editor, File › Quiz settings.",
+    voicesLicence: "The voices are the Supertonic 3 model by Supertone, under the OpenRAIL-M licence. The speech is machine generated: tell the players a synthetic voice reads the questions, and do not use it to imitate a real person.",
     voicesInstalled: "The voices are downloaded.",
-    voicesNotInstalled:
-      "The voices are not downloaded. Until they are, the system voice reads the questions.",
+    voicesNotInstalled: "The voices are not downloaded. Until they are, the system voice reads the questions.",
     voicesDownload: "Download the voices",
     voicesDownloading: "Downloading the voices: {percent}%",
     voicesUnpacking: "Unpacking the voices…",
     voicesRemove: "Remove the voices",
-    voicesRemoveConfirm:
-      "Remove the downloaded voices? The system voice will then read the questions.",
+    voicesRemoveConfirm: "Remove the downloaded voices? The system voice will then read the questions.",
     playSample: "Play sample",
     stopSample: "Stop sample",
     launchPartVoice: "Reading aloud",
     launchVoiceReady: "The questions are ready to be read ({total}).",
-    launchVoiceRendering:
-      "Preparing the questions to be read: {done} of {total}.",
-    launchVoiceFailed:
-      "The voice cannot be used; the system voice will read the questions.",
-    launchVoiceSystem:
-      "The voices are not downloaded; the system voice {name} will read the questions.",
+    launchVoiceRendering: "Preparing the questions to be read: {done} of {total}.",
+    launchVoiceFailed: "The voice could not prepare {failed} of {total} questions; the system voice will read those.",
+    launchVoiceSystem: "The voices are not downloaded; the system voice {name} will read the questions.",
     languageCs: "Czech",
     languageEn: "English",
     welcomeScreen: "Welcome screen",
     welcomeOn: "Open the show on a welcome screen",
-    welcomeOnHint:
-      "On: before the buzzers register, the projector shows the heading with the logo, the intro picture or video and the footer, while the music for “Before the show starts” plays. Next ({key}) goes on to the registration. A buzzer pressed meanwhile registers.",
+    welcomeOnHint: "On: before the buzzers register, the projector shows the heading with the logo, the intro picture or video and the footer, while the music for “Before the show starts” plays. Next ({key}) goes on to the registration. A buzzer pressed meanwhile registers.",
     welcomeHeading: "Heading",
     welcomeLogo: "Logo",
     welcomeIntro: "Intro picture or video",
     welcomeIntroHint: "A video plays over and over without its sound.",
     welcomeFooter: "Footer",
     jokers: "Jokers for each player",
-    jokersHint:
-      "0 = no jokers. A player calls their joker before a question, and the quizmaster plays it in the Director's Teams tab; it doubles the points from that question, including the penalty for a wrong answer.",
+    jokersHint: "0 = no jokers. A player calls their joker before a question, and the quizmaster plays it in the Director's Teams tab; it doubles the points from that question, including the penalty for a wrong answer.",
     soundsAndMusic: "Sounds and music",
-    soundsHint:
-      "They play in the Director window. Each moment of the show can play a sound from the app's library, a sound file of the quiz, or nothing. Music plays over and over, turns down while the slide's sound, a video or the media player plays, and falls silent while the clock is stopped or a buzz waits for its verdict.",
+    soundsHint: "They play in the Director window. Each moment of the show can play a sound from the app's library, a sound file of the quiz, or nothing. Music plays over and over, turns down while the slide's sound, a video or the media player plays, and falls silent while the clock is stopped or a buzz waits for its verdict.",
     soundEffects: "Effects",
     soundMusic: "Music",
     effectsVolume: "Effects volume",
@@ -2283,8 +1965,7 @@ const strings = {
     importFromSheetHint:
       "Questions from an Excel (.xlsx, .xls), OpenDocument (.ods) or CSV spreadsheet are inserted after the selected slide. The first row holds the column names: Q (question), A1–A6 (answers; the correct one is the one in [brackets], else A1 and the answers are shuffled), P1 (picture), NOTES, SOUND, VIDEO, BACKGROUND, BACKGROUND-VIDEO, ANSWER-TIME, POINTS-START, POINTS-END and PENALTY-POINTS-START. Each sheet of a workbook is a round. Media files are looked for next to the spreadsheet.",
     saveSheetTemplate: "Save template…",
-    saveSheetTemplateHint:
-      "A CSV file with every column and sample rows, which Excel opens.",
+    saveSheetTemplateHint: "A CSV file with every column and sample rows, which Excel opens.",
     exportToSheet: "Export to Excel…",
     exportToSheetHint:
       "Saves the slides as a CSV file that Excel opens and that can be imported again. Pictures, sounds and videos are saved next to it under their own names, each once.",
@@ -2296,8 +1977,7 @@ const strings = {
     sheetImportNotes: "Import notes",
     sheetExported: "Slides exported: {n}, media files: {media}.",
     sheetExportMissing: "Missing files were not exported: {files}.",
-    sheetExportRefused:
-      "Files outside the quiz's folder were not exported: {files}.",
+    sheetExportRefused: "Files outside the quiz's folder were not exported: {files}.",
     sheetTemplateSaved: "The template is saved.",
     backstageAi: "AI assistants",
     aiAssistantsHint:
@@ -2305,12 +1985,10 @@ const strings = {
     aiFolderTitle: "1. Folder for quizzes",
     aiFolderHint:
       "AI apps work only in this folder: they take your pictures, sounds and videos from it and save quizzes in it. They read and write nothing else on this computer. Apps already running use a new folder once you open them again.",
-    aiNoFolder:
-      "The system has no Documents folder for your account, so choose a folder yourself.",
+    aiNoFolder: "The system has no Documents folder for your account, so choose a folder yourself.",
     aiChooseFolder: "Change…",
     aiAppsTitle: "2. Connect your AI app",
-    aiAppsHint:
-      "Connecting adds Buzzdome to the app's settings. When you move or reinstall Buzzdome elsewhere, connect it again.",
+    aiAppsHint: "Connecting adds Buzzdome to the app's settings. When you move or reinstall Buzzdome elsewhere, connect it again.",
     aiConnect: "Connect",
     aiConnectAgain: "Connect again",
     aiConnectedState: "Connected",
@@ -2323,8 +2001,7 @@ const strings = {
       "To connect another app that runs local MCP servers, add the buzzdome entry from these settings to its MCP servers (under mcpServers in most apps, servers in VS Code) and open the app again. Keep the other servers in its settings.",
     aiCopyConfig: "Copy settings",
     aiConfigCopied: "The settings are on the clipboard.",
-    aiConfigNotCopied:
-      "The settings could not be copied automatically: select them below and copy them.",
+    aiConfigNotCopied: "The settings could not be copied automatically: select them below and copy them.",
     aiInstructionsTitle: "3. Your instructions for quizzes",
     aiInstructionsHint:
       "The AI follows them for every quiz, so a topic is all you type in the chat. What you write in the chat wins. Saved instructions apply from the next quiz, with no restart.",
@@ -2333,62 +2010,41 @@ const strings = {
     aiInstructionsSaved: "The instructions are saved.",
     aiSettingsLost: "The AI settings could not be read, so the defaults apply.",
     aiConnected: "{app} is connected and will work in {folder}.",
-    aiReconnected:
-      "{app} now starts this Buzzdome app and will work in {folder}.",
+    aiReconnected: "{app} now starts this Buzzdome app and will work in {folder}.",
     aiAlreadyConnected: "{app} is connected already and will work in {folder}.",
     aiRestartClaudeMacos: "Then quit Claude Desktop (⌘Q) and open it again.",
-    aiRestartClaudeWindows:
-      "Then quit Claude Desktop from its icon by the clock (right-click, Quit) and open it again: closing its window keeps it running.",
+    aiRestartClaudeWindows: "Then quit Claude Desktop from its icon by the clock (right-click, Quit) and open it again: closing its window keeps it running.",
     aiRestartClaudeLinux: "Then quit Claude Desktop and open it again.",
-    aiRestartAntigravity:
-      "Then in Antigravity open Settings › Customizations and press Refresh under Installed MCP Servers, or open Antigravity again.",
-    aiRestartCodexMacos:
-      "Then quit the ChatGPT app (⌘Q) and open it again, or start a new Codex session in the command line or your editor.",
-    aiRestartCodexOther:
-      "Then quit the ChatGPT app and open it again, or start a new Codex session in the command line or your editor.",
+    aiRestartAntigravity: "Then in Antigravity open Settings › Customizations and press Refresh under Installed MCP Servers, or open Antigravity again.",
+    aiRestartCodexMacos: "Then quit the ChatGPT app (⌘Q) and open it again, or start a new Codex session in the command line or your editor.",
+    aiRestartCodexOther: "Then quit the ChatGPT app and open it again, or start a new Codex session in the command line or your editor.",
     importRow: "row {rows}",
     importRows: "rows {rows}",
     importSheetRows: "sheet “{sheet}”, {rows}",
     importMore: "and {n} more",
     importNoQuestionColumn: "A sheet without a Q column was skipped.",
-    importUnknownColumn:
-      "Column {column} is not known; its values were left out.",
-    importUnsupportedColumn:
-      "Column {column} is not supported yet; its values were left out.",
+    importUnknownColumn: "Column {column} is not known; its values were left out.",
+    importUnsupportedColumn: "Column {column} is not supported yet; its values were left out.",
     importDuplicateColumn: "A second {column} column was left out.",
     importSecondLanguage: "Text after || (a second language) was left out.",
-    importLinkedFile:
-      "Files marked {L} were copied into the quiz: a quiz file always carries its media.",
-    importSlideTypeNotSupported:
-      "Slide type {prefix} is not available; the slide is a billboard with its text.",
+    importLinkedFile: "Files marked {L} were copied into the quiz: a quiz file always carries its media.",
+    importSlideTypeNotSupported: "Slide type {prefix} is not available; the slide is a billboard with its text.",
     importTestQuestion: "Test question {T} is a question that gives no points.",
-    importQualifierNotSupported:
-      "Qualifier {qualifier} in the question prefix was left out.",
-    importNotEveryone:
-      "An everyone-answers question (EA) with {answers} answers does not fit buttons A–D; it is a fastest-finger question.",
-    importAnswersLeftOut:
-      "Answers on a slide that is not a question were left out.",
-    importUnknownCategory:
-      "The quiz has no category “{name}”, so the slide has none. Create it in the Categories view and import again.",
-    importPictureAndVideo:
-      "A picture and a video: a slide shows one of them, so the picture was left out.",
-    importTwoBackgrounds:
-      "A background picture and a background video: the video is used.",
-    importMediaOnRanking:
-      "A picture or video on an end of round or the final ranking was left out.",
+    importQualifierNotSupported: "Qualifier {qualifier} in the question prefix was left out.",
+    importNotEveryone: "An everyone-answers question (EA) with {answers} answers does not fit buttons A–D; it is a fastest-finger question.",
+    importAnswersLeftOut: "Answers on a slide that is not a question were left out.",
+    importUnknownCategory: "The quiz has no category “{name}”, so the slide has none. Create it in the Categories view and import again.",
+    importPictureAndVideo: "A picture and a video: a slide shows one of them, so the picture was left out.",
+    importTwoBackgrounds: "A background picture and a background video: the video is used.",
+    importMediaOnRanking: "A picture or video on an end of round or the final ranking was left out.",
     importWrongMediaType: "File {file} cannot be used in column {column}.",
-    importBadValue:
-      "“{value}” in column {column} is not a valid number; the default was kept.",
+    importBadValue: "“{value}” in column {column} is not a valid number; the default was kept.",
     importUnknownSetting: "Setting {setting} in column {column} is not known.",
-    importBadSetting:
-      "Setting {setting}={value} in column {column} is not valid; the default was kept.",
-    importSettingNotUsed:
-      "Setting {setting} in column {column} does not apply here.",
+    importBadSetting: "Setting {setting}={value} in column {column} is not valid; the default was kept.",
+    importSettingNotUsed: "Setting {setting} in column {column} does not apply here.",
     importFileNotFound: "File {file} was not found.",
-    importFileOutsideSheetFolder:
-      "File {file} is outside the sheet's folder. It was copied into the quiz; check that it belongs there.",
-    importNetworkPath:
-      "File {file} is on a network path, which the app does not read, and is not next to the sheet. Copy it next to the sheet.",
+    importFileOutsideSheetFolder: "File {file} is outside the sheet's folder. It was copied into the quiz; check that it belongs there.",
+    importNetworkPath: "File {file} is on a network path, which the app does not read, and is not next to the sheet. Copy it next to the sheet.",
     templateFileName: "question-template",
     templateRound: "Round 1",
     templateRoundText: "Geography",
@@ -2397,8 +2053,7 @@ const strings = {
     templateAnswer2: "Lyon",
     templateAnswer3: "Marseille",
     templateAnswer4: "Nice",
-    templateQuestionNotes:
-      "The correct answer is in square brackets. Without them, A1 is correct and the app shuffles the answers.",
+    templateQuestionNotes: "The correct answer is in square brackets. Without them, A1 is correct and the app shuffles the answers.",
     templateOpen: "How many people live in Paris?",
     templateOpenNotes: "No answers: players answer aloud.",
     templateExplanation: "Paris lies on the Seine.",
@@ -2437,8 +2092,7 @@ const strings = {
     clearSearch: "Clear search",
     moreOptions: "More options",
     fewerOptions: "Fewer options",
-    dragToChange:
-      "Drag sideways to change the value (Shift: faster, Alt: slower)",
+    dragToChange: "Drag sideways to change the value (Shift: faster, Alt: slower)",
     selectAllSlides: "Select all slides",
     findProperty: "Find a property",
     pageGameplay: "Gameplay",
@@ -2458,28 +2112,22 @@ const strings = {
     sectionTimer: "Timer",
     sectionMetadata: "Metadata",
     propType: "Type",
-    descType:
-      "A question, an info slide, an answer explanation, or the end of a round with the leaderboard. Text, notes and media stay when the type changes.",
+    descType: "A question, an info slide, an answer explanation, or the end of a round with the leaderboard. Text, notes and media stay when the type changes.",
     propId: "ID",
     descId: "The slide's unique ID in the quiz file. It never changes.",
     propAnswerTime: "Answer time",
-    descAnswerTime:
-      "Seconds the players have to answer. 0 = no clock; the quizmaster ends the question.",
+    descAnswerTime: "Seconds the players have to answer. 0 = no clock; the quizmaster ends the question.",
     propEveryoneAnswers: "Everyone answers",
-    descEveryoneAnswers:
-      "On: everyone answers with the buttons and everyone who is right scores. Off: fastest finger; whoever presses first answers and the quizmaster judges.",
+    descEveryoneAnswers: "On: everyone answers with the buttons and everyone who is right scores. Off: fastest finger; whoever presses first answers and the quizmaster judges.",
     propAnswerCount: "Number of answers",
-    descAnswerCount:
-      "How many options the question offers: two to four when everyone answers (one per button A–D), up to six for fastest finger.",
+    descAnswerCount: "How many options the question offers: two to four when everyone answers (one per button A–D), up to six for fastest finger.",
     propCorrectAnswer: "Correct answers",
     descCorrectAnswer:
       "Which options are right. There may be several. When everyone answers, each may give only part of the points (set on the answer). Fastest finger may have none; then the quizmaster judges, and a right one always gives all of the points.",
     propPointsStart: "Points at start",
-    descPointsStart:
-      "Points for a right answer (with falling points, when the clock starts).",
+    descPointsStart: "Points for a right answer (with falling points, when the clock starts).",
     propFalling: "Points fall over time",
-    descFalling:
-      "Points fall smoothly with the clock down to Points at end. Without a clock they stay the same.",
+    descFalling: "Points fall smoothly with the clock down to Points at end. Without a clock they stay the same.",
     propPointsEnd: "Points at end",
     descPointsEnd: "Points for a right answer at the last moment of the clock.",
     propPenalty: "Penalty",
@@ -2487,40 +2135,30 @@ const strings = {
     descQuestionText: "The question as the players see it.",
     descTitle: "The slide's heading.",
     descBodyText: "Text under the heading of an info slide.",
-    descExplanation:
-      "Why the answer is right. Shown under the question and its correct answer.",
-    descExplains:
-      "The question this slide explains: the nearest question before it in the same round.",
-    descNotes:
-      "Notes for the quizmaster; players never see them. The Director shows them with the slide.",
+    descExplanation: "Why the answer is right. Shown under the question and its correct answer.",
+    descExplains: "The question this slide explains: the nearest question before it in the same round.",
+    descNotes: "Notes for the quizmaster; players never see them. The Director shows them with the slide.",
     propAnswerText: "Answer text",
     descAnswerText: "The text of this option.",
     propIsCorrect: "Correct",
     descIsCorrect: "This option is one of the right answers.",
     propShare: "Share of points",
-    descShare:
-      "What percentage of the question's points this right answer gives, e.g. 50% for a nearly exact one. Everyone-answers questions only.",
+    descShare: "What percentage of the question's points this right answer gives, e.g. 50% for a nearly exact one. Everyone-answers questions only.",
     descRemoveAnswer: "Removes this option; the ones after it move up.",
     propPicture: "Picture",
-    descPicture:
-      "A picture on the slide. A slide has either a picture or a video.",
+    descPicture: "A picture on the slide. A slide has either a picture or a video.",
     propVideo: "Video",
     descVideo: "A video on the slide in place of a picture.",
-    descVideoAutoplay:
-      "The video starts automatically after its intro pause. Otherwise the quizmaster starts it with Play video in the Director.",
+    descVideoAutoplay: "The video starts automatically after its intro pause. Otherwise the quizmaster starts it with Play video in the Director.",
     propIntroPause: "Intro pause",
-    descIntroPause:
-      "How many seconds after the slide appears the video starts, so the quizmaster can read the question first.",
+    descIntroPause: "How many seconds after the slide appears the video starts, so the quizmaster can read the question first.",
     descVideoVolume: "Video volume in percent.",
     propSpeed: "Speed",
     descSpeed: "Playback speed in percent; 100% is normal speed.",
-    descVideoPart:
-      "Which part of the video plays. The file is not changed; the part is set in the Trim window.",
-    descVideoReplay:
-      "Once the answer is revealed, the video plays its replay part once; that part is set in the Trim window.",
+    descVideoPart: "Which part of the video plays. The file is not changed; the part is set in the Trim window.",
+    descVideoReplay: "Once the answer is revealed, the video plays its replay part once; that part is set in the Trim window.",
     propEffect: "Effect",
-    descEffect:
-      "Hides the video when the question starts and fades as the answer time runs out, so the players see more and more.",
+    descEffect: "Hides the video when the question starts and fades as the answer time runs out, so the players see more and more.",
     effectNone: "None",
     effectBlur: "Blur",
     effectMosaic: "Mosaic",
@@ -2528,8 +2166,7 @@ const strings = {
     descVideoRepeat: "The video starts again when it ends.",
     propSound: "Sound",
     descSound: "Music or a sound for the slide.",
-    descSoundStart:
-      "When the sound starts: when the slide opens, with the clock, or by hand from the Director.",
+    descSoundStart: "When the sound starts: when the slide opens, with the clock, or by hand from the Director.",
     descSoundRepeat: "The sound loops while the slide is on the projector.",
     descVolume: "Sound volume in percent.",
     propBackground: "Background",
@@ -2543,38 +2180,32 @@ const strings = {
     newCategory: "New category",
     deleteCategory: "Delete category",
     reapplyCategory: "Apply again to slides",
-    categoryReapplied:
-      "Category {name}: its look was applied again to its slides ({n}).",
+    categoryReapplied: "Category {name}: its look was applied again to its slides ({n}).",
     previousCategory: "Previous category",
     nextCategory: "Next category",
     categoryNumber: "Category {n} / {total}",
     categorySlides: "Slides: {n}",
     categoryHint: "The look the category gives slides",
     noCategories: "The quiz has no categories yet.",
-    noCategoriesHint:
-      "A category is a named look: a background (a video too), colours and fonts. Create one, then apply it to the selected slides on the Design tab.",
-    categoryViewNote:
-      "A category gives slides their look. Questions are edited in the graphical view.",
+    noCategoriesHint: "A category is a named look: a background (a video too), colours and fonts. Create one, then apply it to the selected slides on the Design tab.",
+    categoryViewNote: "A category gives slides their look. Questions are edited in the graphical view.",
     saveAsCategory: "Save look as category",
     editCategories: "Edit categories",
     applyCategory: "Apply the category {name} to the selected slides",
     sectionCategory: "Category",
     sectionHeadlineLook: "Question and title look",
     propCategory: "Category",
-    descCategory:
-      "The category whose look the slide took on. Choosing one gives the slide its background, colours and fonts; the slide's picture, video and sound stay. None only drops the link and keeps the look.",
+    descCategory: "The category whose look the slide took on. Choosing one gives the slide its background, colours and fonts; the slide's picture, video and sound stay. None only drops the link and keeps the look.",
     noCategory: "None",
     propCategoryName: "Name",
-    descCategoryName:
-      "The name the category is offered under, and the one a CAT column names on a spreadsheet import. Two categories cannot have the same name, regardless of case.",
+    descCategoryName: "The name the category is offered under, and the one a CAT column names on a spreadsheet import. Two categories cannot have the same name, regardless of case.",
     // A slide's look over its theme (QZ-9): pickers of colours, gradients and fonts.
     sectionQuestionLook: "Question look",
     sectionTitleLook: "Title look",
     sectionTextLook: "Text look",
     sectionAnswersLook: "Look of every answer",
     propGradient: "Gradient",
-    descSlideGradient:
-      "The gradient behind the slide. It only applies when the slide has no background picture or video.",
+    descSlideGradient: "The gradient behind the slide. It only applies when the slide has no background picture or video.",
     descTextGradient: "The gradient of a box behind the text.",
     descAnswerGradient: "The gradient of the answer's panel.",
     gradientFrom: "From",
@@ -2582,8 +2213,7 @@ const strings = {
     gradientTo: "To",
     descGradientTo: "The colour the gradient ends with.",
     gradientKind: "Type",
-    descGradientKind:
-      "Which way the gradient runs: down, across, diagonally or out from the centre.",
+    descGradientKind: "Which way the gradient runs: down, across, diagonally or out from the centre.",
     gradientVertical: "Vertical",
     gradientHorizontal: "Horizontal",
     gradientDiagonal: "Diagonal down",
@@ -2593,13 +2223,11 @@ const strings = {
     choosePreset: "Choose a preset",
     gradientPresets: "Gradient presets",
     myGradients: "My gradients",
-    myGradientsHint:
-      "Right-click a Gradient property to add it here (up to five).",
+    myGradientsHint: "Right-click a Gradient property to add it here (up to five).",
     addToMyGradients: "Add to my gradients",
     removeFromMyGradients: "Remove from my gradients",
     propFont: "Font",
-    descFont:
-      "The text's font, its size compared with the theme's, bold, italic and underline.",
+    descFont: "The text's font, its size compared with the theme's, bold, italic and underline.",
     themeFont: "Theme font",
     chooseFont: "Choose a font",
     searchFonts: "Search fonts",
@@ -2640,37 +2268,29 @@ const strings = {
     propShadow: "Drop shadow",
     descShadow: "A shadow under the text.",
     propShadowColor: "Shadow colour",
-    descShadowColor:
-      "The colour of the shadow under the text, when it has one.",
+    descShadowColor: "The colour of the shadow under the text, when it has one.",
     propTransparency: "Transparency",
     descTextTransparency: "How transparent the gradient behind the text is.",
     descAnswerTransparency: "How transparent the answer's panel is.",
     // Sound part, replay and loudness (SN-8, SN-9); background video options (BG-1).
     propSoundPart: "Part",
-    descSoundPart:
-      "Which part of the file plays. The file is not changed; the part is set in the Trim window.",
+    descSoundPart: "Which part of the file plays. The file is not changed; the part is set in the Trim window.",
     wholeTrack: "Whole track",
     trackEnd: "end",
     trimAction: "Trim…",
     propReplay: "Replay after the answer is revealed",
-    descReplay:
-      "Once the answer is revealed, the sound plays its replay part once; that part is set in the Trim window.",
+    descReplay: "Once the answer is revealed, the sound plays its replay part once; that part is set in the Trim window.",
     propReplayDelay: "Replay delay",
-    descReplayDelay:
-      "How many seconds after the answer is revealed the replay part plays.",
+    descReplayDelay: "How many seconds after the answer is revealed the replay part plays.",
     propGain: "Loudness gain",
-    descGain:
-      "Makes the sound louder or quieter in dB on top of the volume: the volume can only lower it, the gain can also raise it. Normalizing sets it.",
+    descGain: "Makes the sound louder or quieter in dB on top of the volume: the volume can only lower it, the gain can also raise it. Normalizing sets it.",
     normalizeAction: "Normalize",
-    descNormalize:
-      "Measures the part that plays and sets the gain to the target last chosen under Normalize volume.",
+    descNormalize: "Measures the part that plays and sets the gain to the target last chosen under Normalize volume.",
     normalizeAll: "Normalize volume",
     normalizeDone: "Volume normalized, gain {gain} dB. Undo with Ctrl+Z.",
-    normalizeLimited:
-      "Volume normalized only in part, gain {gain} dB, so the sound does not clip. Undo with Ctrl+Z.",
+    normalizeLimited: "Volume normalized only in part, gain {gain} dB, so the sound does not clip. Undo with Ctrl+Z.",
     propBackgroundSync: "Sync with quiz",
-    descBackgroundSync:
-      "The background video pauses while a player answers, the clock is paused or the question is over.",
+    descBackgroundSync: "The background video pauses while a player answers, the clock is paused or the question is over.",
     descBackgroundRepeat: "The background video loops.",
     descBackgroundMuted: "The background video plays without sound.",
     playBackground: "Play background video",
@@ -2684,8 +2304,7 @@ const strings = {
     trimPlayback: "Playback",
     trimReplayPart: "Replay",
     trimFailed: "The sound could not be read.",
-    trimTooLong:
-      "The sound is longer than {minutes} minutes or the file is too large (a WAV above 48 kHz/16-bit, say), so it is not read whole to save memory. It cannot be trimmed or normalized.",
+    trimTooLong: "The sound is longer than {minutes} minutes or the file is too large (a WAV above 48 kHz/16-bit, say), so it is not read whole to save memory. It cannot be trimmed or normalized.",
     trimScroll: "Scroll the part in view",
     trimStart: "Start",
     trimEnd: "End",
@@ -2695,14 +2314,12 @@ const strings = {
     trimSetStart: "Set start",
     trimSetEnd: "Set end",
     trimFit: "Zoom to fit",
-    trimHint:
-      "Drag to select a part, click to place the cursor. The mouse wheel zooms, Shift + wheel scrolls.",
+    trimHint: "Drag to select a part, click to place the cursor. The mouse wheel zooms, Shift + wheel scrolls.",
     trimVideoTitle: "Trim video – {name}",
     trimVideoFailed: "The video could not be read.",
     trimPosition: "Position in the video",
     trimPlayFromPosition: "Play from here",
-    trimVideoHint:
-      "Find a place in the video with the slider; I and O set the part's start and end there. The file is not changed.",
+    trimVideoHint: "Find a place in the video with the slider; I and O set the part's start and end there. The file is not changed.",
     loudnessTarget: "Target loudness",
     loudnessStandard: "Standard (−16 LUFS)",
     loudnessQuieter: "Quieter (−18 LUFS)",
@@ -2743,26 +2360,18 @@ const strings = {
     errNoSuchSlide: "There is no slide {slide}.",
     errDuplicateBuzzer: "Buzzer {buzzer} is already in the show.",
     errTooManyTeams: "There can be at most {max} teams.",
-    errShowNotSaved:
-      "The show cannot be saved to disk, so the change was not made.",
+    errShowNotSaved: "The show cannot be saved to disk, so the change was not made.",
     errShowNotRead: "The last show cannot be read.",
-    errJournalBroken:
-      "The show stopped saving to disk after a failed write, so this change was not made. End the show and resume it with {resume}; the change whose write failed may then be in it after all.",
-    errShowStopped:
-      "The show stopped responding. Restart the app and resume the last show.",
+    errJournalBroken: "The show stopped saving to disk after a failed write, so this change was not made. End the show and resume it with {resume}; the change whose write failed may then be in it after all.",
+    errShowStopped: "The show stopped responding. Restart the app and resume the last show.",
     errNotFromProjector: "The projector cannot give this command.",
-    errShowBusy:
-      "The show is still saving an earlier step, as the disk is not responding. This step was not carried out; try it again.",
+    errShowBusy: "The show is still saving an earlier step, as the disk is not responding. This step was not carried out; try it again.",
     errSaveHangs:
       "Saving the show to disk has not finished, as the disk is not responding. The step being saved will be carried out once the write finishes, so do not give it again. Other commands are refused meanwhile; presses will count once the write finishes.",
-    errJournalDamaged:
-      "Line {line} of the last show's journal cannot be read: a newer version of the app wrote it, or it is damaged. The journal was left as it is.",
-    errFileLeftUnread:
-      "The file {path} could not be read when the app started, so it is not written over. Close the program holding it and start the app again.",
-    errRulesChanged:
-      "The show began in another version of the app. It goes on, but its scores may differ slightly.",
-    errMediaFolderRefused:
-      "The show's media are in {folder}, which the app does not project from. The show goes on without them.",
+    errJournalDamaged: "Line {line} of the last show's journal cannot be read: a newer version of the app wrote it, or it is damaged. The journal was left as it is.",
+    errFileLeftUnread: "The file {path} could not be read when the app started, so it is not written over. Close the program holding it and start the app again.",
+    errRulesChanged: "The show began in another version of the app. It goes on, but its scores may differ slightly.",
+    errMediaFolderRefused: "The show's media are in {folder}, which the app does not project from. The show goes on without them.",
     errFileRead: "The file {name} cannot be read.",
     errFileWrite: "The file {name} cannot be saved.",
     errFileCreateFolder: "The folder {name} cannot be created.",
@@ -2777,68 +2386,47 @@ const strings = {
     errNotAQuizFile: "The file is not a quiz.",
     errMissingQuizJson: "The quiz file has no quiz.json.",
     errBadQuizJson: "The quiz (quiz.json) cannot be read.",
-    errNewerSchema:
-      "The quiz comes from a newer version of the app (format {found}, this one reads up to {supported}). Update the app.",
+    errNewerSchema: "The quiz comes from a newer version of the app (format {found}, this one reads up to {supported}). Update the app.",
     errTooLarge: "The quiz is larger than {maxMb} MB unpacked.",
-    errQuizJsonTooLarge:
-      "The quiz's text (quiz.json) is larger than {maxMb} MB, so it can be neither opened nor saved.",
+    errQuizJsonTooLarge: "The quiz's text (quiz.json) is larger than {maxMb} MB, so it can be neither opened nor saved.",
     errTooManyFiles: "The quiz has more than {max} files.",
-    errTooManyEndRecords:
-      "The file is not a quiz: it has more than {max} ZIP end records.",
+    errTooManyEndRecords: "The file is not a quiz: it has more than {max} ZIP end records.",
     errQuizInvalid: "The quiz cannot be played; problems: {n}. {first}",
-    backgroundFailed:
-      "The background {file} cannot be loaded; the theme's background shows instead.",
-    playerFileFailed:
-      "The media player's file {file} cannot be shown, so the player stopped it.",
+    backgroundFailed: "The background {file} cannot be loaded; the theme's background shows instead.",
+    playerFileFailed: "The media player's file {file} cannot be shown, so the player stopped it.",
     themeBackgroundFailed: "The theme's background {file} cannot be loaded.",
-    themeNotInstalled:
-      "The theme {id} is not installed; the quiz shows in the default one.",
+    themeNotInstalled: "The theme {id} is not installed; the quiz shows in the default one.",
     hostProblem: "Projector: {message}",
     errNoDraft: "No quiz is open in the editor.",
     errNotRecent: "The file is no longer in Recent quizzes.",
-    errQuizFileGone:
-      "The quiz {name} was deleted or moved, so it left Recent quizzes.",
-    errQuizFileUnreachable:
-      "Neither the quiz {name} nor its folder {folder} can be found. If it is on an unplugged drive, plug it in; otherwise remove it with the cross.",
+    errQuizFileGone: "The quiz {name} was deleted or moved, so it left Recent quizzes.",
+    errQuizFileUnreachable: "Neither the quiz {name} nor its folder {folder} can be found. If it is on an unplugged drive, plug it in; otherwise remove it with the cross.",
     errDraftChanged: "Another quiz was opened in the editor meanwhile.",
     errDraftNotRead: "The quiz left in the editor last time cannot be read.",
-    errNotAMediaFile:
-      "{name} is not a picture, sound or video the app can play.",
+    errNotAMediaFile: "{name} is not a picture, sound or video the app can play.",
     errNotInLibrary: "{reference} is not in the media library.",
     errNoSuchPad: "There is no pad {pad} on the sound board.",
     errNotASpreadsheet: "The file cannot be read as a spreadsheet.",
-    errSpreadsheetTooLarge:
-      "The spreadsheet is too large: at most {maxMb} MB, {maxTextMb} MB of text, {maxRows} rows and {maxColumns} columns.",
-    errSpreadsheetTooComplex:
-      "The spreadsheet is too complex to read: it would take more than {maxMb} MB of memory. Save it in Excel as .xlsx, or as CSV.",
-    errSpreadsheetReaderFailed:
-      "The spreadsheet could not be read: the file is probably damaged. Save it again in Excel, or as CSV.",
-    errNoQuestionColumn:
-      "The spreadsheet has no Q column of questions. Its first row must hold the column names, as in the template.",
-    errAiAppMissing:
-      "{app} is not installed on this computer. Install it, start it once and try again.",
-    errAiConfigUnreadable:
-      "The AI app's settings ({path}) cannot be read, so they were left as they are. Fix them, or use Copy settings.",
-    errAiFolderNotAllowed:
-      "An assistant cannot get access to the folder {path}: it holds or is inside Buzzdome's own data (shows, drafts, settings). Choose another.",
-    errNoDocumentsFolder:
-      "The system has no Documents folder for your account. Choose a folder for AI apps yourself.",
+    errSpreadsheetTooLarge: "The spreadsheet is too large: at most {maxMb} MB, {maxTextMb} MB of text, {maxRows} rows and {maxColumns} columns.",
+    errSpreadsheetTooComplex: "The spreadsheet is too complex to read: it would take more than {maxMb} MB of memory. Save it in Excel as .xlsx, or as CSV.",
+    errSpreadsheetReaderFailed: "The spreadsheet could not be read: the file is probably damaged. Save it again in Excel, or as CSV.",
+    errNoQuestionColumn: "The spreadsheet has no Q column of questions. Its first row must hold the column names, as in the template.",
+    errAiAppMissing: "{app} is not installed on this computer. Install it, start it once and try again.",
+    errAiConfigUnreadable: "The AI app's settings ({path}) cannot be read, so they were left as they are. Fix them, or use Copy settings.",
+    errAiFolderNotAllowed: "An assistant cannot get access to the folder {path}: it holds or is inside Buzzdome's own data (shows, drafts, settings). Choose another.",
+    errNoDocumentsFolder: "The system has no Documents folder for your account. Choose a folder for AI apps yourself.",
     errUsbUnavailable: "USB-HID is not available on this computer.",
     errUsbListFailed: "USB devices cannot be listed.",
     errReceiverNotConnected: "Connect the receiver first.",
-    errReceiverNotLearnable:
-      "The app knows this receiver's protocol, so its buttons need no teaching.",
+    errReceiverNotLearnable: "The app knows this receiver's protocol, so its buttons need no teaching.",
     errLearnNotStarted: "Learning was not started.",
     errLearnTooFewPresses: "Press the button at least {min} times (3 is best).",
     errLearnInconsistent: "The recorded presses differ in length. Try again.",
-    errLearnConflict:
-      "These presses look the same as buzzer {buzzer}, button {button}. Try again or re-learn that button.",
-    errNoDataFolder:
-      "The system gave the app no folder for its data, so the data cannot be saved. Check that your user account has a home folder.",
+    errLearnConflict: "These presses look the same as buzzer {buzzer}, button {button}. Try again or re-learn that button.",
+    errNoDataFolder: "The system gave the app no folder for its data, so the data cannot be saved. Check that your user account has a home folder.",
     errNoUpdate: "No newer version of the app was found.",
     errUpdateFailed: "Updating the app failed.",
-    errUpdateInstalling:
-      "A new version of the app is being installed, so no show can begin now.",
+    errUpdateInstalling: "A new version of the app is being installed, so no show can begin now.",
     errSystem: "The system refused.",
     // Quiz problems (Problem, MediaIssue).
     problemDuplicateSlideId: "The slide has the same ID as another slide.",
@@ -2848,55 +2436,35 @@ const strings = {
     problemSoundPartEmpty: "A part of the sound ends before it starts.",
     problemVideoVolume: "Video volume is a percentage, 0 to 100.",
     problemVideoPartEmpty: "A part of the video ends before it starts.",
-    problemReplayDelayTooLong:
-      "The replay can start at most {max} s after the answer is revealed.",
-    problemVideoSpeedOutOfRange:
-      "Video speed must be between {min} and {max}%.",
-    problemIntroPauseTooLong:
-      "The video can start at most {max} s after the slide is shown.",
-    problemSoundReplayNotOnQuestion:
-      "Only a question can replay a part of its sound after the answer is revealed.",
-    problemVideoReplayNotOnQuestion:
-      "Only a question can replay a part of its video after the answer is revealed.",
-    problemWithClockNotOnQuestion:
-      "Only a question has a clock for its sound to play with.",
-    problemEffectNotOnQuestion:
-      "A video effect fades over the answer time, so only a question can have one.",
-    problemMediaOnRanking:
-      "An end-of-round or final ranking slide shows the ranking, not a picture or a video.",
+    problemReplayDelayTooLong: "The replay can start at most {max} s after the answer is revealed.",
+    problemVideoSpeedOutOfRange: "Video speed must be between {min} and {max}%.",
+    problemIntroPauseTooLong: "The video can start at most {max} s after the slide is shown.",
+    problemSoundReplayNotOnQuestion: "Only a question can replay a part of its sound after the answer is revealed.",
+    problemVideoReplayNotOnQuestion: "Only a question can replay a part of its video after the answer is revealed.",
+    problemWithClockNotOnQuestion: "Only a question has a clock for its sound to play with.",
+    problemEffectNotOnQuestion: "A video effect fades over the answer time, so only a question can have one.",
+    problemMediaOnRanking: "An end-of-round or final ranking slide shows the ranking, not a picture or a video.",
     problemStyleUnread: "The style value {path} cannot be read.",
-    problemCategoryStyleUnread:
-      "The style value {path} of the category {name} cannot be read.",
-    problemThemeUnread:
-      "The quiz's theme cannot be read, so the quiz has the default look.",
+    problemCategoryStyleUnread: "The style value {path} of the category {name} cannot be read.",
+    problemThemeUnread: "The quiz's theme cannot be read, so the quiz has the default look.",
     problemCategoryMedia: "Category {name}, {file}: {issue}",
     problemSoundMedia: "The sound for “{moment}”, {file}: {issue}",
     problemWelcomeMedia: "{place} of the welcome screen, {file}: {issue}",
-    problemMediaNameClash:
-      "{file} and {other} differ only in letter case or in how accents are encoded, so macOS takes them for one file (and Windows does when the case differs).",
-    problemUnknownCategory:
-      "The slide names a category the quiz does not have.",
-    problemDuplicateCategoryId:
-      "The category {name} has the same ID as another category.",
-    problemCategoryIdInvalid:
-      "The category {name} has an empty ID, or one longer than {max} characters.",
+    problemMediaNameClash: "{file} and {other} differ only in letter case or in how accents are encoded, so macOS takes them for one file (and Windows does when the case differs).",
+    problemUnknownCategory: "The slide names a category the quiz does not have.",
+    problemDuplicateCategoryId: "The category {name} has the same ID as another category.",
+    problemCategoryIdInvalid: "The category {name} has an empty ID, or one longer than {max} characters.",
     problemCategoryUnnamed: "A category has no name.",
-    problemCategoryNameTooLong:
-      "A category name can have at most {max} characters.",
+    problemCategoryNameTooLong: "A category name can have at most {max} characters.",
     problemCategoryNameTaken: "Two categories are named {name}.",
-    problemSoundGainOutOfRange:
-      "Loudness gain must be between {min} and {max} dB.",
+    problemSoundGainOutOfRange: "Loudness gain must be between {min} and {max} dB.",
     problemTooManyAnswers: "Too many answers, at most {max}.",
-    problemTooFewAnswers:
-      "An everyone-answers question needs at least {min} answers.",
-    problemNoCorrectAnswer:
-      "An everyone-answers question needs a correct answer.",
+    problemTooFewAnswers: "An everyone-answers question needs at least {min} answers.",
+    problemNoCorrectAnswer: "An everyone-answers question needs a correct answer.",
     problemCorrectOutOfRange: "A correct answer points past the answer list.",
     problemCorrectTwice: "An answer is listed as correct twice.",
-    problemShareOutOfRange:
-      "A correct answer's share of the points must be between 1 and {max}%.",
-    problemShareNotOnEveryone:
-      "Only an everyone-answers question can give a share of the points. On a fastest-finger question every right answer gives all of them.",
+    problemShareOutOfRange: "A correct answer's share of the points must be between 1 and {max}%.",
+    problemShareNotOnEveryone: "Only an everyone-answers question can give a share of the points. On a fastest-finger question every right answer gives all of them.",
     problemPointsOutOfRange: "Points must be between −{max} and {max}.",
     problemPenaltyOutOfRange: "The penalty must be between 0 and {max}.",
     problemTimeLimitTooLong: "The time limit can be at most {max} s.",
@@ -2911,21 +2479,14 @@ const strings = {
     // Receiver states.
     receiverCannotList: "USB devices cannot be listed ({detail}).",
     receiverCannotOpen: "The receiver cannot be opened ({detail}).",
-    receiverConnectionLost:
-      "The receiver connection was lost ({detail}). Reconnecting…",
-    receiverWriteFailed:
-      "Writing to the receiver failed ({detail}). Reconnecting…",
-    receiverOpenHintLinux:
-      "On Linux, install the udev rule shown on the Receiver tab so your user may open the device.",
-    receiverOpenHintMacos:
-      "On macOS, allow the app under System Settings › Privacy & Security › Input Monitoring if asked.",
-    receiverOpenHintOther:
-      "Close other programs that may be using the receiver (for example the vendor's quiz software).",
+    receiverConnectionLost: "The receiver connection was lost ({detail}). Reconnecting…",
+    receiverWriteFailed: "Writing to the receiver failed ({detail}). Reconnecting…",
+    receiverOpenHintLinux: "On Linux, install the udev rule shown on the Receiver tab so your user may open the device.",
+    receiverOpenHintMacos: "On macOS, allow the app under System Settings › Privacy & Security › Input Monitoring if asked.",
+    receiverOpenHintOther: "Close other programs that may be using the receiver (for example the vendor's quiz software).",
     settingsKeptAs: "The old file was kept as {path}.",
-    settingsLeftUnread:
-      "The file was left as it is and is not written over until the app starts again.",
-    teamsLost:
-      "The saved team names could not be read; the app started without them.",
+    settingsLeftUnread: "The file was left as it is and is not written over until the app starts again.",
+    teamsLost: "The saved team names could not be read; the app started without them.",
     protocolRawOnly: "raw reports only",
     protocolLearned: "learned buttons ({buttons})",
     protocolEnjoy303s: "Enjoy 303S",
@@ -2935,8 +2496,7 @@ const strings = {
     monitor: "Display",
     monitorAuto: "Not the Director's",
     monitorDirector: "the Director is here",
-    quitDuringShow:
-      "A show is running. Close the app anyway? The show stays saved and can be resumed.",
+    quitDuringShow: "A show is running. Close the app anyway? The show stays saved and can be resumed.",
     partFailed: "This part could not be shown.",
     windowFailed: "The window could not be shown.",
     closeAppKeepShow: "Close the app (a show in progress stays saved)",
@@ -2959,19 +2519,15 @@ const strings = {
     menuWindow: "Window",
     menuMinimize: "Minimize",
     menuMaximize: "Zoom",
-    projectorFailed:
-      "Its screen could not be shown: {message}. Close it and open it again with M.",
+    projectorFailed: "Its screen could not be shown: {message}. Close it and open it again with M.",
     slideNotShown: "The slide could not be shown: {message}",
     tryAgain: "Try again",
     tabLights: "Lights",
     lightsLive: "Lights",
-    lightsOff:
-      "No output chosen: the lights are only drawn in the preview below.",
+    lightsOff: "No output chosen: the lights are only drawn in the preview below.",
     lightsConnected: "Sending to: {name}",
-    lightsLost:
-      "The output does not work; it is tried again every second. {problem}",
-    lightsMessagesFailed:
-      "Messages to other programs cannot be sent. {problem}",
+    lightsLost: "The output does not work; it is tried again every second. {problem}",
+    lightsMessagesFailed: "Messages to other programs cannot be sent. {problem}",
     lightsShowing: "Showing: {look}",
     lightsDark: "dark",
     lightsBlackout: "Blackout",
@@ -2979,10 +2535,8 @@ const strings = {
     lightsHold: "Hold a look",
     lightsFollowShow: "— follow the show —",
     lightsMaster: "Master",
-    lightsSettingsLost:
-      "The lights setup could not be read, so it started afresh.",
-    lightsRefusedKept:
-      "The saved lights setup did not pass its checks, so the default is used: {problem}",
+    lightsSettingsLost: "The lights setup could not be read, so it started afresh.",
+    lightsRefusedKept: "The saved lights setup did not pass its checks, so the default is used: {problem}",
     lightsOutput: "DMX output",
     lightsInterface: "Interface",
     lightsOutputNone: "None (preview only)",
@@ -2991,26 +2545,20 @@ const strings = {
     lightsOutputArtNet: "Art-Net (network)",
     lightsOutputSacn: "sACN / E1.31 (network)",
     lightsOutputSoundSwitch: "SoundSwitch Micro DMX (experimental)",
-    lightsSoundSwitchHint:
-      "SoundSwitch does not publish its protocol. Buzzdome knows it from an independent open-source project, and it has not been tried with this interface yet. Close the SoundSwitch program before the show: only one program can use the interface.",
-    lightsOpenDmxHint:
-      "With Open DMX USB the computer times the signal; if the lights flicker, try a DMX USB Pro type interface.",
+    lightsSoundSwitchHint: "SoundSwitch does not publish its protocol. Buzzdome knows it from an independent open-source project, and it has not been tried with this interface yet. Close the SoundSwitch program before the show: only one program can use the interface.",
+    lightsOpenDmxHint: "With Open DMX USB the computer times the signal; if the lights flicker, try a DMX USB Pro type interface.",
     lightsPort: "Port",
     lightsFind: "Find interfaces",
     lightsFound: "Interfaces found",
-    lightsNoneFound:
-      "No USB-DMX interface found. The network outputs (Art-Net, sACN) need none.",
+    lightsNoneFound: "No USB-DMX interface found. The network outputs (Art-Net, sACN) need none.",
     lightsUse: "Use",
     lightsHost: "Address",
-    lightsArtNetHostHint:
-      "The node's IPv4 address, or 255.255.255.255 or 2.255.255.255 for every node on the network.",
+    lightsArtNetHostHint: "The node's IPv4 address, or 255.255.255.255 or 2.255.255.255 for every node on the network.",
     lightsUniverse: "Universe",
     lightsSacnHost: "IPv4 address (empty = multicast)",
-    lightsFlashingWarning:
-      "Caution: fast flashing can trigger seizures in some viewers. Buzzdome never flashes more than twice a second, but a fixture's strobe flashes at its own rate set by the channel value: set it by the manual to at most 2 or 3 flashes a second.",
+    lightsFlashingWarning: "Caution: fast flashing can trigger seizures in some viewers. Buzzdome never flashes more than twice a second, but a fixture's strobe flashes at its own rate set by the channel value: set it by the manual to at most 2 or 3 flashes a second.",
     lightsFixtures: "Fixtures",
-    lightsFixturesHint:
-      "Each fixture has a DMX address (its first channel) and its channels in the order its manual gives, for the mode it is set to.",
+    lightsFixturesHint: "Each fixture has a DMX address (its first channel) and its channels in the order its manual gives, for the mode it is set to.",
     lightsAddFixture: "Add fixture",
     lightsNewFixture: "Fixture {n}",
     lightsName: "Name",
@@ -3025,8 +2573,7 @@ const strings = {
     lightsPresetRgbw: "RGBW (4 channels)",
     lightsPresetDimmerRgb: "Dimmer + RGB (4 channels)",
     lightsPresetDimmerRgbStrobe: "Dimmer + RGB + strobe (5 channels)",
-    lightsPresetPar7:
-      "LED par, 7 channels (dimmer, RGB, strobe, program, speed)",
+    lightsPresetPar7: "LED par, 7 channels (dimmer, RGB, strobe, program, speed)",
     lightsPresetDimmerRgbwStrobe: "Dimmer + RGBW + strobe (6 channels)",
     lightsPresetDimmer: "Dimmer only (1 channel)",
     lightsChannelDimmer: "Dimmer",
@@ -3046,33 +2593,25 @@ const strings = {
     lightsLibraryMode: "DMX mode",
     lightsLibraryModeName: "{name} · {n} ch",
     lightsLibraryModes: "modes: {n}",
-    lightsLibraryNone:
-      "No model matches. Add the fixture from a preset and set its channels from its manual.",
+    lightsLibraryNone: "No model matches. Add the fixture from a preset and set its channels from its manual.",
     lightsLibraryMore: "Showing {shown} of {total}; refine your search.",
-    lightsLibraryHint:
-      "Pick the DMX mode the fixture is set to. Colours, dimmer and shutter follow the looks; the other channels (movement, gobos, programs, fog) stay at the library's defaults, away from strobes and programs, and can be set as a fixed value or in a look's extra channels. Lasers are not in the library: they are for an operator, not for automatic looks. The library's data may not fit every unit: try the fixture before the show.",
-    lightsLibraryCheck:
-      "According to the library, these channels may flash or run a program even at rest: {labels}. Try them on the fixture before the show, and set a fixed value from its manual if needed.",
+    lightsLibraryHint: "Pick the DMX mode the fixture is set to. Colours, dimmer and shutter follow the looks; the other channels (movement, gobos, programs, fog) stay at the library's defaults, away from strobes and programs, and can be set as a fixed value or in a look's extra channels. Lasers are not in the library: they are for an operator, not for automatic looks. The library's data may not fit every unit: try the fixture before the show.",
+    lightsLibraryCheck: "According to the library, these channels may flash or run a program even at rest: {labels}. Try them on the fixture before the show, and set a fixed value from its manual if needed.",
     lightsLibraryCredit: "Library: {source}, {copyright}, {url}.",
     lightsLibraryLicence: "Library licence",
-    lightsLibraryNoLook:
-      "Looks will not light this mode: according to the library it has no dimmer, colour or shutter, so the fixture lights only through its own programs or switches. Set those as a fixed value or in a look's extra channels.",
-    lightsLibraryBuiltIn:
-      "Built-in library: {models} models, data from {date}.",
-    lightsLibraryDownloaded:
-      "Downloaded library: {models} models, downloaded {date}.",
+    lightsLibraryNoLook: "Looks will not light this mode: according to the library it has no dimmer, colour or shutter, so the fixture lights only through its own programs or switches. Set those as a fixed value or in a look's extra channels.",
+    lightsLibraryBuiltIn: "Built-in library: {models} models, data from {date}.",
+    lightsLibraryDownloaded: "Downloaded library: {models} models, downloaded {date}.",
     lightsLibraryUpdated: "It had {before} before.",
     lightsLibraryUpdate: "Update from the internet",
     lightsLibraryUpdating: "Downloading…",
-    lightsLibraryUpdateHint:
-      "Downloads the current fixtures from the Open Fixture Library (needs the internet, may take a minute). They follow the same rules as the built-in ones: lasers left out, no channel left strobing at rest.",
+    lightsLibraryUpdateHint: "Downloads the current fixtures from the Open Fixture Library (needs the internet, may take a minute). They follow the same rules as the built-in ones: lasers left out, no channel left strobing at rest.",
     lightsLibraryReset: "Back to the built-in one",
     lightsChannelFixed: "Fixed value",
     lightsChannelUnused: "Unused",
     lightsFixedValue: "Value",
     lightsLooks: "Looks",
-    lightsLooksHint:
-      "A look is how the lights shine: colours, intensity and effect. Try one with Hold.",
+    lightsLooksHint: "A look is how the lights shine: colours, intensity and effect. Try one with Hold.",
     lightsAddLook: "Add look",
     lightsNewLook: "Look {n}",
     lightsColors: "Colours",
@@ -3091,13 +2630,11 @@ const strings = {
     lightsAllFixtures: "Every fixture shines.",
     lightsStrobeValue: "Strobe value",
     lightsExtraChannels: "Extra channels",
-    lightsExtraChannelsHint:
-      "address=value, comma separated, such as a smoke machine at 100=255",
+    lightsExtraChannelsHint: "address=value, comma separated, such as a smoke machine at 100=255",
     lightsHoldLook: "Hold",
     lightsRelease: "Release",
     lightsWhen: "What shines when",
-    lightsWhenHint:
-      "Each moment of the show has its look; one with none keeps the look before.",
+    lightsWhenHint: "Each moment of the show has its look; one with none keeps the look before.",
     lightsKeep: "— keep the one before —",
     lightsStageNoShow: "No show",
     lightsStageLobby: "Players register",
@@ -3114,8 +2651,7 @@ const strings = {
     lightsStageFinalBuildUp: "Final ranking: build-up",
     lightsStageWinner: "Final ranking: winner",
     lightsFlashes: "Flashes",
-    lightsFlashesHint:
-      "At these moments a look shines for a while, then the lights go back.",
+    lightsFlashesHint: "At these moments a look shines for a while, then the lights go back.",
     lightsNoFlash: "— no flash —",
     lightsFlashLength: "Length",
     cueClockStart: "Countdown starts",
@@ -3128,42 +2664,33 @@ const strings = {
     cuePlace: "Place in the final ranking",
     cueWinner: "Winner",
     lightsMessages: "Messages to other programs (OSC, MIDI)",
-    lightsMessagesHint:
-      "Buzzdome sends each moment of the show as an OSC message (/buzzdome/stage/…, /buzzdome/cue/…, /buzzdome/slide, /buzzdome/buzz, /buzzdome/show/start and /end) and as a MIDI note, so a lighting, DJ or sound program can react to it.",
+    lightsMessagesHint: "Buzzdome sends each moment of the show as an OSC message (/buzzdome/stage/…, /buzzdome/cue/…, /buzzdome/slide, /buzzdome/buzz, /buzzdome/show/start and /end) and as a MIDI note, so a lighting, DJ or sound program can react to it.",
     lightsOsc: "OSC over UDP",
     lightsMidi: "MIDI",
     lightsMidiPort: "MIDI output",
     lightsMidiChannel: "Channel",
-    lightsMidiNotes:
-      "Notes: moments of the show from {stage}, flashes from {cue}, show start {start}, end {end}, buzz {buzz}; the slide number as a program change.",
+    lightsMidiNotes: "Notes: moments of the show from {stage}, flashes from {cue}, show start {start}, end {end}, buzz {buzz}; the slide number as a program change.",
     lightsNoMidiPorts: "No MIDI output found.",
     lightsPreview: "Preview",
     lightsChannelValue: "Channel {n}: {value}",
     errLightsRefused: "The lights setup cannot be saved: {problem}.",
-    errVoiceDownload:
-      "The voice cannot be downloaded. Check the internet connection and try again.",
-    errVoiceDamaged:
-      "The downloaded voice is damaged, so it is not used. Try downloading it again.",
-    errVoiceMissing: "The voice is not downloaded yet (File › Quiz settings).",
-    errVoiceFailed:
-      "The voice cannot be used now; the system voice reads the questions.",
-    errLibraryDownload:
-      "The fixture library cannot be downloaded. The one in use stays.",
-    errLibraryRedirected:
-      "The fixture library cannot be downloaded: the site redirected it elsewhere ({to}). The one in use stays.",
-    errLibraryNotRead:
-      "The downloaded fixture library cannot be read. The one in use stays.",
-    errLibraryFormatChanged:
-      "The Open Fixture Library has a new format (version {version}) this version of the app does not know. The library in use stays; an app update will bring the new fixtures.",
-    errLibraryTooSmall:
-      "The downloaded library has only {models} models (at least {least} expected), so the download was probably cut short. The one in use stays.",
+    errVoiceDownload: "The voice cannot be downloaded. Check the internet connection and try again.",
+    errVoiceDamaged: "The downloaded voice is damaged, so it is not used. Try downloading it again.",
+    errVoiceMissing: "The voices are not downloaded yet (Director, Settings › Voices for reading aloud).",
+    errVoiceDisk: "The voices cannot be saved to the disk: {detail}.",
+    voicesDuringShow: "The voices cannot be downloaded or removed during a show, so that the disk keeps up with saving the show.",
+    errVoiceFailed: "The voice cannot be used now; the system voice reads the questions.",
+    errLibraryDownload: "The fixture library cannot be downloaded. The one in use stays.",
+    errLibraryRedirected: "The fixture library cannot be downloaded: the site redirected it elsewhere ({to}). The one in use stays.",
+    errLibraryNotRead: "The downloaded fixture library cannot be read. The one in use stays.",
+    errLibraryFormatChanged: "The Open Fixture Library has a new format (version {version}) this version of the app does not know. The library in use stays; an app update will bring the new fixtures.",
+    errLibraryTooSmall: "The downloaded library has only {models} models (at least {least} expected), so the download was probably cut short. The one in use stays.",
     lightsProblemTooMany: "too many items ({what})",
     lightsProblemOutOfRange: "a value out of range ({what})",
     lightsProblemSameId: "two items with the same number ({what})",
     lightsProblemMissing: "a look or flash names something that is gone",
     lightsProblemPastUniverse: "fixture “{name}” goes past channel 512",
-    lightsProblemNotIpv4:
-      "“{host}” is not an IPv4 address (such as 192.168.1.20); computer names are not used",
+    lightsProblemNotIpv4: "“{host}” is not an IPv4 address (such as 192.168.1.20); computer names are not used",
     lightsPartFixture: "fixtures",
     lightsPartChannel: "channels",
     lightsPartLook: "looks",
@@ -3172,15 +2699,12 @@ const strings = {
     lightsPartOutput: "output",
     lightsPartMessage: "messages",
     lightsPartMaster: "master",
-    lightsOutputNotAvailable:
-      "The interface is not plugged in, or another program uses it ({detail}).",
-    lightsOutputNotFound:
-      "The interface is not plugged in, or another program uses it.",
+    lightsOutputNotAvailable: "The interface is not plugged in, or another program uses it ({detail}).",
+    lightsOutputNotFound: "The interface is not plugged in, or another program uses it.",
     lightsOutputUnknownHost: "{host} is not an IPv4 address.",
     lightsOutputSendFailed: "Sending failed ({detail}).",
     lightsOutputSentPart: "The interface took only {written} of {of} bytes.",
-    lightsOutputNotSupported:
-      "This version of the app cannot drive this interface.",
+    lightsOutputNotSupported: "This version of the app cannot drive this interface.",
   },
 } as const;
 
@@ -3216,23 +2740,16 @@ export const windowLang = {
     window.addEventListener("storage", otherWindowSwitched);
     return () => {
       langListeners.delete(listener);
-      if (langListeners.size === 0)
-        window.removeEventListener("storage", otherWindowSwitched);
+      if (langListeners.size === 0) window.removeEventListener("storage", otherWindowSwitched);
     };
   },
 };
 
 export function useLang(): [Lang, (lang: Lang) => void] {
-  return [
-    useSyncExternalStore(windowLang.subscribe, windowLang.get),
-    windowLang.set,
-  ];
+  return [useSyncExternalStore(windowLang.subscribe, windowLang.get), windowLang.set];
 }
 
-export type Translate = (
-  key: StringKey,
-  params?: Record<string, string | number>,
-) => string;
+export type Translate = (key: StringKey, params?: Record<string, string | number>) => string;
 
 export function translator(lang: Lang): Translate {
   return (key, params) => {
@@ -3270,9 +2787,6 @@ export function menuWords(t: Translate): MenuWords {
   };
 }
 
-export function playerName(
-  t: Translate,
-  player: { name: string; buzzer: number },
-): string {
+export function playerName(t: Translate, player: { name: string; buzzer: number }): string {
   return player.name || t("buzzer", { n: player.buzzer });
 }

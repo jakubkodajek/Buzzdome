@@ -4,27 +4,13 @@ import { useApp, useRun } from "../app-context";
 import { defaultChoice } from "../audio/library";
 import { useSoundPreview } from "../audio/show-sounds";
 import { DEFAULT_QUIZ_SOUNDS } from "../bindings/Constants";
-import {
-  useBackendEvent,
-  usePlayerVolume,
-  useProjectorWindow,
-  useReceiverInfo,
-  useShowDiskSpace,
-} from "../hooks";
+import { useBackendEvent, usePlayerVolume, useProjectorWindow, useReceiverInfo, useShowDiskSpace } from "../hooks";
 import type { StringKey } from "../i18n";
 import { CheckIcon, CrossIcon, QuestionIcon, WarningIcon } from "../icons";
 import { LANGUAGE_LABEL, settingsOf, soundsOf } from "../quiz";
 import { usePreparing, useSystemVoice } from "../audio/read-aloud";
 import type { GameView, Quiz } from "../types";
-import {
-  launchCheck,
-  projectorScreen,
-  type CheckFix,
-  type CheckPart,
-  type CheckState,
-  type Muted,
-  type SoundTry,
-} from "./launch-check";
+import { launchCheck, projectorScreen, type CheckFix, type CheckPart, type CheckState, type Muted, type SoundTry } from "./launch-check";
 import type { ProjectorSettings } from "./SettingsTab";
 
 /** The Director's tabs a fix opens. */
@@ -45,9 +31,7 @@ export function LaunchCheck(props: LaunchCheckProps) {
   const [hidden, setHidden] = useState(false);
   useBackendEvent("show-changed", () => setHidden(false));
   // Hidden, it reads nothing: the panel polls while it is on screen.
-  return hidden ? null : (
-    <LaunchCheckPanel {...props} onHide={() => setHidden(true)} />
-  );
+  return hidden ? null : <LaunchCheckPanel {...props} onHide={() => setHidden(true)} />;
 }
 
 const PART_LABEL: Record<CheckPart, StringKey> = {
@@ -77,13 +61,7 @@ const FIX_LABEL: Record<CheckFix, StringKey> = {
   soundHeard: "launchSoundHeardButton",
 };
 
-function LaunchCheckPanel({
-  view,
-  quiz,
-  projector,
-  onTab,
-  onHide,
-}: LaunchCheckProps & { onHide: () => void }) {
+function LaunchCheckPanel({ view, quiz, projector, onTab, onHide }: LaunchCheckProps & { onHide: () => void }) {
   const { t } = useApp();
   const run = useRun();
   const receiver = useReceiverInfo();
@@ -93,27 +71,14 @@ function LaunchCheckPanel({
   // The test sound plays as loud as the show's effects.
   const preview = useSoundPreview(sounds);
   const playerVolume = usePlayerVolume();
-  const muted: Muted =
-    playerVolume === 0 ? "player" : sounds.effectsVolume === 0 ? "quiz" : null;
+  const muted: Muted = playerVolume === 0 ? "player" : sounds.effectsVolume === 0 ? "quiz" : null;
   const [sound, setSound] = useState<SoundTry>("notPlayed");
 
   const preparing = usePreparing();
   const language = quiz ? settingsOf(quiz).language : "cs";
   const systemVoice = useSystemVoice(language);
-  const voice = {
-    preparing,
-    systemVoice: systemVoice && systemVoice.name,
-    language: t(LANGUAGE_LABEL[language]),
-  };
-  const items = launchCheck(t, {
-    receiver,
-    view,
-    projector: projectorWindow,
-    muted,
-    sound,
-    freeDiskBytes,
-    voice,
-  });
+  const voice = { preparing, systemVoice: systemVoice && systemVoice.name, language: t(LANGUAGE_LABEL[language]) };
+  const items = launchCheck(t, { receiver, view, projector: projectorWindow, muted, sound, freeDiskBytes, voice });
   const open = items.filter((item) => item.state !== "ok").length;
 
   const fix = (action: CheckFix) => {
@@ -131,16 +96,7 @@ function LaunchCheckPanel({
       case "placeProjector":
         // Full screen on a screen the Director is not on: the monitors as they are now, as the Director may have moved.
         projector.setFullscreen(true);
-        return run(
-          api
-            .listMonitors()
-            .then((monitors) =>
-              api.openHostWindow(
-                projectorScreen(monitors, projector.monitor),
-                true,
-              ),
-            ),
-        );
+        return run(api.listMonitors().then((monitors) => api.openHostWindow(projectorScreen(monitors, projector.monitor), true)));
       case "playSound":
         // The app's own sound, so a quiz whose sound for the moment is missing still tests the speakers.
         preview.play("correct", defaultChoice("correct"));
@@ -154,9 +110,7 @@ function LaunchCheckPanel({
     <section className="launch-check" aria-label={t("launchCheck")}>
       <header>
         <h2>{t("launchCheck")}</h2>
-        <span className="muted">
-          {open === 0 ? t("launchAllReady") : t("launchOpen", { n: open })}
-        </span>
+        <span className="muted">{open === 0 ? t("launchAllReady") : t("launchOpen", { n: open })}</span>
         <button onClick={onHide}>{t("launchHide")}</button>
       </header>
       <ul>

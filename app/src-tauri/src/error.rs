@@ -227,6 +227,9 @@ pub enum AppError {
     /// The voice process did not start, load the model or answer in time.
     #[error("the voice process failed")]
     VoiceFailed,
+    /// The model or a clip could not be written to the disk (full, refused).
+    #[error("the voice model cannot be saved: {detail}")]
+    VoiceDisk { detail: String },
 
     // Updates of the app.
     /// No newer version was found to install.

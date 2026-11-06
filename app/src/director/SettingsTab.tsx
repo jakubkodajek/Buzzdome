@@ -25,11 +25,7 @@ const ICONS: Record<IconColor, { label: StringKey; image: string }> = {
   yellow: { label: "iconYellow", image: yellowIcon },
 };
 
-const LOOK_LABEL: Record<Look, StringKey> = {
-  light: "lookLight",
-  dark: "lookDark",
-  system: "lookSystem",
-};
+const LOOK_LABEL: Record<Look, StringKey> = { light: "lookLight", dark: "lookDark", system: "lookSystem" };
 
 export interface ProjectorSettings {
   monitors: MonitorInfo[];
@@ -56,9 +52,7 @@ export function useProjectorSettings(): ProjectorSettings {
       api.listMonitors().then((list) => {
         setMonitors(list);
         // A chosen monitor that is gone gives way to one the Director is not on.
-        setMonitor((chosen) =>
-          list.some((m) => m.id === chosen) ? chosen : null,
-        );
+        setMonitor((chosen) => (list.some((m) => m.id === chosen) ? chosen : null));
       }),
     );
   }, [run]);
@@ -66,35 +60,16 @@ export function useProjectorSettings(): ProjectorSettings {
 
   // The backend lists the monitors again when it opens the projector.
   const toggle = useCallback(() => {
-    run(
-      isOpen ? api.closeHostWindow() : api.openHostWindow(monitor, fullscreen),
-    );
+    run(isOpen ? api.closeHostWindow() : api.openHostWindow(monitor, fullscreen));
   }, [isOpen, monitor, fullscreen, run]);
 
   return useMemo(
-    () => ({
-      monitors,
-      refreshMonitors,
-      monitor,
-      setMonitor,
-      fullscreen,
-      setFullscreen,
-      isOpen,
-      toggle,
-    }),
+    () => ({ monitors, refreshMonitors, monitor, setMonitor, fullscreen, setFullscreen, isOpen, toggle }),
     [monitors, refreshMonitors, monitor, fullscreen, isOpen, toggle],
   );
 }
 
-export function SettingsTab({
-  projector,
-  look,
-  launch,
-}: {
-  projector: ProjectorSettings;
-  look: DirectorLook;
-  launch: LaunchCheckSetting;
-}) {
+export function SettingsTab({ projector, look, launch }: { projector: ProjectorSettings; look: DirectorLook; launch: LaunchCheckSetting }) {
   const { t, lang, setLang } = useApp();
   return (
     <div className="settings">
@@ -110,23 +85,16 @@ export function SettingsTab({
             <option value="">{t("monitorAuto")}</option>
             {projector.monitors.map((m, i) => (
               <option key={m.id} value={m.id}>
-                {m.name ?? t("displayN", { n: i + 1 })} ({m.width}×{m.height})
-                {m.director && ` · ${t("monitorDirector")}`}
+                {m.name ?? t("displayN", { n: i + 1 })} ({m.width}×{m.height}){m.director && ` · ${t("monitorDirector")}`}
               </option>
             ))}
           </select>
         </label>
         <label>
           <span>{t("fullscreen")}</span>
-          <input
-            type="checkbox"
-            checked={projector.fullscreen}
-            onChange={(e) => projector.setFullscreen(e.target.checked)}
-          />
+          <input type="checkbox" checked={projector.fullscreen} onChange={(e) => projector.setFullscreen(e.target.checked)} />
         </label>
-        <button onClick={projector.toggle}>
-          {projector.isOpen ? t("closeProjector") : t("openProjector")}
-        </button>
+        <button onClick={projector.toggle}>{projector.isOpen ? t("closeProjector") : t("openProjector")}</button>
       </fieldset>
       <AppIconPicker />
       <fieldset>
@@ -138,10 +106,7 @@ export function SettingsTab({
       </fieldset>
       <fieldset>
         <legend>{t("directorLook")}</legend>
-        <select
-          value={look.look}
-          onChange={(e) => look.setLook(readLook(e.target.value))}
-        >
+        <select value={look.look} onChange={(e) => look.setLook(readLook(e.target.value))}>
           {LOOKS.map((value) => (
             <option key={value} value={value}>
               {t(LOOK_LABEL[value])}
@@ -155,11 +120,7 @@ export function SettingsTab({
         <legend>{t("launchCheck")}</legend>
         <label>
           <span>{t("launchCheckShow")}</span>
-          <input
-            type="checkbox"
-            checked={launch.on}
-            onChange={(e) => launch.setOn(e.target.checked)}
-          />
+          <input type="checkbox" checked={launch.on} onChange={(e) => launch.setOn(e.target.checked)} />
         </label>
         <p className="muted">{t("launchCheckHint")}</p>
       </fieldset>
@@ -184,13 +145,7 @@ function AppVersion() {
       alive = false;
     };
   }, []);
-  return (
-    version && (
-      <p className="muted">
-        {t("appVersion", { name: t("appTitle"), version })}
-      </p>
-    )
-  );
+  return version && <p className="muted">{t("appVersion", { name: t("appTitle"), version })}</p>;
 }
 
 /** The colour of the windows' icon, orange unless another is chosen. */

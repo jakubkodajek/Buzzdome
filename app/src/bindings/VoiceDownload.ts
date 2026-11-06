@@ -3,4 +3,4 @@
 /**
  * How far the model's download is.
  */
-export type VoiceDownload = { received: number; total: number };
+export type VoiceDownload = { received: number, total: number, };

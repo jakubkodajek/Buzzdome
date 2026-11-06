@@ -10,8 +10,9 @@ use std::path::Path;
 /// Denoising steps per clip: more sound cleaner and take longer. Eight is
 /// what the model's sherpa-onnx example takes.
 const STEPS: i32 = 8;
-/// CPU threads the engine uses: the show's own threads keep the rest.
-const MAX_THREADS: usize = 4;
+/// CPU threads the engine uses: the show's own threads (projector, video,
+/// lights) keep the rest of an event laptop's.
+const MAX_THREADS: usize = 2;
 
 /// A clip: samples from -1 to 1, `rate` per second.
 pub struct Clip {

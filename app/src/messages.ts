@@ -39,23 +39,12 @@ type Params = Record<string, string | number>;
 /** The string and number fields of a code, as text parameters. */
 function params(fields: object): Params {
   return Object.fromEntries(
-    Object.entries(fields).filter((entry): entry is [string, string | number] =>
-      ["string", "number"].includes(typeof entry[1]),
-    ),
+    Object.entries(fields).filter((entry): entry is [string, string | number] => ["string", "number"].includes(typeof entry[1])),
   );
 }
 
 /** Codes worded with their own parameters, see `errorText`. */
-type WordedApart =
-  | "file"
-  | "noSuchSlide"
-  | "noSuchPad"
-  | "notInLibrary"
-  | "learnConflict"
-  | "buzzerColours"
-  | "quizInvalid"
-  | "journalBroken"
-  | "lightsRefused";
+type WordedApart = "file" | "noSuchSlide" | "noSuchPad" | "notInLibrary" | "learnConflict" | "buzzerColours" | "quizInvalid" | "journalBroken" | "lightsRefused";
 
 const ERROR_KEYS: Record<Exclude<AppError["code"], WordedApart>, StringKey> = {
   noShow: "noShow",
@@ -122,6 +111,7 @@ const ERROR_KEYS: Record<Exclude<AppError["code"], WordedApart>, StringKey> = {
   voiceDamaged: "errVoiceDamaged",
   voiceMissing: "errVoiceMissing",
   voiceFailed: "errVoiceFailed",
+  voiceDisk: "errVoiceDisk",
 };
 
 const FILE_ACTION_KEYS: Record<FileAction, StringKey> = {
@@ -143,12 +133,7 @@ const FILE_REASON_KEYS: Record<Exclude<FileReason, "other">, StringKey> = {
 
 /** Whether `value` is a backend error (an `AppError`), not one of Tauri's own or a script's. */
 export function isAppError(value: unknown): value is AppError {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    "code" in value &&
-    typeof value.code === "string"
-  );
+  return typeof value === "object" && value !== null && "code" in value && typeof value.code === "string";
 }
 
 /**
@@ -189,20 +174,12 @@ export function systemWords(detail: string): string {
 export function errorNotice(t: Translate, error: unknown): Notice {
   if (!isAppError(error)) return { text: thrownText(error) };
   if (error.code === "file") {
-    const text = t(FILE_ACTION_KEYS[error.action], {
-      name: fileName(error.path),
-    });
-    if (error.reason === "other")
-      return { text, detail: `${error.path}: ${systemWords(error.detail)}` };
-    return {
-      text: `${text} ${t(FILE_REASON_KEYS[error.reason])}`,
-      detail: error.path,
-    };
+    const text = t(FILE_ACTION_KEYS[error.action], { name: fileName(error.path) });
+    if (error.reason === "other") return { text, detail: `${error.path}: ${systemWords(error.detail)}` };
+    return { text: `${text} ${t(FILE_REASON_KEYS[error.reason])}`, detail: error.path };
   }
   const text = errorWords(t, error);
-  return "detail" in error
-    ? { text, detail: systemWords(error.detail) }
-    : { text };
+  return "detail" in error ? { text, detail: systemWords(error.detail) } : { text };
 }
 
 /** A failed backend call in one line, for a message that has no room for its detail apart. */
@@ -212,38 +189,25 @@ export function errorText(t: Translate, error: unknown): string {
 }
 
 /** The quizmaster's words for `error`, without its detail. */
-function errorWords(
-  t: Translate,
-  error: Exclude<AppError, { code: "file" }>,
-): string {
+function errorWords(t: Translate, error: Exclude<AppError, { code: "file" }>): string {
   switch (error.code) {
     case "noSuchSlide":
       return t("errNoSuchSlide", { slide: error.slide + 1 });
     case "noSuchPad":
       return t("errNoSuchPad", { pad: error.pad + 1 });
     case "notInLibrary":
-      return t("errNotInLibrary", {
-        reference: mediaFileName(error.reference),
-      });
+      return t("errNotInLibrary", { reference: mediaFileName(error.reference) });
     case "learnConflict":
-      return t("errLearnConflict", {
-        buzzer: error.buzzer,
-        button: buttonLabel(error.button),
-      });
+      return t("errLearnConflict", { buzzer: error.buzzer, button: buttonLabel(error.button) });
     case "buzzerColours":
       return colourClashText(t, error.clash);
     case "journalBroken":
       return t("errJournalBroken", { resume: t("resume") });
     case "lightsRefused":
-      return t("errLightsRefused", {
-        problem: setupErrorText(t, error.refused),
-      });
+      return t("errLightsRefused", { problem: setupErrorText(t, error.refused) });
     case "quizInvalid": {
       const first = error.problems[0];
-      return t("errQuizInvalid", {
-        n: error.problems.length,
-        first: first ? problemText(t, first.problem) : "",
-      });
+      return t("errQuizInvalid", { n: error.problems.length, first: first ? problemText(t, first.problem) : "" });
     }
     default:
       return t(ERROR_KEYS[error.code], params(error));
@@ -251,19 +215,9 @@ function errorWords(
 }
 
 /** Problems worded with their own parameters, see `problemText`. */
-type ProblemApart =
-  | "media"
-  | "categoryMedia"
-  | "soundMedia"
-  | "welcomeMedia"
-  | "volume"
-  | "partEmpty"
-  | "replayNotOnQuestion";
+type ProblemApart = "media" | "categoryMedia" | "soundMedia" | "welcomeMedia" | "volume" | "partEmpty" | "replayNotOnQuestion";
 
-const PROBLEM_KEYS: Record<
-  Exclude<Problem["code"], ProblemApart>,
-  StringKey
-> = {
+const PROBLEM_KEYS: Record<Exclude<Problem["code"], ProblemApart>, StringKey> = {
   duplicateSlideId: "problemDuplicateSlideId",
   pictureAndVideo: "problemPictureAndVideo",
   replayDelayTooLong: "problemReplayDelayTooLong",
@@ -318,45 +272,20 @@ const WELCOME_FILE_LABEL: Record<WelcomeFile, StringKey> = {
 export function problemText(t: Translate, problem: Problem): string {
   switch (problem.code) {
     case "media":
-      return t("problemMedia", {
-        file: problem.file,
-        issue: mediaIssueText(t, problem.issue),
-      });
+      return t("problemMedia", { file: problem.file, issue: mediaIssueText(t, problem.issue) });
     case "categoryMedia":
-      return t("problemCategoryMedia", {
-        name: problem.name,
-        file: problem.file,
-        issue: mediaIssueText(t, problem.issue),
-      });
+      return t("problemCategoryMedia", { name: problem.name, file: problem.file, issue: mediaIssueText(t, problem.issue) });
     case "soundMedia":
-      return t("problemSoundMedia", {
-        moment: slotLabel(t, problem.slot),
-        file: problem.file,
-        issue: mediaIssueText(t, problem.issue),
-      });
+      return t("problemSoundMedia", { moment: slotLabel(t, problem.slot), file: problem.file, issue: mediaIssueText(t, problem.issue) });
     case "welcomeMedia":
-      return t("problemWelcomeMedia", {
-        place: t(WELCOME_FILE_LABEL[problem.place]),
-        file: problem.file,
-        issue: mediaIssueText(t, problem.issue),
-      });
+      return t("problemWelcomeMedia", { place: t(WELCOME_FILE_LABEL[problem.place]), file: problem.file, issue: mediaIssueText(t, problem.issue) });
     // Rules a sound and a video share, said of the one that breaks them.
     case "volume":
-      return t(
-        problem.media === "audio" ? "problemSoundVolume" : "problemVideoVolume",
-      );
+      return t(problem.media === "audio" ? "problemSoundVolume" : "problemVideoVolume");
     case "partEmpty":
-      return t(
-        problem.media === "audio"
-          ? "problemSoundPartEmpty"
-          : "problemVideoPartEmpty",
-      );
+      return t(problem.media === "audio" ? "problemSoundPartEmpty" : "problemVideoPartEmpty");
     case "replayNotOnQuestion":
-      return t(
-        problem.media === "audio"
-          ? "problemSoundReplayNotOnQuestion"
-          : "problemVideoReplayNotOnQuestion",
-      );
+      return t(problem.media === "audio" ? "problemSoundReplayNotOnQuestion" : "problemVideoReplayNotOnQuestion");
     default:
       return t(PROBLEM_KEYS[problem.code], params(problem));
   }
@@ -364,9 +293,7 @@ export function problemText(t: Translate, problem: Problem): string {
 
 function mediaIssueText(t: Translate, issue: MediaIssue): string {
   if (issue.type !== "wrongType") return t(MEDIA_ISSUE_KEYS[issue.type]);
-  const kinds = issue.expected.map((kind) =>
-    t(MEDIA_KIND_KEYS[kind], { extensions: MEDIA_EXTENSIONS[kind].join(", ") }),
-  );
+  const kinds = issue.expected.map((kind) => t(MEDIA_KIND_KEYS[kind], { extensions: MEDIA_EXTENSIONS[kind].join(", ") }));
   return t("mediaWrongType", { kinds: kinds.join(` ${t("or")} `) });
 }
 
@@ -381,49 +308,27 @@ const RECEIVER_PROBLEM_KEYS: Record<ReceiverProblem, StringKey> = {
  * Why the receiver cannot be used. A receiver that cannot be opened gets
  * what to check on `platform` (`std::env::consts::OS`).
  */
-export function receiverProblemText(
-  t: Translate,
-  problem: ReceiverProblem,
-  detail: string,
-  platform: string,
-): string {
-  const text = t(RECEIVER_PROBLEM_KEYS[problem], {
-    detail: systemWords(detail),
-  });
+export function receiverProblemText(t: Translate, problem: ReceiverProblem, detail: string, platform: string): string {
+  const text = t(RECEIVER_PROBLEM_KEYS[problem], { detail: systemWords(detail) });
   if (problem !== "cannotOpen") return text;
-  const hint =
-    platform === "linux"
-      ? "receiverOpenHintLinux"
-      : platform === "macos"
-        ? "receiverOpenHintMacos"
-        : "receiverOpenHintOther";
+  const hint = platform === "linux" ? "receiverOpenHintLinux" : platform === "macos" ? "receiverOpenHintMacos" : "receiverOpenHintOther";
   return `${text} ${t(hint)}`;
 }
 
 /** A USB number as four hex digits, as the system lists devices: "10c4". */
 export const hex4 = (n: number) => n.toString(16).padStart(4, "0");
 /** A USB device's vendor and product numbers: "10c4:1819". */
-export const vidPid = (d: { vendorId: number; productId: number }) =>
-  `${hex4(d.vendorId)}:${hex4(d.productId)}`;
+export const vidPid = (d: { vendorId: number; productId: number }) => `${hex4(d.vendorId)}:${hex4(d.productId)}`;
 
 /** The receiver's state, as the Receiver tab's status line says it (`platform` as for `receiverProblemText`). */
-export function receiverStatusText(
-  t: Translate,
-  status: ReceiverStatus,
-  platform: string,
-): string {
+export function receiverStatusText(t: Translate, status: ReceiverStatus, platform: string): string {
   switch (status.kind) {
     case "connected":
-      return t(
-        awaitsAnswer(status.protocol)
-          ? "receiverNotReady"
-          : "receiverConnected",
-        {
-          name: status.device.product ?? "HID",
-          id: vidPid(status.device),
-          protocol: protocolText(t, status.protocol),
-        },
-      );
+      return t(awaitsAnswer(status.protocol) ? "receiverNotReady" : "receiverConnected", {
+        name: status.device.product ?? "HID",
+        id: vidPid(status.device),
+        protocol: protocolText(t, status.protocol),
+      });
     case "looking":
       return t("receiverLooking");
     case "searching":
@@ -436,15 +341,8 @@ export function receiverStatusText(
 }
 
 /** `lead`, what was lost, with what became of the file the app keeps, and why it was not read apart. */
-export function settingsLostNotice(
-  t: Translate,
-  lead: string,
-  lost: SettingsLost,
-): Notice {
-  const file =
-    lost.keptAs === null
-      ? t("settingsLeftUnread")
-      : t("settingsKeptAs", { path: lost.keptAs });
+export function settingsLostNotice(t: Translate, lead: string, lost: SettingsLost): Notice {
+  const file = lost.keptAs === null ? t("settingsLeftUnread") : t("settingsKeptAs", { path: lost.keptAs });
   return { text: `${lead} ${file}`, detail: systemWords(lost.detail) };
 }
 
@@ -518,15 +416,14 @@ export function lightText(t: Translate, light: Light): string {
 /** Why buzzer colours were refused. */
 export function colourClashText(t: Translate, clash: ColourClash): string {
   const ready = lightText(t, "ready");
-  return clash.kind === "readyDark"
-    ? t("coloursReadyDark", { ready })
-    : t("coloursReadyLike", { ready, light: lightText(t, clash.light) });
+  return clash.kind === "readyDark" ? t("coloursReadyDark", { ready }) : t("coloursReadyLike", { ready, light: lightText(t, clash.light) });
 }
 
 /** Whether the receiver has yet to answer its set-up: shown as still being looked for, not as connected. */
 export function awaitsAnswer(protocol: ProtocolKind): boolean {
   return protocol.type === "enjoy303s" && !protocol.answered;
 }
+
 
 const IMPORT_ISSUE_KEYS: Record<ImportIssue["code"], StringKey> = {
   noQuestionColumn: "importNoQuestionColumn",
@@ -565,18 +462,13 @@ const PLACES_SHOWN = 8;
 /** The rows an import note came up in, by sheet: "rows 3, 5; sheet “Round 2”, row 4". */
 export function placesText(t: Translate, places: Place[]): string {
   const sheets = new Map<string, number[]>();
-  for (const { sheet, row } of places.slice(0, PLACES_SHOWN))
-    sheets.set(sheet, [...(sheets.get(sheet) ?? []), row]);
+  for (const { sheet, row } of places.slice(0, PLACES_SHOWN)) sheets.set(sheet, [...(sheets.get(sheet) ?? []), row]);
   const parts = [...sheets].map(([sheet, rows]) => {
-    const worded = t(rows.length === 1 ? "importRow" : "importRows", {
-      rows: rows.join(", "),
-    });
+    const worded = t(rows.length === 1 ? "importRow" : "importRows", { rows: rows.join(", ") });
     return sheet ? t("importSheetRows", { sheet, rows: worded }) : worded;
   });
   const more = places.length - PLACES_SHOWN;
-  return more > 0
-    ? `${parts.join("; ")} ${t("importMore", { n: more })}`
-    : parts.join("; ");
+  return more > 0 ? `${parts.join("; ")} ${t("importMore", { n: more })}` : parts.join("; ");
 }
 
 const PART_KEYS: Record<Part, StringKey> = {
@@ -619,14 +511,7 @@ const OUTPUT_ERROR_KEYS: Record<OutputError["problem"], StringKey> = {
 
 /** Why a lights output or message target does not work. */
 export function outputErrorText(t: Translate, error: OutputError): string {
-  return t(
-    OUTPUT_ERROR_KEYS[error.problem],
-    params(
-      "detail" in error
-        ? { ...error, detail: systemWords(error.detail) }
-        : error,
-    ),
-  );
+  return t(OUTPUT_ERROR_KEYS[error.problem], params("detail" in error ? { ...error, detail: systemWords(error.detail) } : error));
 }
 
 const CONNECT_CHANGE_KEYS: Record<ConnectChange, StringKey> = {
@@ -639,39 +524,20 @@ const CONNECT_CHANGE_KEYS: Record<ConnectChange, StringKey> = {
  * What connecting an AI app changed, where it works, and what the quizmaster does next on `platform`
  * (`std::env::consts::OS`).
  */
-export function aiConnectionText(
-  t: Translate,
-  connected: AiConnected,
-  platform: string,
-): string {
-  const said = t(CONNECT_CHANGE_KEYS[connected.change], {
-    app: connected.name,
-    folder: connected.folder,
-  });
+export function aiConnectionText(t: Translate, connected: AiConnected, platform: string): string {
+  const said = t(CONNECT_CHANGE_KEYS[connected.change], { app: connected.name, folder: connected.folder });
   // A running app keeps the folder it started with, also when its entry was already there.
   return `${said} ${aiRestartText(t, connected.assistant, platform)}`;
 }
 
 /** How `assistant` starts using the server once it is connected, on `platform` (`std::env::consts::OS`). */
-export function aiRestartText(
-  t: Translate,
-  assistant: Assistant,
-  platform: string,
-): string {
+export function aiRestartText(t: Translate, assistant: Assistant, platform: string): string {
   switch (assistant) {
     case "claudeDesktop":
-      return t(
-        platform === "macos"
-          ? "aiRestartClaudeMacos"
-          : platform === "windows"
-            ? "aiRestartClaudeWindows"
-            : "aiRestartClaudeLinux",
-      );
+      return t(platform === "macos" ? "aiRestartClaudeMacos" : platform === "windows" ? "aiRestartClaudeWindows" : "aiRestartClaudeLinux");
     case "antigravity":
       return t("aiRestartAntigravity");
     case "codex":
-      return t(
-        platform === "macos" ? "aiRestartCodexMacos" : "aiRestartCodexOther",
-      );
+      return t(platform === "macos" ? "aiRestartCodexMacos" : "aiRestartCodexOther");
   }
 }

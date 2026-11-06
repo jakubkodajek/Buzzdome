@@ -67,6 +67,12 @@ impl Line {
         cleaned.split_whitespace().collect::<Vec<_>>().join(" ")
     }
 
+    /// The line as the app takes it from a window: its words only, and a
+    /// voice the model has, so that one clip is kept for what sounds the same.
+    pub fn checked(self) -> Line {
+        Line { text: self.words(), voice: self.voice.min(quiz_core::MAX_VOICE), ..self }
+    }
+
     /// Whether there is anything to say.
     pub fn is_empty(&self) -> bool {
         self.words().is_empty()
@@ -89,6 +95,13 @@ mod tests {
 
     fn line(text: &str) -> Line {
         Line { text: text.into(), language: QuizLanguage::Cs, voice: 0 }
+    }
+
+    #[test]
+    fn a_checked_line_has_its_words_and_a_voice_the_model_has() {
+        let checked = Line { text: " Kdo\n je  tu? ".into(), language: QuizLanguage::Cs, voice: 200 }.checked();
+        assert_eq!((checked.text.as_str(), checked.voice), ("Kdo je tu?", quiz_core::MAX_VOICE));
+        assert_eq!(checked.clip_name(), Line { voice: quiz_core::MAX_VOICE, ..checked.clone() }.clip_name());
     }
 
     #[test]
