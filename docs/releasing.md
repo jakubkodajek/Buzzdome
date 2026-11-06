@@ -104,7 +104,9 @@ the build script runs again and unpacks them). Raising `sherpa-onnx` in `Cargo.l
 the archives' names, so the script fails until their new hashes are
 written into it: download each archive, check it, and write its
 `sha256sum`. A local build that cannot download (a proxy) works the same
-way: run the script and export the folder it names.
+way: run the script and export the folder it names. Only on CI does it
+remove `target/sherpa-onnx-prebuilt`: locally the folder's name does not
+change, so the build script would not run again to unpack the libraries.
 
 ## Code signing
 

@@ -67,8 +67,12 @@ done
 
 # The build script links whatever it finds unpacked in the target folder and
 # never looks at its archive again; a cache may bring one back partial or
-# changed. So none is kept: it unpacks the checked archives afresh.
-rm -rf "$root/target/sherpa-onnx-prebuilt"
+# changed. So on CI none is kept: it unpacks the checked archives afresh.
+# (Locally the folder's name stays the same, so the build script would not
+# run again to unpack them: the folder is kept there.)
+if [ -n "${GITHUB_RUN_ID:-}" ]; then
+  rm -rf "$root/target/sherpa-onnx-prebuilt"
+fi
 
 echo "sherpa-onnx $version libraries checked in $dir"
 if [ -n "${GITHUB_ENV:-}" ]; then
