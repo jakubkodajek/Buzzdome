@@ -257,8 +257,10 @@ pub enum Command {
     /// it is, with the jokers played and the questions that ended. Refused
     /// as `GoTo` is.
     ResetScores,
-    /// The player plays their joker on the current question (`on`), or
-    /// takes it back (`QuizSettings::jokers`, `Game::can_set_joker`).
+    /// The player plays their joker (`on`), or takes it back, on the
+    /// question it goes on now (`Game::joker_slide`): the current one, or
+    /// between questions the next (`QuizSettings::jokers`,
+    /// `Game::can_set_joker`).
     #[serde(rename_all = "camelCase")]
     SetJoker { buzzer: BuzzerId, on: bool },
     #[serde(rename_all = "camelCase")]
@@ -317,8 +319,9 @@ pub struct Controls {
     /// results are on screen; a show begun before rules version 4 also
     /// restarts it closed, until its answer is shown.
     pub restart_question: bool,
-    /// `SetJoker`: in a quiz with jokers, before the current question ends;
-    /// for each player as `Game::can_set_joker` says.
+    /// `SetJoker`: in a quiz with jokers, before the current question ends,
+    /// or between questions for the next (`Game::joker_slide`); for each
+    /// player as `Game::can_set_joker` says.
     pub set_joker: bool,
 }
 
@@ -586,7 +589,8 @@ pub struct Game {
     /// again would score it twice.
     closed_questions: BTreeSet<usize>,
     /// The questions players play their joker on, as (slide, buzzer): the
-    /// ones that ended, and the current one (`QuizSettings::jokers`).
+    /// ones that ended, and the current or next one (`joker_slide`,
+    /// `QuizSettings::jokers`).
     jokers: BTreeSet<(usize, BuzzerId)>,
     /// When the step the quiz's settings take by itself (`pending_step`)
     /// began to count down: when the current question closed for having
@@ -868,24 +872,56 @@ impl Game {
         }
     }
 
-    /// Whether jokers can be played now: in a quiz with jokers, while the
-    /// current question waits to start or runs.
+    /// Whether jokers can be played now: in a quiz with jokers, while a
+    /// question takes them (`joker_slide`).
     fn jokers_open(&self) -> bool {
-        let before_the_end = matches!(self.phase, Phase::Question(QuestionStep::Ready | QuestionStep::Running { .. }));
-        self.quiz.settings.jokers > 0 && before_the_end
+        self.quiz.settings.jokers > 0 && self.joker_slide().is_some()
+    }
+
+    /// The question a joker played now goes on: the current one while it
+    /// waits to start or runs. From rules version 7, whose questions start
+    /// as they are shown (`starts_as_shown`), also between questions: on
+    /// the slide before a question that has not ended (the lobby, a
+    /// billboard announcing it, an explanation, the end of a round, or the
+    /// answer of the question before), the question Next shows next.
+    pub fn joker_slide(&self) -> Option<usize> {
+        match self.phase {
+            Phase::Question(QuestionStep::Ready | QuestionStep::Running { .. }) => Some(self.slide),
+            Phase::Welcome
+            | Phase::Lobby
+            | Phase::Billboard
+            | Phase::Explanation
+            | Phase::EndOfRound
+            | Phase::Question(QuestionStep::Revealed { .. })
+                if self.rules_version >= 7 =>
+            {
+                let next = self.following()?;
+                let question = matches!(self.quiz.slides.get(next).map(|s| &s.content), Some(SlideContent::Question(_)));
+                (question && !self.closed_questions.contains(&next)).then_some(next)
+            }
+            _ => None,
+        }
     }
 
     /// Whether the player's joker can be played (`on`) or taken back now:
     /// while jokers can be played (`jokers_open`), as long as the question
     /// gave the player nothing yet, and to play it, with one left.
     pub fn can_set_joker(&self, buzzer: BuzzerId, on: bool) -> bool {
-        let open = self.jokers_open() && self.players.contains_key(&buzzer) && self.mark(buzzer).is_none();
-        open && (!on || self.plays_joker(buzzer) || self.jokers_left(buzzer) > 0)
+        let Some(slide) = self.joker_slide().filter(|_| self.quiz.settings.jokers > 0) else { return false };
+        let given = slide == self.slide && self.mark(buzzer).is_some();
+        let open = self.players.contains_key(&buzzer) && !given;
+        open && (!on || self.jokers.contains(&(slide, buzzer)) || self.jokers_left(buzzer) > 0)
     }
 
     /// Whether the player plays their joker on the current question.
     pub fn plays_joker(&self, buzzer: BuzzerId) -> bool {
         self.jokers.contains(&(self.slide, buzzer))
+    }
+
+    /// Whether the player's joker is on the question a joker played now
+    /// goes on (`joker_slide`); false when none takes one.
+    pub fn joker_chosen(&self, buzzer: BuzzerId) -> bool {
+        self.joker_slide().is_some_and(|slide| self.jokers.contains(&(slide, buzzer)))
     }
 
     /// The jokers the player has left in the show (`QuizSettings::jokers`).
@@ -1177,13 +1213,11 @@ impl Game {
             }
             Command::SetJoker { buzzer, on } => {
                 self.player_mut(*buzzer)?;
-                if !self.can_set_joker(*buzzer, *on) {
-                    return Err(GameError::NotNow);
-                }
+                let slide = self.joker_slide().filter(|_| self.can_set_joker(*buzzer, *on)).ok_or(GameError::NotNow)?;
                 if *on {
-                    self.jokers.insert((self.slide, *buzzer));
+                    self.jokers.insert((slide, *buzzer));
                 } else {
-                    self.jokers.remove(&(self.slide, *buzzer));
+                    self.jokers.remove(&(slide, *buzzer));
                 }
                 Ok(vec![])
             }
@@ -1557,13 +1591,13 @@ impl Game {
     /// kept of the slide left: its answers, score changes, waiting step,
     /// leaderboard and video plays.
     fn enter(&mut self, index: usize, phase: Phase) -> Vec<Effect> {
-        // A joker stays on a question that ended, and on one asked again
-        // from its start (`RestartQuestion`); one left before it ended is
-        // not spent.
-        let left = self.slide;
-        if index != left && !self.closed_questions.contains(&left) {
-            self.jokers.retain(|&(slide, _)| slide != left);
-        }
+        // A joker stays on a question that ended, on one asked again from
+        // its start (`RestartQuestion`) and on the one entered, played for
+        // it between questions (`joker_slide`); one left before it ended,
+        // or played for a question the show then did not go to, is not
+        // spent.
+        let closed = &self.closed_questions;
+        self.jokers.retain(|&(slide, _)| slide == index || closed.contains(&slide));
         // The question left stands as asked; one asked again from its start was taken back.
         self.asked.extend(self.asking.take());
         self.responses.clear();

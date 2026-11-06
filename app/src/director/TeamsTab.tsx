@@ -162,12 +162,12 @@ function ShowTeams({ view, lost }: { view: GameView; lost: SettingsLost | null }
                     <td className="joker-cell">
                       <button
                         className="joker-toggle"
-                        aria-pressed={p.joker.on}
+                        aria-pressed={p.joker.chosen}
                         disabled={!p.joker.canChange}
                         title={t("colJokerHint")}
                         onClick={(e) => {
                           e.stopPropagation();
-                          dispatch({ type: "setJoker", buzzer: p.buzzer, on: !p.joker.on });
+                          dispatch({ type: "setJoker", buzzer: p.buzzer, on: !p.joker.chosen });
                         }}
                       >
                         {t("jokerPlay")}

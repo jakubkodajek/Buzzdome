@@ -2297,3 +2297,50 @@ fn a_question_starts_its_clock_as_it_is_shown() {
     kept.run(0, Command::Next).unwrap();
     assert_eq!(step(&kept.game), QuestionStep::Ready);
 }
+
+#[test]
+fn a_joker_is_played_between_questions_for_the_next_one() {
+    let slides = vec![billboard("announce"), question("q1", AnswerMode::Everyone), billboard("between"), question("q2", AnswerMode::Everyone)];
+    let mut quiz = Quiz::new("Test", slides);
+    quiz.settings.jokers = 2;
+    let mut show = Show { game: Game::new(quiz.clone()), journal: Vec::new() };
+    assert!(show.game.starts_as_shown());
+    show.press(0, 1, Button::Big);
+    show.press(0, 2, Button::Big);
+    assert_eq!(show.game.joker_slide(), None, "the first slide is no question");
+
+    // On the slide announcing it, the quizmaster plays a joker for the question that follows.
+    show.run(1_000, Command::Next).unwrap();
+    assert_eq!(show.game.joker_slide(), Some(1));
+    assert!(show.game.controls().set_joker);
+    show.run(1_500, Command::SetJoker { buzzer: 1, on: true }).unwrap();
+    let player = |show: &Show, buzzer| show.game.view(1_500).players.into_iter().find(|p| p.buzzer == buzzer).unwrap().joker;
+    assert_eq!((player(&show, 1).on, player(&show, 1).chosen, player(&show, 1).left), (false, true, 1), "chosen for the next question");
+    assert!(player(&show, 1).can_change);
+
+    // The question starts as it is shown, with the joker on.
+    show.run(2_000, Command::Next).unwrap();
+    assert!(matches!(step(&show.game), QuestionStep::Running { .. }));
+    assert!(show.game.plays_joker(1) && !show.game.plays_joker(2));
+    show.press(2_000, 1, Button::B);
+    show.press(2_000, 2, Button::A);
+    assert_eq!((show.score(1), show.score(2)), (200, -20), "100 doubled; no joker for buzzer 2");
+
+    // Revealed, the next slide is no question: no joker until the slide before the next one.
+    show.run(3_000, Command::Next).unwrap();
+    assert!(!show.game.controls().set_joker);
+    show.run(4_000, Command::Next).unwrap();
+    assert_eq!(show.game.joker_slide(), Some(3));
+    show.run(4_500, Command::SetJoker { buzzer: 2, on: true }).unwrap();
+    assert_eq!(show.game.jokers_left(2), 1);
+    // The show goes elsewhere: the joker played for slide 4 is not spent.
+    show.run(5_000, Command::GoTo { slide: 0 }).unwrap();
+    assert_eq!(show.game.jokers_left(2), 2);
+    assert_eq!(show.game.jokers_left(1), 1, "the joker of the question that ended stays spent");
+    assert_eq!(Game::replay(quiz.clone(), &show.journal, RULES_VERSION), show.game);
+
+    // Under rules version 6 a joker waits for its question.
+    let older = Game::replay(quiz, &show.journal[..3], 6);
+    assert_eq!(older.joker_slide(), None);
+    assert!(!older.controls().set_joker);
+}
