@@ -1,5 +1,5 @@
 // Reads a question out in the quiz's language (spec SN-10): the clip the
-// app's offline voice rendered for it beforehand (app/src-tauri/src/voice.rs),
+// app's offline voice rendered for it beforehand (app/src-tauri/src/read_aloud.rs),
 // or, while there is none, a voice of the system (the window's Web Speech
 // API). The Director prepares every question's clip once a show with
 // reading on starts, so the show plays them without waiting.
