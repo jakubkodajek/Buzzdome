@@ -13,6 +13,8 @@ export type { Background } from "./bindings/Background";
 export type { AnswerResults } from "./bindings/AnswerResults";
 export type { AutoStepView } from "./bindings/AutoStepView";
 export type { Button } from "./bindings/Button";
+export type { BuzzState } from "./bindings/BuzzState";
+export type { BuzzView } from "./bindings/BuzzView";
 export type { BuzzerSeen } from "./bindings/BuzzerSeen";
 export type { Category } from "./bindings/Category";
 export type { AiConnected } from "./bindings/AiConnected";

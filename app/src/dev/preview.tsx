@@ -167,6 +167,7 @@ function view(partial: Partial<GameView>): GameView {
     answerCounts: null,
     results: null,
     buzzed: null,
+    buzzes: [],
     leaderboardVisible: false,
     controls: { ...NO_CONTROLS, next: true, goTo: true },
     onHold: false,
@@ -246,6 +247,22 @@ const SCENES: Record<string, GameView | null> = {
     slide: quiz.slides[7],
     clock: { limitMs: 30000, remainingMs: 25700, elapsedMs: 4300, running: false, points: 129 },
     buzzed: 3,
+    buzzes: [{ buzzer: 3, button: "big", state: "answering" }],
+    controls: { ...NO_CONTROLS, judge: true, restartQuestion: true },
+  }),
+  // Teams 2, 4 and 7 buzzed in that order; 2 was wrong, 4 answers, 7 waits its turn.
+  queue: view({
+    phase: { phase: "question", step: "buzzed", buzzer: 4, button: "big", clock: { limitMs: 30000, elapsedBeforeMs: 4300, runningSinceMs: null, pressesFromMs: 0 } },
+    slideIndex: 7,
+    slide: quiz.slides[7],
+    clock: { limitMs: 30000, remainingMs: 25700, elapsedMs: 4300, running: false, points: 129 },
+    players: players([{}, { lockedOut: true, delta: -20 }]),
+    buzzed: 4,
+    buzzes: [
+      { buzzer: 2, button: "big", state: "wrong" },
+      { buzzer: 4, button: "big", state: "answering" },
+      { buzzer: 7, button: "big", state: "waiting" },
+    ],
     controls: { ...NO_CONTROLS, judge: true, restartQuestion: true },
   }),
   // Two teams play their joker on the running question; the Director's Teams tab plays them.

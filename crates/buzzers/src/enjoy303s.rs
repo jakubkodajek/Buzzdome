@@ -429,7 +429,7 @@ impl Enjoy303s {
     /// Whether a fastest-finger round runs, or its buzz is judged: presses
     /// count only from buzzers that showed ready, in their timers' order.
     fn fastest_finger(&self) -> bool {
-        matches!(self.mode, BuzzerMode::FastestFinger | BuzzerMode::Buzzed)
+        self.mode.takes_buzzes()
     }
 
     /// Shows the lights in `colours` from now on.
