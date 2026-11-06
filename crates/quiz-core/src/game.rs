@@ -688,6 +688,11 @@ impl Game {
         game
     }
 
+    /// The `RULES_VERSION` the show runs under (`replay`).
+    pub fn rules_version(&self) -> u32 {
+        self.rules_version
+    }
+
     /// After a crash the clock of a running question is meaningless, so the
     /// question starts again (as in the original, §9.1). A step the show
     /// was to take by itself is held, so it waits for the quizmaster, who

@@ -6,7 +6,7 @@
 //! `SOAK_FIRST` the first seed, `SOAK_SEED` replays one that failed.
 
 use super::*;
-use show_sim::{random_quiz, Rng, Show, MAX_BUZZERS};
+use show_sim::{random_quiz, random_rules_version, Rng, Show, MAX_BUZZERS};
 use std::io::Write;
 
 /// What a crash leaves at the end of the journal.
@@ -39,16 +39,16 @@ fn leave_tail(root: &Path, tail: Tail, next: &Stamped) {
     }
 }
 
-fn new_show(root: &Path, quiz: &Quiz, started_ms: u64) -> Inner {
+fn new_show(root: &Path, quiz: &Quiz, started_ms: u64, rules_version: u32) -> Inner {
     let meta = SessionMeta {
         quiz_title: quiz.title.clone(),
         source_path: None,
         started_ms,
         media_root: None,
-        rules_version: quiz_core::RULES_VERSION,
+        rules_version,
     };
     let session = Session::create(root, quiz, &meta).unwrap();
-    Inner { game: Some(Game::new(quiz.clone())), session: Some(session), ..Inner::new() }
+    Inner { game: Some(Game::replay(quiz.clone(), &[], rules_version)), session: Some(session), ..Inner::new() }
 }
 
 /// Plays one show from `seed` through the journal under `root`, crashing
@@ -58,8 +58,9 @@ fn drill(seed: u64, root: &Path) {
     let mut rng = Rng::new(seed);
     let quiz = random_quiz(&mut rng);
     let buzzers = rng.between(1, u64::from(MAX_BUZZERS)) as u16;
-    let mut sim = Show::new(quiz.clone(), buzzers);
-    let mut app = new_show(root, &quiz, sim.now);
+    let rules_version = random_rules_version(&mut rng);
+    let mut sim = Show::under(quiz.clone(), buzzers, rules_version);
+    let mut app = new_show(root, &quiz, sim.now, rules_version);
     for _ in 0..250 {
         sim.random_wait(&mut rng);
         let command = sim.random_command(&mut rng);
@@ -84,14 +85,15 @@ fn drill(seed: u64, root: &Path) {
         } else if rng.chance(1) {
             // The quizmaster ends the show and starts another; only the latest resumes.
             let quiz = random_quiz(&mut rng);
-            sim = Show::new(quiz.clone(), buzzers);
+            let rules_version = random_rules_version(&mut rng);
+            sim = Show::under(quiz.clone(), buzzers, rules_version);
             sim.now = 1_000 + seed;
-            app = new_show(root, &quiz, sim.now);
+            app = new_show(root, &quiz, sim.now, rules_version);
         }
     }
     // What is on disk replays into the show the windows last saw.
     let on_disk = Session::resume_latest(root).unwrap().unwrap();
-    assert_eq!(Game::replay(on_disk.quiz, &on_disk.journal, quiz_core::RULES_VERSION), sim.game);
+    assert_eq!(Game::replay(on_disk.quiz, &on_disk.journal, on_disk.meta.rules_version), sim.game);
     fs::remove_dir_all(root).unwrap();
 }
 
