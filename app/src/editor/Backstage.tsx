@@ -250,7 +250,7 @@ function ReadAloudSettings({ quiz, settings, set }: { quiz: Quiz; settings: Quiz
   const reads = (Object.keys(READ_ALOUD_LABEL) as ReadAloud[]).map((value): [ReadAloud, string] => [value, t(READ_ALOUD_LABEL[value])]);
   const languages = QUIZ_LANGUAGES.map((value): [QuizLanguage, string] => [value, t(LANGUAGE_LABEL[value])]);
   const voices = VOICES.map((value): [number, string] => [value, voiceName(t, value)]);
-  const trying = preview.playing || sample.playing !== null;
+  const trying = preview.playing || sample.playing;
   const tryVoice = () => {
     if (trying) {
       preview.stop();

@@ -167,7 +167,7 @@ fn download() -> CmdResult<Vec<u8>> {
 
 /// Talks to the library over HTTPS only, redirects included.
 fn agent() -> ureq::Agent {
-    ureq::Agent::config_builder().https_only(true).max_redirects(MAX_REDIRECTS).timeout_global(Some(DOWNLOAD_TIMEOUT)).build().into()
+    crate::https_agent(MAX_REDIRECTS, DOWNLOAD_TIMEOUT)
 }
 
 /// Whether a download ended up at the library's own site over HTTPS.

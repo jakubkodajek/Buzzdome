@@ -26,6 +26,12 @@ manual Build.
 
 ## Checks, in order
 
+Rust builds link the sherpa-onnx libraries (`crates/voice`). Before the
+first build, run `.github/scripts/sherpa-onnx-libs.sh .` and export
+`SHERPA_ONNX_ARCHIVE_DIR` as the folder it names (`docs/releasing.md`,
+The voice libraries); without it the build downloads unchecked archives,
+or fails behind a proxy.
+
 1. `cargo test --workspace`
    Rust tests, 40 random shows (`show-sim`), 40 crash drills. It also
    rewrites `app/src/bindings` from the Rust types. Commit the bindings it

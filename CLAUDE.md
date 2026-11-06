@@ -50,6 +50,7 @@ on `PATH` first (macOS dev machine).
 | install UI deps (as locked; `npm install <pkg>` only to add or upgrade one) | `cd app && npm ci` |
 | run the app (dev) | `cd app && npm run tauri dev` |
 | core + driver tests (also regenerates `app/src/bindings`) | `cargo test --workspace` |
+| checked voice libraries for a local Rust build (once; `crates/voice` links sherpa-onnx, `docs/releasing.md`) | `.github/scripts/sherpa-onnx-libs.sh .`, then export `SHERPA_ONNX_ARCHIVE_DIR` as the folder it names |
 | lint Rust | `cargo clippy --workspace --all-targets` |
 | lint UI (incl. React hooks rules) | `cd app && npm run lint` |
 | type-check and build UI | `cd app && npm run build` |
@@ -81,7 +82,7 @@ event order, `app_windows.rs` the Director and projector windows, `remote.rs` wh
 `themes.rs` built-in themes, `fonts.rs` installed fonts, `app_file.rs` settings files,
 `app_icon.rs` the windows' icon colour, `stage_lights.rs` the lights setup and what the show tells them,
 `fixture_library.rs` the fixture library in use and its download, `ai.rs` `--mcp` and File › AI assistants,
-`updates.rs` checking for and installing app updates, `voice.rs` the voice model and the voice process),
+`updates.rs` checking for and installing app updates, `read_aloud.rs` the voice model and the voice process),
 `app/src` (React UI: `director/`, `host/`, `editor/`; `browser-guard.ts` and `error-boundary.tsx`
 keep the windows from acting as a browser or going blank), `app/e2e` (E2E tests through WebDriver),
 `samples/demo-quiz.json`.

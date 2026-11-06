@@ -13,7 +13,6 @@ use crate::editor::refuse_during_show;
 use crate::{app_log, off_ui};
 use quiz_file::FileAction;
 use serde::Serialize;
-use std::ffi::OsStr;
 use std::fs;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::path::{Path, PathBuf};
@@ -46,6 +45,9 @@ const CLIP_TIMEOUT_PER_CHAR: Duration = Duration::from_millis(60);
 /// How much the voice process lowers its priority on macOS and Linux.
 #[cfg(unix)]
 const NICENESS: i32 = 10;
+/// The most of one line of the voice process's output that is read: a
+/// reply is a few bytes, and a longer line (a native library's) is not one.
+const MAX_LINE_BYTES: u64 = 4096;
 /// Redirects followed, each over HTTPS only (GitHub sends release files
 /// on to its file host).
 const MAX_REDIRECTS: u32 = 5;
@@ -177,12 +179,12 @@ impl VoiceProcess {
         let output = child.stdout.take().expect("the voice process's output is piped");
         let (send, replies) = mpsc::channel();
         thread::spawn(move || {
-            for line in BufReader::new(output).lines() {
-                let Ok(line) = line else { break };
+            let mut output = BufReader::new(output);
+            while let Some(line) = read_line(&mut output) {
                 // A line that is not a reply (a native library writing to the
                 // output) is passed over, so the replies after it still arrive.
-                let Ok(reply) = serde_json::from_str::<Reply>(&line) else {
-                    app_log::note(&format!("voice: not a reply: {}", line.chars().take(200).collect::<String>()));
+                let Ok(reply) = serde_json::from_slice::<Reply>(&line) else {
+                    app_log::note(&format!("voice: not a reply: {}", String::from_utf8_lossy(&line).chars().take(200).collect::<String>()));
                     continue;
                 };
                 if send.send(reply).is_err() {
@@ -228,10 +230,7 @@ impl Drop for VoiceProcess {
 /// Called first in `main`: when the app was started as the voice process,
 /// serves clips until the app closes its input, then ends the process.
 pub fn serve_if_asked() {
-    let mut args = std::env::args_os().skip(1);
-    if args.next().as_deref() != Some(OsStr::new(VOICE)) {
-        return;
-    }
+    let Some(mut args) = crate::started_as(VOICE) else { return };
     let Some(root) = args.next() else { std::process::exit(2) };
     // A crash here ends this process quietly: the app notices the voice is
     // gone, and no Windows error dialog waits on the quizmaster's screen.
@@ -371,7 +370,24 @@ fn download(archive: &Path, mut progress: impl FnMut(VoiceDownload)) -> CmdResul
 /// Downloads over HTTPS only, redirects included; what arrives is checked
 /// by its hash, so the host it comes from does not matter.
 fn agent() -> ureq::Agent {
-    ureq::Agent::config_builder().https_only(true).max_redirects(MAX_REDIRECTS).timeout_global(Some(DOWNLOAD_TIMEOUT)).build().into()
+    crate::https_agent(MAX_REDIRECTS, DOWNLOAD_TIMEOUT)
+}
+
+/// The next line of the voice process's output, without its end; at most
+/// `MAX_LINE_BYTES` of it, the rest of a longer one passed over, so that
+/// output with no line end cannot fill the memory. None when it ends.
+fn read_line(output: &mut impl BufRead) -> Option<Vec<u8>> {
+    let mut line = Vec::new();
+    let read = output.by_ref().take(MAX_LINE_BYTES).read_until(b'\n', &mut line).ok()?;
+    if read == 0 {
+        return None;
+    }
+    if line.last() == Some(&b'\n') {
+        line.pop();
+    } else if read as u64 == MAX_LINE_BYTES {
+        output.skip_until(b'\n').ok()?;
+    }
+    Some(line)
 }
 
 fn voice_error(e: voice::VoiceError) -> AppError {
@@ -395,6 +411,17 @@ mod tests {
 
     fn line(text: &str) -> Line {
         Line { text: text.into(), language: quiz_core::QuizLanguage::Cs, voice: 0 }
+    }
+
+    #[test]
+    fn a_long_output_line_is_cut_and_the_next_one_still_read() {
+        let long = "x".repeat(3 * MAX_LINE_BYTES as usize);
+        let output = format!("{long}\n\"ready\"\nlast");
+        let mut output = std::io::Cursor::new(output.into_bytes());
+        assert_eq!(read_line(&mut output).map(|line| line.len() as u64), Some(MAX_LINE_BYTES));
+        assert_eq!(read_line(&mut output), Some(b"\"ready\"".to_vec()));
+        assert_eq!(read_line(&mut output), Some(b"last".to_vec()));
+        assert_eq!(read_line(&mut output), None);
     }
 
     #[test]

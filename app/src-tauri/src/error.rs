@@ -212,7 +212,7 @@ pub enum AppError {
     #[error("the downloaded fixture library has only {models} models")]
     LibraryTooSmall { models: usize, least: usize },
 
-    // Reading questions aloud (voice.rs).
+    // Reading questions aloud (read_aloud.rs).
     /// The voice model could not be downloaded (no connection, the site
     /// did not answer, the disk refused it).
     #[error("the voice model cannot be downloaded: {detail}")]

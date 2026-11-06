@@ -5,17 +5,17 @@
 // reading on starts, so the show plays them without waiting.
 
 import { convertFileSrc } from "@tauri-apps/api/core";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import { api } from "../api";
 import { ANSWER_LETTERS } from "../answers";
-import { DEFAULT_QUIZ_SOUNDS, MAX_VOICE } from "../bindings/Constants";
+import { DEFAULT_QUIZ_SETTINGS, DEFAULT_QUIZ_SOUNDS, FIRST_MALE_VOICE, MAX_VOICE } from "../bindings/Constants";
 import { useLatest, usePlayerVolume } from "../hooks";
 import { settingsOf, soundsOf } from "../quiz";
 import { createStore, useStore } from "../store";
 import type { Translate } from "../i18n";
-import type { GameView, Question, Quiz, QuizLanguage, QuizSettings, ReadAloud, Slide, VoiceLine, VoiceModel } from "../types";
+import type { AppError, GameView, Question, Quiz, QuizLanguage, QuizSettings, ReadAloud, Slide, VoiceLine, VoiceModel } from "../types";
 import { ClipPlayer, linearGain, playerLevel } from "./clip-player";
-import { playBundled, type Playing } from "./show-audio";
+import { playBundled } from "./show-audio";
 
 /** The language tag a system voice of each quiz language has, region included. */
 export const SPEECH_TAGS: Record<QuizLanguage, string> = {
@@ -25,8 +25,6 @@ export const SPEECH_TAGS: Record<QuizLanguage, string> = {
 
 /** Every voice of the model, by number. */
 export const VOICES: readonly number[] = Array.from({ length: MAX_VOICE + 1 }, (_, voice) => voice);
-/** Voices from this number on sound male; the ones before, female [no source - by the pitch of the samples]. */
-const FIRST_MALE_VOICE = 5;
 
 /** A voice as the quizmaster sees it: "Female voice 2". */
 export function voiceName(t: Translate, voice: number): string {
@@ -250,22 +248,21 @@ async function say(line: VoiceLine, gain: number, system: SpeechSynthesisVoice |
   };
 }
 
+/** What speaks: the show's question, the settings' try of a line, or a voice's sample (`sampleKey`). */
+type Speaker = "show" | "preview" | `sample ${string}`;
+
 /**
- * The window's one voice: a new line stops the one before. `speaking`
- * holds what reads now (the show's question or the settings' try), so the
- * buttons show it and the music makes way.
+ * The window's one voice: a new line or sample stops the one before.
+ * `speaking` holds what speaks now, so the buttons show it and the music
+ * makes way.
  */
 const speaker = {
-  speaking: createStore<"show" | "preview" | null>(null),
+  speaking: createStore<Speaker | null>(null),
   current: null as Speaking | null,
   turn: 0,
 
-  /**
-   * Says `line` as `who`, once `before` (rendering its clip) is done. When
-   * `before` fails the line is still said, by the system voice, and the
-   * failure is passed on.
-   */
-  async say(who: "show" | "preview", line: VoiceLine, gain: number, system: SpeechSynthesisVoice | null | undefined, before?: Promise<unknown>) {
+  /** Makes `who` the one that speaks, stopping what spoke before: its turn, and what to call when it ends. */
+  begin(who: Speaker): { mine: number; ended: () => void } {
     this.stop();
     const mine = ++this.turn;
     this.speaking.set(who);
@@ -274,11 +271,30 @@ const speaker = {
       this.current = null;
       this.speaking.set(null);
     };
+    return { mine, ended };
+  },
+
+  /** Starts what `start` plays as `who`; `start` is given what to call when it ends. */
+  play(who: Speaker, start: (onEnd: () => void) => Speaking | null) {
+    const { ended } = this.begin(who);
+    const started = start(ended);
+    if (started) this.current = started;
+    else ended();
+  },
+
+  /**
+   * Says `line` as `who`, once `before` (rendering its clip) is done. When
+   * `before` fails the line is still said, by the system voice, and the
+   * failure is passed on.
+   */
+  async say(who: "show" | "preview", line: VoiceLine, gain: number, system: SpeechSynthesisVoice | null | undefined, before?: Promise<unknown>) {
+    const { mine, ended } = this.begin(who);
     let failure: unknown = null;
     try {
       await before;
     } catch (error) {
-      failure = error ?? new Error("rendering failed");
+      // A rejection without a reason is the voice failing all the same.
+      failure = error ?? ({ code: "voiceFailed" } satisfies AppError);
     }
     if (this.turn !== mine) return;
     const started = await say(line, gain, system, ended);
@@ -296,7 +312,7 @@ const speaker = {
   },
 
   /** Stops what `who` reads, and nothing else. */
-  stopIf(who: "show" | "preview") {
+  stopIf(who: Speaker) {
     if (this.speaking.get() === who) this.stop();
   },
 };
@@ -331,7 +347,7 @@ export function useReadAloud(view: GameView | null, quiz: Quiz | null): ReadAlou
   const what = settings?.readAloud ?? "off";
   const slide = view?.slide ?? null;
   const line = settings ? voiceLine(slide, settings) : null;
-  const system = useSystemVoice(settings?.language ?? "cs");
+  const system = useSystemVoice(settings?.language ?? DEFAULT_QUIZ_SETTINGS.language);
   const gain = useVoiceGain(quiz);
   const step = view?.phase.phase === "question" ? view.phase.step : null;
   const asking = step === "ready" || step === "running";
@@ -370,32 +386,39 @@ export function useVoiceGain(quiz: Quiz | null): number {
   return linearGain(sounds.effectsVolume, 0) * playerLevel(usePlayerVolume());
 }
 
-/** Plays one voice sample at a time, as loud as the player's volume. */
+/** Whether the window's voice speaks anything now (a question, a try or a sample), so the show's music makes way. */
+export function useVoiceSpeaks(): boolean {
+  return useStore(speaker.speaking) !== null;
+}
+
+function sampleKey(language: QuizLanguage, voice: number): Speaker {
+  return `sample ${language}-${voice}`;
+}
+
+/** Plays one voice sample at a time, as the window's voice (so it stops a reading), as loud as the player's volume. */
 export function useVoiceSample(): {
-  playing: string | null;
+  /** Some sample plays. */
+  playing: boolean;
+  plays: (language: QuizLanguage, voice: number) => boolean;
   play: (language: QuizLanguage, voice: number) => void;
   stop: () => void;
 } {
-  const clip = useRef<Playing | null>(null);
-  const [playing, setPlaying] = useState<string | null>(null);
+  const now = useStore(speaker.speaking);
   const level = useLatest(playerLevel(usePlayerVolume()));
-  const stop = useCallback(() => {
-    clip.current?.stop();
-    clip.current = null;
-    setPlaying(null);
-  }, []);
+  const plays = (language: QuizLanguage, voice: number) => now === sampleKey(language, voice);
   const play = useCallback(
     (language: QuizLanguage, voice: number) => {
-      stop();
       const url = sampleUrl(language, voice);
-      if (!url) return;
-      clip.current = playBundled(url, level.current, stop);
-      setPlaying(`${language}-${voice}`);
+      if (url) speaker.play(sampleKey(language, voice), (onEnd) => playBundled(url, level.current, onEnd));
     },
-    [stop, level],
+    [level],
   );
+  const stop = useCallback(() => {
+    const who = speaker.speaking.get();
+    if (who?.startsWith("sample ")) speaker.stop();
+  }, []);
   useEffect(() => stop, [stop]);
-  return { playing, play, stop };
+  return { playing: now?.startsWith("sample ") ?? false, plays, play, stop };
 }
 
 /** Plays a line once as a show would, rendering its clip first, to try the voice in the settings. */

@@ -3,7 +3,7 @@ import { api } from "../api";
 import { AppProvider, useApp, useDispatch, useRun, useStepShown } from "../app-context";
 import { otherSoundPlays, useShowSounds } from "../audio/show-sounds";
 import { useSlideSound, type SlideSound } from "../audio/slide-sound";
-import { usePrepareVoice, useReadAloud, type ReadAloudControl } from "../audio/read-aloud";
+import { usePrepareVoice, useReadAloud, useVoiceSpeaks, type ReadAloudControl } from "../audio/read-aloud";
 import { clockSeconds } from "../format";
 import { EditorScreen } from "../editor/EditorScreen";
 import { ErrorBoundary, RenderFailed } from "../error-boundary";
@@ -134,7 +134,8 @@ function DirectorLayout({ testRun, onEditor }: { testRun: boolean; onEditor: () 
   // And the questions read out, with each one's clip rendered beforehand.
   usePrepareVoice(quiz, view);
   const voice = useReadAloud(view, quiz);
-  useShowSounds(view, quiz, otherSoundPlays(view, sound.playing || voice.speaking, player.now));
+  const voiceSpeaks = useVoiceSpeaks();
+  useShowSounds(view, quiz, otherSoundPlays(view, sound.playing || voiceSpeaks, player.now));
   const showStart = useShowStart();
 
   const tabs: [Tab, string][] = [

@@ -26,7 +26,7 @@ mod stage_lights;
 mod teams;
 mod themes;
 mod updates;
-pub mod voice;
+pub mod read_aloud;
 
 use buzzers::clock::ShowClock;
 use buzzers::receiver::HardwareDriver;
@@ -69,7 +69,7 @@ struct Inner {
     updating: bool,
     /// The voice model is being put in place, which stops the voice
     /// process and fills its folder, so no show may begin
-    /// (`voice::voice_install`).
+    /// (`read_aloud::voice_install`).
     voice_unpacking: bool,
 }
 
@@ -115,6 +115,20 @@ impl Inner {
 }
 
 struct AppState(Mutex<Inner>);
+
+/// The arguments after `flag` when the app was started again as one of its
+/// own helper processes (the sheet reader, the voice, the MCP server), whose
+/// flag is then the first argument; none when it was not.
+fn started_as(flag: &str) -> Option<std::iter::Skip<std::env::ArgsOs>> {
+    let mut args = std::env::args_os().skip(1);
+    (args.next().as_deref() == Some(std::ffi::OsStr::new(flag))).then_some(args)
+}
+
+/// An HTTP client that goes over HTTPS only, redirects included, following
+/// at most `max_redirects` and giving up after `timeout` in all.
+fn https_agent(max_redirects: u32, timeout: std::time::Duration) -> ureq::Agent {
+    ureq::Agent::config_builder().https_only(true).max_redirects(max_redirects).timeout_global(Some(timeout)).build().into()
+}
 
 /// The show state. The app's locks are taken in one order: the editor's
 /// (`editor::lock`), then this one, then the learn lock (`hardware`). So
@@ -728,7 +742,7 @@ pub fn run() {
             app.manage(stage_lights::StageLights::start(app.handle(), stage_lights::lights_path(app.handle())?));
             app.manage(fixture_library::FixtureLibrary::new(fixture_library::library_path(app.handle())?));
             // The Director plays the voice's clips, rendered into a folder of their own.
-            let voice = voice::Voice::new(app.handle())?;
+            let voice = read_aloud::Voice::new(app.handle())?;
             app.asset_protocol_scope().allow_directory(voice.clips_folder(), true)?;
             app.manage(voice);
             show_thread::start(app.handle(), queue, events);
@@ -846,10 +860,10 @@ pub fn run() {
             stage_lights::lights_universe,
             updates::update_check,
             updates::update_install,
-            voice::voice_model,
-            voice::voice_install,
-            voice::voice_remove,
-            voice::voice_clip,
+            read_aloud::voice_model,
+            read_aloud::voice_install,
+            read_aloud::voice_remove,
+            read_aloud::voice_clip,
         ])
         .run(context)
         .expect("error while running tauri application");

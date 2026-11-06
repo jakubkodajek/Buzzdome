@@ -38,6 +38,7 @@ export const MAX_ALL_ANSWERED_DELAY_S = 10;
 export const MAX_AFTER_REVEAL_DELAY_S = 60;
 export const MAX_JOKERS = 5;
 export const MAX_VOICE = 9;
+export const FIRST_MALE_VOICE = 5;
 export const QUIZ_LANGUAGES = ["cs","en"] as const;
 export const LAST_SECONDS_MS = 5000;
 export const DEFAULT_QUIZ_SOUNDS = {"slots":{},"effectsVolume":100,"musicVolume":50} as const;

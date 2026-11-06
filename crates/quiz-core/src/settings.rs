@@ -17,6 +17,9 @@ pub const DEFAULT_AFTER_REVEAL_DELAY_S: u8 = 5;
 pub const MAX_AFTER_REVEAL_DELAY_S: u8 = 60;
 /// Highest voice number of the app's voice model (voices 0 to this).
 pub const MAX_VOICE: u8 = 9;
+/// The first voice that sounds male: the ones before it sound female
+/// (the quiz file's contract, `docs/quiz-format.md`).
+pub const FIRST_MALE_VOICE: u8 = 5;
 /// Most jokers a player can have in a show.
 pub const MAX_JOKERS: u8 = 5;
 

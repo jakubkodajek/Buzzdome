@@ -169,6 +169,10 @@ draws slides without a show.
   mode's lock, as the Receiver tab's commands do, waits for a journal write.
   The close request's lock is taken under the show state when a show begins
   or ends (an unanswered request is forgotten then), and holds no other.
+  The updates lock (`updates::Updates`) and the voice's install lock
+  (`Voice::installing`) are taken before the show state, never under it:
+  installing an update or the voice model marks the show state
+  (`updating`, `voice_unpacking`) so that no show begins meanwhile.
   Every command that writes a file, or lists the USB devices (slow on
   Windows), runs off the windows' thread too: the app's files are in its
   data folder with the journal, so a disk that does not answer holds both.
@@ -455,9 +459,10 @@ without one.
 
 The windows load media through Tauri's asset protocol. Its scope is empty
 in `tauri.conf.json`; at startup the shell allows the folder of unpacked
-quizzes, the editor's drafts folder, the built-in theme packages and the
-media player's library (`<app data>/library`, spec SN-7)
-(`asset_protocol_scope().allow_directory`), and nothing changes it later,
+quizzes, the editor's drafts folder, the built-in theme packages, the
+media player's library (`<app data>/library`, spec SN-7) and the voice's
+clips (`<app local data>/voice-clips`, spec SN-10)
+(`asset_protocol_scope().allow_directory`), for every window, and nothing changes it later,
 so a page cannot read anything else on the disk. A quiz folder is allowed
 only inside the app's own folders (the unpacked quizzes and the editor's
 drafts): a session whose `meta.json` names another folder resumes without
@@ -1115,7 +1120,7 @@ letter from `answers.ts`).
   Supertonic 3, quantized to 8 bits and packed for sherpa-onnx, 129 MB,
   ten voices, 31 languages of which the app offers Czech and English). It
   is not shipped: Settings › Voices for reading aloud downloads it over
-  HTTPS (`voice.rs`, `voice_install`), hashing it as it arrives, and only
+  HTTPS (`read_aloud.rs`, `voice_install`), hashing it as it arrives, and only
   an archive with the SHA-256 written in `model.rs` is unpacked, taking
   only the model's own files into a staging folder that then replaces the
   model's folder in `<app local data>/voice/`. Samples of every voice in
@@ -1130,11 +1135,11 @@ letter from `answers.ts`).
   links the app with too). The libraries are prebuilt archives checked
   against hashes pinned in `.github/scripts/sherpa-onnx-libs.sh` before
   any CI build (`docs/releasing.md`). It runs only in the voice process, the app
-  started again with `--voice <folder>` (`voice::serve_if_asked` in
+  started again with `--voice <folder>` (`read_aloud::serve_if_asked` in
   `main.rs`, as the sheet reader): native code failing there ends that
   process, never a show. The app writes one JSON request per line (the
   line to say and the file to write) and reads one reply per line
-  (`voice::server`); a line that is not a reply is logged and passed
+  (`voice::server`), at most 4 KiB a line; a line that is not a reply is logged and passed
   over. The process loads the model once and stays up. It gives way to
   the show: it starts below normal priority (Windows) or lowers its own
   (`nice`, macOS and Linux), and the engine takes at most two CPU threads.
@@ -1142,7 +1147,7 @@ letter from `answers.ts`).
   it, and the next clip starts another; a process that could not start or
   load the model is not started again until the model is installed again
   or removed, so every clip after fails at once. The download is refused
-  again after it arrives if a show began meanwhile. The locks in `voice.rs` are taken
+  again after it arrives if a show began meanwhile. The locks in `read_aloud.rs` are taken
   in one order, the model's install lock and then the process's; the show
   thread takes neither, and a window's line is checked first (its words
   only, a voice the model has).
@@ -1150,7 +1155,7 @@ letter from `answers.ts`).
   named by the SHA-256 of what it says and how (render version, model,
   language, voice, words), so an edited question gets a new clip and an
   old one is never played for it; the file is written beside its name and
-  renamed. The Director's asset scope includes the folder.
+  renamed. The app's asset scope (one for every window) includes the folder.
 - **Show.** Once a show with reading on is loaded, the Director renders
   the clip of each question not kept yet, one after another
   (`usePrepareVoice`; the check before a show shows how far), pausing

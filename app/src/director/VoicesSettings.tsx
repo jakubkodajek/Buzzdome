@@ -70,7 +70,7 @@ export function VoicesSettings({ showRunning }: { showRunning: boolean }) {
           <h3>{t(LANGUAGE_LABEL[language])}</h3>
           <ul>
             {VOICES.map((voice) => {
-              const playing = sample.playing === `${language}-${voice}`;
+              const playing = sample.plays(language, voice);
               return (
                 <li key={voice}>
                   <button

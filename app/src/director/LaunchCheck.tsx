@@ -3,7 +3,7 @@ import { api } from "../api";
 import { useApp, useRun } from "../app-context";
 import { defaultChoice } from "../audio/library";
 import { useSoundPreview } from "../audio/show-sounds";
-import { DEFAULT_QUIZ_SOUNDS } from "../bindings/Constants";
+import { DEFAULT_QUIZ_SETTINGS, DEFAULT_QUIZ_SOUNDS } from "../bindings/Constants";
 import { useBackendEvent, usePlayerVolume, useProjectorWindow, useReceiverInfo, useShowDiskSpace } from "../hooks";
 import type { StringKey } from "../i18n";
 import { CheckIcon, CrossIcon, QuestionIcon, WarningIcon } from "../icons";
@@ -74,7 +74,7 @@ function LaunchCheckPanel({ view, quiz, projector, onTab, onHide }: LaunchCheckP
   const [sound, setSound] = useState<SoundTry>("notPlayed");
 
   const preparing = usePreparing();
-  const language = quiz ? settingsOf(quiz).language : "cs";
+  const language = quiz ? settingsOf(quiz).language : DEFAULT_QUIZ_SETTINGS.language;
   const systemVoice = useSystemVoice(language);
   const voice = { preparing, systemVoice: systemVoice && systemVoice.name, language: t(LANGUAGE_LABEL[language]) };
   const items = launchCheck(t, { receiver, view, projector: projectorWindow, muted, sound, freeDiskBytes, voice });
