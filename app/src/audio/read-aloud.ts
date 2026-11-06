@@ -5,8 +5,9 @@
 // reading on starts, so the show plays them without waiting.
 
 import { convertFileSrc } from "@tauri-apps/api/core";
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { api } from "../api";
+import { useDispatch } from "../app-context";
 import { ANSWER_LETTERS } from "../answers";
 import { DEFAULT_QUIZ_SETTINGS, DEFAULT_QUIZ_SOUNDS, FIRST_MALE_VOICE, MAX_VOICE } from "../bindings/Constants";
 import { useLatest, usePlayerVolume } from "../hooks";
@@ -364,11 +365,29 @@ export function useReadAloud(view: GameView | null, quiz: Quiz | null): ReadAlou
   const onQuestion = slide?.type === "question";
   const auto = what !== "off" && slide !== null && !soundsItself(slide);
   const arrived = useLatest(() => auto && read());
+  // The slide whose question was read out (or had nothing to read) as it came on.
+  const readFor = useRef<number | null>(null);
   useEffect(() => {
     if (!onQuestion) return;
     arrived.current();
-    return stop;
+    readFor.current = slideIndex;
+    return () => {
+      readFor.current = null;
+      stop();
+    };
   }, [slideIndex, onQuestion, arrived, stop]);
+
+  // A question waiting for its reading (`clockAfterReading`) starts once
+  // nothing reads it any more: read to its end, stopped, or never read.
+  // The store is read, not `speaking`, which this render saw before the
+  // reading above began.
+  const waiting = view?.controls.readingDone ?? false;
+  const dispatch = useDispatch();
+  useEffect(() => {
+    if (!waiting || slideIndex === null || readFor.current !== slideIndex || speaker.speaking.get() === "show") return;
+    readFor.current = null;
+    dispatch({ type: "readingDone", slide: slideIndex });
+  }, [waiting, slideIndex, speaking, dispatch]);
 
   // A buzz, the question's end or its answer ends the reading.
   useEffect(() => {

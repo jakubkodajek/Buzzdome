@@ -861,8 +861,9 @@ packages users will install are read the same way.
   reference app, so the players can answer at once and one press goes
   from question to question; the remote's Next still does nothing while
   a question runs (`commandForRemote`). `startOnNext` brings back the
-  step of Next that started it (`QuestionStep::Ready`). A question
-  restarted (`RestartQuestion`, also after a crash) always waits for
+  step of Next that started it (`QuestionStep::Ready`), and
+  `clockAfterReading` waits for the question to be read out first (§1.8).
+  A question restarted (`RestartQuestion`, also after a crash) always waits for
   Next, so the quizmaster first sees where the show stands. A show begun
   under an older version keeps the step (`rules_version`), so its
   journal replays as it was played.
@@ -1185,10 +1186,18 @@ letter from `answers.ts`).
   Speech API, a voice on the computer before one that needs the
   internet). The music ducks while it reads. A buzz, the question's end or
   answer, or leaving the slide stops it; nothing of it is journaled, as it
-  never changes the show. The question on screen is read again when the
-  Director's window is laid out again (after a crash and resume, on
-  coming back from the editor). The question's clock runs while it is
-  read (Jakub's choice, 2026-11-06).
+  never changes the show, but for the one setting below. The question on
+  screen is read again when the Director's window is laid out again (after
+  a crash and resume, on coming back from the editor). The question's
+  clock runs while it is read (Jakub's choice, 2026-11-06), unless the
+  quiz sets `clockAfterReading` (off by default): a question that starts
+  as shown then waits in `Ready` (`Game::waits_for_reading`, offered as
+  `Controls::reading_done`), and the Director sends `ReadingDone { slide }`
+  once nothing reads it any more (read to its end, stopped, or not read
+  at all, as a slide with its own sound), which starts its clock. That
+  command is journaled like any other, so a replay starts the clock at the
+  same moment; one for another slide, or once the clock runs, is ignored.
+  Next starts the clock sooner, and a restarted question waits for Next.
 
 ## 2. Buzzer link
 

@@ -272,6 +272,14 @@ function ReadAloudSettings({ quiz, settings, set }: { quiz: Quiz; settings: Quiz
         <Select label={t("readAloud")} value={settings.readAloud} options={reads} onChange={(readAloud) => set({ readAloud })} />
       </div>
       <p className="backstage-hint">{t("readAloudHint")}</p>
+      {settings.readAloud !== "off" && !settings.startOnNext && (
+        <SettingSwitch
+          label={t("clockAfterReading")}
+          hint={t("clockAfterReadingHint")}
+          checked={settings.clockAfterReading}
+          onChange={(clockAfterReading) => set({ clockAfterReading })}
+        />
+      )}
       <div className="field">
         <span>{t("quizLanguage")}</span>
         <Select label={t("quizLanguage")} value={settings.language} options={languages} onChange={(language) => set({ language })} />

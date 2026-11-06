@@ -125,6 +125,13 @@ pub struct QuizSettings {
     #[schemars(with = "u8")]
     #[ts(as = "u8")]
     pub voice: u8,
+    /// A question that starts as shown and is read out waits for the
+    /// reading to end before its clock starts (`Command::ReadingDone`);
+    /// by default the clock runs while the voice reads.
+    #[serde(with = "crate::style::lenient_or_default")]
+    #[schemars(with = "bool")]
+    #[ts(as = "bool")]
+    pub clock_after_reading: bool,
 }
 
 impl Default for QuizSettings {
@@ -146,6 +153,7 @@ impl Default for QuizSettings {
             language: QuizLanguage::Cs,
             read_aloud: ReadAloud::Off,
             voice: 0,
+            clock_after_reading: false,
         }
     }
 }
@@ -337,11 +345,12 @@ mod tests {
             language: QuizLanguage::En,
             read_aloud: ReadAloud::QuestionAndAnswers,
             voice: 4,
+            clock_after_reading: true,
         };
         let json = serde_json::to_string(&settings).unwrap();
         assert_eq!(
             json,
-            r#"{"startOnNext":true,"allAnswered":"nextSlide","allAnsweredDelayS":7,"nextAfterReveal":true,"nextAfterRevealDelayS":30,"runClockOut":true,"hideAnswer":true,"changeAnswer":true,"oneBuzz":true,"noAnswerPenalty":true,"hideBuzzPoints":true,"answerChart":true,"jokers":2,"language":"en","readAloud":"questionAndAnswers","voice":4}"#
+            r#"{"startOnNext":true,"allAnswered":"nextSlide","allAnsweredDelayS":7,"nextAfterReveal":true,"nextAfterRevealDelayS":30,"runClockOut":true,"hideAnswer":true,"changeAnswer":true,"oneBuzz":true,"noAnswerPenalty":true,"hideBuzzPoints":true,"answerChart":true,"jokers":2,"language":"en","readAloud":"questionAndAnswers","voice":4,"clockAfterReading":true}"#
         );
         assert_eq!(read(&json), settings);
     }

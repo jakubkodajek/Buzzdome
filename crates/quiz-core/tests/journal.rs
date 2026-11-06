@@ -41,6 +41,7 @@ fn lines() -> Vec<(&'static str, u64, Command)> {
         (r#"{"atMs":23,"command":{"type":"setJoker","buzzer":2,"on":true}}"#, 23, Command::SetJoker { buzzer: 2, on: true }),
         (r#"{"atMs":24,"command":{"type":"startOver"}}"#, 24, Command::StartOver),
         (r#"{"atMs":25,"command":{"type":"resetScores"}}"#, 25, Command::ResetScores),
+        (r#"{"atMs":26,"command":{"type":"readingDone","slide":2}}"#, 26, Command::ReadingDone { slide: 2 }),
     ]
 }
 

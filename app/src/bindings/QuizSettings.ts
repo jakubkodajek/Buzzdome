@@ -83,4 +83,10 @@ readAloud: ReadAloud,
 /**
  * Which of the voice model's voices reads, up to `MAX_VOICE`.
  */
-voice: number, };
+voice: number, 
+/**
+ * A question that starts as shown and is read out waits for the
+ * reading to end before its clock starts (`Command::ReadingDone`);
+ * by default the clock runs while the voice reads.
+ */
+clockAfterReading: boolean, };
