@@ -79,8 +79,16 @@ impl Roots {
     /// absolute (the server's working folder is the assistant's, which it
     /// does not know) and without `..`. A path that is not there yet is
     /// judged by the nearest folder above it that is.
+    ///
+    /// A network or device path (`network_or_device`) is refused before any
+    /// file is looked at, unless a root is on a network share: on Windows
+    /// looking it up would contact the server and sign in to it with the
+    /// user's credentials, whoever told the assistant the path.
     pub fn resolve(&self, given: &Path) -> Result<PathBuf, String> {
         let path = given.display();
+        if network_or_device(given) && !self.0.iter().any(|root| on_a_share(root)) {
+            return Err(format!("{path} is a network or device path: use a path on this computer"));
+        }
         if !given.is_absolute() {
             return Err(format!("{path} is not an absolute path"));
         }
@@ -104,6 +112,24 @@ impl Roots {
         }
         self.folders().iter().map(|root| root.display().to_string()).collect::<Vec<_>>().join(", ")
     }
+}
+
+/// Whether `path` is written as a network or device path: it starts with
+/// two separators (`\\server\share`, `//server/share`, `\\?\UNC\`,
+/// `\\.\`) or with `\??\`, as `quiz_file`'s spreadsheet import tells
+/// them too.
+fn network_or_device(path: &Path) -> bool {
+    let text = path.as_os_str().to_string_lossy();
+    let mut start = text.chars();
+    matches!((start.next(), start.next()), (Some('\\' | '/'), Some('\\' | '/' | '?')))
+}
+
+/// Whether the root, a real path (`allow`), is on a network share: on
+/// Windows `\\?\UNC\server\share`, or `\\server\share` as written;
+/// a folder on a drive is `\\?\C:\`.
+fn on_a_share(root: &Path) -> bool {
+    let text = root.as_os_str().to_string_lossy();
+    text.starts_with(r"\\?\UNC\") || (network_or_device(root) && !text.starts_with(r"\\?\") && !text.starts_with(r"\\.\"))
 }
 
 /// `path` with links followed: the real path of the nearest part of it that
@@ -171,6 +197,19 @@ mod tests {
         assert!(roots.resolve(&quizzes.join("pub/../../private")).unwrap_err().contains(".."));
         assert!(roots.resolve(Path::new("quizzes/x")).unwrap_err().contains("not an absolute path"));
         assert!(Roots::default().resolve(&quizzes).unwrap_err().contains("no folder"));
+    }
+
+    #[test]
+    fn a_network_or_device_path_is_refused_before_it_is_looked_at() {
+        let dir = scratch("roots-network");
+        fs::create_dir_all(&dir).unwrap();
+        let roots = Roots::new(vec![allow(&dir, &[]).unwrap()]);
+        for given in [r"\\host\share\x.png", "//host/share/x.png", r"\\?\UNC\host\share\x.png", r"\\.\pipe\x", r"\??\C:\x.png"] {
+            let refused = roots.resolve(Path::new(given)).unwrap_err();
+            assert!(refused.contains("network or device path"), "{given}: {refused}");
+        }
+        assert!(on_a_share(Path::new(r"\\?\UNC\host\share\quizzes")) && on_a_share(Path::new(r"\\host\share")));
+        assert!(!on_a_share(Path::new(r"\\?\C:\Users\me\Quizzes")) && !on_a_share(&dir));
     }
 
     #[cfg(unix)]
