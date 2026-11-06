@@ -26,6 +26,7 @@ mod stage_lights;
 mod teams;
 mod themes;
 mod updates;
+pub mod voice;
 
 use buzzers::clock::ShowClock;
 use buzzers::receiver::HardwareDriver;
@@ -717,6 +718,10 @@ pub fn run() {
             app.manage(hardware);
             app.manage(stage_lights::StageLights::start(app.handle(), stage_lights::lights_path(app.handle())?));
             app.manage(fixture_library::FixtureLibrary::new(fixture_library::library_path(app.handle())?));
+            // The Director plays the voice's clips, rendered into a folder of their own.
+            let voice = voice::Voice::new(app.handle())?;
+            app.asset_protocol_scope().allow_directory(voice.clips_folder(), true)?;
+            app.manage(voice);
             show_thread::start(app.handle(), queue, events);
             // The windows load theme pictures and fonts from the built-in
             // packages, and a show's media from where they can be.
@@ -832,6 +837,10 @@ pub fn run() {
             stage_lights::lights_universe,
             updates::update_check,
             updates::update_install,
+            voice::voice_model,
+            voice::voice_install,
+            voice::voice_remove,
+            voice::voice_clip,
         ])
         .run(context)
         .expect("error while running tauri application");

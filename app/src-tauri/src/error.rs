@@ -212,6 +212,22 @@ pub enum AppError {
     #[error("the downloaded fixture library has only {models} models")]
     LibraryTooSmall { models: usize, least: usize },
 
+    // Reading questions aloud (voice.rs).
+    /// The voice model could not be downloaded (no connection, the site
+    /// did not answer, the disk refused it).
+    #[error("the voice model cannot be downloaded: {detail}")]
+    VoiceDownload { detail: String },
+    /// The download is not the model it should be (its hash differs, or
+    /// the archive does not have the model's files).
+    #[error("the downloaded voice model is damaged")]
+    VoiceDamaged,
+    /// The voice model is not downloaded, so nothing can be rendered.
+    #[error("the voice model is not downloaded")]
+    VoiceMissing,
+    /// The voice process did not start, load the model or answer in time.
+    #[error("the voice process failed")]
+    VoiceFailed,
+
     // Updates of the app.
     /// No newer version was found to install.
     #[error("no newer version of the app was found")]

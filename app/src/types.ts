@@ -96,9 +96,11 @@ export type { ProjectorWindow } from "./bindings/ProjectorWindow";
 export type { ProtocolKind } from "./bindings/ProtocolKind";
 export type { Question } from "./bindings/Question";
 export type { Quiz } from "./bindings/Quiz";
+export type { QuizLanguage } from "./bindings/QuizLanguage";
 export type { QuizSettings } from "./bindings/QuizSettings";
 export type { QuizSounds } from "./bindings/QuizSounds";
 export type { RawReport } from "./bindings/RawReport";
+export type { ReadAloud } from "./bindings/ReadAloud";
 export type { ReceiverInfo } from "./bindings/ReceiverInfo";
 export type { Rgb } from "./bindings/Rgb";
 export type { ReceiverProblem } from "./bindings/ReceiverProblem";
@@ -134,10 +136,16 @@ export type { UpdateProgress } from "./bindings/UpdateProgress";
 export type { ValidationError } from "./bindings/ValidationError";
 export type { VideoClip } from "./bindings/VideoClip";
 export type { VideoEffect } from "./bindings/VideoEffect";
+export type { VoiceDownload } from "./bindings/VoiceDownload";
+export type { VoiceLine } from "./bindings/VoiceLine";
+export type { VoiceModel } from "./bindings/VoiceModel";
 
 export type QuestionSlide = Extract<Slide, { type: "question" }>;
 /** The slides listed by a title. */
-export type TitledSlide = Extract<Slide, { type: "billboard" | "endOfRound" | "final" }>;
+export type TitledSlide = Extract<
+  Slide,
+  { type: "billboard" | "endOfRound" | "final" }
+>;
 export type SlideType = Slide["type"];
 
 /** Buzzer number as the hardware reports it (`BuzzerId` in Rust). */

@@ -92,6 +92,10 @@ const COMMANDS: &[&str] = &[
     "lights_universe",
     "update_check",
     "update_install",
+    "voice_model",
+    "voice_install",
+    "voice_remove",
+    "voice_clip",
 ];
 
 fn main() {

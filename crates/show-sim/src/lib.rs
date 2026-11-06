@@ -109,6 +109,8 @@ pub fn random_quiz(rng: &mut Rng) -> Quiz {
         hide_buzz_points: rng.chance(30),
         answer_chart: rng.chance(30),
         jokers: if rng.chance(50) { rng.between(1, u64::from(MAX_JOKERS)) as u8 } else { 0 },
+        // Reading aloud is the Director's alone and never changes the show.
+        ..QuizSettings::default()
     };
     // Now and then the show opens on a welcome screen.
     quiz.welcome.on = rng.chance(30);

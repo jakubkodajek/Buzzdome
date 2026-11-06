@@ -1104,6 +1104,50 @@ and has no rules of its own: what it accepts is what `quiz_file` and
   `ai_connect` and `ai_server_config` keep the page's language and make
   sure the folder can be a root before handing the entry out.
 
+### 1.8 Reading questions aloud
+
+Spec SN-10. A quiz's `settings` say what is read (`readAloud`), in which
+language and voice; the words are made in the UI (`audio/read-aloud.ts`,
+`spokenText`: the question as a sentence, then each answer after its
+letter from `answers.ts`).
+
+- **Model.** `crates/voice` knows the one voice model (`model.rs`:
+  Supertonic 3, quantized to 8 bits and packed for sherpa-onnx, 129 MB,
+  ten voices, 31 languages of which the app offers Czech and English). It
+  is not shipped: Settings › Voices for reading aloud downloads it over
+  HTTPS (`voice.rs`, `voice_install`), hashing it as it arrives, and only
+  an archive with the SHA-256 written in `model.rs` is unpacked, taking
+  only the model's own files into a staging folder that then replaces the
+  model's folder in `<app local data>/voice/`. Samples of every voice in
+  both languages ship with the UI (`audio/voices/`), so the quizmaster
+  chooses before downloading.
+- **Engine and process.** The engine is sherpa-onnx's Rust binding over
+  ONNX Runtime, linked statically (on Windows the MT runtime, which Tauri
+  links the app with too). It runs only in the voice process, the app
+  started again with `--voice <folder>` (`voice::serve_if_asked` in
+  `main.rs`, as the sheet reader): native code failing there ends that
+  process, never a show. The app writes one JSON request per line (the
+  line to say and the file to write) and reads one reply per line
+  (`voice::server`); the process loads the model once and stays up. A
+  load past 60 s or a clip past 60 s ends it, and the next clip starts
+  another.
+- **Clips.** A clip is a 16-bit mono WAV in `<app local data>/voice-clips/`,
+  named by the SHA-256 of what it says and how (render version, model,
+  language, voice, words), so an edited question gets a new clip and an
+  old one is never played for it; the file is written beside its name and
+  renamed. The Director's asset scope includes the folder.
+- **Show.** Once a show with reading on is loaded, the Director renders
+  the clip of each question not kept yet, one after another
+  (`usePrepareVoice`; the check before a show shows how far). When a
+  question comes on screen (`ready`), `useReadAloud` asks for its kept
+  clip only (`voice_clip` with `render: false`, a file check) and plays
+  it like the slide's sound, at the effects' volume times the player's;
+  without one, the system voice of the quiz's language reads it (Web
+  Speech API, a voice on the computer before one that needs the
+  internet). The music ducks while it reads. A buzz, the question's end or
+  answer, or leaving the slide stops it; nothing of it is journaled, as it
+  never changes the show.
+
 ## 2. Buzzer link
 
 ### 2.1 Layers
