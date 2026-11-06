@@ -12,7 +12,7 @@
 use quiz_core::{
     AllAnswered, AnswerMode, Button, Command, CorrectAnswer, Effect, Game, GameError, Light, Phase, Question, QuestionStep, Quiz,
     QuizSettings, ReadAloud, Slide, SlideContent, Stamped, VideoClip, FULL_SHARE, MAX_AFTER_REVEAL_DELAY_S, MAX_ALL_ANSWERED_DELAY_S, MAX_ANSWERS, MAX_EVERYONE_ANSWERS,
-    MAX_JOKERS, MAX_POINTS, MAX_TEAMS, MIN_EVERYONE_ANSWERS, RULES_VERSION,
+    MAX_JOKERS, MAX_POINTS, MAX_TEAMS, MIN_EVERYONE_ANSWERS, REPLAYS_AS_PLAYED_FROM, RULES_VERSION,
 };
 use std::collections::BTreeMap;
 
@@ -263,8 +263,14 @@ pub struct Stepped {
 
 impl Show {
     pub fn new(quiz: Quiz, buzzers: u16) -> Show {
+        Show::under(quiz, buzzers, RULES_VERSION)
+    }
+
+    /// A new show run under an older `rules_version`, as a show begun
+    /// before an update goes on after it (`Game::replay`).
+    pub fn under(quiz: Quiz, buzzers: u16, rules_version: u32) -> Show {
         Show {
-            game: Game::new(quiz),
+            game: Game::replay(quiz, &[], rules_version),
             journal: Vec::new(),
             now: 1_000,
             buzzers,
@@ -307,7 +313,7 @@ impl Show {
     /// journal, with a question that was in play restarted and a step
     /// coming by itself held (journaled too).
     pub fn crash_and_resume(&mut self) {
-        let replayed = Game::replay(self.game.quiz().clone(), &self.journal, RULES_VERSION);
+        let replayed = Game::replay(self.game.quiz().clone(), &self.journal, self.game.rules_version());
         assert_eq!(replayed, self.game, "the journal does not rebuild the show the windows saw");
         // A resumed show lights every buzzer as the show has it.
         self.shown = self.game.lights().into_iter().collect();
@@ -318,14 +324,16 @@ impl Show {
         if let Some(command) = self.game.recovery_command() {
             let stepped = self.apply(command);
             assert!(stepped.result.is_ok(), "the recovery command was refused: {:?}", stepped.result);
-            assert!(!self.game.controls().restart_question, "a question is still in play after the recovery");
+            // Not `controls().restart_question`: before rules version 4 a closed question restarts too.
+            let in_play = matches!(self.game.phase(), Phase::Question(QuestionStep::Running { .. } | QuestionStep::Buzzed { .. }));
+            assert!(!in_play, "a question is still in play after the recovery");
         }
         assert_eq!(self.game.view(self.now).auto_step, None, "a step comes by itself right after the recovery");
     }
 
     /// Asserts that the whole journal rebuilds the current game.
     pub fn assert_replays(&self) {
-        let replayed = Game::replay(self.game.quiz().clone(), &self.journal, RULES_VERSION);
+        let replayed = Game::replay(self.game.quiz().clone(), &self.journal, self.game.rules_version());
         assert_eq!(replayed, self.game, "replaying the journal gave another show");
     }
 
@@ -373,7 +381,8 @@ impl Show {
             let fresh: Vec<_> = ready.iter().copied().filter(|buzzer| was.get(buzzer) != Some(&Light::Ready)).collect();
             if !before.buzzer_mode().takes_buzzes() {
                 assert_eq!(fresh, ready, "a buzzer was ready already as a round began: {stamped:?}");
-            } else {
+            } else if after.rules_version() >= 5 {
+                // Before rules version 5 a player who joined in a round played in it at once.
                 assert!(fresh.is_empty() || fresh == ready, "buzzers {fresh:?} of {ready:?} turned ready anew in a round: {stamped:?}");
             }
         }
@@ -616,12 +625,23 @@ fn near_the_limits(game: &Game) -> bool {
     game.players().any(|p| p.score.unsigned_abs() > (i32::MAX as u32) / 4)
 }
 
+/// The rules a random show runs under: mostly today's, else any older
+/// version whose shows still replay as played (`REPLAYS_AS_PLAYED_FROM`),
+/// so the paths kept for them are played too.
+pub fn random_rules_version(rng: &mut Rng) -> u32 {
+    if rng.chance(60) {
+        RULES_VERSION
+    } else {
+        rng.between(u64::from(REPLAYS_AS_PLAYED_FROM), u64::from(RULES_VERSION)) as u32
+    }
+}
+
 /// Plays one random show from `seed` under `plan`, checking every rule.
 pub fn play(seed: u64, plan: Plan) -> Show {
     let mut rng = Rng::new(seed);
     let quiz = random_quiz(&mut rng);
     let buzzers = if rng.chance(20) { MAX_BUZZERS } else { rng.between(1, u64::from(MAX_BUZZERS)) as u16 };
-    let mut show = Show::new(quiz, buzzers);
+    let mut show = Show::under(quiz, buzzers, random_rules_version(&mut rng));
     for step in 1..=plan.steps {
         show.random_wait(&mut rng);
         // Time up comes on the show thread's tick, before or after the events of that moment.

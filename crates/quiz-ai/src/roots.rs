@@ -79,8 +79,20 @@ impl Roots {
     /// absolute (the server's working folder is the assistant's, which it
     /// does not know) and without `..`. A path that is not there yet is
     /// judged by the nearest folder above it that is.
+    ///
+    /// A network or device path (`quiz_file::network_or_device`) is refused
+    /// before any file is looked at, unless it is on the share of a root
+    /// (`share_of`): on Windows looking it up would contact the server and
+    /// sign in to it with the user's credentials, whoever told the assistant
+    /// the path.
     pub fn resolve(&self, given: &Path) -> Result<PathBuf, String> {
         let path = given.display();
+        if quiz_file::network_or_device(&given.as_os_str().to_string_lossy()) {
+            let share = share_of(given);
+            if share.is_none() || !self.0.iter().any(|root| share_of(root) == share) {
+                return Err(format!("{path} is a network or device path: use a path on this computer"));
+            }
+        }
         if !given.is_absolute() {
             return Err(format!("{path} is not an absolute path"));
         }
@@ -103,6 +115,25 @@ impl Roots {
             return format!("none: {NO_FOLDER}");
         }
         self.folders().iter().map(|root| root.display().to_string()).collect::<Vec<_>>().join(", ")
+    }
+}
+
+/// The `server\share` a network path names, in lower case (Windows
+/// compares them so): from `\\?\UNC\server\share`, as a root's real path
+/// reads, or `\\server\share` and `//server/share`, as written. None for a
+/// local or device path (`\\?\C:\`, `\\.\pipe`, `\??\`).
+fn share_of(path: &Path) -> Option<String> {
+    let text = path.as_os_str().to_string_lossy();
+    let separators = |c: char| c == '\\' || c == '/';
+    let rest = match text.get(..8) {
+        Some(head) if head.eq_ignore_ascii_case(r"\\?\UNC\") => &text[8..],
+        _ if quiz_file::network_or_device(&text) && !text[1..].starts_with(['?', '.']) && !text[2..].starts_with(['?', '.']) => &text[2..],
+        _ => return None,
+    };
+    let mut parts = rest.split(separators);
+    match (parts.next(), parts.next()) {
+        (Some(server), Some(share)) if !server.is_empty() && !share.is_empty() => Some(format!("{server}\\{share}").to_lowercase()),
+        _ => None,
     }
 }
 
@@ -171,6 +202,31 @@ mod tests {
         assert!(roots.resolve(&quizzes.join("pub/../../private")).unwrap_err().contains(".."));
         assert!(roots.resolve(Path::new("quizzes/x")).unwrap_err().contains("not an absolute path"));
         assert!(Roots::default().resolve(&quizzes).unwrap_err().contains("no folder"));
+    }
+
+    #[test]
+    fn a_network_or_device_path_is_refused_before_it_is_looked_at() {
+        let dir = scratch("roots-network");
+        fs::create_dir_all(&dir).unwrap();
+        let roots = Roots::new(vec![allow(&dir, &[]).unwrap()]);
+        for given in [r"\\host\share\x.png", "//host/share/x.png", r"\\?\UNC\host\share\x.png", r"\\.\pipe\x", r"\??\C:\x.png"] {
+            let refused = roots.resolve(Path::new(given)).unwrap_err();
+            assert!(refused.contains("network or device path"), "{given}: {refused}");
+        }
+        let host = Some(r"host\share".to_string());
+        assert_eq!(share_of(Path::new(r"\\?\UNC\Host\Share\quizzes")), host);
+        assert_eq!(share_of(Path::new(r"\\host\share")), host);
+        assert_eq!(share_of(Path::new("//host/share/x.png")), host);
+        for local in [r"\\?\C:\Users\me\Quizzes", r"\\.\pipe\x", r"\??\C:\x.png", r"\\host", r"C:\x"] {
+            assert_eq!(share_of(Path::new(local)), None, "{local}");
+        }
+        assert_eq!(share_of(&dir), None);
+        // With a root on a share, a path on another share is still refused by its text.
+        let on_share = Roots(vec![PathBuf::from(r"\\?\UNC\host\share\quizzes")]);
+        for given in [r"\\other\share\x.png", r"\\host\other\x.png", r"\\.\pipe\x"] {
+            let refused = on_share.resolve(Path::new(given)).unwrap_err();
+            assert!(refused.contains("network or device path"), "{given}: {refused}");
+        }
     }
 
     #[cfg(unix)]
