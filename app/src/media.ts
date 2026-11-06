@@ -60,6 +60,11 @@ export function readMediaLength(url: string, kind: Exclude<MediaKind, "image">, 
   });
 }
 
+/** URL for a file the backend names by its full path, such as a read-aloud clip. */
+export function fileUrl(path: string): string {
+  return convertFileSrc(path);
+}
+
 /** URL for a file of a theme package. */
 export function themeFileUrl(file: ThemeFile): string {
   return mediaUrl(file.root, file.path);

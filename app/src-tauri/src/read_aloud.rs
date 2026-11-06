@@ -9,7 +9,7 @@
 //! when a clip is not there.
 
 use crate::error::{AppError, CmdResult};
-use crate::editor::refuse_during_show;
+use crate::refuse_during_show;
 use crate::{app_log, off_ui};
 use quiz_file::FileAction;
 use serde::Serialize;

@@ -4,7 +4,7 @@ import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState
 import { ANSWER_LETTERS } from "../answers";
 import { useApp } from "../app-context";
 import { parseTrackTime, trackTime } from "../format";
-import { ChevronRightIcon, CrossIcon, MoreIcon } from "../icons";
+import { CheckIcon, ChevronRightIcon, CrossIcon, MoreIcon } from "../icons";
 import { mediaFileName } from "../media";
 import { shortcutLabel, type Action } from "./actions";
 
@@ -354,7 +354,7 @@ export function ContextMenu({ x, y, items, onClose }: { x: number; y: number; it
               item.run();
             }}
           >
-            <span className="menu-icon">{item.checked ? "✓" : item.icon}</span>
+            <span className="menu-icon">{item.checked ? <CheckIcon /> : item.icon}</span>
             <span>{item.label}</span>
             {item.keys && <small>{shortcutLabel(item)}</small>}
           </button>

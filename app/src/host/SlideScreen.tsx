@@ -155,9 +155,10 @@ function ExplainedHeader({ explained, n }: { explained: QuestionSlide; n: number
 
 /** The mark on a right answer: a tick, and the share of the points when it gives only part of them. */
 function CorrectMark({ share }: { share: number }) {
+  const { t } = useApp();
   return (
     <>
-      {share < FULL_SHARE && <span className="answer-share digits">{share} %</span>}
+      {share < FULL_SHARE && <span className="answer-share digits">{t("percent", { n: share })}</span>}
       <CheckIcon className="answer-check" />
     </>
   );

@@ -1,4 +1,3 @@
-import { getVersion } from "@tauri-apps/api/app";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import blueIcon from "../../src-tauri/icons/colors/buzzdome-blue.png";
 import greenIcon from "../../src-tauri/icons/colors/buzzdome-green.png";
@@ -8,7 +7,7 @@ import redIcon from "../../src-tauri/icons/colors/buzzdome-red.png";
 import yellowIcon from "../../src-tauri/icons/colors/buzzdome-yellow.png";
 import { api } from "../api";
 import { useApp, useRun } from "../app-context";
-import { useAppIcon, useHostWindowOpen } from "../hooks";
+import { useAppIcon, useAppVersion, useHostWindowOpen } from "../hooks";
 import type { Lang, StringKey } from "../i18n";
 import type { IconColor, MonitorInfo } from "../types";
 import type { LaunchCheckSetting } from "./launch-check";
@@ -133,18 +132,7 @@ export function SettingsTab({ projector, look, launch, showRunning }: { projecto
 /** The app's version, which an update changes. */
 function AppVersion() {
   const { t } = useApp();
-  const [version, setVersion] = useState<string | null>(null);
-  useEffect(() => {
-    let alive = true;
-    getVersion()
-      .then((v) => {
-        if (alive) setVersion(v);
-      })
-      .catch((e) => console.error(e));
-    return () => {
-      alive = false;
-    };
-  }, []);
+  const version = useAppVersion();
   return version && <p className="muted">{t("appVersion", { name: t("appTitle"), version })}</p>;
 }
 

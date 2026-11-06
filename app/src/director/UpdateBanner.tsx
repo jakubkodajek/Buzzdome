@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { api } from "../api";
 import { useApp, useReport } from "../app-context";
 import { confirmAction } from "../confirm";
-import type { AvailableUpdate, UpdateProgress } from "../types";
+import { useAvailableUpdate } from "../hooks";
+import type { UpdateProgress } from "../types";
 import { installQuestion, installStatus, waitsForShow } from "./update";
 
 /**
@@ -13,21 +14,9 @@ import { installQuestion, installStatus, waitsForShow } from "./update";
 export function UpdateBanner({ showRunning }: { showRunning: boolean }) {
   const { t } = useApp();
   const report = useReport();
-  const [update, setUpdate] = useState<AvailableUpdate | null>(null);
+  const update = useAvailableUpdate();
   // The download's progress while installing (null before its first report); undefined otherwise.
   const [progress, setProgress] = useState<UpdateProgress | null | undefined>(undefined);
-  useEffect(() => {
-    let alive = true;
-    api
-      .updateCheck()
-      .then((found) => {
-        if (alive) setUpdate(found);
-      })
-      .catch(() => undefined);
-    return () => {
-      alive = false;
-    };
-  }, []);
   const installing = progress !== undefined;
   if (!update || (showRunning && !installing)) return null;
 

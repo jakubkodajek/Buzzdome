@@ -6,6 +6,14 @@
  */
 export type Controls = { next: boolean, 
 /**
+ * `Next` from the quizmaster's remote: as `next`, but not while a
+ * question runs. On the remote one key starts a question and goes on
+ * after it, so a second press by mistake would end the question as it
+ * starts; End question or the Director ends it, and once it closed
+ * Next goes on again.
+ */
+remoteNext: boolean, 
+/**
  * `JudgeRight` and `JudgeWrong`.
  */
 judge: boolean, 

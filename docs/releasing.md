@@ -18,8 +18,10 @@ finds them can download the installers.
 ## Publish a new version
 
 1. Raise `version` in `app/src-tauri/tauri.conf.json` (`0.1.0` to `0.2.0`,
-   say) and merge it to `main`. The app offers only a version higher than
-   its own. Wait until the Build workflow's `check` and `windows-tests` have
+   say), and to the same in `Cargo.toml` (`[workspace.package]`) and
+   `app/package.json`; `cargo build` and `npm install` (in `app/`) carry it
+   into `Cargo.lock` and `app/package-lock.json`. Merge it to `main`. The
+   app offers only a version higher than its own. Wait until the Build workflow's `check` and `windows-tests` have
    passed on that commit.
 2. Tag that commit of main with the version, with what changed as the tag's
    message, in Czech: the quizmaster reads it before installing.

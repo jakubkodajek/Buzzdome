@@ -5,6 +5,7 @@ import { NoticeBox, NotSavedBanner } from "../notice";
 import {
   BackIcon,
   CategoryIcon,
+  CheckIcon,
   EditIcon,
   FolderIcon,
   NotesIcon,
@@ -17,6 +18,7 @@ import {
   SlideIcon,
   TableIcon,
   UndoIcon,
+  WarningIcon,
 } from "../icons";
 import { MediaRootContext } from "../media";
 import { NO_CONTEXT, slideContexts } from "../quiz";
@@ -445,7 +447,8 @@ function Studio({ editor, open, onExit }: { editor: QuizEditor; open: OpenQuiz |
             <span>{status}</span>
             {open && (
               <button type="button" className={open.problems.length > 0 ? "status-problems bad" : "status-problems"} onClick={() => setBackstage("info")}>
-                {open.problems.length > 0 ? `⚠ ${t("problems", { n: open.problems.length })}` : `✓ ${t("readyToPlay")}`}
+                {open.problems.length > 0 ? <WarningIcon className="inline-icon" /> : <CheckIcon className="inline-icon" />}{" "}
+                {open.problems.length > 0 ? t("problems", { n: open.problems.length }) : t("readyToPlay")}
               </button>
             )}
             {unsaved && <span>{t("unsaved")}</span>}

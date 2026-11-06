@@ -17,7 +17,7 @@
 use crate::dialogs::{self, Picker};
 use crate::error::{AppError, CmdResult};
 use crate::recent_files::RecentFiles;
-use crate::{app_local_data, app_log, folder_prefix, lock_show, media_player, off_ui, roaming_leftover, show_running};
+use crate::{app_local_data, app_log, folder_prefix, lock_show, media_player, off_ui, refuse_during_show, roaming_leftover};
 use quiz_core::{Category, MediaKind, Quiz, ValidationError};
 use quiz_file::{FileAction, SheetExport, SheetImport};
 use serde::de::{Error as _, Unexpected};
@@ -178,18 +178,6 @@ fn prune(app: &AppHandle, dir: &Path, keep: Option<&Path>) {
     if let Err(e) = quiz_file::prune(dir, &keep) {
         app_log::note(&format!("cleaning old editor drafts: {e}"));
     }
-}
-
-/// Refuses work that reads or writes much on the disk (opening or saving a
-/// quiz file, copying a video, reading a sheet) during a show, whose journal
-/// must not wait for the disk behind it. The Director offers the editor
-/// only when no show runs; this holds also for a command already on its way.
-/// The voice model's download is refused alike (`read_aloud.rs`).
-pub(crate) fn refuse_during_show(app: &AppHandle) -> CmdResult<()> {
-    if show_running(app) {
-        return Err(AppError::ShowRunning);
-    }
-    Ok(())
 }
 
 /// Nanoseconds since 1970 on the system clock; 0 on a clock set before it.

@@ -129,6 +129,13 @@ div.slide-failed {
   pointer-events: auto;
 }
 
+/* An icon in a line of text, as tall as the text. */
+.inline-icon {
+  width: 1em;
+  height: 1em;
+  vertical-align: -0.125em;
+}
+
 .slide-failed svg {
   flex: none;
   width: 32px;

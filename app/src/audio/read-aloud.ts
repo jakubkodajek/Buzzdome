@@ -4,13 +4,13 @@
 // API). The Director prepares every question's clip once a show with
 // reading on starts, so the show plays them without waiting.
 
-import { convertFileSrc } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { api } from "../api";
 import { useDispatch } from "../app-context";
 import { ANSWER_LETTERS } from "../answers";
 import { DEFAULT_QUIZ_SETTINGS, DEFAULT_QUIZ_SOUNDS, FIRST_MALE_VOICE, MAX_VOICE } from "../bindings/Constants";
 import { useLatest, usePlayerVolume } from "../hooks";
+import { fileUrl } from "../media";
 import { settingsOf, soundsOf } from "../quiz";
 import { createStore, useStore } from "../store";
 import type { Translate } from "../i18n";
@@ -218,7 +218,7 @@ interface Speaking {
 async function say(line: VoiceLine, gain: number, system: SpeechSynthesisVoice | null | undefined, onEnd: () => void): Promise<Speaking | null> {
   const path = await api.voiceClip(line, false).catch(() => null);
   if (path) {
-    const clip = new ClipPlayer(convertFileSrc(path), gain);
+    const clip = new ClipPlayer(fileUrl(path), gain);
     // Played to its end, or a file that does not play: either way it is over.
     clip.onEnd = () => {
       clip.dispose();

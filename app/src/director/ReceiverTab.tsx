@@ -4,6 +4,7 @@ import { api } from "../api";
 import { useApp, useRun } from "../app-context";
 import { useBackendEvent, useLearnProgress } from "../hooks";
 import type { Translate } from "../i18n";
+import { CrossIcon } from "../icons";
 import { awaitsAnswer, errorNotice, hex4, receiverStatusText, REMOTE_ACTIONS, remoteActionText, remoteKeyText, settingsLostNotice, vidPid } from "../messages";
 import { NoticeBox, ToneDot, type TonedNotice } from "../notice";
 import type { Button, BuzzerSeen, DeviceInfo, Press, PressEvent, RawReport, ReceiverInfo, ReceiverStatus, RemoteAction, RemoteKey, RemoteKeyAction } from "../types";
@@ -331,7 +332,7 @@ export function ReceiverTab() {
                   {r.dropped.length > 0 && (
                     <span className="muted">
                       {" "}
-                      ✕ {r.dropped.map((p) => pressLabel(t, p)).join(", ")}: {t("droppedNotReady")}
+                      <CrossIcon className="inline-icon" /> {r.dropped.map((p) => pressLabel(t, p)).join(", ")}: {t("droppedNotReady")}
                     </span>
                   )}
                 </li>

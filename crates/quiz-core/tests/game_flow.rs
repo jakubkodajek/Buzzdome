@@ -2447,10 +2447,14 @@ fn a_question_starts_its_clock_as_it_is_shown() {
     assert_eq!(Effect::lights(&effects), [(1, Light::Ready)]);
     assert!(effects.contains(&Effect::Sound { cue: Cue::ClockStart }));
     assert_eq!(show.game.view(1_000).clock.map(|clock| clock.remaining_ms), Some(Some(10_000)), "the whole time is left");
+    // The remote's Next, pressed twice by mistake, does not end the question as it starts.
+    let controls = show.game.controls();
+    assert!(controls.next && !controls.remote_next);
 
     // A restarted question, also after a crash, waits for Next.
     show.run(2_000, Command::RestartQuestion).unwrap();
     assert_eq!(step(&show.game), QuestionStep::Ready);
+    assert!(show.game.controls().remote_next, "the remote starts a question that waits");
     show.run(3_000, Command::Next).unwrap();
     assert!(matches!(step(&show.game), QuestionStep::Running { .. }));
     show.run(4_000, Command::CloseQuestion).unwrap();

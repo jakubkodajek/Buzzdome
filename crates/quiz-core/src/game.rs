@@ -328,6 +328,12 @@ pub enum GameError {
 #[serde(rename_all = "camelCase")]
 pub struct Controls {
     pub next: bool,
+    /// `Next` from the quizmaster's remote: as `next`, but not while a
+    /// question runs. On the remote one key starts a question and goes on
+    /// after it, so a second press by mistake would end the question as it
+    /// starts; End question or the Director ends it, and once it closed
+    /// Next goes on again.
+    pub remote_next: bool,
     /// `JudgeRight` and `JudgeWrong`.
     pub judge: bool,
     /// `PauseClock`: also while the show waits to take a step by itself.
@@ -954,6 +960,7 @@ impl Game {
         let show_over = self.next_leaves_slide() && self.following().is_none();
         Controls {
             next: !buzzed && !show_over,
+            remote_next: !buzzed && !show_over && running.is_none(),
             judge: buzzed,
             pause_clock: running.is_some_and(Clock::is_running) || self.pending_step().is_some(),
             resume_clock: running.is_some_and(|clock| !clock.is_running()),

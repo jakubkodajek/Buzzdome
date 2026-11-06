@@ -265,7 +265,7 @@ function PlayerVolume() {
         aria-label={t("playerVolume")}
         onChange={(e) => run(api.mediaSetVolume(Number(e.target.value)))}
       />
-      <span className="media-volume-value">{volume} %</span>
+      <span className="media-volume-value">{t("percent", { n: volume })}</span>
     </label>
   );
 }

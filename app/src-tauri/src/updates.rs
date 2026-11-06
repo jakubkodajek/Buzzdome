@@ -6,7 +6,7 @@
 //! installed (docs/releasing.md).
 
 use crate::error::{AppError, CmdResult};
-use crate::{app_log, lock_show, off_ui, read_show};
+use crate::{app_log, lock_show, off_ui, read_show, refuse_show};
 use serde::Serialize;
 use std::time::Duration;
 use tauri::async_runtime::Mutex;
@@ -104,9 +104,7 @@ pub async fn update_install(app: AppHandle, updates: State<'_, Updates>, progres
     let Some(Checked::Newer(update)) = checked.as_ref() else {
         return Err(AppError::NoUpdate);
     };
-    if read_show(app.clone(), |inner| inner.game.is_some()).await? {
-        return Err(AppError::ShowRunning);
-    }
+    read_show(app.clone(), refuse_show).await??;
     let mut update = Update::clone(update);
     update.timeout = Some(DOWNLOAD_TIMEOUT);
     let mut downloaded = 0;
@@ -143,9 +141,7 @@ fn progress_step_crossed(before: u64, after: u64, total: Option<u64>) -> bool {
 fn install(app: &AppHandle, update: &Update, bytes: &[u8]) -> CmdResult<()> {
     {
         let mut inner = lock_show(app);
-        if inner.game.is_some() {
-            return Err(AppError::ShowRunning);
-        }
+        refuse_show(&inner)?;
         inner.updating = true;
     }
     app_log::note(&format!("installing version {} over {}", update.version, update.current_version));
