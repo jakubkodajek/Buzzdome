@@ -68,7 +68,6 @@ export function VoicesSettings({ showRunning }: { showRunning: boolean }) {
         )}
       </div>
       {showRunning && <p className="muted">{t("voicesDuringShow")}</p>}
-      <p className="muted">{t("voicesLicence")}</p>
       {QUIZ_LANGUAGES.map((language) => (
         <section key={language} className="voice-group" aria-label={t(LANGUAGE_LABEL[language])}>
           <h3>{t(LANGUAGE_LABEL[language])}</h3>

@@ -1122,10 +1122,9 @@ letter from `answers.ts`).
   both languages ship with the UI (`audio/voices/`), so the quizmaster
   chooses before downloading. The download (and removing the model) is
   refused during a show, as the editor's large files are: it writes
-  about 270 MB to the disk the journal is on. Settings › Voices says that
-  the model is Supertone's under OpenRAIL-M, whose use rules ask that
-  machine-made speech be disclosed: the quizmaster tells the players a
-  synthetic voice reads.
+  about 270 MB to the disk the journal is on. The app shows no licence
+  text or notice for the model (Jakub's decision, 2026-11-06: a private,
+  non-commercial app).
 - **Engine and process.** The engine is sherpa-onnx's Rust binding over
   ONNX Runtime, linked statically (on Windows the MT runtime, which Tauri
   links the app with too). The libraries are prebuilt archives checked
