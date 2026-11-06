@@ -431,10 +431,13 @@ fn a_team_switched_off_while_it_waits_its_turn_is_passed_over() {
 }
 
 #[test]
-fn one_buzz_ends_the_question_however_many_wait_their_turn() {
+fn one_buzz_queues_no_other_buzz_and_ends_the_question() {
     let mut show = fastest_finger_running(3, QuizSettings { one_buzz: true, ..stepped() });
     show.press(2_000, 1, Button::Big);
+    // The one buzz is judged with the others locked, so a later press does not queue.
+    assert_eq!(show.game.lights()[1], (2, Light::Locked));
     show.press(2_100, 2, Button::Big);
+    assert_eq!(buzz_states(&show.game), [(1, BuzzState::Answering)]);
     show.run(3_000, Command::JudgeWrong).unwrap();
     assert_eq!(step(&show.game), QuestionStep::Closed);
     assert_eq!((show.score(1), show.score(2)), (-20, 0));

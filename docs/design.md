@@ -866,7 +866,7 @@ packages users will install are read the same way.
   (`PressPlay::Queue`, `Game::buzzes`) without a sound, so the team
   answering is not drowned out. `JudgeWrong` locks the team out and,
   unless that leaves nobody to answer (`closes_as_answered`, also
-  `oneBuzz`), judges the next buzz waiting (`Game::next_in_turn`) with
+  `oneBuzz`, which queues no buzz: `Game::queues_buzzes`), judges the next buzz waiting (`Game::next_in_turn`) with
   the clock still paused; a team switched off meanwhile is passed over,
   and one switched on again plays from the next question (BZ-19). Once
   nobody waits the clock goes on without moving `presses_from_ms`, so a

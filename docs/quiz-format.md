@@ -309,7 +309,7 @@ plays.
 | `nextAfterRevealDelayS` | number | Whole seconds the answer stays on screen first, 0 to 60 (default 5; more reads as 60). |
 | `runClockOut` | true/false | A timed question's clock runs to its end even once nobody is left to answer; the question then closes as everyone having answered, so `allAnswered` applies (default false). |
 | `changeAnswer` | true/false | In an everyone-answers question a player can change their answer while it runs; their last answer counts, with its time (default false: the first answer counts). |
-| `oneBuzz` | true/false | A fastest-finger question takes one buzz: once it is judged wrong nobody else can buzz in, the teams waiting their turn lose it, and the question has nobody left to answer (default false). |
+| `oneBuzz` | true/false | A fastest-finger question takes one buzz: nobody else can buzz in while it is judged nor once it is judged wrong, so no team waits its turn, and the question has nobody left to answer (default false). |
 | `noAnswerPenalty` | true/false | In an everyone-answers question a player switched on who gives no answer loses the question's `penalty`, as for a wrong answer (default false). |
 | `hideAnswer` | true/false | The projector does not mark the right answers when they are shown, so the quizmaster can tell them; the Director still marks them, and the buzzers still light right or wrong (default false). |
 | `hideBuzzPoints` | true/false | The projector does not show the points a fastest-finger buzz won or lost; the leaderboard still shows the scores (default false). |

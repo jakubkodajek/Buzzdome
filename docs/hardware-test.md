@@ -334,8 +334,11 @@ press that leaves no line under "Raw data", and what came before it.
     Also switch a player on just after a buzz was judged wrong.
 17. Fastest-finger question with no answers (the keys stand for the big
     button): buzz first with a keyboard key (say `5`).
-    Expected: the buzzers turn dim white while it is judged. Judge it wrong:
-    they turn blue again, and the first to press then counts.
+    Expected: the buzzers that have not buzzed stay blue while it is judged,
+    and one pressed meanwhile turns dim white and waits its turn. Judge
+    it wrong: the one waiting answers next; once nobody waits, the first
+    to press counts. (With one buzz only, or in a show begun before
+    rules version 8, the others turn dim white while it is judged.)
 18. **Late teams.** Between questions (a billboard, or a closed question),
     press a buzzer that is not in the show yet. Expected: it registers.
     Do the same during an everyone-answers question: it registers and its
@@ -403,8 +406,9 @@ press that leaves no line under "Raw data", and what came before it.
    yet") within about two seconds, and presses work without restarting
    the show. With the Enjoy
    303S the buzzers show their lights again once it is back: blue in a
-   fastest-finger round, the results if they were showing, white and dim
-   white while a buzz is judged. Also pull it while a buzz is being judged:
+   fastest-finger round, the results if they were showing, and while a buzz
+   is judged white for the team answering, dim white for those waiting or
+   out, and blue for those that can still buzz. Also pull it while a buzz is being judged:
    once back, no buzz counts until the quizmaster judges.
 2. Mid-question, pull the RJ45 plug at the receiver and plug it back,
    leaving the USB side in. The computer cannot see this, as the cable

@@ -145,8 +145,8 @@ protocol has no flashing, so each light has a colour of its own.
 | --- | --- | --- | --- |
 | no question running | `Off` | off | off |
 | buzzer may press | `Ready` | green | blue |
-| answered an everyone-answers question, before the reveal | `Answered` | red | dim white (black turns it off, BZ-22) |
-| out for this question (pressed wrong, another team is answering, or switched off) | `Locked` | red | dim white (Jakub's choice, told apart from wrong) |
+| answered an everyone-answers question, before the reveal, or buzzed and waits its turn (BZ-23) | `Answered` | red | dim white (black turns it off, BZ-22) |
+| out for this question (buzzed wrong, switched off, or the question's one buzz used); in shows begun before rules version 8 or with one buzz only, also while another team's buzz is judged | `Locked` | red | dim white (Jakub's choice, told apart from wrong) |
 | pressed first | `First` | white, flashing | white |
 | answer judged correct | `Correct` | green, flashing | green |
 | answer judged wrong | `Wrong` | red, flashing | red |

@@ -802,9 +802,11 @@ impl Game {
     /// their turn, a buzz judged wrong passes the question to the next one
     /// waiting with the clock still stopped, and the clock goes on once
     /// nobody waits. Before, a buzz locked the others out until it was
-    /// judged, and the clock went on after each wrong one.
+    /// judged, and the clock went on after each wrong one. A question with
+    /// one buzz (`QuizSettings::one_buzz`) ends at its first wrong buzz, so
+    /// it queues none and the others stay locked while it is judged.
     pub fn queues_buzzes(&self) -> bool {
-        self.rules_version >= 8
+        self.rules_version >= 8 && !self.quiz.settings.one_buzz
     }
 
     /// Whether the player buzzed in the current question already.
