@@ -309,7 +309,9 @@ fn send_effects(app: &AppHandle, inner: &mut Inner, effects: Vec<Effect>) {
 /// before the lights: by the time the buzzers light ready, the receiver
 /// thread holds a round's presses for the buzzers' timers, and tells one
 /// made in the step before by the light it showed (`buzzers::enjoy303s`).
-/// The change's lights go at once.
+/// The change's lights go at once, in the frames the game split them into
+/// (`Effect::light_frames`): a question that starts as it is shown darkens
+/// the buzzers before it turns them ready.
 fn light_buzzers(inner: &mut Inner, effects: &[Effect]) {
     send_mode(inner);
     for lights in Effect::light_frames(effects) {
