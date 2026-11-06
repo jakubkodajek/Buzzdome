@@ -6,6 +6,7 @@ import { Popup } from "../editor/controls";
 import type { StringKey } from "../i18n";
 import { colourClashText, errorNotice, lightText, type Notice } from "../messages";
 import { NoticeBox } from "../notice";
+import { sameColor } from "../theme/color";
 import type { Light, ReceiverInfo, Rgb } from "../types";
 
 /** The lights in the order a question shows them. */
@@ -38,9 +39,6 @@ const COMMON_COLOURS: readonly { colour: Rgb; name: StringKey }[] = [
   { colour: "#aa00ff", name: "colorPurple" },
 ];
 
-/** Whether two colours are the same, whatever the case of their hex digits. */
-const sameColour = (a: Rgb, b: Rgb) => a.toLowerCase() === b.toLowerCase();
-
 /**
  * Each light's colour on the buzzers, for every quiz (`LightColours`), with
  * the shade the buzzers show of it, and the colours the quizmaster keeps at
@@ -51,7 +49,7 @@ export function BuzzerColours({ info, reload }: { info: ReceiverInfo; reload: ()
   const run = useRun();
   const [error, setError] = useState<Notice | null>(null);
   const choose = (light: Light, colour: Rgb) => {
-    if (sameColour(colour, info.colours[light])) return;
+    if (sameColor(colour, info.colours[light])) return;
     api
       .receiverSetColours({ ...info.colours, [light]: colour })
       .then(
@@ -84,7 +82,7 @@ export function BuzzerColours({ info, reload }: { info: ReceiverInfo; reload: ()
                 />
               </td>
               <td className="buzzer-shade" title={t("buzzerShade")}>
-                ≈ <Swatch color={info.shownColours[light]} />
+                <Swatch color={info.shownColours[light]} />
               </td>
             </tr>
           ))}
@@ -118,7 +116,7 @@ function BuzzerColourBox(props: {
   const [open, setOpen] = useState<{ x: number; y: number } | null>(null);
   const [draft, setDraft] = useState<Rgb | null>(null);
   const shown = draft ?? value;
-  const kept = mine.some((colour) => sameColour(colour, shown));
+  const kept = mine.some((colour) => sameColor(colour, shown));
   const close = (colour: Rgb) => {
     setOpen(null);
     setDraft(null);
@@ -128,7 +126,7 @@ function BuzzerColourBox(props: {
     <button
       key={colour}
       type="button"
-      className={sameColour(colour, shown) ? "color-tile selected" : "color-tile"}
+      className={sameColor(colour, shown) ? "color-tile selected" : "color-tile"}
       title={name}
       aria-label={name}
       style={{ background: colour }}
@@ -162,7 +160,7 @@ function BuzzerColourBox(props: {
               type="button"
               className="mini"
               disabled={!kept && full}
-              onClick={() => onKeep(kept ? mine.filter((colour) => !sameColour(colour, shown)) : [...mine, shown])}
+              onClick={() => onKeep(kept ? mine.filter((colour) => !sameColor(colour, shown)) : [...mine, shown])}
             >
               {t(kept ? "coloursForget" : "coloursKeep")}
             </button>

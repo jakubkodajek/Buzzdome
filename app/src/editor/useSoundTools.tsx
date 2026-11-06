@@ -32,7 +32,7 @@ export interface SoundTools {
  * open and draws it.
  */
 export function useSoundTools(open: OpenQuiz | null, edit: (edit: Edit, mergeKey?: string) => void): SoundTools {
-  const { t, notify, fail } = useApp();
+  const { t, notify, caution, fail } = useApp();
   const [trimOf, setTrimOf] = useState<{ id: string; media: "sound" | "video" } | null>(null);
   const [loudness, setLoudness] = useState(false);
   const quiz = open?.history.present ?? null;
@@ -49,7 +49,9 @@ export function useSoundTools(open: OpenQuiz | null, edit: (edit: Edit, mergeKey
         const { gainDb } = change;
         // Only while the sound still plays the part that was measured.
         if (gainDb !== null) updateSlide(id, (s) => (s.sound?.file === sound.file && sameSpan(s.sound.part, sound.part) ? setSoundOptions(s, { gainDb }) : s));
-        notify(t(change.message, { gain: decibels(gainDb ?? sound.gainDb) }));
+        // Silent, too short or limited: it did not come out as asked.
+        const done = change.status === "changed" || change.status === "atTarget";
+        (done ? notify : caution)(t(change.message, { gain: decibels(gainDb ?? sound.gainDb) }));
       },
       (error: unknown) => {
         console.error("normalize:", error);

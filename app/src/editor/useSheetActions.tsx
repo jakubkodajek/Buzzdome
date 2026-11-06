@@ -34,7 +34,8 @@ export function useSheetActions(editor: QuizEditor, quiz: Quiz | null, insertImp
           if (!result) return;
           const imported = insertImported(result.slides);
           if (result.notes.length > 0) setImportNotes({ imported, notes: result.notes });
-          else notify(imported > 0 ? t("sheetImported", { n: imported }) : t("sheetImportedNone"));
+          else if (imported > 0) notify(t("sheetImported", { n: imported }));
+          else caution(t("sheetImportedNone"));
         }),
     },
     sheetTemplate: {

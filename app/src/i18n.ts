@@ -1,8 +1,10 @@
 import { useSyncExternalStore } from "react";
 import type { MenuWords } from "./bindings/MenuWords";
 import { readPreference, writePreference } from "./preferences";
+import type { Language } from "./types";
 
-export type Lang = "cs" | "en";
+/** The app's language, the one Rust keeps (`quiz_ai::settings::Language`). */
+export type Lang = Language;
 
 const STORAGE_KEY = "quiz-show.lang";
 
@@ -38,7 +40,6 @@ const strings = {
     leaderboard: "Pořadí",
     goTo: "Přejít na…",
     notes: "Poznámky",
-    players: "Hráči",
     buzzer: "Bzučák {n}",
     name: "Jméno",
     score: "Body",
@@ -56,7 +57,6 @@ const strings = {
     importTeams: "Načíst ze souboru…",
     importTeamsHint: "Textový soubor s jedním názvem na řádek nebo CSV (názvy v prvním sloupci).",
     pairHint: "Přetáhněte číslo bzučáku na název týmu, nebo klikněte na číslo a pak na název.",
-    virtualBuzzers: "Virtuální bzučáky",
     count: "Počet",
     keyboardHint: "Klávesy 1–0 = velké tlačítko hráčů 1–10. Mezerník = další, Y/N = správně/špatně, P = pauza, S = pořadí.",
     lobby: "Registrace",
@@ -1018,6 +1018,7 @@ const strings = {
     themeBackgroundFailed: "Pozadí motivu {file} nejde načíst.",
     themeNotInstalled: "Motiv {id} není nainstalovaný, kvíz se zobrazuje ve výchozím.",
     hostProblem: "Projektor: {message}",
+    percent: "{n} %",
     errNoDraft: "V editoru není otevřený žádný kvíz.",
     errNotRecent: "Soubor už v seznamu Naposledy otevřené není.",
     errQuizFileGone: "Kvíz {name} byl smazán nebo přesunut, a tak zmizel ze seznamu Naposledy otevřené.",
@@ -1353,7 +1354,6 @@ const strings = {
     leaderboard: "Leaderboard",
     goTo: "Go to…",
     notes: "Notes",
-    players: "Players",
     buzzer: "Buzzer {n}",
     name: "Name",
     score: "Score",
@@ -1371,7 +1371,6 @@ const strings = {
     importTeams: "Load from file…",
     importTeamsHint: "A text file with one name per line, or CSV (names in the first column).",
     pairHint: "Drag a buzzer number onto a team name, or click the number and then the name.",
-    virtualBuzzers: "Virtual buzzers",
     count: "Count",
     keyboardHint: "Keys 1–0 = big button of players 1–10. Space = next, Y/N = right/wrong, P = pause, S = leaderboard.",
     lobby: "Registration",
@@ -2331,6 +2330,7 @@ const strings = {
     themeBackgroundFailed: "The theme's background {file} cannot be loaded.",
     themeNotInstalled: "The theme {id} is not installed; the quiz shows in the default one.",
     hostProblem: "Projector: {message}",
+    percent: "{n}%",
     errNoDraft: "No quiz is open in the editor.",
     errNotRecent: "The file is no longer in Recent quizzes.",
     errQuizFileGone: "The quiz {name} was deleted or moved, so it left Recent quizzes.",

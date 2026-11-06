@@ -1,3 +1,4 @@
+import { getVersion } from "@tauri-apps/api/app";
 import { Channel, invoke } from "@tauri-apps/api/core";
 import type { Lang } from "./i18n";
 import type {
@@ -17,6 +18,7 @@ import type {
   DeviceInfo,
   EditorDraft,
   GameView,
+  HostProblem,
   IconColor,
   LearnProgress,
   LightColours,
@@ -99,9 +101,11 @@ export const api = {
   hostWindowOpen: () => invoke<boolean>("host_window_open"),
   /** Where the projector window is; null while it is closed. */
   projectorWindow: () => invoke<ProjectorWindow | null>("projector_window"),
-  reportHostProblem: (message: string) => invoke<void>("report_host_problem", { message }),
+  reportHostProblem: (problem: HostProblem) => invoke<void>("report_host_problem", { problem }),
   /** Ends the app; the running show stays saved for resuming. */
   quitApp: () => invoke<void>("quit_app"),
+  /** The app's version, which an update changes. */
+  appVersion: () => getVersion(),
   /** The quizmaster chose not to close the app during a show: the next close asks again. */
   closeDeclined: () => invoke<void>("close_declined"),
   /** Notes in the app's log a problem this window has nowhere to show. */
@@ -251,7 +255,7 @@ export interface BackendEvents {
   /** The projector window opened (true) or closed (false). */
   "host-window": boolean;
   /** A problem the projector met, worded for the Director to show. */
-  "host-problem": string;
+  "host-problem": HostProblem;
   /** The Director was asked to close during a show: the quizmaster confirms it (`quitApp`) or not (`closeDeclined`). */
   "close-requested": null;
   /** The prepared team names changed, or a show started or ended. */

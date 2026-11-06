@@ -189,7 +189,7 @@ function SlidePreview({ slide, context, counts }: { slide: Slide; context: Slide
                   <div key={i} className={share !== null ? "preview-answer correct" : "preview-answer"}>
                     <span className={`dot dot-${i}`}>{ANSWER_LETTERS[i]}</span>
                     <span className="answer-label">{answer}</span>
-                    {share !== null && share < FULL_SHARE && <span className="share">{share} %</span>}
+                    {share !== null && share < FULL_SHARE && <span className="share">{t("percent", { n: share })}</span>}
                     {counts && <span className="count">{counts[i]}</span>}
                   </div>
                 );

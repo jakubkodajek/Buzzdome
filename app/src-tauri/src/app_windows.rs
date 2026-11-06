@@ -170,15 +170,30 @@ pub async fn close_host_window(app: AppHandle) -> CmdResult<()> {
     }
 }
 
+/// A problem the projector met, worded for the Director: what happened,
+/// and the system's words or the file it was about, shown under it.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct HostProblem {
+    pub text: String,
+    #[ts(optional)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub detail: Option<String>,
+}
+
 /// Passes on a problem the projector met, such as a background that does
 /// not load, worded for the Director to show: the projector has nowhere to.
 /// It goes in the log too, to look into after the show, off the windows'
 /// thread (`off_ui`): a disk that does not answer freezes no window.
 #[tauri::command]
-pub async fn report_host_problem(app: AppHandle, message: String) -> CmdResult<()> {
+pub async fn report_host_problem(app: AppHandle, problem: HostProblem) -> CmdResult<()> {
     off_ui(move || {
-        app_log::note(&format!("the projector: {}", logged_problem(&message)));
-        let _ = app.emit("host-problem", message);
+        let said = match &problem.detail {
+            Some(detail) => format!("{} ({detail})", problem.text),
+            None => problem.text.clone(),
+        };
+        app_log::note(&format!("the projector: {}", logged_problem(&said)));
+        let _ = app.emit("host-problem", problem);
         Ok(())
     })
     .await

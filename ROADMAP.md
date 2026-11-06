@@ -53,6 +53,7 @@ Status keys: `[x]` done, `[~]` in progress, `[ ]` not started.
 - [~] Buzzer lights: ready, answered, locked out, first, correct, wrong, in colour on the 303S; seen in the first test, still to read from the back of a room
 - [~] Buzzer colours of the quizmaster's own for each light, black for off, from a colour picker, a row of the most used colours and colours kept at hand (spec BZ-22); colours other than the defaults still to see on the hardware
 - [x] Buzzer registration (any press registers in the lobby); the receiver is found by itself, and the Receiver tab lists each buzzer as it is pressed
+- [~] Every fastest-finger buzz waits its turn in the buzzers' order, and a wrong answer passes the question to the next team in the queue (spec BZ-23, rules version 8); still to try on the hardware
 - [~] The quizmaster's remote: all 12 keys drive the Director, each key's action chosen in the Receiver tab (spec BZ-21); the three arrows' codes to check on the hardware
 - [ ] Fallback: vendor keystroke mode through the keyboard driver
 
@@ -98,7 +99,7 @@ Status keys: `[x]` done, `[~]` in progress, `[ ]` not started.
 ## Phase 5: Run
 
 - [~] Installers for Windows, macOS and Linux from CI (unsigned); code signing and a portable build to do
-- [~] Automatic updates (Windows and macOS): the app offers and installs signed GitHub releases of this repository, built from `v*` tags (`docs/releasing.md`); v0.2.0 and v0.5.0 are released, and 0.5.1 is the next update
+- [~] Automatic updates (Windows and macOS): the app offers and installs signed GitHub releases of this repository, built from `v*` tags (`docs/releasing.md`); v0.2.0, v0.5.0 and v0.5.1 are released, and 0.7.0 is the next update
 - [ ] Event checklist: laptop power, display settings, receiver, spare batteries, backup quiz file
 - [ ] First live event
 - [ ] Retrospective: what to fix and what to build next

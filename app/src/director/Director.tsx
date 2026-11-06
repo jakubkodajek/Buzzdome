@@ -85,7 +85,7 @@ export function Director() {
 function DirectorScreens() {
   const { t, fail } = useApp();
   const [screen, setScreen] = useState<Screen>("show");
-  useBackendEvent("host-problem", (message) => fail(t("hostProblem", { message })));
+  useBackendEvent("host-problem", ({ text, detail }) => fail({ text: t("hostProblem", { message: text }), detail }));
   // Provided above the show controls: their hooks (the slide sound) resolve media too.
   const mediaRoot = useMediaRoot();
   if (screen === "editor") {

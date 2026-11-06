@@ -390,10 +390,22 @@ fn begin_show(app: &AppHandle, inner: &mut Inner, game: Game, session: Option<Se
     named.map(drop)
 }
 
-/// Whether a show (or a test run) is running. Not to be called while
-/// holding the show state.
-fn show_running(app: &AppHandle) -> bool {
-    lock_show(app).game.is_some()
+/// Refuses work that must not run during a show: work that reads or writes
+/// much on the disk (opening or saving a quiz file, copying a video, reading
+/// a sheet, installing an update), whose journal must not wait for the disk
+/// behind it, or that would disturb the buzzers. The windows offer it only
+/// when no show runs; this holds also for a command already on its way.
+/// Not to be called while holding the show state (`refuse_show` then).
+pub(crate) fn refuse_during_show(app: &AppHandle) -> CmdResult<()> {
+    refuse_show(&lock_show(app))
+}
+
+/// `refuse_during_show` for one who holds the show state.
+pub(crate) fn refuse_show(inner: &Inner) -> CmdResult<()> {
+    if inner.game.is_some() {
+        return Err(AppError::ShowRunning);
+    }
+    Ok(())
 }
 
 // The commands that read or start the show are async, so Tauri runs them

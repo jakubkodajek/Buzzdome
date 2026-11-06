@@ -14,7 +14,7 @@ use buzzers::DriverError;
 use crate::app_file::{AppFile, SettingsLost};
 use crate::dialogs::{self, Picker};
 use crate::error::{AppError, CmdResult};
-use crate::off_ui;
+use crate::{off_ui, refuse_during_show};
 use crate::remote::{RemoteAction, RemoteKeyAction, RemoteKeys};
 use crate::show_thread::ShowEvent;
 use buzzers::learned::{LearnedMapping, Recorder};
@@ -497,6 +497,8 @@ pub async fn receiver_learn_finish(app: AppHandle) -> CmdResult<Press> {
 #[tauri::command]
 pub async fn receiver_forget_learned(app: AppHandle) -> CmdResult<()> {
     off_ui(move || {
+        // On a 303S the protocol sets the receiver up again, which restarts every buzzer's timer.
+        refuse_during_show(&app)?;
         let hw = app.state::<Hardware>();
         let change = hw.change_settings();
         change.store(ReceiverSettings { learned: Vec::new(), ..change.settings() })?;

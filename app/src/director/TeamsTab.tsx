@@ -5,6 +5,7 @@ import { MAX_NAME_CHARS } from "../bindings/Constants";
 import { confirmAction } from "../confirm";
 import { seconds, signed } from "../format";
 import { usePreparedTeams, useTeamsLost } from "../hooks";
+import { CrossIcon } from "../icons";
 import { settingsLostNotice } from "../messages";
 import { NoticeBox } from "../notice";
 import type { BuzzerId, Command, GameView, SettingsLost } from "../types";
@@ -153,7 +154,7 @@ function ShowTeams({ view, lost }: { view: GameView; lost: SettingsLost | null }
                     {p.delta !== null && p.delta !== 0 && <span className={p.delta > 0 ? "good-text" : "bad-text"}> ({signed(p.delta)})</span>}
                   </td>
                   <td>
-                    {p.answer ? buttonLabel(p.answer) : p.lockedOut ? "✕" : p.joinsNext ? <span className="muted">{t("joinsNext")}</span> : ""}
+                    {p.answer ? buttonLabel(p.answer) : p.lockedOut ? <CrossIcon className="inline-icon" /> : p.joinsNext ? <span className="muted">{t("joinsNext")}</span> : ""}
                     {p.answerMs !== null && <span className="muted"> · {seconds(p.answerMs)} s</span>}
                   </td>
                   <td className="num">{seconds(p.totalAnswerMs)} s</td>

@@ -5,6 +5,7 @@ import { MAX_PLAYER_VOLUME } from "./bindings/Constants";
 import { heardNow, type HeardMedia } from "./media-player";
 import type {
   AppError,
+  AvailableUpdate,
   ClockView,
   GameView,
   IconColor,
@@ -199,6 +200,16 @@ const DISK_SPACE_POLL_MS = 10_000;
 /** Free space in bytes on the disk the shows are saved to, null when the system does not say; undefined until loaded. Read while in use. */
 export function useShowDiskSpace(): number | null | undefined {
   return usePolledValue<number | null | undefined>(api.showDiskSpace, undefined, DISK_SPACE_POLL_MS)[0];
+}
+
+/** The app's version; null until loaded. */
+export function useAppVersion(): string | null {
+  return useLoadedValue<string | null>(api.appVersion, null)[0];
+}
+
+/** The newer version of the app the update server offers, read once; null when there is none or until loaded. */
+export function useAvailableUpdate(): AvailableUpdate | null {
+  return useLoadedValue<AvailableUpdate | null>(api.updateCheck, null)[0];
 }
 
 /** The receiver's state and set-up, loaded again whenever its state changes; null until loaded. */

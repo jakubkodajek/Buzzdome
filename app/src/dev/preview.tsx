@@ -16,6 +16,7 @@ import type {
   Background,
   BoardChange,
   GameView,
+  HostProblem,
   IconColor,
   LightColours,
   LightsSetup,
@@ -718,7 +719,7 @@ mockIPC(
         return null;
       case "report_host_problem":
         called.push({ cmd, ...(payload as object) });
-        void emit("host-problem", (payload as { message: string }).message);
+        void emit("host-problem", (payload as { problem: HostProblem }).problem);
         return null;
       case "list_themes":
         // Their files are served by Vite from src-tauri/themes.

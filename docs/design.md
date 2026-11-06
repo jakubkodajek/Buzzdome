@@ -29,7 +29,10 @@ How the app is built, with the buzzer link in most detail. Requirements are in
 │  ├── quiz-core    pure game state machine, scoring,     │
 │  │                themes, spreadsheet rows              │
 │  ├── quiz-file    .quiz files, media, spreadsheets      │
-│  └── buzzers      driver trait, HID receiver, protocols │
+│  ├── buzzers      driver trait, HID receiver, protocols │
+│  ├── lights       stage lights, OSC and MIDI messages   │
+│  ├── quiz-ai      quiz writing for AI apps (MCP)        │
+│  └── show-sim     random shows for the soak tests       │
 └─────────────────────────────────────────────────────────┘
 ```
 
@@ -134,8 +137,10 @@ draws slides without a show.
 | `clock-tick` | `ClockView` | every 250 ms while a question clock runs |
 | `sound-cue` | `Cue` | a game effect that has a sound |
 | `receiver-status`, `receiver-raw`, `receiver-press`, `receiver-learn` | see `hardware.rs` | receiver setup and diagnostics |
+| `receiver-buzzer` | `BuzzerSeen` | a buzzer the receiver heard, as it now stands |
+| `receiver-remote` | `RemoteKeyAction` | a key of the quizmaster's remote was pressed, with what it does (the Director does it, `commandForRemote`) |
 | `host-window` | bool | the projector window opened or closed (also from its title bar) |
-| `host-problem` | string | the projector met a problem, worded for the Director to show |
+| `host-problem` | `HostProblem` | the projector met a problem, worded for the Director to show (text, and detail under it) |
 | `close-requested` | none | the quizmaster closed the Director or quit during a show (the Director asks, then `quit_app` or `close_declined`) |
 | `show-not-saved` | `AppError` or null | the running show's journal refused a write, or works again |
 | `teams-changed` | string list | the prepared team names changed, or a show started or ended |
@@ -445,8 +450,12 @@ what is journaled after a resume replays the same way at the next one: a
 show begun before version 2 jumps out of a question in play, as the app
 then restarted a question after a crash with a `GoTo` to it, one begun
 before version 3 switches a player off without closing the question,
-one begun before version 4 restarts a closed question, and one begun
-before version 6 asks a question it goes back to again. Version 3 also
+one begun before version 4 restarts a closed question, one begun
+before version 5 takes a fastest-finger buzz from any button and lets a
+player who joins during the question play in it at once, one begun before version 6 asks a question
+it goes back to again, one begun before version 7 waits for Next to
+start a question's clock, and one begun before version 8 takes no buzz
+while one is judged instead of queuing them. Version 3 also
 changed what is not kept so (ties, accents in names), so a show begun
 before it, or under a newer app's rules, resumes with a warning that its
 scores may differ (`RulesChanged`); from version 3 on
@@ -855,7 +864,7 @@ packages users will install are read the same way.
   starts as Next or a jump shows it (`Game::show_slide`), as in the
   reference app, so the players can answer at once and one press goes
   from question to question; the remote's Next still does nothing while
-  a question runs (`commandForRemote`). `startOnNext` brings back the
+  a question runs (`Controls::remote_next`). `startOnNext` brings back the
   step of Next that started it (`QuestionStep::Ready`). A question
   restarted (`RestartQuestion`, also after a crash) always waits for
   Next, so the quizmaster first sees where the show stands. A show begun
@@ -1777,7 +1786,7 @@ never go into the game themselves:
   action (`commandForAction` in `keyboard.ts`): only when the step takes
   it, one step per press through the window's step guard, and journaled
   like any command. The one difference: Next does not end a running
-  question (`commandForRemote`). On the remote the key that starts a
+  question (`Controls::remote_next`, which `commandForRemote` reads). On the remote the key that starts a
   question also goes on after it, so a press twice by mistake would end
   the question as it starts, and an ended question cannot be asked again.
   While it runs, End question (the target key, by default) or the
@@ -1830,14 +1839,14 @@ section 3).
 1. `check` (Ubuntu 22.04, every push): ESLint, type-check and build the UI,
    `cargo clippy -D warnings`, `cargo test --workspace` from an empty
    bindings folder, then fail if `app/src/bindings` changed.
-2. `installers` (matrix, after `check` and `windows-tests` (not `e2e`, so a flaky E2E run cannot hold back an installer), on tags `v*` and manual
-   runs only, because runner minutes are paid and macOS minutes cost the most): Windows NSIS, macOS universal DMG
+2. `installers` (matrix, after `check` and `windows-tests` (not `e2e`, so a flaky E2E run cannot hold back an installer), on "Run workflow"
+   only, because runner minutes are paid and macOS minutes cost the most; release installers are `release.yml`'s): Windows NSIS, macOS universal DMG
    (`aarch64` and `x86_64` targets), Linux deb and AppImage on Ubuntu 22.04
    so the AppImage runs on older distributions. Each uploads its files as a
    run artifact (`buzzdome-windows`, `buzzdome-macos`, `buzzdome-linux`).
 3. `e2e` (`.github/workflows/e2e.yml`: every push on Ubuntu 22.04 with
    `WebKitWebDriver` under `xvfb-run`; on Windows with `msedgedriver` and
-   WebView2 only on main, tags and "Run workflow", as Windows minutes cost more): the real app built with `--debug --no-bundle` and driven
+   WebView2 only on main and "Run workflow", and every night in `nightly.yml`, as Windows minutes cost more): the real app built with `--debug --no-bundle` and driven
    through `tauri-driver` (`app/e2e`): a whole demo show
    with the on-screen and keyboard buzzers and the projector checked at
    each step, crashes (the app killed) and resumes, every button on every
@@ -1952,6 +1961,7 @@ them.
 | Windows and macOS installers | CI | see the PR's checks |
 | Real receiver: detection, raw reports, presses in a show | Enjoy 303S on Windows 11, buzzers 1 and 2, `hardware-test.md` sections 2 to 6 in part (2026-10-25) | pass; macOS, high IDs, two at once in the app, failures (section 7) **not tested** |
 | Enjoy 303S protocol: set-up, presses, timers, colours | `cargo test -p buzzers` against fakes; the receiver with `hid-monitor` and the app (2026-10-25) | pass; lights read from the back of a room **not tested** |
+| Fastest-finger queue (rules v8) and a question's clock starting as it is shown (v7) on the 303S: dark then ready frames, stale lobby buzzes dropped, queued teams in timer order | `cargo test` (`game_flow`, `buzzers` receiver), the soak, E2E with the fake receiver | **not tested** on the hardware (`hardware-test.md` step 11a) |
 | Battery level | not in the 303S's SDK, and no press or other message carried one (2026-10-25) | **not buildable** for the 303S |
 | Stage lights: stages from the game, setup checks, looks and effects, desk priority and fades, Art-Net, sACN, Enttec and SoundSwitch frames byte for byte, OSC and MIDI encoding, lights thread with fake outputs; Lights tab | `cargo test` (`quiz_core::stage`, `game_flow`, `lights`, shell `stage_lights`), `npm test` (`lights`), the tab in headless Chromium against the preview | pass |
 | Stage lights on real interfaces and fixtures, OSC and MIDI into a real program | needs the hardware | **not tested** |

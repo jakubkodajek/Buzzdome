@@ -54,6 +54,11 @@ export function readColor(text: string): Color | null {
   return parsed && formatColor(parsed);
 }
 
+/** Whether two colours written as hex are the same, whatever the case of their digits. */
+export function sameColor(a: string, b: string): boolean {
+  return a.toLowerCase() === b.toLowerCase();
+}
+
 /** How much of `color` covers what is behind it, 0 to 1, with `transparency` percent of it showing through on top of its own opacity. */
 export function opacity(color: Color, transparency = 0): number {
   return (parseColor(color)?.a ?? 0) * (1 - transparency / 100);
