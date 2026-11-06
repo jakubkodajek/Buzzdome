@@ -899,12 +899,16 @@ packages users will install are read the same way.
   pairs, and a joker is spent when it is played. `SetJoker` plays or takes
   back the current question's while it is ready or running and has given
   the player nothing (`Game::can_set_joker`, no mark of theirs in
-  `asking`), so a joker always covers all or nothing of what the question
+  `asking`); from rules version 7, whose questions start as they are
+  shown, also the next question's on the slide before it (the lobby, a
+  billboard announcing it, an explanation, an end of round, or the
+  answer of the question before; `Game::joker_slide`), so a joker always covers all or nothing of what the question
   gives. `credit` doubles the points, gain or penalty, and the player's
   mark keeps the doubled amount, so `RestartQuestion` takes back what was
-  given and the joker stays on the question asked again. Leaving a question before it ended
-  (`enter_slide` to another slide) drops its pairs, as the question was
-  never asked. The command is journaled like any other and only exists in
+  given and the joker stays on the question asked again. Entering a slide
+  keeps only the pairs of questions that ended and of the slide entered:
+  a question left before it ended, or one played for that the show then
+  did not go to, was never asked. The command is journaled like any other and only exists in
   shows played since, so no rules version is needed.
 - **Reset scores and start over (SF-9).** `ResetScores` sets every
   player's `score`, `total_answer_ms` and `adjusted` to zero and empties
