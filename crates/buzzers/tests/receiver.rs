@@ -430,13 +430,14 @@ fn from_303s_all(payloads: &[&[u8]]) -> Vec<u8> {
 }
 
 /// A press of `buzzer`'s big button, showing ready, `timer` after its light changed.
-fn buzz_303s(buzzer: u8, timer: u8) -> Vec<u8> {
+fn buzz_303s(buzzer: u8, timer: u32) -> Vec<u8> {
     buzz_303s_showing(buzzer, timer, 0x43)
 }
 
 /// A press of `buzzer`'s big button while it showed the colour `shown`.
-fn buzz_303s_showing(buzzer: u8, timer: u8, shown: u8) -> Vec<u8> {
-    from_303s(&[0x32, buzzer - 1, 0x50, shown, timer, 0, 0, 0, 0, 0])
+fn buzz_303s_showing(buzzer: u8, timer: u32, shown: u8) -> Vec<u8> {
+    let [t0, t1, t2, _] = timer.to_le_bytes();
+    from_303s(&[0x32, buzzer - 1, 0x50, shown, t0, t1, t2, 0, 0, 0])
 }
 
 /// Puts the buzzers in `mode` and waits until the receiver thread took it:
@@ -565,15 +566,15 @@ fn a_buzz_from_a_buzzer_that_was_not_ready_is_dropped_and_logged() {
 fn a_buzz_whose_timer_counts_from_before_the_round_is_dropped_and_logged() {
     let backend = FakeBackend::default();
     let (handle, rx) = start_303s(&backend, ReceiverConfig { timer_window: Duration::from_millis(20), ..config() });
-    // Pressed in the lobby, lit ready there for 250 ms, but sent on as the
+    // Pressed in the lobby, lit ready there for ten minutes, but sent on as the
     // round began: the buzzer's light changed after that (two frames, dark
     // then ready), so its timer cannot be longer than the round.
     set_mode_now(&handle, &backend, &rx, BuzzerMode::FastestFinger);
-    backend.0.lock().unwrap().inbox.push_back(buzz_303s(6, 250));
+    backend.0.lock().unwrap().inbox.push_back(buzz_303s(6, 600_000));
     let pressed = |e: &ReceiverEvent| matches!(e, ReceiverEvent::Raw(r) if r.bytes.get(4) == Some(&0x32));
     let ReceiverEvent::Raw(raw) = wait_for(&rx, pressed) else { unreachable!() };
     assert!(raw.decoded.is_empty());
-    assert_eq!(raw.dropped, [Press::timed(6, Button::Big, 250)]);
+    assert_eq!(raw.dropped, [Press::timed(6, Button::Big, 600_000)]);
     // A press made in the round counts, its timer within the round and the report tick.
     backend.0.lock().unwrap().inbox.push_back(buzz_303s(7, 30));
     let ReceiverEvent::Press { press, .. } = wait_for(&rx, |e| matches!(e, ReceiverEvent::Press { .. })) else { unreachable!() };
