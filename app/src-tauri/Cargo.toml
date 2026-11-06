@@ -41,7 +41,7 @@ ts-rs.workspace = true
 ureq = "3"
 
 # Read how much memory the sheet reader process holds, and on Windows cap it
-# (sheet_reader.rs).
+# (sheet_reader.rs); lower the voice process's priority (voice.rs).
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
 

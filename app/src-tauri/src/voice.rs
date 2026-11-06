@@ -19,6 +19,7 @@ use std::io::{BufRead, BufReader, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdin, Command, Stdio};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use std::thread;
 use std::time::{Duration, Instant};
@@ -42,10 +43,6 @@ const LOAD_TIMEOUT: Duration = Duration::from_secs(60);
 /// character, as the longest (`voice::MAX_TEXT_CHARS`) take minutes to say.
 const CLIP_TIMEOUT: Duration = Duration::from_secs(20);
 const CLIP_TIMEOUT_PER_CHAR: Duration = Duration::from_millis(60);
-/// Windows' below-normal priority class (`BELOW_NORMAL_PRIORITY_CLASS`):
-/// the voice process gives way to the show.
-#[cfg(windows)]
-const BELOW_NORMAL_PRIORITY_CLASS: u32 = 0x0000_4000;
 /// How much the voice process lowers its priority on macOS and Linux.
 #[cfg(unix)]
 const NICENESS: i32 = 10;
@@ -64,6 +61,10 @@ pub struct Voice {
     installing: Mutex<()>,
     /// The voice process, started on the first clip it is asked for.
     process: Mutex<Option<VoiceProcess>>,
+    /// Set when the voice process could not start or load the model: no
+    /// other is started until the model is installed again or removed, so
+    /// a broken one is not loaded again for every question.
+    broken: AtomicBool,
 }
 
 /// Whether the voice model is there, for the settings and the check before a show.
@@ -93,7 +94,7 @@ impl Voice {
     }
 
     fn at(root: PathBuf, clips: PathBuf) -> Voice {
-        Voice { root, clips, installing: Mutex::new(()), process: Mutex::new(None) }
+        Voice { root, clips, installing: Mutex::new(()), process: Mutex::new(None), broken: AtomicBool::new(false) }
     }
 
     /// The folder the windows play clips from.
@@ -124,12 +125,24 @@ impl Voice {
             return Ok(Some(path));
         }
         if process.is_none() {
-            *process = Some(VoiceProcess::start(&exe()?, &self.root)?);
+            if self.broken.load(Ordering::Relaxed) {
+                return Err(AppError::VoiceFailed);
+            }
+            let started = exe().and_then(|exe| VoiceProcess::start(&exe, &self.root));
+            match started {
+                Ok(started) => *process = Some(started),
+                Err(e) => {
+                    self.broken.store(true, Ordering::Relaxed);
+                    return Err(e);
+                }
+            }
         }
         let rendered = process.as_mut().map(|running| running.render(line, &path)).unwrap_or(Err(AppError::VoiceFailed));
         match rendered {
             Ok(true) => Ok(Some(path)),
-            Ok(false) => Ok(None),
+            // The engine could not say this line (or the clip could not be
+            // written): a failure, though the process goes on.
+            Ok(false) => Err(AppError::VoiceFailed),
             Err(e) => {
                 // A process that does not answer is ended; the next clip starts another.
                 *process = None;
@@ -138,9 +151,11 @@ impl Voice {
         }
     }
 
-    /// Ends the voice process, as before the model it holds changes.
+    /// Ends the voice process, as before the model it holds changes; the
+    /// next clip may start one again.
     fn stop(&self) {
         *self.process.lock().unwrap() = None;
+        self.broken.store(false, Ordering::Relaxed);
     }
 }
 
@@ -156,7 +171,7 @@ impl VoiceProcess {
         let mut command = Command::new(exe);
         command.arg(VOICE).arg(root).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::null());
         #[cfg(windows)]
-        std::os::windows::process::CommandExt::creation_flags(&mut command, BELOW_NORMAL_PRIORITY_CLASS);
+        std::os::windows::process::CommandExt::creation_flags(&mut command, windows_sys::Win32::System::Threading::BELOW_NORMAL_PRIORITY_CLASS);
         let mut child = command.spawn().map_err(|_| AppError::VoiceFailed)?;
         let requests = child.stdin.take().expect("the voice process's input is piped");
         let output = child.stdout.take().expect("the voice process's output is piped");
@@ -252,7 +267,9 @@ pub async fn voice_install(app: AppHandle, progress: Channel<VoiceDownload>) -> 
         let downloaded = download(&archive, |done| {
             let _ = progress.send(done);
         });
-        let installed = downloaded.and_then(|sha| {
+        // A show started while it downloaded: its journal keeps the disk,
+        // and its clips the voice process.
+        let installed = downloaded.and_then(|sha| refuse_during_show(&app).map(|()| sha)).and_then(|sha| {
             state.stop();
             voice::model::unpack(&archive, &sha, &state.root).map_err(voice_error)
         });
@@ -363,6 +380,24 @@ mod tests {
         fs::write(&kept, b"RIFF").unwrap();
         assert_eq!(voice.clip(&line("Kolik?"), true, no_exe).unwrap(), Some(kept));
         assert!(!voice.model().installed);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_voice_process_that_cannot_start_is_not_started_again_until_the_model_changes() {
+        let (voice, dir) = voice("broken");
+        let model = voice::model::model_dir(&voice.root);
+        fs::create_dir_all(&model).unwrap();
+        for file in voice::model::MODEL_FILES.iter().chain(["installed"].iter()) {
+            fs::write(model.join(file), b"x").unwrap();
+        }
+        assert!(voice.model().installed);
+        let fails = || -> CmdResult<PathBuf> { Err(AppError::VoiceFailed) };
+        assert_eq!(voice.clip(&line("Kolik?"), true, fails), Err(AppError::VoiceFailed));
+        let no_exe = || -> CmdResult<PathBuf> { panic!("not started again") };
+        assert_eq!(voice.clip(&line("Kde?"), true, no_exe), Err(AppError::VoiceFailed));
+        voice.stop();
+        assert_eq!(voice.clip(&line("Kde?"), true, fails), Err(AppError::VoiceFailed));
         let _ = fs::remove_dir_all(&dir);
     }
 

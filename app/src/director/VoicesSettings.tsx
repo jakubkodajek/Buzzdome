@@ -1,14 +1,7 @@
 import { useState } from "react";
 import { api } from "../api";
 import { useApp, useReport } from "../app-context";
-import { useGameView } from "../hooks";
-import {
-  setVoiceModel,
-  useVoiceModel,
-  useVoiceSample,
-  VOICES,
-  voiceName,
-} from "../audio/read-aloud";
+import { setVoiceModel, useVoiceModel, useVoiceSample, VOICES, voiceName } from "../audio/read-aloud";
 import { QUIZ_LANGUAGES } from "../bindings/Constants";
 import { confirmAction } from "../confirm";
 import { diskSize } from "../format";
@@ -21,25 +14,20 @@ import type { VoiceDownload } from "../types";
  * each language, which plays before anything is downloaded, and the one
  * download that brings them all.
  */
-export function VoicesSettings() {
+export function VoicesSettings({ showRunning }: { showRunning: boolean }) {
   const { t } = useApp();
   const report = useReport();
   const model = useVoiceModel();
   const sample = useVoiceSample();
   // Null while unpacking, undefined when nothing is being downloaded.
-  const [progress, setProgress] = useState<VoiceDownload | null | undefined>(
-    undefined,
-  );
+  const [progress, setProgress] = useState<VoiceDownload | null | undefined>(undefined);
   // The download writes much to the disk the show is saved to (design §1.1).
-  const showRunning = useGameView() !== null;
   const busy = progress !== undefined || showRunning;
 
   const install = () => {
     setProgress(null);
     api
-      .voiceInstall((done) =>
-        setProgress(done.received < done.total ? done : null),
-      )
+      .voiceInstall((done) => setProgress(done.received < done.total ? done : null))
       .then(setVoiceModel, report)
       .finally(() => setProgress(undefined));
   };
@@ -65,9 +53,7 @@ export function VoicesSettings() {
   return (
     <fieldset className="voices">
       <legend>{t("voices")}</legend>
-      <p className="muted">
-        {t("voicesHint", { size: diskSize(model?.bytes ?? 0) })}
-      </p>
+      <p className="muted">{t("voicesHint", { size: diskSize(model?.bytes ?? 0) })}</p>
       <div className="row">
         <span role="status">{status()}</span>
         {model && !model.installed && (
@@ -84,11 +70,7 @@ export function VoicesSettings() {
       {showRunning && <p className="muted">{t("voicesDuringShow")}</p>}
       <p className="muted">{t("voicesLicence")}</p>
       {QUIZ_LANGUAGES.map((language) => (
-        <section
-          key={language}
-          className="voice-group"
-          aria-label={t(LANGUAGE_LABEL[language])}
-        >
+        <section key={language} className="voice-group" aria-label={t(LANGUAGE_LABEL[language])}>
           <h3>{t(LANGUAGE_LABEL[language])}</h3>
           <ul>
             {VOICES.map((voice) => {
@@ -99,9 +81,7 @@ export function VoicesSettings() {
                     className="icon-button"
                     aria-label={`${t(playing ? "stopSample" : "playSample")}: ${voiceName(t, voice)}`}
                     title={t(playing ? "stopSample" : "playSample")}
-                    onClick={() =>
-                      playing ? sample.stop() : sample.play(language, voice)
-                    }
+                    onClick={() => (playing ? sample.stop() : sample.play(language, voice))}
                   >
                     {playing ? <StopIcon /> : <PlayIcon />}
                   </button>

@@ -1140,7 +1140,10 @@ letter from `answers.ts`).
   the show: it starts below normal priority (Windows) or lowers its own
   (`nice`, macOS and Linux), and the engine takes at most two CPU threads.
   A load past 60 s, or a clip past 20 s and 60 ms for each character, ends
-  it, and the next clip starts another. The locks in `voice.rs` are taken
+  it, and the next clip starts another; a process that could not start or
+  load the model is not started again until the model is installed again
+  or removed, so every clip after fails at once. The download is refused
+  again after it arrives if a show began meanwhile. The locks in `voice.rs` are taken
   in one order, the model's install lock and then the process's; the show
   thread takes neither, and a window's line is checked first (its words
   only, a voice the model has).
@@ -1154,7 +1157,9 @@ letter from `answers.ts`).
   (`usePrepareVoice`; the check before a show shows how far), pausing
   while a question is asked (`ready` or `running`) so as not to take CPU
   from it. A clip that fails is left to the system voice and the rest are
-  still rendered; the check says how many failed. When a
+  still rendered; the check says how many failed. As the check shows only
+  with a show loaded, when downloading is refused, it says to download the
+  voices in Settings while no show runs. When a
   question comes on screen (`ready`), `useReadAloud` asks for its kept
   clip only (`voice_clip` with `render: false`, a file check) and plays
   it like the slide's sound, at the effects' volume times the player's;

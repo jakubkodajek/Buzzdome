@@ -43,7 +43,10 @@ sha256() {
   if command -v sha256sum > /dev/null; then sha256sum < "$1" | cut -d' ' -f1; else shasum -a 256 < "$1" | cut -d' ' -f1; fi
 }
 
-dir="${RUNNER_TEMP:-${TMPDIR:-/tmp}}/sherpa-onnx-archives"
+# Named for the run on CI: the build script runs again only when this
+# folder's name changes (rerun-if-env-changed), and it must run again to
+# unpack the libraries removed below.
+dir="${RUNNER_TEMP:-${TMPDIR:-/tmp}}/sherpa-onnx-archives${GITHUB_RUN_ID:+-$GITHUB_RUN_ID-${GITHUB_RUN_ATTEMPT:-1}}"
 mkdir -p "$dir"
 for platform in "${platforms[@]}"; do
   name="sherpa-onnx-v$version-$platform-lib.tar.bz2"
@@ -60,14 +63,12 @@ for platform in "${platforms[@]}"; do
     echo "::error::$name has SHA-256 $actual, not $expected"
     exit 1
   fi
-  # A copy kept in a cached target folder from before is used only if it is the same.
-  while IFS= read -r -d '' cached; do
-    if [ "$(sha256 "$cached")" != "$expected" ]; then
-      echo "Removing $cached: not the checked archive"
-      rm -rf "$cached" "${cached%-lib.tar.bz2}-lib"
-    fi
-  done < <(find "$root/target" -path '*sherpa-onnx-prebuilt*' -name "$name" -print0 2>/dev/null || true)
 done
+
+# The build script links whatever it finds unpacked in the target folder and
+# never looks at its archive again; a cache may bring one back partial or
+# changed. So none is kept: it unpacks the checked archives afresh.
+rm -rf "$root/target/sherpa-onnx-prebuilt"
 
 echo "sherpa-onnx $version libraries checked in $dir"
 if [ -n "${GITHUB_ENV:-}" ]; then

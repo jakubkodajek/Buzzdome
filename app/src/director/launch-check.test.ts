@@ -135,8 +135,8 @@ describe("launchCheck", () => {
     expect(voice({ state: "rendering", done: 3, total: 20 })).toMatchObject({ state: "todo", text: "Preparing the questions to be read: 3 of 20." });
     expect(voice({ state: "ready", total: 20 })?.state).toBe("ok");
     expect(voice({ state: "failed", failed: 3, total: 20 })?.state).toBe("warn");
-    expect(voice({ state: "noModel" })).toMatchObject({ state: "warn", fixes: ["settingsTab"] });
-    expect(voice({ state: "noModel" }, null)).toMatchObject({ state: "problem", fixes: ["settingsTab"] });
+    expect(voice({ state: "noModel" })).toMatchObject({ state: "warn", fixes: [] });
+    expect(voice({ state: "noModel" }, null)).toMatchObject({ state: "problem", fixes: [] });
     expect(voice({ state: "noModel" }, undefined)?.state).toBe("problem");
   });
 });

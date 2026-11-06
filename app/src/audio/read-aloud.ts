@@ -8,23 +8,12 @@ import { convertFileSrc } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api";
 import { ANSWER_LETTERS } from "../answers";
-import { DEFAULT_QUIZ_SOUNDS } from "../bindings/Constants";
+import { DEFAULT_QUIZ_SOUNDS, MAX_VOICE } from "../bindings/Constants";
 import { useLatest, usePlayerVolume } from "../hooks";
 import { settingsOf, soundsOf } from "../quiz";
 import { createStore, useStore } from "../store";
-import { MAX_VOICE } from "../bindings/Constants";
 import type { Translate } from "../i18n";
-import type {
-  GameView,
-  Question,
-  Quiz,
-  QuizLanguage,
-  QuizSettings,
-  ReadAloud,
-  Slide,
-  VoiceLine,
-  VoiceModel,
-} from "../types";
+import type { GameView, Question, Quiz, QuizLanguage, QuizSettings, ReadAloud, Slide, VoiceLine, VoiceModel } from "../types";
 import { ClipPlayer, linearGain, playerLevel } from "./clip-player";
 import { playBundled, type Playing } from "./show-audio";
 
@@ -35,18 +24,13 @@ export const SPEECH_TAGS: Record<QuizLanguage, string> = {
 };
 
 /** Every voice of the model, by number. */
-export const VOICES: readonly number[] = Array.from(
-  { length: MAX_VOICE + 1 },
-  (_, voice) => voice,
-);
+export const VOICES: readonly number[] = Array.from({ length: MAX_VOICE + 1 }, (_, voice) => voice);
 /** Voices from this number on sound male; the ones before, female [no source - by the pitch of the samples]. */
 const FIRST_MALE_VOICE = 5;
 
 /** A voice as the quizmaster sees it: "Female voice 2". */
 export function voiceName(t: Translate, voice: number): string {
-  return voice < FIRST_MALE_VOICE
-    ? t("voiceFemale", { n: voice + 1 })
-    : t("voiceMale", { n: voice - FIRST_MALE_VOICE + 1 });
+  return voice < FIRST_MALE_VOICE ? t("voiceFemale", { n: voice + 1 }) : t("voiceMale", { n: voice - FIRST_MALE_VOICE + 1 });
 }
 
 const SAMPLES = import.meta.glob<string>("./voices/*.mp3", {
@@ -56,18 +40,12 @@ const SAMPLES = import.meta.glob<string>("./voices/*.mp3", {
 });
 
 /** A short sample of `voice` speaking `language`, shipped with the app (`voices/README.md`). */
-export function sampleUrl(
-  language: QuizLanguage,
-  voice: number,
-): string | null {
+export function sampleUrl(language: QuizLanguage, voice: number): string | null {
   return SAMPLES[`./voices/${language}-${voice}.mp3`] ?? null;
 }
 
 /** The words read for `question`: its text, and with the answers each after its letter. */
-export function spokenText(
-  question: Pick<Question, "text" | "answers">,
-  what: ReadAloud,
-): string {
+export function spokenText(question: Pick<Question, "text" | "answers">, what: ReadAloud): string {
   if (what === "off") return "";
   const parts = [question.text];
   if (what === "questionAndAnswers") {
@@ -88,16 +66,10 @@ function sentence(text: string): string {
 }
 
 /** What the voice says for `slide` by the quiz's `settings` (reading as `what`); null for nothing. */
-export function voiceLine(
-  slide: Slide | null | undefined,
-  settings: QuizSettings,
-  what: ReadAloud = settings.readAloud,
-): VoiceLine | null {
+export function voiceLine(slide: Slide | null | undefined, settings: QuizSettings, what: ReadAloud = settings.readAloud): VoiceLine | null {
   if (slide?.type !== "question") return null;
   const text = spokenText(slide, what);
-  return text === ""
-    ? null
-    : { text, language: settings.language, voice: settings.voice };
+  return text === "" ? null : { text, language: settings.language, voice: settings.voice };
 }
 
 /** Every line the quiz's questions are read with, each once, in slide order. */
@@ -125,10 +97,7 @@ export interface SystemVoice {
  * one that needs the internet, then one for the language's own region,
  * then the system's default. Null when none speaks it.
  */
-export function pickSystemVoice<V extends SystemVoice>(
-  voices: readonly V[],
-  language: QuizLanguage,
-): V | null {
+export function pickSystemVoice<V extends SystemVoice>(voices: readonly V[], language: QuizLanguage): V | null {
   const tag = SPEECH_TAGS[language].toLowerCase();
   const rank = (voice: V): number | null => {
     const lang = voice.lang.replace("_", "-").toLowerCase();
@@ -146,9 +115,7 @@ export function pickSystemVoice<V extends SystemVoice>(
 }
 
 function speech(): SpeechSynthesis | null {
-  return typeof window !== "undefined" && "speechSynthesis" in window
-    ? window.speechSynthesis
-    : null;
+  return typeof window !== "undefined" && "speechSynthesis" in window ? window.speechSynthesis : null;
 }
 
 /** The system's voices, as they load (Chromium lists them only after `voiceschanged`). */
@@ -165,15 +132,10 @@ function watchVoices() {
 }
 
 /** The system voice for `language`; undefined where the system cannot speak at all. */
-export function useSystemVoice(
-  language: QuizLanguage,
-): SpeechSynthesisVoice | null | undefined {
+export function useSystemVoice(language: QuizLanguage): SpeechSynthesisVoice | null | undefined {
   useEffect(watchVoices, []);
   const voices = useStore(systemVoices);
-  return useMemo(
-    () => (speech() ? pickSystemVoice(voices, language) : undefined),
-    [voices, language],
-  );
+  return useMemo(() => (speech() ? pickSystemVoice(voices, language) : undefined), [voices, language]);
 }
 
 /** Whether the voice model is downloaded: null until known. Shared, so a download in the settings shows in the Director. */
@@ -220,10 +182,7 @@ export function usePreparing(): Preparing {
 export function usePrepareVoice(quiz: Quiz | null, view: GameView | null) {
   const model = useVoiceModel();
   const on = quiz !== null && settingsOf(quiz).readAloud !== "off";
-  const lines = useMemo(
-    () => (on && quiz ? questionLines(quiz) : []),
-    [on, quiz],
-  );
+  const lines = useMemo(() => (on && quiz ? questionLines(quiz) : []), [on, quiz]);
   const installed = model?.installed ?? null;
   // Rendering takes CPU the show needs while a question is asked: it waits until the question is over.
   const step = view?.phase.phase === "question" ? view.phase.step : null;
@@ -257,12 +216,7 @@ interface Speaking {
 }
 
 /** Says `line` with its clip at `gain` if one is kept, else with `system`; `onEnd` hears when it ends. */
-async function say(
-  line: VoiceLine,
-  gain: number,
-  system: SpeechSynthesisVoice | null | undefined,
-  onEnd: () => void,
-): Promise<Speaking | null> {
+async function say(line: VoiceLine, gain: number, system: SpeechSynthesisVoice | null | undefined, onEnd: () => void): Promise<Speaking | null> {
   const path = await api.voiceClip(line, false).catch(() => null);
   if (path) {
     const clip = new ClipPlayer(convertFileSrc(path), gain);
@@ -311,13 +265,7 @@ const speaker = {
    * `before` fails the line is still said, by the system voice, and the
    * failure is passed on.
    */
-  async say(
-    who: "show" | "preview",
-    line: VoiceLine,
-    gain: number,
-    system: SpeechSynthesisVoice | null | undefined,
-    before?: Promise<unknown>,
-  ) {
+  async say(who: "show" | "preview", line: VoiceLine, gain: number, system: SpeechSynthesisVoice | null | undefined, before?: Promise<unknown>) {
     this.stop();
     const mine = ++this.turn;
     this.speaking.set(who);
@@ -365,10 +313,7 @@ export interface ReadAloudControl {
 /** Whether `slide` plays sound of its own as it opens, which the voice would talk over. */
 function soundsOnOpen(slide: Slide): boolean {
   const video = slide.video;
-  return (
-    slide.sound?.start === "onSlide" ||
-    (video !== null && !video.muted && video.volume > 0)
-  );
+  return slide.sound?.start === "onSlide" || (video !== null && !video.muted && video.volume > 0);
 }
 
 /**
@@ -376,10 +321,7 @@ function soundsOnOpen(slide: Slide): boolean {
  * settings say, as loud as the show's effects; a buzz, the question's end
  * or its answer stops it, and so does leaving the slide.
  */
-export function useReadAloud(
-  view: GameView | null,
-  quiz: Quiz | null,
-): ReadAloudControl {
+export function useReadAloud(view: GameView | null, quiz: Quiz | null): ReadAloudControl {
   const settings = quiz ? settingsOf(quiz) : null;
   const what = settings?.readAloud ?? "off";
   const slide = view?.slide ?? null;
@@ -450,6 +392,7 @@ export function useVoiceSample(): {
   useEffect(() => stop, [stop]);
   return { playing, play, stop };
 }
+
 /** Plays a line once as a show would, rendering its clip first, to try the voice in the settings. */
 export function useVoicePreview(): {
   playing: boolean;
@@ -459,17 +402,7 @@ export function useVoicePreview(): {
   useEffect(watchVoices, []);
   const voices = useLatest(useStore(systemVoices));
   const playing = useStore(speaker.speaking) === "preview";
-  const play = useCallback(
-    (line: VoiceLine, gain: number) =>
-      speaker.say(
-        "preview",
-        line,
-        gain,
-        pickSystemVoice(voices.current, line.language),
-        api.voiceClip(line, true),
-      ),
-    [voices],
-  );
+  const play = useCallback((line: VoiceLine, gain: number) => speaker.say("preview", line, gain, pickSystemVoice(voices.current, line.language), api.voiceClip(line, true)), [voices]);
   const stop = useCallback(() => speaker.stopIf("preview"), []);
   useEffect(() => stop, [stop]);
   return { playing, play, stop };

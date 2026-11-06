@@ -2,16 +2,7 @@ import { describe, expect, it } from "vitest";
 import { DEFAULT_QUIZ_SETTINGS } from "../bindings/Constants";
 import { translator } from "../i18n";
 import type { Quiz, QuizSettings, Slide } from "../types";
-import {
-  pickSystemVoice,
-  questionLines,
-  sampleUrl,
-  spokenText,
-  VOICES,
-  voiceLine,
-  voiceName,
-  type SystemVoice,
-} from "./read-aloud";
+import { pickSystemVoice, questionLines, sampleUrl, spokenText, VOICES, voiceLine, voiceName, type SystemVoice } from "./read-aloud";
 
 const settings: QuizSettings = {
   ...DEFAULT_QUIZ_SETTINGS,
@@ -46,13 +37,9 @@ describe("spokenText", () => {
       answers: ["Šest", "", "Osm!"],
     };
     expect(spokenText(q, "question")).toBe("Kolik nohou má pavouk.");
-    expect(spokenText(q, "questionAndAnswers")).toBe(
-      "Kolik nohou má pavouk. A: Šest. C: Osm!",
-    );
+    expect(spokenText(q, "questionAndAnswers")).toBe("Kolik nohou má pavouk. A: Šest. C: Osm!");
     expect(spokenText(q, "off")).toBe("");
-    expect(
-      spokenText({ text: "Kdo?", answers: [] }, "questionAndAnswers"),
-    ).toBe("Kdo?");
+    expect(spokenText({ text: "Kdo?", answers: [] }, "questionAndAnswers")).toBe("Kdo?");
   });
 });
 
@@ -78,19 +65,12 @@ describe("voiceLine and questionLines", () => {
     ]);
     expect(voiceLine(question("  ", []), settings)).toBeNull();
     expect(voiceLine(null, settings)).toBeNull();
-    expect(
-      voiceLine(question("Kdo?", ["Já"]), settings, "question")?.text,
-    ).toBe("Kdo?");
+    expect(voiceLine(question("Kdo?", ["Já"]), settings, "question")?.text).toBe("Kdo?");
   });
 });
 
 describe("pickSystemVoice", () => {
-  const voice = (
-    name: string,
-    lang: string,
-    localService = true,
-    isDefault = false,
-  ): SystemVoice => ({ name, lang, localService, default: isDefault });
+  const voice = (name: string, lang: string, localService = true, isDefault = false): SystemVoice => ({ name, lang, localService, default: isDefault });
 
   it("prefers a voice on this computer, then the language's own region", () => {
     const online = voice("Online", "cs-CZ", false);
@@ -98,10 +78,7 @@ describe("pickSystemVoice", () => {
     const english = voice("Zira", "en-US", true, true);
     expect(pickSystemVoice([online, english, jakub], "cs")).toBe(jakub);
     expect(pickSystemVoice([online, english], "cs")).toBe(online);
-    expect(
-      pickSystemVoice([voice("David", "en-US"), voice("Hazel", "en_GB")], "en")
-        ?.name,
-    ).toBe("Hazel");
+    expect(pickSystemVoice([voice("David", "en-US"), voice("Hazel", "en_GB")], "en")?.name).toBe("Hazel");
     expect(pickSystemVoice([english], "cs")).toBeNull();
   });
 });
@@ -121,8 +98,6 @@ describe("voices", () => {
       "Male voice 4",
       "Male voice 5",
     ]);
-    for (const language of ["cs", "en"] as const)
-      for (const v of VOICES)
-        expect(sampleUrl(language, v), `${language}-${v}`).not.toBeNull();
+    for (const language of ["cs", "en"] as const) for (const v of VOICES) expect(sampleUrl(language, v), `${language}-${v}`).not.toBeNull();
   });
 });

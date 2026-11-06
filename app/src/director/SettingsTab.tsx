@@ -69,7 +69,7 @@ export function useProjectorSettings(): ProjectorSettings {
   );
 }
 
-export function SettingsTab({ projector, look, launch }: { projector: ProjectorSettings; look: DirectorLook; launch: LaunchCheckSetting }) {
+export function SettingsTab({ projector, look, launch, showRunning }: { projector: ProjectorSettings; look: DirectorLook; launch: LaunchCheckSetting; showRunning: boolean }) {
   const { t, lang, setLang } = useApp();
   return (
     <div className="settings">
@@ -115,7 +115,7 @@ export function SettingsTab({ projector, look, launch }: { projector: ProjectorS
         </select>
         <p className="muted">{t("directorLookHint")}</p>
       </fieldset>
-      <VoicesSettings />
+      <VoicesSettings showRunning={showRunning} />
       <fieldset>
         <legend>{t("launchCheck")}</legend>
         <label>

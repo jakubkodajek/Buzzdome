@@ -14,7 +14,7 @@ import { launchCheck, projectorScreen, type CheckFix, type CheckPart, type Check
 import type { ProjectorSettings } from "./SettingsTab";
 
 /** The Director's tabs a fix opens. */
-export type FixTab = "receiver" | "teams" | "media" | "settings";
+export type FixTab = "receiver" | "teams" | "media";
 
 interface LaunchCheckProps {
   view: GameView;
@@ -54,7 +54,6 @@ const FIX_LABEL: Record<CheckFix, StringKey> = {
   receiverTab: "tabReceiver",
   teamsTab: "tabTeams",
   mediaTab: "tabMedia",
-  settingsTab: "tabSettings",
   openProjector: "launchOpenProjector",
   placeProjector: "launchPlaceProjector",
   playSound: "launchPlaySound",
@@ -89,8 +88,6 @@ function LaunchCheckPanel({ view, quiz, projector, onTab, onHide }: LaunchCheckP
         return onTab("teams");
       case "mediaTab":
         return onTab("media");
-      case "settingsTab":
-        return onTab("settings");
       case "openProjector":
         return run(api.openHostWindow(projector.monitor, projector.fullscreen));
       case "placeProjector":

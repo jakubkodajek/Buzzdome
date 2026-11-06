@@ -238,7 +238,7 @@ interface TabBodyProps {
 
 function TabBody({ tab, view, quiz, projector, look, launch, player, sound, showStart }: TabBodyProps) {
   // Setup tabs work without a show; the others need one.
-  if (tab === "settings") return <SettingsTab projector={projector} look={look} launch={launch} />;
+  if (tab === "settings") return <SettingsTab projector={projector} look={look} launch={launch} showRunning={view !== null} />;
   if (tab === "receiver") return <ReceiverTab />;
   if (tab === "lights") return <LightsTab />;
   // Team names can be prepared before a show, and the media player plays without one.

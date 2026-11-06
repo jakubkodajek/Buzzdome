@@ -20,7 +20,7 @@ export type CheckPart = "receiver" | "buzzers" | "projector" | "sound" | "voice"
 export type CheckState = "ok" | "warn" | "problem" | "todo";
 
 /** What the check offers to put a part right. */
-export type CheckFix = "receiverTab" | "teamsTab" | "mediaTab" | "settingsTab" | "openProjector" | "placeProjector" | "playSound" | "soundHeard";
+export type CheckFix = "receiverTab" | "teamsTab" | "mediaTab" | "openProjector" | "placeProjector" | "playSound" | "soundHeard";
 
 export interface CheckItem {
   part: CheckPart;
@@ -149,8 +149,8 @@ function voiceCheck(t: Translate, { preparing, systemVoice, language }: VoiceFac
       return { part: "voice", state: "warn", text: t("launchVoiceFailed", { failed: preparing.failed, total: preparing.total }), fixes: [] };
     case "noModel":
       return systemVoice
-        ? { part: "voice", state: "warn", text: t("launchVoiceSystem", { name: systemVoice }), fixes: ["settingsTab"] }
-        : { part: "voice", state: "problem", text: t("voiceMissing", { language }), fixes: ["settingsTab"] };
+        ? { part: "voice", state: "warn", text: t("launchVoiceSystem", { name: systemVoice }), fixes: [] }
+        : { part: "voice", state: "problem", text: t("voiceMissing", { language }), fixes: [] };
   }
 }
 
