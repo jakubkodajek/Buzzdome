@@ -8,9 +8,10 @@ import { diskSize } from "../format";
 import type { Translate } from "../i18n";
 import { awaitsAnswer, receiverStatusText } from "../messages";
 import { readPreference, writePreference } from "../preferences";
+import type { Preparing } from "../audio/read-aloud";
 import type { GameView, MonitorInfo, ProjectorWindow, ReceiverInfo } from "../types";
 
-export type CheckPart = "receiver" | "buzzers" | "projector" | "sound" | "disk";
+export type CheckPart = "receiver" | "buzzers" | "projector" | "sound" | "voice" | "disk";
 
 /**
  * How a part stands: ready; a warning (the show plays, though not as
@@ -44,6 +45,16 @@ export interface LaunchFacts {
   sound: SoundTry;
   /** Free bytes on the disk the show is saved to: null when the system does not say, undefined until loaded. */
   freeDiskBytes: number | null | undefined;
+  voice: VoiceFacts;
+}
+
+/** How the questions will be read out. */
+export interface VoiceFacts {
+  preparing: Preparing;
+  /** The system voice that reads while there is no clip: null when there is none, undefined where the system cannot speak. */
+  systemVoice: string | null | undefined;
+  /** The quiz's language, in words. */
+  language: string;
 }
 
 const MB = 1024 ** 2;
@@ -64,6 +75,7 @@ export function launchCheck(t: Translate, facts: LaunchFacts): CheckItem[] {
     buzzersCheck(t, facts.view),
     projectorCheck(t, facts.projector),
     soundCheck(t, facts.muted, facts.sound),
+    voiceCheck(t, facts.voice),
     diskCheck(t, facts.freeDiskBytes),
   ];
   return parts.filter((item) => item !== null);
@@ -121,6 +133,24 @@ function soundCheck(t: Translate, muted: Muted, sound: SoundTry): CheckItem {
       return { part: "sound", state: "todo", text: t("launchSoundPlayed"), fixes: ["soundHeard", "playSound"] };
     case "heard":
       return { part: "sound", state: "ok", text: t("launchSoundHeard"), fixes: ["playSound"] };
+  }
+}
+
+/** A quiz that reads its questions out should have each one's clip rendered before the show reaches it. */
+function voiceCheck(t: Translate, { preparing, systemVoice, language }: VoiceFacts): CheckItem | null {
+  switch (preparing.state) {
+    case "off":
+      return null;
+    case "rendering":
+      return { part: "voice", state: "todo", text: t("launchVoiceRendering", { done: preparing.done, total: preparing.total }), fixes: [] };
+    case "ready":
+      return { part: "voice", state: "ok", text: t("launchVoiceReady", { total: preparing.total }), fixes: [] };
+    case "failed":
+      return { part: "voice", state: "warn", text: t("launchVoiceFailed", { failed: preparing.failed, total: preparing.total }), fixes: [] };
+    case "noModel":
+      return systemVoice
+        ? { part: "voice", state: "warn", text: t("launchVoiceSystem", { name: systemVoice }), fixes: [] }
+        : { part: "voice", state: "problem", text: t("voiceMissing", { language }), fixes: [] };
   }
 }
 

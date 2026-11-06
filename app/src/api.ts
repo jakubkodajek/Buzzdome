@@ -56,6 +56,9 @@ import type {
   Theme,
   UpdateProgress,
   ValidationError,
+  VoiceDownload,
+  VoiceLine,
+  VoiceModel,
 } from "./types";
 
 /** The header that names a file dropped into the window (`media_add_dropped`). */
@@ -192,6 +195,18 @@ export const api = {
     progress.onmessage = onProgress;
     return invoke<void>("update_install", { progress });
   },
+  /** Whether the offline voice model is downloaded. */
+  voiceModel: () => invoke<VoiceModel>("voice_model"),
+  /** Downloads the voice model (about 129 MB), checks and unpacks it, telling `onProgress` how the download goes. */
+  voiceInstall: (onProgress: (progress: VoiceDownload) => void) => {
+    const progress = new Channel<VoiceDownload>();
+    progress.onmessage = onProgress;
+    return invoke<VoiceModel>("voice_install", { progress });
+  },
+  /** Removes the voice model and the clips made with it. */
+  voiceRemove: () => invoke<VoiceModel>("voice_remove"),
+  /** The path of the kept clip that says `line`; with `render`, rendered first when it is not kept (a few seconds). Null when there is nothing to say, or it is not kept and not to be rendered. */
+  voiceClip: (line: VoiceLine, render: boolean) => invoke<string | null>("voice_clip", { line, render }),
   // The editor's commands on a draft name it (`EditorDraft.id`): one that
   // another draft has replaced since is refused with `draftChanged`.
   /** The quiz editor's draft left from last time, if any. */

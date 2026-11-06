@@ -26,6 +26,7 @@ mod stage_lights;
 mod teams;
 mod themes;
 mod updates;
+pub mod read_aloud;
 
 use buzzers::clock::ShowClock;
 use buzzers::receiver::HardwareDriver;
@@ -66,6 +67,10 @@ struct Inner {
     /// A new version of the app is being installed, which ends the app, so
     /// no show may begin (`updates::install`).
     updating: bool,
+    /// The voice model is being put in place, which stops the voice
+    /// process and fills its folder, so no show may begin
+    /// (`read_aloud::voice_install`).
+    voice_unpacking: bool,
 }
 
 impl Inner {
@@ -82,17 +87,21 @@ impl Inner {
             began_ms: 0,
             close_request: app_windows::CloseRequest::default(),
             updating: false,
+            voice_unpacking: false,
         }
     }
 
-    /// Refuses a new show while one runs or a new version of the app is
-    /// being installed.
+    /// Refuses a new show while one runs, a new version of the app is
+    /// being installed or the voice model is put in place.
     fn may_start_show(&self) -> CmdResult<()> {
         if self.game.is_some() {
             return Err(AppError::ShowRunning);
         }
         if self.updating {
             return Err(AppError::UpdateInstalling);
+        }
+        if self.voice_unpacking {
+            return Err(AppError::VoiceInstalling);
         }
         Ok(())
     }
@@ -107,6 +116,20 @@ impl Inner {
 
 struct AppState(Mutex<Inner>);
 
+/// The arguments after `flag` when the app was started again as one of its
+/// own helper processes (the sheet reader, the voice, the MCP server), whose
+/// flag is then the first argument; none when it was not.
+fn started_as(flag: &str) -> Option<std::iter::Skip<std::env::ArgsOs>> {
+    let mut args = std::env::args_os().skip(1);
+    (args.next().as_deref() == Some(std::ffi::OsStr::new(flag))).then_some(args)
+}
+
+/// An HTTP client that goes over HTTPS only, redirects included, following
+/// at most `max_redirects` and giving up after `timeout` in all.
+fn https_agent(max_redirects: u32, timeout: std::time::Duration) -> ureq::Agent {
+    ureq::Agent::config_builder().https_only(true).max_redirects(max_redirects).timeout_global(Some(timeout)).build().into()
+}
+
 /// The show state. The app's locks are taken in one order: the editor's
 /// (`editor::lock`), then this one, then the learn lock (`hardware`). So
 /// code holding the learn lock never waits for this one, which a journal
@@ -118,7 +141,8 @@ struct AppState(Mutex<Inner>);
 /// last told (`stage_lights`), taken under this one with every change.
 /// The updates lock (`updates::Updates`) is taken before this one and
 /// never under it; installing an update does not hold this one, but marks
-/// it (`Inner::updating`) so that no show begins meanwhile.
+/// it (`Inner::updating`) so that no show begins meanwhile. Putting the
+/// voice model in place marks it the same way (`Inner::voice_unpacking`).
 fn lock_show(app: &AppHandle) -> MutexGuard<'_, Inner> {
     app.state::<AppState>().inner().0.lock().unwrap()
 }
@@ -392,7 +416,7 @@ fn begin_show(app: &AppHandle, inner: &mut Inner, game: Game, session: Option<Se
 
 /// Refuses work that must not run during a show: work that reads or writes
 /// much on the disk (opening or saving a quiz file, copying a video, reading
-/// a sheet, installing an update), whose journal must not wait for the disk
+/// a sheet, installing an update or the voice model), whose journal must not wait for the disk
 /// behind it, or that would disturb the buzzers. The windows offer it only
 /// when no show runs; this holds also for a command already on its way.
 /// Not to be called while holding the show state (`refuse_show` then).
@@ -730,6 +754,10 @@ pub fn run() {
             app.manage(hardware);
             app.manage(stage_lights::StageLights::start(app.handle(), stage_lights::lights_path(app.handle())?));
             app.manage(fixture_library::FixtureLibrary::new(fixture_library::library_path(app.handle())?));
+            // The Director plays the voice's clips, rendered into a folder of their own.
+            let voice = read_aloud::Voice::new(app.handle())?;
+            app.asset_protocol_scope().allow_directory(voice.clips_folder(), true)?;
+            app.manage(voice);
             show_thread::start(app.handle(), queue, events);
             // The windows load theme pictures and fonts from the built-in
             // packages, and a show's media from where they can be.
@@ -845,6 +873,10 @@ pub fn run() {
             stage_lights::lights_universe,
             updates::update_check,
             updates::update_install,
+            read_aloud::voice_model,
+            read_aloud::voice_install,
+            read_aloud::voice_remove,
+            read_aloud::voice_clip,
         ])
         .run(context)
         .expect("error while running tauri application");
@@ -859,12 +891,15 @@ mod tests {
     use std::time::Instant;
 
     #[test]
-    fn no_show_begins_while_one_runs_or_an_update_installs() {
+    fn no_show_begins_while_one_runs_or_an_update_or_the_voice_installs() {
         let mut inner = Inner::new();
         assert_eq!(inner.may_start_show(), Ok(()));
         inner.updating = true;
         assert_eq!(inner.may_start_show(), Err(AppError::UpdateInstalling));
         inner.updating = false;
+        inner.voice_unpacking = true;
+        assert_eq!(inner.may_start_show(), Err(AppError::VoiceInstalling));
+        inner.voice_unpacking = false;
         inner.game = Some(Game::new(Quiz::new("Quiz", Vec::new())));
         assert_eq!(inner.may_start_show(), Err(AppError::ShowRunning));
     }

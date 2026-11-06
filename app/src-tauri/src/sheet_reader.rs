@@ -10,7 +10,6 @@
 use crate::error::{AppError, CmdResult};
 use quiz_core::Table;
 use quiz_file::{FileAction, SheetRead};
-use std::ffi::OsStr;
 use std::io::Read;
 use std::path::Path;
 use std::process::{Child, Command, Stdio};
@@ -40,10 +39,7 @@ pub const LIMITS: Limits = Limits { time: Duration::from_secs(60), memory: 1 << 
 /// Called first in `main`: when the app was started as the sheet reader,
 /// reads the file, reports what it read and ends the process.
 pub fn serve_if_asked() {
-    let mut args = std::env::args_os().skip(1);
-    if args.next().as_deref() != Some(OsStr::new(READ_SHEET)) {
-        return;
-    }
+    let Some(mut args) = crate::started_as(READ_SHEET) else { return };
     let reported = args.next().is_some_and(|path| serde_json::to_writer(std::io::stdout().lock(), &SheetRead::of(Path::new(&path))).is_ok());
     std::process::exit(if reported { 0 } else { 1 });
 }

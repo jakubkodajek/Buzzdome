@@ -132,23 +132,7 @@ export class ShowAudio {
       once.play(WHOLE_FILE, { fromMs });
       return { stop: () => once.dispose() };
     }
-    const asked = this.context.currentTime;
-    let stopped = false;
-    let playing: Round | null = null;
-    read(source.url).then((buffer) => {
-      if (stopped) return;
-      const late = keepTime ? this.context.currentTime - asked : 0;
-      const offset = fromMs / 1000 + late;
-      if (offset >= buffer.duration) return;
-      playing = startRound(this.context, buffer, this.effectsOut, this.context.currentTime, offset);
-      playing.source.addEventListener("ended", () => onEnd?.());
-    }, failed(source.url));
-    return {
-      stop: () => {
-        stopped = true;
-        if (playing) stopRound(playing, CUT_S);
-      },
-    };
+    return playRead(source.url, this.effectsOut, { fromMs, keepTime, keep: true }, onEnd);
   }
 }
 
@@ -260,6 +244,61 @@ class Stream {
   }
 }
 
+/** Plays one of the app's own sounds (bundled with it, such as a voice sample) once at `gain` straight to the speakers, read whole as the show's are. */
+export function playBundled(url: string, gain: number, onEnd: () => void): Playing {
+  const context = audioContext();
+  const out = new GainNode(context, { gain: Math.max(0, gain) });
+  out.connect(context.destination);
+  let ended = false;
+  const end = () => {
+    if (ended) return;
+    ended = true;
+    out.disconnect();
+    onEnd();
+  };
+  // Not kept read: it would push the show's own sounds out of those kept.
+  const playing = playRead(url, out, { fromMs: 0, keepTime: false, keep: false }, end, end);
+  return {
+    stop: () => {
+      ended = true;
+      playing.stop();
+      setTimeout(() => out.disconnect(), CUT_S * 1000 * 2);
+    },
+  };
+}
+
+/**
+ * Plays one of the app's sounds read whole into `output`, from `fromMs`
+ * in (later by the time reading it took, when `keepTime`); `keep` keeps it
+ * read for next time. `onEnd` hears it end, `onFail` that it could not be read.
+ */
+function playRead(url: string, output: AudioNode, { fromMs, keepTime, keep }: { fromMs: number; keepTime: boolean; keep: boolean }, onEnd?: () => void, onFail?: () => void): Playing {
+  const context = audioContext();
+  const asked = context.currentTime;
+  let stopped = false;
+  let playing: Round | null = null;
+  read(url, keep).then(
+    (buffer) => {
+      if (stopped) return;
+      const late = keepTime ? context.currentTime - asked : 0;
+      const offset = fromMs / 1000 + late;
+      if (offset >= buffer.duration) return;
+      playing = startRound(context, buffer, output, context.currentTime, offset);
+      playing.source.addEventListener("ended", () => onEnd?.());
+    },
+    (e: unknown) => {
+      failed(url)(e);
+      if (!stopped) onFail?.();
+    },
+  );
+  return {
+    stop: () => {
+      stopped = true;
+      if (playing) stopRound(playing, CUT_S);
+    },
+  };
+}
+
 /** A sound read whole, playing through a level of its own, so that it can fade. */
 interface Round {
   source: AudioBufferSourceNode;
@@ -292,13 +331,15 @@ function fadeTo(node: GainNode, value: number, seconds: number) {
 
 const reads = new Map<string, Promise<AudioBuffer>>();
 
-/** One of the app's sounds, read whole; the last ones read stay read. */
-function read(url: string): Promise<AudioBuffer> {
+/** One of the app's sounds, read whole; the last ones read stay read, unless not to `keep`. */
+function read(url: string, keep = true): Promise<AudioBuffer> {
   const known = reads.get(url);
   if (known) {
-    // Read again lately: the last to be let go.
-    reads.delete(url);
-    reads.set(url, known);
+    if (keep) {
+      // Read again lately: the last to be let go.
+      reads.delete(url);
+      reads.set(url, known);
+    }
     return known;
   }
   const reading = fetch(url)
@@ -307,6 +348,7 @@ function read(url: string): Promise<AudioBuffer> {
       return response.arrayBuffer();
     })
     .then((data) => audioContext().decodeAudioData(data));
+  if (!keep) return reading;
   reads.set(url, reading);
   // One that failed is read again when next asked for.
   reading.catch(() => reads.get(url) === reading && reads.delete(url));

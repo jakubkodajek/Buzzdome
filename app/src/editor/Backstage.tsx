@@ -1,16 +1,17 @@
-import { useApp } from "../app-context";
+import { useApp, useRun } from "../app-context";
+import { useVoiceGain, useVoiceModel, useVoicePreview, useVoiceSample, voiceLine, voiceName, VOICES } from "../audio/read-aloud";
 import { welcomePreviewView } from "../host/preview";
 import { SlideScreen } from "../host/SlideScreen";
 import { Stage } from "../host/Stage";
-import { BackIcon } from "../icons";
+import { BackIcon, PlayIcon, StopIcon } from "../icons";
 import { keyHint, KEYS } from "../keyboard";
 import { problemText } from "../messages";
-import { MAX_AFTER_REVEAL_DELAY_S, MAX_ALL_ANSWERED_DELAY_S, MAX_JOKERS } from "../bindings/Constants";
+import { MAX_AFTER_REVEAL_DELAY_S, MAX_ALL_ANSWERED_DELAY_S, MAX_JOKERS, QUIZ_LANGUAGES } from "../bindings/Constants";
 import type { StringKey } from "../i18n";
 import type { MediaKind } from "../media";
-import { NO_CONTEXT, questionCount, settingsOf, soundsOf, welcomeOf } from "../quiz";
+import { LANGUAGE_LABEL, NO_CONTEXT, questionCount, settingsOf, soundsOf, welcomeOf } from "../quiz";
 import { RecentFileList } from "../recent-files";
-import type { AllAnswered, Quiz, QuizSettings, QuizSounds, ValidationError, Welcome } from "../types";
+import type { AllAnswered, Quiz, QuizLanguage, QuizSettings, QuizSounds, ReadAloud, ValidationError, Welcome } from "../types";
 import type { Action, Actions } from "./actions";
 import { AiPage } from "./AiPage";
 import { MediaPicker, NumberBox, Select, Switch } from "./controls";
@@ -229,8 +230,71 @@ function SettingsPage({ open, onSettings, onSounds, onWelcome, onPickMedia }: Ba
         onChange={(show) => set({ hideBuzzPoints: !show })}
       />
       <SettingSwitch label={t("answerChart")} hint={t("answerChartHint")} checked={settings.answerChart} onChange={(answerChart) => set({ answerChart })} />
+      <ReadAloudSettings quiz={quiz} settings={settings} set={set} />
       <WelcomeSettings quiz={quiz} onWelcome={onWelcome} onPickMedia={onPickMedia} />
       <SoundsSettings sounds={soundsOf(quiz)} onSounds={onSounds} onPickFile={() => onPickMedia(["audio"])} />
+    </>
+  );
+}
+
+/** What of a question can be read out. */
+const READ_ALOUD_LABEL: Record<ReadAloud, StringKey> = { off: "readAloudOff", question: "readAloudQuestion", questionAndAnswers: "readAloudQuestionAndAnswers" };
+
+/** Reading questions aloud (spec SN-10): what is read, in which language, by which voice. */
+function ReadAloudSettings({ quiz, settings, set }: { quiz: Quiz; settings: QuizSettings; set: (change: Partial<QuizSettings>) => void }) {
+  const { t } = useApp();
+  const run = useRun();
+  const model = useVoiceModel();
+  const preview = useVoicePreview();
+  const sample = useVoiceSample();
+  const gain = useVoiceGain(quiz);
+  const reads = (Object.keys(READ_ALOUD_LABEL) as ReadAloud[]).map((value): [ReadAloud, string] => [value, t(READ_ALOUD_LABEL[value])]);
+  const languages = QUIZ_LANGUAGES.map((value): [QuizLanguage, string] => [value, t(LANGUAGE_LABEL[value])]);
+  const voices = VOICES.map((value): [number, string] => [value, voiceName(t, value)]);
+  const trying = preview.playing || sample.playing;
+  const tryVoice = () => {
+    if (trying) {
+      preview.stop();
+      return sample.stop();
+    }
+    if (!model?.installed) return sample.play(settings.language, settings.voice);
+    // The first question, as the show reads it; read in full even while reading is off.
+    const what = settings.readAloud === "off" ? "questionAndAnswers" : settings.readAloud;
+    const line = quiz.slides.map((slide) => voiceLine(slide, settings, what)).find((found) => found !== null);
+    if (!line) return sample.play(settings.language, settings.voice);
+    run(preview.play(line, gain));
+  };
+  return (
+    <>
+      <h3>{t("settingsVoice")}</h3>
+      <div className="field">
+        <span>{t("readAloud")}</span>
+        <Select label={t("readAloud")} value={settings.readAloud} options={reads} onChange={(readAloud) => set({ readAloud })} />
+      </div>
+      <p className="backstage-hint">{t("readAloudHint")}</p>
+      {settings.readAloud !== "off" && !settings.startOnNext && (
+        <SettingSwitch
+          label={t("clockAfterReading")}
+          hint={t("clockAfterReadingHint")}
+          checked={settings.clockAfterReading}
+          onChange={(clockAfterReading) => set({ clockAfterReading })}
+        />
+      )}
+      <div className="field">
+        <span>{t("quizLanguage")}</span>
+        <Select label={t("quizLanguage")} value={settings.language} options={languages} onChange={(language) => set({ language })} />
+      </div>
+      <p className="backstage-hint">{t("quizLanguageHint")}</p>
+      <div className="field">
+        <span>{t("voiceChoice")}</span>
+        <div className="voice-choice">
+          <Select label={t("voiceChoice")} value={settings.voice} options={voices} onChange={(voice) => set({ voice })} />
+          <button type="button" className="mini" aria-label={t(trying ? "stopTryVoice" : "tryVoice")} title={t(trying ? "stopTryVoice" : "tryVoice")} onClick={tryVoice}>
+            {trying ? <StopIcon /> : <PlayIcon />}
+          </button>
+        </div>
+      </div>
+      {model && !model.installed && <p className="backstage-hint">{t("voiceNotDownloaded")}</p>}
     </>
   );
 }

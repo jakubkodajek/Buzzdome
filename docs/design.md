@@ -32,6 +32,7 @@ How the app is built, with the buzzer link in most detail. Requirements are in
 │  ├── buzzers      driver trait, HID receiver, protocols │
 │  ├── lights       stage lights, OSC and MIDI messages   │
 │  ├── quiz-ai      quiz writing for AI apps (MCP)        │
+│  ├── voice        reading questions aloud, offline      │
 │  └── show-sim     random shows for the soak tests       │
 └─────────────────────────────────────────────────────────┘
 ```
@@ -174,6 +175,10 @@ draws slides without a show.
   mode's lock, as the Receiver tab's commands do, waits for a journal write.
   The close request's lock is taken under the show state when a show begins
   or ends (an unanswered request is forgotten then), and holds no other.
+  The updates lock (`updates::Updates`) and the voice's install lock
+  (`Voice::installing`) are taken before the show state, never under it:
+  installing an update or the voice model marks the show state
+  (`updating`, `voice_unpacking`) so that no show begins meanwhile.
   Every command that writes a file, or lists the USB devices (slow on
   Windows), runs off the windows' thread too: the app's files are in its
   data folder with the journal, so a disk that does not answer holds both.
@@ -464,9 +469,10 @@ without one.
 
 The windows load media through Tauri's asset protocol. Its scope is empty
 in `tauri.conf.json`; at startup the shell allows the folder of unpacked
-quizzes, the editor's drafts folder, the built-in theme packages and the
-media player's library (`<app data>/library`, spec SN-7)
-(`asset_protocol_scope().allow_directory`), and nothing changes it later,
+quizzes, the editor's drafts folder, the built-in theme packages, the
+media player's library (`<app data>/library`, spec SN-7) and the voice's
+clips (`<app local data>/voice-clips`, spec SN-10)
+(`asset_protocol_scope().allow_directory`), for every window, and nothing changes it later,
 so a page cannot read anything else on the disk. A quiz folder is allowed
 only inside the app's own folders (the unpacked quizzes and the editor's
 drafts): a session whose `meta.json` names another folder resumes without
@@ -865,8 +871,9 @@ packages users will install are read the same way.
   reference app, so the players can answer at once and one press goes
   from question to question; the remote's Next still does nothing while
   a question runs (`Controls::remote_next`). `startOnNext` brings back the
-  step of Next that started it (`QuestionStep::Ready`). A question
-  restarted (`RestartQuestion`, also after a crash) always waits for
+  step of Next that started it (`QuestionStep::Ready`), and
+  `clockAfterReading` waits for the question to be read out first (§1.8).
+  A question restarted (`RestartQuestion`, also after a crash) always waits for
   Next, so the quizmaster first sees where the show stands. A show begun
   under an older version keeps the step (`rules_version`), so its
   journal replays as it was played.
@@ -1145,6 +1152,81 @@ and has no rules of its own: what it accepts is what `quiz_file` and
   instructions (`ai_set_instructions`, empty for the defaults).
   `ai_connect` and `ai_server_config` keep the page's language and make
   sure the folder can be a root before handing the entry out.
+
+### 1.8 Reading questions aloud
+
+Spec SN-10. A quiz's `settings` say what is read (`readAloud`), in which
+language and voice; the words are made in the UI (`audio/read-aloud.ts`,
+`spokenText`: the question as a sentence, then each answer after its
+letter from `answers.ts`).
+
+- **Model.** `crates/voice` knows the one voice model (`model.rs`:
+  Supertonic 3, quantized to 8 bits and packed for sherpa-onnx, 129 MB,
+  ten voices, 31 languages of which the app offers Czech and English). It
+  is not shipped: Settings › Voices for reading aloud downloads it over
+  HTTPS (`read_aloud.rs`, `voice_install`), hashing it as it arrives, and only
+  an archive with the SHA-256 written in `model.rs` is unpacked, taking
+  only the model's own files into a staging folder that then replaces the
+  model's folder in `<app local data>/voice/`. Samples of every voice in
+  both languages ship with the UI (`audio/voices/`), so the quizmaster
+  chooses before downloading. The download (and removing the model) is
+  refused during a show, as the editor's large files are: it writes
+  about 270 MB to the disk the journal is on. The app shows no licence
+  text or notice for the model (Jakub's decision, 2026-11-06: a private,
+  non-commercial app).
+- **Engine and process.** The engine is sherpa-onnx's Rust binding over
+  ONNX Runtime, linked statically (on Windows the MT runtime, which Tauri
+  links the app with too). The libraries are prebuilt archives checked
+  against hashes pinned in `.github/scripts/sherpa-onnx-libs.sh` before
+  any CI build (`docs/releasing.md`). It runs only in the voice process, the app
+  started again with `--voice <folder>` (`read_aloud::serve_if_asked` in
+  `main.rs`, as the sheet reader): native code failing there ends that
+  process, never a show. The app writes one JSON request per line (the
+  line to say and the file to write) and reads one reply per line
+  (`voice::server`), at most 4 KiB a line; a line that is not a reply is logged and passed
+  over. The process loads the model once and stays up. It gives way to
+  the show: it starts below normal priority (Windows) or lowers its own
+  (`nice`, macOS and Linux), and the engine takes at most two CPU threads.
+  A load past 60 s, or a clip past 20 s and 60 ms for each character, ends
+  it, and the next clip starts another; a process that could not start or
+  load the model is not started again until the model is installed again
+  or removed, so every clip after fails at once. The download is refused
+  again after it arrives if a show began meanwhile. The locks in `read_aloud.rs` are taken
+  in one order, the model's install lock and then the process's; the show
+  thread takes neither, and a window's line is checked first (its words
+  only, a voice the model has).
+- **Clips.** A clip is a 16-bit mono WAV in `<app local data>/voice-clips/`,
+  named by the SHA-256 of what it says and how (render version, model,
+  language, voice, words), so an edited question gets a new clip and an
+  old one is never played for it; the file is written beside its name and
+  renamed. The app's asset scope (one for every window) includes the folder.
+- **Show.** Once a show with reading on is loaded, the Director renders
+  the clip of each question not kept yet, one after another
+  (`usePrepareVoice`; the check before a show shows how far), pausing
+  while a question is asked (`ready` or `running`) so as not to take CPU
+  from it. A clip that fails is left to the system voice and the rest are
+  still rendered; the check says how many failed. As the check shows only
+  with a show loaded, when downloading is refused, it says to download the
+  voices in Settings while no show runs. When a
+  question comes on screen (`ready`), `useReadAloud` asks for its kept
+  clip only (`voice_clip` with `render: false`, a file check) and plays
+  it like the slide's sound, at the effects' volume times the player's;
+  without one, the system voice of the quiz's language reads it (Web
+  Speech API, a voice on the computer before one that needs the
+  internet). The music ducks while it reads. A buzz, the question's end or
+  answer, or leaving the slide stops it; nothing of it is journaled, as it
+  never changes the show, but for the one setting below. The question on
+  screen is read again when the Director's window is laid out again (after
+  a crash and resume, on coming back from the editor). The question's
+  clock runs while it is read (Jakub's choice, 2026-11-06), unless the
+  quiz sets `clockAfterReading` (off by default): a question that starts
+  as shown then waits in `Ready` (`Game::waits_for_reading`, offered as
+  `Controls::reading_done`), and the Director sends `ReadingDone { slide }`
+  once nothing reads it any more (read to its end, stopped, or not read
+  at all, as a slide with its own sound), which starts its clock. That
+  command is journaled like any other, so a replay starts the clock at the
+  same moment; one for another slide, or once the clock runs, is ignored.
+  Next starts the clock sooner, and a restarted question waits for Next.
 
 ## 2. Buzzer link
 
@@ -1962,6 +2044,7 @@ them.
 | Real receiver: detection, raw reports, presses in a show | Enjoy 303S on Windows 11, buzzers 1 and 2, `hardware-test.md` sections 2 to 6 in part (2026-10-25) | pass; macOS, high IDs, two at once in the app, failures (section 7) **not tested** |
 | Enjoy 303S protocol: set-up, presses, timers, colours | `cargo test -p buzzers` against fakes; the receiver with `hid-monitor` and the app (2026-10-25) | pass; lights read from the back of a room **not tested** |
 | Fastest-finger queue (rules v8) and a question's clock starting as it is shown (v7) on the 303S: dark then ready frames, stale lobby buzzes dropped, queued teams in timer order | `cargo test` (`game_flow`, `buzzers` receiver), the soak, E2E with the fake receiver | **not tested** on the hardware (`hardware-test.md` step 11a) |
+| Reading aloud (SN-10): lines, clips, the voice process and its protocol, the model's download check, the clock after reading | `cargo test` (`voice`, shell `read_aloud`, `game_flow`), `npm test` (`read-aloud`) | pass; the voice on the Windows event laptop **not tested** (BF62, BF63) |
 | Battery level | not in the 303S's SDK, and no press or other message carried one (2026-10-25) | **not buildable** for the 303S |
 | Stage lights: stages from the game, setup checks, looks and effects, desk priority and fades, Art-Net, sACN, Enttec and SoundSwitch frames byte for byte, OSC and MIDI encoding, lights thread with fake outputs; Lights tab | `cargo test` (`quiz_core::stage`, `game_flow`, `lights`, shell `stage_lights`), `npm test` (`lights`), the tab in headless Chromium against the preview | pass |
 | Stage lights on real interfaces and fixtures, OSC and MIDI into a real program | needs the hardware | **not tested** |

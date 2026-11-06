@@ -3,6 +3,7 @@ import { api } from "../api";
 import { AppProvider, useApp, useDispatch, useRun, useStepShown } from "../app-context";
 import { otherSoundPlays, useShowSounds } from "../audio/show-sounds";
 import { useSlideSound, type SlideSound } from "../audio/slide-sound";
+import { usePrepareVoice, useReadAloud, useVoiceSpeaks, type ReadAloudControl } from "../audio/read-aloud";
 import { clockSeconds } from "../format";
 import { EditorScreen } from "../editor/EditorScreen";
 import { ErrorBoundary, RenderFailed } from "../error-boundary";
@@ -34,6 +35,7 @@ import {
   RewindIcon,
   ScreenIcon,
   SoundIcon,
+  SpeakIcon,
   StopIcon,
   VideoIcon,
 } from "../icons";
@@ -129,7 +131,11 @@ function DirectorLayout({ testRun, onEditor }: { testRun: boolean; onEditor: () 
   const sound = useSlideSound(view);
   // Here too, so what plays goes on and ends whichever tab is open.
   const player = useMediaPlayer();
-  useShowSounds(view, quiz, otherSoundPlays(view, sound.playing, player.now));
+  // And the questions read out, with each one's clip rendered beforehand.
+  usePrepareVoice(quiz, view);
+  const voice = useReadAloud(view, quiz);
+  const voiceSpeaks = useVoiceSpeaks();
+  useShowSounds(view, quiz, otherSoundPlays(view, sound.playing || voiceSpeaks, player.now));
   const showStart = useShowStart();
 
   const tabs: [Tab, string][] = [
@@ -147,7 +153,7 @@ function DirectorLayout({ testRun, onEditor }: { testRun: boolean; onEditor: () 
   return (
     // `data-step`: the step on screen, which the E2E tests wait for before a step press (StepGuard.shown).
     <div className={look.dark ? "director dark" : "director"} data-step={view?.stepNo}>
-      <CommandPanel view={view} projector={projector} sound={sound} showStart={showStart} testRun={testRun} onEditor={onEditor} />
+      <CommandPanel view={view} projector={projector} sound={sound} voice={voice} showStart={showStart} testRun={testRun} onEditor={onEditor} />
       <div className="workspace">
         <nav className="tabs" role="tablist">
           {tabs.map(([id, label]) => (
@@ -233,7 +239,7 @@ interface TabBodyProps {
 
 function TabBody({ tab, view, quiz, projector, look, launch, player, sound, showStart }: TabBodyProps) {
   // Setup tabs work without a show; the others need one.
-  if (tab === "settings") return <SettingsTab projector={projector} look={look} launch={launch} />;
+  if (tab === "settings") return <SettingsTab projector={projector} look={look} launch={launch} showRunning={view !== null} />;
   if (tab === "receiver") return <ReceiverTab />;
   if (tab === "lights") return <LightsTab />;
   // Team names can be prepared before a show, and the media player plays without one.
@@ -349,11 +355,12 @@ function CommandPanel(props: {
   view: GameView | null;
   projector: ProjectorSettings;
   sound: SlideSound;
+  voice: ReadAloudControl;
   showStart: ShowStart;
   testRun: boolean;
   onEditor: () => void;
 }) {
-  const { view, projector, sound, showStart, testRun, onEditor } = props;
+  const { view, projector, sound, voice, showStart, testRun, onEditor } = props;
   const { t, notify, caution } = useApp();
   const dispatch = useDispatch();
   const run = useRun();
@@ -443,6 +450,12 @@ function CommandPanel(props: {
               <CommandButton icon={<StopIcon />} label={t("stopSound")} onClick={sound.stop} />
             ) : (
               <CommandButton icon={<SoundIcon />} label={t("playSound")} onClick={sound.play} />
+            ))}
+          {voice.available &&
+            (voice.speaking ? (
+              <CommandButton icon={<StopIcon />} label={t("stopReading")} onClick={voice.stop} />
+            ) : (
+              <CommandButton icon={<SpeakIcon />} label={t("readQuestion")} onClick={voice.read} />
             ))}
           {controls?.playVideo && <CommandButton icon={<VideoIcon />} label={t("playVideo")} onClick={() => dispatch({ type: "playVideo" })} />}
           <CommandButton

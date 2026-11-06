@@ -212,6 +212,25 @@ pub enum AppError {
     #[error("the downloaded fixture library has only {models} models")]
     LibraryTooSmall { models: usize, least: usize },
 
+    // Reading questions aloud (read_aloud.rs).
+    /// The voice model could not be downloaded (no connection, the site
+    /// did not answer, the disk refused it).
+    #[error("the voice model cannot be downloaded: {detail}")]
+    VoiceDownload { detail: String },
+    /// The download is not the model it should be (its hash differs, or
+    /// the archive does not have the model's files).
+    #[error("the downloaded voice model is damaged")]
+    VoiceDamaged,
+    /// The voice model is not downloaded, so nothing can be rendered.
+    #[error("the voice model is not downloaded")]
+    VoiceMissing,
+    /// The voice process did not start, load the model or answer in time.
+    #[error("the voice process failed")]
+    VoiceFailed,
+    /// The model or a clip could not be written to the disk (full, refused).
+    #[error("the voice model cannot be saved: {detail}")]
+    VoiceDisk { detail: String },
+
     // Updates of the app.
     /// No newer version was found to install.
     #[error("no newer version of the app was found")]
@@ -223,6 +242,9 @@ pub enum AppError {
     /// A new version of the app is being installed, which ends the app.
     #[error("a new version of the app is being installed")]
     UpdateInstalling,
+    /// The voice model is being put in place, which stops the voice process.
+    #[error("the voice model is being installed")]
+    VoiceInstalling,
 
     // Windows and the operating system.
     /// The system gave the app no folder for its data (team names, sessions, the media library).

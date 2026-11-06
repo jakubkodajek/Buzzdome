@@ -1,0 +1,7 @@
+name: Voice libraries
+description: Fetches the prebuilt sherpa-onnx libraries crates/voice links, checks them against their pinned SHA-256 and points the build at them. Comes after rust-cache, so that a cached copy that differs is removed.
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: bash .github/scripts/sherpa-onnx-libs.sh .

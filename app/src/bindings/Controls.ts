@@ -38,4 +38,10 @@ restartQuestion: boolean,
  * or between questions for the next (`Game::joker_slide`); for each
  * player as `Game::can_set_joker` says.
  */
-setJoker: boolean, };
+setJoker: boolean, 
+/**
+ * `ReadingDone`: the question on screen was shown waiting for its
+ * reading to end (`QuizSettings::clock_after_reading`); Next starts
+ * it as well.
+ */
+readingDone: boolean, };

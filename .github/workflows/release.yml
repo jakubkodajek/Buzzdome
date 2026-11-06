@@ -163,6 +163,10 @@ jobs:
           if [ ${#targets[@]} != 0 ]; then rustup target add "${targets[@]}"; fi
           cargo --version
 
+      # The native voice libraries, checked against their pinned SHA-256 (docs/releasing.md).
+      - name: Fetch the voice libraries
+        run: bash source/.github/scripts/sherpa-onnx-libs.sh source
+
       # No install scripts, so nothing but the build itself runs next to the key;
       # a Node.js older than the build tools need fails here.
       - name: Install UI dependencies

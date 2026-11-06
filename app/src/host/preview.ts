@@ -3,7 +3,7 @@ import { shareOf } from "../quiz";
 import type { Controls, GameView, Phase, Slide, Welcome } from "../types";
 
 /** A preview is not a show: no command applies. */
-export const NO_CONTROLS: Controls = { next: false, remoteNext: false, judge: false, pauseClock: false, resumeClock: false, closeQuestion: false, playVideo: false, goTo: false, restartQuestion: false, setJoker: false };
+export const NO_CONTROLS: Controls = { next: false, remoteNext: false, judge: false, pauseClock: false, resumeClock: false, closeQuestion: false, playVideo: false, goTo: false, restartQuestion: false, setJoker: false, readingDone: false };
 
 /**
  * The game state a slide is shown in before anyone plays: a question ready

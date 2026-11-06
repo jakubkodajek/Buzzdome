@@ -16,7 +16,6 @@ use quiz_ai::roots::{self, RootError};
 use quiz_ai::settings::{default_instructions, AiSettings, Language, MAX_INSTRUCTIONS_CHARS, SETTINGS_FILE};
 use quiz_file::FileAction;
 use serde::Serialize;
-use std::ffi::OsStr;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
@@ -29,7 +28,7 @@ use ts_rs::TS;
 /// identifier, which names its data folders: the AI settings are kept
 /// there, and none of them is ever a root.
 pub fn serve_mcp_if_asked(version: &str, identifier: &str) {
-    if std::env::args_os().nth(1).as_deref() != Some(OsStr::new(MCP_ARG)) {
+    if crate::started_as(MCP_ARG).is_none() {
         return;
     }
     let app_data = roots::app_data_dirs(identifier);

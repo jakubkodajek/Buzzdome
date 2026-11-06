@@ -165,6 +165,23 @@ describe("the quiz editor", () => {
     await app.$(".studio");
   });
 
+  test("a question read out starts its clock once the reading ends, with no Next", async () => {
+    await app.press("ribbonFile");
+    await app.press("quizSettings");
+    // The test before had questions start with Next; they start as shown again.
+    await app.page.click(await app.$(`button[role="switch"][aria-label="${t("startOnNext")}"]`));
+    await app.page.click(await app.$(`select[aria-label="${t("readAloud")}"] option[value="question"]`));
+    await app.page.click(await app.$(`button[role="switch"][aria-label="${t("clockAfterReading")}"]`));
+    await app.page.click(await app.$(".backstage-back"));
+    await app.page.keys([Key.F5], [Key.Shift]);
+    await app.seeText(t("testRunActive"));
+    // No voice model here: the system voice reads it, or nothing can, and
+    // either way the reading ends and the clock starts (closed only follows it).
+    await app.waitView("the clock started after the reading", (v) => v.phase.phase === "question" && (v.phase.step === "running" || v.phase.step === "closed"), 30_000);
+    await app.press("backToEditor");
+    await app.$(".studio");
+  });
+
   test("a test run from the start opens on the quiz's welcome screen, and Next goes on to the registration", async () => {
     await app.press("ribbonFile");
     await app.press("quizSettings");

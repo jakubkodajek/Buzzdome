@@ -1,6 +1,6 @@
 import { DEFAULT_QUIZ_SETTINGS, DEFAULT_QUIZ_SOUNDS, DEFAULT_WELCOME, FULL_SHARE, SLIDE_PLAYS } from "./bindings/Constants";
 import type { StringKey, Translate } from "./i18n";
-import type { Picker, Plays, QuestionSlide, Quiz, QuizSettings, QuizSounds, Slide, SlideType, TitledSlide, Welcome } from "./types";
+import type { Picker, Plays, QuestionSlide, Quiz, QuizLanguage, QuizSettings, QuizSounds, Slide, SlideType, TitledSlide, Welcome } from "./types";
 
 /** The wording of a picker for quiz files (a quiz file, or a plain quiz JSON to open), offering `fileName` (without the extension) to save as. */
 export function quizPicker(t: Translate, fileName?: string): Picker {
@@ -27,6 +27,9 @@ export function sameFields<T extends object>(a: T, b: T): boolean {
   const keys = new Set([...Object.keys(a), ...Object.keys(b)] as (keyof T)[]);
   return [...keys].every((key) => a[key] === b[key]);
 }
+
+/** What each quiz language is called. */
+export const LANGUAGE_LABEL: Record<QuizLanguage, StringKey> = { cs: "languageCs", en: "languageEn" };
 
 /** How each kind of slide is named in the UI. */
 export const SLIDE_TYPE_LABEL: Record<SlideType, StringKey> = {

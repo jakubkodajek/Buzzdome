@@ -172,6 +172,17 @@ export function SoundIcon({ className }: IconProps) {
   );
 }
 
+/** A voice speaking: reading a question out. */
+export function SpeakIcon({ className }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinejoin="round" strokeLinecap="round">
+      <circle cx="9" cy="8.5" r="3.5" />
+      <path d="M3 19.5a6 6 0 0 1 12 0" />
+      <path d="M17.5 6.5a4 4 0 0 1 0 5M19.5 4a7.5 7.5 0 0 1 0 10" />
+    </svg>
+  );
+}
+
 export function EditIcon({ className }: IconProps) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">

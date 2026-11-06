@@ -815,6 +815,53 @@
   min-width: 110px;
 }
 
+/* The voices: each language's ten in two columns, each with its sample. */
+.voices .row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.voices .voice-group {
+  align-self: stretch;
+}
+
+.voices .voice-group h3 {
+  margin: 4px 0 6px;
+  font-size: 1em;
+}
+
+.voices .voice-group ul {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-rows: repeat(5, auto);
+  grid-auto-flow: column;
+  gap: 4px 16px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.voices .voice-group li {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.voices .icon-button {
+  display: inline-grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+}
+
+.voices .icon-button svg {
+  width: 12px;
+  height: 12px;
+}
+
 .icon-picker {
   display: flex;
   gap: 8px;

@@ -100,6 +100,7 @@ const ERROR_KEYS: Record<Exclude<AppError["code"], WordedApart>, StringKey> = {
   noUpdate: "errNoUpdate",
   updateFailed: "errUpdateFailed",
   updateInstalling: "errUpdateInstalling",
+  voiceInstalling: "errVoiceInstalling",
   noDataFolder: "errNoDataFolder",
   system: "errSystem",
   libraryDownload: "errLibraryDownload",
@@ -107,6 +108,11 @@ const ERROR_KEYS: Record<Exclude<AppError["code"], WordedApart>, StringKey> = {
   libraryNotRead: "errLibraryNotRead",
   libraryFormatChanged: "errLibraryFormatChanged",
   libraryTooSmall: "errLibraryTooSmall",
+  voiceDownload: "errVoiceDownload",
+  voiceDamaged: "errVoiceDamaged",
+  voiceMissing: "errVoiceMissing",
+  voiceFailed: "errVoiceFailed",
+  voiceDisk: "errVoiceDisk",
 };
 
 const FILE_ACTION_KEYS: Record<FileAction, StringKey> = {
