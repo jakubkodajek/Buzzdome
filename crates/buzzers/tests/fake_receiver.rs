@@ -83,6 +83,8 @@ fn a_test_plugs_the_receiver_in_presses_and_sees_the_lights() {
     test.wait_for(|v| light_of(v, 64).is_some_and(|l| l == "ready"));
     assert_eq!(test.wait_for(|_| true), json!({ "lights": [{ "buzzer": 3, "light": "locked", "colour": "#2a2a2a" }] }));
 
+    // The timers below count from a light change in the round, so it has run that long.
+    std::thread::sleep(std::time::Duration::from_millis(300));
     // The later press has the lower timer: the buzzers' order wins.
     test.send(json!({ "press": { "buzzer": 1, "button": "big", "timer": 300 } }));
     test.send(json!({ "press": { "buzzer": 2, "button": "big", "timer": 120 } }));

@@ -451,6 +451,12 @@ fn set_mode_now(handle: &ReceiverHandle, backend: &FakeBackend, rx: &Receiver<Re
     wait_for(rx, |e| matches!(e, ReceiverEvent::Raw(r) if r.bytes == answer));
 }
 
+/// Lets `ms` pass in a fastest-finger round, so that a buzzer's timer of up
+/// to `ms` counts from a light change in it (`ROUND_SLACK_MS`).
+fn round_runs_for(ms: u64) {
+    std::thread::sleep(Duration::from_millis(ms));
+}
+
 /// The receiver thread on an Enjoy 303S receiver that answered its set-up.
 fn start_303s(backend: &FakeBackend, config: ReceiverConfig) -> (ReceiverHandle, Receiver<ReceiverEvent>) {
     backend.0.lock().unwrap().plugged = true;
@@ -511,6 +517,7 @@ fn orders_a_fastest_finger_buzz_by_the_buzzers_timers() {
     let config = ReceiverConfig { timer_window: Duration::from_millis(60), ..config() };
     let (handle, rx) = start_303s(&backend, config);
     set_mode_now(&handle, &backend, &rx, BuzzerMode::FastestFinger);
+    round_runs_for(200);
     // Buzzer 1's press arrives first, though buzzer 2 pressed sooner after its light.
     backend.0.lock().unwrap().inbox.extend([buzz_303s(1, 200), buzz_303s(2, 120)]);
     let ReceiverEvent::Raw(first) = wait_for(&rx, |e| matches!(e, ReceiverEvent::Raw(r) if !r.decoded.is_empty())) else { unreachable!() };
@@ -551,6 +558,26 @@ fn a_buzz_from_a_buzzer_that_was_not_ready_is_dropped_and_logged() {
     backend.0.lock().unwrap().inbox.push_back(buzz_303s(5, 8));
     let ReceiverEvent::Press { press, .. } = wait_for(&rx, |e| matches!(e, ReceiverEvent::Press { .. })) else { unreachable!() };
     assert_eq!(press, Press::timed(5, Button::Big, 8));
+    handle.shutdown();
+}
+
+#[test]
+fn a_buzz_whose_timer_counts_from_before_the_round_is_dropped_and_logged() {
+    let backend = FakeBackend::default();
+    let (handle, rx) = start_303s(&backend, ReceiverConfig { timer_window: Duration::from_millis(20), ..config() });
+    // Pressed in the lobby, lit ready there for 250 ms, but sent on as the
+    // round began: the buzzer's light changed after that (two frames, dark
+    // then ready), so its timer cannot be longer than the round.
+    set_mode_now(&handle, &backend, &rx, BuzzerMode::FastestFinger);
+    backend.0.lock().unwrap().inbox.push_back(buzz_303s(6, 250));
+    let pressed = |e: &ReceiverEvent| matches!(e, ReceiverEvent::Raw(r) if r.bytes.get(4) == Some(&0x32));
+    let ReceiverEvent::Raw(raw) = wait_for(&rx, pressed) else { unreachable!() };
+    assert!(raw.decoded.is_empty());
+    assert_eq!(raw.dropped, [Press::timed(6, Button::Big, 250)]);
+    // A press made in the round counts, its timer within the round and the report tick.
+    backend.0.lock().unwrap().inbox.push_back(buzz_303s(7, 30));
+    let ReceiverEvent::Press { press, .. } = wait_for(&rx, |e| matches!(e, ReceiverEvent::Press { .. })) else { unreachable!() };
+    assert_eq!(press, Press::timed(7, Button::Big, 30));
     handle.shutdown();
 }
 
@@ -632,6 +659,7 @@ fn a_fastest_finger_buzz_waiting_for_the_timers_goes_on_when_the_receiver_goes()
         let config = ReceiverConfig { timer_window: Duration::from_secs(30), ..config() };
         let (handle, rx) = start_303s(&backend, config);
         set_mode_now(&handle, &backend, &rx, BuzzerMode::FastestFinger);
+        round_runs_for(90);
         backend.0.lock().unwrap().inbox.push_back(buzz_303s(4, 90));
         wait_for(&rx, |e| matches!(e, ReceiverEvent::Raw(r) if !r.decoded.is_empty()));
         if deselect {
@@ -656,6 +684,7 @@ fn a_fastest_finger_buzz_waiting_for_the_timers_goes_on_when_the_round_ends() {
     let config = ReceiverConfig { timer_window: Duration::from_secs(30), ..config() };
     let (handle, rx) = start_303s(&backend, config);
     set_mode_now(&handle, &backend, &rx, BuzzerMode::FastestFinger);
+    round_runs_for(90);
     backend.0.lock().unwrap().inbox.push_back(buzz_303s(4, 90));
     wait_for(&rx, |e| matches!(e, ReceiverEvent::Raw(r) if !r.decoded.is_empty()));
     handle.set_mode(BuzzerMode::Off);

@@ -271,7 +271,9 @@ press that leaves no line under "Raw data", and what came before it.
     under the book in both places too, its timer starts later after a
     colour change, which favours high numbers in fastest finger. Note both
     timers of every pair.
-11. **Too early.** Press before the clock starts or before the buzzers turn
+11. **Too early.** The clock starts as the question is shown (unless the
+    quiz has "Start a question's clock only with Next"), so press on the
+    slide before, just as Next is pressed, or before the buzzers turn
     blue, and hold the big button down while they turn. Expected: neither
     buzzes (the press shows under "Presses" or as not counted, but the
     question goes on), and pressing again once blue does. If the held
@@ -282,6 +284,17 @@ press that leaves no line under "Raw data", and what came before it.
     alone hammers the buzzer, eight or more presses a second, from before
     the question starts until after it turns blue: its first press once
     blue must buzz.
+11a. **Straight from the lobby.** With the buzzers blue in the lobby,
+    press Next (or Go to) onto a fastest-finger question (start a show of
+    the demo quiz and go to slide 8). The app darkens the buzzers and turns
+    them blue again about 10 ms later. Press one buzzer about a second
+    after it turns blue. Expected: a timer near 1000 under "Presses", not
+    the time since the lobby; repeat with the highest-numbered buzzer and
+    with every buzzer of the set lit. If the timer comes out high, a buzzer
+    missed the dark order and the round's order is unfair: note it. Then
+    the players hammer their big buttons in the lobby while Next is
+    pressed: no buzz comes from a press made in the lobby (it shows as not
+    counted under "Presses"), and the first press once blue buzzes.
 12. While a buzz is judged, the other players keep hammering their
     buttons; then judge it wrong. Expected: that buzzer turns red, the
     others turn blue again together; no press made while they were dim

@@ -100,6 +100,12 @@ const player = (view: GameView, buzzer: number) => view.players.find((p) => p.bu
  * lights (lib.rs `light_buzzers`), so from then on it takes the round's presses: one sent as soon as
  * the view says the clock runs can reach it before, in the step before's mode.
  */
+/**
+ * Lets a fastest-finger round run for `timer` ms and a little more: the app drops a buzz whose own timer
+ * is longer than the round has run, as one pressed before the round (receiver.rs `stale_buzzes`).
+ */
+const roundRuns = (timer: number) => sleep(timer + 100);
+
 const buzzersReady = (...buzzers: number[]) =>
   waitFor(`buzzers ${buzzers.join(", ")} ready`, async () => buzzers.every((buzzer) => fake.lights.get(buzzer) === "ready"));
 
@@ -167,6 +173,7 @@ describe("a simulated buzzer receiver", () => {
     await buzzersReady(7, 12);
     // Buzzer 7 delivered second, but pressed sooner by its own clock. The receiver delivers presses made
     // at the same moment within the app's timer window (`ReceiverConfig::timer_window`), so they go together.
+    await roundRuns(400);
     await fake.pressTogether({ buzzer: 12, button: "big", timer: 400 }, { buzzer: 7, button: "big", timer: 150 });
     const buzzed = await app.waitView("a buzz", (v) => v.phase.phase === "question" && v.phase.step === "buzzed");
     expect(buzzed.buzzed).toBe(7);
@@ -177,6 +184,7 @@ describe("a simulated buzzer receiver", () => {
     await app.waitView("the clock running again", (v) => v.phase.phase === "question" && v.phase.step === "running");
     await waitFor("buzzer 7 shown wrong", async () => fake.lights.get(7) === "wrong");
     await fake.press(7, "big", 10);
+    await roundRuns(500);
     await fake.press(3, "big", 500);
     const next = await app.waitView("the next buzz", (v) => v.phase.phase === "question" && v.phase.step === "buzzed");
     expect(next.buzzed).toBe(3);
@@ -251,12 +259,14 @@ describe("a simulated buzzer receiver", () => {
     await app.stepPause();
     expect(await app.view()).toMatchObject({ phase: { phase: "question", step: "running" } });
 
+    await roundRuns(150);
     await fake.press(7, "big", 150);
     await app.waitView("buzzer 7 buzzed", (v) => v.phase.phase === "question" && v.phase.step === "buzzed" && v.buzzed === 7);
     await app.stepPause();
     await fake.remote("cross");
     await app.waitView("the clock running again", (v) => v.phase.phase === "question" && v.phase.step === "running");
     await waitFor("buzzer 7 shown wrong", async () => fake.lights.get(7) === "wrong");
+    await roundRuns(300);
     await fake.press(3, "big", 300);
     await app.waitView("buzzer 3 buzzed", (v) => v.phase.phase === "question" && v.phase.step === "buzzed" && v.buzzed === 3);
     await app.stepPause();

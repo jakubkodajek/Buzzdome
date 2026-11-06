@@ -1529,7 +1529,11 @@ buzz in it: a question always opens dark (`QuestionStep::Ready`, also when
 it is restarted) and turns ready from there; one whose clock starts as it
 is shown (rules version 7, `Game::starts_as_shown`) sends the dark and the
 ready as two changes, one after the other (`Effect::LightBreak`,
-`Effect::light_frames`), a round that goes on after a
+`Effect::light_frames`). A press made just before such a round, still
+showing the lobby's ready, could reach the receiver thread once its mode is
+fastest finger; the thread drops a buzz whose timer is longer than the
+round has run plus `ROUND_SLACK_MS` (40 ms, the 36 ms report tick), as its
+light changed before the round (`Worker::stale_buzzes`). A round that goes on after a
 wrong answer turns ready from locked, and when the receiver comes back or
 a show begins or resumes every buzzer goes dark before it lights (2.4,
 2.7). A guard test in `quiz-core` and a check in every simulated show
