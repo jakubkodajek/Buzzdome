@@ -205,6 +205,10 @@ describe("a simulated buzzer receiver", () => {
   });
 
   test("the quizmaster's remote steps the show, judges a fastest finger and shows the leaderboard", async () => {
+    // Slide 9 started as it was shown, and a question in play cannot be left: restarted, it waits for Next.
+    await app.answerQuestions(true);
+    await app.step("restartQuestion");
+    await app.waitView("slide 9 waiting", (v) => v.slideIndex === 8 && v.phase.phase === "question" && v.phase.step === "ready");
     // Back from the slide after the fastest finger: it comes back answered, keeps its scores and takes no presses.
     const before = await app.waitView("a way back to slide 8", (v) => v.previousSlide === 7);
     const scores = before.players.map((p) => [p.buzzer, p.score]);
@@ -218,7 +222,7 @@ describe("a simulated buzzer receiver", () => {
     await app.stepPause();
     expect(await app.view()).toMatchObject({ slideIndex: 7, buzzed: back.buzzed, phase: { phase: "question", step: "revealed" } });
     await fake.remote("forward");
-    await app.waitView("slide 9 again", (v) => v.slideIndex === 8);
+    await app.waitView("slide 9 again, running", (v) => v.slideIndex === 8 && v.phase.phase === "question" && v.phase.step === "running");
 
     // A new show, for a fastest finger nobody has answered yet.
     await app.press("endShow");
@@ -227,9 +231,8 @@ describe("a simulated buzzer receiver", () => {
     await app.waitView("the lobby", (v) => v.phase.phase === "lobby");
     for (const buzzer of [3, 7]) await fake.press(buzzer, "big");
     await app.waitView("two players from the receiver", (v) => [3, 7].every((buzzer) => player(v, buzzer)));
-    await app.stepPause();
-    await fake.remote("forward");
-    await app.waitView("the first slide", (v) => v.slideIndex === 0);
+    await buzzersReady(3, 7);
+    // Straight from the lobby, where the buzzers are lit ready.
     await app.tab("tabQuestions");
     await app.page.click(await app.$(".slide-grid tbody tr:nth-child(8) td:nth-child(1)"));
     fake.written.clear();
