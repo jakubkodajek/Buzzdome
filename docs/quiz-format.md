@@ -347,7 +347,7 @@ app's other effects.
 | --- | --- | --- |
 | `clockStart` | A question's clock starts. | `start.chime`, `start.gong`, `start.go` |
 | `countdown` | Over a timed question's last 5 seconds, so it ends as the time is up. A pause or a buzz stops it, and the clock going on starts it where the clock is. | `countdown.ticks`, `countdown.beeps`, `countdown.pulse` |
-| `buzz` | A player buzzes in on a fastest-finger question. | `buzz.classic`, `buzz.bell`, `buzz.laser`, `buzz.horn` |
+| `buzz` | A player buzzes in first on a fastest-finger question, stopping its clock; buzzes that wait their turn are silent, so the team answering is heard. | `buzz.classic`, `buzz.bell`, `buzz.laser`, `buzz.horn` |
 | `correct` | A buzz is judged right. | `correct.chime`, `correct.dings`, `correct.fanfare` |
 | `wrong` | A buzz is judged wrong. | `wrong.buzzer`, `wrong.trombone`, `wrong.bonk` |
 | `timeUp` | A question's time is up. | `timeup.horn`, `timeup.gong`, `timeup.alarm` |

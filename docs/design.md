@@ -868,7 +868,10 @@ packages users will install are read the same way.
   unless that leaves nobody to answer (`closes_as_answered`, also
   `oneBuzz`, which queues no buzz: `Game::queues_buzzes`), judges the next buzz waiting (`Game::next_in_turn`) with
   the clock still paused; a team switched off meanwhile is passed over,
-  and one switched on again plays from the next question (BZ-19). Once
+  and one switched off while it answers passes the question on unscored
+  (`Game::pass_turn`, as for a wrong buzz); one switched on again plays
+  from the next question (BZ-19). Before version 8 a team switched off
+  while it answers is still judged and scored. Once
   nobody waits the clock goes on without moving `presses_from_ms`, so a
   press made during the judging and applied just after still counts.
   `JudgeRight` lights the others locked. A buzz's points and answer time

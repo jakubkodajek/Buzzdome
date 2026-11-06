@@ -431,6 +431,38 @@ fn a_team_switched_off_while_it_waits_its_turn_is_passed_over() {
 }
 
 #[test]
+fn a_team_switched_off_while_it_answers_passes_the_question_on_unscored() {
+    let mut show = fastest_finger_running(3, stepped());
+    show.press(2_000, 1, Button::Big);
+    show.press(2_100, 2, Button::Big);
+    show.run(2_500, Command::SetPlayerEnabled { buzzer: 1, enabled: false }).unwrap();
+    assert!(matches!(step(&show.game), QuestionStep::Buzzed { buzzer: 2, .. }));
+    assert_eq!(buzz_states(&show.game), [(2, BuzzState::Answering)]);
+    assert_eq!(show.game.lights()[..2], [(1, Light::Locked), (2, Light::First)]);
+    // Nobody waits once buzzer 2 is switched off too: the clock goes on, and buzzer 3 can still buzz.
+    show.run(3_000, Command::SetPlayerEnabled { buzzer: 2, enabled: false }).unwrap();
+    assert!(matches!(step(&show.game), QuestionStep::Running { clock } if clock.running_since_ms.is_some()));
+    show.press(3_500, 3, Button::Big);
+    assert!(matches!(step(&show.game), QuestionStep::Buzzed { buzzer: 3, .. }));
+    // Switched off last, nobody is left to answer.
+    show.run(4_000, Command::SetPlayerEnabled { buzzer: 3, enabled: false }).unwrap();
+    assert_eq!(step(&show.game), QuestionStep::Closed);
+    assert_eq!((show.score(1), show.score(2), show.score(3)), (0, 0, 0));
+}
+
+#[test]
+fn a_team_switched_off_while_it_answers_is_still_judged_before_rules_version_8() {
+    let mut show = Show::under(7, vec![question("q1", AnswerMode::FastestFinger)]);
+    show.press(0, 1, Button::Big);
+    show.press(0, 2, Button::Big);
+    show.run(0, Command::Next).unwrap();
+    show.run(0, Command::Next).unwrap();
+    show.press(1_000, 1, Button::Big);
+    show.run(1_500, Command::SetPlayerEnabled { buzzer: 1, enabled: false }).unwrap();
+    assert!(matches!(step(&show.game), QuestionStep::Buzzed { buzzer: 1, .. }));
+}
+
+#[test]
 fn one_buzz_queues_no_other_buzz_and_ends_the_question() {
     let mut show = fastest_finger_running(3, QuizSettings { one_buzz: true, ..stepped() });
     show.press(2_000, 1, Button::Big);
@@ -2369,8 +2401,8 @@ fn a_question_asked_again_from_its_start_counts_once_and_a_reset_starts_the_resu
 }
 
 #[test]
-fn a_player_switched_off_while_their_buzz_waits_is_judged_with_their_buzzer_locked() {
-    let mut show = Show::new(vec![question("q1", AnswerMode::FastestFinger)]);
+fn a_player_switched_off_while_their_buzz_waits_is_judged_with_their_buzzer_locked_before_rules_version_8() {
+    let mut show = Show::under(7, vec![question("q1", AnswerMode::FastestFinger)]);
     for buzzer in 1..=3 {
         show.press(0, buzzer, Button::Big);
     }
@@ -2385,7 +2417,7 @@ fn a_player_switched_off_while_their_buzz_waits_is_judged_with_their_buzzer_lock
     show.press(3_000, 1, Button::Big);
     show.run(3_500, Command::SetPlayerEnabled { buzzer: 1, enabled: false }).unwrap();
     let effects = show.run(4_000, Command::JudgeRight).unwrap();
-    assert_eq!(Effect::lights(&effects), [(1, Light::Locked), (3, Light::Locked)]);
+    assert_eq!(Effect::lights(&effects), [(1, Light::Locked)]);
     assert_eq!(show.game.lights(), [(1, Light::Locked), (2, Light::Locked), (3, Light::Locked)]);
 }
 
