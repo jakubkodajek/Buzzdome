@@ -37,8 +37,10 @@ case "$(uname -s)" in
   *) echo "::error::No sherpa-onnx libraries for $(uname -s)"; exit 1 ;;
 esac
 
+# Read from standard input: given a path, Git Bash's sha256sum on Windows
+# starts its line with a backslash.
 sha256() {
-  if command -v sha256sum > /dev/null; then sha256sum "$1" | cut -d' ' -f1; else shasum -a 256 "$1" | cut -d' ' -f1; fi
+  if command -v sha256sum > /dev/null; then sha256sum < "$1" | cut -d' ' -f1; else shasum -a 256 < "$1" | cut -d' ' -f1; fi
 }
 
 dir="${RUNNER_TEMP:-${TMPDIR:-/tmp}}/sherpa-onnx-archives"
