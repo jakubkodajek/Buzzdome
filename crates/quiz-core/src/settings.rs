@@ -1,7 +1,9 @@
 //! A quiz's advanced settings (spec QZ-11): how its show runs, for the whole
 //! quiz. Every default keeps the show as it ran before there were settings,
-//! and a value a build cannot read reads as its default, so a quiz always
-//! opens and plays.
+//! but for one: since rules version 7 a question's clock starts as the
+//! question is shown, as in the reference app, and `start_on_next` brings
+//! back the step of Next that started it. A value a build cannot read
+//! reads as its default, so a quiz always opens and plays.
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Deserializer, Serialize};
@@ -27,6 +29,13 @@ pub const MAX_JOKERS: u8 = 5;
 #[ts(export)]
 #[serde(rename_all = "camelCase", default)]
 pub struct QuizSettings {
+    /// A question shown waits for the quizmaster's Next to start its clock
+    /// and take answers; by default they start as the question is shown
+    /// (`Game::starts_as_shown`).
+    #[serde(with = "crate::style::lenient_or_default")]
+    #[schemars(with = "bool")]
+    #[ts(as = "bool")]
+    pub start_on_next: bool,
     /// What the show does once a question has nobody left to answer.
     #[serde(with = "crate::style::lenient_or_default")]
     #[schemars(with = "AllAnswered")]
@@ -121,6 +130,7 @@ pub struct QuizSettings {
 impl Default for QuizSettings {
     fn default() -> Self {
         QuizSettings {
+            start_on_next: false,
             all_answered: AllAnswered::Wait,
             all_answered_delay_s: DEFAULT_ALL_ANSWERED_DELAY_S,
             next_after_reveal: false,
@@ -311,6 +321,7 @@ mod tests {
     #[test]
     fn settings_read_back_the_same() {
         let settings = QuizSettings {
+            start_on_next: true,
             all_answered: AllAnswered::NextSlide,
             all_answered_delay_s: 7,
             next_after_reveal: true,
@@ -330,7 +341,7 @@ mod tests {
         let json = serde_json::to_string(&settings).unwrap();
         assert_eq!(
             json,
-            r#"{"allAnswered":"nextSlide","allAnsweredDelayS":7,"nextAfterReveal":true,"nextAfterRevealDelayS":30,"runClockOut":true,"hideAnswer":true,"changeAnswer":true,"oneBuzz":true,"noAnswerPenalty":true,"hideBuzzPoints":true,"answerChart":true,"jokers":2,"language":"en","readAloud":"questionAndAnswers","voice":4}"#
+            r#"{"startOnNext":true,"allAnswered":"nextSlide","allAnsweredDelayS":7,"nextAfterReveal":true,"nextAfterRevealDelayS":30,"runClockOut":true,"hideAnswer":true,"changeAnswer":true,"oneBuzz":true,"noAnswerPenalty":true,"hideBuzzPoints":true,"answerChart":true,"jokers":2,"language":"en","readAloud":"questionAndAnswers","voice":4}"#
         );
         assert_eq!(read(&json), settings);
     }

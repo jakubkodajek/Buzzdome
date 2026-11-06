@@ -26,7 +26,8 @@ goTo: boolean,
  */
 restartQuestion: boolean, 
 /**
- * `SetJoker`: in a quiz with jokers, before the current question ends;
- * for each player as `Game::can_set_joker` says.
+ * `SetJoker`: in a quiz with jokers, before the current question ends,
+ * or between questions for the next (`Game::joker_slide`); for each
+ * player as `Game::can_set_joker` says.
  */
 setJoker: boolean, };

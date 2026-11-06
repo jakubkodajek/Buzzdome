@@ -200,7 +200,6 @@ mod tests {
         assert_eq!(moment(&game, 0).slide, Some(1));
         // The demo quiz's slide 8 is a fastest-finger question answered aloud.
         run(&mut game, Command::GoTo { slide: 7 });
-        run(&mut game, Command::Next);
         run(&mut game, Command::Press { buzzer: 3, button: Button::Big });
         assert_eq!(moment(&game, 0), ShowMoment { stage: Stage::Buzzed, slide: Some(8), buzzer: Some(3) });
     }

@@ -91,6 +91,11 @@ pub enum ReceiverEvent {
     Remote { key: RemoteKey, at_ms: u64 },
 }
 
+/// How much longer than the time since a fastest-finger round began a
+/// buzz's own timer may be and still count (`Worker::stale_buzzes`): the
+/// Enjoy 303S receiver reports on a 36 ms tick.
+pub const ROUND_SLACK_MS: u64 = 40;
+
 #[derive(Debug, Clone)]
 pub struct ReceiverConfig {
     /// Wait between attempts to find or reopen the receiver.
@@ -274,6 +279,7 @@ pub fn spawn<E: From<ReceiverEvent> + Send + 'static>(
         edge,
         order,
         mode: BuzzerMode::Off,
+        round_from_ms: 0,
         lights: BTreeMap::new(),
         colours: LightColours::default(),
         outbox: VecDeque::new(),
@@ -315,6 +321,9 @@ struct Worker<E> {
     /// The mode and lights the buzzers should show, and the lights'
     /// colours, as the app last set them.
     mode: BuzzerMode,
+    /// When the mode last turned `FastestFinger`, on the show clock: the
+    /// round's lights change after it (`stale_buzzes`).
+    round_from_ms: u64,
     lights: BTreeMap<BuzzerId, Light>,
     colours: LightColours,
     /// Reports waiting to be written, in order.
@@ -406,6 +415,7 @@ impl<E: From<ReceiverEvent>> Worker<E> {
                     // A press while the round had not begun must not hide the
                     // first one in it as a held button's repeat.
                     self.edge.reset();
+                    self.round_from_ms = self.config.clock.now_ms();
                 }
                 if let Some(conn) = self.conn.as_mut() {
                     let reports = conn.protocol.encode_mode(mode);
@@ -471,8 +481,8 @@ impl<E: From<ReceiverEvent>> Worker<E> {
     fn report(&mut self, bytes: &[u8]) {
         let Some(conn) = self.conn.as_mut() else { return };
         let at_ms = self.config.clock.now_ms();
-        let decoded = conn.protocol.decode(bytes);
-        let dropped = conn.protocol.take_dropped();
+        let mut decoded = conn.protocol.decode(bytes);
+        let mut dropped = conn.protocol.take_dropped();
         let remote = conn.protocol.take_remote();
         // The report may have changed what the protocol knows of the receiver.
         let kind = conn.protocol.kind();
@@ -480,7 +490,10 @@ impl<E: From<ReceiverEvent>> Worker<E> {
             conn.kind = kind;
             connected_status(conn)
         });
-        let presses = self.edge.filter(decoded.clone(), at_ms);
+        let filtered = self.edge.filter(decoded.clone(), at_ms);
+        let (presses, stale) = self.stale_buzzes(filtered, at_ms);
+        decoded.retain(|press| !stale.contains(press));
+        dropped.extend(stale);
         if let Some(status) = status {
             self.set_status(status);
         }
@@ -491,6 +504,21 @@ impl<E: From<ReceiverEvent>> Worker<E> {
         for key in keys {
             let _ = self.events.send(ReceiverEvent::Remote { key, at_ms }.into());
         }
+    }
+
+    /// Splits off, in a fastest-finger round, the buzzes whose buzzer's
+    /// timer counts from before the round began: pressed while the buzzer
+    /// still showed the light of the step before, such as ready in the
+    /// lobby, though the receiver sent them on in the round. A buzzer's
+    /// timer counts milliseconds from its last light change, which comes
+    /// after the mode turned `FastestFinger`; `ROUND_SLACK_MS` covers the
+    /// receiver's report tick.
+    fn stale_buzzes(&self, presses: Vec<Press>, at_ms: u64) -> (Vec<Press>, Vec<Press>) {
+        if self.mode != BuzzerMode::FastestFinger {
+            return (presses, Vec::new());
+        }
+        let since_round = at_ms.saturating_sub(self.round_from_ms);
+        presses.into_iter().partition(|press| press.timer.is_none_or(|timer| u64::from(timer) <= since_round + ROUND_SLACK_MS))
     }
 
     fn send_presses(&self, presses: Vec<(Press, u64)>) {

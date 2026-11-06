@@ -168,6 +168,7 @@ function SettingsPage({ open, onSettings, onSounds, onWelcome, onPickMedia }: Ba
       <p className="backstage-hint">{t("quizSettingsHint")}</p>
       <h2>{t("advancedSettings")}</h2>
       <h3>{t("settingsFlow")}</h3>
+      <SettingSwitch label={t("startOnNext")} hint={t("startOnNextHint")} checked={settings.startOnNext} onChange={(startOnNext) => set({ startOnNext })} />
       <div className="field">
         <span>{t("allAnswered")}</span>
         <Select label={t("allAnswered")} value={settings.allAnswered} options={options} onChange={(allAnswered) => set({ allAnswered })} />

@@ -333,11 +333,12 @@ fn send_effects(app: &AppHandle, inner: &mut Inner, effects: Vec<Effect>) {
 /// before the lights: by the time the buzzers light ready, the receiver
 /// thread holds a round's presses for the buzzers' timers, and tells one
 /// made in the step before by the light it showed (`buzzers::enjoy303s`).
-/// The change's lights go at once.
+/// The change's lights go at once, in the frames the game split them into
+/// (`Effect::light_frames`): a question that starts as it is shown darkens
+/// the buzzers before it turns them ready.
 fn light_buzzers(inner: &mut Inner, effects: &[Effect]) {
     send_mode(inner);
-    let lights = Effect::lights(effects);
-    if !lights.is_empty() {
+    for lights in Effect::light_frames(effects) {
         set_lights(inner, &lights);
     }
 }
@@ -979,8 +980,7 @@ mod tests {
             Command::Press { buzzer: 1, button: quiz_core::Button::Big },
             Command::AddPlayer { buzzer: 2, name: "Žluťoučký kůň".into() },
             Command::Next, // the billboard
-            Command::Next, // the question
-            Command::Next, // its clock
+            Command::Next, // the question, whose clock starts as it is shown
             Command::Press { buzzer: 1, button: quiz_core::Button::A },
         ]
     }
@@ -1294,9 +1294,11 @@ mod tests {
             told.lock().unwrap().clone()
         };
         assert_eq!(step(Command::Press { buzzer: 3, button: quiz_core::Button::Big }, 1_000), ["mode Register", "lights [(3, Ready)]"]);
-        step(Command::GoTo { slide: fastest_finger }, 2_000);
-        // A fastest-finger clock starts: the buzzers take presses as buzzes before they turn ready.
-        assert_eq!(step(Command::Next, 3_000), ["mode FastestFinger", "lights [(3, Ready)]"]);
+        // A fastest-finger question starts as it is shown: the buzzers take
+        // presses as buzzes, then go dark and turn ready in two changes, so
+        // every buzzer's timer starts from the second.
+        let shown = step(Command::GoTo { slide: fastest_finger }, 2_000);
+        assert_eq!(shown, ["mode FastestFinger", "lights [(3, Off)]", "lights [(3, Ready)]"]);
         told.lock().unwrap().clear();
         replace_show(&mut inner, None, None);
         assert_eq!(*told.lock().unwrap(), ["mode Register", "lights [], others dark"], "the show ended");
