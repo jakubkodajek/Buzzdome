@@ -373,7 +373,8 @@ impl Show {
             let fresh: Vec<_> = ready.iter().copied().filter(|buzzer| was.get(buzzer) != Some(&Light::Ready)).collect();
             if !before.buzzer_mode().takes_buzzes() {
                 assert_eq!(fresh, ready, "a buzzer was ready already as a round began: {stamped:?}");
-            } else {
+            } else if after.rules_version() >= 5 {
+                // Before rules version 5 a player who joined in a round played in it at once.
                 assert!(fresh.is_empty() || fresh == ready, "buzzers {fresh:?} of {ready:?} turned ready anew in a round: {stamped:?}");
             }
         }
