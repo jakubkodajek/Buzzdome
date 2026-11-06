@@ -15,10 +15,11 @@ use std::collections::{BTreeMap, BTreeSet, HashSet};
 pub type BuzzerId = u16;
 
 /// The version of the rules a journal is replayed with. Bump it whenever
-/// the same commands give another show: a resumed show begun under another
-/// version runs to its end with today's rules, but for what would put its
-/// replay a step off, which it keeps from its own version (`Game::replay`),
-/// and the Director says its scores may differ. A command that was refused
+/// the same commands give another show: a show begun under another
+/// version replays and runs to its end with that version's rules
+/// (`Game::rules_version`, `Game::replay`), as far as they are kept
+/// (`REPLAYS_AS_PLAYED_FROM`), and the Director says its scores may differ
+/// where they are not. A command that was refused
 /// before and is taken now needs no bump, as a refused command is never
 /// journaled.
 ///
@@ -38,7 +39,11 @@ pub type BuzzerId = u16;
 /// 7: a question's clock starts as Next or a jump shows the question
 /// (`Game::starts_as_shown`), unless the quiz's settings keep the step of
 /// Next that started it (`QuizSettings::start_on_next`).
-pub const RULES_VERSION: u32 = 7;
+/// 8: a fastest-finger question queues every buzz (`Game::queues_buzzes`):
+/// players who buzz while another answers wait their turn in buzz order,
+/// a buzz judged wrong passes the question to the next one with the clock
+/// still stopped, and the clock goes on only once nobody waits.
+pub const RULES_VERSION: u32 = 8;
 
 /// The oldest `RULES_VERSION` whose shows replay today as they were played:
 /// every later change applies only to shows begun under it
@@ -104,10 +109,13 @@ impl Button {
 pub enum Light {
     Off,
     Ready,
-    /// Out of the question: a fastest-finger buzz judged wrong, another
-    /// player buzzed, or the player is switched off.
+    /// Out of the question: a fastest-finger buzz judged wrong, the
+    /// question's one buzz used, or the player is switched off; while
+    /// another player's buzz is judged too, where buzzes do not queue
+    /// (`Game::queues_buzzes`).
     Locked,
-    /// Answered an everyone-answers question, waiting for its reveal.
+    /// Answered an everyone-answers question, waiting for its reveal, or
+    /// buzzed in and waiting its turn (`Game::queues_buzzes`).
     Answered,
     First,
     Correct,
@@ -139,10 +147,20 @@ pub enum BuzzerMode {
     /// A fastest-finger question runs: the first buzz of a player who has
     /// not answered yet wins (`Button::buzzes_in`).
     FastestFinger,
-    /// A buzz is being judged.
+    /// A buzz is being judged. From rules version 8 the others can still
+    /// buzz in, to wait their turn (`Game::queues_buzzes`).
     Buzzed,
     /// The question's results show: right or wrong.
     Results,
+}
+
+impl BuzzerMode {
+    /// Whether presses can buzz in a fastest-finger round: while it runs
+    /// and while a buzz is judged. They count only from buzzers that showed
+    /// ready, in their timers' order (`docs/design.md` 2.6).
+    pub fn takes_buzzes(self) -> bool {
+        matches!(self, BuzzerMode::FastestFinger | BuzzerMode::Buzzed)
+    }
 }
 
 /// A moment of the show that plays a sound, flashes the stage lights and
@@ -375,8 +393,9 @@ impl Clock {
         self.remaining_ms(now) == Some(0)
     }
 
-    /// The clock goes on after a player's buzz was judged wrong; presses
-    /// received while that player answered do not count.
+    /// The clock goes on after a player's buzz was judged wrong where buzzes
+    /// do not queue (`Game::queues_buzzes`); presses received while that
+    /// player answered do not count.
     fn go_on_after_buzz(&mut self, now: u64) {
         self.resume(now);
         self.presses_from_ms = now;
@@ -386,8 +405,9 @@ impl Clock {
     /// paused, and before time up. Presses can be applied a moment after they
     /// were received, so this goes by `now` alone: one received while the
     /// quizmaster paused counts even when applied after the resume, and one
-    /// received before the question started or while another team's buzz
-    /// held the clock does not.
+    /// received before the question started does not, nor, where buzzes do
+    /// not queue, one received while another team's buzz held the clock
+    /// (`go_on_after_buzz`).
     fn takes_press_at(&self, now: u64) -> bool {
         !self.expired(now) && now >= self.presses_from_ms
     }
@@ -399,6 +419,17 @@ enum PressPlay {
     Answer { elapsed_ms: u64 },
     /// The buzz in a fastest-finger question; `clock` is the question's.
     Buzz { clock: Clock },
+    /// A buzz while another player's is judged: it waits its turn
+    /// (`Game::queues_buzzes`).
+    Queue,
+}
+
+/// A buzz in the current fastest-finger question: whose, and the button,
+/// which is the player's answer on a question whose answers each have one.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Buzz {
+    pub buzzer: BuzzerId,
+    pub button: Button,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -409,8 +440,9 @@ pub enum QuestionStep {
     Ready,
     Running { clock: Clock },
     /// Fastest finger: a player buzzed with `button`, which is their answer
-    /// on a question whose answers each have a button; the clock is paused
-    /// until judged.
+    /// on a question whose answers each have a button, and is judged; the
+    /// clock is paused until judged, and stays paused while buzzes wait
+    /// their turn (`Game::queues_buzzes`).
     #[serde(rename_all = "camelCase")]
     Buzzed { buzzer: BuzzerId, button: Button, clock: Clock },
     /// Answers are in; points are applied.
@@ -572,6 +604,9 @@ pub struct Game {
     counted: BTreeSet<BuzzerId>,
     /// Fastest finger: players who answered wrong in the current question.
     locked_out: BTreeSet<BuzzerId>,
+    /// Fastest finger: every buzz of the current question, in the order
+    /// the show took them (`Game::buzzes`).
+    buzzes: Vec<Buzz>,
     /// Fastest finger: players switched on or registered while the current
     /// question was under way (rules version 5). The others' buzzer timers
     /// count from when they lit ready, by which a buzz is ordered (BZ-5):
@@ -627,6 +662,7 @@ impl Game {
             responses: BTreeMap::new(),
             counted: BTreeSet::new(),
             locked_out: BTreeSet::new(),
+            buzzes: Vec::new(),
             joins_next: BTreeSet::new(),
             asked: Vec::new(),
             asking: None,
@@ -759,6 +795,44 @@ impl Game {
     /// See `joins_next`.
     pub fn joins_next(&self) -> &BTreeSet<BuzzerId> {
         &self.joins_next
+    }
+
+    /// Every buzz of the current fastest-finger question, in the order the
+    /// show took them, which is the hardware's (BZ-5): those judged, the
+    /// one being judged and those waiting their turn (`queues_buzzes`).
+    pub fn buzzes(&self) -> &[Buzz] {
+        &self.buzzes
+    }
+
+    /// Whether a fastest-finger question queues every buzz, from rules
+    /// version 8: a player who buzzes while another's buzz is judged waits
+    /// their turn, a buzz judged wrong passes the question to the next one
+    /// waiting with the clock still stopped, and the clock goes on once
+    /// nobody waits. Before, a buzz locked the others out until it was
+    /// judged, and the clock went on after each wrong one. A question with
+    /// one buzz (`QuizSettings::one_buzz`) ends at its first wrong buzz, so
+    /// it queues none and the others stay locked while it is judged.
+    pub fn queues_buzzes(&self) -> bool {
+        self.rules_version >= 8 && !self.quiz.settings.one_buzz
+    }
+
+    /// Whether the player buzzed in the current question already.
+    fn buzzed_in(&self, buzzer: BuzzerId) -> bool {
+        self.buzzes.iter().any(|buzz| buzz.buzzer == buzzer)
+    }
+
+    /// Whether the player's buzz waits its turn: they buzzed, are not being
+    /// judged, were not judged, and can still answer (`sits_out`). A player
+    /// switched off while waiting is passed over.
+    pub(crate) fn waits_turn(&self, buzzer: BuzzerId) -> bool {
+        let judged_now = matches!(self.phase, Phase::Question(QuestionStep::Buzzed { buzzer: b, .. }) if b == buzzer);
+        let on = self.players.get(&buzzer).is_some_and(|p| p.enabled);
+        on && self.buzzed_in(buzzer) && !judged_now && !self.sits_out(buzzer)
+    }
+
+    /// The buzz whose turn comes next: the first one waiting (`waits_turn`).
+    fn next_in_turn(&self) -> Option<Buzz> {
+        self.buzzes.iter().copied().find(|buzz| self.waits_turn(buzz.buzzer))
     }
 
     /// Whether the player has no buzz left in the current fastest-finger
@@ -1019,9 +1093,10 @@ impl Game {
 
     /// The light a switched-on buzzer shows in the current step: ready while
     /// its player can press (before the slides, to register), answered once
-    /// they answered an everyone-answers question, locked once they buzzed
-    /// wrong or sit out or another player buzzed, first for the
-    /// buzz being judged, and from the reveal the result: right or wrong
+    /// they answered an everyone-answers question or buzzed and wait their
+    /// turn, locked once they buzzed wrong or sit out (and, where buzzes do
+    /// not queue, once another player buzzed), first for the buzz being
+    /// judged, and from the reveal the result: right or wrong
     /// for the players an everyone-answers question counted, right for the
     /// fastest finger judged right. Dark otherwise, also once a question
     /// closed, until its reveal. A switched-off buzzer shows locked. A
@@ -1032,14 +1107,24 @@ impl Game {
             Phase::Question(QuestionStep::Running { .. }) => {
                 if self.responses.contains_key(&buzzer) {
                     Light::Answered
-                } else if self.sits_out(buzzer) {
+                } else if self.sits_out(buzzer) || self.buzzed_in(buzzer) {
                     Light::Locked
                 } else {
                     Light::Ready
                 }
             }
             Phase::Question(QuestionStep::Buzzed { buzzer: first, .. }) => {
-                if *first == buzzer { Light::First } else { Light::Locked }
+                if *first == buzzer {
+                    Light::First
+                } else if !self.queues_buzzes() || self.sits_out(buzzer) {
+                    Light::Locked
+                } else if self.buzzed_in(buzzer) {
+                    // Waiting their turn, or passed over as switched off.
+                    Light::Answered
+                } else {
+                    // Can still buzz: the light, and so the buzzer's timer, goes on unchanged (`docs/design.md` 2.6).
+                    Light::Ready
+                }
             }
             Phase::Question(QuestionStep::Revealed { winner: Some(winner) }) => {
                 if *winner == buzzer { Light::Correct } else { Light::Locked }
@@ -1259,7 +1344,9 @@ impl Game {
 
     /// Switches a player on or off. A running question that then has nobody
     /// left to answer closes, as it would on the last answer. Switching on
-    /// a player who is on changes nothing.
+    /// a player who is on changes nothing. Switching off the player whose
+    /// buzz is judged passes the question on unscored, as for a buzz
+    /// judged wrong (`pass_turn`), when buzzes queue (`queues_buzzes`).
     fn set_enabled(&mut self, buzzer: BuzzerId, enabled: bool, now: u64) -> Result<Vec<Effect>, GameError> {
         let player = self.player_mut(buzzer)?;
         let switched_on = enabled && !player.enabled;
@@ -1267,8 +1354,15 @@ impl Game {
         if switched_on && self.joins_at_next_question() {
             self.joins_next.insert(buzzer);
         }
+        let mut effects = Vec::new();
+        if let Phase::Question(QuestionStep::Buzzed { buzzer: judged, clock, .. }) = self.phase {
+            if !enabled && judged == buzzer && self.queues_buzzes() {
+                self.pass_turn(clock, now);
+                effects.push(self.lights_now());
+            }
+        }
         let light = self.lit_if_on(buzzer, self.light_of(buzzer));
-        let mut effects = vec![Effect::Lights { lights: vec![(buzzer, light)] }];
+        effects.push(Effect::Lights { lights: vec![(buzzer, light)] });
         // Before rules version 3 a switch never closed a question.
         let running = matches!(self.phase, Phase::Question(QuestionStep::Running { .. }));
         if self.rules_version >= 3 && running && self.closes_as_answered() {
@@ -1313,8 +1407,14 @@ impl Game {
             // PC clock never re-ranks them (BZ-5), not even against a keyboard press.
             Some(PressPlay::Buzz { mut clock }) => {
                 clock.pause(now);
+                self.buzzes.push(Buzz { buzzer, button });
                 self.phase = Phase::Question(QuestionStep::Buzzed { buzzer, button, clock });
                 vec![self.lights_now(), Effect::Sound { cue: Cue::Buzz }]
+            }
+            // No sound, so the player answering is not drowned out; the light and the projector's buzz bar say it.
+            Some(PressPlay::Queue) => {
+                self.buzzes.push(Buzz { buzzer, button });
+                vec![Effect::Lights { lights: vec![(buzzer, self.light_of(buzzer))] }]
             }
         }
     }
@@ -1327,8 +1427,10 @@ impl Game {
             return None;
         }
         let question = self.question()?;
-        let Phase::Question(QuestionStep::Running { clock }) = self.phase else {
-            return None;
+        let (clock, judging) = match self.phase {
+            Phase::Question(QuestionStep::Running { clock }) => (clock, false),
+            Phase::Question(QuestionStep::Buzzed { clock, .. }) if self.queues_buzzes() => (clock, true),
+            _ => return None,
         };
         if !clock.takes_press_at(now) {
             return None;
@@ -1345,7 +1447,8 @@ impl Game {
             }
             AnswerMode::FastestFinger => {
                 let buzzes = self.rules_version < 5 || button.buzzes_in(question);
-                (buzzes && !self.sits_out(buzzer)).then_some(PressPlay::Buzz { clock })
+                let play = if judging { PressPlay::Queue } else { PressPlay::Buzz { clock } };
+                (buzzes && !self.sits_out(buzzer) && !self.buzzed_in(buzzer)).then_some(play)
             }
         }
     }
@@ -1451,18 +1554,27 @@ impl Game {
         if right {
             self.credit(buzzer, buzz, true, q.points_at(elapsed));
             self.reveal(Some(buzzer), now);
-            return Ok(vec![
-                Effect::Lights { lights: vec![(buzzer, self.lit_if_on(buzzer, self.light_of(buzzer)))] },
-                Effect::Sound { cue: Cue::Correct },
-            ]);
+            // The others were locked while the buzz was judged, unless they could still buzz or waited their turn.
+            let others = if self.queues_buzzes() { vec![self.lights_now()] } else { vec![] };
+            return Ok(others
+                .into_iter()
+                .chain([
+                    Effect::Lights { lights: vec![(buzzer, self.lit_if_on(buzzer, self.light_of(buzzer)))] },
+                    Effect::Sound { cue: Cue::Correct },
+                ])
+                .collect());
         }
         self.credit(buzzer, buzz, false, -q.penalty);
         self.locked_out.insert(buzzer);
         // The buzz paused the clock before time up (`Clock::takes_press_at`),
         // so time is left for the others.
-        let mut clock = clock;
-        clock.go_on_after_buzz(now);
-        self.phase = Phase::Question(QuestionStep::Running { clock });
+        if self.queues_buzzes() {
+            self.pass_turn(clock, now);
+        } else {
+            let mut clock = clock;
+            clock.go_on_after_buzz(now);
+            self.phase = Phase::Question(QuestionStep::Running { clock });
+        }
         let mut effects = vec![
             Effect::Lights { lights: vec![(buzzer, self.lit_if_on(buzzer, Light::Wrong))] },
             Effect::Sound { cue: Cue::Wrong },
@@ -1478,6 +1590,20 @@ impl Game {
             other => other,
         }));
         Ok(effects)
+    }
+
+    /// Passes the question on from the buzz judged now (`queues_buzzes`):
+    /// the next buzz waiting is judged with `clock` still stopped, or, once
+    /// nobody waits, the clock goes on with the time it had left. Presses
+    /// made while the buzzes were judged were queued, so all of them count.
+    fn pass_turn(&mut self, mut clock: Clock, now: u64) {
+        self.phase = match self.next_in_turn() {
+            Some(next) => Phase::Question(QuestionStep::Buzzed { buzzer: next.buzzer, button: next.button, clock }),
+            None => {
+                clock.resume(now);
+                Phase::Question(QuestionStep::Running { clock })
+            }
+        };
     }
 
     /// Shows the question's answer at `now`, which ends it if it had not
@@ -1603,6 +1729,7 @@ impl Game {
         self.responses.clear();
         self.counted.clear();
         self.locked_out.clear();
+        self.buzzes.clear();
         self.joins_next.clear();
         self.auto_step_from = None;
         self.leaderboard_visible = false;

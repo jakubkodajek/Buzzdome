@@ -10,7 +10,7 @@
 //! edits with odd names, score changes, and crashes followed by a resume.
 
 use quiz_core::{
-    AllAnswered, AnswerMode, Button, BuzzerMode, Command, CorrectAnswer, Effect, Game, GameError, Light, Phase, Question, QuestionStep, Quiz,
+    AllAnswered, AnswerMode, Button, Command, CorrectAnswer, Effect, Game, GameError, Light, Phase, Question, QuestionStep, Quiz,
     QuizSettings, Slide, SlideContent, Stamped, VideoClip, FULL_SHARE, MAX_AFTER_REVEAL_DELAY_S, MAX_ALL_ANSWERED_DELAY_S, MAX_ANSWERS, MAX_EVERYONE_ANSWERS,
     MAX_JOKERS, MAX_POINTS, MAX_TEAMS, MIN_EVERYONE_ANSWERS, RULES_VERSION,
 };
@@ -348,17 +348,25 @@ impl Show {
         // Every buzzer ready in a fastest-finger round that begins showed
         // another light just before: the buzzes are ordered by the buzzers'
         // timers, and an Enjoy 303S buzzer's starts again only when its
-        // colour changes (docs/design.md, 2.6). A change can light the
-        // buzzers more than once (`Effect::light_frames`): what counts is the
-        // light each showed before the last time.
-        if after.buzzer_mode() == BuzzerMode::FastestFinger && before.buzzer_mode() != BuzzerMode::FastestFinger {
+        // colour changes (docs/design.md, 2.6). While the round goes on,
+        // buzzers turn ready again all together (a round that went on after
+        // a wrong buzz, before rules version 8) or none does (a queue of
+        // buzzes, `Game::queues_buzzes`), so no timer counts from another
+        // moment than the others'. A change can light the buzzers more than
+        // once (`Effect::light_frames`): what counts is the light each
+        // showed before the last time.
+        if after.buzzer_mode().takes_buzzes() {
             let mut was: BTreeMap<_, _> = before.lights().into_iter().collect();
             let frames = result.as_ref().map(|effects| Effect::light_frames(effects)).unwrap_or_default();
             for frame in frames.iter().take(frames.len().saturating_sub(1)) {
                 was.extend(frame.iter().copied());
             }
-            for (buzzer, light) in after.lights() {
-                assert!(light != Light::Ready || was.get(&buzzer) != Some(&Light::Ready), "buzzer {buzzer} was ready already as a round began: {stamped:?}");
+            let ready: Vec<_> = after.lights().into_iter().filter(|&(_, light)| light == Light::Ready).map(|(buzzer, _)| buzzer).collect();
+            let fresh: Vec<_> = ready.iter().copied().filter(|buzzer| was.get(buzzer) != Some(&Light::Ready)).collect();
+            if !before.buzzer_mode().takes_buzzes() {
+                assert_eq!(fresh, ready, "a buzzer was ready already as a round began: {stamped:?}");
+            } else {
+                assert!(fresh.is_empty() || fresh == ready, "buzzers {fresh:?} of {ready:?} turned ready anew in a round: {stamped:?}");
             }
         }
         // Every player's buzzer shows a light, and a switched-off player's

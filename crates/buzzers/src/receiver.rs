@@ -321,8 +321,11 @@ struct Worker<E> {
     /// The mode and lights the buzzers should show, and the lights'
     /// colours, as the app last set them.
     mode: BuzzerMode,
-    /// When the mode last turned `FastestFinger`, on the show clock: the
-    /// round's lights change after it (`stale_buzzes`).
+    /// When a fastest-finger round began (the mode turned `FastestFinger`
+    /// from one that takes no buzzes), on the show clock: the round's
+    /// lights change after it (`stale_buzzes`). A buzz judged in the round
+    /// (`Buzzed`) does not move it, as the buzzers still ready keep their
+    /// timers (rules version 8).
     round_from_ms: u64,
     lights: BTreeMap<BuzzerId, Light>,
     colours: LightColours,
@@ -406,12 +409,13 @@ impl<E: From<ReceiverEvent>> Worker<E> {
                 if mode == self.mode {
                     return;
                 }
+                let began = mode.takes_buzzes() && !self.mode.takes_buzzes();
                 self.mode = mode;
                 // Buzzes waiting for the timers' order go on as the round ends.
-                if mode != BuzzerMode::FastestFinger {
+                if !mode.takes_buzzes() {
                     let held = self.order.flush();
                     self.send_presses(held);
-                } else {
+                } else if began {
                     // A press while the round had not begun must not hide the
                     // first one in it as a held button's repeat.
                     self.edge.reset();
@@ -499,7 +503,7 @@ impl<E: From<ReceiverEvent>> Worker<E> {
         }
         let keys: Vec<RemoteKey> = remote.iter().copied().filter(|&key| self.edge.remote(key, at_ms)).collect();
         let _ = self.events.send(ReceiverEvent::Raw(RawReport { at_ms, bytes: bytes.to_vec(), decoded, dropped, remote }).into());
-        let presses = self.order.take(presses, at_ms, self.mode == BuzzerMode::FastestFinger);
+        let presses = self.order.take(presses, at_ms, self.mode.takes_buzzes());
         self.send_presses(presses);
         for key in keys {
             let _ = self.events.send(ReceiverEvent::Remote { key, at_ms }.into());
@@ -509,12 +513,12 @@ impl<E: From<ReceiverEvent>> Worker<E> {
     /// Splits off, in a fastest-finger round, the buzzes whose buzzer's
     /// timer counts from before the round began: pressed while the buzzer
     /// still showed the light of the step before, such as ready in the
-    /// lobby, though the receiver sent them on in the round. A buzzer's
-    /// timer counts milliseconds from its last light change, which comes
-    /// after the mode turned `FastestFinger`; `ROUND_SLACK_MS` covers the
+    /// lobby, though the receiver sent them on in the round, also while a
+    /// buzz of it is judged. A buzzer's timer counts milliseconds from its
+    /// last light change, which comes after the round began; `ROUND_SLACK_MS` covers the
     /// receiver's report tick.
     fn stale_buzzes(&self, presses: Vec<Press>, at_ms: u64) -> (Vec<Press>, Vec<Press>) {
-        if self.mode != BuzzerMode::FastestFinger {
+        if !self.mode.takes_buzzes() {
             return (presses, Vec::new());
         }
         let since_round = at_ms.saturating_sub(self.round_from_ms);
