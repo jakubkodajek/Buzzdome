@@ -247,12 +247,10 @@ describe("a simulated buzzer receiver", () => {
     await app.step("goToSelected");
     // The question's clock starts as the jump shows it.
     await app.waitView("slide 8 running", (v) => v.slideIndex === 7 && v.phase.phase === "question" && v.phase.step === "running");
-    await buzzersReady(3, 7);
-    // Dark first, as the lobby lit them ready, so that ready is the round's and starts their timers.
-    expect([3, 7].map((buzzer) => fake.written.get(buzzer))).toEqual([
-      ["off", "ready"],
-      ["off", "ready"],
-    ]);
+    // Dark first, as the lobby lit them ready, so that ready is the round's and starts their timers. They
+    // were ready before the jump, so wait for the writes, never for the light.
+    const writes = () => [3, 7].map((buzzer) => JSON.stringify(fake.written.get(buzzer) ?? []));
+    await waitFor("buzzers 3 and 7 dark, then ready", async () => writes().every((w) => w === JSON.stringify(["off", "ready"])));
     // Next on the remote does not end the running question, as a second press by mistake would.
     await app.stepPause();
     await fake.remote("centre");
