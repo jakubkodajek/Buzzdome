@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { buttonLabel } from "../answers";
+import { buttonName } from "../answers";
 import { useApp, useDispatch, useRun } from "../app-context";
 import { MAX_NAME_CHARS } from "../bindings/Constants";
 import { confirmAction } from "../confirm";
@@ -184,7 +184,7 @@ function ShowTeams({ view, lost }: { view: GameView; lost: SettingsLost | null }
                     {p.delta !== null && p.delta !== 0 && <span className={p.delta > 0 ? "good-text" : "bad-text"}> ({signed(p.delta)})</span>}
                   </td>
                   <td>
-                    {p.answer ? buttonLabel(p.answer) : p.lockedOut ? <CrossIcon className="inline-icon" /> : p.joinsNext ? <span className="muted">{t("joinsNext")}</span> : ""}
+                    {p.answer ? buttonName(t, p.answer) : p.lockedOut ? <CrossIcon className="inline-icon" /> : p.joinsNext ? <span className="muted">{t("joinsNext")}</span> : ""}
                     {p.answerMs !== null && <span className="muted"> · {seconds(p.answerMs)} s</span>}
                   </td>
                   <td className="num">{seconds(p.totalAnswerMs)} s</td>

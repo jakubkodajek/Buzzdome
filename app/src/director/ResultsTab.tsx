@@ -1,4 +1,4 @@
-import { ANSWER_LETTERS, buttonLabel } from "../answers";
+import { ANSWER_LETTERS, buttonName } from "../answers";
 import { api } from "../api";
 import { useApp, useRun } from "../app-context";
 import { seconds, signed } from "../format";
@@ -148,7 +148,7 @@ function Questions({ results, quiz }: { results: ShowResults; quiz: Quiz }) {
                     <tr key={buzzer}>
                       <td>{name(buzzer)}</td>
                       <td className="num">{buzzer}</td>
-                      <td className={mark.right ? "good-text strong" : ""}>{mark.answer ? buttonLabel(mark.answer.button) : t("noAnswer")}</td>
+                      <td className={mark.right ? "good-text strong" : ""}>{mark.answer ? buttonName(t, mark.answer.button) : t("noAnswer")}</td>
                       <td className="num">{mark.answer ? `${seconds(mark.answer.elapsedMs, 2)} s` : ""}</td>
                       <td className="num">
                         {signed(mark.points)}

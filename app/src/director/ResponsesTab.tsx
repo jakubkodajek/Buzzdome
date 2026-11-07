@@ -1,4 +1,4 @@
-import { buttonLabel } from "../answers";
+import { buttonName } from "../answers";
 import { useApp } from "../app-context";
 import { seconds } from "../format";
 import { playerName, type StringKey } from "../i18n";
@@ -43,7 +43,7 @@ export function ResponsesTab({ view }: { view: GameView }) {
                     <td className="num">{i + 1}</td>
                     <td className="num">{buzz.buzzer}</td>
                     <td>{player ? playerName(t, player) : buzz.buzzer}</td>
-                    <td>{buttonLabel(buzz.button)}</td>
+                    <td>{buttonName(t, buzz.button)}</td>
                     <td className={tone}>{t(BUZZ_STATE[buzz.state])}</td>
                   </tr>
                 );
@@ -69,7 +69,7 @@ export function ResponsesTab({ view }: { view: GameView }) {
                 <tr key={player.buzzer}>
                   <td className="num">{player.buzzer}</td>
                   <td>{playerName(t, player)}</td>
-                  <td className={player.answerCorrect ? "good-text strong" : ""}>{buttonLabel(answer)}</td>
+                  <td className={player.answerCorrect ? "good-text strong" : ""}>{buttonName(t, answer)}</td>
                   <td className="num">{seconds(player.answerMs ?? 0, 2)} s</td>
                 </tr>
               ))}

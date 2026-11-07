@@ -1,6 +1,7 @@
 import { useState } from "react";
-import { BUTTONS, buttonLabel } from "../answers";
+import { BUTTONS, buttonName } from "../answers";
 import { useApp, useDispatch } from "../app-context";
+import { BigButtonIcon } from "../icons";
 import { keyboardHelp } from "../keyboard";
 import { BUZZER_COUNT, buzzerCount, readBuzzerCount, writeBuzzerCount } from "./virtual-buzzers";
 
@@ -40,8 +41,14 @@ export function VirtualBuzzers() {
           <div key={buzzer} className="buzzer">
             <span className="buzzer-id">{buzzer}</span>
             {BUTTONS.map((button) => (
-              <button key={button} className={`small key-${button}`} onClick={() => dispatch({ type: "press", buzzer, button })}>
-                {buttonLabel(button)}
+              <button
+                key={button}
+                className={`small key-${button}`}
+                title={buttonName(t, button)}
+                aria-label={buttonName(t, button)}
+                onClick={() => dispatch({ type: "press", buzzer, button })}
+              >
+                {button === "big" ? <BigButtonIcon className="inline-icon" /> : buttonName(t, button)}
               </button>
             ))}
           </div>
