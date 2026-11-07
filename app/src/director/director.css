@@ -156,6 +156,11 @@
   width: 70px;
 }
 
+/* Wide enough for its placeholder, "Bzučák" / "Buzzer", beside the spinner. */
+.director .narrow.add-buzzer {
+  width: 90px;
+}
+
 .director .strong {
   font-weight: 600;
 }
@@ -173,6 +178,10 @@
 
 .start-pane p {
   margin: 0;
+}
+
+.start-stale {
+  margin-top: 16px;
 }
 
 .start-pane h2 {
@@ -220,6 +229,26 @@
 
 .director .command:disabled {
   opacity: 0.5;
+}
+
+/* A toggle that is on: the ranking on the projector. */
+.director .command[aria-pressed="true"],
+.director .command[aria-pressed="true"]:hover {
+  background: var(--panel-hover);
+  box-shadow: inset 4px 0 0 var(--accent);
+}
+
+/* Who Right and Wrong judge: two lines high always, so the commands below never move. */
+.judged {
+  display: -webkit-box;
+  height: 2.5em;
+  padding: 0 12px;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-height: 1.25;
+  color: #f2f2f2;
+  font-weight: 600;
 }
 
 .command-icon {
@@ -344,6 +373,12 @@
   border-bottom: 1px solid var(--line);
 }
 
+.launch-check-hidden {
+  padding: 4px 12px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+}
+
 .launch-check header {
   display: flex;
   align-items: baseline;
@@ -460,6 +495,13 @@
 .status-clock {
   font-weight: 700;
   font-variant-numeric: tabular-nums;
+}
+
+/* What the projector shows, or that it is closed. */
+.status-chip {
+  padding: 0 10px;
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  border-radius: 9px;
 }
 
 .status-test-run,
@@ -659,6 +701,22 @@
   min-height: 0;
   overflow: auto;
   background: var(--backdrop);
+}
+
+/* Over the preview of a slide that is not the one on the projector. */
+.preview-ahead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 10px 10px 0;
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  font-weight: 600;
+}
+
+.preview-ahead span {
+  flex: 1;
 }
 
 .preview-card {
@@ -1316,6 +1374,8 @@
   display: inline-flex;
   align-items: center;
   gap: 2px;
+  /* Unpairing stays well apart from removing the team. */
+  margin-right: 14px;
 }
 
 .team-panel .icon-button {

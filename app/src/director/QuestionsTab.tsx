@@ -7,7 +7,7 @@ import { SlideThumbnail } from "../host/SlideThumbnail";
 import type { StringKey } from "../i18n";
 import { NextIcon, TrophyIcon, UndoIcon } from "../icons";
 import { mediaFileName } from "../media";
-import { beforeSlides } from "../phase";
+import { beforeSlides, currentSlide } from "../phase";
 import { readPreference, writePreference } from "../preferences";
 import { rightAnswers, shareOf, SLIDE_TYPE_LABEL, slideContexts, slideTitle, type SlideContext } from "../quiz";
 import { SlideMedia } from "../slide-media";
@@ -27,12 +27,13 @@ export function QuestionsTab({ view, quiz }: { view: GameView; quiz: Quiz | null
   const { t } = useApp();
   const dispatch = useDispatch();
   const run = useRun();
-  // None in the lobby and in the ranking after the last slide.
-  const current = beforeSlides(view.phase) || view.slideIndex >= view.slideCount ? null : view.slideIndex;
-  // A selection lasts until the show moves on; then the current slide is shown again.
+  const current = currentSlide(view);
+  // A selection lasts until the show moves on or the quizmaster goes back
+  // (Esc, or the button over the preview); then the current slide is shown again.
   const [selection, setSelection] = useState<{ slide: number; madeOn: number | null } | null>(null);
   const selected = selection !== null && selection.madeOn === current ? selection.slide : null;
   const setSelected = (slide: number) => setSelection({ slide, madeOn: current });
+  const looksAhead = selected !== null && selected !== current;
   const shown = selected ?? current ?? 0;
   const currentRow = useRef<HTMLTableRowElement>(null);
   const [layout, setLayoutState] = useState<Layout>(readLayout);
@@ -49,25 +50,23 @@ export function QuestionsTab({ view, quiz }: { view: GameView; quiz: Quiz | null
   const contexts = slideContexts(quiz);
   const preview = quiz.slides[shown];
   const nextSlide = view.nextSlide === null ? undefined : quiz.slides[view.nextSlide];
-  // Jumps only with the buttons, never mid-question; the final and starting over ask first.
+  // Jumps never mid-question (the buttons say why); the final and starting over ask first.
   const jumps = view.controls.goTo;
+  const noJumps = jumps ? undefined : t("jumpsNotMidQuestion");
+  const goTo = (slide: number) => jumps && slide !== current && dispatch({ type: "goTo", slide });
   const goToFinal = () => run(confirmAction(t, t("goToFinalConfirm")).then((yes) => yes && dispatch({ type: "goToFinal" })));
   const startOver = () => run(confirmAction(t, t("startOverConfirm")).then((yes) => yes && dispatch({ type: "startOver" })));
 
   return (
     <div className="questions-tab">
       <div className="toolbar dark-toolbar">
-        <ToolButton
-          icon={<NextIcon />}
-          disabled={!jumps || selected === null || selected === current}
-          onClick={() => selected !== null && dispatch({ type: "goTo", slide: selected })}
-        >
+        <ToolButton icon={<NextIcon />} title={noJumps} disabled={!jumps || !looksAhead} onClick={() => selected !== null && goTo(selected)}>
           {t("goToSelected")}
         </ToolButton>
-        <ToolButton icon={<TrophyIcon />} disabled={!jumps || view.phase.phase === "final"} onClick={goToFinal}>
+        <ToolButton icon={<TrophyIcon />} title={noJumps} disabled={!jumps || view.phase.phase === "final"} onClick={goToFinal}>
           {t("goToFinal")}
         </ToolButton>
-        <ToolButton icon={<UndoIcon />} disabled={!jumps || beforeSlides(view.phase)} onClick={startOver}>
+        <ToolButton icon={<UndoIcon />} title={noJumps} disabled={!jumps || beforeSlides(view.phase)} onClick={startOver}>
           {t("startOver")}
         </ToolButton>
         <span className="toolbar-separator" />
@@ -103,7 +102,15 @@ export function QuestionsTab({ view, quiz }: { view: GameView; quiz: Quiz | null
                   aria-selected={i === shown}
                   onClick={() => setSelected(i)}
                   onFocus={() => setSelected(i)}
+                  onDoubleClick={() => goTo(i)}
                   onKeyDown={(e) => {
+                    // Enter jumps to the row, Esc goes back to the current slide.
+                    if (e.key === "Enter" || e.key === "Escape") {
+                      e.preventDefault();
+                      if (e.key === "Enter") goTo(i);
+                      else setSelection(null);
+                      return;
+                    }
                     // The arrows move along the rows; Space stays the show's Next.
                     const row = { ArrowDown: e.currentTarget.nextElementSibling, ArrowUp: e.currentTarget.previousElementSibling }[e.key];
                     if (!(row instanceof HTMLElement)) return;
@@ -130,6 +137,14 @@ export function QuestionsTab({ view, quiz }: { view: GameView; quiz: Quiz | null
           </table>
         </div>
         <div className="preview">
+          {looksAhead && (
+            <div className="preview-ahead" role="status">
+              <span>{current === null ? t("previewSelectedNoSlide", { n: selected + 1 }) : t("previewSelected", { n: selected + 1, m: current + 1 })}</span>
+              <button type="button" onClick={() => setSelection(null)}>
+                {t("backToCurrent")}
+              </button>
+            </div>
+          )}
           {preview && (
             <SlideBoundary className="preview-card" slide={preview}>
               <SlidePreview slide={preview} context={contexts[shown]} counts={shown === current ? view.answerCounts : null} />
@@ -141,10 +156,10 @@ export function QuestionsTab({ view, quiz }: { view: GameView; quiz: Quiz | null
   );
 }
 
-function ToolButton(props: { icon: ReactNode; pressed?: boolean; disabled?: boolean; onClick: () => void; children: ReactNode }) {
-  const { icon, pressed, disabled, onClick, children } = props;
+function ToolButton(props: { icon: ReactNode; title?: string; pressed?: boolean; disabled?: boolean; onClick: () => void; children: ReactNode }) {
+  const { icon, title, pressed, disabled, onClick, children } = props;
   return (
-    <button type="button" className="tool-button" aria-pressed={pressed} disabled={disabled} onClick={onClick}>
+    <button type="button" className="tool-button" title={title} aria-pressed={pressed} disabled={disabled} onClick={onClick}>
       {icon}
       {children}
     </button>

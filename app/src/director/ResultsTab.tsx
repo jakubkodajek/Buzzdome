@@ -129,7 +129,7 @@ function Questions({ results, quiz }: { results: ShowResults; quiz: Quiz }) {
                       <td className="num">{mark.answer ? `${seconds(mark.answer.elapsedMs, 2)} s` : ""}</td>
                       <td className="num">
                         {signed(mark.points)}
-                        {mark.joker && <span className="results-joker"> {t("jokerPlay")}</span>}
+                        {mark.joker && <span className="results-joker"> {t("jokerTimes")}</span>}
                       </td>
                     </tr>
                   ))}

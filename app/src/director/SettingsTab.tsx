@@ -9,6 +9,7 @@ import { api } from "../api";
 import { useApp, useRun } from "../app-context";
 import { useAppIcon, useAppVersion, useHostWindowOpen } from "../hooks";
 import type { Lang, StringKey } from "../i18n";
+import { keyboardHelp } from "../keyboard";
 import type { IconColor, MonitorInfo } from "../types";
 import type { LaunchCheckSetting } from "./launch-check";
 import { VoicesSettings } from "./VoicesSettings";
@@ -123,7 +124,7 @@ export function SettingsTab({ projector, look, launch, showRunning }: { projecto
         </label>
         <p className="muted">{t("launchCheckHint")}</p>
       </fieldset>
-      <p className="muted">{t("keyboardHint")}</p>
+      <p className="muted">{keyboardHelp(t)}</p>
       <AppVersion />
     </div>
   );
