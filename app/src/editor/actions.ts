@@ -14,7 +14,15 @@ export interface Action {
   inFields?: boolean;
   /** Holding the keys down repeats the action. */
   repeats?: boolean;
+  /**
+   * It takes the quiz as it is (Save, a test run): its keys pressed in a
+   * field first apply what is typed there, as leaving the field does, and
+   * the action then runs as it is once that change is in.
+   */
+  appliesField?: boolean;
   disabled?: boolean;
+  /** Said in its tooltip in place of its label: why it is off, or that there is nothing to do. */
+  note?: string;
   /** A setting that is switched on. */
   checked?: boolean;
   run: () => void;
@@ -75,17 +83,32 @@ export function shortcutLabel(action: Pick<Action, "keys">): string | undefined 
   return action.keys?.[0].replace(/Arrow(Up|Down|Left|Right)|Escape/, (key) => KEY_SYMBOLS[key]);
 }
 
-/** The action's label with its keys, for a tooltip. */
-export function tooltip(action: Pick<Action, "label" | "keys">): string {
+/** The action's label (or its note) with its keys, for a tooltip. */
+export function tooltip(action: Pick<Action, "label" | "keys" | "note">): string {
   const keys = shortcutLabel(action);
-  return keys ? `${action.label} (${keys})` : action.label;
+  const text = action.note ?? action.label;
+  return keys ? `${text} (${keys})` : text;
+}
+
+/**
+ * What a button that runs `action` takes: its tooltip, and off while the
+ * action is, yet still focusable, so a click that turns it off (Save,
+ * Undo of the last step) leaves the focus on it.
+ */
+export function actionButton(action: Action) {
+  return { title: tooltip(action), "aria-disabled": action.disabled || undefined, onClick: action.disabled ? undefined : action.run };
 }
 
 /** The keys that delete what is selected. */
 const DELETE_KEYS = new Set(["Delete", "Backspace"]);
 
-/** Where Delete and Backspace belong to the control used last (a switch, a button, a property, a table cell), so they never delete a slide. */
-const OWNS_DELETE = "button, [role=switch], [role=tab], [role=menuitem], .properties-panel, .slide-table";
+/**
+ * Where Delete and Backspace belong to the control used last (a switch, an
+ * answer's toggle, a menu item, a property, a table cell), so they never
+ * delete a slide. A clicked ribbon button keeps the focus (WebView2), yet
+ * they still delete the selection after it, as in an office ribbon.
+ */
+const OWNS_DELETE = "[role=switch], .answer-toggles, [role^=menuitem], .properties-panel, .slide-table";
 
 /**
  * Whether the key `combo` pressed on `target` is the target's own: a field
@@ -108,7 +131,19 @@ export function useActionKeys(actions: Action[]) {
       const action = latest.current.find((a) => a.keys?.includes(combo) && (a.inFields || !typing));
       if (!action) return;
       event.preventDefault();
-      if (!action.disabled && (action.repeats || !event.repeat)) action.run();
+      if (!action.repeats && event.repeat) return;
+      const field = event.target;
+      if (action.appliesField && isFieldTarget(field) && field instanceof HTMLElement) {
+        // Leaving the field applies its text; once that change is drawn, the action as it is then runs (Save no longer off as saved).
+        field.blur();
+        setTimeout(() => {
+          const now = latest.current.find((a) => a.keys?.includes(combo));
+          if (now && !now.disabled) now.run();
+          if (field.isConnected) field.focus();
+        });
+        return;
+      }
+      if (!action.disabled) action.run();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);

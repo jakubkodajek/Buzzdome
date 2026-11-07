@@ -3,7 +3,7 @@ import { api } from "../api";
 import { useApp, useReport } from "../app-context";
 import { useLatest, useRecentFiles } from "../hooks";
 import { mediaPicker, type MediaKind } from "../media";
-import { quizPicker } from "../quiz";
+import { quizName, quizPicker } from "../quiz";
 import type { EditorDraft, Quiz, SheetExport, SheetImport } from "../types";
 import { BUSY, DraftSession, heldIn, type DraftApi, type DraftHeld, type DraftOperation, type DraftStatus } from "./draft-session";
 import { createStore, useStore, type Store } from "../store";
@@ -38,7 +38,10 @@ export interface QuizEditor {
    * nothing was opened.
    */
   openQuiz: (recent?: string) => Promise<EditorDraft | false>;
-  /** Quiz files opened, saved or played lately, newest first. */
+  /**
+   * Quiz files opened, saved or played lately, newest first; not the one
+   * open, which opening again would reload and so lose its undo.
+   */
   recentFiles: string[];
   /** Takes a file off `recentFiles`; the file itself stays where it is. */
   forgetRecentFile: (path: string) => void;
@@ -135,7 +138,7 @@ export function useQuizEditor(onTestRun: () => void): QuizEditor {
   const saveWith = async (draftApi: DraftApi, saveAs: boolean) => {
     if (!open) return false;
     const quiz = open.history.present;
-    const picker = quizPicker(t, quiz.title || t("untitledQuiz"));
+    const picker = quizPicker(t, quizName(t, quiz));
     const path = await draftApi.editorSave(open.draftId, quiz, saveAs, picker);
     if (path === null) return false;
     dispatch({ type: "saved", quiz, path });
@@ -147,7 +150,7 @@ export function useQuizEditor(onTestRun: () => void): QuizEditor {
   /** Whether the open quiz may make way for another: asks to save unsaved changes first, and goes on once they are saved or let go. */
   const mayLeave = async (draftApi: DraftApi) => {
     if (!open || !unsaved) return true;
-    const choice = await confirmSave(t, t("unsavedAsk", { title: open.history.present.title || t("untitledQuiz") }));
+    const choice = await confirmSave(t, t("unsavedAsk", { title: quizName(t, open.history.present) }));
     return choice === "discard" || (choice === "save" && (await saveWith(draftApi, false)));
   };
 
@@ -179,7 +182,7 @@ export function useQuizEditor(onTestRun: () => void): QuizEditor {
     newQuiz: (title) =>
       attempt("new", async (draftApi) => {
         if (!(await mayLeave(draftApi))) return false;
-        load(await draftApi.editorNew(title || t("untitledQuiz")));
+        load(await draftApi.editorNew(quizName(t, { title })));
         return true;
       }),
     openQuiz: (recent) =>
@@ -191,7 +194,7 @@ export function useQuizEditor(onTestRun: () => void): QuizEditor {
         load(draft);
         return draft;
       }),
-    recentFiles,
+    recentFiles: recentFiles.filter((path) => path !== open?.sourcePath),
     forgetRecentFile: (path) => void forgetRecentFile(path).catch(report.current),
     save: () => save(false),
     saveAs: () => save(true),

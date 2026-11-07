@@ -18,7 +18,12 @@ import type { SlideEditing } from "./properties";
 import { categoryPages, type Page } from "./property-pages";
 import { rowBuilders } from "./row-builders";
 import { setBackground } from "./slides";
-import type { QuizEditor } from "./useQuizEditor";
+import { draftStore, openDraftId, useDraftState, type QuizEditor } from "./useQuizEditor";
+
+/** The category shown and its part selected; kept while the editor is not shown (a test run), for its draft only. */
+type CategorySelection = { id: string | null; index: number; element: ElementId };
+const FIRST_CATEGORY: CategorySelection = { id: null, index: 0, element: "slide" };
+const categorySelections = draftStore<CategorySelection>();
 
 export type CategoryActionId =
   | "newCategory"
@@ -55,7 +60,8 @@ export interface CategoryEditor {
 export function useCategories(editor: QuizEditor, quiz: Quiz | null): CategoryEditor {
   const { t, notify } = useApp();
   const report = useReport();
-  const [selection, setSelection] = useState<{ id: string | null; index: number; element: ElementId }>({ id: null, index: 0, element: "slide" });
+  const [held, setSelection] = useDraftState(categorySelections, openDraftId(editor));
+  const selection = held ?? FIRST_CATEGORY;
   /** A category is being named, so the next waits for it. */
   const creating = useRef(false);
   const [playingBackgroundOf, setPlayingBackgroundOf] = useState<string | null>(null);

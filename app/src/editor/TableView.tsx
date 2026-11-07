@@ -3,6 +3,7 @@ import { ANSWER_LETTERS } from "../answers";
 import { useApp } from "../app-context";
 import type { StringKey } from "../i18n";
 import { isCorrect, slideTitle } from "../quiz";
+import { createStore, useStore } from "../store";
 import type { Quiz, Slide } from "../types";
 import type { Action } from "./actions";
 import { ContextMenu } from "./controls";
@@ -21,6 +22,9 @@ const COLUMNS: [ColumnId, StringKey][] = [
   ["notes", "notes"],
 ];
 
+/** The columns hidden, kept while the editor is not shown (a test run, the Director). */
+const hiddenColumns = createStore<ReadonlySet<ColumnId>>(new Set());
+
 interface TableViewProps {
   quiz: Quiz;
   selected: number;
@@ -36,19 +40,18 @@ interface TableViewProps {
  */
 export function TableView({ quiz, selected, onSelect, onOpen, editingFor }: TableViewProps) {
   const { t } = useApp();
-  const [hidden, setHidden] = useState<ReadonlySet<ColumnId>>(new Set());
+  const hidden = useStore(hiddenColumns);
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const shown = (column: ColumnId) => !hidden.has(column);
 
   const columnActions: Action[] = COLUMNS.map(([column, label]) => ({
     label: t(label),
     checked: shown(column),
-    run: () =>
-      setHidden((current) => {
-        const next = new Set(current);
-        if (!next.delete(column)) next.add(column);
-        return next;
-      }),
+    run: () => {
+      const next = new Set(hiddenColumns.get());
+      if (!next.delete(column)) next.add(column);
+      hiddenColumns.set(next);
+    },
   }));
 
   const openMenu = (e: MouseEvent) => {

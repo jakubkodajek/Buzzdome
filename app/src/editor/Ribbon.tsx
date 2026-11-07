@@ -254,7 +254,7 @@ function QuestionTab({ slide, properties, timer }: { slide: Slide | null; proper
           ]}
         />
       </Group>
-      <Group title="groupTimer">
+      <Group title="groupTimer" gallery>
         <TimerGallery row={timer} mixed={mixed.has(timer.id)} />
       </Group>
     </>

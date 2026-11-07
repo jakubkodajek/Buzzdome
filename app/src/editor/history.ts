@@ -50,6 +50,22 @@ export const UNDO_LIMIT = 200;
 /** Changes to one field closer together than this are one undo step. */
 export const MERGE_MS = 1500;
 
+/**
+ * The merge key of a change to one of the quiz's records (its settings,
+ * say) from `before` to `after`: the fields it changed, so quick changes of
+ * one field are one undo step and of two different ones two.
+ */
+export function fieldsMerge(record: string, before: object, after: object): string {
+  return changedFields(before, after, record).join(" ");
+}
+
+function changedFields(before: unknown, after: unknown, at: string): string[] {
+  if (before === after) return [];
+  if (typeof before !== "object" || typeof after !== "object" || before === null || after === null) return [at];
+  const [b, a] = [before as Record<string, unknown>, after as Record<string, unknown>];
+  return [...new Set([...Object.keys(b), ...Object.keys(a)])].flatMap((key) => changedFields(b[key], a[key], `${at}.${key}`));
+}
+
 export function startHistory(quiz: Quiz): History {
   return { past: [], present: quiz, future: [], open: null };
 }

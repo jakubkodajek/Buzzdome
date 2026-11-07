@@ -90,7 +90,7 @@ describe("the quiz editor", () => {
     // The title bar names it (its tooltip holds the whole title, which may be cut short on screen).
     await app.$('.studio-title[title="Kvíz z E2E"]');
     // A new quiz has no file yet: it can be saved.
-    expect(await app.page.enabled(await app.$(`.quick-access button[aria-label="${t("saveQuiz")}"]`))).toBe(true);
+    expect(await app.page.attribute(await app.$(`.quick-access button[aria-label="${t("saveQuiz")}"]`), "aria-disabled")).toBe(null);
   });
 
   test("adds questions with the keys, and undo and redo take them back and forth", async () => {
@@ -245,8 +245,8 @@ describe("the quiz editor", () => {
     await waitFor("the quiz file", async () => existsSync(file));
     // A quiz file is a ZIP (docs/quiz-format.md).
     expect(readFileSync(file).subarray(0, 2).toString("latin1")).toBe("PK");
-    // Saved: the Save button greys out and says so, until the quiz changes again.
-    await waitFor("Save to grey out", async () => !(await app.page.enabled(await app.$(`.quick-access button[aria-label="${t("quizSaved")}"]`))));
+    // Saved: the Save button greys out (yet keeps the focus) and its tooltip says so, until the quiz changes again.
+    await waitFor("Save to grey out", async () => (await app.count(`.quick-access button[aria-label="${t("saveQuiz")}"][aria-disabled="true"][title^="${t("quizSavedHint")}"]`)) === 1);
     const slides = await slideCount();
     await app.press("backToDirector");
     await app.press("openQuiz");

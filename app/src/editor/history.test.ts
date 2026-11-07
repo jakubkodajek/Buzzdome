@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_QUIZ_SETTINGS, DEFAULT_QUIZ_SOUNDS, DEFAULT_WELCOME } from "../bindings/Constants";
 import type { Category, Quiz } from "../types";
-import { applyEdit, historyReducer, MERGE_MS, startHistory, UNDO_LIMIT, type History } from "./history";
+import { applyEdit, fieldsMerge, historyReducer, MERGE_MS, startHistory, UNDO_LIMIT, type History } from "./history";
 import { newSlide, setTextStyle } from "./slides";
 
 const quiz: Quiz = {
@@ -157,5 +157,15 @@ describe("category edits", () => {
     expect(removed.slides.map((s) => s.category)).toEqual([undefined, undefined, undefined]);
     // Their look stays.
     expect(removed.slides[2].style).toEqual(restyled.slides[2].style);
+  });
+});
+
+describe("fieldsMerge", () => {
+  it("names the fields a change of a record changed, so two settings changed quickly are two undo steps", () => {
+    const settings = DEFAULT_QUIZ_SETTINGS;
+    expect(fieldsMerge("settings", settings, { ...settings, oneBuzz: !settings.oneBuzz })).toBe("settings.oneBuzz");
+    expect(fieldsMerge("settings", settings, { ...settings, jokers: settings.jokers + 1 })).toBe("settings.jokers");
+    const sounds = DEFAULT_QUIZ_SOUNDS;
+    expect(fieldsMerge("sounds", sounds, { ...sounds, slots: { ...sounds.slots, correct: "none" } })).toBe("sounds.slots.correct");
   });
 });

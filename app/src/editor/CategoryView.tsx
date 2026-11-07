@@ -1,4 +1,4 @@
-import { useEffect, useRef, type MouseEvent } from "react";
+import type { MouseEvent } from "react";
 import { useApp } from "../app-context";
 import { SlideThumbnail } from "../host/SlideThumbnail";
 import { AddIcon } from "../icons";
@@ -7,6 +7,7 @@ import { ThemeContext } from "../theme/context";
 import type { Quiz, Theme } from "../types";
 import { categoryName, sampleSlide } from "./categories";
 import { DesignArea } from "./DesignArea";
+import { useCurrentItem } from "./Thumbnails";
 import type { CategoryEditor } from "./useCategories";
 
 interface CategoryViewProps {
@@ -26,10 +27,7 @@ interface CategoryViewProps {
 export function CategoryView({ quiz, categories, canvasTheme, onMenu }: CategoryViewProps) {
   const { t } = useApp();
   const { category, index, actions } = categories;
-  const selectedItem = useRef<HTMLLIElement>(null);
-  useEffect(() => {
-    selectedItem.current?.scrollIntoView({ block: "nearest" });
-  }, [index]);
+  const item = useCurrentItem(index);
   const menu = (event: MouseEvent) => {
     event.preventDefault();
     onMenu(event);
@@ -42,7 +40,7 @@ export function CategoryView({ quiz, categories, canvasTheme, onMenu }: Category
           {categories.categories.map((c, i) => (
             <li
               key={c.id}
-              ref={i === index ? selectedItem : undefined}
+              {...item(i)}
               aria-selected={i === index}
               className={i === index ? "thumbnail selected" : "thumbnail"}
               onClick={() => categories.select(i)}

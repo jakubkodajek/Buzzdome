@@ -73,8 +73,8 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
   if (state.status !== "open") return state;
   switch (action.type) {
     case "saved":
-      // The file no longer has what opening left out.
-      return { ...state, saved: action.quiz, sourcePath: action.path, savesInPlace: true, dropped: [] };
+      // The file no longer has what opening left out. Typing on after it starts a new undo step, so one step is the quiz as saved.
+      return { ...state, history: { ...state.history, open: null }, saved: action.quiz, sourcePath: action.path, savesInPlace: true, dropped: [] };
     case "checked":
       // A check of a quiz that has changed since is already out of date.
       return action.quiz === state.history.present ? { ...state, problems: action.problems } : state;

@@ -4,7 +4,7 @@ import { useApp, useRun } from "../app-context";
 import { seconds, signed } from "../format";
 import { useShowResults } from "../hooks";
 import { playerName } from "../i18n";
-import { rightAnswers } from "../quiz";
+import { quizName, rightAnswers } from "../quiz";
 import type { BuzzerId, GameView, PlayerResult, Quiz, ShowResults, Slide } from "../types";
 import { listSeparator } from "../editor/sheet";
 import { errorNotice } from "../messages";
@@ -24,7 +24,7 @@ export function ResultsTab({ view, quiz }: { view: GameView; quiz: Quiz | null }
 
   const exportCsv = () => {
     if (!results) return;
-    const picker = { filter: t("csvFile"), fileName: t("resultsFileName", { title: quiz.title || t("untitledQuiz") }) };
+    const picker = { filter: t("csvFile"), fileName: t("resultsFileName", { title: quizName(t, quiz) }) };
     const rows = resultsTable(t, quiz, results, listSeparator(lang));
     run(api.exportResults(rows, listSeparator(lang), picker).then((saved) => saved && notify(t("resultsSaved"))));
   };
@@ -40,7 +40,7 @@ export function ResultsTab({ view, quiz }: { view: GameView; quiz: Quiz | null }
         </button>
       </div>
       <div className="results-body">
-        <h1 className="results-title">{quiz.title || t("untitledQuiz")}</h1>
+        <h1 className="results-title">{quizName(t, quiz)}</h1>
         {problem !== null && <ResultsProblem problem={problem} />}
         {results ? (
           <>

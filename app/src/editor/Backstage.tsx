@@ -3,7 +3,7 @@ import { useVoiceGain, useVoiceModel, useVoicePreview, useVoiceSample, voiceLine
 import { welcomePreviewView } from "../host/preview";
 import { SlideScreen } from "../host/SlideScreen";
 import { Stage } from "../host/Stage";
-import { useEffect, useRef } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { BackIcon, CheckIcon, PlayIcon, StopIcon } from "../icons";
 import { keyHint, KEYS } from "../keyboard";
 import { problemText } from "../messages";
@@ -13,7 +13,7 @@ import type { MediaKind } from "../media";
 import { LANGUAGE_LABEL, NO_CONTEXT, questionCount, settingsOf, soundsOf, welcomeOf } from "../quiz";
 import { RecentFileList } from "../recent-files";
 import type { AllAnswered, Quiz, QuizLanguage, QuizSettings, QuizSounds, ReadAloud, ValidationError, Welcome } from "../types";
-import { tooltip, type Action, type Actions } from "./actions";
+import { actionButton, tooltip, type Action, type Actions } from "./actions";
 import { AiPage } from "./AiPage";
 import { MediaPicker, NumberBox, Select, Switch } from "./controls";
 import type { OpenQuiz } from "./editor-state";
@@ -66,7 +66,7 @@ export function Backstage(props: BackstageProps) {
   }, []);
   // Each item's tooltip says its keys, as the quick-access buttons' do.
   const item = (action: Action) => (
-    <button type="button" className="backstage-item" title={tooltip(action)} disabled={action.disabled} onClick={action.run}>
+    <button type="button" className="backstage-item" {...actionButton(action)}>
       {action.label}
     </button>
   );
@@ -271,6 +271,7 @@ function ReadAloudSettings({ quiz, settings, set }: { quiz: Quiz; settings: Quiz
   const languages = QUIZ_LANGUAGES.map((value): [QuizLanguage, string] => [value, t(LANGUAGE_LABEL[value])]);
   const voices = VOICES.map((value): [number, string] => [value, voiceName(t, value)]);
   const trying = preview.playing || sample.playing;
+  const [preparing, setPreparing] = useState(false);
   const tryVoice = () => {
     if (trying) {
       preview.stop();
@@ -281,7 +282,9 @@ function ReadAloudSettings({ quiz, settings, set }: { quiz: Quiz; settings: Quiz
     const what = settings.readAloud === "off" ? "questionAndAnswers" : settings.readAloud;
     const line = quiz.slides.map((slide) => voiceLine(slide, settings, what)).find((found) => found !== null);
     if (!line) return sample.play(settings.language, settings.voice);
-    run(preview.play(line, gain));
+    // The clip renders for a few seconds before it plays (or is stopped): that wait is shown.
+    setPreparing(true);
+    run(preview.play(line, gain).finally(() => setPreparing(false)));
   };
   return (
     <>
@@ -308,9 +311,21 @@ function ReadAloudSettings({ quiz, settings, set }: { quiz: Quiz; settings: Quiz
         <span>{t("voiceChoice")}</span>
         <div className="voice-choice">
           <Select label={t("voiceChoice")} value={settings.voice} options={voices} onChange={(voice) => set({ voice })} />
-          <button type="button" className="mini" aria-label={t(trying ? "stopTryVoice" : "tryVoice")} title={t(trying ? "stopTryVoice" : "tryVoice")} onClick={tryVoice}>
+          <button
+            type="button"
+            className={preparing ? "mini preparing" : "mini"}
+            aria-label={t(trying ? "stopTryVoice" : "tryVoice")}
+            aria-busy={preparing}
+            title={t(trying ? "stopTryVoice" : "tryVoice")}
+            onClick={tryVoice}
+          >
             {trying ? <StopIcon /> : <PlayIcon />}
           </button>
+          {preparing && (
+            <span className="voice-preparing" role="status">
+              {t("voicePreparing")}
+            </span>
+          )}
         </div>
       </div>
       {model && !model.installed && <p className="backstage-hint">{t("voiceNotDownloaded")}</p>}
@@ -338,7 +353,7 @@ function WelcomeSettings({ quiz, onWelcome, onPickMedia }: { quiz: Quiz; onWelco
   const view = welcomePreviewView(welcome, quiz.title, quiz.slides.length);
   return (
     <>
-      <h2>{t("welcomeScreen")}</h2>
+      <h3>{t("welcomeScreen")}</h3>
       <SettingSwitch label={t("welcomeOn")} hint={t("welcomeOnHint", { key: keyHint(t, KEYS.next) })} checked={welcome.on} onChange={(on) => set({ on })} />
       <div className="welcome-fields">
         {text(t("welcomeHeading"), welcome.heading, (heading) => ({ heading }), quiz.title)}
@@ -354,12 +369,13 @@ function WelcomeSettings({ quiz, onWelcome, onPickMedia }: { quiz: Quiz; onWelco
   );
 }
 
-/** A setting that is on or off, with what it does. */
+/** A setting that is on or off, with what it does; a click on its name switches it too. */
 function SettingSwitch(props: { label: string; hint: string; checked: boolean; onChange: (on: boolean) => void }) {
+  const id = useId();
   return (
     <div className="setting-switch">
-      <span>{props.label}</span>
-      <Switch label={props.label} checked={props.checked} onChange={props.onChange} />
+      <label htmlFor={id}>{props.label}</label>
+      <Switch id={id} label={props.label} checked={props.checked} onChange={props.onChange} />
       <p className="backstage-hint">{props.hint}</p>
     </div>
   );

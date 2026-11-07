@@ -1,40 +1,50 @@
+import { useEffect, useRef } from "react";
 import { ANSWER_LETTERS } from "../answers";
 import { useApp } from "../app-context";
 import type { Translate } from "../i18n";
 import { SLIDE_TYPE_LABEL } from "../quiz";
-import { Popup } from "./controls";
+import { GALLERY_KEYS, moveFocus, Popup } from "./controls";
 import { LAYOUT_GROUPS, layoutMode, type SlideLayout } from "./layouts";
 
-/** The slide layouts to insert, each drawn as a small sketch of the slide. */
+/** The slide layouts to insert, each drawn as a small sketch of the slide; the arrow keys, Home and End go through them. */
 export function LayoutGallery({ x, y, onPick, onClose }: { x: number; y: number; onPick: (layout: SlideLayout) => void; onClose: () => void }) {
   const { t } = useApp();
+  const first = useRef<HTMLButtonElement>(null);
+  // After the popup took the focus, so Enter inserts the first layout at once, as a menu's first item runs.
+  useEffect(() => first.current?.focus(), []);
   return (
     <Popup x={x} y={y} onClose={onClose} className="layout-gallery" role="dialog" label={t("newSlide")}>
-      {LAYOUT_GROUPS.map((group) => (
-        <section key={group.title}>
-          <h3>{t(group.title)}</h3>
-          <div className="layout-tiles">
-            {group.layouts.map((layout, i) => {
-              const label = layoutLabel(t, layout);
-              return (
-                <button
-                  key={i}
-                  type="button"
-                  className="layout-tile"
-                  title={label}
-                  onClick={() => {
-                    onClose();
-                    onPick(layout);
-                  }}
-                >
-                  <LayoutSketch layout={layout} />
-                  <span>{label}</span>
-                </button>
-              );
-            })}
-          </div>
-        </section>
-      ))}
+      {(close) =>
+        LAYOUT_GROUPS.map((group, g) => (
+          <section key={group.title}>
+            <h3>{t(group.title)}</h3>
+            <div className="layout-tiles">
+              {group.layouts.map((layout, i) => {
+                const label = layoutLabel(t, layout);
+                return (
+                  <button
+                    key={i}
+                    ref={g === 0 && i === 0 ? first : undefined}
+                    type="button"
+                    className="layout-tile"
+                    title={label}
+                    onKeyDown={(e) => {
+                      if (moveFocus(e.currentTarget, e.key, e.currentTarget.closest(".layout-gallery"), ".layout-tile", GALLERY_KEYS)) e.preventDefault();
+                    }}
+                    onClick={() => {
+                      close();
+                      onPick(layout);
+                    }}
+                  >
+                    <LayoutSketch layout={layout} />
+                    <span>{label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+        ))
+      }
     </Popup>
   );
 }
