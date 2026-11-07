@@ -196,8 +196,9 @@ for (const size of SIZES) {
     }
     if ((!only || only === "host") && lang === LANGS[0]) {
       for (const scene of scenes) {
-        const { visit, close } = await check(`host scene=${scene}`, `/preview.html?window=host&scene=${scene}`, size, lang);
+        const { visit, errors, close } = await check(`host scene=${scene}`, `/preview.html?window=host&scene=${scene}`, size, lang);
         await visit("");
+        for (const e of errors) problems.push(`host scene=${scene}: page error: ${e}`);
         await close();
       }
     }
