@@ -13,7 +13,7 @@ const reason = (show: boolean, unsavedQuiz: boolean, unsavedInstructions = false
 function deps(answers: Partial<CloseDeps> = {}) {
   return {
     loadDraft: vi.fn(async () => draft),
-    editorSave: vi.fn(async () => "/q/pub.quiz"),
+    editorSave: vi.fn(async () => ({ path: "/q/pub.quiz", savesInPlace: true })),
     quitApp: vi.fn(async () => undefined),
     closeDeclined: vi.fn(async () => undefined),
     confirm: vi.fn(async () => true),

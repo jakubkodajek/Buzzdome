@@ -116,6 +116,7 @@ export type { RemoteAction } from "./bindings/RemoteAction";
 export type { RemoteKey } from "./bindings/RemoteKey";
 export type { RemoteKeyAction } from "./bindings/RemoteKeyAction";
 export type { Replay } from "./bindings/Replay";
+export type { SavedDraft } from "./bindings/SavedDraft";
 export type { ScreenKey } from "./bindings/ScreenKey";
 export type { SessionSummary } from "./bindings/SessionSummary";
 export type { ShowFinish } from "./bindings/ShowFinish";

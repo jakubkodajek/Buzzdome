@@ -147,9 +147,9 @@ export function useQuizEditor(onTestRun: () => void): QuizEditor {
     if (!open) return false;
     const quiz = open.history.present;
     const picker = quizPicker(t, quizName(t, quiz));
-    const path = await draftApi.editorSave(open.draftId, quiz, saveAs, picker);
-    if (path === null) return false;
-    dispatch({ type: "saved", quiz, path });
+    const saved = await draftApi.editorSave(open.draftId, quiz, saveAs, picker);
+    if (saved === null) return false;
+    dispatch({ type: "saved", quiz, ...saved });
     readRecentFiles();
     return true;
   };

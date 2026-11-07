@@ -48,6 +48,7 @@ import type {
   RemoteAction,
   RemoteKey,
   RemoteKeyAction,
+  SavedDraft,
   SessionSummary,
   SettingsLost,
   SheetExport,
@@ -220,7 +221,7 @@ export const api = {
   /** Stores the edited quiz; returns what keeps it from being played. */
   editorUpdate: (draft: string, quiz: Quiz, unsaved: boolean) => invoke<ValidationError[]>("editor_update", { draft, quiz, unsaved }),
   /** Saves over the quiz file the draft came from, unless `saveAs`, else where the quizmaster picks; returns the path, null when they cancel. */
-  editorSave: (draft: string, quiz: Quiz, saveAs: boolean, picker: Picker) => invoke<string | null>("editor_save", { draft, quiz, saveAs, picker }),
+  editorSave: (draft: string, quiz: Quiz, saveAs: boolean, picker: Picker) => invoke<SavedDraft | null>("editor_save", { draft, quiz, saveAs, picker }),
   /** Copies a media file of `kinds` the quizmaster picks into the draft; returns its reference (`media/...`), null when they cancel. */
   editorAddMedia: (draft: string, kinds: MediaKind[], picker: Picker) => invoke<string | null>("editor_add_media", { draft, kinds, picker }),
   /** A name for a new category, "`base` 2" or so, that none of `categories` has. */

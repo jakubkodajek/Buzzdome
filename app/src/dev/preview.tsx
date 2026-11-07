@@ -930,7 +930,7 @@ mockIPC(
         return editorProblems();
       case "editor_save":
         called.push({ cmd, ...(payload as object) });
-        return "C:\\Kvizy\\hospodsky-kviz.quiz";
+        return { path: "C:\\Kvizy\\hospodsky-kviz.quiz", savesInPlace: true };
       case "plugin:dialog|message": {
         // "Yes" is the first button and "No" the second, which the app words itself.
         const { buttons } = payload as { buttons?: { OkCancelCustom?: [string, string]; YesNoCancelCustom?: [string, string, string] } };

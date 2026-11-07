@@ -30,15 +30,21 @@ describe("editor state", () => {
     // A draft left unsaved last time stays unsaved until it is saved.
     state = editorReducer(state, { type: "loaded", draft: draft(true) });
     expect(isUnsaved(opened(state))).toBe(true);
-    state = editorReducer(state, { type: "saved", quiz: opened(state).history.present, path: "/other.quiz" });
-    expect(opened(state)).toMatchObject({ sourcePath: "/other.quiz" });
+    state = editorReducer(state, { type: "saved", quiz: opened(state).history.present, path: "/other.quiz", savesInPlace: true });
+    expect(opened(state)).toMatchObject({ sourcePath: "/other.quiz", savesInPlace: true });
     expect(isUnsaved(opened(state))).toBe(false);
+  });
+
+  it("saves in place from then on only when the backend says the file it saved allows it", () => {
+    let state = editorReducer(LOADING, { type: "loaded", draft: draft(true) });
+    state = editorReducer(state, { type: "saved", quiz: opened(state).history.present, path: "/q.json", savesInPlace: false });
+    expect(opened(state)).toMatchObject({ sourcePath: "/q.json", savesInPlace: false });
   });
 
   it("starts a new undo step for typing on after a save, so undo comes back to the quiz as saved", () => {
     let state = editorReducer(LOADING, { type: "loaded", draft: draft(false) });
     state = editorReducer(state, { type: "edit", edit: { type: "setTitle", title: "Pub" }, merge: "title", at: 0 });
-    state = editorReducer(state, { type: "saved", quiz: opened(state).history.present, path: "/q.quiz" });
+    state = editorReducer(state, { type: "saved", quiz: opened(state).history.present, path: "/q.quiz", savesInPlace: true });
     state = editorReducer(state, { type: "edit", edit: { type: "setTitle", title: "Pub 2026" }, merge: "title", at: 500 });
     expect(isUnsaved(opened(state))).toBe(true);
     state = editorReducer(state, { type: "undo" });
@@ -63,7 +69,7 @@ describe("editor state", () => {
     expect(needsInfo(opened(state))).toBe(true);
     state = editorReducer(state, { type: "edit", edit: { type: "setTitle", title: "New" }, at: 0 });
     expect(opened(state).dropped).toEqual(dropped);
-    state = editorReducer(state, { type: "saved", quiz: opened(state).history.present, path: "/q.quiz" });
+    state = editorReducer(state, { type: "saved", quiz: opened(state).history.present, path: "/q.quiz", savesInPlace: true });
     expect(opened(state).dropped).toEqual([]);
     expect(needsInfo(opened(state))).toBe(false);
   });

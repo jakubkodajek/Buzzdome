@@ -122,6 +122,17 @@ pub struct EditorDraft {
     pub dropped: Vec<ValidationError>,
 }
 
+/// Where `editor_save` saved the draft.
+#[derive(Debug, Serialize, TS)]
+#[ts(export)]
+#[serde(rename_all = "camelCase")]
+pub struct SavedDraft {
+    /// The quiz file it saved, now the draft's source.
+    pub path: String,
+    /// Save writes over it from now on (`EditorDraft::saves_in_place`).
+    pub saves_in_place: bool,
+}
+
 const EDITOR_FOLDER: &str = "editor";
 
 pub(crate) fn editor_dir(app: &AppHandle) -> CmdResult<PathBuf> {
@@ -378,9 +389,10 @@ pub async fn editor_update(app: AppHandle, draft: String, quiz: Quiz, unsaved: b
 /// Saves the quiz of the draft `draft` with its media as a quiz file: over
 /// the quiz file it came from, unless `save_as`, else where the quizmaster
 /// picks (none when they cancel; a plain JSON quiz is never written over).
-/// Gives the file's path. Refused during a show (`refuse_during_show`).
+/// Gives the file's path and whether Save writes over it from now on.
+/// Refused during a show (`refuse_during_show`).
 #[tauri::command]
-pub async fn editor_save(app: AppHandle, window: Window, draft: String, quiz: Quiz, save_as: bool, picker: Picker) -> CmdResult<Option<String>> {
+pub async fn editor_save(app: AppHandle, window: Window, draft: String, quiz: Quiz, save_as: bool, picker: Picker) -> CmdResult<Option<SavedDraft>> {
     let source = on_draft(app.clone(), draft.clone(), |_, _, _, pointer| Ok(pointer.source_path.map(PathBuf::from))).await?;
     let path = match source {
         Some(source) if !save_as && is_quiz_file(&source) => source,
@@ -396,7 +408,7 @@ pub async fn editor_save(app: AppHandle, window: Window, draft: String, quiz: Qu
         let saved = path.to_string_lossy().into_owned();
         write_pointer(dir, &Pointer { source_path: Some(saved.clone()), unsaved: false, dropped: Vec::new(), ..pointer })?;
         app.state::<RecentFiles>().remember(&saved);
-        Ok(Some(saved))
+        Ok(Some(SavedDraft { saves_in_place: is_quiz_file(&path), path: saved }))
     })
     .await
 }

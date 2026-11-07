@@ -1,7 +1,7 @@
 // Everything the editor knows about the open quiz. Pure, like `history.ts`.
 
 import { WARNING_PROBLEMS } from "../bindings/Constants";
-import type { EditorDraft, Quiz, ValidationError } from "../types";
+import type { EditorDraft, Quiz, SavedDraft, ValidationError } from "../types";
 import { historyReducer, startHistory, type History, type HistoryAction } from "./history";
 
 export interface OpenQuiz {
@@ -40,7 +40,7 @@ export type EditorAction =
   | { type: "loading" }
   /** The draft could not be read. */
   | { type: "unreadable"; error: unknown }
-  | { type: "saved"; quiz: Quiz; path: string }
+  | ({ type: "saved"; quiz: Quiz } & SavedDraft)
   /** The backend stored `quiz` and checked it. */
   | { type: "checked"; quiz: Quiz; problems: ValidationError[] }
   | HistoryAction;
@@ -75,7 +75,7 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
   switch (action.type) {
     case "saved":
       // The file no longer has what opening left out. Typing on after it starts a new undo step, so one step is the quiz as saved.
-      return { ...state, history: { ...state.history, open: null }, saved: action.quiz, sourcePath: action.path, savesInPlace: true, dropped: [] };
+      return { ...state, history: { ...state.history, open: null }, saved: action.quiz, sourcePath: action.path, savesInPlace: action.savesInPlace, dropped: [] };
     case "checked":
       // A check of a quiz that has changed since is already out of date.
       return action.quiz === state.history.present ? { ...state, problems: action.problems } : state;

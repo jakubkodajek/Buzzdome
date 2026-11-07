@@ -37,7 +37,7 @@ function fakeApi(start = "draft-1") {
     editorSave: vi.fn(async (id: string, saved: Quiz, saveAs: boolean) => {
       calls.push(`save ${id} ${saved.title}${saveAs ? " as" : ""}`);
       if (id !== current) throw { code: "draftChanged" };
-      return "/q.quiz";
+      return { path: "/q.quiz", savesInPlace: true };
     }),
     editorAddMedia: vi.fn(async () => "media/a.png"),
     editorImportSheet: vi.fn(),

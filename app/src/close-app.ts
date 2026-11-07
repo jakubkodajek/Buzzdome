@@ -7,13 +7,13 @@ import { loadDraftAfterWrites } from "./editor/useQuizEditor";
 import type { Translate } from "./i18n";
 import { errorText } from "./messages";
 import { quizPicker } from "./quiz";
-import type { CloseReason, EditorDraft, Picker } from "./types";
+import type { CloseReason, EditorDraft, Picker, SavedDraft } from "./types";
 
 /** What answering a close request uses: the backend and the system's dialogs. */
 export interface CloseDeps {
   /** The editor's draft, after its changes still being written. */
   loadDraft: () => Promise<EditorDraft | null>;
-  editorSave: (draft: string, quiz: EditorDraft["quiz"], saveAs: boolean, picker: Picker) => Promise<string | null>;
+  editorSave: (draft: string, quiz: EditorDraft["quiz"], saveAs: boolean, picker: Picker) => Promise<SavedDraft | null>;
   quitApp: () => Promise<void>;
   closeDeclined: () => Promise<void>;
   confirm: (question: string, ok: string) => Promise<boolean>;
