@@ -4,7 +4,7 @@ import { useGameView } from "../hooks";
 import { CrossIcon } from "../icons";
 import { NoticeContent, type TonedNotice } from "../notice";
 
-/** The most messages on screen at once; an older one makes way. */
+/** The most messages on screen at once; an older one makes way (`trimToasts`). */
 const MAX_TOASTS = 3;
 /** How long news of what was done stays on screen. */
 const INFO_MS = 4000;
@@ -27,6 +27,21 @@ interface Shown extends TonedNotice {
   id: number;
 }
 
+/**
+ * The messages that stay when `shown` holds more than `MAX_TOASTS`: the
+ * oldest that is not a failure makes way first, so a failure that stays
+ * until closed (`toastMs`) is not pushed out by news; only failures alone
+ * push out the oldest failure.
+ */
+export function trimToasts<T extends TonedNotice>(shown: T[], max = MAX_TOASTS): T[] {
+  const kept = [...shown];
+  while (kept.length > max) {
+    const news = kept.findIndex((toast) => toast.tone !== "error");
+    kept.splice(news === -1 ? 0 : news, 1);
+  }
+  return kept;
+}
+
 /** The window's messages, and `show` to add one (`AppProvider`). The same message again replaces the first. */
 export function useToasts(): { toasts: Shown[]; show: (toast: TonedNotice) => void; close: (id: number) => void } {
   const [toasts, setToasts] = useState<Shown[]>([]);
@@ -34,7 +49,7 @@ export function useToasts(): { toasts: Shown[]; show: (toast: TonedNotice) => vo
   const close = useCallback((id: number) => setToasts((shown) => shown.filter((toast) => toast.id !== id)), []);
   const show = useCallback((toast: TonedNotice) => {
     const id = ++lastId.current;
-    setToasts((shown) => [...shown.filter((old) => old.text !== toast.text || old.detail !== toast.detail), { ...toast, id }].slice(-MAX_TOASTS));
+    setToasts((shown) => trimToasts([...shown.filter((old) => old.text !== toast.text || old.detail !== toast.detail), { ...toast, id }]));
   }, []);
   return { toasts, show, close };
 }
