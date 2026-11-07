@@ -8,11 +8,20 @@
 //! buttons (mostly the ones `Game::controls` offers, sometimes any), presses
 //! from any buzzer in bursts and late, time up from the show thread, team
 //! edits with odd names, score changes, and crashes followed by a resume.
+//!
+//! Commands are stamped with the sim's show clock, but a press now and then
+//! keeps an earlier time, up to `PRESS_GRACE_MS` and half a second more
+//! before it (`Show::received_at`): a receiver's press keeps its report time
+//! and can reach the show thread after a later command (a pause or resume, a
+//! verdict, time up). So the journal holds presses older than commands
+//! applied before them, and the core's rules for when a press was received
+//! (`Clock::takes_press_at`, the grace after time up, a press received while
+//! paused and applied after the resume) are played and replayed too.
 
 use quiz_core::{
     AllAnswered, AnswerMode, Button, Command, CorrectAnswer, Effect, Game, GameError, Light, Phase, Question, QuestionStep, Quiz,
     QuizSettings, ReadAloud, Slide, SlideContent, Stamped, VideoClip, FULL_SHARE, MAX_AFTER_REVEAL_DELAY_S, MAX_ALL_ANSWERED_DELAY_S, MAX_ANSWERS, MAX_EVERYONE_ANSWERS,
-    MAX_JOKERS, MAX_POINTS, MAX_TEAMS, MIN_EVERYONE_ANSWERS, REPLAYS_AS_PLAYED_FROM, RULES_VERSION,
+    MAX_JOKERS, MAX_POINTS, MAX_TEAMS, MIN_EVERYONE_ANSWERS, PRESS_GRACE_MS, REPLAYS_AS_PLAYED_FROM, RULES_VERSION,
 };
 use std::collections::BTreeMap;
 
@@ -237,7 +246,9 @@ impl Default for Plan {
 pub struct Show {
     pub game: Game,
     pub journal: Vec<Stamped>,
-    /// The show clock, in milliseconds; it never goes back within a run.
+    /// The show clock, in milliseconds; it never goes back within a run. A
+    /// press may be stamped a little before it (`received_at`), so the
+    /// journal's times need not rise.
     pub now: u64,
     pub buzzers: u16,
     /// Each player's score when the current question was entered, plus the
@@ -280,12 +291,17 @@ impl Show {
         }
     }
 
-    /// Applies `command` at the current time as the app does: a press that
+    /// Applies `command` at the current time (`apply_at`).
+    pub fn apply(&mut self, command: Command) -> Stepped {
+        self.apply_at(command, self.now)
+    }
+
+    /// Applies `command` stamped `at_ms` as the app does: a press that
     /// changes nothing is neither applied nor journaled (`Game::ignores`),
     /// anything else is applied and journaled if the game takes it. Checks
     /// every rule (`check`) on the way.
-    pub fn apply(&mut self, command: Command) -> Stepped {
-        let stamped = Stamped { at_ms: self.now, command };
+    pub fn apply_at(&mut self, command: Command, at_ms: u64) -> Stepped {
+        let stamped = Stamped { at_ms, command };
         let before = self.game.clone();
         let ignored = before.ignores(&stamped);
         let result = if ignored { Ok(vec![]) } else { self.game.apply(&stamped) };
@@ -577,6 +593,19 @@ impl Show {
         }
     }
 
+    /// When `command` was received: now, except for a press, which now and
+    /// then keeps a report time from before commands applied already, up to
+    /// `PRESS_GRACE_MS` and half a second more before now (a receiver's
+    /// press on its way while the quizmaster paused, resumed or judged, or
+    /// while time ran out).
+    pub fn received_at(&self, command: &Command, rng: &mut Rng) -> u64 {
+        if matches!(command, Command::Press { .. }) && rng.chance(30) {
+            self.now.saturating_sub(rng.between(0, PRESS_GRACE_MS + 500))
+        } else {
+            self.now
+        }
+    }
+
     /// Moves the show clock on: mostly a moment, sometimes not at all (a
     /// burst in one millisecond), sometimes past any question's time limit.
     pub fn random_wait(&mut self, rng: &mut Rng) {
@@ -652,7 +681,8 @@ pub fn play(seed: u64, plan: Plan) -> Show {
         let burst = if rng.chance(10) { rng.between(2, u64::from(show.buzzers).max(2)) } else { 1 };
         for _ in 0..burst {
             let command = show.random_command(&mut rng);
-            show.apply(command);
+            let at_ms = show.received_at(&command, &mut rng);
+            show.apply_at(command, at_ms);
         }
         if !tick_first {
             show.tick();
