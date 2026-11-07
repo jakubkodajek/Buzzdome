@@ -9,10 +9,10 @@ import { installQuestion, installStatus, waitsForShow } from "./update";
 /**
  * Offers the newer version of the app the update server has, while no show
  * runs: installing it ends the app. Without internet it offers nothing (the
- * backend logs why).
+ * backend logs why) until a later check gets an answer.
  */
 export function UpdateBanner({ showRunning }: { showRunning: boolean }) {
-  const { t, lang } = useApp();
+  const { t, lang, caution } = useApp();
   const report = useReport();
   const update = useAvailableUpdate();
   // The download's progress while installing (null before its first report); undefined otherwise.
@@ -29,7 +29,8 @@ export function UpdateBanner({ showRunning }: { showRunning: boolean }) {
         return api.updateInstall(setProgress);
       })
       .catch((error: unknown) => {
-        if (!waitsForShow(error)) report(error);
+        if (waitsForShow(error)) caution(t("updateAfterShow", { version: update.version }));
+        else report(error);
       })
       .finally(() => setProgress(undefined));
   };
