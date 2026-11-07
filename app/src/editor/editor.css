@@ -37,7 +37,8 @@
   cursor: pointer;
 }
 
-.studio button:disabled {
+.studio button:disabled,
+.studio button[aria-disabled="true"] {
   color: #a8a8a8;
   cursor: default;
 }
@@ -173,11 +174,12 @@
   border-radius: 2px;
 }
 
-.quick-access button:hover:not(:disabled) {
+.quick-access button:hover:not(:disabled):not([aria-disabled="true"]) {
   background: rgba(255, 255, 255, 0.18);
 }
 
-.studio-titlebar button:disabled {
+.studio-titlebar button:disabled,
+.studio-titlebar button[aria-disabled="true"] {
   color: rgba(255, 255, 255, 0.4);
 }
 
@@ -2180,7 +2182,7 @@
 }
 
 
-.studio .backstage-item:hover:not(:disabled) {
+.studio .backstage-item:hover:not(:disabled):not([aria-disabled="true"]) {
   background: rgba(255, 255, 255, 0.16);
 }
 
@@ -2188,7 +2190,8 @@
   background: var(--accent-dark);
 }
 
-.studio .backstage-item:disabled {
+.studio .backstage-item:disabled,
+.studio .backstage-item[aria-disabled="true"] {
   color: rgba(255, 255, 255, 0.45);
 }
 

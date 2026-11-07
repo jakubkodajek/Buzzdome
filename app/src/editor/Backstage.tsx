@@ -13,7 +13,7 @@ import type { MediaKind } from "../media";
 import { LANGUAGE_LABEL, NO_CONTEXT, questionCount, settingsOf, soundsOf, welcomeOf } from "../quiz";
 import { RecentFileList } from "../recent-files";
 import type { AllAnswered, Quiz, QuizLanguage, QuizSettings, QuizSounds, ReadAloud, ValidationError, Welcome } from "../types";
-import { tooltip, type Action, type Actions } from "./actions";
+import { actionButton, tooltip, type Action, type Actions } from "./actions";
 import { AiPage } from "./AiPage";
 import { MediaPicker, NumberBox, Select, Switch } from "./controls";
 import type { OpenQuiz } from "./editor-state";
@@ -66,7 +66,7 @@ export function Backstage(props: BackstageProps) {
   }, []);
   // Each item's tooltip says its keys, as the quick-access buttons' do.
   const item = (action: Action) => (
-    <button type="button" className="backstage-item" title={tooltip(action)} disabled={action.disabled} onClick={action.run}>
+    <button type="button" className="backstage-item" {...actionButton(action)}>
       {action.label}
     </button>
   );

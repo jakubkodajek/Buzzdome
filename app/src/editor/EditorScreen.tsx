@@ -30,7 +30,7 @@ import { createStore, useStore } from "../store";
 import type { StringKey } from "../i18n";
 import type { EditorDraft, Slide } from "../types";
 import type { DraftOperation } from "./draft-session";
-import { tooltip, useActionKeys, type Action, type ActionId, type Actions } from "./actions";
+import { actionButton, tooltip, useActionKeys, type Action, type ActionId, type Actions } from "./actions";
 import { Backstage, type BackstagePage } from "./Backstage";
 import { CategoryView } from "./CategoryView";
 import { ContextMenu } from "./controls";
@@ -87,6 +87,9 @@ const BUSY_TEXT: Record<DraftOperation, StringKey> = {
   export: "busyExport",
   testRun: "busyTestRun",
 };
+
+/** The commands in the title bar, as an office suite's quick-access toolbar. */
+const QUICK_ACCESS: ActionId[] = ["save", "undo", "redo"];
 
 /** What the keys do in the Categories view besides the categories' own actions: nothing that changes a slide unseen. */
 const CATEGORY_VIEW_KEYS: ActionId[] = ["file", "newQuiz", "openQuiz", "save", "saveAs", "closeQuiz", "undo", "redo", "findProperty", "testRun"];
@@ -251,16 +254,18 @@ function Studio({ editor, open, ask, onExit }: { editor: QuizEditor; open: OpenQ
     newQuiz: { label: t("newQuiz"), keys: ["Ctrl+N"], inFields: true, disabled: busy, run: () => setAsking("new") },
     openQuiz: { label: t("openFile"), icon: <FolderIcon />, keys: ["Ctrl+O"], inFields: true, disabled: busy, run: () => setBackstage("open") },
     save: {
-      label: saved ? t("quizSaved") : t("saveQuiz"),
+      label: t("saveQuiz"),
       icon: <SaveIcon />,
       keys: ["Ctrl+S"],
       inFields: true,
+      appliesField: true,
       disabled: !open || saved || busy,
+      note: saved ? t("quizSavedHint") : undefined,
       run: () => void editor.save(),
     },
-    saveAs: { label: t("saveQuizAs"), keys: ["Ctrl+Shift+S"], inFields: true, disabled: !open || busy, run: () => void editor.saveAs() },
+    saveAs: { label: t("saveQuizAs"), keys: ["Ctrl+Shift+S"], inFields: true, appliesField: true, disabled: !open || busy, run: () => void editor.saveAs() },
     closeQuiz: { label: t("closeQuiz"), disabled: !open || busy, run: () => void editor.closeQuiz().then(loaded) },
-    exit: { label: t("backToDirector"), icon: <BackIcon />, disabled: busy, run: onExit },
+    exit: { label: t("backToDirector"), icon: <BackIcon />, disabled: busy, note: busy ? t("editorBusyExit") : undefined, run: onExit },
     undo: {
       label: t("undo"),
       icon: <UndoIcon />,
@@ -310,8 +315,8 @@ function Studio({ editor, open, ask, onExit }: { editor: QuizEditor; open: OpenQ
       },
     },
     notes: { label: t("viewNotes"), icon: <NotesIcon />, checked: notesShown, run: () => setNotesShown(!notesShown) },
-    testRun: { label: t("testFromStart"), icon: <PlayIcon />, keys: ["F5"], inFields: true, disabled: slides.length === 0 || busy, run: () => testRun() },
-    testRunHere: { label: t("testFromHere"), icon: <PreviewIcon />, keys: ["Shift+F5"], inFields: true, disabled: noSlide || busy, run: () => testRun(index) },
+    testRun: { label: t("testFromStart"), icon: <PlayIcon />, keys: ["F5"], inFields: true, appliesField: true, disabled: slides.length === 0 || busy, run: () => testRun() },
+    testRunHere: { label: t("testFromHere"), icon: <PreviewIcon />, keys: ["Shift+F5"], inFields: true, appliesField: true, disabled: noSlide || busy, run: () => testRun(index) },
     importSheet: sheet.importSheet,
     sheetTemplate: sheet.sheetTemplate,
     exportSheet: sheet.exportSheet,
@@ -372,16 +377,9 @@ function Studio({ editor, open, ask, onExit }: { editor: QuizEditor; open: OpenQ
         <div className={busy ? "studio studio-busy" : "studio"} aria-busy={busy}>
           <header className="studio-titlebar">
             <div className="quick-access">
-              {[actions.save, actions.undo, actions.redo].map((action) => (
-                <button
-                  key={action.label}
-                  type="button"
-                  title={tooltip(action)}
-                  aria-label={action.label}
-                  disabled={action.disabled}
-                  onClick={action.run}
-                >
-                  {action.icon}
+              {QUICK_ACCESS.map((id) => (
+                <button key={id} type="button" aria-label={actions[id].label} {...actionButton(actions[id])}>
+                  {actions[id].icon}
                 </button>
               ))}
             </div>
@@ -391,7 +389,7 @@ function Studio({ editor, open, ask, onExit }: { editor: QuizEditor; open: OpenQ
               {unsaved && <span className="studio-title-mark">*</span>}
               <span className="studio-title-app">– {t("quizEditor")}</span>
             </span>
-            <button type="button" className="titlebar-exit" title={busy ? t("editorBusyExit") : tooltip(actions.exit)} disabled={actions.exit.disabled} onClick={actions.exit.run}>
+            <button type="button" className="titlebar-exit" title={tooltip(actions.exit)} disabled={actions.exit.disabled} onClick={actions.exit.run}>
               <BackIcon />
               {t("backToDirector")}
             </button>
