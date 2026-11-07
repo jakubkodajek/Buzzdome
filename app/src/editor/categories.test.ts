@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { slideTitle } from "../quiz";
 import type { Category, Quiz } from "../types";
-import { freshCategoryId, newCategory, sampleSlide, slidesOf, withLook } from "./categories";
+import { translator } from "../i18n";
+import { categoryName, freshCategoryId, newCategory, sampleSlide, slidesOf, withLook } from "./categories";
 import { newSlide, setBackground, setSlideFill, setTextStyle } from "./slides";
 
 const films: Category = { id: "c-1", name: "Films", background: null, style: { headline: { bold: true } } };
@@ -46,5 +47,11 @@ describe("categories", () => {
   it("know the slides that took them on", () => {
     expect(slidesOf(quiz, "c-1")).toEqual(["a", "c"]);
     expect(slidesOf(quiz, "c-2")).toEqual([]);
+  });
+
+  it("are named even when they have no name", () => {
+    const t = translator("en");
+    expect(categoryName(t, films)).toBe("Films");
+    expect(categoryName(t, { name: "" })).toBe(t("unnamedCategory"));
   });
 });

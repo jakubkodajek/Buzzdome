@@ -12,7 +12,7 @@ import { isVideo, type MediaKind } from "../media";
 import { NO_CONTEXT } from "../quiz";
 import type { Category, Quiz, Slide } from "../types";
 import type { Action } from "./actions";
-import { freshCategoryId, newCategory, sampleSlide, slidesOf, withLook } from "./categories";
+import { categoryName, freshCategoryId, newCategory, sampleSlide, slidesOf, withLook } from "./categories";
 import { hasElement, type ElementId } from "./elements";
 import type { SlideEditing } from "./properties";
 import { categoryPages, type Page } from "./property-pages";
@@ -126,12 +126,15 @@ export function useCategories(editor: QuizEditor, quiz: Quiz | null): CategoryEd
     deleteCategory: {
       label: t("deleteCategory"),
       icon: <TrashIcon />,
-      keys: ["Delete", "Backspace"],
+      // Not while a part of its sample slide is selected.
+      keys: element === "slide" ? ["Delete", "Backspace"] : undefined,
       disabled: !category,
       run: () => {
         if (!category) return;
         editor.edit({ type: "removeCategory", id: category.id });
         setSelection({ id: null, index, element: "slide" });
+        // Its slides look as they did, which is easy to miss: say so.
+        if (slides.length > 0) notify(t("categoryDeleted", { name: categoryName(t, category), n: slides.length }));
       },
     },
     reapplyCategory: {
@@ -141,7 +144,7 @@ export function useCategories(editor: QuizEditor, quiz: Quiz | null): CategoryEd
       run: () => {
         if (!category) return;
         editor.edit({ type: "applyCategory", id: category.id, slides });
-        notify(t("categoryReapplied", { n: slides.length, name: category.name }));
+        notify(t("categoryReapplied", { n: slides.length, name: categoryName(t, category) }));
       },
     },
     previousCategory: { label: t("previousCategory"), keys: ["ArrowUp", "ArrowLeft", "PageUp"], repeats: true, disabled: index <= 0, run: () => select(index - 1) },

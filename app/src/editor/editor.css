@@ -99,15 +99,23 @@
   background: var(--hover);
 }
 
-.studio .dialog-footer .primary {
+.studio .dialog-footer .primary,
+.studio .draft-unreadable-actions .primary {
   border-color: var(--accent);
   background: var(--accent);
   color: #fff;
 }
 
-.studio .dialog-footer .primary:hover {
+.studio .dialog-footer .primary:hover,
+.studio .draft-unreadable-actions .primary:hover {
   background: var(--accent-dark);
   color: #fff;
+}
+
+/* What cannot be undone, apart from the safe choices. */
+.studio .draft-unreadable-actions .bad {
+  margin-left: auto;
+  color: var(--bad);
 }
 
 .studio-loading {
@@ -180,10 +188,21 @@
 
 .studio-title {
   flex: 1;
-  overflow: hidden;
-  text-align: center;
+  min-width: 0;
+  display: flex;
+  justify-content: center;
+  gap: 0.3em;
   white-space: nowrap;
+}
+
+.studio-title-name {
+  overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.studio-title-mark,
+.studio-title-app {
+  flex: none;
 }
 
 .titlebar-exit {
@@ -2154,6 +2173,13 @@
   color: #fff;
 }
 
+/* An item's keys, at its right end. */
+.backstage-item small {
+  float: right;
+  margin-left: 16px;
+  opacity: 0.7;
+}
+
 .studio .backstage-item:hover:not(:disabled) {
   background: rgba(255, 255, 255, 0.16);
 }
@@ -2440,6 +2466,7 @@
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
+  direction: rtl;
   opacity: 0.85;
 }
 

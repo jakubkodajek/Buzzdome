@@ -4,6 +4,7 @@ import { SlideThumbnail } from "../host/SlideThumbnail";
 import { AddIcon, ExclamationIcon } from "../icons";
 import type { SlideContext } from "../quiz";
 import type { Quiz } from "../types";
+import { tooltip, type Action } from "./actions";
 
 interface ThumbnailsProps {
   quiz: Quiz;
@@ -22,11 +23,12 @@ interface ThumbnailsProps {
   onMenu: (event: MouseEvent, index: number | null) => void;
   /** The slide with id `dragged` was dropped into the gap before slide `gap` (the end when it is the count). */
   onMove: (dragged: string, gap: number) => void;
-  onAdd: () => void;
+  /** What the button under the slides does: adds a question. */
+  add: Action;
 }
 
 /** The slides down the left side: click to select (Ctrl or Shift for several), drag to reorder. */
-export function Thumbnails({ quiz, contexts, current, selected, problems, onSelect, onOpen, onMenu, onMove, onAdd }: ThumbnailsProps) {
+export function Thumbnails({ quiz, contexts, current, selected, problems, onSelect, onOpen, onMenu, onMove, add }: ThumbnailsProps) {
   const { t } = useApp();
   // While dragging: the slide dragged and the gap (0..count) it would drop into.
   const [drag, setDrag] = useState<{ from: number; gap: number } | null>(null);
@@ -113,7 +115,7 @@ export function Thumbnails({ quiz, contexts, current, selected, problems, onSele
           </li>
         ))}
       </ol>
-      <button type="button" className="add-slide" title={t("newSlide")} aria-label={t("newSlide")} onClick={onAdd}>
+      <button type="button" className="add-slide" title={tooltip(add)} aria-label={add.label} disabled={add.disabled} onClick={add.run}>
         <AddIcon />
       </button>
     </nav>

@@ -36,7 +36,7 @@ export function menuItems(t: Translate, target: MenuTarget, x: number, y: number
     return [c.newCategory, c.deleteCategory, c.reapplyCategory, "separator", c.categoryBackground, ...available([c.toggleCategoryBackground, c.removeCategoryBackground])];
   }
   const galleryHere = { ...actions.newSlide, run: () => context.openGallery(x, y) };
-  if (target.kind === "list") return [actions.paste, galleryHere];
+  if (target.kind === "list") return [actions.paste, galleryHere, actions.addQuestion];
   if (target.kind === "thumbnail") {
     return [
       actions.cut,
@@ -45,6 +45,7 @@ export function menuItems(t: Translate, target: MenuTarget, x: number, y: number
       actions.selectAll,
       "separator",
       galleryHere,
+      actions.addQuestion,
       actions.duplicate,
       actions.delete,
       "separator",
@@ -69,5 +70,14 @@ export function menuItems(t: Translate, target: MenuTarget, x: number, y: number
   if (target.element === "sound") items.push("separator", actions.trimSound, actions.normalizeSound);
   if (target.element === "video") items.push("separator", actions.trimVideo);
   if (target.element === "slide") items.push("separator", actions.insertBackground, ...available([actions.toggleBackground, actions.removeBackground]));
-  return [...items, "separator", actions.cut, actions.copy, actions.paste];
+  // On a part of the slide, the clipboard still takes the whole slide, and says so.
+  const clipboard =
+    target.element === "slide"
+      ? [actions.cut, actions.copy, actions.paste]
+      : [
+          { ...actions.cut, label: t("cutSlide") },
+          { ...actions.copy, label: t("copySlide") },
+          { ...actions.paste, label: t("pasteSlide") },
+        ];
+  return [...items, "separator", ...clipboard];
 }

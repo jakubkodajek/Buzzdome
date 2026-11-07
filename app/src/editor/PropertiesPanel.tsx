@@ -18,6 +18,7 @@ import { DEFAULT_TIMER, TIMER_LABEL } from "../timers";
 import type { Category, Slide } from "../types";
 import { keyCombo } from "../keyboard";
 import type { Action } from "./actions";
+import { categoryName } from "./categories";
 import { ContextMenu, Fold, MixedContext } from "./controls";
 import { answerIndex, type ElementId } from "./elements";
 import { withRows, type Page, type PageId, type Section } from "./property-pages";
@@ -447,5 +448,5 @@ export function selectionHeader(t: Translate, slide: Slide, count: number, eleme
 
 /** The header for a category in the Categories view, with how many slides took it on. */
 export function categoryHeader(t: Translate, category: Category, slides: number): PanelHeader {
-  return { icon: <PaletteIcon />, title: category.name || t("unnamedCategory"), chip: t("categorySlides", { n: slides }), subtitle: t("categoryHint") };
+  return { icon: <PaletteIcon />, title: categoryName(t, category), chip: t("categorySlides", { n: slides }), subtitle: t("categoryHint") };
 }

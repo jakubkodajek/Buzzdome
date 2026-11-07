@@ -1,9 +1,11 @@
-import { useMemo, useState, type MouseEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import { useApp } from "../app-context";
 import { errorNotice } from "../messages";
 import { NoticeBox, NotSavedBanner } from "../notice";
 import {
+  AddIcon,
   BackIcon,
+  CategoryAddIcon,
   CategoryIcon,
   CheckIcon,
   EditIcon,
@@ -91,21 +93,26 @@ function DraftNotWritten({ problem }: { problem: unknown }) {
 /** The draft left from last time does not read: it stays until the quizmaster discards it. */
 function UnreadableDraft({ editor, error, onExit }: { editor: QuizEditor; error: unknown; onExit: () => void }) {
   const { t } = useApp();
+  const tryAgain = useRef<HTMLButtonElement>(null);
+  useEffect(() => tryAgain.current?.focus(), []);
+  useActionKeys([{ label: t("backToDirector"), keys: ["Escape"], inFields: true, run: onExit }]);
+  // The heading says it does not open; what went wrong is the detail.
+  const { text, detail } = errorNotice(t, error);
   return (
     <div className="studio studio-loading">
       <div className="draft-unreadable">
         <h2>{t("draftUnreadable")}</h2>
-        <NoticeBox notice={errorNotice(t, error)} />
+        <NoticeBox notice={{ text: detail ?? text }} />
         <p>{t("draftUnreadableInfo")}</p>
         <div className="draft-unreadable-actions">
-          <button type="button" onClick={editor.reload}>
+          <button ref={tryAgain} type="button" className="primary" onClick={editor.reload}>
             {t("tryAgain")}
-          </button>
-          <button type="button" onClick={() => void editor.discardUnreadable()}>
-            {t("discardDraft")}
           </button>
           <button type="button" onClick={onExit}>
             {t("backToDirector")}
+          </button>
+          <button type="button" className="bad" onClick={() => void editor.discardUnreadable()}>
+            {t("discardDraft")}
           </button>
         </div>
       </div>
@@ -210,7 +217,7 @@ function Studio({ editor, open, ask, onExit }: { editor: QuizEditor; open: OpenQ
 
   const noSlide = slide === null;
   const actions: Actions = {
-    file: { label: t("ribbonFile"), keys: ["F1"], inFields: true, run: () => setBackstage("info") },
+    file: { label: t("ribbonFile"), keys: ["F1", "Alt+F"], inFields: true, run: () => setBackstage("info") },
     newQuiz: { label: t("newQuiz"), keys: ["Ctrl+N"], inFields: true, run: () => setAsking("new") },
     openQuiz: { label: t("openFile"), icon: <FolderIcon />, keys: ["Ctrl+O"], inFields: true, run: () => setBackstage("open") },
     save: { label: saved ? t("quizSaved") : t("saveQuiz"), icon: <SaveIcon />, keys: ["Ctrl+S"], inFields: true, disabled: !open || saved, run: () => void editor.save() },
@@ -239,14 +246,14 @@ function Studio({ editor, open, ask, onExit }: { editor: QuizEditor; open: OpenQ
     // The slide's dialog; for a picture, video or sound the slide's too (a click on one picks a file).
     edit: { label: t("editSlide"), icon: <EditIcon />, keys: ["Enter", "F2"], disabled: noSlide, run: () => openEdit(isMediaElement(element) ? "slide" : element) },
     newSlide: { label: t("newSlide"), icon: <SlideAddIcon />, disabled: !quiz, run: () => setGallery(GALLERY_AT) },
-    addQuestion: { label: t("addQuestion"), keys: ["Ctrl+M"], disabled: !quiz, run: () => insertLayout(DEFAULT_LAYOUT) },
+    addQuestion: { label: t("addQuestion"), icon: <AddIcon />, keys: ["Ctrl+M"], disabled: !quiz, run: () => insertLayout(DEFAULT_LAYOUT) },
     ...media.actions,
     graphical: { label: t("viewGraphical"), icon: <SlideIcon />, checked: view === "graphical", run: () => setView("graphical") },
     table: { label: t("viewTable"), icon: <TableIcon />, checked: view === "table", run: () => setView("table") },
     categories: { label: t("viewCategories"), icon: <CategoryIcon />, checked: view === "categories", run: () => setView("categories") },
     saveAsCategory: {
       label: t("saveAsCategory"),
-      icon: <CategoryIcon />,
+      icon: <CategoryAddIcon />,
       disabled: noSlide,
       run: () => {
         if (!slide) return;
@@ -334,11 +341,13 @@ function Studio({ editor, open, ask, onExit }: { editor: QuizEditor; open: OpenQ
                 </button>
               ))}
             </div>
-            <span className="studio-title">
-              {title}
-              {unsaved && " *"} – {t("quizEditor")}
+            {/* A long name is cut, never the unsaved mark after it. */}
+            <span className="studio-title" title={title}>
+              <span className="studio-title-name">{title}</span>
+              {unsaved && <span className="studio-title-mark">*</span>}
+              <span className="studio-title-app">– {t("quizEditor")}</span>
             </span>
-            <button type="button" className="titlebar-exit" onClick={onExit}>
+            <button type="button" className="titlebar-exit" title={tooltip(actions.exit)} onClick={actions.exit.run}>
               <BackIcon />
               {t("backToDirector")}
             </button>
@@ -410,7 +419,7 @@ function Studio({ editor, open, ask, onExit }: { editor: QuizEditor; open: OpenQ
                           const moved = moveToGap(slides, selected.includes(dragged) ? selected : [dragged], gap);
                           if (moved) editor.edit(moved);
                         }}
-                        onAdd={actions.addQuestion.run}
+                        add={actions.addQuestion}
                       />
                       <div className="studio-center">
                         {slide ? (
@@ -467,12 +476,20 @@ function Studio({ editor, open, ask, onExit }: { editor: QuizEditor; open: OpenQ
                 {open.problems.length > 0 ? t("problems", { n: open.problems.length }) : t("readyToPlay")}
               </button>
             )}
-            {unsaved && <span>{t("unsaved")}</span>}
-            {saved && <span>{t("quizSaved")}</span>}
+            {open && (
+              <span className="status-saved">
+                {unsaved ? <WarningIcon className="inline-icon" /> : saved && <SaveIcon className="inline-icon" />} {t(unsaved ? "statusUnsaved" : saved ? "quizSaved" : "notSavedYet")}
+              </span>
+            )}
             <span className="spacer" />
-            {open?.sourcePath && <span className="status-path">{open.sourcePath}</span>}
+            {/* Cut at its start: the file's name is the part that matters. */}
+            {open?.sourcePath && (
+              <span className="status-path" title={open.sourcePath}>
+                <bdi dir="ltr">{open.sourcePath}</bdi>
+              </span>
+            )}
             {[actions.graphical, actions.table, actions.categories].map((action) => (
-              <button key={action.label} type="button" className="status-view" title={action.label} aria-pressed={action.checked} onClick={action.run}>
+              <button key={action.label} type="button" className="status-view" title={tooltip(action)} aria-label={action.label} aria-pressed={action.checked} onClick={action.run}>
                 {action.icon}
               </button>
             ))}

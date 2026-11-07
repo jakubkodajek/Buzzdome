@@ -5,7 +5,7 @@ import { AddIcon } from "../icons";
 import { NO_CONTEXT } from "../quiz";
 import { ThemeContext } from "../theme/context";
 import type { Quiz, Theme } from "../types";
-import { sampleSlide } from "./categories";
+import { categoryName, sampleSlide } from "./categories";
 import { DesignArea } from "./DesignArea";
 import type { CategoryEditor } from "./useCategories";
 
@@ -54,7 +54,7 @@ export function CategoryView({ quiz, categories, canvasTheme, onMenu }: Category
             >
               <div className="thumbnail-frame">
                 <SlideThumbnail className="thumbnail-stage" slide={sampleSlide(c)} index={0} count={1} context={NO_CONTEXT} />
-                <span className="category-name">{c.name || t("unnamedCategory")}</span>
+                <span className="category-name">{categoryName(t, c)}</span>
               </div>
             </li>
           ))}

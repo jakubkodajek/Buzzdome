@@ -4,10 +4,10 @@
 
 import { useState, type Dispatch, type SetStateAction } from "react";
 import { useApp } from "../app-context";
-import { ArrowDownIcon, ArrowUpIcon, CopyIcon, CutIcon, PasteIcon, SlideIcon, TrashIcon } from "../icons";
+import { ArrowDownIcon, ArrowUpIcon, CopyIcon, CutIcon, DuplicateIcon, PasteIcon, TrashIcon } from "../icons";
 import type { Quiz, Slide } from "../types";
 import type { Action, SlideListActionId } from "./actions";
-import { hasElement, isMediaElement, type ElementId } from "./elements";
+import { hasElement, type ElementId } from "./elements";
 import { FIRST, insertSlides, moveByOne, positions, removeSlides, selectAll, selectedIds, selectIds, selectOne, type Selection } from "./selection";
 import { withFreshIds } from "./slides";
 import { openDraftId, useDraftState, type QuizEditor } from "./useQuizEditor";
@@ -92,14 +92,14 @@ export function useSlideList(editor: QuizEditor, quiz: Quiz | null): SlideList {
     delete: {
       label: t("deleteSlide"),
       icon: <TrashIcon />,
-      // Delete removes what is selected: a picture, video or sound, or else the slides.
-      keys: isMediaElement(element) ? undefined : ["Delete", "Backspace"],
+      // Delete removes what is selected: the slides only while no part of one is (a picture, video or sound goes by itself).
+      keys: element === "slide" ? ["Delete", "Backspace"] : undefined,
       disabled: noSlide,
       run: removeSelected,
     },
     duplicate: {
       label: t("duplicate"),
-      icon: <SlideIcon />,
+      icon: <DuplicateIcon />,
       keys: ["Ctrl+D"],
       disabled: noSlide,
       // The copies go after the last selected slide.
@@ -107,7 +107,12 @@ export function useSlideList(editor: QuizEditor, quiz: Quiz | null): SlideList {
     },
     moveUp: { label: t("moveUp"), icon: <ArrowUpIcon />, keys: ["Ctrl+ArrowUp"], disabled: moveUp === null, run: () => moveUp && editor.edit(moveUp) },
     moveDown: { label: t("moveDown"), icon: <ArrowDownIcon />, keys: ["Ctrl+ArrowDown"], disabled: moveDown === null, run: () => moveDown && editor.edit(moveDown) },
-    selectAll: { label: t("selectAllSlides"), keys: ["Ctrl+A"], disabled: slides.length < 2, run: () => setSelection(selectAll(selection, slides, index)) },
+    selectAll: {
+      label: t("selectAllSlides"),
+      keys: ["Ctrl+A"],
+      disabled: slides.length < 2 || selected.length === slides.length,
+      run: () => setSelection(selectAll(selection, slides, index)),
+    },
     previous: { label: t("previousSlide"), keys: ["ArrowUp", "ArrowLeft", "PageUp"], repeats: true, disabled: index <= 0, run: () => select(index - 1) },
     next: {
       label: t("nextSlide"),
