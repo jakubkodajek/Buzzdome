@@ -183,14 +183,17 @@ pub fn lights_info(state: State<StageLights>) -> LightsInfo {
     }
 }
 
-/// Checks `setup`, keeps it, then gives it to the lights. Off the windows'
-/// thread (`off_ui`): a disk that does not answer freezes no window.
+/// Checks `setup`, also as a change from the one kept
+/// (`LightsSetup::check_change`), keeps it, then gives it to the lights.
+/// Off the windows' thread (`off_ui`): a disk that does not answer freezes
+/// no window.
 #[tauri::command]
 pub async fn lights_store(app: AppHandle, setup: LightsSetup) -> CmdResult<()> {
     setup.check().map_err(|refused| AppError::LightsRefused { refused })?;
     off_ui(move || {
         let state = app.state::<StageLights>();
         let _storing = state.storing.lock().unwrap();
+        setup.check_change(&state.setup.lock().unwrap()).map_err(|refused| AppError::LightsRefused { refused })?;
         state.file.store(&setup)?;
         *state.setup.lock().unwrap() = setup.clone();
         *state.refused.lock().unwrap() = None;
