@@ -695,6 +695,11 @@
   background: #c42b1c;
 }
 
+/* A warning plays: a milder badge than a problem to fix. */
+.thumbnail-problem.warning {
+  background: var(--warn);
+}
+
 .thumbnail-problem svg {
   width: 12px;
   height: 12px;
@@ -2498,12 +2503,22 @@
 }
 
 .studio .status-problems.bad {
-  color: #ffd75e;
+  background: var(--bad);
   font-weight: 600;
+}
+
+/* Warnings only: the quiz plays. */
+.studio .status-problems.warn {
+  color: #ffd75e;
 }
 
 .studio .status-problems:hover {
   background: rgba(255, 255, 255, 0.18);
+}
+
+.studio .status-problems.bad:hover {
+  background: var(--bad);
+  filter: brightness(1.15);
 }
 
 .status-path {

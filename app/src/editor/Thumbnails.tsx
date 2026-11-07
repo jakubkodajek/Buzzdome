@@ -14,8 +14,10 @@ interface ThumbnailsProps {
   current: number;
   /** The ids of the selected slides, the current one among them. */
   selected: ReadonlySet<string>;
-  /** Slide ids with problems. */
+  /** Slide ids with problems to fix. */
   problems: ReadonlySet<string>;
+  /** Slide ids with warnings only (`splitProblems`), badged more mildly. */
+  warnings: ReadonlySet<string>;
   /** A click on a slide, with Ctrl (Cmd) or Shift held or not. */
   onSelect: (index: number, keys: { ctrl: boolean; shift: boolean }) => void;
   onOpen: (index: number) => void;
@@ -45,7 +47,7 @@ export function useCurrentItem(current: number) {
 }
 
 /** The slides down the left side: click to select (Ctrl or Shift for several), drag to reorder. */
-export function Thumbnails({ quiz, contexts, current, selected, problems, onSelect, onOpen, onMenu, onMove, add }: ThumbnailsProps) {
+export function Thumbnails({ quiz, contexts, current, selected, problems, warnings, onSelect, onOpen, onMenu, onMove, add }: ThumbnailsProps) {
   const { t } = useApp();
   // While dragging: the slide dragged and the gap (0..count) it would drop into.
   const [drag, setDrag] = useState<{ from: number; gap: number } | null>(null);
@@ -119,10 +121,16 @@ export function Thumbnails({ quiz, contexts, current, selected, problems, onSele
                 count={quiz.slides.length}
                 context={contexts[i]}
               />
-              {problems.has(slide.id) && (
+              {problems.has(slide.id) ? (
                 <span className="thumbnail-problem" title={t("slideHasProblems")}>
                   <ExclamationIcon />
                 </span>
+              ) : (
+                warnings.has(slide.id) && (
+                  <span className="thumbnail-problem warning" title={t("slideHasWarnings")}>
+                    <ExclamationIcon />
+                  </span>
+                )
               )}
             </div>
           </li>

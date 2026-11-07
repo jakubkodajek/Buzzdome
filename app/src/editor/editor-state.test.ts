@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { EditorDraft, Quiz, ValidationError } from "../types";
-import { editorReducer, isUnsaved, LOADING, needsInfo, sameData, type EditorState, type OpenQuiz } from "./editor-state";
+import { editorReducer, isUnsaved, LOADING, needsInfo, sameData, splitProblems, type EditorState, type OpenQuiz } from "./editor-state";
 
 const quiz: Quiz = { schemaVersion: 1, title: "Quiz", theme: null, slides: [] };
 const draft = (unsaved: boolean, dropped: ValidationError[] = []): EditorDraft => ({
@@ -106,5 +106,23 @@ describe("editor state", () => {
     expect(editorReducer(state, { type: "undo" })).toBe(state);
     expect(editorReducer(state, { type: "loading" })).toBe(LOADING);
     expect(opened(editorReducer(LOADING, { type: "loaded", draft: draft(false) })).draftId).toBe("draft-1");
+  });
+});
+
+describe("splitProblems", () => {
+  const noText: ValidationError = { slideId: "q", problem: { code: "questionTextEmpty" } };
+  const noAnswer: ValidationError = { slideId: "q", problem: { code: "answerEmpty", answer: 1 } };
+  const noSlides: ValidationError = { slideId: null, problem: { code: "noSlides" } };
+  const noCorrect: ValidationError = { slideId: "q", problem: { code: "noCorrectAnswer" } };
+  const clash: ValidationError = { slideId: null, problem: { code: "unknownCategory" } };
+
+  it("puts the warnings apart from the problems to fix, each in its order", () => {
+    expect(splitProblems([noText, noCorrect, noAnswer, clash, noSlides])).toEqual({ problems: [noCorrect, clash], warnings: [noText, noAnswer, noSlides] });
+    expect(splitProblems([])).toEqual({ problems: [], warnings: [] });
+  });
+
+  it("opens File › Info for problems to fix, not for warnings only", () => {
+    expect(needsInfo({ problems: [noSlides, noText], dropped: [] })).toBe(false);
+    expect(needsInfo({ problems: [noSlides, noCorrect], dropped: [] })).toBe(true);
   });
 });

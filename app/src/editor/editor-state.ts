@@ -1,5 +1,6 @@
 // Everything the editor knows about the open quiz. Pure, like `history.ts`.
 
+import { WARNING_PROBLEMS } from "../bindings/Constants";
 import type { EditorDraft, Quiz, ValidationError } from "../types";
 import { historyReducer, startHistory, type History, type HistoryAction } from "./history";
 
@@ -107,7 +108,22 @@ export function sameData(a: unknown, b: unknown): boolean {
   return [...new Set([...Object.keys(x), ...Object.keys(y)])].every((key) => sameData(x[key], y[key]));
 }
 
-/** File › Info has something to tell: problems to fix, or what opening the file left out. */
+/** A quiz's problems apart: what to fix before it is played, and warnings of what may be a mistake but plays. */
+export interface SplitProblems {
+  problems: ValidationError[];
+  warnings: ValidationError[];
+}
+
+const WARNINGS: ReadonlySet<string> = new Set(WARNING_PROBLEMS);
+
+/** Splits `all` (`OpenQuiz.problems`) into problems and warnings (`WARNING_PROBLEMS`), each in its order. */
+export function splitProblems(all: ValidationError[]): SplitProblems {
+  const split: SplitProblems = { problems: [], warnings: [] };
+  for (const problem of all) (WARNINGS.has(problem.problem.code) ? split.warnings : split.problems).push(problem);
+  return split;
+}
+
+/** File › Info has something to tell: problems to fix (not warnings only), or what opening the file left out. */
 export function needsInfo(quiz: Pick<OpenQuiz, "problems" | "dropped">): boolean {
-  return quiz.problems.length > 0 || quiz.dropped.length > 0;
+  return splitProblems(quiz.problems).problems.length > 0 || quiz.dropped.length > 0;
 }

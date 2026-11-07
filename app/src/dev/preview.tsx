@@ -35,6 +35,7 @@ import type {
   SoundBoard,
   SoundClip,
   TimerDesign,
+  ValidationError,
   VideoClip,
   Welcome,
 } from "../types";
@@ -73,6 +74,8 @@ const resume = params.get("resume");
 const saving = params.get("saving");
 /** `unreadable`: the editor's draft does not read; `failing`: writing it fails, as on a full disk; `busy`: a sheet import does not finish; `unsaved`: it has changes its quiz file does not have. */
 const draft = params.get("draft");
+/** `problems=warnings`: the editor's quiz has warnings only (it plays); `both`: a problem to fix too. */
+const quizChecks = params.get("problems");
 /** `recent=gone`: the recent quiz files are no longer where they were, as after they were deleted. */
 const recentGone = params.get("recent") === "gone";
 /** `available`: the update server offers a newer version; `installing`: it also downloads without end once asked. */
@@ -559,6 +562,17 @@ const editorQuiz: Quiz = {
   ],
 };
 
+/** What the backend's check finds in the editor's quiz, as `quizChecks` asks. */
+function editorProblems(): ValidationError[] {
+  if (quizChecks !== "warnings" && quizChecks !== "both") return [];
+  const [, second, third] = editorQuiz.slides;
+  const warnings: ValidationError[] = [
+    { slideId: second.id, problem: { code: "questionTextEmpty" } },
+    { slideId: third.id, problem: { code: "answerEmpty", answer: 2 } },
+  ];
+  return quizChecks === "both" ? [{ slideId: third.id, problem: { code: "noCorrectAnswer" } }, ...warnings] : warnings;
+}
+
 clearMocks();
 mockWindows(windowLabel, windowLabel === "host" ? "director" : "host");
 /** The commands the windows sent, for browser checks of the controls (nothing applies them here). */
@@ -872,7 +886,7 @@ mockIPC(
         return { meta: { quizTitle: quiz.title, sourcePath: null, startedMs: Date.now() - 3_600_000 }, commandCount: 57 };
       case "editor_load":
         if (draft === "unreadable") return Promise.reject({ code: "draftNotRead", detail: "expected value at line 1 column 1" });
-        return { id: "draft-1", quiz: firstDraft?.quiz ?? editorQuiz, sourcePath: "C:\\Kvizy\\hospodsky-kviz.quiz", savesInPlace: true, unsaved: firstDraft?.unsaved ?? draft === "unsaved", mediaRoot: "/src/dev/", problems: [], dropped: [] };
+        return { id: "draft-1", quiz: firstDraft?.quiz ?? editorQuiz, sourcePath: "C:\\Kvizy\\hospodsky-kviz.quiz", savesInPlace: true, unsaved: firstDraft?.unsaved ?? draft === "unsaved", mediaRoot: "/src/dev/", problems: editorProblems(), dropped: [] };
       case "editor_new":
         return { id: `draft-${++drafts}`, quiz: { ...editorQuiz, title: (payload as { title: string }).title, slides: [] }, sourcePath: null, savesInPlace: false, unsaved: false, mediaRoot: "/src/dev/", problems: [], dropped: [] };
       case "recent_files":
@@ -913,7 +927,7 @@ mockIPC(
           const written = payload as { draft: string; quiz: Quiz; unsaved: boolean };
           if (written.draft === "draft-1") firstDraft = { quiz: JSON.parse(JSON.stringify(written.quiz)) as Quiz, unsaved: written.unsaved };
         }
-        return [];
+        return editorProblems();
       case "editor_save":
         called.push({ cmd, ...(payload as object) });
         return "C:\\Kvizy\\hospodsky-kviz.quiz";

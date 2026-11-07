@@ -28,7 +28,7 @@ import { ThemeContext } from "../theme/context";
 import { useLatest, useWindowTitle } from "../hooks";
 import { createStore, useStore } from "../store";
 import type { StringKey } from "../i18n";
-import type { EditorDraft, Slide } from "../types";
+import type { EditorDraft, Slide, ValidationError } from "../types";
 import type { DraftOperation } from "./draft-session";
 import { actionButton, tooltip, useActionKeys, type Action, type ActionId, type Actions } from "./actions";
 import { Backstage, type BackstagePage } from "./Backstage";
@@ -36,7 +36,7 @@ import { CategoryView } from "./CategoryView";
 import { ContextMenu } from "./controls";
 import { DesignArea, NotesBox } from "./DesignArea";
 import { EditSlideDialog } from "./EditSlideDialog";
-import { isUnsaved, needsInfo, type OpenQuiz } from "./editor-state";
+import { isUnsaved, needsInfo, splitProblems, type OpenQuiz } from "./editor-state";
 import { isMediaElement, type ElementId } from "./elements";
 import { fieldsMerge } from "./history";
 import { LayoutGallery } from "./LayoutGallery";
@@ -188,6 +188,7 @@ function Studio({ editor, open, ask, onExit }: { editor: QuizEditor; open: OpenQ
   const several = selected.length > 1;
   const dialogSlide = dialog ? slides.find((s) => s.id === dialog.id) : undefined;
   const unsaved = open !== null && isUnsaved(open);
+  const { problems, warnings } = splitProblems(open?.problems ?? []);
   // Nothing to save: every change is in the quiz file that Save writes (a new quiz has none yet, a JSON quiz is saved as one).
   const saved = open !== null && !unsaved && open.savesInPlace;
 
@@ -250,7 +251,7 @@ function Studio({ editor, open, ask, onExit }: { editor: QuizEditor; open: OpenQ
   // say); what is to fix is then listed in File › Info.
   const testRun = (from?: number) =>
     void editor.testRun(from).then((started) => {
-      if (!started && open && open.problems.length > 0) setBackstage("info");
+      if (!started && problems.length > 0) setBackstage("info");
     });
 
   const noSlide = slide === null;
@@ -474,7 +475,8 @@ function Studio({ editor, open, ask, onExit }: { editor: QuizEditor; open: OpenQ
                         contexts={contexts}
                         current={index}
                         selected={new Set(selected)}
-                        problems={new Set(open.problems.flatMap((p) => (p.slideId === null ? [] : [p.slideId])))}
+                        problems={slideIds(problems)}
+                        warnings={slideIds(warnings)}
                         onSelect={(i, keys) => list.setSelection(clickSlide(list.selection, slides, i, keys))}
                         onOpen={(i) => {
                           list.select(i);
@@ -539,9 +541,9 @@ function Studio({ editor, open, ask, onExit }: { editor: QuizEditor; open: OpenQ
             <span>{status}</span>
             {editor.status.busy && <span role="status">{t(BUSY_TEXT[editor.status.busy])}</span>}
             {open && (
-              <button type="button" className={open.problems.length > 0 ? "status-problems bad" : "status-problems"} onClick={() => setBackstage("info")}>
-                {open.problems.length > 0 ? <WarningIcon className="inline-icon" /> : <CheckIcon className="inline-icon" />}{" "}
-                {open.problems.length > 0 ? t("problems", { n: open.problems.length }) : t("readyToPlay")}
+              <button type="button" className={problems.length > 0 ? "status-problems bad" : warnings.length > 0 ? "status-problems warn" : "status-problems"} onClick={() => setBackstage("info")}>
+                {problems.length > 0 || warnings.length > 0 ? <WarningIcon className="inline-icon" /> : <CheckIcon className="inline-icon" />}{" "}
+                {problems.length > 0 ? t("problems", { n: problems.length }) : warnings.length > 0 ? t("readyWithWarnings", { n: warnings.length }) : t("readyToPlay")}
               </button>
             )}
             {open && (
@@ -593,4 +595,9 @@ function Studio({ editor, open, ask, onExit }: { editor: QuizEditor; open: OpenQ
       </ThemeContext>
     </MediaRootContext>
   );
+}
+
+/** The ids of the slides `problems` are on. */
+function slideIds(problems: ValidationError[]): Set<string> {
+  return new Set(problems.flatMap((p) => (p.slideId === null ? [] : [p.slideId])));
 }

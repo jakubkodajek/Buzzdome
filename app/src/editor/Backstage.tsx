@@ -16,7 +16,7 @@ import type { AllAnswered, Quiz, QuizLanguage, QuizSettings, QuizSounds, ReadAlo
 import { actionButton, tooltip, type Action, type Actions } from "./actions";
 import { AiPage } from "./AiPage";
 import { MediaPicker, NumberBox, Select, Switch } from "./controls";
-import type { OpenQuiz } from "./editor-state";
+import { splitProblems, type OpenQuiz } from "./editor-state";
 import { SoundsSettings } from "./SoundsSettings";
 
 export type BackstagePage = "info" | "settings" | "open" | "import" | "export" | "ai";
@@ -128,6 +128,7 @@ function pageFor(page: BackstagePage, props: BackstageProps, open: OpenQuiz) {
 function InfoPage({ open, unsaved, onTitle, onShowSlide }: BackstageProps & { open: OpenQuiz }) {
   const { t } = useApp();
   const quiz = open.history.present;
+  const { problems, warnings } = splitProblems(open.problems);
   return (
     <>
       <h1>{t("info")}</h1>
@@ -146,14 +147,21 @@ function InfoPage({ open, unsaved, onTitle, onShowSlide }: BackstageProps & { op
         <dt>{t("tabQuestions")}</dt>
         <dd>{questionCount(quiz)}</dd>
       </dl>
-      {open.problems.length === 0 ? (
+      {problems.length === 0 ? (
         <h2 className="good-text">
           <CheckIcon className="inline-icon" /> {t("readyToPlay")}
         </h2>
       ) : (
         <>
-          <h2>{t("problems", { n: open.problems.length })}</h2>
-          <ProblemList problems={open.problems} quiz={quiz} onShowSlide={onShowSlide} />
+          <h2>{t("problems", { n: problems.length })}</h2>
+          <ProblemList problems={problems} quiz={quiz} onShowSlide={onShowSlide} />
+        </>
+      )}
+      {warnings.length > 0 && (
+        <>
+          <h2>{t("warnings", { n: warnings.length })}</h2>
+          <p>{t("warningsHint")}</p>
+          <ProblemList problems={warnings} quiz={quiz} onShowSlide={onShowSlide} />
         </>
       )}
       {open.dropped.length > 0 && (
