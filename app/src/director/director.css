@@ -788,11 +788,17 @@
 
 /* Settings and virtual buzzers */
 
+/* The tab scrolls on its own, as the Receiver and Lights tabs do, so the
+   tabs and the status bar stay where they are. */
 .settings {
   padding: 16px;
   display: flex;
   flex-direction: column;
   gap: 14px;
+  overflow: auto;
+}
+
+.settings > * {
   max-width: 560px;
 }
 
@@ -1419,6 +1425,7 @@
 
 .media-toolbar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 6px;
   padding: 6px 8px;

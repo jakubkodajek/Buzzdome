@@ -47,7 +47,9 @@ or fails behind a proxy.
 7. For a screen change, look at it in the browser preview:
    `cd app && npm run dev`, then
    `/preview.html?window=<director|host>&scene=<name>` (scenes in
-   `app/src/dev/preview.tsx`). Keep any Playwright scripts outside the repo.
+   `app/src/dev/preview.tsx`). For a layout or CSS change, also run the
+   `buzzdome-layout` skill's check of every window. Keep any other
+   Playwright scripts outside the repo.
 
 Deeper runs when the game core changed:
 `SOAK_SHOWS=5000 cargo test --release -p show-sim`. A failing show prints
