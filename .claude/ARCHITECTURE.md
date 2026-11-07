@@ -118,6 +118,7 @@ quiz-core (crates/quiz-core)    pure game state machine, rules, scoring, view
 | Add or change a backend command | `app/src-tauri/build.rs`, `src/lib.rs`, `capabilities/`, `app/src/api.ts` | `buzzdome-backend-command` |
 | Change a game rule or the quiz format | `crates/quiz-core/src/game.rs`, `model.rs`, `docs/quiz-format.md` | `buzzdome-game-rules` |
 | Change a screen, the editor or a text | `app/src`, `i18n.ts`, `editor/slides.ts`, `host/SlideScreen.tsx` | `buzzdome-ui-change` |
+| A window's layout: bars, scrolling, what covers what | `app/src/director/director.css`, `editor/editor.css`, `host/` | `buzzdome-layout` |
 | A message to the quizmaster, an icon | `useApp()` (`notify`, `caution`, `fail`), `notice.tsx`, `icons.tsx` | `buzzdome-ui-change` |
 | Buzzers, receiver, remote, buzzer colours or stage lights | `crates/buzzers`, `crates/lights`, `app/src-tauri/src/hardware.rs`, `remote.rs`, `docs/hardware-test.md` | `buzzdome-hardware` |
 | AI assistants: MCP tools, connecting AI apps, instructions | `crates/quiz-ai`, `app/src-tauri/src/ai.rs`, `editor/AiPage.tsx`, `docs/ai-assistants.md` | none |

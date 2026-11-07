@@ -73,4 +73,6 @@ gets. `CLAUDE.md` lists the conventions; this is the checklist.
    clock with `showClockNow` or `heardNow` (`media-player.ts`).
 10. **Check it.** Add the state to a preview scene in
    `app/src/dev/preview.tsx` if none shows it, look at it in Czech and English,
-   and run the `buzzdome-verify` skill.
+   and run the `buzzdome-verify` skill. A part that can grow taller than the
+   window scrolls in its own box (`overflow: auto`), so the bars stay put;
+   the `buzzdome-layout` skill checks every window for that.

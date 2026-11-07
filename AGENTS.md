@@ -19,6 +19,7 @@ Then read:
 | `buzzdome-backend-command` | add or change a Tauri command or backend event |
 | `buzzdome-game-rules` | change game rules, scoring or the quiz file format |
 | `buzzdome-ui-change` | change the Director, projector slides, editor or texts |
+| `buzzdome-layout` | check every window for broken layout (bars, scrolling, covered controls) |
 | `buzzdome-hardware` | work on the buzzers, the receiver or the stage lights |
 
 Never commit the reference manual copies or any vendor SDK file. The
