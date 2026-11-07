@@ -72,6 +72,7 @@ export function FontBox(props: { label: string; value: FontValue; themeBold: boo
               setOpen(null);
               onChange({ font });
             }}
+            onKeep={() => setOpen(null)}
           />
         </Popup>
       )}
@@ -79,8 +80,13 @@ export function FontBox(props: { label: string; value: FontValue; themeBold: boo
   );
 }
 
-/** The installed fonts, each in its own look, with a search; the first entry is the theme's font. */
-function FontList({ value, width, onPick }: { value: string | undefined; width: number; onPick: (font: string | undefined) => void }) {
+/**
+ * The installed fonts, each in its own look, with a search; the first entry
+ * is the theme's font. Enter picks the first font found, or with nothing
+ * searched keeps the font as it is (`onKeep`).
+ */
+function FontList(props: { value: string | undefined; width: number; onPick: (font: string | undefined) => void; onKeep: () => void }) {
+  const { value, width, onPick, onKeep } = props;
   const { t } = useApp();
   const fonts = useInstalledFonts();
   const [query, setQuery] = useState("");
@@ -101,7 +107,9 @@ function FontList({ value, width, onPick }: { value: string | undefined; width: 
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         onKeyDown={(e) => {
-          if (e.key === "Enter" && listed.length > 0) onPick(listed[0]);
+          if (e.key !== "Enter") return;
+          if (!needle) onKeep();
+          else if (listed.length > 0) onPick(listed[0]);
         }}
       />
       <div className="font-options" role="listbox" aria-label={t("chooseFont")}>

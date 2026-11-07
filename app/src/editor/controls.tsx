@@ -3,7 +3,9 @@
 import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { ANSWER_LETTERS } from "../answers";
 import { useApp } from "../app-context";
+import { confirmAction } from "../confirm";
 import { parseTrackTime, trackTime } from "../format";
+import { useLatest } from "../hooks";
 import { CheckIcon, ChevronRightIcon, CrossIcon, MoreIcon } from "../icons";
 import { mediaFileName } from "../media";
 import { shortcutLabel, type Action } from "./actions";
@@ -41,12 +43,14 @@ export function Switch({ checked, onChange, disabled = false, label }: { checked
  */
 export function AnswerToggles(props: { label: string; count: number; value: number[]; keepOne: boolean; none: string; onChange: (answers: number[]) => void }) {
   const { label, count, value, keepOne, none, onChange } = props;
+  const { t } = useApp();
   const mixed = useContext(MixedContext);
   const pressed = mixed ? [] : value;
   return (
     <span className="answer-toggles" role="group" aria-label={label}>
       {ANSWER_LETTERS.slice(0, count).map((letter, i) => {
         const on = pressed.includes(i);
+        const kept = on && keepOne && pressed.length === 1;
         return (
           <button
             key={letter}
@@ -54,7 +58,8 @@ export function AnswerToggles(props: { label: string; count: number; value: numb
             className={on ? "answer-toggle on" : "answer-toggle"}
             aria-pressed={on}
             aria-label={`${label}: ${letter}`}
-            disabled={on && keepOne && pressed.length === 1}
+            title={kept ? t("keepOneCorrect") : undefined}
+            disabled={kept}
             onClick={() => onChange(on ? pressed.filter((answer) => answer !== i) : [...pressed, i])}
           >
             {letter}
@@ -245,39 +250,93 @@ export function MediaPicker({ file, onChoose, onRemove, label }: { file: string 
   );
 }
 
-/** A dialog over the window; Escape or the close button cancels. */
-export function Dialog(props: { title: string; onClose: () => void; children: ReactNode; footer: ReactNode; className?: string }) {
-  const { title, onClose, children, footer, className } = props;
+/** What can take the focus in a dialog. */
+const FOCUSABLE = "button, [href], input, select, textarea, [tabindex]:not([tabindex='-1'])";
+
+/** The controls in `box` that Tab reaches, in order: enabled and shown. */
+function tabStops(box: HTMLElement): HTMLElement[] {
+  return [...box.querySelectorAll<HTMLElement>(FOCUSABLE)].filter((e) => !e.matches(":disabled") && e.getClientRects().length > 0);
+}
+
+/**
+ * A dialog over the window. Escape, the close button and the footer's
+ * Cancel (a `footer` given as a function of it) cancel it; while `dirty`
+ * they ask first and a click beside the dialog does nothing, so nothing
+ * typed is lost by mistake. The focus stays inside while it is open, and
+ * goes back where it was once it closes.
+ */
+export function Dialog(props: {
+  title: string;
+  onClose: () => void;
+  children: ReactNode;
+  footer: ReactNode | ((cancel: () => void) => ReactNode);
+  className?: string;
+  dirty?: boolean;
+}) {
+  const { title, onClose, children, footer, className, dirty = false } = props;
   const { t } = useApp();
   const box = useRef<HTMLDivElement>(null);
+  // Read while rendering, before anything inside takes the focus.
+  const [opener] = useState(() => document.activeElement);
+  const cancel = useLatest(() => {
+    if (!dirty) onClose();
+    else void confirmAction(t, t("discardEdits")).then((discard) => discard && onClose());
+  });
   useEffect(() => {
     // Focus the control marked for it (a footer button too), or else the first field, so typing starts at once.
     const body = box.current?.querySelector(".dialog-body");
     (box.current?.querySelector<HTMLElement>("[data-autofocus]") ?? body?.querySelector<HTMLElement>("textarea, input, select, button"))?.focus();
-  }, []);
+    // The focused control went or was disabled: Escape and Tab still act on the dialog, not on the window behind it.
+    const focusLost = (event: KeyboardEvent) => {
+      const element = box.current;
+      if (!element || (event.target !== document.body && event.target !== document.documentElement)) return;
+      if (event.key === "Escape") {
+        event.preventDefault();
+        cancel.current();
+      } else if (event.key === "Tab") {
+        event.preventDefault();
+        (tabStops(element)[0] ?? element).focus();
+      }
+    };
+    window.addEventListener("keydown", focusLost);
+    return () => {
+      window.removeEventListener("keydown", focusLost);
+      if (opener instanceof HTMLElement && opener.isConnected) opener.focus();
+    };
+  }, [cancel, opener]);
   return (
-    <div className="dialog-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+    <div className="dialog-backdrop" onMouseDown={(e) => e.target === e.currentTarget && !dirty && onClose()}>
       <div
         ref={box}
         className={className ? `dialog ${className}` : "dialog"}
         role="dialog"
         aria-modal="true"
         aria-label={title}
+        // A click on its text keeps the focus in the dialog, so Escape still cancels it.
+        tabIndex={-1}
         onKeyDown={(e) => {
           if (e.key === "Escape") {
             e.stopPropagation();
-            onClose();
+            cancel.current();
+          } else if (e.key === "Tab") {
+            // Tab goes round the dialog's own controls.
+            const stops = tabStops(e.currentTarget);
+            const at = stops.indexOf(document.activeElement as HTMLElement);
+            const wrapTo = stops.length === 0 ? e.currentTarget : e.shiftKey ? (at <= 0 ? stops[stops.length - 1] : null) : at === -1 || at === stops.length - 1 ? stops[0] : null;
+            if (!wrapTo) return;
+            e.preventDefault();
+            wrapTo.focus();
           }
         }}
       >
         <header className="dialog-title">
           <span>{title}</span>
-          <button type="button" className="dialog-close" aria-label={t("closeDialog")} title={t("closeDialog")} onClick={onClose}>
+          <button type="button" className="dialog-close" aria-label={t("closeDialog")} title={t("closeDialog")} onClick={() => cancel.current()}>
             <CrossIcon />
           </button>
         </header>
         <div className="dialog-body">{children}</div>
-        <footer className="dialog-footer">{footer}</footer>
+        <footer className="dialog-footer">{typeof footer === "function" ? footer(() => cancel.current()) : footer}</footer>
       </div>
     </div>
   );
@@ -335,8 +394,30 @@ export function Popup(props: { x: number; y: number; onClose: () => void; classN
   );
 }
 
-/** A context menu of actions at a point of the window. */
+/** The keys that move through a menu's items, to where they go from item `at` of `count`. */
+const MENU_KEYS: Record<string, (at: number, count: number) => number> = {
+  ArrowDown: (at, count) => (at + 1) % count,
+  ArrowUp: (at, count) => (at - 1 + count) % count,
+  Home: () => 0,
+  End: (_, count) => count - 1,
+};
+
+/** Moves the focus through the enabled items of the menu `item` is in, as `key` says; whether it was a menu key. */
+function moveInMenu(item: HTMLElement, key: string): boolean {
+  const to = MENU_KEYS[key];
+  const menu = item.parentElement;
+  if (!to || !menu) return false;
+  const items = [...menu.querySelectorAll<HTMLElement>("[role^=menuitem]:not(:disabled)")];
+  if (items.length > 0) items[to(items.indexOf(item), items.length)].focus();
+  return true;
+}
+
+/** A context menu of actions at a point of the window; the arrow keys, Home and End go through its items. */
 export function ContextMenu({ x, y, items, onClose }: { x: number; y: number; items: (Action | "separator")[]; onClose: () => void }) {
+  const first = useRef<HTMLButtonElement>(null);
+  const firstEnabled = items.findIndex((item) => item !== "separator" && !item.disabled);
+  // After the popup took the focus, so Enter runs the first item at once.
+  useEffect(() => first.current?.focus(), []);
   return (
     <Popup x={x} y={y} onClose={onClose} className="context-menu" role="menu">
       {items.map((item, i) =>
@@ -345,10 +426,14 @@ export function ContextMenu({ x, y, items, onClose }: { x: number; y: number; it
         ) : (
           <button
             key={i}
+            ref={i === firstEnabled ? first : undefined}
             type="button"
             role={item.checked === undefined ? "menuitem" : "menuitemcheckbox"}
             aria-checked={item.checked}
             disabled={item.disabled}
+            onKeyDown={(e) => {
+              if (moveInMenu(e.currentTarget, e.key)) e.preventDefault();
+            }}
             onClick={() => {
               onClose();
               item.run();

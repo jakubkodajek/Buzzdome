@@ -68,17 +68,34 @@ export type ActionId =
 
 export type Actions = Record<ActionId, Action>;
 
-const KEY_SYMBOLS: Record<string, string> = { ArrowUp: "↑", ArrowDown: "↓", ArrowLeft: "←", ArrowRight: "→" };
+const KEY_SYMBOLS: Record<string, string> = { ArrowUp: "↑", ArrowDown: "↓", ArrowLeft: "←", ArrowRight: "→", Escape: "Esc" };
 
 /** How an action's first key combination is shown in menus and tooltips. */
-export function shortcutLabel(action: Action): string | undefined {
-  return action.keys?.[0].replace(/Arrow(Up|Down|Left|Right)/, (key) => KEY_SYMBOLS[key]);
+export function shortcutLabel(action: Pick<Action, "keys">): string | undefined {
+  return action.keys?.[0].replace(/Arrow(Up|Down|Left|Right)|Escape/, (key) => KEY_SYMBOLS[key]);
 }
 
 /** The action's label with its keys, for a tooltip. */
-export function tooltip(action: Action): string {
+export function tooltip(action: Pick<Action, "label" | "keys">): string {
   const keys = shortcutLabel(action);
   return keys ? `${action.label} (${keys})` : action.label;
+}
+
+/** The keys that delete what is selected. */
+const DELETE_KEYS = new Set(["Delete", "Backspace"]);
+
+/** Where Delete and Backspace belong to the control used last (a switch, a button, a property, a table cell), so they never delete a slide. */
+const OWNS_DELETE = "button, [role=switch], [role=tab], [role=menuitem], .properties-panel, .slide-table";
+
+/**
+ * Whether the key `combo` pressed on `target` is the target's own: a field
+ * keeps its keys, a focused button its Enter, and a control used last its
+ * Delete and Backspace.
+ */
+export function keyBelongsTo(target: EventTarget | null, combo: string): boolean {
+  if (isFieldTarget(target)) return true;
+  if (combo === "Enter") return target instanceof HTMLButtonElement;
+  return DELETE_KEYS.has(combo) && target instanceof Element && target.closest(OWNS_DELETE) !== null;
 }
 
 /** Runs the action whose keys are pressed. */
@@ -87,8 +104,7 @@ export function useActionKeys(actions: Action[]) {
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       const combo = keyCombo(event);
-      // Fields keep their keys, and a focused button its Enter.
-      const typing = isFieldTarget(event.target) || (combo === "Enter" && event.target instanceof HTMLButtonElement);
+      const typing = keyBelongsTo(event.target, combo);
       const action = latest.current.find((a) => a.keys?.includes(combo) && (a.inFields || !typing));
       if (!action) return;
       event.preventDefault();

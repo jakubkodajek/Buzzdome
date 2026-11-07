@@ -3,7 +3,8 @@ import { useVoiceGain, useVoiceModel, useVoicePreview, useVoiceSample, voiceLine
 import { welcomePreviewView } from "../host/preview";
 import { SlideScreen } from "../host/SlideScreen";
 import { Stage } from "../host/Stage";
-import { BackIcon, PlayIcon, StopIcon } from "../icons";
+import { useEffect, useRef } from "react";
+import { BackIcon, CheckIcon, PlayIcon, StopIcon } from "../icons";
 import { keyHint, KEYS } from "../keyboard";
 import { problemText } from "../messages";
 import { MAX_AFTER_REVEAL_DELAY_S, MAX_ALL_ANSWERED_DELAY_S, MAX_JOKERS, QUIZ_LANGUAGES } from "../bindings/Constants";
@@ -12,7 +13,7 @@ import type { MediaKind } from "../media";
 import { LANGUAGE_LABEL, NO_CONTEXT, questionCount, settingsOf, soundsOf, welcomeOf } from "../quiz";
 import { RecentFileList } from "../recent-files";
 import type { AllAnswered, Quiz, QuizLanguage, QuizSettings, QuizSounds, ReadAloud, ValidationError, Welcome } from "../types";
-import type { Action, Actions } from "./actions";
+import { tooltip, type Action, type Actions } from "./actions";
 import { AiPage } from "./AiPage";
 import { MediaPicker, NumberBox, Select, Switch } from "./controls";
 import type { OpenQuiz } from "./editor-state";
@@ -31,7 +32,7 @@ interface BackstageProps {
   /**
    * The file's actions, questions from a spreadsheet, the template for one and the quiz as one (spec QZ-8).
    */
-  actions: Pick<Actions, "newQuiz" | "save" | "saveAs" | "closeQuiz" | "exit" | "importSheet" | "sheetTemplate" | "exportSheet">;
+  actions: Pick<Actions, "newQuiz" | "openQuiz" | "save" | "saveAs" | "closeQuiz" | "exit" | "importSheet" | "sheetTemplate" | "exportSheet">;
   recentFiles: string[];
   /** Opens `recent`, a file in `recentFiles`, or one the quizmaster picks. */
   onOpenFile: (recent?: string) => void;
@@ -50,34 +51,49 @@ interface BackstageProps {
 /** Pages shown when no quiz is open. */
 const WITHOUT_QUIZ: BackstagePage[] = ["open", "ai"];
 
+/** Back to the quiz, as Escape goes there. */
+const BACK_KEYS = ["Escape"];
+
 /** The FILE tab: the quiz as a whole and its file, over the whole window. */
 export function Backstage(props: BackstageProps) {
   const { open, page, onPage, onClose, actions } = props;
   const { t } = useApp();
   const shown = open || WITHOUT_QUIZ.includes(page) ? page : "open";
+  const menu = useRef<HTMLElement>(null);
+  useEffect(() => {
+    // Opened by a key, the menu takes the focus, so Tab and Enter go on from the page shown; not from a field or dialog that has it.
+    if (document.activeElement === document.body) menu.current?.querySelector<HTMLElement>(".backstage-item.active")?.focus();
+  }, []);
+  // Each item's tooltip says its keys, as the quick-access buttons' do.
   const item = (action: Action) => (
-    <button type="button" className="backstage-item" disabled={action.disabled} onClick={action.run}>
+    <button type="button" className="backstage-item" title={tooltip(action)} disabled={action.disabled} onClick={action.run}>
       {action.label}
     </button>
   );
-  const pageItem = (id: BackstagePage, label: string) => (
-    <button type="button" className={shown === id ? "backstage-item active" : "backstage-item"} disabled={!open && !WITHOUT_QUIZ.includes(id)} onClick={() => onPage(id)}>
+  const pageItem = (id: BackstagePage, label: string, keys?: string[]) => (
+    <button
+      type="button"
+      className={shown === id ? "backstage-item active" : "backstage-item"}
+      title={tooltip({ label, keys })}
+      disabled={!open && !WITHOUT_QUIZ.includes(id)}
+      onClick={() => onPage(id)}
+    >
       {label}
     </button>
   );
 
   return (
     <div className="backstage">
-      <nav className="backstage-menu">
+      <nav className="backstage-menu" ref={menu}>
         {onClose && (
-          <button type="button" className="backstage-back" aria-label={t("backToQuiz")} title={t("backToQuiz")} onClick={onClose}>
+          <button type="button" className="backstage-back" aria-label={t("backToQuiz")} title={tooltip({ label: t("backToQuiz"), keys: BACK_KEYS })} onClick={onClose}>
             <BackIcon />
           </button>
         )}
         {pageItem("info", t("info"))}
         {pageItem("settings", t("quizSettings"))}
         {item(actions.newQuiz)}
-        {pageItem("open", t("openFile"))}
+        {pageItem("open", actions.openQuiz.label, actions.openQuiz.keys)}
         {item(actions.save)}
         {item(actions.saveAs)}
         {pageItem("import", t("backstageImport"))}
@@ -130,11 +146,15 @@ function InfoPage({ open, unsaved, onTitle, onShowSlide }: BackstageProps & { op
         <dt>{t("tabQuestions")}</dt>
         <dd>{questionCount(quiz)}</dd>
       </dl>
-      <h2>{t("problems", { n: open.problems.length })}</h2>
       {open.problems.length === 0 ? (
-        <p className="good-text">{t("noProblems")}</p>
+        <h2 className="good-text">
+          <CheckIcon className="inline-icon" /> {t("readyToPlay")}
+        </h2>
       ) : (
-        <ProblemList problems={open.problems} quiz={quiz} onShowSlide={onShowSlide} />
+        <>
+          <h2>{t("problems", { n: open.problems.length })}</h2>
+          <ProblemList problems={open.problems} quiz={quiz} onShowSlide={onShowSlide} />
+        </>
       )}
       {open.dropped.length > 0 && (
         <>
@@ -166,7 +186,6 @@ function SettingsPage({ open, onSettings, onSounds, onWelcome, onPickMedia }: Ba
     <>
       <h1>{t("quizSettings")}</h1>
       <p className="backstage-hint">{t("quizSettingsHint")}</p>
-      <h2>{t("advancedSettings")}</h2>
       <h3>{t("settingsFlow")}</h3>
       <SettingSwitch label={t("startOnNext")} hint={t("startOnNextHint")} checked={settings.startOnNext} onChange={(startOnNext) => set({ startOnNext })} />
       <div className="field">
@@ -408,19 +427,21 @@ function ExportPage({ actions }: BackstageProps) {
   );
 }
 
-function OpenPage({ recentFiles, onOpenFile, onForgetFile }: BackstageProps) {
+function OpenPage({ recentFiles, onOpenFile, onForgetFile, actions }: BackstageProps) {
   const { t } = useApp();
+  // Not while the editor works on a file.
+  const busy = actions.openQuiz.disabled;
   return (
     <>
       <h1>{t("openFile")}</h1>
-      <button type="button" className="browse" onClick={() => onOpenFile()}>
+      <button type="button" className="browse" disabled={busy} onClick={() => onOpenFile()}>
         {t("browse")}
       </button>
       <h2>{t("recentFiles")}</h2>
       {recentFiles.length === 0 ? (
         <p className="muted">{t("noRecentFiles")}</p>
       ) : (
-        <RecentFileList files={recentFiles} onOpen={onOpenFile} onForget={onForgetFile} />
+        <RecentFileList files={recentFiles} disabled={busy} onOpen={onOpenFile} onForget={onForgetFile} />
       )}
     </>
   );

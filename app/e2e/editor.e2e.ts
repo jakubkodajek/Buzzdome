@@ -104,6 +104,25 @@ describe("the quiz editor", () => {
     await waitFor("one redone", async () => (await slideCount()) === start + 3);
   });
 
+  test("Delete and Backspace take a slide only when no control or part of it has the keys", async () => {
+    // WebDriver's names for the keys (https://www.w3.org/TR/webdriver2/#keyboard-actions).
+    const [backspace, del] = ["", ""];
+    const start = await slideCount();
+    // After a switch in the properties, the keys are the switch's: no slide goes.
+    const toggle = `.properties-panel button[role="switch"]`;
+    await app.page.click(await app.$(toggle));
+    await app.page.keys([backspace, del]);
+    expect(await slideCount()).toBe(start);
+    // The switch as it was, for the tests after this one.
+    await app.page.click(await app.$(toggle));
+    // With the slide itself selected, Delete takes it, and undo brings it back.
+    await app.page.click(await app.$(".thumbnails .thumbnail.selected"));
+    await app.page.keys([del]);
+    await waitFor("one slide deleted", async () => (await slideCount()) === start - 1);
+    await ctrl("z");
+    await waitFor("the slide back", async () => (await slideCount()) === start);
+  });
+
   test("every ribbon button on every ribbon tab works", async () => {
     for (const tab of RIBBON_TABS) {
       await ribbonTab(tab);

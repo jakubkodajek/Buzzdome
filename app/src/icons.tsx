@@ -294,6 +294,16 @@ export function CopyIcon(props: IconProps) {
   );
 }
 
+/** Two slides, one over the other: a copy of the slide. */
+export function DuplicateIcon(props: IconProps) {
+  return (
+    <LineIcon {...props}>
+      <rect x="7.5" y="9" width="14" height="10" rx="1" />
+      <path d="M4.5 15.5h-1a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v1" />
+    </LineIcon>
+  );
+}
+
 export function CutIcon(props: IconProps) {
   return (
     <LineIcon {...props}>
@@ -425,6 +435,16 @@ export function CategoryIcon(props: IconProps) {
     <LineIcon {...props}>
       <path d="M3.5 12.2V4.5a1 1 0 0 1 1-1h7.7l8.3 8.3a1 1 0 0 1 0 1.4l-7 7a1 1 0 0 1-1.4 0z" />
       <path d="M8 8h.01" />
+    </LineIcon>
+  );
+}
+
+/** A category's tag with a plus: a new category. */
+export function CategoryAddIcon(props: IconProps) {
+  return (
+    <LineIcon {...props}>
+      <path d="M8.5 10.7V4.5a1 1 0 0 1 1-1h6.2l5.3 5.3a1 1 0 0 1 0 1.4l-5.6 5.6a1 1 0 0 1-1.4 0z" />
+      <path d="M12.5 7.5h.01M6 14.5v6M3 17.5h6" />
     </LineIcon>
   );
 }

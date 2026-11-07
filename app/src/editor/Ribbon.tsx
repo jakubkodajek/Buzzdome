@@ -65,7 +65,7 @@ export function Ribbon({ tab, onTab, actions, onGallery, slide, element, propert
     <MixedRowsContext value={mixed}>
       <div className="ribbon">
         <nav className="ribbon-tabs" role="tablist">
-          <button type="button" className="ribbon-tab file" title={`${t("ribbonFile")} (F1)`} onClick={actions.file.run}>
+          <button type="button" className="ribbon-tab file" title={tooltip(actions.file)} onClick={actions.file.run}>
             {t("ribbonFile")}
           </button>
           {TABS.map(([id, label]) => (
@@ -105,7 +105,7 @@ export function Ribbon({ tab, onTab, actions, onGallery, slide, element, propert
               </Group>
               <Group title="groupSlides">
                 {newSlide}
-                <Stack actions={[actions.duplicate, actions.delete]} />
+                <Stack actions={[actions.addQuestion, actions.duplicate, actions.delete]} />
               </Group>
               <Group title="groupArrange">
                 <Stack actions={[actions.moveUp, actions.moveDown]} />

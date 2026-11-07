@@ -20,6 +20,7 @@ import type { StringKey, Translate } from "../i18n";
 import { isVideo, mediaKindOf, type MediaKind } from "../media";
 import { isCorrect, plays, shareOf, SLIDE_TYPE_LABEL, type SlideContext } from "../quiz";
 import type { Category, QuestionSlide, Replay, Slide, SlideType, SoundClip, SoundStart, Span, TitledSlide, VideoClip, VideoEffect } from "../types";
+import { categoryName } from "./categories";
 import { AnswerToggles, MediaPicker } from "./controls";
 import type { PropertyRow } from "./property-rows";
 import { rowBuilders } from "./row-builders";
@@ -194,7 +195,7 @@ export function slideProperties(t: Translate, { slide, context, categories, upda
         ? null
         : choiceRow("category", "propCategory", "descCategory", {
             value: slide.category ?? "",
-            options: [["", t("noCategory")], ...categories.map((c): [string, string] => [c.id, c.name])],
+            options: [["", t("noCategory")], ...categories.map((c): [string, string] => [c.id, categoryName(t, c)])],
             set: (id) => {
               const category = categories.find((c) => c.id === id);
               update((s) => (category ? formatLike(s, category) : forgetCategory(s)));

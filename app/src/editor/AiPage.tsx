@@ -6,8 +6,9 @@ import { useCallback, useEffect, useState } from "react";
 import { api } from "../api";
 import { useApp, useRun } from "../app-context";
 import type { StringKey } from "../i18n";
-import { aiConnectionText, aiRestartText, settingsLostNotice } from "../messages";
+import { aiConnectionText, aiRestartText, errorNotice, settingsLostNotice } from "../messages";
 import { NoticeBox } from "../notice";
+import { createStore, useStore } from "../store";
 import type { AiPage as AiPageInfo, AssistantInfo, ConnectionState } from "../types";
 
 const STATE_KEYS: Record<ConnectionState, StringKey> = {
@@ -16,20 +17,50 @@ const STATE_KEYS: Record<ConnectionState, StringKey> = {
   outdated: "aiOutdatedState",
 };
 
+/** The instructions as the quizmaster is changing them, null while they are as saved: kept while another page is shown. */
+const instructionsDraft = createStore<string | null>(null);
+
 export function AiPage() {
   const { t, lang, notify, fail } = useApp();
   const run = useRun();
   const [page, setPage] = useState<AiPageInfo | null>(null);
-  /** The instructions as the quizmaster is changing them; null while they are as saved. */
-  const [draft, setDraft] = useState<string | null>(null);
+  /** Why the page could not be read, until it is tried again. */
+  const [failed, setFailed] = useState<{ error: unknown } | null>(null);
+  const draft = useStore(instructionsDraft);
   /** The settings for another AI app, once the quizmaster asked for them. */
   const [config, setConfig] = useState<string | null>(null);
   const load = useCallback(() => api.aiPage(lang).then(setPage), [lang]);
-  useEffect(() => run(load()), [run, load]);
-  if (!page) return <h1>{t("backstageAi")}</h1>;
+  // Said on the page, which shows nothing else until it reads.
+  const show = useCallback(() => load().catch((error: unknown) => setFailed({ error })), [load]);
+  useEffect(() => void show(), [show]);
+  if (!page) {
+    return (
+      <>
+        <h1>{t("backstageAi")}</h1>
+        {failed ? (
+          <div className="backstage-task">
+            <NoticeBox notice={errorNotice(t, failed.error)} />
+            <button
+              type="button"
+              className="browse"
+              onClick={() => {
+                setFailed(null);
+                void show();
+              }}
+            >
+              {t("tryAgain")}
+            </button>
+          </div>
+        ) : (
+          <p className="backstage-hint">{t("loading")}</p>
+        )}
+      </>
+    );
+  }
 
   const saved = page.instructions ?? page.defaultInstructions;
   const instructions = draft ?? saved;
+  const setDraft = (text: string) => instructionsDraft.set(text === saved ? null : text);
   const chooseFolder = () => run(api.aiChooseFolder().then((folder) => (folder === null ? undefined : load())));
   const connect = (info: AssistantInfo) =>
     run(api.aiConnect(info.assistant, lang).then((connected) => load().then(() => notify(aiConnectionText(t, connected, page.platform)))));
@@ -52,7 +83,7 @@ export function AiPage() {
         .aiSetInstructions(text, lang)
         .then(load)
         .then(() => {
-          setDraft(null);
+          instructionsDraft.set(null);
           notify(t("aiInstructionsSaved"));
         }),
     );
@@ -108,7 +139,9 @@ export function AiPage() {
       </div>
       {config !== null && <pre className="ai-config">{config}</pre>}
 
-      <h2>{t("aiInstructionsTitle")}</h2>
+      <h2>
+        {t("aiInstructionsTitle")} {draft !== null && <span className="chip warn">{t("unsaved")}</span>}
+      </h2>
       <p className="backstage-hint">{t("aiInstructionsHint")}</p>
       <textarea
         className="ai-instructions"

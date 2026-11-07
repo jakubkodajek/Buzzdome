@@ -1,9 +1,11 @@
-import { useMemo, useState, type MouseEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import { useApp } from "../app-context";
 import { errorNotice } from "../messages";
 import { NoticeBox, NotSavedBanner } from "../notice";
 import {
+  AddIcon,
   BackIcon,
+  CategoryAddIcon,
   CategoryIcon,
   CheckIcon,
   EditIcon,
@@ -24,7 +26,10 @@ import { MediaRootContext } from "../media";
 import { NO_CONTEXT, slideContexts } from "../quiz";
 import { ThemeContext } from "../theme/context";
 import { useLatest } from "../hooks";
+import { createStore, useStore } from "../store";
+import type { StringKey } from "../i18n";
 import type { EditorDraft, Slide } from "../types";
+import type { DraftOperation } from "./draft-session";
 import { tooltip, useActionKeys, type Action, type ActionId, type Actions } from "./actions";
 import { Backstage, type BackstagePage } from "./Backstage";
 import { CategoryView } from "./CategoryView";
@@ -48,7 +53,7 @@ import { styleProperties } from "./style-properties";
 import { TableView } from "./TableView";
 import { Thumbnails } from "./Thumbnails";
 import { useCategories } from "./useCategories";
-import { useDraftState, useQuizEditor, type QuizEditor } from "./useQuizEditor";
+import { draftStore, useDraftState, useQuizEditor, type QuizEditor } from "./useQuizEditor";
 import { useSheetActions } from "./useSheetActions";
 import { useSlideList } from "./useSlideList";
 import { useSlideMedia } from "./useSlideMedia";
@@ -61,6 +66,27 @@ const GALLERY_AT = { x: 180, y: 120 };
 
 /** A category's properties are its own: nothing is mixed. */
 const NOTHING_MIXED: ReadonlySet<string> = new Set();
+
+type View = "graphical" | "table" | "categories";
+
+// How the editor was left, kept while it is not shown (a test run, the Director), so it opens again as it was.
+const shownTab = createStore<RibbonTab>("home");
+const shownView = createStore<View>("graphical");
+const panelShown = createStore(true);
+const notesOn = createStore(true);
+const copiedValues = draftStore<CopiedValue>();
+
+/** What the status bar says while each file operation runs. */
+const BUSY_TEXT: Record<DraftOperation, StringKey> = {
+  new: "busyNew",
+  open: "busyOpen",
+  close: "busyClose",
+  save: "busySave",
+  media: "busyMedia",
+  import: "busyImport",
+  export: "busyExport",
+  testRun: "busyTestRun",
+};
 
 /** What the keys do in the Categories view besides the categories' own actions: nothing that changes a slide unseen. */
 const CATEGORY_VIEW_KEYS: ActionId[] = ["file", "newQuiz", "openQuiz", "save", "saveAs", "closeQuiz", "undo", "redo", "findProperty", "testRun"];
@@ -91,21 +117,26 @@ function DraftNotWritten({ problem }: { problem: unknown }) {
 /** The draft left from last time does not read: it stays until the quizmaster discards it. */
 function UnreadableDraft({ editor, error, onExit }: { editor: QuizEditor; error: unknown; onExit: () => void }) {
   const { t } = useApp();
+  const tryAgain = useRef<HTMLButtonElement>(null);
+  useEffect(() => tryAgain.current?.focus(), []);
+  useActionKeys([{ label: t("backToDirector"), keys: ["Escape"], inFields: true, run: onExit }]);
+  // The heading says it does not open; what went wrong is the detail.
+  const { text, detail } = errorNotice(t, error);
   return (
     <div className="studio studio-loading">
       <div className="draft-unreadable">
         <h2>{t("draftUnreadable")}</h2>
-        <NoticeBox notice={errorNotice(t, error)} />
+        <NoticeBox notice={{ text: detail ?? text }} />
         <p>{t("draftUnreadableInfo")}</p>
         <div className="draft-unreadable-actions">
-          <button type="button" onClick={editor.reload}>
+          <button ref={tryAgain} type="button" className="primary" onClick={editor.reload}>
             {t("tryAgain")}
-          </button>
-          <button type="button" onClick={() => void editor.discardUnreadable()}>
-            {t("discardDraft")}
           </button>
           <button type="button" onClick={onExit}>
             {t("backToDirector")}
+          </button>
+          <button type="button" className="bad" onClick={() => void editor.discardUnreadable()}>
+            {t("discardDraft")}
           </button>
         </div>
       </div>
@@ -117,13 +148,17 @@ function Studio({ editor, open, ask, onExit }: { editor: QuizEditor; open: OpenQ
   const { t } = useApp();
   /** What to work on is asked: everything (as the editor opens) or a new quiz's name. */
   const [asking, setAsking] = useState<"start" | "new" | null>(ask ? "start" : null);
-  const [tab, setTab] = useState<RibbonTab>("home");
+  const tab = useStore(shownTab);
+  const setTab = shownTab.set;
   const [backstage, setBackstage] = useState<BackstagePage | null>(null);
-  const [view, setView] = useState<"graphical" | "table" | "categories">("graphical");
-  const [panel, setPanel] = useState(true);
-  const [notesShown, setNotesShown] = useState(true);
+  const view = useStore(shownView);
+  const setView = shownView.set;
+  const panel = useStore(panelShown);
+  const setPanel = panelShown.set;
+  const notesShown = useStore(notesOn);
+  const setNotesShown = notesOn.set;
   /** The value last copied from a property, to paste into another; a media file only in its own quiz. */
-  const [copiedValue, setCopiedValue] = useDraftState<CopiedValue>(open?.draftId ?? null);
+  const [copiedValue, setCopiedValue] = useDraftState(copiedValues, open?.draftId ?? null);
   /** Ctrl+F asked for the property search, which the panel focuses once it is shown. */
   const [findProperty, setFindProperty] = useState(false);
   const [menu, setMenu] = useState<{ x: number; y: number; target: MenuTarget } | null>(null);
@@ -209,14 +244,23 @@ function Studio({ editor, open, ask, onExit }: { editor: QuizEditor; open: OpenQ
     });
 
   const noSlide = slide === null;
+  // A file operation under way takes no other, and the editor stays open until it ends (its result lands here).
+  const busy = editor.status.busy !== null;
   const actions: Actions = {
-    file: { label: t("ribbonFile"), keys: ["F1"], inFields: true, run: () => setBackstage("info") },
-    newQuiz: { label: t("newQuiz"), keys: ["Ctrl+N"], inFields: true, run: () => setAsking("new") },
-    openQuiz: { label: t("openFile"), icon: <FolderIcon />, keys: ["Ctrl+O"], inFields: true, run: () => setBackstage("open") },
-    save: { label: saved ? t("quizSaved") : t("saveQuiz"), icon: <SaveIcon />, keys: ["Ctrl+S"], inFields: true, disabled: !open || saved, run: () => void editor.save() },
-    saveAs: { label: t("saveQuizAs"), keys: ["Ctrl+Shift+S"], inFields: true, disabled: !open, run: () => void editor.saveAs() },
-    closeQuiz: { label: t("closeQuiz"), disabled: !open, run: () => void editor.closeQuiz().then(loaded) },
-    exit: { label: t("backToDirector"), icon: <BackIcon />, run: onExit },
+    file: { label: t("ribbonFile"), keys: ["F1", "Alt+F"], inFields: true, run: () => setBackstage("info") },
+    newQuiz: { label: t("newQuiz"), keys: ["Ctrl+N"], inFields: true, disabled: busy, run: () => setAsking("new") },
+    openQuiz: { label: t("openFile"), icon: <FolderIcon />, keys: ["Ctrl+O"], inFields: true, disabled: busy, run: () => setBackstage("open") },
+    save: {
+      label: saved ? t("quizSaved") : t("saveQuiz"),
+      icon: <SaveIcon />,
+      keys: ["Ctrl+S"],
+      inFields: true,
+      disabled: !open || saved || busy,
+      run: () => void editor.save(),
+    },
+    saveAs: { label: t("saveQuizAs"), keys: ["Ctrl+Shift+S"], inFields: true, disabled: !open || busy, run: () => void editor.saveAs() },
+    closeQuiz: { label: t("closeQuiz"), disabled: !open || busy, run: () => void editor.closeQuiz().then(loaded) },
+    exit: { label: t("backToDirector"), icon: <BackIcon />, disabled: busy, run: onExit },
     undo: {
       label: t("undo"),
       icon: <UndoIcon />,
@@ -239,14 +283,14 @@ function Studio({ editor, open, ask, onExit }: { editor: QuizEditor; open: OpenQ
     // The slide's dialog; for a picture, video or sound the slide's too (a click on one picks a file).
     edit: { label: t("editSlide"), icon: <EditIcon />, keys: ["Enter", "F2"], disabled: noSlide, run: () => openEdit(isMediaElement(element) ? "slide" : element) },
     newSlide: { label: t("newSlide"), icon: <SlideAddIcon />, disabled: !quiz, run: () => setGallery(GALLERY_AT) },
-    addQuestion: { label: t("addQuestion"), keys: ["Ctrl+M"], disabled: !quiz, run: () => insertLayout(DEFAULT_LAYOUT) },
+    addQuestion: { label: t("addQuestion"), icon: <AddIcon />, keys: ["Ctrl+M"], disabled: !quiz, run: () => insertLayout(DEFAULT_LAYOUT) },
     ...media.actions,
     graphical: { label: t("viewGraphical"), icon: <SlideIcon />, checked: view === "graphical", run: () => setView("graphical") },
     table: { label: t("viewTable"), icon: <TableIcon />, checked: view === "table", run: () => setView("table") },
     categories: { label: t("viewCategories"), icon: <CategoryIcon />, checked: view === "categories", run: () => setView("categories") },
     saveAsCategory: {
       label: t("saveAsCategory"),
-      icon: <CategoryIcon />,
+      icon: <CategoryAddIcon />,
       disabled: noSlide,
       run: () => {
         if (!slide) return;
@@ -266,8 +310,8 @@ function Studio({ editor, open, ask, onExit }: { editor: QuizEditor; open: OpenQ
       },
     },
     notes: { label: t("viewNotes"), icon: <NotesIcon />, checked: notesShown, run: () => setNotesShown(!notesShown) },
-    testRun: { label: t("testFromStart"), icon: <PlayIcon />, keys: ["F5"], inFields: true, disabled: slides.length === 0, run: () => testRun() },
-    testRunHere: { label: t("testFromHere"), icon: <PreviewIcon />, keys: ["Shift+F5"], inFields: true, disabled: noSlide, run: () => testRun(index) },
+    testRun: { label: t("testFromStart"), icon: <PlayIcon />, keys: ["F5"], inFields: true, disabled: slides.length === 0 || busy, run: () => testRun() },
+    testRunHere: { label: t("testFromHere"), icon: <PreviewIcon />, keys: ["Shift+F5"], inFields: true, disabled: noSlide || busy, run: () => testRun(index) },
     importSheet: sheet.importSheet,
     sheetTemplate: sheet.sheetTemplate,
     exportSheet: sheet.exportSheet,
@@ -313,12 +357,18 @@ function Studio({ editor, open, ask, onExit }: { editor: QuizEditor; open: OpenQ
         : t("noCategories")
       : `${slide ? t("slide", { n: index + 1, total: slides.length }) : t("noSlideSelected")}${several ? ` · ${t("slidesSelected", { n: selected.length })}` : ""}`;
   const sameCategory = slide?.category !== undefined && selectedSlides.every((s) => s.category === slide.category);
+  // The picture, video or sound tab shows only while one is selected, and goes back to HOME once none is.
+  const ribbonElement = view === "categories" ? categories.element : element;
+  const mediaShown = isMediaElement(ribbonElement);
+  useEffect(() => {
+    if (!mediaShown && shownTab.get() === "media") shownTab.set("home");
+  }, [mediaShown]);
 
   return (
     <MediaRootContext value={open?.mediaRoot ?? null}>
       <ThemeContext value={theme}>
         {/* A file operation under way takes no other; while another quiz opens, no edits either. */}
-        <div className={editor.status.busy ? "studio studio-busy" : "studio"} aria-busy={editor.status.busy !== null}>
+        <div className={busy ? "studio studio-busy" : "studio"} aria-busy={busy}>
           <header className="studio-titlebar">
             <div className="quick-access">
               {[actions.save, actions.undo, actions.redo].map((action) => (
@@ -334,11 +384,13 @@ function Studio({ editor, open, ask, onExit }: { editor: QuizEditor; open: OpenQ
                 </button>
               ))}
             </div>
-            <span className="studio-title">
-              {title}
-              {unsaved && " *"} – {t("quizEditor")}
+            {/* A long name is cut, never the unsaved mark after it. */}
+            <span className="studio-title" title={title}>
+              <span className="studio-title-name">{title}</span>
+              {unsaved && <span className="studio-title-mark">*</span>}
+              <span className="studio-title-app">– {t("quizEditor")}</span>
             </span>
-            <button type="button" className="titlebar-exit" onClick={onExit}>
+            <button type="button" className="titlebar-exit" title={busy ? t("editorBusyExit") : tooltip(actions.exit)} disabled={actions.exit.disabled} onClick={actions.exit.run}>
               <BackIcon />
               {t("backToDirector")}
             </button>
@@ -378,7 +430,7 @@ function Studio({ editor, open, ask, onExit }: { editor: QuizEditor; open: OpenQ
                   actions={actions}
                   onGallery={(button) => setGallery({ x: button.left, y: button.bottom })}
                   slide={slide}
-                  element={view === "categories" ? categories.element : element}
+                  element={ribbonElement}
                   properties={properties}
                   timer={timer}
                   mixed={shared.mixed}
@@ -410,7 +462,7 @@ function Studio({ editor, open, ask, onExit }: { editor: QuizEditor; open: OpenQ
                           const moved = moveToGap(slides, selected.includes(dragged) ? selected : [dragged], gap);
                           if (moved) editor.edit(moved);
                         }}
-                        onAdd={actions.addQuestion.run}
+                        add={actions.addQuestion}
                       />
                       <div className="studio-center">
                         {slide ? (
@@ -461,18 +513,27 @@ function Studio({ editor, open, ask, onExit }: { editor: QuizEditor; open: OpenQ
 
           <footer className="studio-status">
             <span>{status}</span>
+            {editor.status.busy && <span role="status">{t(BUSY_TEXT[editor.status.busy])}</span>}
             {open && (
               <button type="button" className={open.problems.length > 0 ? "status-problems bad" : "status-problems"} onClick={() => setBackstage("info")}>
                 {open.problems.length > 0 ? <WarningIcon className="inline-icon" /> : <CheckIcon className="inline-icon" />}{" "}
                 {open.problems.length > 0 ? t("problems", { n: open.problems.length }) : t("readyToPlay")}
               </button>
             )}
-            {unsaved && <span>{t("unsaved")}</span>}
-            {saved && <span>{t("quizSaved")}</span>}
+            {open && (
+              <span className="status-saved">
+                {unsaved ? <WarningIcon className="inline-icon" /> : saved && <SaveIcon className="inline-icon" />} {t(unsaved ? "statusUnsaved" : saved ? "quizSaved" : "notSavedYet")}
+              </span>
+            )}
             <span className="spacer" />
-            {open?.sourcePath && <span className="status-path">{open.sourcePath}</span>}
+            {/* Cut at its start: the file's name is the part that matters. */}
+            {open?.sourcePath && (
+              <span className="status-path" title={open.sourcePath}>
+                <bdi dir="ltr">{open.sourcePath}</bdi>
+              </span>
+            )}
             {[actions.graphical, actions.table, actions.categories].map((action) => (
-              <button key={action.label} type="button" className="status-view" title={action.label} aria-pressed={action.checked} onClick={action.run}>
+              <button key={action.label} type="button" className="status-view" title={tooltip(action)} aria-label={action.label} aria-pressed={action.checked} onClick={action.run}>
                 {action.icon}
               </button>
             ))}
@@ -487,15 +548,15 @@ function Studio({ editor, open, ask, onExit }: { editor: QuizEditor; open: OpenQ
               open={open}
               unsaved={unsaved}
               recentFiles={editor.recentFiles}
-              busy={editor.status.busy !== null}
+              busy={busy}
               onContinue={() => setAsking(null)}
               onNew={createQuiz}
               onOpen={openQuiz}
               onForget={editor.forgetRecentFile}
-              onCancel={onExit}
+              onCancel={() => !busy && onExit()}
             />
           )}
-          {asking === "new" && <NewQuizDialog busy={editor.status.busy !== null} onNew={createQuiz} onCancel={() => setAsking(null)} />}
+          {asking === "new" && <NewQuizDialog busy={busy} onNew={createQuiz} onCancel={() => setAsking(null)} />}
           {dialog && dialogSlide && (
             <EditSlideDialog
               slide={dialogSlide}

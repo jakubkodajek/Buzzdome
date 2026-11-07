@@ -2,15 +2,20 @@
 // part of the one on the canvas, and what is done with them in order:
 // the clipboard, moving them, going from one to the next.
 
-import { useState, type Dispatch, type SetStateAction } from "react";
+import type { Dispatch, SetStateAction } from "react";
 import { useApp } from "../app-context";
-import { ArrowDownIcon, ArrowUpIcon, CopyIcon, CutIcon, PasteIcon, SlideIcon, TrashIcon } from "../icons";
+import { ArrowDownIcon, ArrowUpIcon, CopyIcon, CutIcon, DuplicateIcon, PasteIcon, TrashIcon } from "../icons";
 import type { Quiz, Slide } from "../types";
 import type { Action, SlideListActionId } from "./actions";
-import { hasElement, isMediaElement, type ElementId } from "./elements";
+import { hasElement, type ElementId } from "./elements";
 import { FIRST, insertSlides, moveByOne, positions, removeSlides, selectAll, selectedIds, selectIds, selectOne, type Selection } from "./selection";
+import { heldIn } from "./draft-session";
 import { withFreshIds } from "./slides";
-import { openDraftId, useDraftState, type QuizEditor } from "./useQuizEditor";
+import { draftStore, openDraftId, useDraftState, type QuizEditor } from "./useQuizEditor";
+
+// Kept while the editor is not shown (a test run, the Director), so it opens again where it was left.
+const selections = draftStore<Selection>();
+const clipboards = draftStore<Slide[]>();
 
 export interface SlideList {
   slides: Slide[];
@@ -39,9 +44,13 @@ export interface SlideList {
 
 export function useSlideList(editor: QuizEditor, quiz: Quiz | null): SlideList {
   const { t } = useApp();
-  const [selection, setSelection] = useState<Selection>(FIRST);
+  const draftId = openDraftId(editor);
+  const [held, hold] = useDraftState(selections, draftId);
+  const selection = held ?? FIRST;
+  const setSelection: Dispatch<SetStateAction<Selection>> = (next) =>
+    hold(typeof next === "function" ? next(heldIn(selections.get(), draftId) ?? FIRST) : next);
   // Slides keep their media by name, which another quiz does not have.
-  const [clipboard, setClipboard] = useDraftState<Slide[]>(openDraftId(editor));
+  const [clipboard, setClipboard] = useDraftState(clipboards, draftId);
   const slides = quiz?.slides ?? [];
   const found = selection.id === null ? -1 : slides.findIndex((s) => s.id === selection.id);
   const index = slides.length === 0 ? -1 : found >= 0 ? found : Math.min(selection.index, slides.length - 1);
@@ -92,14 +101,14 @@ export function useSlideList(editor: QuizEditor, quiz: Quiz | null): SlideList {
     delete: {
       label: t("deleteSlide"),
       icon: <TrashIcon />,
-      // Delete removes what is selected: a picture, video or sound, or else the slides.
-      keys: isMediaElement(element) ? undefined : ["Delete", "Backspace"],
+      // Delete removes what is selected: the slides only while no part of one is (a picture, video or sound goes by itself).
+      keys: element === "slide" ? ["Delete", "Backspace"] : undefined,
       disabled: noSlide,
       run: removeSelected,
     },
     duplicate: {
       label: t("duplicate"),
-      icon: <SlideIcon />,
+      icon: <DuplicateIcon />,
       keys: ["Ctrl+D"],
       disabled: noSlide,
       // The copies go after the last selected slide.
@@ -107,7 +116,12 @@ export function useSlideList(editor: QuizEditor, quiz: Quiz | null): SlideList {
     },
     moveUp: { label: t("moveUp"), icon: <ArrowUpIcon />, keys: ["Ctrl+ArrowUp"], disabled: moveUp === null, run: () => moveUp && editor.edit(moveUp) },
     moveDown: { label: t("moveDown"), icon: <ArrowDownIcon />, keys: ["Ctrl+ArrowDown"], disabled: moveDown === null, run: () => moveDown && editor.edit(moveDown) },
-    selectAll: { label: t("selectAllSlides"), keys: ["Ctrl+A"], disabled: slides.length < 2, run: () => setSelection(selectAll(selection, slides, index)) },
+    selectAll: {
+      label: t("selectAllSlides"),
+      keys: ["Ctrl+A"],
+      disabled: slides.length < 2 || selected.length === slides.length,
+      run: () => setSelection(selectAll(selection, slides, index)),
+    },
     previous: { label: t("previousSlide"), keys: ["ArrowUp", "ArrowLeft", "PageUp"], repeats: true, disabled: index <= 0, run: () => select(index - 1) },
     next: {
       label: t("nextSlide"),
