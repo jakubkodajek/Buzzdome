@@ -985,10 +985,10 @@ impl Game {
             _ => None,
         };
         let buzzed = matches!(step, Some(QuestionStep::Buzzed { .. }));
-        let show_over = self.next_leaves_slide() && self.following().is_none();
+        let next_step = self.next_step();
         Controls {
-            next: !buzzed && !show_over,
-            remote_next: !buzzed && !show_over && running.is_none(),
+            next: next_step.is_some(),
+            remote_next: next_step.is_some() && running.is_none(),
             judge: buzzed,
             pause_clock: running.is_some_and(Clock::is_running) || self.pending_step().is_some(),
             resume_clock: running.is_some_and(|clock| !clock.is_running()),
@@ -998,14 +998,16 @@ impl Game {
             restart_question: self.question_restartable(),
             set_joker: self.open_joker_slide().is_some(),
             reading_done: self.awaiting_reading,
-            next_step: if buzzed || show_over { None } else { self.next_step() },
+            next_step,
         }
     }
 
-    /// What `next` would do in this step, as long as it may.
+    /// What `next` does in this step; None when it refuses (`NotNow`):
+    /// while a buzz waits to be judged, and past the last slide. The one
+    /// place that says it: `next` takes the step it gives.
     fn next_step(&self) -> Option<NextStep> {
         if self.next_leaves_slide() {
-            return Some(NextStep::NextSlide);
+            return self.following().map(|_| NextStep::NextSlide);
         }
         match &self.phase {
             Phase::Welcome => Some(NextStep::Registration),
@@ -1013,6 +1015,7 @@ impl Game {
             Phase::Question(QuestionStep::Running { .. }) => Some(NextStep::EndQuestion),
             Phase::Question(QuestionStep::Closed) => Some(NextStep::ShowAnswer),
             Phase::Final { .. } => Some(NextStep::FinalStep),
+            // Buzzed; the other phases leave the slide (`next_leaves_slide`).
             _ => None,
         }
     }
@@ -1707,29 +1710,25 @@ impl Game {
     }
 
     fn next(&mut self, now: u64) -> Result<Vec<Effect>, GameError> {
-        if self.next_leaves_slide() {
-            let following = self.following().ok_or(GameError::NotNow)?;
-            return Ok(self.show_slide(following, now));
-        }
-        match self.phase.clone() {
-            Phase::Welcome => {
+        match self.next_step().ok_or(GameError::NotNow)? {
+            NextStep::NextSlide => {
+                let following = self.following().ok_or(GameError::NotNow)?;
+                Ok(self.show_slide(following, now))
+            }
+            NextStep::Registration => {
                 self.phase = Phase::Lobby;
                 Ok(vec![])
             }
-            Phase::Lobby | Phase::Billboard | Phase::Explanation | Phase::EndOfRound => Err(GameError::NotNow),
-            Phase::Question(step) => match step {
-                QuestionStep::Ready => Ok(self.start_clock(now)),
-                QuestionStep::Running { .. } => Ok(self.close_question()),
-                QuestionStep::Buzzed { .. } => Err(GameError::NotNow),
-                QuestionStep::Closed => {
-                    self.reveal(None, now);
-                    // Dark after a fastest-finger question nobody won, also
-                    // the last buzz judged wrong (`judge`).
-                    Ok(vec![self.lights_now(), Effect::Sound { cue: Cue::Reveal }])
-                }
-                QuestionStep::Revealed { .. } => Err(GameError::NotNow),
-            },
-            Phase::Final { step } => {
+            NextStep::StartQuestion => Ok(self.start_clock(now)),
+            NextStep::EndQuestion => Ok(self.close_question()),
+            NextStep::ShowAnswer => {
+                self.reveal(None, now);
+                // Dark after a fastest-finger question nobody won, also
+                // the last buzz judged wrong (`judge`).
+                Ok(vec![self.lights_now(), Effect::Sound { cue: Cue::Reveal }])
+            }
+            NextStep::FinalStep => {
+                let Phase::Final { step } = &self.phase else { return Err(GameError::NotNow) };
                 let step = step + 1;
                 self.phase = Phase::Final { step };
                 Ok(self.final_cue(step).map(|cue| Effect::Sound { cue }).into_iter().collect())
