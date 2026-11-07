@@ -518,6 +518,11 @@
   white-space: nowrap;
 }
 
+/* A row is 24 px high: the right answers stay on one line, as in the table. */
+.ribbon-field .answer-toggles {
+  flex-wrap: nowrap;
+}
+
 .ribbon-field select {
   max-width: 140px;
 }
