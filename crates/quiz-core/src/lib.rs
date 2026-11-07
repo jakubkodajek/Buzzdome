@@ -110,6 +110,7 @@ mod ui_constants {
             ("SOUND_SLOTS", format!("{} as const", serde_json::to_string(&crate::SoundSlot::ALL).unwrap())),
             ("EFFECT_SLOTS", sound_slots(false)),
             ("MUSIC_SLOTS", sound_slots(true)),
+            ("SLOT_SOUND_IDS", slot_sound_ids()),
             ("STAGES", format!("{} as const", serde_json::to_string(&crate::Stage::ALL).unwrap())),
             ("ANSWER_BUTTONS", format!("{} as const", serde_json::to_string(&crate::game::ANSWER_BUTTONS).unwrap())),
         ];
@@ -124,6 +125,12 @@ mod ui_constants {
     fn sound_slots(music: bool) -> String {
         let slots: Vec<_> = crate::SoundSlot::ALL.into_iter().filter(|slot| slot.is_music() == music).collect();
         format!("{} as const", serde_json::to_string(&slots).unwrap())
+    }
+
+    /// The app's own sounds made for each moment (`SoundSlot::made_for`).
+    fn slot_sound_ids() -> String {
+        let ids: std::collections::BTreeMap<_, _> = crate::SoundSlot::ALL.into_iter().map(|slot| (slot, slot.made_for())).collect();
+        format!("{} as const", serde_json::to_string(&ids).unwrap())
     }
 
     /// What each slide type can play, by the type's name in the quiz file.

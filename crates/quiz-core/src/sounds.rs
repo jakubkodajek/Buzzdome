@@ -82,6 +82,37 @@ impl SoundSlot {
     pub fn is_music(self) -> bool {
         matches!(self, SoundSlot::LobbyMusic | SoundSlot::BetweenMusic | SoundSlot::ClockMusic | SoundSlot::BuildUpMusic | SoundSlot::WinnerMusic)
     }
+
+    /// The app's own sounds made for the moment, by id (the files are in
+    /// `app/src/audio/library`). An effect's first one is its default;
+    /// music plays none unless the quiz says.
+    pub fn made_for(self) -> &'static [&'static str] {
+        match self {
+            SoundSlot::ClockStart => &["start.chime", "start.gong", "start.go"],
+            SoundSlot::Countdown => &["countdown.ticks", "countdown.beeps", "countdown.pulse"],
+            SoundSlot::Buzz => &["buzz.classic", "buzz.bell", "buzz.laser", "buzz.horn"],
+            SoundSlot::Correct => &["correct.chime", "correct.dings", "correct.fanfare"],
+            SoundSlot::Wrong => &["wrong.buzzer", "wrong.trombone", "wrong.bonk"],
+            SoundSlot::TimeUp => &["timeup.horn", "timeup.gong", "timeup.alarm"],
+            SoundSlot::Reveal => &["reveal.whoosh", "reveal.sparkle", "reveal.sting"],
+            SoundSlot::Leaderboard => &["leaderboard.rise", "leaderboard.drums", "leaderboard.chord"],
+            SoundSlot::Place => &["place.cymbal", "place.stab", "place.boom"],
+            SoundSlot::Winner => &["winner.fanfare", "winner.applause", "winner.party"],
+            SoundSlot::LobbyMusic => &["music.lobby", "music.lounge"],
+            SoundSlot::BetweenMusic => &["music.lounge", "music.lobby"],
+            SoundSlot::ClockMusic => &["music.thinking", "music.race"],
+            SoundSlot::BuildUpMusic => &["music.drumroll"],
+            SoundSlot::WinnerMusic => &["music.victory"],
+        }
+    }
+
+    /// Whether the app's own sound `id` plays at this moment: one made for
+    /// a moment of its kind, an effect for an effect and music for music.
+    /// Any other id (one from a newer build, or one that does not fit)
+    /// plays the moment's default.
+    pub fn plays(self, id: &str) -> bool {
+        SoundSlot::ALL.into_iter().filter(|slot| slot.is_music() == self.is_music()).any(|slot| slot.made_for().contains(&id))
+    }
 }
 
 /// What a moment of the show plays.
@@ -119,14 +150,14 @@ pub struct QuizSounds {
     #[schemars(with = "BTreeMap<SoundSlot, SoundChoice>")]
     #[ts(as = "BTreeMap<SoundSlot, SoundChoice>")]
     pub slots: BTreeMap<SoundSlot, SoundChoice>,
-    /// Up to `MAX_SOUND_VOLUME` percent.
+    /// Percent, up to 100 (`MAX_SOUND_VOLUME`).
     #[serde(with = "effects_volume")]
-    #[schemars(with = "u8")]
+    #[schemars(with = "u8", range(max = MAX_SOUND_VOLUME))]
     #[ts(as = "u8")]
     pub effects_volume: u8,
-    /// Up to `MAX_SOUND_VOLUME` percent.
+    /// Percent, up to 100 (`MAX_SOUND_VOLUME`).
     #[serde(with = "music_volume")]
-    #[schemars(with = "u8")]
+    #[schemars(with = "u8", range(max = MAX_SOUND_VOLUME))]
     #[ts(as = "u8")]
     pub music_volume: u8,
 }

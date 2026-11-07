@@ -62,6 +62,9 @@ pub struct Check {
     /// What reading the quiz left out because it does not fit the format
     /// (`ReadQuiz::dropped`), such as a colour that is not hex.
     pub left_out: Vec<String>,
+    /// The quiz's theme, for the server to say when this app does not have it.
+    #[serde(skip)]
+    pub theme: Option<String>,
 }
 
 impl Check {
@@ -79,6 +82,7 @@ impl Check {
             questions: quiz.slides.iter().filter(|slide| slide.content.slide_type() == SlideType::Question).count(),
             problems: words(problems),
             left_out: words(&read.dropped),
+            theme: quiz.theme.clone(),
         }
     }
 

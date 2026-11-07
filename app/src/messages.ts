@@ -232,6 +232,7 @@ const PROBLEM_KEYS: Record<Exclude<Problem["code"], ProblemApart>, StringKey> = 
   styleUnread: "problemStyleUnread",
   categoryStyleUnread: "problemCategoryStyleUnread",
   themeUnread: "problemThemeUnread",
+  valueUnread: "problemValueUnread",
   unknownCategory: "problemUnknownCategory",
   duplicateCategoryId: "problemDuplicateCategoryId",
   categoryIdInvalid: "problemCategoryIdInvalid",

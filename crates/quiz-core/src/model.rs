@@ -7,7 +7,7 @@ use crate::media::{
     MAX_INTRO_PAUSE_MS, MAX_REPLAY_DELAY_MS, MAX_VIDEO_SPEED, MIN_GAIN_DB, MIN_VIDEO_SPEED,
 };
 use crate::settings::QuizSettings;
-use crate::sounds::{QuizSounds, SoundSlot};
+use crate::sounds::{QuizSounds, SoundChoice, SoundSlot};
 use crate::style::SlideStyle;
 use crate::text::file_key;
 use crate::welcome::{Welcome, WelcomeFile};
@@ -569,6 +569,13 @@ pub enum Problem {
     /// the quiz reads with the default look.
     #[error("the quiz's theme cannot be read")]
     ThemeUnread,
+    /// Only in `ReadQuiz::dropped`: a value of the quiz's `settings`,
+    /// `sounds` or `welcome`, or a field of the quiz, that the quiz read
+    /// without (a wrong type, out of range, or a name it does not know), so
+    /// its default applies. `path` names it as the file has it, such as
+    /// `settings.jokers` or `timeLimit`.
+    #[error("the value {path} cannot be read, so its default applies")]
+    ValueUnread { path: String },
     /// On a slide whose category the quiz does not have; in
     /// `ReadQuiz::dropped`, the slide read without it.
     #[error("the slide's category is not in the quiz")]
@@ -746,6 +753,9 @@ impl Quiz {
                 dropped.push(ValidationError { slide_id: None, problem: Problem::CategoryStyleUnread { name: category.name.clone(), path } });
             }
         }
+        for path in quiz.unread_values(&value) {
+            dropped.push(ValidationError { slide_id: None, problem: Problem::ValueUnread { path } });
+        }
         let categories: HashSet<&str> = quiz.categories.iter().map(|category| category.id.as_str()).collect();
         for (slide, written) in quiz.slides.iter_mut().zip(written) {
             let id = slide.id.clone();
@@ -761,6 +771,44 @@ impl Quiz {
             }
         }
         Ok(ReadQuiz { quiz, dropped })
+    }
+
+    /// What `written`, this quiz as its file has it, holds outside its
+    /// slides, categories and theme that the quiz read without: a field of
+    /// the quiz it does not know, and a value of `settings`, `sounds` or
+    /// `welcome` that read as its default or was cut to its range. Each by
+    /// its path in the file (`settings.jokers`, `timeLimit`).
+    fn unread_values(&self, written: &serde_json::Value) -> Vec<String> {
+        use serde_json::Value;
+        let Value::Object(written) = written else {
+            return Vec::new();
+        };
+        // Read with every value, defaults too, so a default written out is no change.
+        let read = |key: &str| match key {
+            "settings" => serde_json::to_value(self.settings),
+            "sounds" => serde_json::to_value(&self.sounds),
+            _ => serde_json::to_value(&self.welcome),
+        };
+        let mut paths = Vec::new();
+        for (key, value) in written {
+            match key.as_str() {
+                "settings" | "sounds" | "welcome" => {
+                    let read = read(key).expect("settings, sounds and a welcome screen serialize");
+                    crate::style::left_out(value, &read, key.clone(), &mut paths);
+                }
+                "schemaVersion" | "title" | "theme" | "slides" | "categories" => {}
+                _ if !value.is_null() => paths.push(key.clone()),
+                _ => {}
+            }
+        }
+        // Kept, so a newer build's sound comes back there, but played as the default.
+        for (slot, choice) in &self.sounds.slots {
+            if matches!(choice, SoundChoice::BuiltIn(id) if !slot.plays(id)) {
+                let slot = serde_json::to_value(slot).expect("a moment serializes");
+                paths.push(format!("sounds.slots.{}", slot.as_str().unwrap_or_default()));
+            }
+        }
+        paths
     }
 
     /// Index of the slide that shows the final ranking: the last final slide.
@@ -897,6 +945,9 @@ mod tests {
     use crate::game::Button;
     use crate::media::{Replay, Span};
     use serde_json::json;
+    use crate::settings::{AllAnswered, QuizLanguage, ReadAloud, MAX_JOKERS};
+    use crate::sounds::{QuizSounds, SoundChoice, SoundSlot};
+    use crate::welcome::Welcome;
 
     fn question(points: i32, points_end: Option<i32>, time_limit_s: u32) -> Question {
         Question {
@@ -1472,6 +1523,81 @@ mod tests {
         );
         assert_eq!(quiz.slides[0].category, None);
         assert_eq!(Quiz::read_json(&serde_json::to_string(&quiz).unwrap()).unwrap().dropped, []);
+    }
+
+    #[test]
+    fn says_which_settings_sounds_welcome_values_and_fields_a_file_read_without() {
+        let json = r##"{"schemaVersion": 5, "title": "x", "timeLimit": 20, "slides": [],
+            "settings": {"jokers": 9, "readAloud": "loudly", "language": "de", "readaloud": "question", "voice": 3, "startOnNext": true},
+            "sounds": {"musicVolume": 50, "effectsVolume": "loud", "slots": {"clockStart": "none", "noSuchMoment": "none", "buzz": {"builtIn": "music.victory"}, "correct": {"builtIn": "correct.dings"}}},
+            "welcome": {"on": "yes", "heading": "Hi", "logo": 5}}"##;
+        let ReadQuiz { quiz, dropped } = Quiz::read_json(json).unwrap();
+        let paths: Vec<String> = dropped
+            .into_iter()
+            .map(|error| match error.problem {
+                Problem::ValueUnread { path } => path,
+                other => panic!("{other:?}"),
+            })
+            .collect();
+        let expected = [
+            "settings.jokers", "settings.readAloud", "settings.language", "settings.readaloud",
+            "sounds.effectsVolume", "sounds.slots.noSuchMoment", "sounds.slots.buzz", "timeLimit",
+            "welcome.on", "welcome.logo",
+        ];
+        let mut sorted = paths.clone();
+        sorted.sort();
+        let mut expected: Vec<String> = expected.iter().map(|path| (*path).to_owned()).collect();
+        expected.sort();
+        assert_eq!(sorted, expected);
+        // What did read stays.
+        assert_eq!((quiz.settings.jokers, quiz.settings.voice, quiz.settings.start_on_next), (MAX_JOKERS, 3, true));
+        assert_eq!(quiz.welcome.heading, "Hi");
+        // A sound that does not fit its moment is kept, and said again.
+        let again: Vec<_> = Quiz::read_json(&serde_json::to_string(&quiz).unwrap()).unwrap().dropped.into_iter().map(|error| error.problem).collect();
+        assert_eq!(again, [Problem::ValueUnread { path: "sounds.slots.buzz".into() }]);
+    }
+
+    #[test]
+    fn a_quiz_with_every_field_and_setting_set_reads_back_without_leaving_anything_out() {
+        let mut quiz = Quiz::new("x", vec![Slide::new("a", SlideContent::Billboard { title: String::new(), text: String::new() })]);
+        quiz.theme = Some("builtin.aurora".into());
+        quiz.categories = vec![Category::new("c1", "Sport")];
+        quiz.settings = QuizSettings {
+            start_on_next: true,
+            all_answered: AllAnswered::NextSlide,
+            all_answered_delay_s: 7,
+            next_after_reveal: true,
+            next_after_reveal_delay_s: 30,
+            run_clock_out: true,
+            hide_answer: true,
+            change_answer: true,
+            one_buzz: true,
+            no_answer_penalty: true,
+            hide_buzz_points: true,
+            answer_chart: true,
+            jokers: 2,
+            language: QuizLanguage::En,
+            read_aloud: ReadAloud::QuestionAndAnswers,
+            voice: 6,
+            clock_after_reading: true,
+        };
+        quiz.sounds.effects_volume = 40;
+        quiz.sounds.music_volume = 60;
+        quiz.sounds.slots.insert(SoundSlot::ClockStart, SoundChoice::None);
+        quiz.sounds.slots.insert(SoundSlot::Countdown, SoundChoice::File("media/tick.mp3".into()));
+        quiz.welcome = Welcome { on: true, heading: "Hi".into(), logo: Some("media/logo.png".into()), intro: Some("media/intro.mp4".into()), footer: "Bye".into() };
+        let written = serde_json::to_value(&quiz).unwrap();
+        // Every field of the quiz is one reading knows (`Quiz::unread_values`).
+        let fields: Vec<&str> = written.as_object().unwrap().keys().map(String::as_str).collect();
+        assert_eq!(fields.len(), 8, "{fields:?}");
+        assert_eq!(Quiz::read_json(&written.to_string()).unwrap().dropped, []);
+        // Defaults written out are no change either.
+        let mut defaults = serde_json::to_value(Quiz::new("x", vec![])).unwrap();
+        defaults["settings"] = serde_json::to_value(QuizSettings::default()).unwrap();
+        defaults["sounds"] = serde_json::to_value(QuizSounds::default()).unwrap();
+        defaults["welcome"] = serde_json::to_value(Welcome::default()).unwrap();
+        defaults["categories"] = serde_json::json!([]);
+        assert_eq!(Quiz::read_json(&defaults.to_string()).unwrap().dropped, []);
     }
 
     #[test]

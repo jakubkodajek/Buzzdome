@@ -17,7 +17,8 @@ hand or generating them with a script.
 
 Rules for readers and writers (implemented in `crates/quiz-file`):
 
-- `quiz.json` is UTF-8 JSON at the root of the archive. Its fields are below.
+- `quiz.json` is UTF-8 JSON at the root of the archive (a byte order mark
+  before it, as Notepad writes one, is read past). Its fields are below.
 - Media files live under `media/`. Slides refer to them by their path in the
   archive, for example `"media/flag.png"`. Names may contain sub-folders.
   Every part must work on Windows, macOS and Linux alike, so these are
@@ -106,6 +107,14 @@ app.
 | `sounds` | object | What the show sounds like; see [Sounds](#sounds). Left out when every moment plays its default at the default volumes. |
 | `welcome` | object | The screen the show opens on; see [Welcome screen](#welcome-screen). Left out while it is off with nothing on it. |
 
+A field of the quiz that the format does not have (such as `timeLimit`, which
+belongs to a question), and a value of `settings`, `sounds` or `welcome` that
+does not read (a wrong type, a name or language the format does not have) or
+is cut to its range, take their default, and opening the file lists each by
+its path under File › Info (`valueUnread`, such as `settings.jokers`); the AI
+tools' checks list them under `leftOut`. One of the app's sounds that does not
+fit its moment is kept and listed the same way.
+
 ### Every slide
 
 | Field | Type | Default | Meaning |
@@ -186,7 +195,7 @@ A **text style** has:
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `color` | colour | Of the text. |
-| `font` | text | Name of a font installed on the computer that shows the quiz, at most 64 characters, without `" ' \ ; { } < >` or control characters. Not installed there: the theme's font. |
+| `font` | text | Name of a font installed on the computer that shows the quiz, at most 64 characters, without `" ' \ ; { } < >` or control characters. Not installed there: the theme's font, so a quiz written for another computer is safest with the theme's fonts (left out) or a font every Windows and macOS computer has, such as `Arial`, `Georgia` or `Verdana`. |
 | `size` | 50 to 200 | Percent of the theme's size for this text. |
 | `bold`, `italic`, `underline` | yes/no | `false` turns off what the theme has (titles and questions are bold). |
 | `align` | `left`, `center`, `right` | |
@@ -272,7 +281,10 @@ shows and, to a question, its `timer`, and the category's `background`
 when it has one; the slide's
 picture, video and sound stay, and its `category` remembers the id.
 Changing the category later changes no slide until it is applied again,
-and deleting it leaves its slides' look as it is. A background video is
+and deleting it leaves its slides' look as it is. A quiz written by hand or
+by an AI assistant applies a category by writing its look onto the slide
+too: the slide's `style` and `background` as the category has them, beside
+`category`. A `category` alone changes nothing a show draws. A background video is
 stored once in `media/`, however many slides use it.
 
 | Field | Type | Meaning |
@@ -333,7 +345,7 @@ moment of the show in `slots` plays one of the app's own sounds
 folder), or nothing (`"none"`). A moment left out plays its default. A
 moment, a choice or an id that a build does not know reads as left out, as
 does one of the app's effects chosen for music or the other way round, so a
-quiz always opens and plays.
+quiz always opens and plays; each is listed as `valueUnread`.
 
 | Field | Type | Meaning |
 | --- | --- | --- |
@@ -419,6 +431,16 @@ else UTF-8, else Windows-1250; its separator is whichever of `;`, tab and
 `,` the headings row uses most. Export writes UTF-8 with a byte order mark
 and CRLF line ends, separated by `;` when the app is in Czech and `,` in
 English, as Excel expects in those locales.
+
+**Cell values.** A workbook cell that is no text is read as text the way
+a Czech spreadsheet program shows it, as the sheet's language is not known
+and Czech Excel turns a typed `17.11.1989` or `Pravda` into a date or a
+flag: a number without formatting (`30`, `1.5`), a date `17.11.1989`, a
+time `10:30` (`10:30:15` with seconds), a date and time `17.11.1989 10:30`,
+a duration `25:30`, a flag `PRAVDA` or `NEPRAVDA`. A date's own display
+format is not read, so a typed `1.2` that Excel made a date comes in as
+`1.2.2026`; type such answers with a leading `'`. An error, and a formula
+with no value saved, are empty.
 
 **Sheets and rows.** The headings (any case) are in a sheet's first row
 with values, a CSV file's first line. A sheet without a `Q` column is
