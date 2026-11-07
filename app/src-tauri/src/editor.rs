@@ -17,7 +17,7 @@
 use crate::dialogs::{self, Picker};
 use crate::error::{AppError, CmdResult};
 use crate::recent_files::RecentFiles;
-use crate::{app_local_data, app_log, folder_prefix, lock_show, media_player, off_ui, refuse_during_show, roaming_leftover};
+use crate::{app_local_data, app_log, folder_prefix, lock_show, media_player, off_ui, roaming_leftover, DiskWork};
 use quiz_core::{Category, MediaKind, Quiz, ValidationError};
 use quiz_file::{FileAction, SheetExport, SheetImport};
 use serde::de::{Error as _, Unexpected};
@@ -253,7 +253,7 @@ pub async fn editor_new(app: AppHandle, title: String) -> CmdResult<EditorDraft>
 /// be in the list (`RecentFiles`), or one the quizmaster picks (none when
 /// they cancel). A file that is not there is reported as such
 /// (`RecentFiles::explain`).
-/// Refused during a show (`refuse_during_show`).
+/// Refused during a show (`DiskWork`).
 #[tauri::command]
 pub async fn editor_open(app: AppHandle, window: Window, recent: Option<String>, picker: Picker) -> CmdResult<Option<EditorDraft>> {
     let path = match recent {
@@ -264,7 +264,7 @@ pub async fn editor_open(app: AppHandle, window: Window, recent: Option<String>,
         },
     };
     with_drafts(app, move |app, dir| {
-        refuse_during_show(app)?;
+        let _disk = DiskWork::begin(app)?;
         let (folder, root) = new_draft_folder(dir)?;
         let source_path = path.to_string_lossy().into_owned();
         let opened = quiz_file::open_into(&path, &root).map_err(|e| app.state::<RecentFiles>().explain(&source_path, e.into()))?;
@@ -294,7 +294,7 @@ pub async fn editor_update(app: AppHandle, draft: String, quiz: Quiz, unsaved: b
 /// Saves the quiz of the draft `draft` with its media as a quiz file: over
 /// the quiz file it came from, unless `save_as`, else where the quizmaster
 /// picks (none when they cancel; a plain JSON quiz is never written over).
-/// Gives the file's path. Refused during a show (`refuse_during_show`).
+/// Gives the file's path. Refused during a show (`DiskWork`).
 #[tauri::command]
 pub async fn editor_save(app: AppHandle, window: Window, draft: String, quiz: Quiz, save_as: bool, picker: Picker) -> CmdResult<Option<String>> {
     let source = on_draft(app.clone(), draft.clone(), |_, _, _, pointer| Ok(pointer.source_path.map(PathBuf::from))).await?;
@@ -306,7 +306,7 @@ pub async fn editor_save(app: AppHandle, window: Window, draft: String, quiz: Qu
         },
     };
     on_draft(app, draft, move |app, dir, root, pointer| {
-        refuse_during_show(app)?;
+        let _disk = DiskWork::begin(app)?;
         quiz_file::write_quiz_json(&root, &quiz)?;
         quiz_file::save(&quiz, &root, &path)?;
         let saved = path.to_string_lossy().into_owned();
@@ -324,13 +324,13 @@ fn is_quiz_file(path: &Path) -> bool {
 
 /// Copies a picture, sound or video of `kinds` that the quizmaster picks
 /// into the draft `draft` and returns its reference (none when they cancel).
-/// Refused during a show (`refuse_during_show`).
+/// Refused during a show (`DiskWork`).
 #[tauri::command]
 pub async fn editor_add_media(app: AppHandle, window: Window, draft: String, kinds: Vec<MediaKind>, picker: Picker) -> CmdResult<Option<String>> {
     let Some(path) = dialogs::pick_file(window, picker, media_player::extensions(&kinds)).await? else { return Ok(None) };
     media_player::of_kind(&media_player::file_name(&path), &kinds)?;
     on_draft(app, draft, move |app, _, root, _| {
-        refuse_during_show(app)?;
+        let _disk = DiskWork::begin(app)?;
         Ok(Some(quiz_file::import_media(&root, quiz_file::MediaSource::File(&path))?))
     })
     .await
@@ -346,7 +346,7 @@ pub fn editor_category_name(categories: Vec<Category>, base: String) -> String {
 /// cancel) and copies the media they use into the draft; the editor
 /// inserts the slides as one change (spec QZ-8), giving a row that names
 /// one of the draft's categories its look. Refused during a show
-/// (`refuse_during_show`).
+/// (`DiskWork`).
 #[tauri::command]
 pub async fn editor_import_sheet(app: AppHandle, window: Window, draft: String, picker: Picker) -> CmdResult<Option<SheetImport>> {
     let Some(path) = dialogs::pick_file(window, picker, quiz_file::SHEET_EXTENSIONS.to_vec()).await? else { return Ok(None) };
@@ -354,12 +354,12 @@ pub async fn editor_import_sheet(app: AppHandle, window: Window, draft: String, 
     // for other commands meanwhile.
     let (read, reader) = (path.clone(), app.clone());
     let tables = off_ui(move || {
-        refuse_during_show(&reader)?;
+        let _disk = DiskWork::begin(&reader)?;
         crate::sheet_reader::read_tables(&read)
     })
     .await?;
     on_draft(app, draft, move |app, _, root, _| {
-        refuse_during_show(app)?;
+        let _disk = DiskWork::begin(app)?;
         let categories = quiz_file::read_quiz_json(&root)?.categories;
         // Shuffles the answers of a question with none marked right.
         let seed = nanos_now() as u64;

@@ -1089,6 +1089,7 @@ const strings = {
     errUpdateFailed: "Aktualizace se nepodařila.",
     errUpdateInstalling: "Instaluje se nová verze aplikace, show teď začít nemůže.",
     errVoiceInstalling: "Instaluje se hlas pro předčítání, show začne až po dokončení.",
+    errDiskBusy: "Otevírá se nebo ukládá kvíz, nebo se kopírují média. Show začne až po dokončení.",
     errSystem: "Systém akci odmítl.",
     // Quiz problems (Problem, MediaIssue).
     problemDuplicateSlideId: "Snímek má stejné ID jako jiný snímek.",
@@ -2449,6 +2450,7 @@ const strings = {
     errUpdateFailed: "Updating the app failed.",
     errUpdateInstalling: "A new version of the app is being installed, so no show can begin now.",
     errVoiceInstalling: "The reading voice is being installed; a show can begin once it is done.",
+    errDiskBusy: "A quiz is being opened or saved, or media copied; a show can begin once that is done.",
     errSystem: "The system refused.",
     // Quiz problems (Problem, MediaIssue).
     problemDuplicateSlideId: "The slide has the same ID as another slide.",

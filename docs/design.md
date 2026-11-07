@@ -190,7 +190,9 @@ draws slides without a show.
   never taken under the show state), so two quick clicks cannot lose either
   change; and every atomic write has a temporary file of its own
   (`quiz_file::write_atomic`). The editor's commands that open, save or
-  copy large files, or read a sheet, are refused during a show.
+  copy large files, or read a sheet, are refused during a show, and so are
+  the media library's copies; while one runs it marks the show state
+  (`DiskWork`, `disk_work`), so no show begins until it is done (`diskBusy`).
 - **Saving problems.** When the journal refuses a write (the disk is full,
   say), the change is not made, and the Director shows why in a banner until
   a write works again (`show-not-saved`, `show_not_saved`). A due command
@@ -1588,7 +1590,8 @@ never holds a NUL (`is_journal_line`); so a last line that is that, but
 whose command this version does not know, was accepted by a newer app and
 is not cut. Resume cuts a torn line off, after keeping the journal as it was in
 `torn/journal-<n>.jsonl` (a copy per cut; when the copy fails, as on a full
-disk, the log says so and the show resumes all the same). Any other line
+disk, the log says so and the show resumes all the same; when cutting
+fails too, the next journal write cuts it first). Any other line
 that does not read as a command (one from a newer app, or one the disk
 damaged before the end) refuses the resume with `journalDamaged` and leaves
 the journal as it is, since replaying without it would rebuild another show.
@@ -1596,7 +1599,12 @@ A show that stopped mid-question has its question restarted
 (`Game::recovery_command` gives `RestartQuestion`, which takes the
 question's score changes back, so a wrong answer before the crash is not
 charged twice), and that command is journaled before `show-changed`
-reaches the windows, so no window shows the stopped question. One that
+reaches the windows, so no window shows the stopped question. When the
+journal refuses it (a full disk), the show resumes as journaled, stopped
+question and all, with the save problem in the Director's banner; nothing
+else is journaled before the recovery (`Inner::recovery_due`), which the
+show thread tries again each second, as a due command, until it is
+journaled and only then shown. One that
 stopped while a step was coming by itself (QZ-11) has the step held
 (`PauseClock`): the clock reads later after a restart, so the step would
 otherwise come at once, before the quizmaster saw where the show stands. The

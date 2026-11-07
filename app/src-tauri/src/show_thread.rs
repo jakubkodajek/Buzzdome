@@ -15,7 +15,7 @@
 
 use crate::error::{AppError, CmdResult};
 use crate::pump::{Pump, Timed};
-use crate::{execute_at, hardware, lock_show, now_ms, off_ui, play_press, stage_lights, Inner};
+use crate::{execute_at, hardware, lock_show, now_ms, off_ui, play_press, retry_recovery, stage_lights, Inner};
 use buzzers::receiver::ReceiverEvent;
 use buzzers::Press;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -289,16 +289,24 @@ struct Ticker {
 
 impl Ticker {
     /// Issues a time-driven command due at `now`, such as "time is up", or
-    /// else sends the running clock to the windows now and then. Then tells
+    /// a resumed show's recovery that the journal refused (`retry_recovery`),
+    /// or else sends the running clock to the windows now and then. Then tells
     /// the Director when saving the show starts or stops failing, or no
     /// longer hangs (`Watch::tell_if_stuck`).
     fn tick(&mut self, app: &AppHandle, now: u64) {
         let mut inner = lock_show(app);
-        match inner.game.as_ref().and_then(|g| g.due_command(now)) {
+        // A resumed show's recovery that the journal refused goes first:
+        // nothing else is journaled before it (`Inner::recovery_due`).
+        let due = if inner.recovery_due { Some(None) } else { inner.game.as_ref().and_then(|g| g.due_command(now)).map(Some) };
+        match due {
             Some(command) => {
                 if self.retry_due_at.is_none_or(|at| Instant::now() >= at) {
                     // Why it failed is the Director's to show (`save_problem`).
-                    let failed = execute_at(app, &mut inner, command, now).is_err();
+                    let failed = match command {
+                        Some(command) => execute_at(app, &mut inner, command, now).map(drop),
+                        None => retry_recovery(app, &mut inner, now),
+                    }
+                    .is_err();
                     self.retry_due_at = failed.then(|| Instant::now() + RETRY_DUE_AFTER);
                 }
             }

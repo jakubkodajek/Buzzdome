@@ -249,6 +249,10 @@ pub enum AppError {
     /// The voice model is being put in place, which stops the voice process.
     #[error("the voice model is being installed")]
     VoiceInstalling,
+    /// A quiz file is being opened, saved or read from a sheet, or media
+    /// copied, which reads or writes much on the disk (`DiskWork`).
+    #[error("a quiz file or media is being read or written")]
+    DiskBusy,
 
     // Windows and the operating system.
     /// The system gave the app no folder for its data (team names, sessions, the media library).

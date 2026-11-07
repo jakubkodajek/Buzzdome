@@ -64,6 +64,10 @@ pub struct Session {
     len: u64,
     /// A failed write could not be taken back; nothing more may be appended.
     broken: bool,
+    /// Resuming could not cut the torn last line off (`resume_latest`), so
+    /// the next append cuts it first: a line written over it could leave
+    /// some of it after the new line.
+    torn_left: bool,
 }
 
 /// Why the last show cannot be read or resumed.
@@ -103,6 +107,9 @@ pub struct Resumed {
     pub quiz: Quiz,
     pub journal: Vec<Stamped>,
     pub meta: SessionMeta,
+    /// Why the torn last line could not be cut off, if it could not: the
+    /// show resumes all the same, and the next append cuts it first.
+    pub not_cut: Option<io::Error>,
 }
 
 impl Session {
@@ -121,7 +128,7 @@ impl Session {
         let journal = open_journal(&path).context(FileAction::Write, &path)?;
         quiz_file::sync_dir(&dir)?;
         let len = journal.metadata().context(FileAction::Read, &path)?.len();
-        Ok(Session { journal, len, broken: false })
+        Ok(Session { journal, len, broken: false, torn_left: false })
     }
 
     /// Reopens the most recent session for appending, with its quiz and journal.
@@ -141,13 +148,16 @@ impl Session {
                 app_log::note(&format!("the torn journal {} was not kept aside: {e}", path.display()));
             }
         }
-        let file = open_journal(&path)?;
-        if torn {
-            file.set_len(kept)?;
-            file.sync_data()?;
+        // A full disk does not stop it either when cutting fails: the
+        // commands before the torn line are whole, and the next append
+        // cuts it first (`torn_left`).
+        let mut file = open_journal(&path)?;
+        let not_cut = if torn { cut(&mut file, kept).err() } else { None };
+        if let Some(e) = &not_cut {
+            app_log::note(&format!("the torn line of {} was not cut off: {e}", path.display()));
         }
-        let session = Session { journal: file, len: kept, broken: false };
-        Ok(Some(Resumed { session, quiz, journal, meta }))
+        let session = Session { journal: file, len: kept, broken: false, torn_left: not_cut.is_some() };
+        Ok(Some(Resumed { session, quiz, journal, meta, not_cut }))
     }
 
     pub fn latest_summary(root: &Path) -> Result<Option<SessionSummary>, ResumeError> {
@@ -155,6 +165,12 @@ impl Session {
         let meta = read_meta(&dir)?;
         let command_count = read_journal(&dir.join(JOURNAL_FILE))?.0.len();
         Ok(Some(SessionSummary { meta, command_count }))
+    }
+
+    /// Whether a torn line that resuming could not cut off is still there,
+    /// to be cut off before the next append.
+    pub fn torn_left(&self) -> bool {
+        self.torn_left
     }
 
     /// Lets appends work again after `break_for_test`.
@@ -177,7 +193,7 @@ impl Session {
         }
         let mut line = serde_json::to_string(stamped).map_err(io::Error::from)?;
         line.push('\n');
-        append_line(&mut self.journal, &mut self.len, line.as_bytes()).inspect_err(|e| {
+        append_past_torn(&mut self.journal, &mut self.len, &mut self.torn_left, line.as_bytes()).inspect_err(|e| {
             if let AppendError::Unrepaired(_) = e {
                 self.broken = true;
             }
@@ -257,6 +273,22 @@ impl AppendError {
             AppendError::Failed(e) | AppendError::Unrepaired(e) => e,
         }
     }
+}
+
+/// Cuts the journal back to its first `len` bytes, on disk.
+fn cut(file: &mut impl JournalFile, len: u64) -> io::Result<()> {
+    file.truncate(len)?;
+    file.sync()
+}
+
+/// `append_line`, first cutting off a torn line that resuming left
+/// (`torn_left`); when that fails, nothing is written.
+fn append_past_torn(file: &mut impl JournalFile, len: &mut u64, torn_left: &mut bool, line: &[u8]) -> Result<(), AppendError> {
+    if *torn_left {
+        cut(file, *len).map_err(AppendError::Failed)?;
+        *torn_left = false;
+    }
+    append_line(file, len, line)
 }
 
 /// Appends `line` to a journal whose whole lines take `len` bytes, and syncs.
@@ -691,6 +723,23 @@ mod tests {
         journal.bytes.extend_from_slice(b"tw");
         append_line(&mut journal, &mut len, b"three\n").unwrap();
         assert_eq!(journal.bytes, b"one\nthree\n");
+    }
+
+    #[test]
+    fn a_torn_line_resuming_could_not_cut_off_is_cut_before_the_next_line() {
+        // A whole line that is no journal line, longer than the next one.
+        let mut journal = FlakyJournal { bytes: b"one\n{\"garbage\": true, \"long\": 1}\n".to_vec(), fail_truncate: true, ..FlakyJournal::default() };
+        let (mut len, mut torn_left) = (4, true);
+        assert!(matches!(append_past_torn(&mut journal, &mut len, &mut torn_left, b"two\n"), Err(AppendError::Failed(_))));
+        assert!(torn_left, "it is tried again");
+        assert_eq!(&journal.bytes[..4], b"one\n");
+        assert_eq!(len, 4);
+        journal.fail_truncate = false;
+        append_past_torn(&mut journal, &mut len, &mut torn_left, b"two\n").unwrap();
+        assert!(!torn_left);
+        assert_eq!(journal.bytes, b"one\ntwo\n", "nothing of the torn line is left after the new one");
+        append_past_torn(&mut journal, &mut len, &mut torn_left, b"three\n").unwrap();
+        assert_eq!(journal.bytes, b"one\ntwo\nthree\n");
     }
 
     #[test]

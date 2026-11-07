@@ -38,7 +38,7 @@ pub use error::AppError;
 use hardware::Hardware;
 use quiz_core::{BuzzerId, BuzzerMode, Command, Effect, Game, GameView, Light, Quiz, ShowResults, Stamped};
 use recent_files::RecentFiles;
-use session::{Resumed, Session, SessionMeta, SessionSummary};
+use session::{NotSaved, Resumed, Session, SessionMeta, SessionSummary};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{mpsc, LazyLock, Mutex, MutexGuard, TryLockError};
@@ -71,6 +71,15 @@ struct Inner {
     /// process and fills its folder, so no show may begin
     /// (`read_aloud::voice_install`).
     voice_unpacking: bool,
+    /// How many commands read or write much on the disk now, such as
+    /// saving a quiz file or copying a video, so no show may begin
+    /// (`DiskWork`): its journal would wait for the disk behind them.
+    disk_work: u32,
+    /// The resumed show stopped mid-question and its recovery
+    /// (`Game::recovery_command`) is not in the journal yet: the journal
+    /// refused it. The windows show the show as replayed until it is; it is
+    /// tried again before anything else is journaled (`recover`).
+    recovery_due: bool,
 }
 
 impl Inner {
@@ -88,11 +97,14 @@ impl Inner {
             close_request: app_windows::CloseRequest::default(),
             updating: false,
             voice_unpacking: false,
+            disk_work: 0,
+            recovery_due: false,
         }
     }
 
     /// Refuses a new show while one runs, a new version of the app is
-    /// being installed or the voice model is put in place.
+    /// being installed, the voice model is put in place or other large
+    /// disk work runs (`DiskWork`).
     fn may_start_show(&self) -> CmdResult<()> {
         if self.game.is_some() {
             return Err(AppError::ShowRunning);
@@ -102,6 +114,9 @@ impl Inner {
         }
         if self.voice_unpacking {
             return Err(AppError::VoiceInstalling);
+        }
+        if self.disk_work > 0 {
+            return Err(AppError::DiskBusy);
         }
         Ok(())
     }
@@ -142,7 +157,9 @@ fn https_agent(max_redirects: u32, timeout: std::time::Duration) -> ureq::Agent 
 /// The updates lock (`updates::Updates`) is taken before this one and
 /// never under it; installing an update does not hold this one, but marks
 /// it (`Inner::updating`) so that no show begins meanwhile. Putting the
-/// voice model in place marks it the same way (`Inner::voice_unpacking`).
+/// voice model in place marks it the same way (`Inner::voice_unpacking`),
+/// and so does other large disk work (`DiskWork`), which may hold the
+/// editor's lock or the media library's.
 fn lock_show(app: &AppHandle) -> MutexGuard<'_, Inner> {
     app.state::<AppState>().inner().0.lock().unwrap()
 }
@@ -257,22 +274,78 @@ fn execute_at(app: &AppHandle, inner: &mut Inner, command: Command, at_ms: u64) 
 /// then does the copy replace the show (S1). Gives the effects, for
 /// `deliver`, or none for a press that changes nothing (`Game::ignores`):
 /// a burst of those costs no journal write. Keeps whether the journal
-/// write failed, for the Director.
+/// write failed, for the Director. Refused, for the reason the journal
+/// gave, while a resumed show's recovery is not journaled yet
+/// (`Inner::recovery_due`): nothing goes in the journal before it.
 fn apply_journaled(inner: &mut Inner, command: Command, at_ms: u64) -> CmdResult<Option<Vec<Effect>>> {
     let game = inner.game.as_ref().ok_or(AppError::NoShow)?;
     let stamped = Stamped { at_ms, command };
     if game.ignores(&stamped) {
         return Ok(None);
     }
+    if inner.recovery_due {
+        return Err(inner.save_problem.clone().unwrap_or(AppError::JournalBroken));
+    }
     let applied = apply_and_journal(game, inner.session.as_mut(), &stamped);
-    match &applied {
+    note_saved(inner, &applied);
+    let (next, effects) = applied?;
+    inner.game = Some(next);
+    Ok(Some(effects))
+}
+
+/// Keeps whether a journal write worked, for the Director (`save_problem`).
+fn note_saved<T>(inner: &mut Inner, applied: &CmdResult<T>) {
+    match applied {
         Ok(_) if inner.session.is_some() => inner.save_problem = None,
         Err(e) if e.is_not_saved() => inner.save_problem = Some(e.clone()),
         _ => {}
     }
-    let (next, effects) = applied?;
-    inner.game = Some(next);
-    Ok(Some(effects))
+}
+
+/// Journals the recovery of a resumed show that its journal refused when
+/// it resumed (`Inner::recovery_due`), and only then makes it the show.
+/// Gives its effects, for `deliver`, or none when none is due. Keeps whether
+/// the write failed, for the Director, as `apply_journaled` does.
+fn recover(inner: &mut Inner, at_ms: u64) -> CmdResult<Option<Vec<Effect>>> {
+    if !inner.recovery_due {
+        return Ok(None);
+    }
+    let game = inner.game.as_ref().ok_or(AppError::NoShow)?;
+    let Some(command) = game.recovery_command() else {
+        inner.recovery_due = false;
+        return Ok(None);
+    };
+    let applied = apply_and_journal(game, inner.session.as_mut(), &Stamped { at_ms, command });
+    note_saved(inner, &applied);
+    match applied {
+        Ok((next, effects)) => {
+            inner.game = Some(next);
+            inner.recovery_due = false;
+            Ok(Some(effects))
+        }
+        Err(e) => {
+            // Only the journal is tried again: a show that refuses its
+            // recovery (none does) plays on without it.
+            if !e.is_not_saved() {
+                inner.recovery_due = false;
+            }
+            Err(e)
+        }
+    }
+}
+
+/// Tries the resumed show's recovery again at `at_ms` (`recover`), as the
+/// show thread does with due commands (`Ticker::tick`), and tells the
+/// buzzers and windows once it is journaled.
+pub(crate) fn retry_recovery(app: &AppHandle, inner: &mut Inner, at_ms: u64) -> CmdResult<()> {
+    if inner.before_show(at_ms) {
+        return Ok(());
+    }
+    if let Some(effects) = recover(inner, at_ms)? {
+        app_log::note("the resumed show's recovery is journaled now");
+        deliver(app, inner, effects);
+    }
+    Ok(())
 }
 
 /// Makes `game` the running show, or none, journaled in `session` (none in
@@ -286,6 +359,7 @@ fn replace_show(inner: &mut Inner, game: Option<Game>, session: Option<Session>)
     inner.game = game;
     inner.session = session;
     inner.save_problem = None;
+    inner.recovery_due = false;
     inner.began_ms = now_ms();
     // A close request left unanswered was about the show before.
     inner.close_request.forget();
@@ -419,9 +493,34 @@ fn begin_show(app: &AppHandle, inner: &mut Inner, game: Game, session: Option<Se
 /// a sheet, installing an update or the voice model), whose journal must not wait for the disk
 /// behind it, or that would disturb the buzzers. The windows offer it only
 /// when no show runs; this holds also for a command already on its way.
+/// Disk work also keeps a show from beginning until it is done (`DiskWork`).
 /// Not to be called while holding the show state (`refuse_show` then).
 pub(crate) fn refuse_during_show(app: &AppHandle) -> CmdResult<()> {
     refuse_show(&lock_show(app))
+}
+
+/// Marks the show state while a command reads or writes much on the disk
+/// (`refuse_during_show`), so that no show begins meanwhile
+/// (`Inner::disk_work`); the mark goes when this does, however the work
+/// ends. Taken in place of `refuse_during_show`, and not while holding the
+/// show state.
+pub(crate) struct DiskWork<'a>(&'a AppHandle);
+
+impl<'a> DiskWork<'a> {
+    /// Marks it, unless a show runs.
+    pub(crate) fn begin(app: &'a AppHandle) -> CmdResult<DiskWork<'a>> {
+        let mut inner = lock_show(app);
+        refuse_show(&inner)?;
+        inner.disk_work += 1;
+        Ok(DiskWork(app))
+    }
+}
+
+impl Drop for DiskWork<'_> {
+    fn drop(&mut self) {
+        let mut inner = lock_show(self.0);
+        inner.disk_work = inner.disk_work.saturating_sub(1);
+    }
 }
 
 /// `refuse_during_show` for one who holds the show state.
@@ -594,14 +693,22 @@ struct ResumedShow {
     effects: Vec<Effect>,
     /// For the quizmaster (`resume_warnings`).
     warnings: Vec<AppError>,
+    /// The journal refused the recovery, which is to be tried again
+    /// (`Inner::recovery_due`).
+    recovery_due: bool,
+    /// Why the journal refused a write, the recovery or cutting a torn
+    /// line off, if it did (`Inner::save_problem`).
+    save_problem: Option<AppError>,
 }
 
 /// Rebuilds the latest show under `root` from its journal. A show that
 /// stopped mid-question has the question restarted, journaled at `at_ms`,
-/// before anything is shown: no window sees the stopped question. Its
-/// media are served only from the `media_folders`.
+/// before anything is shown: no window sees the stopped question while
+/// the journal takes the restart. When it refuses it (a full disk), the
+/// show resumes as it was journaled, and the restart is tried again
+/// (`recover`). Its media are served only from the `media_folders`.
 fn resume_show(root: &Path, at_ms: u64, media_folders: &[PathBuf]) -> CmdResult<ResumedShow> {
-    let Resumed { mut session, quiz, journal, meta } = Session::resume_latest(root)?.ok_or(AppError::NoShowToResume)?;
+    let Resumed { mut session, quiz, journal, meta, not_cut } = Session::resume_latest(root)?.ok_or(AppError::NoShowToResume)?;
     // A journal edited by hand, or one where an earlier version unpacked,
     // may name another folder.
     let (media_root, refused) = match meta.media_root.as_deref().map(PathBuf::from) {
@@ -610,12 +717,28 @@ fn resume_show(root: &Path, at_ms: u64, media_folders: &[PathBuf]) -> CmdResult<
     };
     // The show must go on: without its media it still runs, and the Director says why.
     let warnings = resume_warnings(&quiz, media_root.as_deref(), refused.as_deref(), meta.rules_changed());
-    let mut game = Game::replay(quiz, &journal, meta.rules_version);
-    let mut effects = Vec::new();
-    if let Some(command) = game.recovery_command() {
-        (game, effects) = apply_and_journal(&game, Some(&mut session), &Stamped { at_ms, command })?;
+    let game = Game::replay(quiz, &journal, meta.rules_version);
+    let (game, effects, refused) = recover_resumed(game, &mut session, at_ms)?;
+    let recovery_due = refused.is_some();
+    // A torn line that is still there is cut off before the next write.
+    let save_problem = refused.or_else(|| not_cut.filter(|_| session.torn_left()).map(|e| NotSaved::Io(e).into()));
+    if let Some(problem) = &save_problem {
+        app_log::note(&format!("the resumed show is not saved: {problem}"));
     }
-    Ok(ResumedShow { game, session, media_root: media_root.filter(|root| root.is_dir()), effects, warnings })
+    Ok(ResumedShow { game, session, media_root: media_root.filter(|root| root.is_dir()), effects, warnings, recovery_due, save_problem })
+}
+
+/// Journals the recovery of the replayed `game`, if it needs one, at
+/// `at_ms`. Gives the show to resume, what the recovery sends to the
+/// buzzers and windows, and why the journal refused it, if it did: then
+/// the show is `game` as replayed, which is on disk.
+fn recover_resumed(game: Game, session: &mut Session, at_ms: u64) -> CmdResult<(Game, Vec<Effect>, Option<AppError>)> {
+    let Some(command) = game.recovery_command() else { return Ok((game, Vec::new(), None)) };
+    match apply_and_journal(&game, Some(session), &Stamped { at_ms, command }) {
+        Ok((next, effects)) => Ok((next, effects, None)),
+        Err(e) if e.is_not_saved() => Ok((game, Vec::new(), Some(e))),
+        Err(e) => Err(e),
+    }
 }
 
 /// Resumes the last show. Returns warnings for the quizmaster when the show
@@ -628,6 +751,9 @@ async fn resume_last_session(app: AppHandle) -> CmdResult<Vec<AppError>> {
         let show = resume_show(&sessions_root(&app)?, now_ms(), &media_folders(&app)?)?;
         inner.media_root = show.media_root;
         replace_show(&mut inner, Some(show.game), Some(show.session));
+        // The show thread tries a refused recovery again (`Ticker::tick`).
+        inner.recovery_due = show.recovery_due;
+        inner.save_problem = show.save_problem;
         send_effects(&app, &mut inner, show.effects);
         show_changed(&app, &inner);
         Ok(show.warnings)
@@ -891,7 +1017,7 @@ mod tests {
     use std::time::Instant;
 
     #[test]
-    fn no_show_begins_while_one_runs_or_an_update_or_the_voice_installs() {
+    fn no_show_begins_while_one_runs_or_an_update_the_voice_or_disk_work_runs() {
         let mut inner = Inner::new();
         assert_eq!(inner.may_start_show(), Ok(()));
         inner.updating = true;
@@ -900,6 +1026,13 @@ mod tests {
         inner.voice_unpacking = true;
         assert_eq!(inner.may_start_show(), Err(AppError::VoiceInstalling));
         inner.voice_unpacking = false;
+        // Saving a quiz file and copying a video at once: the show waits for both.
+        inner.disk_work = 2;
+        assert_eq!(inner.may_start_show(), Err(AppError::DiskBusy));
+        inner.disk_work = 1;
+        assert_eq!(inner.may_start_show(), Err(AppError::DiskBusy));
+        inner.disk_work = 0;
+        assert_eq!(inner.may_start_show(), Ok(()));
         inner.game = Some(Game::new(Quiz::new("Quiz", Vec::new())));
         assert_eq!(inner.may_start_show(), Err(AppError::ShowRunning));
     }
@@ -1161,6 +1294,58 @@ mod tests {
         let new = Command::Press { buzzer: 9, button: quiz_core::Button::B };
         assert!(apply_journaled(&mut inner, new, 7_100).unwrap().is_some());
         assert_eq!(journal_len(&root), before + 1);
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn a_show_whose_journal_refuses_its_recovery_resumes_as_journaled_and_recovers_later() {
+        let root = sessions_dir("recovery-refused");
+        let live = run_show_and_crash(&root, up_to_the_first_question());
+        let before = journal_len(&root);
+        let Resumed { mut session, quiz, journal, meta, .. } = Session::resume_latest(&root).unwrap().unwrap();
+        let replayed = Game::replay(quiz, &journal, meta.rules_version);
+        assert_eq!(replayed.recovery_command(), Some(Command::RestartQuestion));
+        // The disk is full: the restart is not journaled, so it is not made.
+        session.break_for_test();
+        let (game, effects, refused) = recover_resumed(replayed, &mut session, 60_000).unwrap();
+        assert_eq!(game, live, "the show resumes as it is on disk");
+        assert!(effects.is_empty());
+        assert_eq!(refused, Some(AppError::JournalBroken));
+        let mut inner = Inner { game: Some(game), session: Some(session), recovery_due: true, save_problem: refused, ..Inner::new() };
+
+        // Nothing goes in the journal before the restart, and trying it again fails while the disk is full.
+        let press = Command::Press { buzzer: 2, button: quiz_core::Button::C };
+        assert_eq!(apply_journaled(&mut inner, Command::AdjustScore { buzzer: 1, delta: 100 }, 61_000), Err(AppError::JournalBroken));
+        assert_eq!(recover(&mut inner, 61_500), Err(AppError::JournalBroken));
+        assert!(inner.recovery_due);
+        assert_eq!(inner.save_problem, Some(AppError::JournalBroken));
+        assert_eq!(inner.game.as_ref(), Some(&live));
+        assert_eq!(journal_len(&root), before);
+
+        // Space is freed: the restart is journaled first, then the show plays on.
+        inner.session.as_mut().unwrap().repair_for_test();
+        assert!(recover(&mut inner, 62_000).unwrap().is_some());
+        assert!(!inner.recovery_due);
+        assert_eq!(inner.save_problem, None);
+        assert_eq!(inner.game.as_ref().unwrap().phase(), &quiz_core::Phase::Question(quiz_core::QuestionStep::Ready));
+        assert_eq!(recover(&mut inner, 62_100), Ok(None), "it is made once");
+        apply_journaled(&mut inner, Command::Next, 63_000).unwrap(); // the restarted question's clock
+        assert!(apply_journaled(&mut inner, press, 64_000).unwrap().is_some());
+        let on_disk = Session::resume_latest(&root).unwrap().unwrap();
+        assert_eq!(on_disk.journal[before], Stamped { at_ms: 62_000, command: Command::RestartQuestion });
+        assert_eq!(Game::replay(on_disk.quiz, &on_disk.journal, on_disk.meta.rules_version), inner.game.unwrap());
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn a_resumed_show_that_needs_no_recovery_has_nothing_due() {
+        let root = sessions_dir("no-recovery");
+        run_show_and_crash(&root, vec![Command::Press { buzzer: 1, button: quiz_core::Button::Big }]);
+        let resumed = resume_show(&root, 60_000, &[]).unwrap();
+        assert!(!resumed.recovery_due);
+        assert_eq!(resumed.save_problem, None);
+        let mut inner = Inner { game: Some(resumed.game), session: Some(resumed.session), ..Inner::new() };
+        assert_eq!(recover(&mut inner, 61_000), Ok(None));
         std::fs::remove_dir_all(&root).unwrap();
     }
 

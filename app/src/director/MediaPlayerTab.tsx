@@ -124,7 +124,7 @@ export function MediaPlayerTab({ player, sound, view }: { player: MediaPlayer; s
   return (
     <div className="media-player">
       <div className="media-toolbar" role="toolbar">
-        <button title={t("mediaAddHint")} onClick={() => run(add())}>
+        <button title={t("mediaAddHint")} disabled={view !== null} onClick={() => run(add())}>
           <AddIcon /> {t("mediaAdd")}
         </button>
         <button disabled={!chosen} onClick={() => chosen && run(remove(chosen))}>
