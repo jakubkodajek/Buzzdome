@@ -1037,6 +1037,10 @@
   overflow: auto;
 }
 
+.lights-stored {
+  margin: 0;
+}
+
 .receiver fieldset,
 .lights fieldset {
   border: 1px solid var(--line);

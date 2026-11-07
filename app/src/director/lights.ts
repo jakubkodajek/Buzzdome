@@ -5,7 +5,7 @@
 
 import { CHANNEL_KINDS, LIT_BY_LOOKS, UNIVERSE_SIZE } from "../bindings/LightsConstants";
 import type { StringKey } from "../i18n";
-import type { Channel, ChannelValue, Fixture, LightsSetup, Look, OutputChoice } from "../types";
+import type { Channel, ChannelValue, Cue, Fixture, LightsSetup, Look, OutputChoice, Stage } from "../types";
 
 /** The channel layouts most fixtures have, to start a fixture from. */
 export const FIXTURE_PRESETS: { id: string; label: StringKey; channels: Channel[] }[] = [
@@ -129,6 +129,24 @@ export function removeLook(setup: LightsSetup, id: number): LightsSetup {
     stages: Object.fromEntries(Object.entries(setup.stages).filter(([, look]) => look !== id)),
     flashes: Object.fromEntries(Object.entries(setup.flashes).filter(([, flash]) => flash?.look !== id)),
   };
+}
+
+/** The stages that take look `id` and the cues that flash it, which `removeLook` would leave without it. */
+export function lookUses(setup: LightsSetup, id: number): { stages: Stage[]; cues: Cue[] } {
+  return {
+    stages: (Object.keys(setup.stages) as Stage[]).filter((stage) => setup.stages[stage] === id),
+    cues: (Object.keys(setup.flashes) as Cue[]).filter((cue) => setup.flashes[cue]?.look === id),
+  };
+}
+
+/**
+ * Whether `host` is an IPv4 address such as 192.168.1.20, which network
+ * outputs and OSC take (`ipv4` in crates/lights: Rust's `Ipv4Addr`, four
+ * numbers to 255 without leading zeros, spaces around it allowed).
+ */
+export function isIpv4(host: string): boolean {
+  const parts = host.trim().split(".");
+  return parts.length === 4 && parts.every((part) => /^(0|[1-9]\d{0,2})$/.test(part) && Number(part) <= 255);
 }
 
 /** Whether `choice` is the same output as `other`, settings and all. */
