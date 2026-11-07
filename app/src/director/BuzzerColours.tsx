@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import { useApp, useRun } from "../app-context";
+import { confirmAction } from "../confirm";
 import { CustomColor, Swatch } from "../editor/ColorPicker";
 import { Popup } from "../editor/controls";
 import type { StringKey } from "../i18n";
@@ -49,6 +50,8 @@ export function BuzzerColours({ info, reload }: { info: ReceiverInfo; reload: ()
   const { t } = useApp();
   const run = useRun();
   const [error, setError] = useState<Notice | null>(null);
+  const reset = () =>
+    run(confirmAction(t, t("buzzerColoursResetConfirm")).then((yes) => (yes ? api.receiverResetColours().then(() => setError(null)).finally(reload) : undefined)));
   const choose = (light: Light, colour: Rgb) => {
     if (sameColor(colour, info.colours[light])) return;
     api
@@ -92,7 +95,7 @@ export function BuzzerColours({ info, reload }: { info: ReceiverInfo; reload: ()
       {error && <NoticeBox notice={error} />}
       <div className="row">
         <span className="spacer" />
-        <button onClick={() => run(api.receiverResetColours().then(() => setError(null)).finally(reload))}>{t("buzzerColoursReset")}</button>
+        <button onClick={reset}>{t("buzzerColoursReset")}</button>
       </div>
     </fieldset>
   );
@@ -101,7 +104,8 @@ export function BuzzerColours({ info, reload }: { info: ReceiverInfo; reload: ()
 /**
  * A light's colour: a swatch with its hex code that opens a picker with the
  * most used colours, the quizmaster's own, and any colour. A colour from a
- * row is chosen at once; a custom one once the picker closes.
+ * row is chosen at once; a custom one once the picker closes, unless Esc
+ * closed it.
  */
 function BuzzerColourBox(props: {
   label: string;
@@ -118,10 +122,21 @@ function BuzzerColourBox(props: {
   const [draft, setDraft] = useState<Rgb | null>(null);
   const shown = draft ?? value;
   const kept = mine.some((colour) => sameColor(colour, shown));
-  const close = (colour: Rgb) => {
+  // Set by an Esc on its way to the picker, which closes it on Esc as on a click outside.
+  const escaped = useRef(false);
+  useEffect(() => {
+    if (!open) return;
+    escaped.current = false;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") escaped.current = true;
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [open]);
+  const close = (colour: Rgb | null) => {
     setOpen(null);
     setDraft(null);
-    onChoose(colour);
+    if (colour !== null) onChoose(colour);
   };
   const tile = (colour: Rgb, name: string) => (
     <button
@@ -151,7 +166,7 @@ function BuzzerColourBox(props: {
       </button>
       <code>{shown.toLowerCase()}</code>
       {open && (
-        <Popup x={open.x} y={open.y} onClose={() => close(shown)} className="color-picker" role="dialog" label={label}>
+        <Popup x={open.x} y={open.y} onClose={() => close(escaped.current ? null : shown)} className="color-picker" role="dialog" label={label}>
           <div className="color-picker-body">
             <small className="color-heading">{t("coloursCommon")}</small>
             <div className="color-grid">{COMMON_COLOURS.map(({ colour, name }) => tile(colour, t(name)))}</div>

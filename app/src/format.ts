@@ -37,6 +37,11 @@ export function calendarDay(ms: number, lang: Lang): string {
   return new Date(ms).toLocaleDateString(lang === "cs" ? "cs-CZ" : "en-GB", { timeZone: "UTC" });
 }
 
+/** A time of day on this computer's clock, as the quizmaster's language writes it, to the second: "09:47:50". */
+export function timeOfDay(ms: number, lang: Lang): string {
+  return new Date(ms).toLocaleTimeString(lang === "cs" ? "cs-CZ" : "en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" });
+}
+
 /** A score padded to three digits for the score boards, e.g. "042". */
 export function scoreDigits(n: number): string {
   return n < 0 ? `-${String(-n).padStart(2, "0")}` : String(n).padStart(3, "0");
