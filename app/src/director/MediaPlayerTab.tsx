@@ -104,7 +104,7 @@ export function MediaPlayerTab({ player, sound, view }: { player: MediaPlayer; s
       now?.reference === reference ? t("mediaRemoveStops") : "",
       pads > 0 ? t("mediaRemoveEmptiesPads", { n: pads }) : "",
     ];
-    if (await confirmAction(t, message.filter((part) => part !== "").join(" "))) await api.mediaRemove(reference);
+    if (await confirmAction(t, message.filter((part) => part !== "").join(" "), t("mediaRemove"))) await api.mediaRemove(reference);
   };
 
   /** Copies files dropped from the system into the library; returns the references of those that came in. */

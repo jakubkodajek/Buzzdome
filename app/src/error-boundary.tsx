@@ -1,4 +1,5 @@
 import { Component, type ReactNode } from "react";
+import { storedLookIsDark } from "./director/look";
 import type { Translate } from "./i18n";
 import { thrownText } from "./messages";
 import { NoticeBox } from "./notice";
@@ -45,12 +46,14 @@ export class ErrorBoundary extends Component<Props, { message: string | null }> 
 /**
  * What a window or a part of it shows after it failed to render: `text`
  * says so, `detail` is the error's message, with a button to try again;
- * `children` adds other ways out.
+ * `children` adds other ways out. It draws itself in the Director's look,
+ * light or dark, as the window's own root that would give the look may be
+ * what failed.
  */
 export function RenderFailed(props: { t: Translate; text: string; detail: string; retry: () => void; children?: ReactNode }) {
   const { t, text, detail, retry, children } = props;
   return (
-    <div className="render-failed">
+    <div className={storedLookIsDark() ? "director dark render-failed" : "director render-failed"}>
       <NoticeBox notice={{ text, detail }}>
         <button onClick={retry}>{t("tryAgain")}</button>
         {children}

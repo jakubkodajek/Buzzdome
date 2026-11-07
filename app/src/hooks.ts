@@ -209,9 +209,28 @@ export function useAppVersion(): string | null {
   return useLoadedValue<string | null>(api.appVersion, null)[0];
 }
 
-/** The newer version of the app the update server offers, read once; null when there is none or until loaded. */
+/** How often the update server is asked again while it has not answered, such as before the venue's network is up. */
+const UPDATE_RECHECK_MS = 5 * 60_000;
+
+/**
+ * The newer version of the app the update server offers; null when there is
+ * none or until known. Until the server answers once, it is asked again
+ * every few minutes and when the computer comes online (the backend keeps
+ * the first answer, `update_check`).
+ */
 export function useAvailableUpdate(): AvailableUpdate | null {
-  return useLoadedValue<AvailableUpdate | null>(api.updateCheck, null)[0];
+  const [update, reload] = useLoadedValue<AvailableUpdate | null | undefined>(api.updateCheck, undefined);
+  const answered = update !== undefined;
+  useEffect(() => {
+    if (answered) return;
+    const timer = setInterval(reload, UPDATE_RECHECK_MS);
+    window.addEventListener("online", reload);
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener("online", reload);
+    };
+  }, [answered, reload]);
+  return update ?? null;
 }
 
 /** The receiver's state and set-up, loaded again whenever its state changes; null until loaded. */

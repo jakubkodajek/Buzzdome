@@ -1,4 +1,4 @@
-import { useState, type DragEvent } from "react";
+import { Fragment, useState, type DragEvent, type ReactNode } from "react";
 import { api } from "../api";
 import { useApp, useDispatch, useRun } from "../app-context";
 import type { SlideSound } from "../audio/slide-sound";
@@ -14,6 +14,16 @@ import type { BoardChange, GameView, MediaKind, Pad, PadClick, PadColor, PadSour
 import { carriesFiles, KindIcon, LIBRARY_FILE_TYPE } from "./media-parts";
 import type { MediaPlayer } from "./useMediaPlayer";
 import { confirmAction } from "../confirm";
+
+/** `label` with a place to break the line after each dot, dash and underscore, so a long file name breaks there first. */
+function breakable(label: string): ReactNode {
+  return label.split(/(?<=[._-])/).map((part, i) => (
+    <Fragment key={i}>
+      {i > 0 && <wbr />}
+      {part}
+    </Fragment>
+  ));
+}
 
 /** Drag data of a pad: its place. */
 const PAD_TYPE = "application/x-quiz-show-pad";
@@ -196,11 +206,13 @@ export function SoundBoardGrid({ player, sound, view, selected, onSelect, import
             const file = padFile(pad);
             const kind = file ? kindOf(file) : null;
             const length = file ? player.durationOf(file) : undefined;
+            const label = labelOf(pad);
             return (
               <button
                 key={place}
                 className={["pad", `pad-${padColor(pad, place)}`, pad.source ? "" : "empty", progress.state, ready(pad.source) ? "" : "unready", target === place ? "target" : ""].join(" ")}
                 aria-pressed={progress.state === "playing"}
+                title={label || t("padEmpty")}
                 draggable={pad.source !== null}
                 onClick={() => click(place, pad)}
                 onContextMenu={(e) => {
@@ -226,7 +238,7 @@ export function SoundBoardGrid({ player, sound, view, selected, onSelect, import
                   run(drop(place, e));
                 }}
               >
-                <span className="pad-label">{labelOf(pad)}</span>
+                <span className="pad-label">{breakable(label)}</span>
                 <span className="pad-foot">
                   <span className="pad-kind">
                     {kind ? <KindIcon kind={kind} /> : pad.source?.type === "slideSound" ? <SoundIcon /> : pad.source?.type === "slideVideo" ? <VideoIcon /> : null}

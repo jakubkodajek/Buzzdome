@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type KeyboardEvent } from "react";
 import blueIcon from "../../src-tauri/icons/colors/buzzdome-blue.png";
 import greenIcon from "../../src-tauri/icons/colors/buzzdome-green.png";
 import orangeIcon from "../../src-tauri/icons/colors/buzzdome-orange.png";
@@ -11,6 +11,7 @@ import { useAppIcon, useAppVersion, useHostWindowOpen } from "../hooks";
 import type { Lang, StringKey } from "../i18n";
 import { readPreference, writePreference } from "../preferences";
 import { keyboardHelp } from "../keyboard";
+import { stepSelection } from "../media-player";
 import type { IconColor, MonitorInfo } from "../types";
 import type { LaunchCheckSetting } from "./launch-check";
 import { VoicesSettings } from "./VoicesSettings";
@@ -25,6 +26,11 @@ const ICONS: Record<IconColor, { label: StringKey; image: string }> = {
   red: { label: "iconRed", image: redIcon },
   yellow: { label: "iconYellow", image: yellowIcon },
 };
+
+const ICON_COLORS = Object.keys(ICONS) as IconColor[];
+
+/** The arrow keys of a row of choices as `stepSelection` reads a list's. */
+const ROW_KEYS: Record<string, string> = { ArrowLeft: "ArrowUp", ArrowRight: "ArrowDown" };
 
 const LOOK_LABEL: Record<Look, StringKey> = { light: "lookLight", dark: "lookDark", system: "lookSystem" };
 
@@ -121,6 +127,7 @@ export function SettingsTab({ projector, look, launch, showRunning }: { projecto
           <span>{t("fullscreen")}</span>
           <input type="checkbox" checked={projector.fullscreen} onChange={(e) => projector.choose({ fullscreen: e.target.checked })} />
         </label>
+        {noSecondMonitor(projector) && <p className="muted">{t("monitorNoSecond")}</p>}
         <button onClick={projector.toggle}>{projector.isOpen ? t("closeProjectorWindow") : t("openProjectorWindow")}</button>
       </fieldset>
       <AppIconPicker />
@@ -157,6 +164,11 @@ export function SettingsTab({ projector, look, launch, showRunning }: { projecto
   );
 }
 
+/** Whether the projector would find no monitor but the Director's, so it opens in a window over the Director (`projector_place`). */
+function noSecondMonitor({ monitors, monitor }: ProjectorSettings): boolean {
+  return monitor === null && monitors.length > 0 && monitors.every((m) => m.director);
+}
+
 /** The app's version, which an update changes. */
 function AppVersion() {
   const { t } = useApp();
@@ -164,19 +176,32 @@ function AppVersion() {
   return version && <p className="muted">{t("appVersion", { name: t("appTitle"), version })}</p>;
 }
 
-/** The colour of the windows' icon, orange unless another is chosen. */
+/**
+ * The colour of the windows' icon, orange unless another is chosen. A radio
+ * group: one tab stop, the arrow keys, Home and End choose another.
+ */
 function AppIconPicker() {
   const { t } = useApp();
   const run = useRun();
   const current = useAppIcon();
+  const focused = current ?? ICON_COLORS[0];
+  const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+    const next = stepSelection(ICON_COLORS, focused, ROW_KEYS[e.key] ?? e.key) as IconColor | null;
+    if (next === null) return;
+    e.preventDefault();
+    e.currentTarget.querySelector<HTMLButtonElement>(`[data-color="${next}"]`)?.focus();
+    if (next !== current) run(api.setAppIcon(next));
+  };
   return (
     <fieldset>
       <legend>{t("appIcon")}</legend>
-      <div className="icon-picker" role="radiogroup" aria-label={t("appIcon")}>
-        {(Object.keys(ICONS) as IconColor[]).map((color) => (
+      <div className="icon-picker" role="radiogroup" aria-label={t("appIcon")} onKeyDown={onKeyDown}>
+        {ICON_COLORS.map((color) => (
           <button
             key={color}
             role="radio"
+            data-color={color}
+            tabIndex={color === focused ? 0 : -1}
             aria-checked={color === current}
             className={color === current ? "icon-choice chosen" : "icon-choice"}
             title={t(ICONS[color].label)}

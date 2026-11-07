@@ -116,6 +116,23 @@ export function addLook(setup: LightsSetup, name: string): LightsSetup {
   return { ...setup, looks: [...setup.looks, look] };
 }
 
+/** Whether `look` lights fixture `id`: a look that lists none lights every fixture. */
+export function lookLights(look: Look, id: number): boolean {
+  return look.fixtures.length === 0 || look.fixtures.includes(id);
+}
+
+/**
+ * The fixtures `look` lists once fixture `id` of the setup's `fixtures` is
+ * ticked `on` or not. With every fixture ticked it lists none, so that
+ * fixtures added later shine too; the last ticked one stays, as listing
+ * none would light them all.
+ */
+export function tickLookFixture(look: Look, fixtures: Fixture[], id: number, on: boolean): number[] {
+  const lit = fixtures.map((fixture) => fixture.id).filter((fixture) => (fixture === id ? on : lookLights(look, fixture)));
+  if (lit.length === 0) return look.fixtures;
+  return lit.length === fixtures.length ? [] : lit;
+}
+
 /** `setup` with look `id` changed by `change`. */
 export function changeLook(setup: LightsSetup, id: number, change: Partial<Omit<Look, "id">>): LightsSetup {
   return { ...setup, looks: setup.looks.map((look) => (look.id === id ? { ...look, ...change } : look)) };
@@ -137,16 +154,6 @@ export function lookUses(setup: LightsSetup, id: number): { stages: Stage[]; cue
     stages: (Object.keys(setup.stages) as Stage[]).filter((stage) => setup.stages[stage] === id),
     cues: (Object.keys(setup.flashes) as Cue[]).filter((cue) => setup.flashes[cue]?.look === id),
   };
-}
-
-/**
- * Whether `host` is an IPv4 address such as 192.168.1.20, which network
- * outputs and OSC take (`ipv4` in crates/lights: Rust's `Ipv4Addr`, four
- * numbers to 255 without leading zeros, spaces around it allowed).
- */
-export function isIpv4(host: string): boolean {
-  const parts = host.trim().split(".");
-  return parts.length === 4 && parts.every((part) => /^(0|[1-9]\d{0,2})$/.test(part) && Number(part) <= 255);
 }
 
 /** Whether `choice` is the same output as `other`, settings and all. */

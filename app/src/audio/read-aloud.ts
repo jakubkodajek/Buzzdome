@@ -253,10 +253,21 @@ async function say(line: VoiceLine, gain: number, system: SpeechSynthesisVoice |
 }
 
 /** What speaks: the show's question, the settings' try of a line, or a voice's sample (`sampleKey`). */
-type Speaker = "show" | "preview" | `sample ${string}`;
+export type Speaker = "show" | "preview" | `sample ${string}`;
 
 /**
- * The window's one voice: a new line or sample stops the one before.
+ * Whether `who` may start speaking while `now` speaks: anything may stop a
+ * try or a sample, but only the show stops the show's reading, so that a
+ * try or a sample never cuts a question off in the hall (nor lets its
+ * clock start early, `clockAfterReading`).
+ */
+export function mayTakeVoice(now: Speaker | null, who: Speaker): boolean {
+  return now !== "show" || who === "show";
+}
+
+/**
+ * The window's one voice: a new line or sample stops the one before, but
+ * not the show's reading (`mayTakeVoice`).
  * `speaking` holds what speaks now, so the buttons show it and the music
  * makes way.
  */
@@ -280,6 +291,7 @@ const speaker = {
 
   /** Starts what `start` plays as `who`; `start` is given what to call when it ends. */
   play(who: Speaker, start: (onEnd: () => void) => Speaking | null) {
+    if (!mayTakeVoice(this.speaking.get(), who)) return;
     const { ended } = this.begin(who);
     const started = start(ended);
     if (started) this.current = started;
@@ -292,6 +304,7 @@ const speaker = {
    * failure is passed on.
    */
   async say(who: "show" | "preview", line: VoiceLine, gain: number, system: SpeechSynthesisVoice | null | undefined, before?: Promise<unknown>) {
+    if (!mayTakeVoice(this.speaking.get(), who)) return;
     const { mine, ended } = this.begin(who);
     let failure: unknown = null;
     try {

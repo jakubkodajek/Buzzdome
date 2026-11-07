@@ -81,6 +81,10 @@ const update = params.get("update");
 const broken = params.get("broken");
 /** `refused`: the backend refuses every lights setup the Lights tab stores. */
 const lightsStore = params.get("lights");
+/** `one`: only the laptop's screen, the Director's, is connected. */
+const oneMonitor = params.get("monitors") === "one";
+/** `stalls`: the voices download connects without end, as on a captive network. */
+const voicesStall = params.get("voices") === "stalls";
 /** The slides, the fourth broken when asked (`broken`). */
 const maybeBroken = (slides: Quiz["slides"]): Quiz["slides"] =>
   broken === "slide" ? slides.map((slide, i) => (i === 3 ? ({ ...slide, answers: null } as unknown as Quiz["slides"][number]) : slide)) : slides;
@@ -790,7 +794,7 @@ mockIPC(
         return [
           { id: "Built-in Display@0,0", name: "Built-in Display", width: 2560, height: 1600, director: true },
           { id: "Projector@2560,0", name: "Projector", width: 1920, height: 1080, director: false },
-        ];
+        ].slice(0, oneMonitor ? 1 : 2);
       case "quit_app":
       case "close_declined":
         called.push({ cmd });
@@ -961,9 +965,14 @@ mockIPC(
         };
       case "lights_info":
         return { setup: LIGHTS_SETUP, status: { output: { kind: "connected", name: "Art-Net 255.255.255.255" }, messages: null, look: 2, hold: null, blackout: false }, settingsError: null, refused: null };
-      case "lights_store":
+      case "lights_store": {
         called.push({ cmd, ...(payload as object) });
-        return lightsStore === "refused" ? Promise.reject({ code: "lightsRefused", refused: { problem: "pastUniverse", name: "Par vlevo" } }) : null;
+        if (lightsStore === "refused") return Promise.reject({ code: "lightsRefused", refused: { problem: "pastUniverse", name: "Par vlevo" } });
+        // A host with a letter in it stands for any the backend refuses as not IPv4.
+        const { setup } = payload as { setup: LightsSetup };
+        const host = [setup.output.kind === "artNet" || setup.output.kind === "sacn" ? setup.output.host : null, setup.messages.osc?.host].find((h) => h && /[a-z]/i.test(h));
+        return host ? Promise.reject({ code: "lightsRefused", refused: { problem: "notIpv4", host } }) : null;
+      }
       case "lights_universe": {
         // The first fixture in the "Question" blue, the second in red.
         const slots = new Array<number>(512).fill(0);
@@ -1010,7 +1019,7 @@ mockIPC(
       case "voice_remove":
         return { installed: false, bytes: 128_774_318, voices: 10 };
       case "voice_install":
-        return { installed: true, bytes: 128_774_318, voices: 10 };
+        return voicesStall ? new Promise(() => undefined) : { installed: true, bytes: 128_774_318, voices: 10 };
       case "voice_clip":
       case "voice_install_cancel":
         return null;
