@@ -184,7 +184,9 @@ export function SoundBoardGrid({ player, sound, view, selected, onSelect, import
         >
           <GridIcon /> {t("boardOptions")} <span className="muted">{t("boardGrid", { rows: board.rows, columns: board.columns })}</span>
         </button>
-        <span className="muted board-hint">{t("boardHint")}</span>
+        <span className="muted board-hint" title={t("boardHint")}>
+          {t("boardHint")}
+        </span>
       </header>
       <div className="board-grid" style={{ gridTemplateColumns: `repeat(${board.columns}, minmax(0, 1fr))`, gridTemplateRows: `repeat(${board.rows}, minmax(0, 1fr))` }}>
         {shownRows(board).flatMap((places) =>
