@@ -87,7 +87,8 @@ describe("the quiz editor", () => {
     await app.openEditor("Kvíz z E2E");
     await app.$(".ribbon");
     await app.seeText(t("noSlides").slice(0, 20));
-    await app.seeText("Kvíz z E2E");
+    // The title bar names it (its tooltip holds the whole title, which may be cut short on screen).
+    await app.$('.studio-title[title="Kvíz z E2E"]');
     // A new quiz has no file yet: it can be saved.
     expect(await app.page.enabled(await app.$(`.quick-access button[aria-label="${t("saveQuiz")}"]`))).toBe(true);
   });
