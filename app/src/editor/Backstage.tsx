@@ -429,19 +429,21 @@ function ExportPage({ actions }: BackstageProps) {
   );
 }
 
-function OpenPage({ recentFiles, onOpenFile, onForgetFile }: BackstageProps) {
+function OpenPage({ recentFiles, onOpenFile, onForgetFile, actions }: BackstageProps) {
   const { t } = useApp();
+  // Not while the editor works on a file.
+  const busy = actions.openQuiz.disabled;
   return (
     <>
       <h1>{t("openFile")}</h1>
-      <button type="button" className="browse" onClick={() => onOpenFile()}>
+      <button type="button" className="browse" disabled={busy} onClick={() => onOpenFile()}>
         {t("browse")}
       </button>
       <h2>{t("recentFiles")}</h2>
       {recentFiles.length === 0 ? (
         <p className="muted">{t("noRecentFiles")}</p>
       ) : (
-        <RecentFileList files={recentFiles} onOpen={onOpenFile} onForget={onForgetFile} />
+        <RecentFileList files={recentFiles} disabled={busy} onOpen={onOpenFile} onForget={onForgetFile} />
       )}
     </>
   );

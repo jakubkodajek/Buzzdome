@@ -26,7 +26,9 @@ import { MediaRootContext } from "../media";
 import { NO_CONTEXT, slideContexts } from "../quiz";
 import { ThemeContext } from "../theme/context";
 import { useLatest } from "../hooks";
+import type { StringKey } from "../i18n";
 import type { EditorDraft, Slide } from "../types";
+import type { DraftOperation } from "./draft-session";
 import { tooltip, useActionKeys, type Action, type ActionId, type Actions } from "./actions";
 import { Backstage, type BackstagePage } from "./Backstage";
 import { CategoryView } from "./CategoryView";
@@ -63,6 +65,18 @@ const GALLERY_AT = { x: 180, y: 120 };
 
 /** A category's properties are its own: nothing is mixed. */
 const NOTHING_MIXED: ReadonlySet<string> = new Set();
+
+/** What the status bar says while each file operation runs. */
+const BUSY_TEXT: Record<DraftOperation, StringKey> = {
+  new: "busyNew",
+  open: "busyOpen",
+  close: "busyClose",
+  save: "busySave",
+  media: "busyMedia",
+  import: "busyImport",
+  export: "busyExport",
+  testRun: "busyTestRun",
+};
 
 /** What the keys do in the Categories view besides the categories' own actions: nothing that changes a slide unseen. */
 const CATEGORY_VIEW_KEYS: ActionId[] = ["file", "newQuiz", "openQuiz", "save", "saveAs", "closeQuiz", "undo", "redo", "findProperty", "testRun"];
@@ -216,14 +230,23 @@ function Studio({ editor, open, ask, onExit }: { editor: QuizEditor; open: OpenQ
     });
 
   const noSlide = slide === null;
+  // A file operation under way takes no other, and the editor stays open until it ends (its result lands here).
+  const busy = editor.status.busy !== null;
   const actions: Actions = {
     file: { label: t("ribbonFile"), keys: ["F1", "Alt+F"], inFields: true, run: () => setBackstage("info") },
-    newQuiz: { label: t("newQuiz"), keys: ["Ctrl+N"], inFields: true, run: () => setAsking("new") },
-    openQuiz: { label: t("openFile"), icon: <FolderIcon />, keys: ["Ctrl+O"], inFields: true, run: () => setBackstage("open") },
-    save: { label: saved ? t("quizSaved") : t("saveQuiz"), icon: <SaveIcon />, keys: ["Ctrl+S"], inFields: true, disabled: !open || saved, run: () => void editor.save() },
-    saveAs: { label: t("saveQuizAs"), keys: ["Ctrl+Shift+S"], inFields: true, disabled: !open, run: () => void editor.saveAs() },
-    closeQuiz: { label: t("closeQuiz"), disabled: !open, run: () => void editor.closeQuiz().then(loaded) },
-    exit: { label: t("backToDirector"), icon: <BackIcon />, run: onExit },
+    newQuiz: { label: t("newQuiz"), keys: ["Ctrl+N"], inFields: true, disabled: busy, run: () => setAsking("new") },
+    openQuiz: { label: t("openFile"), icon: <FolderIcon />, keys: ["Ctrl+O"], inFields: true, disabled: busy, run: () => setBackstage("open") },
+    save: {
+      label: saved ? t("quizSaved") : t("saveQuiz"),
+      icon: <SaveIcon />,
+      keys: ["Ctrl+S"],
+      inFields: true,
+      disabled: !open || saved || busy,
+      run: () => void editor.save(),
+    },
+    saveAs: { label: t("saveQuizAs"), keys: ["Ctrl+Shift+S"], inFields: true, disabled: !open || busy, run: () => void editor.saveAs() },
+    closeQuiz: { label: t("closeQuiz"), disabled: !open || busy, run: () => void editor.closeQuiz().then(loaded) },
+    exit: { label: t("backToDirector"), icon: <BackIcon />, disabled: busy, run: onExit },
     undo: {
       label: t("undo"),
       icon: <UndoIcon />,
@@ -273,8 +296,8 @@ function Studio({ editor, open, ask, onExit }: { editor: QuizEditor; open: OpenQ
       },
     },
     notes: { label: t("viewNotes"), icon: <NotesIcon />, checked: notesShown, run: () => setNotesShown(!notesShown) },
-    testRun: { label: t("testFromStart"), icon: <PlayIcon />, keys: ["F5"], inFields: true, disabled: slides.length === 0, run: () => testRun() },
-    testRunHere: { label: t("testFromHere"), icon: <PreviewIcon />, keys: ["Shift+F5"], inFields: true, disabled: noSlide, run: () => testRun(index) },
+    testRun: { label: t("testFromStart"), icon: <PlayIcon />, keys: ["F5"], inFields: true, disabled: slides.length === 0 || busy, run: () => testRun() },
+    testRunHere: { label: t("testFromHere"), icon: <PreviewIcon />, keys: ["Shift+F5"], inFields: true, disabled: noSlide || busy, run: () => testRun(index) },
     importSheet: sheet.importSheet,
     sheetTemplate: sheet.sheetTemplate,
     exportSheet: sheet.exportSheet,
@@ -328,7 +351,7 @@ function Studio({ editor, open, ask, onExit }: { editor: QuizEditor; open: OpenQ
     <MediaRootContext value={open?.mediaRoot ?? null}>
       <ThemeContext value={theme}>
         {/* A file operation under way takes no other; while another quiz opens, no edits either. */}
-        <div className={editor.status.busy ? "studio studio-busy" : "studio"} aria-busy={editor.status.busy !== null}>
+        <div className={busy ? "studio studio-busy" : "studio"} aria-busy={busy}>
           <header className="studio-titlebar">
             <div className="quick-access">
               {[actions.save, actions.undo, actions.redo].map((action) => (
@@ -350,7 +373,7 @@ function Studio({ editor, open, ask, onExit }: { editor: QuizEditor; open: OpenQ
               {unsaved && <span className="studio-title-mark">*</span>}
               <span className="studio-title-app">– {t("quizEditor")}</span>
             </span>
-            <button type="button" className="titlebar-exit" title={tooltip(actions.exit)} onClick={actions.exit.run}>
+            <button type="button" className="titlebar-exit" title={busy ? t("editorBusyExit") : tooltip(actions.exit)} disabled={actions.exit.disabled} onClick={actions.exit.run}>
               <BackIcon />
               {t("backToDirector")}
             </button>
@@ -473,6 +496,7 @@ function Studio({ editor, open, ask, onExit }: { editor: QuizEditor; open: OpenQ
 
           <footer className="studio-status">
             <span>{status}</span>
+            {editor.status.busy && <span role="status">{t(BUSY_TEXT[editor.status.busy])}</span>}
             {open && (
               <button type="button" className={open.problems.length > 0 ? "status-problems bad" : "status-problems"} onClick={() => setBackstage("info")}>
                 {open.problems.length > 0 ? <WarningIcon className="inline-icon" /> : <CheckIcon className="inline-icon" />}{" "}
@@ -507,15 +531,15 @@ function Studio({ editor, open, ask, onExit }: { editor: QuizEditor; open: OpenQ
               open={open}
               unsaved={unsaved}
               recentFiles={editor.recentFiles}
-              busy={editor.status.busy !== null}
+              busy={busy}
               onContinue={() => setAsking(null)}
               onNew={createQuiz}
               onOpen={openQuiz}
               onForget={editor.forgetRecentFile}
-              onCancel={onExit}
+              onCancel={() => !busy && onExit()}
             />
           )}
-          {asking === "new" && <NewQuizDialog busy={editor.status.busy !== null} onNew={createQuiz} onCancel={() => setAsking(null)} />}
+          {asking === "new" && <NewQuizDialog busy={busy} onNew={createQuiz} onCancel={() => setAsking(null)} />}
           {dialog && dialogSlide && (
             <EditSlideDialog
               slide={dialogSlide}
