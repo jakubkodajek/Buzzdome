@@ -287,14 +287,19 @@ pub fn read_json(path: &Path) -> Result<String> {
 }
 
 /// Reads quiz JSON from `from` (the file `path`, or an entry of it) up to
-/// `MAX_QUIZ_JSON_BYTES`.
+/// `MAX_QUIZ_JSON_BYTES`, without the byte order mark that Notepad and
+/// PowerShell 5 write at the start of a UTF-8 file.
 fn read_bounded_json(from: impl Read, path: &Path) -> Result<String> {
     let mut bytes = Vec::new();
     from.take(MAX_QUIZ_JSON_BYTES + 1).read_to_end(&mut bytes).context(FileAction::Read, path)?;
     if bytes.len() as u64 > MAX_QUIZ_JSON_BYTES {
         return Err(QuizFileError::QuizJsonTooLarge);
     }
-    String::from_utf8(bytes).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e)).context(FileAction::Read, path)
+    let mut text = String::from_utf8(bytes).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e)).context(FileAction::Read, path)?;
+    if text.starts_with('\u{feff}') {
+        text.drain(..'\u{feff}'.len_utf8());
+    }
+    Ok(text)
 }
 
 /// A quiz file as `open_into` would unpack it, read without unpacking it.
@@ -1231,6 +1236,19 @@ mod tests {
         fs::write(folder.join("quiz.json"), serde_json::to_vec(&quiz).unwrap()).unwrap();
         let package = open(&folder.join("quiz.json"), &temp("json-cache")).unwrap();
         assert_eq!(fs::read(package.root.join("media/flag.png")).unwrap(), b"png bytes");
+    }
+
+    #[test]
+    fn a_quiz_json_with_a_byte_order_mark_opens_plain_and_in_a_quiz_file() {
+        let quiz = quiz_with_picture("media/flag.png");
+        let json = [b"\xef\xbb\xbf".as_slice(), &serde_json::to_vec(&quiz).unwrap()].concat();
+        let folder = media_folder("json-bom", &[("media/flag.png", b"png bytes")]);
+        fs::write(folder.join("quiz.json"), &json).unwrap();
+        assert_eq!(open(&folder.join("quiz.json"), &temp("json-bom-cache")).unwrap().quiz, quiz);
+
+        let file = zip_of("quiz-bom", &[(QUIZ_JSON, &json), ("media/flag.png", b"png bytes")]);
+        assert_eq!(open(&file, &temp("quiz-bom-cache")).unwrap().quiz, quiz);
+        assert_eq!(inspect(&file).unwrap().read.quiz, quiz);
     }
 
     #[test]

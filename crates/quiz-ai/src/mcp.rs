@@ -40,7 +40,10 @@ You may work only in these folders: {}. Unless the quizmaster says otherwise, ma
 To make a quiz: find the quizmaster's media with list_media_files (look_at_picture shows you a picture), \
 copy the media the quiz uses into its folder with add_media, \
 write the quiz with write_quiz and fix the problems it reports, then save_quiz_file makes the .quiz file \
-the quizmaster opens in Buzzdome (File > Open). Use absolute paths.",
+the quizmaster opens in Buzzdome (File > Open). Use absolute paths. \
+add_media copies only files inside those folders: save a file you make or download into one of them first. \
+A quiz can set everything the format describes, such as its theme (list_themes shows them), welcome screen, sounds, \
+reading aloud and jokers; leave out what the quizmaster's instructions do not ask for.",
         roots.describe()
     )
 }
@@ -54,6 +57,8 @@ pub struct Context {
     /// The AI settings file (`settings::SETTINGS_FILE`), read for the
     /// quizmaster's instructions each time the assistant reads the format.
     pub settings: PathBuf,
+    /// The themes this app has, the default first (the app's `list_themes`).
+    pub themes: Vec<quiz_core::Theme>,
 }
 
 /// JSON-RPC error codes.
@@ -201,6 +206,36 @@ fn worded(error: WorkError) -> String {
     error.to_string()
 }
 
+/// `check`, saying also when the quiz names a theme this app does not have:
+/// the quiz then shows the default theme.
+fn noted(mut check: Check, context: &Context) -> Check {
+    let installed = |id: &str| context.themes.iter().any(|theme| theme.id == id);
+    if let Some(theme) = check.theme.as_deref().filter(|id| !context.themes.is_empty() && !installed(id)) {
+        check.left_out.push(format!("theme {theme} is not one this app has, so the quiz shows the default theme (list_themes lists them)"));
+    }
+    check
+}
+
+/// The themes as the assistant chooses from them: their id, name, colours
+/// and look. Fonts are left out: a theme's fonts are files in its package,
+/// which a slide's `font` (a font installed on the computer) cannot name.
+fn theme_choices(themes: &[quiz_core::Theme]) -> Vec<Value> {
+    themes
+        .iter()
+        .enumerate()
+        .map(|(index, theme)| {
+            json!({
+                "id": theme.id,
+                "name": theme.name,
+                "default": index == 0,
+                "colors": theme.colors,
+                "corners": theme.corners,
+                "headings": theme.headings,
+            })
+        })
+        .collect()
+}
+
 /// A check, with what to do next.
 fn checked(check: &Check, ready: &str) -> Vec<Value> {
     let next = if check.is_ready() { ready } else { "Fix the problems and write the quiz again." };
@@ -243,7 +278,7 @@ fn path_property(description: &str) -> Value {
 const QUIZMASTER_INSTRUCTIONS: &str =
     "The quizmaster's instructions for every quiz, which they write in Buzzdome. Follow them; what the quizmaster asks for in the chat wins over them:";
 
-const TOOLS: [Tool; 9] = [
+const TOOLS: [Tool; 10] = [
     Tool {
         name: "quiz_format",
         title: "Read the quiz format",
@@ -255,6 +290,15 @@ const TOOLS: [Tool; 9] = [
             let instructions = format!("{QUIZMASTER_INSTRUCTIONS}\n\n{}", settings.instructions());
             Ok(vec![text_block(&instructions), text_block(crate::FORMAT_GUIDE), text_block(&serde_json::to_string_pretty(&crate::quiz_schema()).expect("JSON serializes"))])
         },
+    },
+    Tool {
+        name: "list_themes",
+        title: "List themes",
+        description: "The themes this Buzzdome has for a quiz's theme field: id, name in Czech and English, colours, \
+                      corners and heading case. The default comes first; a quiz without a theme shows it.",
+        read_only: true,
+        input: || object(json!({}), &[]),
+        run: |args| Ok(json_block(&theme_choices(&args.context.themes))),
     },
     Tool {
         name: "list_media_files",
@@ -308,7 +352,7 @@ const TOOLS: [Tool; 9] = [
             // A quiz sent as a JSON text reads as well as one sent as an object.
             let json = quiz.as_str().map_or_else(|| quiz.to_string(), str::to_owned);
             let check = workbench::write_quiz(&args.path("folder")?, &json).map_err(worded)?;
-            Ok(checked(&check, "The quiz is ready: save_quiz_file makes the .quiz file."))
+            Ok(checked(&noted(check, args.context), "The quiz is ready: save_quiz_file makes the .quiz file."))
         },
     },
     Tool {
@@ -325,7 +369,7 @@ const TOOLS: [Tool; 9] = [
         description: "Checks a quiz folder or a .quiz file as Buzzdome does: lists what keeps it from being played.",
         read_only: true,
         input: || object(json!({ "path": path_property("Absolute path of the quiz folder or .quiz file.") }), &["path"]),
-        run: |args| workbench::check(&args.path("path")?).map(|check| checked(&check, "The quiz is ready to play.")).map_err(worded),
+        run: |args| workbench::check(&args.path("path")?).map(|check| checked(&noted(check, args.context), "The quiz is ready to play.")).map_err(worded),
     },
     Tool {
         name: "save_quiz_file",
@@ -348,7 +392,7 @@ const TOOLS: [Tool; 9] = [
             let file = args.path("file")?;
             let replace = args.get("replace").and_then(Value::as_bool).unwrap_or(false);
             let check = workbench::pack(&args.path("folder")?, &file, replace).map_err(worded)?;
-            let mut content = json_block(&check);
+            let mut content = json_block(&noted(check, args.context));
             content.push(text_block(&format!("Saved {}.", file.display())));
             Ok(content)
         },
@@ -369,7 +413,7 @@ const TOOLS: [Tool; 9] = [
                 &["file", "folder"],
             )
         },
-        run: |args| workbench::unpack(&args.path("file")?, &args.path("folder")?).map(|check| json_block(&check)).map_err(worded),
+        run: |args| workbench::unpack(&args.path("file")?, &args.path("folder")?).map(|check| json_block(&noted(check, args.context))).map_err(worded),
     },
 ];
 
@@ -401,7 +445,7 @@ mod tests {
     /// A server that works in `roots`, with the settings in `settings`.
     fn context(roots: &[&Path], settings: PathBuf) -> Context {
         let roots = Roots::new(roots.iter().map(|root| crate::roots::allow(root, &[]).unwrap()).collect());
-        Context { version: "1.2.3".into(), roots, settings }
+        Context { version: "1.2.3".into(), roots, settings, themes: Vec::new() }
     }
 
     /// The replies to `messages`, sent one per line, as a client reads them,
@@ -443,9 +487,9 @@ mod tests {
         let tools: Vec<&str> = replies[1]["result"]["tools"].as_array().unwrap().iter().map(|t| t["name"].as_str().unwrap()).collect();
         assert_eq!(
             tools,
-            ["quiz_format", "list_media_files", "look_at_picture", "add_media", "write_quiz", "read_quiz", "check_quiz", "save_quiz_file", "unpack_quiz_file"]
+            ["quiz_format", "list_themes", "list_media_files", "look_at_picture", "add_media", "write_quiz", "read_quiz", "check_quiz", "save_quiz_file", "unpack_quiz_file"]
         );
-        let write = &replies[1]["result"]["tools"][4]["inputSchema"];
+        let write = &replies[1]["result"]["tools"][5]["inputSchema"];
         assert_eq!(write["$defs"]["Quiz"]["required"], json!(["schemaVersion", "title"]));
         assert!(write["$defs"]["Slide"].is_object());
         assert_eq!(replies[2], json!({ "jsonrpc": "2.0", "id": 3, "result": {} }));
@@ -512,6 +556,30 @@ mod tests {
     }
 
     #[test]
+    fn the_assistant_sees_the_apps_themes_and_hears_of_a_theme_it_does_not_have() {
+        let dir = scratch("mcp-themes");
+        let manifest = quiz_core::ThemeManifest::from_json(include_str!("../../../app/src-tauri/themes/builtin.classic/theme.json")).unwrap().0;
+        let source = quiz_core::ThemeSource { manifest, root: String::new() };
+        let mut context = context(&[&dir], dir.join("no-settings.json"));
+        context.themes = quiz_core::resolve_themes(&[source], &[]).unwrap().themes;
+        let mut quiz: Value = serde_json::from_str(&quiz_with_picture("media/x.png")).unwrap();
+        let folder = dir.join("quiz");
+        let reply = |message: Value| answer(&message.to_string(), &context).unwrap();
+        let themes = reply(call_tool(1, "list_themes", json!({})));
+        let listed: Value = serde_json::from_str(&text(&themes)).unwrap();
+        assert_eq!(listed[0]["id"], "builtin.classic");
+        assert_eq!(listed[0]["name"]["cs"], "Klasický");
+        assert_eq!(listed[0]["default"], true);
+        assert!(listed[0]["colors"]["accent"].is_string() && listed[0].get("backgrounds").is_none(), "{listed}");
+        let note = "theme builtin.gone is not one this app has";
+        quiz["theme"] = json!("builtin.classic");
+        assert!(!text(&reply(call_tool(2, "write_quiz", json!({ "folder": folder, "quiz": quiz })))).contains("is not one this app has"));
+        quiz["theme"] = json!("builtin.gone");
+        assert!(text(&reply(call_tool(3, "write_quiz", json!({ "folder": folder, "quiz": quiz })))).contains(note));
+        assert!(text(&reply(call_tool(4, "check_quiz", json!({ "path": folder })))).contains(note));
+    }
+
+    #[test]
     fn nothing_outside_the_roots_is_read_or_written() {
         let dir = scratch("mcp-roots");
         let (quizzes, private) = (dir.join("quizzes"), dir.join("private"));
@@ -573,7 +641,7 @@ mod tests {
         input.extend(vec![b'x'; MAX_MESSAGE_BYTES as usize + 10]);
         input.extend(b"\n{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"ping\"}\n");
         let mut output = Vec::new();
-        let context = Context { version: "1".into(), roots: Roots::default(), settings: PathBuf::new() };
+        let context = Context { version: "1".into(), roots: Roots::default(), settings: PathBuf::new(), themes: Vec::new() };
         serve(&input[..], &mut output, &context).unwrap();
         let replies: Vec<Value> = String::from_utf8(output).unwrap().lines().map(|l| serde_json::from_str(l).unwrap()).collect();
         let codes: Vec<&Value> = replies.iter().map(|r| &r["error"]["code"]).collect();

@@ -13,7 +13,7 @@ const BUZZ_STATE = { wrong: "wrong", answering: "buzzAnswering", waiting: "buzzW
  * fastest finger, every buzz in the order it came, with how it stands.
  */
 export function ResponsesTab({ view }: { view: GameView }) {
-  const { t } = useApp();
+  const { t, lang } = useApp();
   const responses = view.players
     .flatMap((p) => (p.answer === null ? [] : [{ player: p, answer: p.answer }]))
     .sort((a, b) => (a.player.answerMs ?? 0) - (b.player.answerMs ?? 0));
@@ -70,7 +70,7 @@ export function ResponsesTab({ view }: { view: GameView }) {
                   <td className="num">{player.buzzer}</td>
                   <td>{playerName(t, player)}</td>
                   <td className={player.answerCorrect ? "good-text strong" : ""}>{buttonName(t, answer)}</td>
-                  <td className="num">{seconds(player.answerMs ?? 0, 2)} s</td>
+                  <td className="num">{seconds(player.answerMs ?? 0, 2, lang)} s</td>
                 </tr>
               ))}
             </tbody>

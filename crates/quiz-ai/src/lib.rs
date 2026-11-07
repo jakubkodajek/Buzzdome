@@ -49,4 +49,15 @@ mod tests {
         assert_eq!(schema["$defs"]["Slide"]["properties"]["picture"]["pattern"], media);
         assert_eq!(schema["$defs"]["SoundClip"]["properties"]["file"]["pattern"], media);
     }
+
+    #[test]
+    fn the_guide_lists_the_sounds_made_for_each_moment() {
+        for slot in quiz_core::SoundSlot::ALL {
+            let name = serde_json::to_value(slot).unwrap();
+            let ids: Vec<String> = slot.made_for().iter().map(|id| format!("`{id}`")).collect();
+            let sounds = &FORMAT_GUIDE[FORMAT_GUIDE.find("| Moment | When |").unwrap()..];
+            let row = sounds.lines().find(|line| line.starts_with(&format!("| `{}` |", name.as_str().unwrap())));
+            assert!(row.is_some_and(|row| row.trim_end().ends_with(&format!("| {} |", ids.join(", ")))), "{slot:?}: {row:?}");
+        }
+    }
 }

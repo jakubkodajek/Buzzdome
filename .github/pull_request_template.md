@@ -1,5 +1,5 @@
 ## What and why
-<!-- What changes and why. Link the spec ID, ROADMAP line or features.json id. -->
+<!-- What changes and why. Link the spec ID or `replica/features.csv` row. -->
 
 ## How it was verified
 <!-- Paste the output. "Tests pass" without output is not evidence. -->

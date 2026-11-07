@@ -105,6 +105,14 @@ mod tests {
         }
     }
 
+    /// The quiz format guide, which AI assistants read too, names every
+    /// built-in theme, in gallery order.
+    #[test]
+    fn the_quiz_format_guide_lists_the_built_in_themes() {
+        let ids: Vec<String> = BUILTIN.iter().map(|(id, _)| format!("`{id}`")).collect();
+        assert!(quiz_ai::FORMAT_GUIDE.contains(&format!("({}, later installed themes", ids.join(", "))), "docs/quiz-format.md: the theme row");
+    }
+
     /// The browser preview and the UI tests use the built-in themes as
     /// `list_themes` returns them, with the files served by Vite. Written as
     /// TypeScript typed as `Theme`, so the compiler checks the named values

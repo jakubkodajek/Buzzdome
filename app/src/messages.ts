@@ -49,6 +49,7 @@ type WordedApart = "file" | "noSuchSlide" | "questionRestarted" | "noSuchPad" | 
 const ERROR_KEYS: Record<Exclude<AppError["code"], WordedApart>, StringKey> = {
   noShow: "noShow",
   showRunning: "errShowRunning",
+  mediaDuringShow: "errMediaDuringShow",
   showStarting: "errShowStarting",
   noShowToResume: "errNoShowToResume",
   notNow: "errNotNow",
@@ -102,6 +103,7 @@ const ERROR_KEYS: Record<Exclude<AppError["code"], WordedApart>, StringKey> = {
   updateFailed: "errUpdateFailed",
   updateInstalling: "errUpdateInstalling",
   voiceInstalling: "errVoiceInstalling",
+  diskBusy: "errDiskBusy",
   noDataFolder: "errNoDataFolder",
   system: "errSystem",
   libraryDownload: "errLibraryDownload",
@@ -236,6 +238,7 @@ const PROBLEM_KEYS: Record<Exclude<Problem["code"], ProblemApart>, StringKey> = 
   styleUnread: "problemStyleUnread",
   categoryStyleUnread: "problemCategoryStyleUnread",
   themeUnread: "problemThemeUnread",
+  valueUnread: "problemValueUnread",
   unknownCategory: "problemUnknownCategory",
   duplicateCategoryId: "problemDuplicateCategoryId",
   categoryIdInvalid: "problemCategoryIdInvalid",

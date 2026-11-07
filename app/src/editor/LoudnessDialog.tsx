@@ -28,7 +28,7 @@ type Measured = Loudness | UnreadSound;
  * sound's loudness gain. The chosen target is remembered on this computer.
  */
 export function LoudnessDialog({ quiz, mediaRoot, onApply, onClose }: LoudnessDialogProps) {
-  const { t } = useApp();
+  const { t, lang } = useApp();
   const rows = useMemo(() => quiz.slides.flatMap((slide, i) => (slide.sound ? [{ id: slide.id, n: i + 1, sound: slide.sound }] : [])), [quiz]);
   const [target, setTarget] = useState<LoudnessTarget>(readLoudnessTarget);
   const [measured, setMeasured] = useState<ReadonlyMap<string, Measured>>(new Map());
@@ -134,9 +134,9 @@ export function LoudnessDialog({ quiz, mediaRoot, onApply, onClose }: LoudnessDi
                 <td className="loudness-file" title={row.sound.file}>
                   {mediaFileName(row.sound.file)}
                 </td>
-                <td className="tabular">{row.read && row.read.lufs !== null ? decibels(row.read.lufs, false) : ""}</td>
-                <td className="tabular">{row.read && Number.isFinite(row.read.peakDb) ? decibels(row.read.peakDb, false) : ""}</td>
-                <td className="tabular">{row.change ? decibels((row.gainDb ?? row.sound.gainDb) - row.sound.gainDb) : ""}</td>
+                <td className="tabular">{row.read && row.read.lufs !== null ? decibels(row.read.lufs, false, lang) : ""}</td>
+                <td className="tabular">{row.read && Number.isFinite(row.read.peakDb) ? decibels(row.read.peakDb, false, lang) : ""}</td>
+                <td className="tabular">{row.change ? decibels((row.gainDb ?? row.sound.gainDb) - row.sound.gainDb, true, lang) : ""}</td>
                 <td>{row.status === null ? t("loudnessWaiting") : t(LOUDNESS_STATUS_KEYS[row.status], { minutes: MAX_DECODED_MINUTES })}</td>
               </tr>
             ))}

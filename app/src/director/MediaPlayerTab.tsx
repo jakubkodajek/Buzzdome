@@ -168,7 +168,7 @@ export function MediaPlayerTab({ player, sound, view }: { player: MediaPlayer; s
   return (
     <div className="media-player">
       <div className="media-toolbar" role="toolbar">
-        <button title={t("mediaAddHint")} disabled={copying > 0} onClick={() => run(add())}>
+        <button title={t(view !== null ? "mediaAddDuringShow" : "mediaAddHint")} disabled={copying > 0 || view !== null} onClick={() => run(add())}>
           <AddIcon /> {t("mediaAdd")}
         </button>
         <button disabled={!chosen} onClick={() => chosen && run(remove(chosen))}>
@@ -217,14 +217,15 @@ export function MediaPlayerTab({ player, sound, view }: { player: MediaPlayer; s
           <section
             className={dropping ? "media-list dropping" : "media-list"}
             onDragOver={(e) => {
-              if (!carriesFiles(e)) return;
+              // Files are copied into the library only between shows.
+              if (!carriesFiles(e) || view !== null) return;
               e.preventDefault();
               e.dataTransfer.dropEffect = "copy";
               setDropping(true);
             }}
             onDragLeave={(e) => !e.currentTarget.contains(e.relatedTarget as Node | null) && setDropping(false)}
             onDrop={(e) => {
-              if (!carriesFiles(e)) return;
+              if (!carriesFiles(e) || view !== null) return;
               e.preventDefault();
               setDropping(false);
               const dropped = [...e.dataTransfer.files];

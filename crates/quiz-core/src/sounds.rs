@@ -82,6 +82,52 @@ impl SoundSlot {
     pub fn is_music(self) -> bool {
         matches!(self, SoundSlot::LobbyMusic | SoundSlot::BetweenMusic | SoundSlot::ClockMusic | SoundSlot::BuildUpMusic | SoundSlot::WinnerMusic)
     }
+
+    /// The app's own sounds made for the moment, by id (the files are in
+    /// `app/src/audio/library`). An effect's first one is its default;
+    /// music plays none unless the quiz says.
+    pub fn made_for(self) -> &'static [&'static str] {
+        match self {
+            SoundSlot::ClockStart => &["start.chime", "start.gong", "start.go"],
+            SoundSlot::Countdown => &["countdown.ticks", "countdown.beeps", "countdown.pulse"],
+            SoundSlot::Buzz => &["buzz.classic", "buzz.bell", "buzz.laser", "buzz.horn"],
+            SoundSlot::Correct => &["correct.chime", "correct.dings", "correct.fanfare"],
+            SoundSlot::Wrong => &["wrong.buzzer", "wrong.trombone", "wrong.bonk"],
+            SoundSlot::TimeUp => &["timeup.horn", "timeup.gong", "timeup.alarm"],
+            SoundSlot::Reveal => &["reveal.whoosh", "reveal.sparkle", "reveal.sting"],
+            SoundSlot::Leaderboard => &["leaderboard.rise", "leaderboard.drums", "leaderboard.chord"],
+            SoundSlot::Place => &["place.cymbal", "place.stab", "place.boom"],
+            SoundSlot::Winner => &["winner.fanfare", "winner.applause", "winner.party"],
+            SoundSlot::LobbyMusic => &["music.lobby", "music.lounge"],
+            SoundSlot::BetweenMusic => &["music.lounge", "music.lobby"],
+            SoundSlot::ClockMusic => &["music.thinking", "music.race"],
+            SoundSlot::BuildUpMusic => &["music.drumroll"],
+            SoundSlot::WinnerMusic => &["music.victory"],
+        }
+    }
+
+    /// Whether the app's own sound `id` plays at this moment: one made for
+    /// a moment of its kind, an effect for an effect and music for music.
+    /// Any other id (one from a newer build, or one that does not fit)
+    /// plays the moment's default.
+    pub fn plays(self, id: &str) -> bool {
+        self.playable().contains(&id)
+    }
+
+    /// The app's own sounds that play at this moment (`plays`), in the
+    /// order of the moments they are made for, each once. The UI's player
+    /// reads them from `Constants.ts` (`SLOT_PLAYABLE_IDS`).
+    pub fn playable(self) -> Vec<&'static str> {
+        let mut ids: Vec<&'static str> = Vec::new();
+        for slot in SoundSlot::ALL.into_iter().filter(|slot| slot.is_music() == self.is_music()) {
+            for &id in slot.made_for() {
+                if !ids.contains(&id) {
+                    ids.push(id);
+                }
+            }
+        }
+        ids
+    }
 }
 
 /// What a moment of the show plays.
@@ -119,14 +165,14 @@ pub struct QuizSounds {
     #[schemars(with = "BTreeMap<SoundSlot, SoundChoice>")]
     #[ts(as = "BTreeMap<SoundSlot, SoundChoice>")]
     pub slots: BTreeMap<SoundSlot, SoundChoice>,
-    /// Up to `MAX_SOUND_VOLUME` percent.
+    /// Percent, up to `MAX_SOUND_VOLUME`.
     #[serde(with = "effects_volume")]
-    #[schemars(with = "u8")]
+    #[schemars(with = "u8", range(max = MAX_SOUND_VOLUME))]
     #[ts(as = "u8")]
     pub effects_volume: u8,
-    /// Up to `MAX_SOUND_VOLUME` percent.
+    /// Percent, up to `MAX_SOUND_VOLUME`.
     #[serde(with = "music_volume")]
-    #[schemars(with = "u8")]
+    #[schemars(with = "u8", range(max = MAX_SOUND_VOLUME))]
     #[ts(as = "u8")]
     pub music_volume: u8,
 }
@@ -159,6 +205,16 @@ impl QuizSounds {
                 }
             }
         }
+    }
+
+    /// The app's own sounds the quiz chose for a moment that does not play
+    /// them (`SoundSlot::plays`): one from a newer build, or one that does
+    /// not fit. The moment plays its default.
+    pub fn unplayed(&self) -> impl Iterator<Item = (SoundSlot, &str)> {
+        self.slots.iter().filter_map(|(&slot, choice)| match choice {
+            SoundChoice::BuiltIn(id) if !slot.plays(id) => Some((slot, id.as_str())),
+            _ => None,
+        })
     }
 
     /// Each file that is not a sound in the quiz's media folder, with its moment.

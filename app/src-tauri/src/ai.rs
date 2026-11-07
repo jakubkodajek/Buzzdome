@@ -38,7 +38,9 @@ pub fn serve_mcp_if_asked(version: &str, identifier: &str) {
     if let Some(error) = refused {
         eprintln!("{error}");
     }
-    let context = mcp::Context { version: version.to_string(), roots, settings };
+    // Only their ids, names, colours and fonts are told, so the packages' folders do not matter.
+    let themes = crate::themes::builtin_themes(|_| String::new()).unwrap_or_default();
+    let context = mcp::Context { version: version.to_string(), roots, settings, themes };
     let served = mcp::serve(io::stdin().lock(), io::stdout().lock(), &context);
     std::process::exit(if served.is_ok() { 0 } else { 1 });
 }

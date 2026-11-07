@@ -26,8 +26,9 @@ from Jakub's `dev_template` and is tailored here to a live-show desktop app
 5. **Evidence, not claims.** Every report includes the commands run and
    their output.
 6. **Deterministic guardrails.** Rules that must never break are enforced by
-   hooks, tests and CI, not only by prompts (hooks are deterministic,
-   instructions are advisory, https://code.claude.com/docs/en/hooks). In
+   tests, CI, `.gitignore` and the `release` approval, not only by prompts
+   (instructions are advisory, https://code.claude.com/docs/en/hooks). The
+   hooks are a speed bump in front of those, not a guard. In
    Buzzdome most invariants already have a test: the window capabilities, the
    journal contract, stale bindings, `controls` against `apply`, the soak and
    crash drills.
@@ -50,7 +51,7 @@ from Jakub's `dev_template` and is tailored here to a live-show desktop app
 | `ux-ui-reviewer` | `.work/` (findings) | sonnet | The windows in the browser preview: show flow, projector readability, layout, copy | `buzzdome-ui-change`, `buzzdome-layout` |
 | `bug-hunter` | `.work/` (repros) | sonnet | Odd command orders, crashes mid-show, malformed files, press storms | `show-sim`, crash drills, fake receiver |
 | `verifier` | `.work/` | opus | Confirm or reject every finding, dedupe, rank | the code |
-| `docs-keeper` | `memory/`, `docs/`, `ROADMAP.md`, `replica/features.csv` | haiku | Progress log, decisions, lessons, feature status | `memory/README.md` |
+| `docs-keeper` | `memory/`, `docs/`, `replica/features.csv` | haiku | Progress log, lessons, feature status | `memory/README.md` |
 
 Model choices are defaults: stronger models where judgment matters
 (planning, verification), cheaper ones for routine work. Change `model:` per
@@ -60,7 +61,7 @@ agent in `.claude/agents/`.
 
 ```mermaid
 flowchart TD
-    U[Request: features.json id, ROADMAP line or spec ID] --> P[planner<br/>plan.md + acceptance criteria]
+    U[Request: spec ID or features.csv row] --> P[planner<br/>plan.md + acceptance criteria]
     P --> T[test-engineer<br/>failing tests]
     T --> I[implementer<br/>buzzdome-* skill, make check green]
     I --> R{parallel review}
@@ -71,7 +72,7 @@ flowchart TD
     CR & BH & SR & UX --> V[verifier<br/>CONFIRMED / PLAUSIBLE / REJECTED]
     V -->|CONFIRMED critical/major<br/>round < 3| F[test-engineer: regression test<br/>implementer: fix]
     F --> R
-    V -->|clean or round = 3| D[docs-keeper<br/>memory, ROADMAP, spec status]
+    V -->|clean or round = 3| D[docs-keeper<br/>memory, features.csv, spec status]
     D --> PR[PR: Jakub reviews and merges]
     D -.->|hardware criteria| H[docs/hardware-test.md<br/>Jakub on the event laptop]
 ```
@@ -82,8 +83,9 @@ or CI (security), or `app/src` (UX).
 CI runs the same checks again (`.github/workflows/build.yml`), and an
 optional independent AI review can run on the PR
 (`.github/workflows/claude-review.yml`, off until enabled). Agents never
-approve, merge, bump the version or push a `v*` tag: a tag publishes a
-release to every installed app (`docs/releasing.md`).
+approve their own work. They merge a PR or raise the version only after
+Jakub's explicit consent, and never push a `v*` tag: a tag publishes a
+release to every installed app (`AGENTS.md`, Rules; `docs/releasing.md`).
 
 ## Which skill for which task
 
@@ -171,11 +173,15 @@ own sandbox and approval settings.
   (`make layout`) is the one Playwright script kept in the repository.
 - **The real app:** `make e2e` on Linux (WebDriver through `tauri-driver`);
   Windows E2E only on CI.
-- **Hooks** (`.claude/hooks/`): `guard-bash.sh` blocks destructive commands,
-  force pushes, release tags, force-adding ignored files and printing
-  secrets; `protect-files.sh` blocks edits to secrets, lockfiles,
-  `app/src/bindings`, generated agent copies and the reference manual
-  copies. They need `jq` or `python3`.
+- **Hooks** (`.claude/hooks/`): a speed bump, not a sandbox.
+  `guard_bash.py` reads the words of each command and blocks destructive
+  deletes, force pushes, pushing tags, making releases, force-adding ignored
+  files and piping a download into a shell; `protect_files.py` blocks edits
+  to secrets, lockfiles, `app/src/bindings`, generated agent copies and the
+  reference manual copies. Both need `python3` and block the call without
+  it. `test_hooks.py` lists what each must block and let through (CI runs
+  it). The real guards are CI's checks, `.gitignore` and the `release`
+  environment's approval.
 - **Cost control:** multi-agent runs use many more tokens than one chat
   (Anthropic measured about 15x for its research system,
   https://www.anthropic.com/engineering/multi-agent-research-system), and

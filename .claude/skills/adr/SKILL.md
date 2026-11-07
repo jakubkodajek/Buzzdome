@@ -13,5 +13,5 @@ Decision: $ARGUMENTS
 3. Fill in context, at least two considered options with pros/cons, the decision,
    and consequences. Cite sources (docs, benchmarks) for factual claims.
 4. Status starts as `Proposed`; only the user sets `Accepted`.
-5. Add a one-line entry to `memory/decisions.md` linking the ADR. If the decision
-   changes behaviour, also update `docs/design.md` where the choice is described.
+5. If the decision changes behaviour, also update `docs/design.md` where the
+   choice is described.

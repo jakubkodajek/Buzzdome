@@ -29,7 +29,9 @@ workflow agents follow.
 
 ## Consequences
 - Positive: reviews by a fresh context with false-positive filtering;
-  hooks enforce bindings, lockfile, manual-copy and release-tag rules;
+  hooks are a speed bump against edits to bindings, lockfiles and manual
+  copies and against pushing tags (CI, `.gitignore` and the `release`
+  approval stay the real guards);
   memory survives sessions; one source for every tool.
 - Negative: multi-agent runs cost many more tokens (Anthropic measured about
   15x for its research system), so `/feature` is for real features and small

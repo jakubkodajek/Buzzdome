@@ -14,7 +14,8 @@ affiliated with it. Goal: behave like the reference app for the formats we use.
 
 Scope changed on 2026-10-05 from a browser app with phones to a desktop app
 with hardware buzzers. Target: first live event in
-November 2026. Plan and progress: `ROADMAP.md`.
+November 2026. What the app does: `replica/features.csv` (`clone` column)
+and the status of each spec ID in `docs/specification.md`.
 
 ## Product shape
 
@@ -152,14 +153,23 @@ UI conventions (keep one way of doing each thing):
   and where to change what. Read it before any non-trivial change.
 - `memory/`: durable project memory shared by people and agents
   (`memory/README.md`): `project-context.md` (goals, users, constraints,
-  glossary), `features.json` (open work toward the next event),
-  `decisions.md`, `lessons-learned.md`, `progress.md` (session log).
-- `.claude/skills/buzzdome-*`: task checklists (verify, backend command,
-  game rules, UI change, layout, hardware). `.claude/skills/{feature,review,bug-hunt,ux-audit,adr,handoff}`:
-  the multi-agent workflow. `.claude/agents/`: the subagents
-  (`docs/agent-workflow.md`). Agents that do not load skills read them as
-  plain checklists.
-- `ROADMAP.md`: phases, milestones and what is done.
+  glossary), `lessons-learned.md`, `progress.md` (session log).
+  Decisions are ADRs in `docs/adr/` and the specification.
+- `.claude/skills/`: one folder each with a `SKILL.md`. Agents that do not
+  load skills read them as plain checklists. The task checklists:
+
+  | Skill | Use it to |
+  | --- | --- |
+  | `buzzdome-verify` | run the local checks before a commit or PR |
+  | `buzzdome-backend-command` | add or change a Tauri command or backend event |
+  | `buzzdome-game-rules` | change game rules, scoring or the quiz file format |
+  | `buzzdome-ui-change` | change the Director, projector slides, editor or texts |
+  | `buzzdome-layout` | check every window for broken layout (bars, scrolling, covered controls) |
+  | `buzzdome-hardware` | work on the buzzers, the receiver or the stage lights |
+
+  The multi-agent workflow: `feature`, `review`, `bug-hunt`, `ux-audit`,
+  `adr`, `handoff`, run by the subagents in `.claude/agents/`
+  (`docs/agent-workflow.md`).
 - `docs/specification.md`: requirements with IDs (buzzer link, themes, plugins).
   `docs/design.md`: architecture, buzzer stack. `docs/quiz-format.md`: the quiz
   file format. `docs/ai-assistants.md`: quizzes written by AI assistants. `docs/hardware-test.md`:
@@ -190,10 +200,10 @@ UI conventions (keep one way of doing each thing):
   official 303S kit (Jakub's, 2026-10-21) and that copy (`docs/design.md`
   2.4). No file or code from either goes into the repository.
 - Never commit the reference manual copies or any vendor SDK file. The
-  manual copies are every path `.gitignore` lists for it: `docs/`
-  subfolders, `docs/index.md`, `docs/solo.md`, `docs/tips-and-tricks.md`,
+  manual copies are every path `.gitignore` lists for it: the `docs/`
+  subfolders except our `docs/adr/`, `docs/index.md`, `docs/solo.md`, `docs/tips-and-tricks.md`,
   `replica/sources/` and `replica/screens/`. They are not our docs; never
-  quote them into ours (`.claude/hooks/protect-files.sh` refuses edits there).
+  quote them into ours (`.claude/hooks/protect_files.py` refuses edits there).
 - No trademarked names in the product or UI: not QuizXpress, Jeopardy!, Who Wants to
   Be a Millionaire?, Family Feud or Wheel of Fortune. Use generic names
   ("topic board", "ladder round", "survey round").
@@ -216,6 +226,10 @@ UI conventions (keep one way of doing each thing):
   `release.yml` builds, signs and publishes; never make the release or the
   tag on GitHub's Releases page, and never push a tag without Jakub's
   go-ahead (`docs/releasing.md`).
+- Merging and the version: an agent merges a PR or raises `version` only
+  after Jakub's explicit consent to that step, given for that PR or version
+  (Jakub's decision of 2026-11-07). Agents never push a `v*` tag or make a
+  release; Jakub pushes the tag.
 
 ## Agent workflow
 
@@ -225,8 +239,8 @@ The full protocol is `docs/agent-workflow.md`. In short:
    `docs/architecture.md` first. For anything larger than a small fix, write
    a plan in `.work/<task-slug>/plan.md` (gitignored) with acceptance
    criteria that a test or command can check.
-2. **One feature at a time.** Take one item from `memory/features.json` (or
-   one `ROADMAP.md` line), finish and verify it before starting another.
+2. **One feature at a time.** Take one request (a spec ID or a
+   `replica/features.csv` row), finish and verify it before starting another.
 3. **Evidence over assertion.** Done means `make check` (or the
    `buzzdome-verify` checks that apply) passed and the output was shown.
    Screen changes also need a look in the browser preview; layout or CSS
@@ -236,12 +250,13 @@ The full protocol is `docs/agent-workflow.md`. In short:
    `crates/quiz-core/tests/journal.rs`.
 5. **Separation of duties.** The agent that wrote code does not approve it.
    Reviews run in a fresh context (`/review`), and an independent verifier
-   filters false positives before fixes. Agents never merge, release or
-   push a tag.
+   filters false positives before fixes. Merging, raising the version and
+   tags follow the merging rule in Rules: only with Jakub's consent, and
+   never a tag.
 6. **Update memory before you stop** (`/handoff`): an entry in
-   `memory/progress.md`, new decisions in `memory/decisions.md` (or an ADR
-   in `docs/adr/`), repeated mistakes in `memory/lessons-learned.md`, and
-   `ROADMAP.md` / `replica/features.csv` where a feature landed.
+   `memory/progress.md`, new decisions as an ADR in `docs/adr/`, repeated
+   mistakes in `memory/lessons-learned.md`, and `replica/features.csv` and
+   the spec status where a feature landed.
 7. **Small commits** with Conventional Commit prefixes (`feat:`, `fix:`,
    `test:`, `docs:`, `refactor:`, `chore:`). PRs fill in
    `.github/pull_request_template.md`; reviewers follow `REVIEW.md`.

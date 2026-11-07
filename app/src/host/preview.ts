@@ -38,6 +38,7 @@ function nobodyPlays(quizTitle: string, slideCount: number): Omit<GameView, "sli
     controls: NO_CONTROLS,
     onHold: false,
     videoPlays: 0,
+    askings: 0,
     stepNo: 0,
     autoStep: null,
     settings: DEFAULT_QUIZ_SETTINGS,

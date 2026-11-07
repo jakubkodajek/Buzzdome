@@ -278,8 +278,9 @@ impl SlideStyle {
 }
 
 /// Adds to `paths` what of `written` (at `path`) is not in `read`, looking
-/// into what both have as objects.
-fn left_out(written: &serde_json::Value, read: &serde_json::Value, path: String, paths: &mut Vec<String>) {
+/// into what both have as objects. A number is the same number however it
+/// is written (`3` or `3.0`).
+pub(crate) fn left_out(written: &serde_json::Value, read: &serde_json::Value, path: String, paths: &mut Vec<String>) {
     use serde_json::Value;
     match (written, read) {
         (Value::Object(written), Value::Object(read)) => {
@@ -287,6 +288,7 @@ fn left_out(written: &serde_json::Value, read: &serde_json::Value, path: String,
                 left_out(value, read.get(key).unwrap_or(&Value::Null), format!("{path}.{key}"), paths);
             }
         }
+        (Value::Number(written), Value::Number(read)) if written.as_f64() == read.as_f64() => {}
         _ if written != read && !is_blank(written) => paths.push(path),
         _ => {}
     }

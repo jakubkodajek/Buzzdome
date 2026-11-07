@@ -22,8 +22,8 @@ details live in `AGENTS.md`, `docs/architecture.md` and `docs/design.md`.
   updates from signed GitHub releases.
 - **Out (now):** phones, PIN/QR joining, cloud, any network or server during
   a show; plugins and theme packages wait until after the first event.
-- **Open work:** `memory/features.json` (next event) and `ROADMAP.md`; the
-  full feature matrix is `replica/features.csv`.
+- **Open work:** the feature matrix `replica/features.csv` and the spec
+  status in `docs/specification.md`.
 
 ## Constraints
 - **Deadline:** first live event in November 2026, on a Windows laptop with a

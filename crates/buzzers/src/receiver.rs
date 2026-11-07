@@ -67,9 +67,12 @@ pub struct RawReport {
     /// the presses decoded from it.
     pub at_ms: u64,
     pub bytes: Vec<u8>,
+    /// Presses read that count, passed on as `ReceiverEvent::Press`.
     pub decoded: Vec<Press>,
-    /// Presses read but dropped as ones that cannot count now, such as a
-    /// buzz from a buzzer that was not ready (`Protocol::take_dropped`).
+    /// Presses read but dropped as ones that cannot count now: a buzz from
+    /// a buzzer that was not ready (`Protocol::take_dropped`), one whose
+    /// timer counts from before the fastest-finger round, or one the edge
+    /// filter took for a press held or sent again.
     pub dropped: Vec<Press>,
     /// Keys of the quizmaster's remote read from it, sent again or not
     /// (`Protocol::take_remote`).
@@ -92,9 +95,21 @@ pub enum ReceiverEvent {
 }
 
 /// How much longer than the time since a fastest-finger round began a
-/// buzz's own timer may be and still count (`Worker::stale_buzzes`): the
+/// buzz's own timer may be and still count (`is_stale`): the
 /// Enjoy 303S receiver reports on a 36 ms tick.
 pub const ROUND_SLACK_MS: u64 = 40;
+
+/// Whether `press` came, in a fastest-finger round that has run
+/// `since_round` ms (`None`: no round takes buzzes), from a buzzer whose
+/// timer counts from before the round began: pressed while the buzzer still
+/// showed the light of the step before, such as ready in the lobby, though
+/// the receiver sent it on in the round, also while a buzz of it is judged.
+/// A buzzer's timer counts milliseconds from its last light change, which
+/// comes after the round began; `ROUND_SLACK_MS` covers the receiver's
+/// report tick.
+fn is_stale(press: &Press, since_round: Option<u64>) -> bool {
+    since_round.is_some_and(|since| press.timer.is_some_and(|timer| u64::from(timer) > since + ROUND_SLACK_MS))
+}
 
 #[derive(Debug, Clone)]
 pub struct ReceiverConfig {
@@ -323,7 +338,7 @@ struct Worker<E> {
     mode: BuzzerMode,
     /// When a fastest-finger round began (the mode turned `FastestFinger`
     /// from one that takes no buzzes), on the show clock: the round's
-    /// lights change after it (`stale_buzzes`). A buzz judged in the round
+    /// lights change after it (`is_stale`). A buzz judged in the round
     /// (`Buzzed`) does not move it, as the buzzers still ready keep their
     /// timers (rules version 8).
     round_from_ms: u64,
@@ -491,7 +506,7 @@ impl<E: From<ReceiverEvent>> Worker<E> {
     fn report(&mut self, bytes: &[u8]) {
         let Some(conn) = self.conn.as_mut() else { return };
         let at_ms = self.config.clock.now_ms();
-        let mut decoded = conn.protocol.decode(bytes);
+        let read = conn.protocol.decode(bytes);
         let mut dropped = conn.protocol.take_dropped();
         let remote = conn.protocol.take_remote();
         // The report may have changed what the protocol knows of the receiver.
@@ -500,10 +515,19 @@ impl<E: From<ReceiverEvent>> Worker<E> {
             conn.kind = kind;
             connected_status(conn)
         });
-        let filtered = self.edge.filter(decoded.clone(), at_ms);
-        let (presses, stale) = self.stale_buzzes(filtered, at_ms);
-        decoded.retain(|press| !stale.contains(press));
-        dropped.extend(stale);
+        // Stale buzzes never count, and the edge filter does not note them
+        // as the report before (they would hide the same buzzer's real
+        // press). It still learns their timers, in the receiver's order, so
+        // that one sent again, once the round ran longer than its timer, is
+        // known as sent again and not taken for a buzz in the round.
+        let since_round = self.mode.takes_buzzes().then(|| at_ms.saturating_sub(self.round_from_ms));
+        let presses = self.edge.filter_stale(read.clone(), at_ms, |press| is_stale(press, since_round));
+        // The log has what counts as decoded and every other press read as
+        // dropped: first those the protocol dropped (a buzzer not ready),
+        // then the stale, held and sent-again ones in the receiver's order.
+        let mut counted = presses.iter().peekable();
+        dropped.extend(read.into_iter().filter(|press| counted.next_if_eq(&press).is_none()));
+        let decoded = presses.clone();
         if let Some(status) = status {
             self.set_status(status);
         }
@@ -514,21 +538,6 @@ impl<E: From<ReceiverEvent>> Worker<E> {
         for key in keys {
             let _ = self.events.send(ReceiverEvent::Remote { key, at_ms }.into());
         }
-    }
-
-    /// Splits off, in a fastest-finger round, the buzzes whose buzzer's
-    /// timer counts from before the round began: pressed while the buzzer
-    /// still showed the light of the step before, such as ready in the
-    /// lobby, though the receiver sent them on in the round, also while a
-    /// buzz of it is judged. A buzzer's timer counts milliseconds from its
-    /// last light change, which comes after the round began; `ROUND_SLACK_MS` covers the
-    /// receiver's report tick.
-    fn stale_buzzes(&self, presses: Vec<Press>, at_ms: u64) -> (Vec<Press>, Vec<Press>) {
-        if !self.mode.takes_buzzes() {
-            return (presses, Vec::new());
-        }
-        let since_round = at_ms.saturating_sub(self.round_from_ms);
-        presses.into_iter().partition(|press| press.timer.is_none_or(|timer| u64::from(timer) <= since_round + ROUND_SLACK_MS))
     }
 
     fn send_presses(&self, presses: Vec<(Press, u64)>) {

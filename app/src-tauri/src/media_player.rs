@@ -15,7 +15,7 @@
 use crate::app_file::{AppFile, SettingsLost};
 use crate::error::{AppError, CmdResult};
 use crate::dialogs::{self, Picker};
-use crate::{app_log, folder_prefix, now_ms, off_ui};
+use crate::{app_log, folder_prefix, now_ms, off_ui, DiskWork};
 use quiz_core::{
     is_safe_reference, BoardChange, MediaKind, MediaPlayer, NowPlaying, PlayerCommand, SoundBoard, MAX_DROPPED_MB, MAX_PLAYER_VOLUME, MEDIA_PREFIX,
 };
@@ -232,7 +232,8 @@ pub fn media_library(state: State<MediaState>) -> MediaLibrary {
 
 /// Copies the files the quizmaster picks into the library and returns their
 /// references in order (none when they cancel). Each file that can be
-/// copied is; the first failure is reported after.
+/// copied is; the first failure is reported after. Refused during a show
+/// (`DiskWork`): the library is on the journal's disk.
 #[tauri::command]
 pub async fn media_add(app: AppHandle, window: Window, picker: Picker) -> CmdResult<Vec<String>> {
     let paths = dialogs::pick_files(window, picker, extensions(&MediaKind::ALL)).await?;
@@ -240,6 +241,7 @@ pub async fn media_add(app: AppHandle, window: Window, picker: Picker) -> CmdRes
         return Ok(Vec::new());
     }
     off_ui(move || {
+        let _disk = media_work(&app)?;
         let state = app.state::<MediaState>();
         let _one_at_a_time = state.file_changes.lock().unwrap();
         let mut added = Vec::new();
@@ -258,8 +260,15 @@ pub async fn media_add(app: AppHandle, window: Window, picker: Picker) -> CmdRes
     .await
 }
 
+/// Marks a copy into the media library as disk work; during a show it is
+/// refused in words that say so.
+fn media_work(app: &AppHandle) -> CmdResult<DiskWork<'_>> {
+    DiskWork::begin(app).map_err(|error| if error == AppError::ShowRunning { AppError::MediaDuringShow } else { error })
+}
+
 /// Copies a file dropped into the window, sent as its bytes with its name
-/// in a header, into the library and returns its reference.
+/// in a header, into the library and returns its reference. Refused during
+/// a show, as `media_add` is.
 #[tauri::command]
 pub async fn media_add_dropped(app: AppHandle, request: Request<'_>) -> CmdResult<String> {
     let InvokeBody::Raw(bytes) = request.body() else { return Err(AppError::system("a dropped file comes as its bytes")) };
@@ -273,6 +282,7 @@ pub async fn media_add_dropped(app: AppHandle, request: Request<'_>) -> CmdResul
     // async runtime, which the show's commands use too.
     let bytes = bytes.clone();
     off_ui(move || {
+        let _disk = media_work(&app)?;
         let state = app.state::<MediaState>();
         let _one_at_a_time = state.file_changes.lock().unwrap();
         let reference = import(&state.root, &name, MediaSource::Bytes { name: &name, bytes: &bytes })?;

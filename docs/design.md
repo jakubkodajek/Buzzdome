@@ -190,7 +190,9 @@ draws slides without a show.
   never taken under the show state), so two quick clicks cannot lose either
   change; and every atomic write has a temporary file of its own
   (`quiz_file::write_atomic`). The editor's commands that open, save or
-  copy large files, or read a sheet, are refused during a show.
+  copy large files, or read a sheet, are refused during a show, and so are
+  the media library's copies; while one runs it marks the show state
+  (`DiskWork`, `disk_work`), so no show begins until it is done (`diskBusy`).
 - **Saving problems.** When the journal refuses a write (the disk is full,
   say), the change is not made, and the Director shows why in a banner until
   a write works again (`show-not-saved`, `show_not_saved`). A due command
@@ -1305,8 +1307,10 @@ Loop, every iteration:
 2. If connected: write the next queued report if it is due, then
    `read_timeout` (20 ms, or less when the next report or a held buzz is
    due sooner). A report goes through the protocol and the edge filter; the
-   thread sends `Raw` (bytes, time, decoded presses, and those the protocol
-   dropped as unable to count, `Protocol::take_dropped`) and then one `Press`
+   thread sends `Raw` (bytes, time, the presses that count, and every other
+   press read as dropped: from a buzzer that was not ready,
+   `Protocol::take_dropped`, then stale, held and sent-again ones in the
+   receiver's order) and then one `Press`
    event per press, in the order the protocol returned them, except that in
    a fastest-finger round presses with the buzzer's own timer wait for the
    timer order (2.6). The edge filter starts afresh as a fastest-finger
@@ -1598,7 +1602,8 @@ never holds a NUL (`is_journal_line`); so a last line that is that, but
 whose command this version does not know, was accepted by a newer app and
 is not cut. Resume cuts a torn line off, after keeping the journal as it was in
 `torn/journal-<n>.jsonl` (a copy per cut; when the copy fails, as on a full
-disk, the log says so and the show resumes all the same). Any other line
+disk, the log says so and the show resumes all the same; when cutting
+fails too, the next journal write cuts it first). Any other line
 that does not read as a command (one from a newer app, or one the disk
 damaged before the end) refuses the resume with `journalDamaged` and leaves
 the journal as it is, since replaying without it would rebuild another show.
@@ -1606,7 +1611,12 @@ A show that stopped mid-question has its question restarted
 (`Game::recovery_command` gives `RestartQuestion`, which takes the
 question's score changes back, so a wrong answer before the crash is not
 charged twice), and that command is journaled before `show-changed`
-reaches the windows, so no window shows the stopped question. One that
+reaches the windows, so no window shows the stopped question. When the
+journal refuses it (a full disk), the show resumes as journaled, stopped
+question and all, with the save problem in the Director's banner; nothing
+else is journaled before the recovery (`Inner::recovery_due`), which the
+show thread tries again each second, as a due command, until it is
+journaled and only then shown. One that
 stopped while a step was coming by itself (QZ-11) has the step held
 (`PauseClock`): the clock reads later after a restart, so the step would
 otherwise come at once, before the quizmaster saw where the show stands.
@@ -1666,7 +1676,7 @@ ready as two changes, one after the other (`Effect::LightBreak`,
 showing the lobby's ready, could reach the receiver thread once its mode is
 fastest finger; the thread drops a buzz whose timer is longer than the
 round has run plus `ROUND_SLACK_MS` (40 ms, the 36 ms report tick), as its
-light changed before the round (`Worker::stale_buzzes`), also while a buzz
+light changed before the round (`is_stale` in `receiver.rs`), also while a buzz
 of the round is judged. A round that goes on after a
 wrong answer turns ready from locked (before rules version 8), and when the receiver comes back or
 a show begins or resumes every buzzer goes dark before it lights (2.4,
@@ -1833,7 +1843,8 @@ the buzzers' lights are the app's either way.
   latest ones and can export all of them as text
   (`unix-ms <tab> hex bytes <tab> decoded presses <tab> dropped presses
   <tab> remote keys`, such as `3A@500` for buzzer 3, button A, with its
-  timer at 500; dropped ones came from a buzzer that was not ready, 2.4).
+  timer at 500; dropped ones came from a buzzer that was not ready, were
+  pressed before the round, held, or sent again by the receiver, 2.4).
 - `cargo run -p buzzers --example hid-monitor` lists HID devices and, with a
   `VID:PID` argument, runs the app's receiver thread and protocol on that
   receiver without the app, printing the status, every report with its

@@ -14,7 +14,7 @@ version (or by a colleague or an AI assistant) still opens.
 
 Read the rule in `replica/recon.md` ("Scoring rules worth getting right")
 and its spec ID in `docs/specification.md`. Behaviour follows the
-reference app unless Jakub decided otherwise (`ROADMAP.md`, the spec).
+reference app unless Jakub decided otherwise (the spec, `docs/adr/`).
 
 ## A rule or step change (`game.rs`, `view.rs`)
 

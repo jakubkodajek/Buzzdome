@@ -583,6 +583,81 @@ fn a_buzz_whose_timer_counts_from_before_the_round_is_dropped_and_logged() {
 }
 
 #[test]
+fn a_stale_buzz_does_not_hide_the_same_buzzers_press_in_the_round() {
+    let stale: &[u8] = &[0x32, 5, 0x50, 0x43, 0xc0, 0x27, 0x09, 0, 0, 0];
+    let real: &[u8] = &[0x32, 5, 0x50, 0x43, 30, 0, 0, 0, 0, 0];
+    // In one report, and in two reports within the repeat gap.
+    for reports in [vec![from_303s_all(&[stale, real])], vec![buzz_303s(6, 600_000), buzz_303s(6, 30)]] {
+        let backend = FakeBackend::default();
+        let (handle, rx) = start_303s(&backend, ReceiverConfig { timer_window: Duration::from_millis(20), repeat_gap_ms: 5_000, ..config() });
+        set_mode_now(&handle, &backend, &rx, BuzzerMode::FastestFinger);
+        round_runs_for(30);
+        backend.0.lock().unwrap().inbox.extend(reports);
+        let ReceiverEvent::Press { press, .. } = wait_for(&rx, |e| matches!(e, ReceiverEvent::Press { .. })) else { unreachable!() };
+        assert_eq!(press, Press::timed(6, Button::Big, 30));
+        handle.shutdown();
+    }
+}
+
+#[test]
+fn a_stale_buzz_sent_again_once_the_round_ran_longer_than_its_timer_is_dropped() {
+    let backend = FakeBackend::default();
+    let (handle, rx) = start_303s(&backend, ReceiverConfig { timer_window: Duration::from_millis(20), ..config() });
+    set_mode_now(&handle, &backend, &rx, BuzzerMode::FastestFinger);
+    // Pressed before the round with a timer longer than the round so far
+    // (stale while it is read within 960 ms, so a slow runner still sees it)...
+    backend.0.lock().unwrap().inbox.push_back(buzz_303s(6, 1_000));
+    let pressed = |e: &ReceiverEvent| matches!(e, ReceiverEvent::Raw(r) if r.bytes.get(4) == Some(&0x32));
+    let ReceiverEvent::Raw(raw) = wait_for(&rx, pressed) else { unreachable!() };
+    assert_eq!(raw.dropped, [Press::timed(6, Button::Big, 1_000)]);
+    // ...then its real press in the round, which counts...
+    backend.0.lock().unwrap().inbox.push_back(buzz_303s(6, 5));
+    let ReceiverEvent::Press { press, .. } = wait_for(&rx, |e| matches!(e, ReceiverEvent::Press { .. })) else { unreachable!() };
+    assert_eq!(press, Press::timed(6, Button::Big, 5));
+    // ...and the stale one sent again by the receiver once the round ran
+    // longer than its timer: still dropped, though the real press came between.
+    round_runs_for(1_100);
+    backend.0.lock().unwrap().inbox.push_back(buzz_303s(6, 1_000));
+    let ReceiverEvent::Raw(again) = wait_for(&rx, pressed) else { unreachable!() };
+    assert!(again.decoded.is_empty());
+    assert_eq!(again.dropped, [Press::timed(6, Button::Big, 1_000)]);
+    handle.shutdown();
+}
+
+#[test]
+fn a_press_sent_again_does_not_hide_the_buzzers_next_press() {
+    let backend = FakeBackend::default();
+    let (handle, rx) = start_303s(&backend, config());
+    handle.set_mode(BuzzerMode::Answers);
+    let press: &[u8] = &[0x32, 3, 0x10, 0x43, 9, 0, 0, 0, 0, 0];
+    let next: &[u8] = &[0x32, 3, 0x10, 0x43, 100, 0, 0, 0, 0, 0];
+    // Sent again by the receiver, then pressed again within the repeat gap.
+    backend.0.lock().unwrap().inbox.extend([from_303s(press), from_303s(press), from_303s(next)]);
+    let pressed = |e: &ReceiverEvent| matches!(e, ReceiverEvent::Press { .. });
+    let ReceiverEvent::Press { press, .. } = wait_for(&rx, pressed) else { unreachable!() };
+    assert_eq!(press, Press::timed(4, Button::A, 9));
+    let ReceiverEvent::Press { press, .. } = wait_for(&rx, pressed) else { unreachable!() };
+    assert_eq!(press, Press::timed(4, Button::A, 100));
+    handle.shutdown();
+}
+
+#[test]
+fn a_press_the_edge_filter_drops_is_logged_as_dropped() {
+    let backend = FakeBackend::default();
+    let (handle, rx) = start_303s(&backend, config());
+    handle.set_mode(BuzzerMode::Answers);
+    let press: &[u8] = &[0x32, 3, 0x10, 0x43, 9, 0, 0, 0, 0, 0];
+    // The receiver sends the same press again, timer and all.
+    backend.0.lock().unwrap().inbox.extend([from_303s(press), from_303s(press)]);
+    let pressed = |e: &ReceiverEvent| matches!(e, ReceiverEvent::Raw(r) if r.bytes.get(4) == Some(&0x32));
+    let ReceiverEvent::Raw(first) = wait_for(&rx, pressed) else { unreachable!() };
+    assert_eq!((first.decoded.as_slice(), first.dropped.as_slice()), (&[Press::timed(4, Button::A, 9)][..], &[][..]));
+    let ReceiverEvent::Raw(again) = wait_for(&rx, pressed) else { unreachable!() };
+    assert_eq!((again.decoded.as_slice(), again.dropped.as_slice()), (&[][..], &[Press::timed(4, Button::A, 9)][..]));
+    handle.shutdown();
+}
+
+#[test]
 fn a_key_of_the_remote_reaches_the_app_once_after_the_presses_of_its_report() {
     let backend = FakeBackend::default();
     let (handle, rx) = start_303s(&backend, config());

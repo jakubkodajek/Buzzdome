@@ -10,7 +10,8 @@
 //! interface, with the protocol the app picks for it, and prints the status,
 //! every input report in hex with a millisecond timestamp, and the presses
 //! decoded from it, with the buzzer's own timer when it sends one, or
-//! dropped as from a buzzer that was not ready. Press each
+//! dropped: from a buzzer that was not ready, pressed before the round
+//! (stale), a held button or a press the receiver sent again. Press each
 //! button on a buzzer and save the output: for a receiver the app does not
 //! know, it is what the real protocol decoder is written from.
 //!
@@ -100,7 +101,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             ReceiverEvent::Raw(raw) => {
                 println!("{:>9.3}s  [{:>2}]  {}", raw.at_ms as f64 / 1000.0, raw.bytes.len(), format_hex(&raw.bytes));
                 for press in raw.dropped {
-                    println!("{:>14}buzzer {}, {:?}: dropped, the buzzer was not ready", "", press.buzzer, press.button);
+                    let timer = press.timer.map(|t| format!(", timer {t}")).unwrap_or_default();
+                    println!("{:>14}buzzer {}, {:?}{timer}: dropped (not ready, stale, held or sent again)", "", press.buzzer, press.button);
                 }
             }
             ReceiverEvent::Press { press, .. } => {

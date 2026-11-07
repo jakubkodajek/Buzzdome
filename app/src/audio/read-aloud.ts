@@ -385,8 +385,10 @@ export function useReadAloud(view: GameView | null, quiz: Quiz | null): ReadAlou
   };
   const stop = useCallback(() => speaker.stopIf("show"), []);
 
-  // A question coming on is read once, unless its slide sounds itself.
+  // A question coming on is read once each time it is asked (a restarted
+  // question again), unless its slide sounds itself.
   const slideIndex = view?.slideIndex ?? null;
+  const asked = view?.askings ?? null;
   const onQuestion = slide?.type === "question";
   const auto = what !== "off" && slide !== null && !soundsItself(slide);
   const arrived = useLatest(() => auto && read());
@@ -400,7 +402,7 @@ export function useReadAloud(view: GameView | null, quiz: Quiz | null): ReadAlou
       readFor.current = null;
       stop();
     };
-  }, [slideIndex, onQuestion, arrived, stop]);
+  }, [slideIndex, asked, onQuestion, arrived, stop]);
 
   // A question waiting for its reading (`clockAfterReading`) starts once
   // nothing reads it any more: read to its end, stopped, or never read.

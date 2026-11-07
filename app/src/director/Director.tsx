@@ -65,6 +65,7 @@ import { UpdateBanner } from "./UpdateBanner";
 import { confirmAction } from "../confirm";
 import { useMediaPlayer, type MediaPlayer } from "./useMediaPlayer";
 import { restartOutcome } from "./restart";
+import { autoStepBar, type AutoStepBar } from "./auto-step";
 import { resumeInfo, staleFile, useShowStart, type ShowStart } from "./show-start";
 import { ToastStack, useToasts } from "./Toasts";
 import { VirtualBuzzers } from "./VirtualBuzzers";
@@ -356,14 +357,21 @@ function CommandButton(props: { icon: ReactNode; label: string; hint?: string; t
  * that runs out when it comes; the quizmaster can take a step first or
  * hold it.
  */
-function AutoStepNote({ step }: { step: AutoStepView }) {
+function AutoStepNote({ view, step }: { view: GameView; step: AutoStepView }) {
   const { t } = useApp();
+  const bar = autoStepBar(view);
   return (
     <div className="auto-step" role="status">
       {t(step.action === "nextSlide" ? "autoStepNextSlide" : "autoStepReveal")}
-      <span key={step.inMs} className="auto-step-bar" style={{ animationDuration: `${step.inMs}ms` }} />
+      {bar && <AutoStepRunsOut key={bar.key} bar={bar} />}
     </div>
   );
+}
+
+/** The bar of one wait, set as it starts: views during the wait neither restart nor stretch it. */
+function AutoStepRunsOut({ bar }: { bar: AutoStepBar }) {
+  const [run] = useState(bar);
+  return <span className="auto-step-bar" style={{ animationDuration: `${run.totalMs}ms`, animationDelay: `${-run.elapsedMs}ms` }} />;
 }
 
 /**
@@ -439,7 +447,7 @@ function CommandPanel(props: {
         ) : (
           <>
             <StepCommands view={view} onRestart={restartQuestion} />
-            {view.autoStep && <AutoStepNote step={view.autoStep} />}
+            {view.autoStep && <AutoStepNote view={view} step={view.autoStep} />}
             {sound.available &&
               (sound.playing ? (
                 <CommandButton icon={<StopIcon />} label={t("stopSound")} onClick={sound.stop} />

@@ -487,4 +487,4 @@ Screens 42 (original), flows 10, entities 11. Hard parts:
 Size: the full original is XL. The must-have slice (form-based editor,
 everyone-answers and fastest-finger questions, phones, Director, scores) is
 M. (This sizing predates the 2026-10-05 move to a desktop app with
-hardware buzzers; the plan now is `ROADMAP.md`.)
+hardware buzzers; what is built is in `replica/features.csv`.)

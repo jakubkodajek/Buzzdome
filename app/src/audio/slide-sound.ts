@@ -24,6 +24,9 @@ export function useSlideSound(view: GameView | null): SlideSound {
   const sound = view?.slide?.sound ?? null;
   const url = toUrl(sound?.file ?? null);
   const slideIndex = view?.slideIndex ?? null;
+  // A restarted question is asked again: its sound starts afresh
+  // (`GameView.askings`, counted by the core).
+  const asking = view?.askings ?? null;
   // Views arrive many times a second, so effects depend on plain values only.
   const start = sound?.start ?? null;
   const repeat = sound?.repeat ?? false;
@@ -34,7 +37,7 @@ export function useSlideSound(view: GameView | null): SlideSound {
   const player = useRef<ClipPlayer | null>(null);
   const [playing, setPlaying] = useState(false);
 
-  // One player per slide; leaving the slide stops it.
+  // One player per slide and asking; leaving the slide stops it.
   useEffect(() => {
     if (!url) return;
     const clip = new ClipPlayer(url, gain);
@@ -47,7 +50,7 @@ export function useSlideSound(view: GameView | null): SlideSound {
       player.current = null;
       setPlaying(false);
     };
-  }, [url, slideIndex, start, repeat, gain, fromMs, toMs, latestLevel]);
+  }, [url, slideIndex, asking, start, repeat, gain, fromMs, toMs, latestLevel]);
 
   useEffect(() => player.current?.setGain(gain * level), [gain, level]);
 
@@ -59,7 +62,7 @@ export function useSlideSound(view: GameView | null): SlideSound {
     if (!clip || start !== "withClock") return;
     if (clockRunning) clip.play(part(fromMs, toMs), { loop: repeat });
     else clip.pause();
-  }, [clockRunning, start, repeat, fromMs, toMs, url, slideIndex]);
+  }, [clockRunning, start, repeat, fromMs, toMs, url, slideIndex, asking]);
 
   // The replay part, once the answer is on screen.
   const cancelReplay = useReplay(player, url, step === "revealed", sound?.replay ?? null);

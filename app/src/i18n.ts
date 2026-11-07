@@ -133,6 +133,7 @@ const strings = {
     // The media player and sound board (director/MediaPlayerTab.tsx).
     mediaAdd: "Přidat…",
     mediaAddHint: "Zkopíruje obrázky, zvuky a videa do knihovny tohoto počítače",
+    mediaAddDuringShow: "Během show se média nepřidávají. Přidejte je před show nebo po ní.",
     mediaCopying: "Kopíruji soubory do knihovny…",
     mediaAdded: "Přidané soubory: {n}.",
     mediaRemove: "Odebrat",
@@ -299,7 +300,7 @@ const strings = {
     noPresses: "Zatím žádný stisk.",
     rawReports: "Surová data",
     noRawReports: "Zatím žádná data.",
-    droppedNotReady: "nezapočteno, bzučák nebyl připravený",
+    droppedNotReady: "nezapočteno, bzučák nebyl připravený, nebo stisk z doby před kolem, podržený či poslaný znovu",
     pressUsed: "započítáno",
     pressTimer: "časovač {timer}",
     exportLog: "Uložit záznam do souboru…",
@@ -1126,6 +1127,7 @@ const strings = {
     layoutWithVideo: "{layout} + video",
     // Backend errors (AppError), in messages.ts.
     errShowRunning: "Show už běží. Nejdřív ji ukončete.",
+    errMediaDuringShow: "Během show se média do knihovny nekopírují. Přidejte je před show nebo po ní.",
     errShowStarting: "Show se právě spouští.",
     errNoShowToResume: "Není žádná show, ve které by šlo pokračovat.",
     errNotNow: "V tomto kroku to nejde.",
@@ -1204,6 +1206,7 @@ const strings = {
     errUpdateFailed: "Aktualizace se nepodařila.",
     errUpdateInstalling: "Instaluje se nová verze aplikace, show teď začít nemůže.",
     errVoiceInstalling: "Instaluje se hlas pro předčítání, show začne až po dokončení.",
+    errDiskBusy: "Otevírá se nebo ukládá kvíz, nebo se kopírují média. Show začne až po dokončení.",
     errSystem: "Systém akci odmítl.",
     // Quiz problems (Problem, MediaIssue).
     problemDuplicateSlideId: "Snímek má stejné ID jako jiný snímek.",
@@ -1224,6 +1227,7 @@ const strings = {
     problemStyleUnread: "Hodnota vzhledu {path} nejde přečíst.",
     problemCategoryStyleUnread: "Hodnota vzhledu {path} kategorie {name} nejde přečíst.",
     problemThemeUnread: "Motiv kvízu nejde přečíst, kvíz má výchozí vzhled.",
+    problemValueUnread: "Hodnotu {path} nejde přečíst, platí výchozí.",
     problemCategoryMedia: "Kategorie {name}, {file}: {issue}",
     problemSoundMedia: "Zvuk pro chvíli „{moment}“, {file}: {issue}",
     problemWelcomeMedia: "{place} uvítací obrazovky, {file}: {issue}",
@@ -1642,6 +1646,7 @@ const strings = {
     // The media player and sound board (director/MediaPlayerTab.tsx).
     mediaAdd: "Add…",
     mediaAddHint: "Copies pictures, sounds and videos into this computer's library",
+    mediaAddDuringShow: "Media are not added during a show. Add them before or after it.",
     mediaCopying: "Copying files into the library…",
     mediaAdded: "Files added: {n}.",
     mediaRemove: "Remove",
@@ -1808,7 +1813,7 @@ const strings = {
     noPresses: "No presses yet.",
     rawReports: "Raw data",
     noRawReports: "No data yet.",
-    droppedNotReady: "not counted, the buzzer was not ready",
+    droppedNotReady: "not counted, the buzzer was not ready, or the press came before the round, was held or sent again",
     pressUsed: "counted",
     pressTimer: "timer {timer}",
     exportLog: "Save log to a file…",
@@ -2633,6 +2638,7 @@ const strings = {
     layoutWithVideo: "{layout} + video",
     // Backend errors (AppError), in messages.ts.
     errShowRunning: "A show is running. End it first.",
+    errMediaDuringShow: "Media are not copied into the library during a show. Add them before or after it.",
     errShowStarting: "A show is starting.",
     errNoShowToResume: "There is no show to resume.",
     errNotNow: "That cannot be done in this step.",
@@ -2711,6 +2717,7 @@ const strings = {
     errUpdateFailed: "Updating the app failed.",
     errUpdateInstalling: "A new version of the app is being installed, so no show can begin now.",
     errVoiceInstalling: "The reading voice is being installed; a show can begin once it is done.",
+    errDiskBusy: "A quiz is being opened or saved, or media copied; a show can begin once that is done.",
     errSystem: "The system refused.",
     // Quiz problems (Problem, MediaIssue).
     problemDuplicateSlideId: "The slide has the same ID as another slide.",
@@ -2731,6 +2738,7 @@ const strings = {
     problemStyleUnread: "The style value {path} cannot be read.",
     problemCategoryStyleUnread: "The style value {path} of the category {name} cannot be read.",
     problemThemeUnread: "The quiz's theme cannot be read, so the quiz has the default look.",
+    problemValueUnread: "The value {path} cannot be read, so its default applies.",
     problemCategoryMedia: "Category {name}, {file}: {issue}",
     problemSoundMedia: "The sound for “{moment}”, {file}: {issue}",
     problemWelcomeMedia: "{place} of the welcome screen, {file}: {issue}",

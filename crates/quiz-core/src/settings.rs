@@ -44,7 +44,7 @@ pub struct QuizSettings {
     /// Seconds it waits before it does it, up to `MAX_ALL_ANSWERED_DELAY_S`;
     /// the quizmaster can step in meanwhile.
     #[serde(with = "all_answered_delay")]
-    #[schemars(with = "u8")]
+    #[schemars(with = "u8", range(max = MAX_ALL_ANSWERED_DELAY_S))]
     #[ts(as = "u8")]
     pub all_answered_delay_s: u8,
     /// Once a question's answer is shown, the show goes on to the next
@@ -54,9 +54,9 @@ pub struct QuizSettings {
     #[schemars(with = "bool")]
     #[ts(as = "bool")]
     pub next_after_reveal: bool,
-    /// Up to `MAX_AFTER_REVEAL_DELAY_S`.
+    /// Seconds, up to `MAX_AFTER_REVEAL_DELAY_S`.
     #[serde(with = "after_reveal_delay")]
-    #[schemars(with = "u8")]
+    #[schemars(with = "u8", range(max = MAX_AFTER_REVEAL_DELAY_S))]
     #[ts(as = "u8")]
     pub next_after_reveal_delay_s: u8,
     /// A timed question's clock runs to its end even once nobody is left
@@ -106,7 +106,7 @@ pub struct QuizSettings {
     /// default. A player's joker doubles what one question gives them,
     /// the penalty too; the quizmaster plays it before the question ends.
     #[serde(with = "jokers")]
-    #[schemars(with = "u8")]
+    #[schemars(with = "u8", range(max = MAX_JOKERS))]
     #[ts(as = "u8")]
     pub jokers: u8,
     /// The language the quiz is written in, for the voice that reads it out.
@@ -120,9 +120,10 @@ pub struct QuizSettings {
     #[schemars(with = "ReadAloud")]
     #[ts(as = "ReadAloud")]
     pub read_aloud: ReadAloud,
-    /// Which of the voice model's voices reads, up to `MAX_VOICE`.
+    /// Which of the voice model's voices reads, 0 to `MAX_VOICE`: those below
+    /// `FIRST_MALE_VOICE` sound female, the rest male.
     #[serde(with = "voice")]
-    #[schemars(with = "u8")]
+    #[schemars(with = "u8", range(max = MAX_VOICE))]
     #[ts(as = "u8")]
     pub voice: u8,
     /// A question that starts as shown and is read out waits for the

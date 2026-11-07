@@ -720,6 +720,10 @@ pub struct Game {
     /// How many times the quizmaster started the current slide's video
     /// (`Command::PlayVideo`); the projector starts it whenever this grows.
     video_plays: u32,
+    /// How many times a question was asked from its start in this show:
+    /// shown ready, or restarted (`Command::RestartQuestion`). The windows
+    /// start a question's sound and reading afresh whenever this grows.
+    askings: u32,
     /// The question on screen was shown waiting for the Director to read it
     /// out before its clock starts (`Command::ReadingDone`).
     awaiting_reading: bool,
@@ -757,6 +761,7 @@ impl Game {
             leaderboard_visible: false,
             teams: Vec::new(),
             video_plays: 0,
+            askings: 0,
             awaiting_reading: false,
             step_no: 0,
             rules_version: RULES_VERSION,
@@ -1170,6 +1175,11 @@ impl Game {
         self.video_plays
     }
 
+    /// See `askings`.
+    pub fn askings(&self) -> u32 {
+        self.askings
+    }
+
     /// See `step_no`.
     pub fn step_no(&self) -> u32 {
         self.step_no
@@ -1214,14 +1224,7 @@ impl Game {
     /// step first, or hold it (`PauseClock`). Gives the step, the command
     /// that takes it and its time.
     pub(crate) fn pending_step(&self) -> Option<(AutoStep, Command, u64)> {
-        let settings = self.quiz.settings;
-        let (step, wait_ms) = match self.phase {
-            Phase::Question(QuestionStep::Closed) => (settings.all_answered.auto_step()?, settings.all_answered_delay_ms()),
-            Phase::Question(QuestionStep::Revealed { .. }) if settings.next_after_reveal => {
-                (AutoStep::NextSlide, settings.next_after_reveal_delay_ms())
-            }
-            _ => return None,
-        };
+        let (step, wait_ms) = self.auto_step_wait()?;
         let at = self.auto_step_from?.saturating_add(wait_ms);
         let command = match step {
             AutoStep::Reveal => Command::Next,
@@ -1232,6 +1235,19 @@ impl Game {
             },
         };
         Some((step, command, at))
+    }
+
+    /// The step this step of the question leads to by itself, and the
+    /// settings' whole wait for it, counted from `auto_step_from`.
+    pub(crate) fn auto_step_wait(&self) -> Option<(AutoStep, u64)> {
+        let settings = self.quiz.settings;
+        match self.phase {
+            Phase::Question(QuestionStep::Closed) => Some((settings.all_answered.auto_step()?, settings.all_answered_delay_ms())),
+            Phase::Question(QuestionStep::Revealed { .. }) if settings.next_after_reveal => {
+                Some((AutoStep::NextSlide, settings.next_after_reveal_delay_ms()))
+            }
+            _ => None,
+        }
     }
 
     pub(crate) fn question(&self) -> Option<&Question> {
@@ -1918,6 +1934,9 @@ impl Game {
         self.leaderboard_visible = false;
         self.video_plays = 0;
         self.awaiting_reading = false;
+        if phase == Phase::Question(QuestionStep::Ready) {
+            self.askings = self.askings.saturating_add(1);
+        }
         self.slide = index;
         self.phase = phase;
         vec![self.lights_now()]

@@ -62,6 +62,9 @@ pub struct Check {
     /// What reading the quiz left out because it does not fit the format
     /// (`ReadQuiz::dropped`), such as a colour that is not hex.
     pub left_out: Vec<String>,
+    /// The quiz's theme, for the server to say when this app does not have it.
+    #[serde(skip)]
+    pub theme: Option<String>,
 }
 
 impl Check {
@@ -78,7 +81,8 @@ impl Check {
             slides: quiz.slides.len(),
             questions: quiz.slides.iter().filter(|slide| slide.content.slide_type() == SlideType::Question).count(),
             problems: words(problems),
-            left_out: words(&read.dropped),
+            left_out: words(&read.dropped).into_iter().chain(unplayed_sounds(quiz)).collect(),
+            theme: quiz.theme.clone(),
         }
     }
 
@@ -86,6 +90,15 @@ impl Check {
     pub fn is_ready(&self) -> bool {
         self.problems.is_empty()
     }
+}
+
+/// What the assistant is told of the app's own sounds the quiz chose for a
+/// moment that does not play them (`QuizSounds::unplayed`).
+fn unplayed_sounds(quiz: &Quiz) -> impl Iterator<Item = String> + '_ {
+    quiz.sounds.unplayed().map(|(slot, id)| {
+        let slot = serde_json::to_value(slot).expect("a moment serializes");
+        format!("sounds.slots.{}: {id} is not one of the app's sounds for this moment, so it plays its default", slot.as_str().unwrap_or_default())
+    })
 }
 
 /// Checks the quiz at `path`: a quiz folder, or a quiz file (`.quiz`, or a

@@ -20,6 +20,19 @@ fn random_shows_keep_every_rule() {
 }
 
 #[test]
+fn shows_journal_presses_received_before_commands_applied_earlier() {
+    // A receiver's press keeps its report time and can be applied after a
+    // later command, so a show journals presses older than what came before.
+    use quiz_core::Command;
+    let late = (0..5).map(|seed| play(seed, Plan::default())).any(|show| {
+        show.journal
+            .windows(2)
+            .any(|pair| matches!(pair[1].command, Command::Press { .. }) && !matches!(pair[0].command, Command::Press { .. }) && pair[1].at_ms < pair[0].at_ms)
+    });
+    assert!(late, "no show journaled a press received before the command applied ahead of it");
+}
+
+#[test]
 #[ignore = "takes about 20 s in debug; the nightly run plays it"]
 fn a_long_evening_with_fifty_buzzers_keeps_every_rule() {
     // One show of thousands of steps: a whole evening's journal, replayed in full now and then.

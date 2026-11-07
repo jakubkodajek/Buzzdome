@@ -61,6 +61,8 @@ pub struct GameView {
     pub on_hold: bool,
     /// See `Game::video_plays`.
     pub video_plays: u32,
+    /// See `Game::askings`.
+    pub askings: u32,
     /// See `Game::step_no`.
     pub step_no: u32,
     /// The step the show takes by itself (`Game::pending_step`); none
@@ -110,6 +112,9 @@ pub struct AutoStepView {
     pub action: AutoStep,
     /// How long until it does it.
     pub in_ms: u64,
+    /// The whole wait before it, as the quiz's settings give it, so the
+    /// Director's bar shows how much of it is left.
+    pub total_ms: u64,
 }
 
 /// The players a closed everyone-answers question counted, by outcome.
@@ -322,8 +327,13 @@ impl Game {
             controls: self.controls(),
             on_hold: self.on_hold(),
             video_plays: self.video_plays(),
+            askings: self.askings(),
             step_no: self.step_no(),
-            auto_step: self.pending_step().map(|(action, _, at)| AutoStepView { action, in_ms: at.saturating_sub(now) }),
+            auto_step: self.pending_step().zip(self.auto_step_wait()).map(|((action, _, at), (_, total_ms))| AutoStepView {
+                action,
+                in_ms: at.saturating_sub(now),
+                total_ms,
+            }),
             settings: self.quiz().settings,
             music: self.music(),
             welcome: (self.phase() == &Phase::Welcome).then(|| self.quiz().welcome.clone()),

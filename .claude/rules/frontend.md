@@ -16,7 +16,8 @@ Follow the `buzzdome-ui-change` skill; the short version:
   worded in `messages.ts`. No trademarked names.
 - Messages are `notify` / `caution` / `fail` from `useApp()`; icons come from
   `icons.tsx`, never typed glyphs.
-- Stage CSS takes colours and fonts only from `--theme-*` / `--style-*` variables.
+- Stage CSS takes colours and fonts only from `--theme-*` variables; a slide's own
+  style (`--style-*`, from `theme/slide-style.ts`) is read only by `host/slide.css`.
 - No wall-clock reads (`Date.now`, `performance.now`) and no `alert` / `confirm`:
   ESLint refuses them; use the show clock and `confirmAction`.
 - A part that can grow scrolls in its own box; never `overflow: hidden` on a window

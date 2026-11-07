@@ -26,7 +26,7 @@ allAnsweredDelayS: number,
  */
 nextAfterReveal: boolean, 
 /**
- * Up to `MAX_AFTER_REVEAL_DELAY_S`.
+ * Seconds, up to `MAX_AFTER_REVEAL_DELAY_S`.
  */
 nextAfterRevealDelayS: number, 
 /**
@@ -81,7 +81,8 @@ language: QuizLanguage,
  */
 readAloud: ReadAloud, 
 /**
- * Which of the voice model's voices reads, up to `MAX_VOICE`.
+ * Which of the voice model's voices reads, 0 to `MAX_VOICE`: those below
+ * `FIRST_MALE_VOICE` sound female, the rest male.
  */
 voice: number, 
 /**
