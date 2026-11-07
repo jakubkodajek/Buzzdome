@@ -519,6 +519,22 @@ pub enum Phase {
     Final { step: u8 },
 }
 
+/// Where a show stands (`Game::position`), as the Director names it when
+/// it offers to resume the show.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
+#[serde(tag = "at", rename_all = "camelCase")]
+pub enum ShowPosition {
+    /// The welcome screen or the lobby, before the first slide.
+    BeforeSlides,
+    /// A question: the `number`th (from 1) of the quiz's `count` questions.
+    Question { number: usize, count: usize },
+    /// Another slide: the `number`th (from 1) of the quiz's `count` slides.
+    Slide { number: usize, count: usize },
+    /// The final ranking after the last slide of a quiz without a final slide.
+    FinalRanking,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Player {
     pub buzzer: BuzzerId,
@@ -809,6 +825,23 @@ impl Game {
         match self.phase {
             Phase::Welcome | Phase::Lobby => None,
             _ => self.quiz.slides.get(self.slide),
+        }
+    }
+
+    /// Where the show stands: on a question, its place among the quiz's
+    /// questions; on another slide, its place among the slides.
+    pub fn position(&self) -> ShowPosition {
+        if self.before_slides() {
+            return ShowPosition::BeforeSlides;
+        }
+        let Some(slide) = self.current_slide() else { return ShowPosition::FinalRanking };
+        let slides = &self.quiz.slides;
+        let is_question = |slide: &&Slide| matches!(slide.content, SlideContent::Question(_));
+        if is_question(&slide) {
+            let number = slides[..=self.slide].iter().filter(is_question).count();
+            ShowPosition::Question { number, count: slides.iter().filter(is_question).count() }
+        } else {
+            ShowPosition::Slide { number: self.slide + 1, count: slides.len() }
         }
     }
 

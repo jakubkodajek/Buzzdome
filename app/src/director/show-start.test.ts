@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { translator } from "../i18n";
 import type { SessionSummary } from "../types";
-import { startQuestion, staleFile, staleFor, type DraftState } from "./show-start";
+import { dayAndTime } from "../format";
+import { positionText, resumeInfo, startQuestion, staleFile, staleFor, type DraftState } from "./show-start";
 
 const t = translator("en");
 const last: SessionSummary = { meta: { quizTitle: "Pub quiz", sourcePath: null, startedMs: 0, mediaRoot: null, rulesVersion: 1 }, commandCount: 57 };
@@ -54,5 +55,24 @@ describe("staleFor", () => {
     expect(staleFor(edited, "/quizzes/b.quiz")).toBeNull();
     expect(staleFor({ ...edited, unsaved: false }, "/quizzes/a.quiz")).toBeNull();
     expect(staleFor(null, "/quizzes/a.quiz")).toBeNull();
+  });
+});
+
+describe("positionText", () => {
+  it("names a question among the questions, another slide among the slides, and the steps around them", () => {
+    expect(positionText(t, { at: "question", number: 7, count: 20 })).toBe("question 7 of 20");
+    expect(positionText(t, { at: "slide", number: 3, count: 25 })).toBe("slide 3 of 25");
+    expect(positionText(t, { at: "beforeSlides" })).toBe(t("positionBeforeSlides"));
+    expect(positionText(t, { at: "finalRanking" })).toBe(t("positionFinalRanking"));
+    expect(positionText(translator("cs"), { at: "question", number: 7, count: 20 })).toBe("otázka 7/20");
+  });
+});
+
+describe("resumeInfo", () => {
+  const time = dayAndTime(0, "en");
+
+  it("says where the last show stands, when the backend knows", () => {
+    expect(resumeInfo(t, "en", { ...last, position: { at: "question", number: 7, count: 20 } })).toBe(`Pub quiz – question 7 of 20, started ${time}`);
+    expect(resumeInfo(t, "en", last)).toBe(`Pub quiz – started ${time}`);
   });
 });

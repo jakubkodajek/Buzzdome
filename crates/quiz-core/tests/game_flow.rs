@@ -1,6 +1,6 @@
 use quiz_core::{
     AnswerMode, BuzzerMode, Button, Command, CorrectAnswer, Cue, Effect, Game, GameError, Light, Mark, NextStep, Phase, Question, QuestionStep, Quiz,
-    Response, Slide, SlideContent, Stamped, VideoClip, team_names, FULL_SHARE, MAX_NAME_CHARS, MAX_TEAMS, PRESS_GRACE_MS, RULES_VERSION,
+    Response, ShowPosition, Slide, SlideContent, Stamped, VideoClip, team_names, FULL_SHARE, MAX_NAME_CHARS, MAX_TEAMS, PRESS_GRACE_MS, RULES_VERSION,
 };
 use quiz_core::game::FINAL_LAST_STEP;
 use quiz_core::view::{AnswerResults, AutoStepView, BuzzState, BuzzView};
@@ -86,6 +86,27 @@ fn lobby_registers_buzzers_on_any_press() {
     let buzzers: Vec<u16> = show.game.players().map(|p| p.buzzer).collect();
     assert_eq!(buzzers, vec![1, 3]);
     assert_eq!(show.game.phase(), &Phase::Lobby);
+}
+
+#[test]
+fn the_position_counts_a_question_among_the_questions_and_another_slide_among_the_slides() {
+    let mut show = Show::new(vec![
+        billboard("intro"),
+        question("q1", AnswerMode::Everyone),
+        Slide::new("why", SlideContent::Explanation { text: "Because.".into() }),
+        question("q2", AnswerMode::FastestFinger),
+        billboard("thanks"),
+    ]);
+    assert_eq!(show.game.position(), ShowPosition::BeforeSlides);
+    show.run(0, Command::Next).unwrap();
+    assert_eq!(show.game.position(), ShowPosition::Slide { number: 1, count: 5 });
+    show.run(0, Command::GoTo { slide: 3 }).unwrap();
+    assert_eq!(show.game.position(), ShowPosition::Question { number: 2, count: 2 });
+    show.run(0, Command::GoTo { slide: 2 }).unwrap();
+    assert_eq!(show.game.position(), ShowPosition::Slide { number: 3, count: 5 });
+    // Without a final slide, the final ranking follows the last slide.
+    show.run(0, Command::GoToFinal).unwrap();
+    assert_eq!(show.game.position(), ShowPosition::FinalRanking);
 }
 
 #[test]

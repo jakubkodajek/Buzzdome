@@ -3,10 +3,11 @@ import { api } from "../api";
 import { useApp, useRun } from "../app-context";
 import { confirmAction } from "../confirm";
 import { loadDraftAfterWrites } from "../editor/useQuizEditor";
+import { dayAndTime } from "../format";
 import { useLastSession, useLatest, type LastSession } from "../hooks";
-import type { Translate } from "../i18n";
+import type { Lang, Translate } from "../i18n";
 import { isAppError } from "../messages";
-import type { EditorDraft, SessionSummary } from "../types";
+import type { EditorDraft, SessionSummary, ShowPosition } from "../types";
 
 /** What the Director knows of the quiz editor's draft: whether it holds changes its file does not have. */
 export type DraftState = Pick<EditorDraft, "sourcePath" | "unsaved"> & { title: string };
@@ -47,6 +48,26 @@ export function startQuestion(t: Translate, last: SessionSummary | null, draft: 
   if (replaces && older) return { text: `${replaces}\n\n${older}`, ok: t("startNewShow") };
   if (replaces) return { text: replaces, ok: t("startNewShow") };
   return older ? { text: older, ok: t("startSavedVersion") } : null;
+}
+
+/** Where the show `position` stands, in words. */
+export function positionText(t: Translate, position: ShowPosition): string {
+  switch (position.at) {
+    case "beforeSlides":
+      return t("positionBeforeSlides");
+    case "question":
+      return t("positionQuestion", { n: position.number, total: position.count });
+    case "slide":
+      return t("positionSlide", { n: position.number, total: position.count });
+    case "finalRanking":
+      return t("positionFinalRanking");
+  }
+}
+
+/** What Resume says of the last show `last`: its quiz, where it stands when known, and when it began. */
+export function resumeInfo(t: Translate, lang: Lang, last: SessionSummary): string {
+  const params = { title: last.meta.quizTitle, time: dayAndTime(last.meta.startedMs, lang) };
+  return last.position ? t("resumeInfoAt", { ...params, position: positionText(t, last.position) }) : t("resumeInfo", params);
 }
 
 /** Starting a show from the Director. */

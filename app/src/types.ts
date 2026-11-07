@@ -120,6 +120,7 @@ export type { SavedDraft } from "./bindings/SavedDraft";
 export type { ScreenKey } from "./bindings/ScreenKey";
 export type { SessionSummary } from "./bindings/SessionSummary";
 export type { ShowFinish } from "./bindings/ShowFinish";
+export type { ShowPosition } from "./bindings/ShowPosition";
 export type { SettingsLost } from "./bindings/SettingsLost";
 export type { SheetExport } from "./bindings/SheetExport";
 export type { SheetImport } from "./bindings/SheetImport";

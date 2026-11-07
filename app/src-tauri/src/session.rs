@@ -9,7 +9,7 @@
 //! taken back. Every line is written at the end of the whole lines instead.
 
 use crate::app_log;
-use quiz_core::{Game, Quiz, QuizJsonError, Stamped};
+use quiz_core::{Game, Quiz, QuizJsonError, ShowPosition, Stamped};
 use quiz_file::{Context, FileAction, QuizFileError};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
@@ -64,6 +64,11 @@ pub struct SessionSummary {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub finished: Option<ShowFinish>,
+    /// Where the show stands (`Game::position`); none when the show's copy
+    /// of the quiz does not read (resuming it says why).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub position: Option<ShowPosition>,
 }
 
 /// How a show was done with (`SessionSummary::finished`).
@@ -180,12 +185,13 @@ impl Session {
         let Some(dir) = latest_dir(root)? else { return Ok(None) };
         let meta = read_meta(&dir)?;
         let journal = read_journal(&dir.join(JOURNAL_FILE))?.0;
+        let game = replayed(&dir, &meta, &journal);
         let finished = if dir.join(ENDED_FILE).exists() {
             Some(ShowFinish::Ended)
         } else {
-            played_out(&dir, &meta, &journal).then_some(ShowFinish::PlayedOut)
+            game.as_ref().is_some_and(Game::is_over).then_some(ShowFinish::PlayedOut)
         };
-        Ok(Some(SessionSummary { meta, command_count: journal.len(), finished }))
+        Ok(Some(SessionSummary { meta, command_count: journal.len(), finished, position: game.as_ref().map(Game::position) }))
     }
 
     /// The quizmaster ended the show (End show): marked on disk, so the
@@ -247,11 +253,11 @@ fn keep_aside(path: &Path, dir: &Path) -> io::Result<PathBuf> {
     }
 }
 
-/// Whether the show in `dir` played to its end (`Game::is_over`). One whose
-/// quiz copy does not read is not: resuming it says why.
-fn played_out(dir: &Path, meta: &SessionMeta, journal: &[Stamped]) -> bool {
-    let quiz = fs::read_to_string(dir.join(QUIZ_FILE)).ok().and_then(|json| Quiz::from_json(&json).ok());
-    quiz.is_some_and(|quiz| Game::replay(quiz, journal, meta.rules_version).is_over())
+/// The show in `dir` as its journal leaves it; none when its quiz copy
+/// does not read (it did not play to its end, and resuming it says why).
+fn replayed(dir: &Path, meta: &SessionMeta, journal: &[Stamped]) -> Option<Game> {
+    let quiz = fs::read_to_string(dir.join(QUIZ_FILE)).ok().and_then(|json| Quiz::from_json(&json).ok())?;
+    Some(Game::replay(quiz, journal, meta.rules_version))
 }
 
 fn read_meta(dir: &Path) -> Result<SessionMeta, ResumeError> {
@@ -663,6 +669,22 @@ mod tests {
             resumed.session.append(&Stamped { at_ms, command: Command::Next }).unwrap();
         }
         assert_eq!(summary().finished, Some(ShowFinish::PlayedOut));
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn the_summary_says_where_the_show_stands_unless_its_quiz_does_not_read() {
+        let root = temp_root("position");
+        let mut session = Session::create(&root, &Quiz::from_json(crate::DEMO_QUIZ).unwrap(), &meta(1)).unwrap();
+        let position = || Session::latest_summary(&root).unwrap().unwrap().position;
+        assert_eq!(position(), Some(ShowPosition::BeforeSlides));
+        session.append(&Stamped { at_ms: 5, command: Command::Next }).unwrap();
+        assert_eq!(position(), Some(ShowPosition::Slide { number: 1, count: 12 }));
+        // The demo quiz's eighth slide is its fourth question of six.
+        session.append(&Stamped { at_ms: 6, command: Command::GoTo { slide: 7 } }).unwrap();
+        assert_eq!(position(), Some(ShowPosition::Question { number: 4, count: 6 }));
+        fs::write(latest_dir(&root).unwrap().unwrap().join(QUIZ_FILE), "{").unwrap();
+        assert_eq!(position(), None);
         fs::remove_dir_all(&root).unwrap();
     }
 

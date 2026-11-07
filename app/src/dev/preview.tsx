@@ -883,7 +883,7 @@ mockIPC(
       case "last_session":
         if (resume === "damaged") return Promise.reject({ code: "journalDamaged", line: 58 });
         if (resume === "none") return null;
-        return { meta: { quizTitle: quiz.title, sourcePath: null, startedMs: Date.now() - 3_600_000 }, commandCount: 57 };
+        return { meta: { quizTitle: quiz.title, sourcePath: null, startedMs: Date.now() - 3_600_000 }, commandCount: 57, position: { at: "question", number: 7, count: 20 } };
       case "editor_load":
         if (draft === "unreadable") return Promise.reject({ code: "draftNotRead", detail: "expected value at line 1 column 1" });
         return { id: "draft-1", quiz: firstDraft?.quiz ?? editorQuiz, sourcePath: "C:\\Kvizy\\hospodsky-kviz.quiz", savesInPlace: true, unsaved: firstDraft?.unsaved ?? draft === "unsaved", mediaRoot: "/src/dev/", problems: editorProblems(), dropped: [] };

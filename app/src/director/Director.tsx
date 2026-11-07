@@ -4,7 +4,7 @@ import { AppProvider, useApp, useDispatch, useRun, useStepShown } from "../app-c
 import { otherSoundPlays, useShowSounds } from "../audio/show-sounds";
 import { useSlideSound, type SlideSound } from "../audio/slide-sound";
 import { usePrepareVoice, useReadAloud, useVoiceSpeaks, type ReadAloudControl } from "../audio/read-aloud";
-import { clockSeconds, dayAndTime } from "../format";
+import { clockSeconds } from "../format";
 import { EditorScreen } from "../editor/EditorScreen";
 import { ErrorBoundary, RenderFailed } from "../error-boundary";
 import { errorNotice, errorText } from "../messages";
@@ -66,7 +66,7 @@ import { UpdateBanner } from "./UpdateBanner";
 import { confirmAction } from "../confirm";
 import { useMediaPlayer, type MediaPlayer } from "./useMediaPlayer";
 import { restartOutcome } from "./restart";
-import { staleFile, useShowStart, type ShowStart } from "./show-start";
+import { resumeInfo, staleFile, useShowStart, type ShowStart } from "./show-start";
 import { ToastStack, useToasts } from "./Toasts";
 import { VirtualBuzzers } from "./VirtualBuzzers";
 import "./director.css";
@@ -431,7 +431,7 @@ function CommandPanel(props: {
               <CommandButton
                 icon={<NextIcon />}
                 label={t("resume")}
-                hint={t("resumeInfo", { title: last.session.meta.quizTitle, time: dayAndTime(last.session.meta.startedMs, lang) })}
+                hint={resumeInfo(t, lang, last.session)}
                 disabled={showStart.starting}
                 onClick={resume}
               />

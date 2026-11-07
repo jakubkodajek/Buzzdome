@@ -1611,7 +1611,9 @@ End show leaves an `ended` mark in the session folder (`Session::end`),
 which resuming removes; the last session's summary says the show was done
 with (`SessionSummary::finished`: ended, or played to its end, which a
 replay of its journal tells), so a new show starts without asking to give
-it up, though it can still be resumed. The
+it up, though it can still be resumed. The same replay says where the show
+stands (`SessionSummary::position`, from `Game::position`: a question among
+the questions, another slide among the slides), which Resume shows. The
 quizmaster can restart a question in play too (Restart question, after a
 confirmation): it is the way to leave a question without scoring it, since
 a jump is refused then. Its score changes and answering times are taken
