@@ -756,7 +756,7 @@ fn next_step_names_what_next_does() {
     let mut show = Show::new(vec![billboard("intro"), question("q1", AnswerMode::Everyone), billboard("thanks")]);
     show.press(0, 1, Button::Big);
     let step = |show: &Show| show.game.controls().next_step;
-    assert_eq!(step(&show), Some(NextStep::NextSlide), "lobby");
+    assert_eq!(step(&show), Some(NextStep::StartQuiz), "lobby");
     show.run(0, Command::Next).unwrap();
     assert_eq!(step(&show), Some(NextStep::NextSlide), "intro");
     show.run(0, Command::Next).unwrap();
@@ -768,7 +768,7 @@ fn next_step_names_what_next_does() {
     show.run(2_000, Command::Next).unwrap();
     assert_eq!(step(&show), Some(NextStep::NextSlide), "q1 revealed");
     show.run(3_000, Command::Next).unwrap();
-    assert_eq!(step(&show), Some(NextStep::NextSlide), "the last slide, before the final ranking");
+    assert_eq!(step(&show), Some(NextStep::FinalRanking), "the last slide, before the final ranking");
     while show.game.controls().next {
         show.run(4_000, Command::Next).unwrap();
     }
@@ -787,8 +787,10 @@ fn next_as_named(show: &mut Show, at_ms: u64) -> NextStep {
         NextStep::StartQuestion => matches!(after, Phase::Question(QuestionStep::Running { .. })),
         NextStep::EndQuestion => *after == Phase::Question(QuestionStep::Closed),
         NextStep::ShowAnswer => matches!(after, Phase::Question(QuestionStep::Revealed { .. })),
-        NextStep::FinalStep => matches!((&before, after), (Phase::Final { step }, Phase::Final { step: next }) if *next == step + 1),
-        NextStep::NextSlide => show.game.current_slide().map(|s| s.id.clone()) != slide || before == Phase::Lobby,
+        NextStep::FinalStep { .. } => matches!((&before, after), (Phase::Final { step }, Phase::Final { step: next }) if *next == step + 1),
+        NextStep::StartQuiz => before == Phase::Lobby && show.game.slide_index() == 0 && *after != Phase::Lobby,
+        NextStep::FinalRanking => matches!(after, Phase::Final { step: 0 }) && show.game.slide_index() == show.game.quiz().slides.len(),
+        NextStep::NextSlide => show.game.current_slide().map(|s| s.id.clone()) != slide,
     };
     assert!(did, "{named:?} from {before:?} went to {after:?}");
     named
@@ -809,15 +811,15 @@ fn next_does_what_its_button_names_on_the_welcome_screen_in_the_final_ranking_an
         next_as_named(show, at_ms)
     };
     assert_eq!(next(&mut show), NextStep::Registration, "the welcome screen");
-    assert_eq!(next(&mut show), NextStep::NextSlide, "the lobby");
+    assert_eq!(next(&mut show), NextStep::StartQuiz, "the lobby");
     // The question waits for its reading; Next starts its clock as well.
     assert!(show.game.controls().reading_done);
     assert_eq!(next(&mut show), NextStep::StartQuestion, "q1 waiting for its reading");
     assert_eq!(next(&mut show), NextStep::EndQuestion, "q1 running");
     assert_eq!(next(&mut show), NextStep::ShowAnswer, "q1 closed");
     assert_eq!(next(&mut show), NextStep::NextSlide, "q1 revealed");
-    for step in 0..FINAL_LAST_STEP {
-        assert_eq!(next(&mut show), NextStep::FinalStep, "final ranking step {step}");
+    for place in [Some(3), Some(2), Some(1), None] {
+        assert_eq!(next(&mut show), NextStep::FinalStep { place }, "the final ranking reveals {place:?}");
     }
     assert_eq!(show.game.controls().next_step, None, "the last slide's last step ends the show");
     assert!(!show.game.controls().next);

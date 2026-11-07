@@ -11,7 +11,7 @@ import { installBrowserGuard } from "../browser-guard";
 import { setBodyText } from "../editor/slides";
 import { rightAnswers } from "../quiz";
 import { answerShares, NO_CONTROLS } from "../host/preview";
-import { ANSWER_BUTTONS, DEFAULT_QUIZ_SETTINGS, MAX_BOARD_COLUMNS, MAX_BOARD_ROWS, MAX_PLAYER_VOLUME } from "../bindings/Constants";
+import { ANSWER_BUTTONS, DEFAULT_QUIZ_SETTINGS, FINAL_LAST_STEP, MAX_BOARD_COLUMNS, MAX_BOARD_ROWS, MAX_PLAYER_VOLUME } from "../bindings/Constants";
 import type {
   Background,
   BoardChange,
@@ -220,8 +220,12 @@ function nextStepOf(phase: Phase): NextStep {
   switch (phase.phase) {
     case "welcome":
       return "registration";
-    case "final":
-      return "finalStep";
+    case "lobby":
+      return "startQuiz";
+    case "final": {
+      const place = FINAL_LAST_STEP - phase.step - 1;
+      return { finalStep: { place: place > 0 ? place : null } };
+    }
     case "question":
       return phase.step === "ready" ? "startQuestion" : phase.step === "running" ? "endQuestion" : phase.step === "closed" ? "showAnswer" : "nextSlide";
     default:

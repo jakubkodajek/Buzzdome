@@ -381,8 +381,14 @@ pub enum NextStep {
     EndQuestion,
     /// Shows the closed question's answer.
     ShowAnswer,
-    /// The final ranking's next step.
-    FinalStep,
+    /// From the registration (the lobby) to the first slide.
+    StartQuiz,
+    /// From the last slide to the final ranking after it.
+    FinalRanking,
+    /// The final ranking's next step: it reveals `place` (3, 2, then the
+    /// winner, 1), or the whole ranking (none). A place that nobody holds,
+    /// after shared places, reveals nobody, though the step is still taken.
+    FinalStep { place: Option<u8> },
     /// Goes on to the next slide.
     NextSlide,
 }
@@ -1035,14 +1041,19 @@ impl Game {
     /// place that says it: `next` takes the step it gives.
     fn next_step(&self) -> Option<NextStep> {
         if self.next_leaves_slide() {
-            return self.following().map(|_| NextStep::NextSlide);
+            let following = self.following()?;
+            return Some(match self.phase {
+                Phase::Lobby => NextStep::StartQuiz,
+                _ if following == self.quiz.slides.len() => NextStep::FinalRanking,
+                _ => NextStep::NextSlide,
+            });
         }
         match &self.phase {
             Phase::Welcome => Some(NextStep::Registration),
             Phase::Question(QuestionStep::Ready) => Some(NextStep::StartQuestion),
             Phase::Question(QuestionStep::Running { .. }) => Some(NextStep::EndQuestion),
             Phase::Question(QuestionStep::Closed) => Some(NextStep::ShowAnswer),
-            Phase::Final { .. } => Some(NextStep::FinalStep),
+            Phase::Final { step } => Some(NextStep::FinalStep { place: FINAL_LAST_STEP.checked_sub(step + 1).filter(|&place| place > 0) }),
             // Buzzed; the other phases leave the slide (`next_leaves_slide`).
             _ => None,
         }
@@ -1743,7 +1754,7 @@ impl Game {
 
     fn next(&mut self, now: u64) -> Result<Vec<Effect>, GameError> {
         match self.next_step().ok_or(GameError::NotNow)? {
-            NextStep::NextSlide => {
+            NextStep::NextSlide | NextStep::StartQuiz | NextStep::FinalRanking => {
                 let following = self.following().ok_or(GameError::NotNow)?;
                 Ok(self.show_slide(following, now))
             }
@@ -1759,7 +1770,7 @@ impl Game {
                 // the last buzz judged wrong (`judge`).
                 Ok(vec![self.lights_now(), Effect::Sound { cue: Cue::Reveal }])
             }
-            NextStep::FinalStep => {
+            NextStep::FinalStep { .. } => {
                 let Phase::Final { step } = &self.phase else { return Err(GameError::NotNow) };
                 let step = step + 1;
                 self.phase = Phase::Final { step };

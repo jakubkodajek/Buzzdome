@@ -1,5 +1,4 @@
 import { ANSWER_LETTERS, answerIndex } from "./answers";
-import { FINAL_LAST_STEP } from "./bindings/Constants";
 import { playerName, type StringKey, type Translate } from "./i18n";
 import type { Button, BuzzerId, Cue, GameView, NextStep, Phase } from "./types";
 
@@ -91,39 +90,25 @@ function buzzedLabel(t: Translate, view: GameView, buzzer: BuzzerId, button: But
   return { who, detail: details.length > 0 ? details.join(" · ") : null };
 }
 
-/** How the Next button says what it does in each step (`Controls::next_step`), where the step alone says it. */
-const NEXT_STEP_LABEL: Record<Exclude<NextStep, "nextSlide" | "finalStep">, StringKey> = {
+/** How the Next button says what it does in each step (`Controls::next_step`), but the final ranking's, which names its place. */
+const NEXT_STEP_LABEL: Record<Exclude<NextStep, { finalStep: unknown }>, StringKey> = {
   registration: "nextRegistration",
   startQuestion: "nextStartQuestion",
   endQuestion: "nextEndQuestion",
   showAnswer: "nextShowAnswer",
+  startQuiz: "nextStartQuiz",
+  finalRanking: "nextFinalRanking",
+  nextSlide: "nextSlide",
 };
 
-/**
- * What the Next button does now, in words: its step (`Controls::next_step`),
- * told apart further where the view says more. From the registration Next
- * starts the quiz, from the last slide it opens the final ranking, and in
- * the final ranking it says which place it shows: steps 1 to
- * `FINAL_LAST_STEP - 1` show the places from the third up to the winner,
- * the last step the whole ranking.
- */
+/** What the Next button does now, in words, as the show says it (`Controls::next_step`). */
 export function nextLabel(t: Translate, view: GameView): string {
   const step = view.controls.nextStep;
-  switch (step) {
-    case null:
-      return t("next");
-    case "nextSlide":
-      if (view.phase.phase === "lobby") return t("nextStartQuiz");
-      return view.nextSlide !== null && view.nextSlide >= view.slideCount ? t("nextFinalRanking") : t("nextSlide");
-    case "finalStep": {
-      const shows = view.phase.phase === "final" ? view.phase.step + 1 : FINAL_LAST_STEP;
-      const place = FINAL_LAST_STEP - shows;
-      if (place < 1) return t("nextFinalTable");
-      return place === 1 ? t("nextFinalWinner") : t("nextFinalPlace", { n: place });
-    }
-    default:
-      return t(NEXT_STEP_LABEL[step]);
-  }
+  if (step === null) return t("next");
+  if (typeof step === "string") return t(NEXT_STEP_LABEL[step]);
+  const { place } = step.finalStep;
+  if (place === null) return t("nextFinalTable");
+  return place === 1 ? t("nextFinalWinner") : t("nextFinalPlace", { n: place });
 }
 
 /**

@@ -52,9 +52,9 @@ describe("commandForKey", () => {
   });
 
   it("gives only commands the projector may give, as its keys are the same", () => {
-    const keys = [..."abcdefghijklmnopqrstuvwxyz0123456789", " ", "ArrowRight", "PageDown", "Enter", "Escape", "Backspace"];
+    const keys = [..."abcdefghijklmnopqrstuvwxyz0123456789", " ", "ArrowRight", "PageDown", "ArrowLeft", "PageUp", "Enter", "Escape", "Backspace"];
     const all: Controls = { next: true, remoteNext: true, judge: true, pauseClock: true, resumeClock: true, closeQuestion: true, playVideo: true, goTo: true, restartQuestion: true, setJoker: true, readingDone: false, nextStep: "nextSlide" };
-    const views = [viewWith(all), viewWith({ ...all, pauseClock: false }, true)];
+    const views = [viewWith(all), viewWith({ ...all, pauseClock: false }, true)].map((view) => ({ ...view, previousSlide: 1 }));
     const given = new Set(views.flatMap((view) => keys.map((key) => commandForKey(key, view)?.type).filter((type) => type !== undefined)));
     expect([...given].filter((type) => !PROJECTOR_COMMANDS.includes(type))).toEqual([]);
     expect(given.size).toBe(PROJECTOR_COMMANDS.length);
