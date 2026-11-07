@@ -31,6 +31,7 @@ export type { Corners } from "./bindings/Corners";
 export type { CorrectAnswer } from "./bindings/CorrectAnswer";
 export type { Command } from "./bindings/Command";
 export type { Controls } from "./bindings/Controls";
+export type { NextStep } from "./bindings/NextStep";
 export type { Cue } from "./bindings/Cue";
 export type { DeviceInfo } from "./bindings/DeviceInfo";
 export type { EditorDraft } from "./bindings/EditorDraft";

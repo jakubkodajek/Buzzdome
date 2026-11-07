@@ -45,7 +45,8 @@ import { quizPicker, slideContext } from "../quiz";
 import { RecentFileList } from "../recent-files";
 import { ThemeContext, ThemesProvider, useResolvedTheme, useThemes } from "../theme/context";
 import { isThemeMissing } from "../theme/themes";
-import type { AutoStepView, GameView, Quiz } from "../types";
+import type { AutoStepView, GameView, NextStep, Quiz } from "../types";
+import type { StringKey } from "../i18n";
 import { QuestionsTab } from "./QuestionsTab";
 import { LaunchCheck } from "./LaunchCheck";
 import { useLaunchCheckSetting, type LaunchCheckSetting } from "./launch-check";
@@ -318,6 +319,16 @@ function StartPane({ showStart, onEditor }: { showStart: ShowStart; onEditor: (a
 }
 
 /** A command; `pressed`: a toggle, pressed while what it shows is on (the ranking on the projector). */
+/** How the Next button says what it does in each step (`Controls::next_step`). */
+const NEXT_STEP_LABEL: Record<NextStep, StringKey> = {
+  registration: "nextRegistration",
+  startQuestion: "nextStartQuestion",
+  endQuestion: "endQuestion",
+  showAnswer: "nextShowAnswer",
+  finalStep: "nextFinalStep",
+  nextSlide: "nextSlide",
+};
+
 function CommandButton(props: { icon: ReactNode; label: string; hint?: string; tone?: "good" | "bad"; pressed?: boolean; disabled?: boolean; onClick: () => void }) {
   return (
     <button className={`command ${props.tone ?? ""}`} aria-pressed={props.pressed} disabled={props.disabled} onClick={props.onClick}>
@@ -479,7 +490,14 @@ function StepCommands({ view, onRestart }: { view: GameView; onRestart: () => vo
     : { icon: <PauseIcon />, label: t(view.autoStep ? "holdAutoStep" : "pause"), command: { type: "pauseClock" } as const };
   return (
     <>
-      <CommandButton icon={<NextIcon />} label={t("next")} hint={hint(KEYS.next)} disabled={!controls.next} onClick={() => dispatch({ type: "next" })} />
+      {/* Says what Next does now; "Next" and its key stay beside it. */}
+      <CommandButton
+        icon={<NextIcon />}
+        label={controls.nextStep ? t(NEXT_STEP_LABEL[controls.nextStep]) : t("next")}
+        hint={controls.nextStep ? `${t("next")} · ${hint(KEYS.next)}` : hint(KEYS.next)}
+        disabled={!controls.next}
+        onClick={() => dispatch({ type: "next" })}
+      />
       {/* Always there, one line high, so a buzz does not move the commands under it. */}
       <div className="judged" role="status" title={judged ?? undefined}>
         {judged}

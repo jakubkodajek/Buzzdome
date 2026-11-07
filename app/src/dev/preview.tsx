@@ -22,8 +22,10 @@ import type {
   LightsSetup,
   MediaLibrary,
   MediaNow,
+  NextStep,
   NowPlaying,
   Pad,
+  Phase,
   PlayerCommand,
   PlayerView,
   Quiz,
@@ -182,7 +184,23 @@ function view(partial: Partial<GameView>): GameView {
     welcome: null,
     ...partial,
   };
-  return { ...shown, answerShares: answerShares(shown.slide) };
+  // What Next does, as `Game::controls` would say for the scene's phase.
+  const controls = { ...shown.controls, nextStep: shown.controls.next ? (shown.controls.nextStep ?? nextStepOf(shown.phase)) : null };
+  return { ...shown, controls, answerShares: answerShares(shown.slide) };
+}
+
+/** What Next does in `phase` (`Game::next_step`), for the scenes. */
+function nextStepOf(phase: Phase): NextStep {
+  switch (phase.phase) {
+    case "welcome":
+      return "registration";
+    case "final":
+      return "finalStep";
+    case "question":
+      return phase.step === "ready" ? "startQuestion" : phase.step === "running" ? "endQuestion" : phase.step === "closed" ? "showAnswer" : "nextSlide";
+    default:
+      return "nextSlide";
+  }
 }
 
 const answered: Partial<PlayerView>[] = [
