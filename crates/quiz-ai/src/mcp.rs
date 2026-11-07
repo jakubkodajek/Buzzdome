@@ -217,7 +217,8 @@ fn noted(mut check: Check, context: &Context) -> Check {
 }
 
 /// The themes as the assistant chooses from them: their id, name, colours
-/// and fonts, without the package's file paths.
+/// and look. Fonts are left out: a theme's fonts are files in its package,
+/// which a slide's `font` (a font installed on the computer) cannot name.
 fn theme_choices(themes: &[quiz_core::Theme]) -> Vec<Value> {
     themes
         .iter()
@@ -228,7 +229,6 @@ fn theme_choices(themes: &[quiz_core::Theme]) -> Vec<Value> {
                 "name": theme.name,
                 "default": index == 0,
                 "colors": theme.colors,
-                "fonts": theme.fonts,
                 "corners": theme.corners,
                 "headings": theme.headings,
             })
@@ -294,7 +294,7 @@ const TOOLS: [Tool; 10] = [
     Tool {
         name: "list_themes",
         title: "List themes",
-        description: "The themes this Buzzdome has for a quiz's theme field: id, name in Czech and English, colours, fonts, \
+        description: "The themes this Buzzdome has for a quiz's theme field: id, name in Czech and English, colours, \
                       corners and heading case. The default comes first; a quiz without a theme shows it.",
         read_only: true,
         input: || object(json!({}), &[]),

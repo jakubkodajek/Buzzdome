@@ -111,7 +111,22 @@ impl SoundSlot {
     /// Any other id (one from a newer build, or one that does not fit)
     /// plays the moment's default.
     pub fn plays(self, id: &str) -> bool {
-        SoundSlot::ALL.into_iter().filter(|slot| slot.is_music() == self.is_music()).any(|slot| slot.made_for().contains(&id))
+        self.playable().contains(&id)
+    }
+
+    /// The app's own sounds that play at this moment (`plays`), in the
+    /// order of the moments they are made for, each once. The UI's player
+    /// reads them from `Constants.ts` (`SLOT_PLAYABLE_IDS`).
+    pub fn playable(self) -> Vec<&'static str> {
+        let mut ids: Vec<&'static str> = Vec::new();
+        for slot in SoundSlot::ALL.into_iter().filter(|slot| slot.is_music() == self.is_music()) {
+            for &id in slot.made_for() {
+                if !ids.contains(&id) {
+                    ids.push(id);
+                }
+            }
+        }
+        ids
     }
 }
 
@@ -150,12 +165,12 @@ pub struct QuizSounds {
     #[schemars(with = "BTreeMap<SoundSlot, SoundChoice>")]
     #[ts(as = "BTreeMap<SoundSlot, SoundChoice>")]
     pub slots: BTreeMap<SoundSlot, SoundChoice>,
-    /// Percent, up to 100 (`MAX_SOUND_VOLUME`).
+    /// Percent, up to `MAX_SOUND_VOLUME`.
     #[serde(with = "effects_volume")]
     #[schemars(with = "u8", range(max = MAX_SOUND_VOLUME))]
     #[ts(as = "u8")]
     pub effects_volume: u8,
-    /// Percent, up to 100 (`MAX_SOUND_VOLUME`).
+    /// Percent, up to `MAX_SOUND_VOLUME`.
     #[serde(with = "music_volume")]
     #[schemars(with = "u8", range(max = MAX_SOUND_VOLUME))]
     #[ts(as = "u8")]

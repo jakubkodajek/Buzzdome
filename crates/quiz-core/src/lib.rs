@@ -111,6 +111,7 @@ mod ui_constants {
             ("EFFECT_SLOTS", sound_slots(false)),
             ("MUSIC_SLOTS", sound_slots(true)),
             ("SLOT_SOUND_IDS", slot_sound_ids()),
+            ("SLOT_PLAYABLE_IDS", slot_playable_ids()),
             ("STAGES", format!("{} as const", serde_json::to_string(&crate::Stage::ALL).unwrap())),
             ("ANSWER_BUTTONS", format!("{} as const", serde_json::to_string(&crate::game::ANSWER_BUTTONS).unwrap())),
         ];
@@ -130,6 +131,12 @@ mod ui_constants {
     /// The app's own sounds made for each moment (`SoundSlot::made_for`).
     fn slot_sound_ids() -> String {
         let ids: std::collections::BTreeMap<_, _> = crate::SoundSlot::ALL.into_iter().map(|slot| (slot, slot.made_for())).collect();
+        format!("{} as const", serde_json::to_string(&ids).unwrap())
+    }
+
+    /// The app's own sounds each moment plays (`SoundSlot::playable`).
+    fn slot_playable_ids() -> String {
+        let ids: std::collections::BTreeMap<_, _> = crate::SoundSlot::ALL.into_iter().map(|slot| (slot, slot.playable())).collect();
         format!("{} as const", serde_json::to_string(&ids).unwrap())
     }
 

@@ -2,7 +2,7 @@
 // from the app's own library (made by `library/make_sounds.py`), from a
 // sound file of the quiz, or nothing.
 
-import { LAST_SECONDS_MS, MUSIC_SLOTS, SLOT_SOUND_IDS, SOUND_SLOTS } from "../bindings/Constants";
+import { LAST_SECONDS_MS, MUSIC_SLOTS, SLOT_PLAYABLE_IDS, SLOT_SOUND_IDS, SOUND_SLOTS } from "../bindings/Constants";
 import type { StringKey, Translate } from "../i18n";
 import { CUE_LABEL } from "../phase";
 import type { QuizSounds, SoundChoice, SoundSlot } from "../types";
@@ -121,10 +121,12 @@ export function defaultChoice(slot: SoundSlot): SoundChoice {
   return isMusic(slot) ? "none" : { builtIn: SLOT_SOUNDS[slot].madeFor[0] };
 }
 
-/** The app's sound with `id`, if it has one that fits the moment: an effect for an effect, music for music. */
+/**
+ * The app's sound with `id`, if it plays at the moment: one quiz-core says
+ * fits it (`SoundSlot::playable`), an effect for an effect, music for music.
+ */
 export function librarySoundFor(slot: SoundSlot, id: string): LibrarySound | undefined {
-  const sound = BY_ID.get(id);
-  return sound && (sound.kind === "music") === isMusic(slot) ? sound : undefined;
+  return (SLOT_PLAYABLE_IDS[slot] as readonly string[]).includes(id) ? BY_ID.get(id) : undefined;
 }
 
 /**

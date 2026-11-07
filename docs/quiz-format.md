@@ -434,10 +434,12 @@ else UTF-8, else Windows-1250; its separator is whichever of `;`, tab and
 and CRLF line ends, separated by `;` when the app is in Czech and `,` in
 English, as Excel expects in those locales.
 
-**Cell values.** A workbook cell that is no text is read as text the way
-a Czech spreadsheet program shows it, as the sheet's language is not known
-and Czech Excel turns a typed `17.11.1989` or `Pravda` into a date or a
-flag: a number without formatting (`30`, `1.5`), a date `17.11.1989`, a
+**Cell values.** A workbook cell that is no text is read as text in one
+fixed wording, Czech for dates and flags, as the sheet's language is not
+known and Czech Excel turns a typed `17.11.1989` or `Pravda` into a date or
+a flag. It is not always what Excel shows: a number keeps a decimal point
+(`30`, `1.5`, also an answer typed `3,14` in Czech Excel, which comes in as
+`3.14`; type such an answer with a leading `'` to keep the comma), a date `17.11.1989`, a
 time `10:30` (`10:30:15` with seconds), a date and time `17.11.1989 10:30`,
 a duration `25:30`, a flag `PRAVDA` or `NEPRAVDA`. A date's own display
 format is not read, so a typed `1.2` that Excel made a date comes in as

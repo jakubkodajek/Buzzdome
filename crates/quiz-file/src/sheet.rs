@@ -319,10 +319,12 @@ fn unpacked_size(path: &Path, max: u64) -> Result<u64> {
     Ok(total)
 }
 
-/// A cell as text, near what a Czech spreadsheet program shows, as the
+/// A cell as text in one fixed wording, Czech for dates and flags, as the
 /// sheet's language is not known and quizzes are written in Czech Excel
-/// (which turns a typed `17.11.1989` or `Pravda` into a date or a flag): a
-/// number without formatting (`30`, `1.5`), a date `17.11.1989`, a time
+/// (which turns a typed `17.11.1989` or `Pravda` into a date or a flag).
+/// It is not what Excel shows (that depends on the cell's format and the
+/// computer's language): a number keeps a decimal point (`30`, `1.5`), so
+/// points and times read as numbers; a date `17.11.1989`, a time
 /// `10:30` (`10:30:15` with seconds), both `17.11.1989 10:30`, a duration
 /// `25:30`, a flag `PRAVDA` / `NEPRAVDA`. An error, or a formula with no
 /// value saved, is empty.

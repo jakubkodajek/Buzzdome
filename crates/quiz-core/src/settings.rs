@@ -41,7 +41,7 @@ pub struct QuizSettings {
     #[schemars(with = "AllAnswered")]
     #[ts(as = "AllAnswered")]
     pub all_answered: AllAnswered,
-    /// Seconds it waits before it does it, up to 10 (`MAX_ALL_ANSWERED_DELAY_S`);
+    /// Seconds it waits before it does it, up to `MAX_ALL_ANSWERED_DELAY_S`;
     /// the quizmaster can step in meanwhile.
     #[serde(with = "all_answered_delay")]
     #[schemars(with = "u8", range(max = MAX_ALL_ANSWERED_DELAY_S))]
@@ -54,7 +54,7 @@ pub struct QuizSettings {
     #[schemars(with = "bool")]
     #[ts(as = "bool")]
     pub next_after_reveal: bool,
-    /// Seconds, up to 60 (`MAX_AFTER_REVEAL_DELAY_S`).
+    /// Seconds, up to `MAX_AFTER_REVEAL_DELAY_S`.
     #[serde(with = "after_reveal_delay")]
     #[schemars(with = "u8", range(max = MAX_AFTER_REVEAL_DELAY_S))]
     #[ts(as = "u8")]
@@ -102,7 +102,7 @@ pub struct QuizSettings {
     #[schemars(with = "bool")]
     #[ts(as = "bool")]
     pub answer_chart: bool,
-    /// Jokers each player has for the show, up to 5 (`MAX_JOKERS`); none by
+    /// Jokers each player has for the show, up to `MAX_JOKERS`; none by
     /// default. A player's joker doubles what one question gives them,
     /// the penalty too; the quizmaster plays it before the question ends.
     #[serde(with = "jokers")]
@@ -120,8 +120,8 @@ pub struct QuizSettings {
     #[schemars(with = "ReadAloud")]
     #[ts(as = "ReadAloud")]
     pub read_aloud: ReadAloud,
-    /// Which of the voice model's voices reads, 0 to 9 (`MAX_VOICE`): 0 to 4
-    /// sound female, 5 to 9 male (`FIRST_MALE_VOICE`).
+    /// Which of the voice model's voices reads, 0 to `MAX_VOICE`: those below
+    /// `FIRST_MALE_VOICE` sound female, the rest male.
     #[serde(with = "voice")]
     #[schemars(with = "u8", range(max = MAX_VOICE))]
     #[ts(as = "u8")]
