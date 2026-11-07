@@ -6,7 +6,7 @@ import { confirmAction, confirmSave, tellFailure, type SaveChoice } from "./conf
 import { loadDraftAfterWrites } from "./editor/useQuizEditor";
 import type { Translate } from "./i18n";
 import { errorText } from "./messages";
-import { quizPicker } from "./quiz";
+import { quizName, quizPicker } from "./quiz";
 import type { CloseReason, EditorDraft, Picker, SavedDraft } from "./types";
 
 /** What answering a close request uses: the backend and the system's dialogs. */
@@ -45,7 +45,7 @@ export async function answerClose(t: Translate, reason: CloseReason, deps: Close
   const draft = reason.unsavedQuiz && !reason.show ? await deps.loadDraft() : null;
   let quit: boolean;
   if (draft) {
-    const title = draft.quiz.title || t("untitledQuiz");
+    const title = quizName(t, draft.quiz);
     const choice = await deps.confirmSave(t("quitSaveQuiz", { title }));
     quit = choice === "discard" || (choice === "save" && (await saved(t, draft, title, deps)));
   } else {

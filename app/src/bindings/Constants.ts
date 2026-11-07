@@ -49,4 +49,3 @@ export const EFFECT_SLOTS = ["clockStart","countdown","buzz","correct","wrong","
 export const MUSIC_SLOTS = ["lobbyMusic","betweenMusic","clockMusic","buildUpMusic","winnerMusic"] as const;
 export const STAGES = ["noShow","lobby","billboard","explanation","endOfRound","questionReady","answering","lastSeconds","buzzed","closed","revealed","leaderboard","finalBuildUp","winner"] as const;
 export const ANSWER_BUTTONS = ["a","b","c","d"] as const;
-export const WARNING_PROBLEMS = ["noSlides","questionTextEmpty","answerEmpty"] as const;

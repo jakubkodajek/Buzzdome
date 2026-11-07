@@ -4,7 +4,7 @@
 
 import type { api } from "../api";
 import { isAppError } from "../messages";
-import type { EditorDraft, Quiz, ValidationError } from "../types";
+import type { Checked, EditorDraft, Quiz } from "../types";
 import { DraftQueue } from "./draft-queue";
 
 /** The backend's draft commands; a test stands in for them. */
@@ -42,7 +42,7 @@ interface Write {
   draft: string;
   quiz: Quiz;
   unsaved: boolean;
-  checked: (problems: ValidationError[]) => void;
+  checked: (checked: Checked) => void;
 }
 
 /**
@@ -152,7 +152,7 @@ export class DraftSession {
    * or a later one works; one for a draft that another has replaced is let
    * go, but not one for the open draft: its change is not in the draft.
    */
-  write(draft: string, quiz: Quiz, unsaved: boolean, checked: (problems: ValidationError[]) => void): void {
+  write(draft: string, quiz: Quiz, unsaved: boolean, checked: (checked: Checked) => void): void {
     this.cancelRetry();
     const write = { draft, quiz, unsaved, checked };
     this.latest = write;

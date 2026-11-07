@@ -16,7 +16,7 @@ import type { AllAnswered, Quiz, QuizLanguage, QuizSettings, QuizSounds, ReadAlo
 import { actionButton, tooltip, type Action, type Actions } from "./actions";
 import { AiPage } from "./AiPage";
 import { MediaPicker, NumberBox, Select, Switch } from "./controls";
-import { splitProblems, type OpenQuiz } from "./editor-state";
+import type { OpenQuiz } from "./editor-state";
 import { SoundsSettings } from "./SoundsSettings";
 
 export type BackstagePage = "info" | "settings" | "open" | "import" | "export" | "ai";
@@ -128,7 +128,7 @@ function pageFor(page: BackstagePage, props: BackstageProps, open: OpenQuiz) {
 function InfoPage({ open, unsaved, onTitle, onShowSlide }: BackstageProps & { open: OpenQuiz }) {
   const { t } = useApp();
   const quiz = open.history.present;
-  const { problems, warnings } = splitProblems(open.problems);
+  const { problems, warnings } = open;
   return (
     <>
       <h1>{t("info")}</h1>

@@ -28,7 +28,7 @@ import { ThemeContext } from "../theme/context";
 import { useLatest, useWindowTitle } from "../hooks";
 import { createStore, useStore } from "../store";
 import type { StringKey } from "../i18n";
-import type { EditorDraft, Slide, ValidationError } from "../types";
+import type { Checked, EditorDraft, Slide, ValidationError } from "../types";
 import type { DraftOperation } from "./draft-session";
 import { actionButton, tooltip, useActionKeys, type Action, type ActionId, type Actions } from "./actions";
 import { Backstage, type BackstagePage } from "./Backstage";
@@ -36,7 +36,7 @@ import { CategoryView } from "./CategoryView";
 import { ContextMenu } from "./controls";
 import { DesignArea, NotesBox } from "./DesignArea";
 import { EditSlideDialog } from "./EditSlideDialog";
-import { isUnsaved, needsInfo, splitProblems, type OpenQuiz } from "./editor-state";
+import { isUnsaved, needsInfo, type OpenQuiz } from "./editor-state";
 import { isMediaElement, type ElementId } from "./elements";
 import { fieldsMerge } from "./history";
 import { LayoutGallery } from "./LayoutGallery";
@@ -188,7 +188,7 @@ function Studio({ editor, open, ask, onExit }: { editor: QuizEditor; open: OpenQ
   const several = selected.length > 1;
   const dialogSlide = dialog ? slides.find((s) => s.id === dialog.id) : undefined;
   const unsaved = open !== null && isUnsaved(open);
-  const { problems, warnings } = splitProblems(open?.problems ?? []);
+  const { problems, warnings } = open ?? NOTHING_CHECKED;
   // Nothing to save: every change is in the quiz file that Save writes (a new quiz has none yet, a JSON quiz is saved as one).
   const saved = open !== null && !unsaved && open.savesInPlace;
 
@@ -596,6 +596,9 @@ function Studio({ editor, open, ask, onExit }: { editor: QuizEditor; open: OpenQ
     </MediaRootContext>
   );
 }
+
+/** What the editor shows without an open quiz. */
+const NOTHING_CHECKED: Checked = { problems: [], warnings: [] };
 
 /** The ids of the slides `problems` are on. */
 function slideIds(problems: ValidationError[]): Set<string> {

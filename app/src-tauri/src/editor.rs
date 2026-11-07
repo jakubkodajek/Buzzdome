@@ -127,12 +127,26 @@ pub struct EditorDraft {
     pub unsaved: bool,
     /// Folder of the draft's media, ending with a path separator.
     pub media_root: String,
-    /// What keeps it from being saved or played, then its warnings
-    /// (`Problem::is_warning`), which never do (`checked`).
-    pub problems: Vec<ValidationError>,
+    /// What keeps it from being saved or played, and its warnings (`checked`).
+    #[serde(flatten)]
+    #[ts(flatten)]
+    pub checked: Checked,
     /// What the file has that the quiz cannot keep (`quiz_core::ReadQuiz`),
     /// so saving leaves it out.
     pub dropped: Vec<ValidationError>,
+}
+
+/// What the editor shows of a quiz (`checked`), told apart by the backend
+/// so the editor never decides which problem is a warning.
+#[derive(Debug, PartialEq, Serialize, TS)]
+#[ts(export)]
+#[serde(rename_all = "camelCase")]
+pub struct Checked {
+    /// What keeps it from being saved or played (`quiz_file::problems`).
+    pub problems: Vec<ValidationError>,
+    /// What looks unfinished but plays (`Quiz::warnings`), which keeps it
+    /// from nothing.
+    pub warnings: Vec<ValidationError>,
 }
 
 /// Where `editor_save` saved the draft.
@@ -300,18 +314,16 @@ fn new_draft_folder(dir: &Path) -> CmdResult<(String, PathBuf)> {
 }
 
 /// What the editor shows of the quiz in `root`: what keeps it from being
-/// saved or played (`quiz_file::problems`), then what looks unfinished
+/// saved or played (`quiz_file::problems`), and what looks unfinished
 /// (`Quiz::warnings`), which keeps it from nothing.
-fn checked(quiz: &Quiz, root: &Path) -> Vec<ValidationError> {
-    let mut found = quiz_file::problems(quiz, root);
-    found.extend(quiz.warnings());
-    found
+fn checked(quiz: &Quiz, root: &Path) -> Checked {
+    Checked { problems: quiz_file::problems(quiz, root), warnings: quiz.warnings() }
 }
 
 /// Describes the draft in `root` for the editor.
 fn describe(root: &Path, pointer: Pointer, quiz: Quiz) -> EditorDraft {
     EditorDraft {
-        problems: checked(&quiz, root),
+        checked: checked(&quiz, root),
         id: pointer.folder,
         quiz,
         saves_in_place: pointer.source_path.as_deref().is_some_and(|source| is_quiz_file(Path::new(source))),
@@ -380,11 +392,11 @@ pub async fn editor_open(app: AppHandle, window: Window, recent: Option<String>,
 }
 
 /// Stores the edited quiz in the draft `draft` and returns what keeps it
-/// from being played, then its warnings (`checked`). `unsaved` tells whether it differs from the saved
+/// from being played, and its warnings (`checked`). `unsaved` tells whether it differs from the saved
 /// file; until such a change is written, closing the app asks
 /// (`UnkeptEdits`).
 #[tauri::command]
-pub async fn editor_update(app: AppHandle, draft: String, quiz: Quiz, unsaved: bool) -> CmdResult<Vec<ValidationError>> {
+pub async fn editor_update(app: AppHandle, draft: String, quiz: Quiz, unsaved: bool) -> CmdResult<Checked> {
     let unkept = app.state::<UnkeptEdits>();
     unkept.begin(&draft, unsaved);
     let written = on_draft(app.clone(), draft.clone(), move |_, dir, root, pointer| {
@@ -539,6 +551,24 @@ mod tests {
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
         dir
+    }
+
+    #[test]
+    fn the_editor_is_told_warnings_apart_from_problems() {
+        let root = editor_dir("checked");
+        let empty = Quiz::new("Quiz", Vec::new());
+        assert_eq!(checked(&empty, &root), Checked { problems: Vec::new(), warnings: empty.warnings() });
+        let mut quiz = Quiz::from_json(crate::DEMO_QUIZ).unwrap();
+        let question = quiz.slides.iter_mut().find(|slide| matches!(slide.content, quiz_core::SlideContent::Question(_))).unwrap();
+        question.picture = Some("media/gone.png".into());
+        if let quiz_core::SlideContent::Question(question) = &mut question.content {
+            question.text.clear();
+        }
+        let found = checked(&quiz, &root);
+        assert!(!found.problems.is_empty() && !found.warnings.is_empty(), "{found:?}");
+        assert!(found.problems.iter().all(|found| !found.problem.is_warning()), "{found:?}");
+        assert!(found.warnings.iter().all(|found| found.problem.is_warning()), "{found:?}");
+        fs::remove_dir_all(&root).unwrap();
     }
 
     #[test]

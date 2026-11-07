@@ -3,7 +3,7 @@ import type { EditorDraft, Quiz } from "../types";
 import { BUSY, DraftSession, heldIn, type DraftApi } from "./draft-session";
 
 const quiz = (title: string): Quiz => ({ schemaVersion: 1, title, theme: null, slides: [] });
-const draft = (id: string, title = id): EditorDraft => ({ id, quiz: quiz(title), sourcePath: null, savesInPlace: false, unsaved: false, mediaRoot: "/d/", problems: [], dropped: [] });
+const draft = (id: string, title = id): EditorDraft => ({ id, quiz: quiz(title), sourcePath: null, savesInPlace: false, unsaved: false, mediaRoot: "/d/", problems: [], warnings: [], dropped: [] });
 const FULL_DISK = { code: "file", action: "write", path: "/d/quiz.json", detail: "No space left on device" };
 
 /** A promise with its resolver, to finish a backend call when a test says so. */
@@ -32,7 +32,7 @@ function fakeApi(start = "draft-1") {
       calls.push(`update ${id} ${written.title}`);
       if (current === null) throw { code: "noDraft" };
       if (id !== current) throw { code: "draftChanged" };
-      return [];
+      return { problems: [], warnings: [] };
     }),
     editorSave: vi.fn(async (id: string, saved: Quiz, saveAs: boolean) => {
       calls.push(`save ${id} ${saved.title}${saveAs ? " as" : ""}`);
@@ -261,7 +261,7 @@ describe("DraftSession", () => {
     const loaded = await session.load();
     expect(loaded?.quiz.title).toBe("Edited");
     expect(loaded?.unsaved).toBe(true);
-    draftApi.editorUpdate.mockResolvedValue([]);
+    draftApi.editorUpdate.mockResolvedValue({ problems: [], warnings: [] });
     await vi.advanceTimersByTimeAsync(1000);
     expect((await session.load())?.quiz.title).toBe("draft-1");
   });

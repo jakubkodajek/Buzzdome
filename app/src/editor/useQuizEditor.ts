@@ -114,7 +114,7 @@ export function useQuizEditor(onTestRun: () => void): QuizEditor {
   useEffect(() => {
     if (!draftId || !present || present === written.current) return;
     written.current = present;
-    drafts.write(draftId, present, unsaved, (problems) => dispatch({ type: "checked", quiz: present, problems }));
+    drafts.write(draftId, present, unsaved, (checked) => dispatch({ type: "checked", quiz: present, ...checked }));
   }, [draftId, present, unsaved]);
 
   /**

@@ -12,6 +12,7 @@ import type {
   BuzzerId,
   BuzzerSeen,
   Category,
+  Checked,
   ClockView,
   CloseReason,
   Command,
@@ -57,7 +58,6 @@ import type {
   SoundBoard,
   Theme,
   UpdateProgress,
-  ValidationError,
   VoiceDownload,
   VoiceLine,
   VoiceModel,
@@ -221,7 +221,7 @@ export const api = {
   /** Opens `recent`, a file in `recentFiles`, or a quiz file the quizmaster picks; null when they cancel. */
   editorOpen: (recent: string | null, picker: Picker) => invoke<EditorDraft | null>("editor_open", { recent, picker }),
   /** Stores the edited quiz; returns what keeps it from being played. */
-  editorUpdate: (draft: string, quiz: Quiz, unsaved: boolean) => invoke<ValidationError[]>("editor_update", { draft, quiz, unsaved }),
+  editorUpdate: (draft: string, quiz: Quiz, unsaved: boolean) => invoke<Checked>("editor_update", { draft, quiz, unsaved }),
   /** Saves over the quiz file the draft came from, unless `saveAs`, else where the quizmaster picks; returns the path, null when they cancel. */
   editorSave: (draft: string, quiz: Quiz, saveAs: boolean, picker: Picker) => invoke<SavedDraft | null>("editor_save", { draft, quiz, saveAs, picker }),
   /** Copies a media file of `kinds` the quizmaster picks into the draft; returns its reference (`media/...`), null when they cancel. */

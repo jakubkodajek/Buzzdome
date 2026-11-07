@@ -3,13 +3,14 @@
 // time is left, and the question's place in the quiz.
 
 import { useId, type ComponentType } from "react";
+import { LAST_SECONDS_MS } from "../bindings/Constants";
 import { minutesAndSeconds } from "../format";
 import { DEFAULT_TIMER } from "../timers";
 import type { TimerDesign } from "../types";
 import "./timer.css";
 
-/** Seconds left from which a counting clock urges the players on. */
-const URGENT_SECONDS = 5;
+/** Seconds left from which a counting clock urges the players on: the show's last seconds. */
+const URGENT_SECONDS = LAST_SECONDS_MS / 1000;
 
 export interface TimerProps {
   /** The slide's design; none is `DEFAULT_TIMER`. */
