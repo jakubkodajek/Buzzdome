@@ -81,6 +81,10 @@ const update = params.get("update");
 const broken = params.get("broken");
 /** `refused`: the backend refuses every lights setup the Lights tab stores. */
 const lightsStore = params.get("lights");
+/** `one`: only the laptop's screen, the Director's, is connected. */
+const oneMonitor = params.get("monitors") === "one";
+/** `stalls`: the voices download connects without end, as on a captive network. */
+const voicesStall = params.get("voices") === "stalls";
 /** The slides, the fourth broken when asked (`broken`). */
 const maybeBroken = (slides: Quiz["slides"]): Quiz["slides"] =>
   broken === "slide" ? slides.map((slide, i) => (i === 3 ? ({ ...slide, answers: null } as unknown as Quiz["slides"][number]) : slide)) : slides;
@@ -723,7 +727,7 @@ mockIPC(
         return [
           { id: "Built-in Display@0,0", name: "Built-in Display", width: 2560, height: 1600, director: true },
           { id: "Projector@2560,0", name: "Projector", width: 1920, height: 1080, director: false },
-        ];
+        ].slice(0, oneMonitor ? 1 : 2);
       case "quit_app":
       case "close_declined":
         called.push({ cmd });
@@ -943,7 +947,7 @@ mockIPC(
       case "voice_remove":
         return { installed: false, bytes: 128_774_318, voices: 10 };
       case "voice_install":
-        return { installed: true, bytes: 128_774_318, voices: 10 };
+        return voicesStall ? new Promise(() => undefined) : { installed: true, bytes: 128_774_318, voices: 10 };
       case "voice_clip":
       case "voice_install_cancel":
         return null;
