@@ -48,7 +48,7 @@ describe("errorText", () => {
   });
 
   it("names the button of a learn conflict and the first problem of an invalid quiz", () => {
-    expect(errorText(en, { code: "learnConflict", buzzer: 2, button: "big" })).toContain("buzzer 2, button ●");
+    expect(errorText(en, { code: "learnConflict", buzzer: 2, button: "big" })).toContain(`buzzer 2 (${en("bigButton")})`);
     const problems = [{ slideId: "q1", problem: { code: "noCorrectAnswer" } }] as const;
     expect(errorText(en, { code: "quizInvalid", problems: [...problems] })).toBe(
       "The quiz cannot be played; problems: 1. An everyone-answers question needs a correct answer.",

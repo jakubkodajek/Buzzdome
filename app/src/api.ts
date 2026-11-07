@@ -92,7 +92,7 @@ export const api = {
   forgetRecentFile: (path: string) => invoke<void>("forget_recent_file", { path }),
   startDemoShow: () => invoke<void>("start_demo_show"),
   lastSession: () => invoke<SessionSummary | null>("last_session"),
-  /** Resumes the last show; returns warnings when it runs but not quite as before (its media are missing, other rules). */
+  /** Resumes the last show; returns warnings when it runs but not quite as before (its media are missing, other rules, a question started again, a step held). */
   resumeLastSession: () => invoke<AppError[]>("resume_last_session"),
   endShow: () => invoke<void>("end_show"),
   /** `seen`: the step the window shows, for a command that moves the show on (`StepGuard`). */
@@ -106,11 +106,11 @@ export const api = {
   /** Where the projector window is; null while it is closed. */
   projectorWindow: () => invoke<ProjectorWindow | null>("projector_window"),
   reportHostProblem: (problem: HostProblem) => invoke<void>("report_host_problem", { problem }),
-  /** Ends the app; the running show stays saved for resuming. */
+  /** Ends the app, once the quizmaster confirmed a close (`close-requested`); a running show stays saved for resuming, the editor's draft for the next start. */
   quitApp: () => invoke<void>("quit_app"),
   /** The app's version, which an update changes. */
   appVersion: () => getVersion(),
-  /** The quizmaster chose not to close the app during a show: the next close asks again. */
+  /** The quizmaster chose not to close the app after a `close-requested`: the next close asks again. */
   closeDeclined: () => invoke<void>("close_declined"),
   /** Notes in the app's log a problem this window has nowhere to show. */
   logProblem: (message: string) => invoke<void>("log_problem", { message }),
@@ -247,6 +247,8 @@ export const api = {
   aiServerConfig: (language: Lang) => invoke<string>("ai_server_config", { language }),
   /** Keeps the quizmaster's instructions for every quiz; empty gives the default ones back. */
   aiSetInstructions: (instructions: string, language: Lang) => invoke<void>("ai_set_instructions", { instructions, language }),
+  /** Tells whether the AI assistants page has changes to the instructions it has not kept, so that closing the app asks first. */
+  aiInstructionsUnsaved: (unsaved: boolean) => invoke<void>("ai_instructions_unsaved", { unsaved }),
 };
 
 /** Events the backend emits (`app.emit` in app/src-tauri), with their payloads. */
@@ -274,7 +276,7 @@ export interface BackendEvents {
   "host-window": boolean;
   /** A problem the projector met, worded for the Director to show. */
   "host-problem": HostProblem;
-  /** The Director was asked to close during a show: the quizmaster confirms it (`quitApp`) or not (`closeDeclined`). */
+  /** The Director was asked to close while something would be left behind (a show, an unsaved quiz or AI instructions, all that hold): the quizmaster confirms it (`quitApp`) or not (`closeDeclined`). */
   "close-requested": CloseReason;
   /** The prepared team names changed, or a show started or ended. */
   "teams-changed": string[];

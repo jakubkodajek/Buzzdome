@@ -265,7 +265,8 @@ pub async fn voice_model(app: AppHandle) -> CmdResult<VoiceModel> {
 /// how the download goes. A model already there is kept until the new one
 /// is whole. Refused during a show, as the editor's large files are
 /// (`refuse_during_show`): the journal shares the disk. A show that begins
-/// meanwhile stops the download at its next progress report (BF111).
+/// meanwhile, or a cancel (`voice_install_cancel`), stops the download
+/// within `PROGRESS_EVERY`, also while no data comes (`unstalled`).
 #[tauri::command]
 pub async fn voice_install(app: AppHandle, progress: Channel<VoiceDownload>) -> CmdResult<VoiceModel> {
     off_ui(move || {
@@ -279,14 +280,14 @@ pub async fn voice_install(app: AppHandle, progress: Channel<VoiceDownload>) -> 
         fs::create_dir_all(&state.root).map_err(|e| AppError::file(FileAction::CreateFolder, &state.root, e))?;
         let archive = state.root.join(format!("{}.download", MODEL.id));
         state.cancelled.store(false, Ordering::SeqCst);
-        let downloaded = download(&archive, |done| {
-            let _ = progress.send(done);
-            !state.cancelled.load(Ordering::SeqCst) && refuse_during_show(&app).is_ok()
-        })
-        .map_err(|e| match e {
-            AppError::VoiceDownloadStopped if state.cancelled.load(Ordering::SeqCst) => AppError::VoiceDownloadCancelled,
-            e => e,
-        });
+        let downloaded = download(
+            &archive,
+            |done| {
+                let _ = progress.send(done);
+            },
+            || !state.cancelled.load(Ordering::SeqCst) && refuse_during_show(&app).is_ok(),
+        )
+        .map_err(|e| stopped_why(e, state.cancelled.load(Ordering::SeqCst)));
         // A show started after the last report: its journal keeps the disk,
         // and its clips the voice process. None starts while it unpacks.
         let installed = downloaded.and_then(|sha| {
@@ -302,8 +303,18 @@ pub async fn voice_install(app: AppHandle, progress: Channel<VoiceDownload>) -> 
     .await
 }
 
-/// Cancels the voice model download under way, if one is: it stops at its
-/// next progress report and fails with `VoiceDownloadCancelled`.
+/// A download that `stopped` (`VoiceDownloadStopped`) as the quizmaster
+/// `cancelled` it fails with `VoiceDownloadCancelled`; else a show began.
+fn stopped_why(e: AppError, cancelled: bool) -> AppError {
+    match e {
+        AppError::VoiceDownloadStopped if cancelled => AppError::VoiceDownloadCancelled,
+        e => e,
+    }
+}
+
+/// Cancels the voice model download under way, if one is: it stops within
+/// `PROGRESS_EVERY`, also while the connection stalls, and fails with
+/// `VoiceDownloadCancelled`.
 #[tauri::command]
 pub fn voice_install_cancel(app: AppHandle) {
     app.state::<Voice>().cancelled.store(true, Ordering::SeqCst);
@@ -362,25 +373,83 @@ pub async fn voice_clip(app: AppHandle, line: Line, render: bool) -> CmdResult<O
 }
 
 /// Downloads the model into `archive`, telling `progress` how far it got
-/// every `PROGRESS_EVERY`: the download's SHA-256. `progress` stops it by
-/// answering false, which fails it with `VoiceDownloadStopped`.
-fn download(archive: &Path, mut progress: impl FnMut(VoiceDownload) -> bool) -> CmdResult<String> {
+/// every `PROGRESS_EVERY`: the download's SHA-256. `go_on` is asked as
+/// often, also while no data comes, and stops it by answering false, which
+/// fails it with `VoiceDownloadStopped`.
+fn download(archive: &Path, mut progress: impl FnMut(VoiceDownload), go_on: impl Fn() -> bool) -> CmdResult<String> {
     let failed = |detail: String| AppError::VoiceDownload { detail };
-    let mut response = agent().get(MODEL.url).call().map_err(|e| failed(e.to_string()))?;
+    let response = agent().get(MODEL.url).call().map_err(|e| failed(e.to_string()))?;
     let file = fs::File::create(archive).map_err(|e| AppError::file(FileAction::Write, archive, e))?;
-    let body = response.body_mut().with_config().limit(MODEL.bytes + 1).reader();
+    let body = response.into_body().into_with_config().limit(MODEL.bytes + 1).reader();
+    let stopped = AtomicBool::new(false);
+    let body = unstalled(body.take(MODEL.bytes + 1), PROGRESS_EVERY, || {
+        let going = go_on();
+        stopped.store(!going, Ordering::Relaxed);
+        going
+    });
     let mut last = Instant::now();
     let total = MODEL.bytes;
-    let sha = voice::model::receive(body.take(MODEL.bytes + 1), std::io::BufWriter::new(&file), |received| {
+    let sha = voice::model::receive(body, std::io::BufWriter::new(&file), |received| {
         if last.elapsed() < PROGRESS_EVERY && received != total {
             return true;
         }
         last = Instant::now();
-        progress(VoiceDownload { received, total })
+        progress(VoiceDownload { received, total });
+        go_on()
     })
-    .map_err(voice_error)?;
+    // A read given up as `go_on` said stop is a stop, not a network failure.
+    .map_err(|e| if stopped.load(Ordering::Relaxed) { AppError::VoiceDownloadStopped } else { voice_error(e) })?;
     file.sync_all().map_err(|e| AppError::file(FileAction::Write, archive, e))?;
     Ok(sha)
+}
+
+/// `from`, read on a thread of its own, so that a read that stalls (the
+/// venue's network dropped) does not keep the download from stopping:
+/// while no data comes, `go_on` is asked every `every`, and once it says
+/// stop the read fails at once. The thread then ends with its read, at the
+/// latest when the agent's timeout ends it.
+fn unstalled<'a>(mut from: impl Read + Send + 'static, every: Duration, go_on: impl FnMut() -> bool + 'a) -> impl Read + 'a {
+    let (chunks, received) = mpsc::sync_channel::<std::io::Result<Vec<u8>>>(4);
+    thread::spawn(move || {
+        let mut buffer = vec![0u8; 1 << 16];
+        loop {
+            let read = from.read(&mut buffer).map(|n| buffer[..n].to_vec());
+            let last = !matches!(&read, Ok(chunk) if !chunk.is_empty());
+            // Nobody waits any more: the download stopped.
+            if chunks.send(read).is_err() || last {
+                return;
+            }
+        }
+    });
+    Unstalled { received, pending: std::io::Cursor::new(Vec::new()), every, go_on }
+}
+
+/// The reading end of `unstalled`.
+struct Unstalled<F> {
+    received: Receiver<std::io::Result<Vec<u8>>>,
+    /// What came and is not read yet.
+    pending: std::io::Cursor<Vec<u8>>,
+    every: Duration,
+    go_on: F,
+}
+
+impl<F: FnMut() -> bool> Read for Unstalled<F> {
+    fn read(&mut self, into: &mut [u8]) -> std::io::Result<usize> {
+        loop {
+            let n = self.pending.read(into)?;
+            if n > 0 || into.is_empty() {
+                return Ok(n);
+            }
+            match self.received.recv_timeout(self.every) {
+                Ok(Ok(chunk)) if chunk.is_empty() => return Ok(0),
+                Ok(Ok(chunk)) => self.pending = std::io::Cursor::new(chunk),
+                Ok(Err(e)) => return Err(e),
+                Err(RecvTimeoutError::Timeout) if (self.go_on)() => {}
+                Err(RecvTimeoutError::Timeout) => return Err(std::io::Error::other("stopped")),
+                Err(RecvTimeoutError::Disconnected) => return Err(std::io::ErrorKind::UnexpectedEof.into()),
+            }
+        }
+    }
 }
 
 /// Downloads over HTTPS only, redirects included; what arrives is checked
@@ -411,7 +480,7 @@ fn voice_error(e: voice::VoiceError) -> AppError {
         voice::VoiceError::Download(detail) => AppError::VoiceDownload { detail },
         voice::VoiceError::Disk(detail) => AppError::VoiceDisk { detail },
         voice::VoiceError::Damaged => AppError::VoiceDamaged,
-        // The app stops a download only for a show that began (`voice_install`).
+        // The app stops a download for a show that began or a cancel (`voice_install`, `stopped_why`).
         voice::VoiceError::Stopped => AppError::VoiceDownloadStopped,
         voice::VoiceError::Load | voice::VoiceError::Render => AppError::VoiceFailed,
     }
@@ -440,6 +509,57 @@ mod tests {
         assert_eq!(read_line(&mut output), Some(b"\"ready\"".to_vec()));
         assert_eq!(read_line(&mut output), Some(b"last".to_vec()));
         assert_eq!(read_line(&mut output), None);
+    }
+
+    #[test]
+    fn a_stopped_download_says_whether_it_was_cancelled() {
+        assert_eq!(stopped_why(AppError::VoiceDownloadStopped, true), AppError::VoiceDownloadCancelled);
+        assert_eq!(stopped_why(AppError::VoiceDownloadStopped, false), AppError::VoiceDownloadStopped, "a show began");
+        assert_eq!(stopped_why(AppError::VoiceDamaged, true), AppError::VoiceDamaged, "it failed before");
+    }
+
+    /// A connection that sends `first`, then nothing until the test ends.
+    struct Stalls {
+        first: Option<Vec<u8>>,
+        hold: Receiver<()>,
+    }
+
+    impl Read for Stalls {
+        fn read(&mut self, into: &mut [u8]) -> std::io::Result<usize> {
+            if let Some(first) = self.first.take() {
+                into[..first.len()].copy_from_slice(&first);
+                return Ok(first.len());
+            }
+            let _ = self.hold.recv();
+            Ok(0)
+        }
+    }
+
+    #[test]
+    fn a_stalled_download_stops_once_asked_without_waiting_for_data() {
+        let (release, hold) = mpsc::channel();
+        let asked = std::cell::Cell::new(0);
+        let mut body = unstalled(Stalls { first: Some(b"abc".to_vec()), hold }, Duration::from_millis(10), || {
+            asked.set(asked.get() + 1);
+            asked.get() < 3
+        });
+        let mut got = [0u8; 8];
+        assert_eq!(body.read(&mut got).unwrap(), 3);
+        assert_eq!(&got[..3], b"abc");
+        let began = Instant::now();
+        assert!(body.read(&mut got).is_err(), "stopped while the connection stalls");
+        assert_eq!(asked.get(), 3);
+        assert!(began.elapsed() < Duration::from_secs(5));
+        drop(release);
+    }
+
+    #[test]
+    fn an_unstalled_read_passes_everything_on_to_the_end() {
+        let data: Vec<u8> = (0..200_000u32).map(|i| i as u8).collect();
+        let mut body = unstalled(std::io::Cursor::new(data.clone()), Duration::from_millis(10), || true);
+        let mut got = Vec::new();
+        body.read_to_end(&mut got).unwrap();
+        assert_eq!(got, data);
     }
 
     #[test]

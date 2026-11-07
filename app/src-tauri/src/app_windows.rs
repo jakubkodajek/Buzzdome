@@ -231,8 +231,9 @@ fn logged_problem(message: &str) -> String {
     }
 }
 
-/// Ends the app, once the quizmaster confirmed it during a show. Every
-/// command is on disk already, so the show can be resumed.
+/// Ends the app, once the quizmaster confirmed it (`close-requested`):
+/// during a show, every command is on disk already, so the show can be
+/// resumed; the editor's draft keeps unsaved changes for the next start.
 #[tauri::command]
 pub fn quit_app(app: AppHandle) {
     app.exit(0);
@@ -257,7 +258,8 @@ impl CloseRequest {
     }
 }
 
-/// The quizmaster chose not to close the app: the next close asks again.
+/// The quizmaster chose not to close the app after all
+/// (`close-requested`): the next close asks again.
 #[tauri::command]
 pub fn close_declined(request: State<CloseRequest>) {
     request.forget();
@@ -286,31 +288,40 @@ fn close_answer(asked: &mut Option<Instant>, now: Instant) -> CloseAnswer {
     }
 }
 
-/// Why closing the app asks the quizmaster first (`close-requested`).
+/// Why closing the app asks the quizmaster first (`close-requested`):
+/// every reason that holds, so the question names them all.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
 #[ts(export)]
 #[serde(rename_all = "camelCase")]
-pub enum CloseReason {
-    /// A show is running.
-    Show,
+pub struct CloseReason {
+    /// A show is running; it stays saved for resuming.
+    pub show: bool,
     /// The quiz in the editor has changes that are not in its file (the
     /// draft keeps them for the next start).
-    UnsavedQuiz,
+    pub unsaved_quiz: bool,
+    /// The AI assistants page has changes to the instructions it has not
+    /// kept, which closing loses (`ai::ai_instructions_unsaved`).
+    pub unsaved_instructions: bool,
 }
 
-/// Whether the app may close now. During a show, or with unsaved changes
-/// in the editor, it waits for the Director to confirm it
-/// (`close-requested`, then `quit_app` or `close_declined`), asking once,
-/// unless a recent request went unanswered (`close_answer`).
+impl CloseReason {
+    /// The reason to ask before closing, none when nothing would be left
+    /// behind.
+    fn of(show: bool, unsaved_quiz: bool, unsaved_instructions: bool) -> Option<CloseReason> {
+        (show || unsaved_quiz || unsaved_instructions).then_some(CloseReason { show, unsaved_quiz, unsaved_instructions })
+    }
+}
+
+/// Whether the app may close now. During a show, with unsaved changes in
+/// the editor or to the AI instructions, it waits for the Director to
+/// confirm it (`close-requested`, then `quit_app` or `close_declined`),
+/// asking once, unless a recent request went unanswered (`close_answer`).
 fn may_close(app: &AppHandle) -> bool {
     if app.get_webview_window(DIRECTOR_LABEL).is_none() {
         return true;
     }
-    let reason = if show_may_run(app) {
-        CloseReason::Show
-    } else if crate::editor::has_unsaved_draft(app) {
-        CloseReason::UnsavedQuiz
-    } else {
+    let instructions = app.try_state::<crate::ai::SavedAiSettings>().is_some_and(|ai| ai.instructions_unsaved());
+    let Some(reason) = CloseReason::of(show_may_run(app), crate::editor::has_unsaved_draft(app), instructions) else {
         return true;
     };
     match app.state::<CloseRequest>().answer(Instant::now()) {
@@ -500,6 +511,16 @@ fn is_app_url(url: &Url, dev: Option<&Url>) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn closing_asks_for_every_reason_that_holds_and_none_without_one() {
+        assert_eq!(CloseReason::of(false, false, false), None, "nothing is left behind: it closes");
+        let reason = |show, unsaved_quiz, unsaved_instructions| Some(CloseReason { show, unsaved_quiz, unsaved_instructions });
+        assert_eq!(CloseReason::of(true, false, false), reason(true, false, false));
+        assert_eq!(CloseReason::of(false, true, false), reason(false, true, false));
+        assert_eq!(CloseReason::of(false, false, true), reason(false, false, true));
+        assert_eq!(CloseReason::of(true, true, true), reason(true, true, true), "a show does not hide the unsaved quiz");
+    }
 
     #[test]
     fn the_windows_stay_on_the_apps_pages() {

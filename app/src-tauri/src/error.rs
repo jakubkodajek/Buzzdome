@@ -81,6 +81,15 @@ pub enum AppError {
     /// from; it runs without them.
     #[error("the show's media are in {folder}, which the windows may not load from")]
     MediaFolderRefused { folder: String },
+    /// A resumed show stopped while the question on `slide` was in play: it
+    /// starts again, its answers and score changes taken back
+    /// (`Game::recovery_command`), and waits for the quizmaster.
+    #[error("the question on slide {slide} was in play when the show stopped; it starts again")]
+    QuestionRestarted { slide: usize },
+    /// A resumed show stopped while it counted down to a step it takes by
+    /// itself: the step waits for the quizmaster (`Game::recovery_command`).
+    #[error("the step the show was about to take by itself waits")]
+    AutoStepHeld,
 
     // Quiz files and the editor.
     /// `detail` is the system's own words, for a `reason` the UI cannot word.

@@ -11,7 +11,7 @@ import { installBrowserGuard } from "../browser-guard";
 import { setBodyText } from "../editor/slides";
 import { rightAnswers } from "../quiz";
 import { answerShares, NO_CONTROLS } from "../host/preview";
-import { ANSWER_BUTTONS, DEFAULT_QUIZ_SETTINGS, MAX_BOARD_COLUMNS, MAX_BOARD_ROWS, MAX_PLAYER_VOLUME } from "../bindings/Constants";
+import { ANSWER_BUTTONS, DEFAULT_QUIZ_SETTINGS, FINAL_LAST_STEP, MAX_BOARD_COLUMNS, MAX_BOARD_ROWS, MAX_PLAYER_VOLUME } from "../bindings/Constants";
 import type {
   Background,
   BoardChange,
@@ -220,8 +220,12 @@ function nextStepOf(phase: Phase): NextStep {
   switch (phase.phase) {
     case "welcome":
       return "registration";
-    case "final":
-      return "finalStep";
+    case "lobby":
+      return "startQuiz";
+    case "final": {
+      const place = FINAL_LAST_STEP - phase.step - 1;
+      return { finalStep: { place: place > 0 ? place : null } };
+    }
     case "question":
       return phase.step === "ready" ? "startQuestion" : phase.step === "running" ? "endQuestion" : phase.step === "closed" ? "showAnswer" : "nextSlide";
     default:
@@ -1044,6 +1048,7 @@ mockIPC(
         return voicesStall ? new Promise(() => undefined) : { installed: true, bytes: 128_774_318, voices: 10 };
       case "voice_clip":
       case "voice_install_cancel":
+      case "ai_instructions_unsaved":
         return null;
       case "lights_devices":
         return { outputs: [{ choice: { kind: "enttecPro", port: "COM4" }, label: "COM4 (FTDI)" }], midiPorts: ["loopMIDI Port"] };

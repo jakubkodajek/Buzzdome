@@ -22,6 +22,7 @@ use quiz_core::{Category, MediaKind, Quiz, ValidationError};
 use quiz_file::{FileAction, SheetExport, SheetImport};
 use serde::de::{Error as _, Unexpected};
 use serde::{Deserialize, Deserializer, Serialize};
+use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, MutexGuard};
@@ -35,6 +36,52 @@ const FOLDER_PREFIX: &str = "draft-";
 /// One editor command at a time: they share the draft folder.
 #[derive(Default)]
 pub struct EditorLock(Mutex<()>);
+
+/// Changes the editor gave (`editor_update`) that may be in neither the
+/// draft nor its file: a write of unsaved changes under way, or one that
+/// failed (a full disk, a file another program holds) until a later write
+/// of the draft works. In memory only: the pointer on disk says saved
+/// meanwhile, and closing the app must still ask (`has_unsaved_draft`).
+#[derive(Default)]
+pub struct UnkeptEdits(Mutex<BTreeMap<String, Unkept>>);
+
+/// A draft's changes not known to be kept (`UnkeptEdits`).
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+struct Unkept {
+    /// Writes of unsaved changes under way.
+    writing: usize,
+    /// The last write of unsaved changes failed.
+    failed: bool,
+}
+
+impl UnkeptEdits {
+    /// A write of the draft `draft` begins; `unsaved`: its quiz differs from the file.
+    fn begin(&self, draft: &str, unsaved: bool) {
+        if unsaved {
+            self.0.lock().unwrap().entry(draft.to_owned()).or_default().writing += 1;
+        }
+    }
+
+    /// The write `begin` began ended, `kept` or not. One that worked holds
+    /// the whole quiz, so an earlier failure is mended; one of a quiz the
+    /// file has already loses nothing.
+    fn end(&self, draft: &str, unsaved: bool, kept: bool) {
+        let mut drafts = self.0.lock().unwrap();
+        let unkept = drafts.entry(draft.to_owned()).or_default();
+        if unsaved {
+            unkept.writing = unkept.writing.saturating_sub(1);
+        }
+        unkept.failed = unsaved && !kept;
+        if *unkept == Unkept::default() {
+            drafts.remove(draft);
+        }
+    }
+
+    /// Whether the draft `draft` may have changes that are not kept.
+    fn has(&self, draft: &str) -> bool {
+        self.0.lock().unwrap().contains_key(draft)
+    }
+}
 
 /// Contents of `draft.json`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -67,6 +114,8 @@ pub struct EditorDraft {
     pub unsaved: bool,
     /// Folder of the draft's media, ending with a path separator.
     pub media_root: String,
+    /// What keeps it from being saved or played, then its warnings
+    /// (`Problem::is_warning`), which never do (`checked`).
     pub problems: Vec<ValidationError>,
     /// What the file has that the quiz cannot keep (`quiz_core::ReadQuiz`),
     /// so saving leaves it out.
@@ -125,12 +174,18 @@ fn read_pointer(dir: &Path) -> CmdResult<Option<Pointer>> {
     Ok(Some(pointer))
 }
 
-/// Whether the editor's draft has changes that are not in its quiz file,
-/// as its pointer last said. Read without the drafts' lock, from the
-/// windows' thread: the pointer is written whole, and a draft that cannot
-/// be read counts as none.
+/// Whether the editor's draft has changes that are not in its quiz file:
+/// as its pointer last said, or not kept yet (`UnkeptEdits`). Read without
+/// the drafts' lock, from the windows' thread: the pointer is written
+/// whole, and a draft that cannot be read counts as none.
 pub(crate) fn has_unsaved_draft(app: &AppHandle) -> bool {
-    editor_dir(app).ok().and_then(|dir| read_pointer(&dir).ok().flatten()).is_some_and(|pointer| pointer.unsaved)
+    let pointer = editor_dir(app).ok().and_then(|dir| read_pointer(&dir).ok().flatten());
+    pointer.is_some_and(|pointer| unsaved(app, &pointer))
+}
+
+/// Whether the draft `pointer` names has changes that are not in its file.
+fn unsaved(app: &AppHandle, pointer: &Pointer) -> bool {
+    pointer.unsaved || app.state::<UnkeptEdits>().has(&pointer.folder)
 }
 
 fn write_pointer(dir: &Path, pointer: &Pointer) -> CmdResult<()> {
@@ -220,10 +275,19 @@ fn new_draft_folder(dir: &Path) -> CmdResult<(String, PathBuf)> {
     Ok((folder, root))
 }
 
+/// What the editor shows of the quiz in `root`: what keeps it from being
+/// saved or played (`quiz_file::problems`), then what looks unfinished
+/// (`Quiz::warnings`), which keeps it from nothing.
+fn checked(quiz: &Quiz, root: &Path) -> Vec<ValidationError> {
+    let mut found = quiz_file::problems(quiz, root);
+    found.extend(quiz.warnings());
+    found
+}
+
 /// Describes the draft in `root` for the editor.
 fn describe(root: &Path, pointer: Pointer, quiz: Quiz) -> EditorDraft {
     EditorDraft {
-        problems: quiz_file::problems(&quiz, root),
+        problems: checked(&quiz, root),
         id: pointer.folder,
         quiz,
         saves_in_place: pointer.source_path.as_deref().is_some_and(|source| is_quiz_file(Path::new(source))),
@@ -234,14 +298,16 @@ fn describe(root: &Path, pointer: Pointer, quiz: Quiz) -> EditorDraft {
     }
 }
 
-/// The draft left from last time, if any.
+/// The draft left from last time, if any; unsaved also while a change the
+/// editor gave is not kept (`UnkeptEdits`).
 #[tauri::command]
 pub async fn editor_load(app: AppHandle) -> CmdResult<Option<EditorDraft>> {
-    with_drafts(app, |_, dir| {
+    with_drafts(app, |app, dir| {
         let Some(pointer) = read_pointer(dir)? else { return Ok(None) };
         let root = dir.join(&pointer.folder);
         let quiz = quiz_file::read_quiz_json(&root)?;
-        Ok(Some(describe(&root, pointer, quiz)))
+        let unsaved = unsaved(app, &pointer);
+        Ok(Some(describe(&root, Pointer { unsaved, ..pointer }, quiz)))
     })
     .await
 }
@@ -290,17 +356,23 @@ pub async fn editor_open(app: AppHandle, window: Window, recent: Option<String>,
 }
 
 /// Stores the edited quiz in the draft `draft` and returns what keeps it
-/// from being played. `unsaved` tells whether it differs from the saved file.
+/// from being played, then its warnings (`checked`). `unsaved` tells whether it differs from the saved
+/// file; until such a change is written, closing the app asks
+/// (`UnkeptEdits`).
 #[tauri::command]
 pub async fn editor_update(app: AppHandle, draft: String, quiz: Quiz, unsaved: bool) -> CmdResult<Vec<ValidationError>> {
-    on_draft(app, draft, move |_, dir, root, pointer| {
+    let unkept = app.state::<UnkeptEdits>();
+    unkept.begin(&draft, unsaved);
+    let written = on_draft(app.clone(), draft.clone(), move |_, dir, root, pointer| {
         quiz_file::write_quiz_json(&root, &quiz)?;
         if pointer.unsaved != unsaved {
             write_pointer(dir, &Pointer { unsaved, ..pointer })?;
         }
-        Ok(quiz_file::problems(&quiz, &root))
+        Ok(checked(&quiz, &root))
     })
-    .await
+    .await;
+    unkept.end(&draft, unsaved, written.is_ok());
+    written
 }
 
 /// Saves the quiz of the draft `draft` with its media as a quiz file: over
@@ -439,6 +511,42 @@ mod tests {
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
         dir
+    }
+
+    #[test]
+    fn a_change_not_kept_yet_counts_as_unsaved_until_a_later_write_works() {
+        let unkept = UnkeptEdits::default();
+        assert!(!unkept.has("draft-1"));
+        // Under way.
+        unkept.begin("draft-1", true);
+        assert!(unkept.has("draft-1"));
+        unkept.end("draft-1", true, true);
+        assert!(!unkept.has("draft-1"), "kept: the pointer says it");
+        // Failed, then tried again and failed, then kept.
+        unkept.begin("draft-1", true);
+        unkept.end("draft-1", true, false);
+        assert!(unkept.has("draft-1"), "the change is in neither the draft nor the file");
+        unkept.begin("draft-1", true);
+        unkept.end("draft-1", true, false);
+        assert!(unkept.has("draft-1"));
+        assert!(!unkept.has("draft-2"), "another draft has nothing unkept");
+        unkept.begin("draft-1", true);
+        unkept.end("draft-1", true, true);
+        assert!(!unkept.has("draft-1"));
+        // A quiz the file has (undone back to it, say) loses nothing, kept or not.
+        unkept.begin("draft-1", true);
+        unkept.end("draft-1", true, false);
+        unkept.begin("draft-1", false);
+        assert!(unkept.has("draft-1"), "not kept yet");
+        unkept.end("draft-1", false, false);
+        assert!(!unkept.has("draft-1"));
+        // Two writes under way, the first one ends.
+        unkept.begin("draft-1", true);
+        unkept.begin("draft-1", true);
+        unkept.end("draft-1", true, true);
+        assert!(unkept.has("draft-1"), "the second is still under way");
+        unkept.end("draft-1", true, true);
+        assert!(!unkept.has("draft-1"));
     }
 
     #[test]

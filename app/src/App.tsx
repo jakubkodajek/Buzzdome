@@ -1,7 +1,7 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useEffect } from "react";
 import { api } from "./api";
-import { confirmAction } from "./confirm";
+import { answerClose, closeDeps } from "./close-app";
 import { Director } from "./director/Director";
 import { ErrorBoundary, RenderFailed } from "./error-boundary";
 import { useBackendEvent } from "./hooks";
@@ -46,12 +46,10 @@ export default function App() {
  * screen's boundary, and the fallback can close the app itself.
  */
 function DirectorWindow({ lang, t }: { lang: Lang; t: Translate }) {
-  // Closing this window during a show, or with unsaved changes in the editor, asks first; the app ends with it.
+  // Closing this window during a show, or with unsaved changes in the editor or to the AI instructions, asks first; the app ends with it.
   useBackendEvent("close-requested", (reason) => {
     // A dialog that does not open leaves the request unanswered, so a close in the next minute goes through.
-    confirmAction(t, t(reason === "show" ? "quitDuringShow" : "quitUnsavedQuiz"), t("closeApp"))
-      .then((quit) => (quit ? api.quitApp() : api.closeDeclined()))
-      .catch(logProblem);
+    answerClose(t, reason, closeDeps(t)).catch(logProblem);
   });
   // The macOS app menu in the UI's language.
   useEffect(() => {

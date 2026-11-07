@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { FINAL_LAST_STEP } from "./bindings/Constants";
 import { NO_CONTROLS, previewView } from "./host/preview";
 import { translator } from "./i18n";
 import { currentSlide, judgedLabel, nextLabel, phaseLabel } from "./phase";
@@ -102,16 +101,15 @@ describe("nextLabel", () => {
   });
 
   it("starts the quiz from the registration and opens the final ranking from the last slide", () => {
-    expect(nextLabel(t, withNext(viewAt({ phase: "lobby" }, 0), "nextSlide", 0))).toBe(t("nextStartQuiz"));
-    expect(nextLabel(t, withNext(viewAt({ phase: "endOfRound" }, 4), "nextSlide", 5))).toBe(t("nextFinalRanking"));
+    expect(nextLabel(t, withNext(viewAt({ phase: "lobby" }, 0), "startQuiz", 0))).toBe(t("nextStartQuiz"));
+    expect(nextLabel(t, withNext(viewAt({ phase: "endOfRound" }, 4), "finalRanking", 5))).toBe(t("nextFinalRanking"));
   });
 
   it("names the place each step of the final ranking shows, the winner, then the whole ranking", () => {
-    const final = (step: number) => nextLabel(t, withNext(viewAt({ phase: "final", step }, 5), "finalStep", null));
-    expect(FINAL_LAST_STEP).toBe(4);
-    expect(final(0)).toBe(t("nextFinalPlace", { n: 3 }));
-    expect(final(1)).toBe(t("nextFinalPlace", { n: 2 }));
-    expect(final(2)).toBe(t("nextFinalWinner"));
-    expect(final(3)).toBe(t("nextFinalTable"));
+    const final = (step: number, place: number | null) => nextLabel(t, withNext(viewAt({ phase: "final", step }, 5), { finalStep: { place } }, null));
+    expect(final(0, 3)).toBe(t("nextFinalPlace", { n: 3 }));
+    expect(final(1, 2)).toBe(t("nextFinalPlace", { n: 2 }));
+    expect(final(2, 1)).toBe(t("nextFinalWinner"));
+    expect(final(3, null)).toBe(t("nextFinalTable"));
   });
 });

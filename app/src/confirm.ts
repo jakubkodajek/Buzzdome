@@ -28,6 +28,11 @@ export function confirmAction(t: Translate, message: string, ok?: string): Promi
   return counted(() => ask(message, { kind: "warning", okLabel: ok ?? t("yes"), cancelLabel: ok ? t("cancel") : t("no") }));
 }
 
+/** Tells the quizmaster, in the system's own dialog, why a step they asked for failed, where no window shows it (closing the app). */
+export async function tellFailure(text: string): Promise<void> {
+  await message(text, { kind: "error" });
+}
+
 /** What the quizmaster chose to do with unsaved changes. */
 export type SaveChoice = "save" | "discard" | "cancel";
 

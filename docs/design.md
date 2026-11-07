@@ -142,7 +142,7 @@ draws slides without a show.
 | `receiver-remote` | `RemoteKeyAction` | a key of the quizmaster's remote was pressed, with what it does (the Director does it, `commandForRemote`) |
 | `host-window` | bool | the projector window opened or closed (also from its title bar) |
 | `host-problem` | `HostProblem` | the projector met a problem, worded for the Director to show (text, and detail under it) |
-| `close-requested` | none | the quizmaster closed the Director or quit during a show (the Director asks, then `quit_app` or `close_declined`) |
+| `close-requested` | `CloseReason` | the quizmaster closed the Director or quit while something would be left behind: a show runs, the editor's quiz has unsaved changes (also a write of them under way or failed, `UnkeptEdits`), or the AI instructions do (`ai_instructions_unsaved`); the Director asks, naming all that hold, then `quit_app` or `close_declined` |
 | `show-not-saved` | `AppError` or null | the running show's journal refused a write, or works again |
 | `teams-changed` | string list | the prepared team names changed, or a show started or ended |
 | `media-library`, `sound-board` | `MediaLibrary`, `SoundBoard` | the media player's library or pads changed |
@@ -205,8 +205,12 @@ draws slides without a show.
   keys and on-screen buzzers alike, are never given up: they wait in the
   queue and count by their time once the write finishes.
 - **Windows.** `app_windows.rs` keeps both windows through a show. Closing
-  the Director during a show asks first (`close-requested`), and the app
-  ends with the Director, so a full-screen projector is never left alone.
+  the Director during a show, with unsaved changes in the editor or to the
+  AI instructions asks first (`close-requested` with every `CloseReason`
+  that holds), and the app ends with the Director, so a full-screen
+  projector is never left alone. With an unsaved quiz and no show the
+  question offers Save, Don't save and Cancel (`close-app.ts`); during a
+  show it only says that the draft stays, since the editor cannot save then.
   The question is asked above the Director's screen (`App.tsx`), so it
   comes even when the screen failed to render. A second close in the next
   10 s adds no dialog. A Director that does not answer within 10 s (its
@@ -226,7 +230,8 @@ draws slides without a show.
   Director is not on, and full screen over the Director only when chosen
   there. The monitors are listed when it opens, so one plugged in late
   counts; a monitor is known by its name and position (`MonitorInfo.id`).
-  M and Esc close the projector from itself.
+  M and Esc close the projector from itself, but during a show only Esc
+  pressed twice within 2 s does, and M does nothing there.
 - **Pages.** The windows stay on the app's own pages: a navigation guard
   (`app_windows::navigation_guard`) refuses every other URL, and
   `browser-guard.ts` takes the web view's own keys (reload, back, find,
@@ -1599,7 +1604,14 @@ charged twice), and that command is journaled before `show-changed`
 reaches the windows, so no window shows the stopped question. One that
 stopped while a step was coming by itself (QZ-11) has the step held
 (`PauseClock`): the clock reads later after a restart, so the step would
-otherwise come at once, before the quizmaster saw where the show stands. The
+otherwise come at once, before the quizmaster saw where the show stands.
+Either way the Director is told (`QuestionRestarted`, `AutoStepHeld`
+among the resume warnings), so the hall can be asked to answer again.
+End show leaves an `ended` mark in the session folder (`Session::end`),
+which resuming removes; the last session's summary says the show was done
+with (`SessionSummary::finished`: ended, or played to its end, which a
+replay of its journal tells), so a new show starts without asking to give
+it up, though it can still be resumed. The
 quizmaster can restart a question in play too (Restart question, after a
 confirmation): it is the way to leave a question without scoring it, since
 a jump is refused then. Its score changes and answering times are taken
@@ -2073,7 +2085,10 @@ change what a replay does.
 - `app/src-tauri/src/stage_lights.rs` keeps the setup in `lights.json`
   (`AppFile`, checked with `LightsSetup::check` before it is kept or used;
   `lights_store` writes off the windows' thread under a lock of its own
-  held until the lights have the setup, so the last kept is the one used)
+  held until the lights have the setup, so the last kept is the one used),
+  keeps the quizmaster's blackout and held look in `lights-live.json`
+  (`lights_hold`, `lights_blackout`), which the lights take again at
+  the next start, so a restart or crash does not light a blacked-out room,
   and tells the lights thread what the show did: after every show change and
   every tick of the show thread it queues the cues of the change's effects,
   then the stage, slide and buzz, only when they changed. Sending is a

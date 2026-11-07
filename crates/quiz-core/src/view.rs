@@ -1,6 +1,6 @@
 //! What the windows render: a read-only snapshot of the game at one moment.
 
-use crate::game::{same_name, Buzz, BuzzerId, Button, Controls, Game, Phase, QuestionStep, Response};
+use crate::game::{same_name, Buzz, BuzzerId, Button, Controls, Game, Phase, QuestionEnd, QuestionStep, Response};
 use crate::model::{AnswerMode, Slide};
 use crate::settings::{AutoStep, QuizSettings};
 use crate::sounds::SoundSlot;
@@ -25,6 +25,13 @@ pub struct GameView {
     /// where it goes nowhere.
     pub previous_slide: Option<usize>,
     pub clock: Option<ClockView>,
+    /// How the current question's clock stood as the question ended, for
+    /// the projector once `clock` is gone: none before it ends, and on a
+    /// question the show came back to after it ended (`Game::question_end`).
+    /// Left out when none, so a window's own made-up views need not say it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub question_end: Option<QuestionEndView>,
     pub players: Vec<PlayerView>,
     /// The team names prepared for the show, in order, with their buzzers.
     pub teams: Vec<TeamView>,
@@ -136,6 +143,25 @@ pub struct ClockView {
     pub running: bool,
     /// Points a correct answer earns at this moment (they can fall over time).
     pub points: i32,
+}
+
+/// How a question's clock stood as the question ended (`GameView::question_end`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
+#[serde(rename_all = "camelCase")]
+pub struct QuestionEndView {
+    /// Its time ran out ("time's up"), rather than the quizmaster, a buzz
+    /// judged right or everyone's answer ending it.
+    pub timed_out: bool,
+    /// The points a right answer scored as the clock stopped, the value
+    /// the clock's `points` stopped at; before a joker doubles it.
+    pub points: i32,
+}
+
+impl From<QuestionEnd> for QuestionEndView {
+    fn from(end: QuestionEnd) -> QuestionEndView {
+        QuestionEndView { timed_out: end.timed_out, points: end.points }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, TS)]
@@ -277,6 +303,7 @@ impl Game {
             next_slide: self.following(),
             previous_slide: self.previous(),
             clock: self.clock_view(now),
+            question_end: self.question_end().map(QuestionEndView::from),
             enabled_count: enabled.len(),
             answered_count: enabled.iter().filter(|p| p.answered).count(),
             answer_counts: self.answer_counts(),

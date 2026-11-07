@@ -609,13 +609,25 @@ fn resume_show(root: &Path, at_ms: u64, media_folders: &[PathBuf]) -> CmdResult<
         named => (named, None),
     };
     // The show must go on: without its media it still runs, and the Director says why.
-    let warnings = resume_warnings(&quiz, media_root.as_deref(), refused.as_deref(), meta.rules_changed());
+    let mut warnings = resume_warnings(&quiz, media_root.as_deref(), refused.as_deref(), meta.rules_changed());
     let mut game = Game::replay(quiz, &journal, meta.rules_version);
     let mut effects = Vec::new();
     if let Some(command) = game.recovery_command() {
+        warnings.extend(recovery_warning(&command, game.slide_index()));
         (game, effects) = apply_and_journal(&game, Some(&mut session), &Stamped { at_ms, command })?;
     }
     Ok(ResumedShow { game, session, media_root: media_root.filter(|root| root.is_dir()), effects, warnings })
+}
+
+/// What the quizmaster is told of the recovery `command` a resumed show
+/// took on `slide` (`Game::recovery_command`): the hall answers the
+/// question again, or the show waits for them to take its step.
+fn recovery_warning(command: &Command, slide: usize) -> Option<AppError> {
+    match command {
+        Command::RestartQuestion => Some(AppError::QuestionRestarted { slide }),
+        Command::PauseClock => Some(AppError::AutoStepHeld),
+        _ => None,
+    }
 }
 
 /// Resumes the last show. Returns warnings for the quizmaster when the show
@@ -644,6 +656,10 @@ async fn end_show(app: AppHandle) -> CmdResult<()> {
         if inner.before_show(at_ms) {
             return Ok(());
         }
+        // Done with: the next show starts without asking to give it up.
+        if let Some(Err(e)) = inner.session.take().map(Session::end) {
+            app_log::note(&format!("the ended show is not marked as ended: {e}"));
+        }
         replace_show(inner, None, None);
         inner.media_root = None;
         show_changed(app, inner);
@@ -654,8 +670,10 @@ async fn end_show(app: AppHandle) -> CmdResult<()> {
 
 /// The commands the projector window may give: those its keys stand for
 /// (`commandForKey`, whose tests check it against this list in the
-/// bindings). Scores, names and jumps are the Director's alone.
-const PROJECTOR_COMMANDS: [&str; 7] = ["press", "next", "judgeRight", "judgeWrong", "pauseClock", "resumeClock", "showLeaderboard"];
+/// bindings): `goTo` for Left and Page Up, which go back a slide where the
+/// show lets them (`Controls::go_to`). Scores, names and the other jumps
+/// are the Director's alone.
+const PROJECTOR_COMMANDS: [&str; 8] = ["press", "next", "judgeRight", "judgeWrong", "pauseClock", "resumeClock", "showLeaderboard", "goTo"];
 
 /// The buzzers the projector's keys press, 1 to 9 and 0 for 10, always
 /// with the big button (`commandForKey`).
@@ -738,6 +756,7 @@ pub fn run() {
         .on_menu_event(app_windows::on_menu_event)
         .manage(inner.close_request.clone())
         .manage(editor::EditorLock::default())
+        .manage(editor::UnkeptEdits::default())
         .manage(updates::Updates::default())
         .manage(AppState(Mutex::new(inner)))
         .setup(|app| {
@@ -752,7 +771,7 @@ pub fn run() {
                 send_mode(&mut inner);
             }
             app.manage(hardware);
-            app.manage(stage_lights::StageLights::start(app.handle(), stage_lights::lights_path(app.handle())?));
+            app.manage(stage_lights::StageLights::start(app.handle(), stage_lights::lights_path(app.handle())?, stage_lights::live_path(app.handle())?));
             app.manage(fixture_library::FixtureLibrary::new(fixture_library::library_path(app.handle())?));
             // The Director plays the voice's clips, rendered into a folder of their own.
             let voice = read_aloud::Voice::new(app.handle())?;
@@ -847,6 +866,7 @@ pub fn run() {
             ai::ai_connect,
             ai::ai_server_config,
             ai::ai_set_instructions,
+            ai::ai_instructions_unsaved,
             hardware::receiver_info,
             hardware::receiver_devices,
             hardware::receiver_select,
@@ -1037,6 +1057,7 @@ mod tests {
         assert_eq!(before.recovery_command(), Some(Command::RestartQuestion), "{:?}", before.phase());
 
         let resumed = resume_show(&root, 60_000, &[]).unwrap();
+        assert_eq!(resumed.warnings, [AppError::QuestionRestarted { slide }], "the quizmaster is told");
         // What the windows will see is on disk: the restart is journaled.
         let on_disk = Session::resume_latest(&root).unwrap().unwrap();
         assert_eq!(on_disk.journal.last(), Some(&Stamped { at_ms: 60_000, command: Command::RestartQuestion }));
@@ -1069,6 +1090,7 @@ mod tests {
         assert!(before.view(7_000).auto_step.is_some(), "the step was on its way");
 
         let resumed = resume_show(&root, 60_000, &[]).unwrap();
+        assert_eq!(resumed.warnings, [AppError::AutoStepHeld], "the quizmaster is told");
         // The question waits for the quizmaster, and the hold is on disk.
         let on_disk = Session::resume_latest(&root).unwrap().unwrap();
         assert_eq!(on_disk.journal.last(), Some(&Stamped { at_ms: 60_000, command: Command::PauseClock }));
@@ -1092,7 +1114,7 @@ mod tests {
         drop(inner);
 
         let resumed = resume_show(&root, 120_000, &[]).unwrap();
-        assert_eq!(resumed.warnings, [AppError::RulesChanged]);
+        assert_eq!(resumed.warnings, [AppError::RulesChanged, AppError::QuestionRestarted { slide }]);
         // Replayed with its jump, the question ran again, so it is restarted once more.
         let on_disk = Session::resume_latest(&root).unwrap().unwrap();
         assert_eq!(on_disk.journal.last(), Some(&Stamped { at_ms: 120_000, command: Command::RestartQuestion }));
@@ -1192,14 +1214,22 @@ mod tests {
     #[test]
     fn the_projector_may_give_only_what_its_keys_stand_for() {
         let press = Command::Press { buzzer: 3, button: quiz_core::Button::Big };
-        let keys = [press, Command::Next, Command::JudgeRight, Command::JudgeWrong, Command::PauseClock, Command::ResumeClock, Command::ShowLeaderboard { visible: true }];
+        let keys = [
+            press,
+            Command::Next,
+            Command::JudgeRight,
+            Command::JudgeWrong,
+            Command::PauseClock,
+            Command::ResumeClock,
+            Command::ShowLeaderboard { visible: true },
+            Command::GoTo { slide: 2 },
+        ];
         for command in &keys {
             assert!(may_give(app_windows::HOST_LABEL, command), "{command:?}");
         }
         let directors = [
             Command::AdjustScore { buzzer: 3, delta: 100 },
             Command::SetTeams { names: vec!["A".into()] },
-            Command::GoTo { slide: 2 },
             Command::GoToFinal,
             Command::StartOver,
             Command::ResetScores,

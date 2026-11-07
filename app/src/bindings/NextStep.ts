@@ -3,4 +3,4 @@
 /**
  * What `Next` does in the current step (`Controls::next_step`).
  */
-export type NextStep = "registration" | "startQuestion" | "endQuestion" | "showAnswer" | "finalStep" | "nextSlide";
+export type NextStep = "registration" | "startQuestion" | "endQuestion" | "showAnswer" | "startQuiz" | "finalRanking" | { "finalStep": { place: number | null, } } | "nextSlide";

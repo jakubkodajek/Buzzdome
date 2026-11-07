@@ -749,7 +749,6 @@ fn assert_controls_match_apply(game: &Game, at_ms: u64) {
         let taken = game.clone().apply(&Stamped { at_ms, command: command.clone() }).is_ok();
         assert_eq!(allowed, taken, "{command:?} in {:?}", game.phase());
     }
-    assert_eq!(controls.next, controls.next_step.is_some(), "what Next does in {:?}", game.phase());
 }
 
 #[test]
@@ -757,7 +756,7 @@ fn next_step_names_what_next_does() {
     let mut show = Show::new(vec![billboard("intro"), question("q1", AnswerMode::Everyone), billboard("thanks")]);
     show.press(0, 1, Button::Big);
     let step = |show: &Show| show.game.controls().next_step;
-    assert_eq!(step(&show), Some(NextStep::NextSlide), "lobby");
+    assert_eq!(step(&show), Some(NextStep::StartQuiz), "lobby");
     show.run(0, Command::Next).unwrap();
     assert_eq!(step(&show), Some(NextStep::NextSlide), "intro");
     show.run(0, Command::Next).unwrap();
@@ -769,11 +768,112 @@ fn next_step_names_what_next_does() {
     show.run(2_000, Command::Next).unwrap();
     assert_eq!(step(&show), Some(NextStep::NextSlide), "q1 revealed");
     show.run(3_000, Command::Next).unwrap();
-    assert_eq!(step(&show), Some(NextStep::NextSlide), "the last slide, before the final ranking");
+    assert_eq!(step(&show), Some(NextStep::FinalRanking), "the last slide, before the final ranking");
     while show.game.controls().next {
         show.run(4_000, Command::Next).unwrap();
     }
     assert_eq!(step(&show), None, "the end of the show");
+}
+
+/// Gives Next and checks that it did what the Director's button said it
+/// would (`Controls::next_step`); returns what that was.
+fn next_as_named(show: &mut Show, at_ms: u64) -> NextStep {
+    let named = show.game.controls().next_step.expect("Next is offered");
+    let (slide, before) = (show.game.current_slide().map(|s| s.id.clone()), show.game.phase().clone());
+    show.run(at_ms, Command::Next).unwrap();
+    let after = show.game.phase();
+    let did = match named {
+        NextStep::Registration => before == Phase::Welcome && *after == Phase::Lobby,
+        NextStep::StartQuestion => matches!(after, Phase::Question(QuestionStep::Running { .. })),
+        NextStep::EndQuestion => *after == Phase::Question(QuestionStep::Closed),
+        NextStep::ShowAnswer => matches!(after, Phase::Question(QuestionStep::Revealed { .. })),
+        NextStep::FinalStep { .. } => matches!((&before, after), (Phase::Final { step }, Phase::Final { step: next }) if *next == step + 1),
+        NextStep::StartQuiz => before == Phase::Lobby && show.game.slide_index() == 0 && *after != Phase::Lobby,
+        NextStep::FinalRanking => matches!(after, Phase::Final { step: 0 }) && show.game.slide_index() == show.game.quiz().slides.len(),
+        NextStep::NextSlide => show.game.current_slide().map(|s| s.id.clone()) != slide,
+    };
+    assert!(did, "{named:?} from {before:?} went to {after:?}");
+    named
+}
+
+#[test]
+fn next_does_what_its_button_names_on_the_welcome_screen_in_the_final_ranking_and_while_a_question_is_read() {
+    let mut quiz = quiz(vec![question("q1", AnswerMode::Everyone), final_slide("final")]);
+    quiz.welcome.on = true;
+    quiz.settings.read_aloud = ReadAloud::Question;
+    quiz.settings.clock_after_reading = true;
+    quiz.settings.start_on_next = false;
+    let mut show = Show { game: Game::new(quiz), journal: Vec::new() };
+    show.press(0, 1, Button::Big);
+    let mut at_ms = 0;
+    let mut next = |show: &mut Show| {
+        at_ms += 1_000;
+        next_as_named(show, at_ms)
+    };
+    assert_eq!(next(&mut show), NextStep::Registration, "the welcome screen");
+    assert_eq!(next(&mut show), NextStep::StartQuiz, "the lobby");
+    // The question waits for its reading; Next starts its clock as well.
+    assert!(show.game.controls().reading_done);
+    assert_eq!(next(&mut show), NextStep::StartQuestion, "q1 waiting for its reading");
+    assert_eq!(next(&mut show), NextStep::EndQuestion, "q1 running");
+    assert_eq!(next(&mut show), NextStep::ShowAnswer, "q1 closed");
+    assert_eq!(next(&mut show), NextStep::NextSlide, "q1 revealed");
+    for place in [Some(3), Some(2), Some(1), None] {
+        assert_eq!(next(&mut show), NextStep::FinalStep { place }, "the final ranking reveals {place:?}");
+    }
+    assert_eq!(show.game.controls().next_step, None, "the last slide's last step ends the show");
+    assert!(!show.game.controls().next);
+    assert_eq!(show.run(at_ms, Command::Next), Err(GameError::NotNow));
+
+    // While a buzz waits to be judged Next is not offered, and refused.
+    let mut show = Show::new(vec![question("q1", AnswerMode::FastestFinger)]);
+    show.press(0, 1, Button::Big);
+    show.run(0, Command::Next).unwrap();
+    show.run(0, Command::Next).unwrap();
+    show.press(1_000, 1, Button::Big);
+    assert_eq!(show.game.controls().next_step, None, "buzzed");
+    assert_eq!(show.run(1_001, Command::Next), Err(GameError::NotNow));
+}
+
+#[test]
+fn a_closed_question_keeps_whether_its_time_ran_out_and_the_points_its_clock_stopped_at() {
+    let end = |show: &Show| show.game.view(60_000).question_end.map(|end| (end.timed_out, end.points));
+    // Ended by Next at 4 s of 10: the points fall from 100 to 50.
+    let mut show = Show::new(vec![question("q1", AnswerMode::Everyone), billboard("after")]);
+    show.press(0, 1, Button::Big);
+    show.run(0, Command::Next).unwrap();
+    assert_eq!(end(&show), None, "ready");
+    show.run(0, Command::Next).unwrap();
+    assert_eq!(end(&show), None, "running: the clock says it");
+    show.run(4_000, Command::Next).unwrap();
+    assert_eq!(end(&show), Some((false, 80)), "closed");
+    show.run(5_000, Command::Next).unwrap();
+    assert_eq!(end(&show), Some((false, 80)), "its answer shown");
+    show.run(6_000, Command::Next).unwrap();
+    assert_eq!(end(&show), None, "the next slide");
+    // Going back shows the answer again, but its clock is gone.
+    show.run(7_000, Command::GoTo { slide: 0 }).unwrap();
+    assert_eq!(end(&show), None, "came back to it");
+
+    // Closed as its time ran out.
+    let mut show = Show::new(vec![question("q1", AnswerMode::Everyone)]);
+    show.press(0, 1, Button::Big);
+    show.run(0, Command::Next).unwrap();
+    show.run(0, Command::Next).unwrap();
+    show.run(10_000, Command::CloseQuestion).unwrap();
+    assert_eq!(end(&show), Some((true, 50)));
+    assert_eq!(Game::replay(show.game.quiz().clone(), &show.journal, RULES_VERSION).question_end(), show.game.question_end(), "a resumed show keeps it");
+
+    // A fastest finger judged right: the points the winner scored.
+    let mut show = Show::new(vec![question("q1", AnswerMode::FastestFinger)]);
+    show.press(0, 1, Button::Big);
+    show.run(0, Command::Next).unwrap();
+    show.run(0, Command::Next).unwrap();
+    show.press(3_000, 1, Button::Big);
+    show.run(5_000, Command::JudgeRight).unwrap();
+    let won = show.game.view(5_000).players.iter().find(|p| p.buzzer == 1).and_then(|p| p.delta);
+    assert_eq!(end(&show).map(|(_, points)| points), won);
+    assert_eq!(end(&show), Some((false, 85)));
 }
 
 #[test]
