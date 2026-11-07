@@ -2,7 +2,11 @@
 # in AGENTS.md (Commands). `check` runs the steps of build.yml's `check` job
 # (UI built before Rust, bindings regenerated from an empty folder, voice
 # libraries checked); keep the two in step when either changes.
-.PHONY: help setup voice-libs lint ui-build test bindings check agents e2e soak dev preview layout
+.PHONY: help setup voice-libs ui-deps lint ui-build test bindings check agents e2e soak dev preview layout
+
+# The steps depend on each other's order (voice libraries before clippy, the
+# bindings check after the tests), so `make -j` runs them one at a time.
+.NOTPARALLEL:
 
 # Rust on Jakub's Mac comes from Homebrew's keg-only rustup.
 ifneq ($(wildcard /opt/homebrew/opt/rustup/bin),)
@@ -17,11 +21,13 @@ export SHERPA_ONNX_ARCHIVE_DIR
 help: ## List the targets
 	@grep -E '^[a-z0-9-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-11s %s\n", $$1, $$2}'
 
-setup: voice-libs ## Install the UI as locked and fetch the voice libraries
-	cd app && npm ci
+setup: voice-libs ui-deps ## Install the UI as locked and fetch the voice libraries
 
 voice-libs: ## Fetch and check the sherpa-onnx libraries (once per machine)
 	.github/scripts/sherpa-onnx-libs.sh .
+
+ui-deps: ## Install the UI dependencies as locked (npm ci), as CI does
+	cd app && npm ci
 
 lint: ui-build ## ESLint (UI) and clippy (Rust), warnings are errors
 	cd app && npm run lint
@@ -43,7 +49,7 @@ bindings: ## Fail if app/src/bindings differs from what the Rust types generate
 	  echo "app/src/bindings is out of date: commit what cargo test --workspace wrote."; exit 1; \
 	fi
 
-check: agents voice-libs lint test bindings ## The steps of CI's check job (build.yml), plus the agent config
+check: agents voice-libs ui-deps lint test bindings ## The steps of CI's check job (build.yml), plus the agent config
 
 agents: ## Generated Codex/Copilot agent files are in sync with .claude/
 	python3 scripts/sync_agents.py --check

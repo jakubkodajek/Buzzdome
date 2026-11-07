@@ -26,8 +26,10 @@ manual Build.
 
 ## Checks, in order
 
-`make check` (`Makefile`) runs steps 1 to 5 in CI's order, after the agent-config
-check (`python3 scripts/sync_agents.py --check`), and sets up the voice libraries.
+`make check` (`Makefile`) runs steps 1 to 5 as CI's check job does
+(`build.yml`): the agent-config check (`python3 scripts/sync_agents.py --check`),
+the voice libraries, `npm ci`, then the steps, with the UI built before any
+Rust is compiled, and the bindings check last.
 
 Rust builds link the sherpa-onnx libraries (`crates/voice`). Before the
 first build, run `.github/scripts/sherpa-onnx-libs.sh .` and export
@@ -35,15 +37,16 @@ first build, run `.github/scripts/sherpa-onnx-libs.sh .` and export
 The voice libraries); without it the build downloads unchecked archives,
 or fails behind a proxy.
 
-1. `cargo test --workspace`
+1. `cd app && npm run lint` (ESLint with the React hooks rules and the
+   app's own bans: no `alert`/`confirm`, no wall-clock reads in the UI).
+2. `cd app && npm test` (vitest: UI logic).
+3. `cd app && npm run build` (type-check and production build; Tauri
+   embeds it, so Rust needs it first).
+4. `cargo clippy --workspace --all-targets -- -D warnings`
+5. `cargo test --workspace`
    Rust tests, 40 random shows (`show-sim`), 40 crash drills. It also
    rewrites `app/src/bindings` from the Rust types. Commit the bindings it
    changed; CI fails when the committed ones are stale.
-2. `cargo clippy --workspace --all-targets -- -D warnings`
-3. `cd app && npm run lint` (ESLint with the React hooks rules and the
-   app's own bans: no `alert`/`confirm`, no wall-clock reads in the UI).
-4. `cd app && npm run build` (type-check and production build).
-5. `cd app && npm test` (vitest: UI logic).
 6. When the change touches a window, a show flow, files or the receiver:
    `cd app && npm run tauri build -- --debug --no-bundle && xvfb-run -a npm run e2e`.
    Linux only; Windows E2E runs on CI only, because it wipes the real app data.

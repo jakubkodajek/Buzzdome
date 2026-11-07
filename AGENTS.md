@@ -155,11 +155,21 @@ UI conventions (keep one way of doing each thing):
   (`memory/README.md`): `project-context.md` (goals, users, constraints,
   glossary), `lessons-learned.md`, `progress.md` (session log).
   Decisions are ADRs in `docs/adr/` and the specification.
-- `.claude/skills/buzzdome-*`: task checklists (verify, backend command,
-  game rules, UI change, layout, hardware). `.claude/skills/{feature,review,bug-hunt,ux-audit,adr,handoff}`:
-  the multi-agent workflow. `.claude/agents/`: the subagents
-  (`docs/agent-workflow.md`). Agents that do not load skills read them as
-  plain checklists.
+- `.claude/skills/`: one folder each with a `SKILL.md`. Agents that do not
+  load skills read them as plain checklists. The task checklists:
+
+  | Skill | Use it to |
+  | --- | --- |
+  | `buzzdome-verify` | run the local checks before a commit or PR |
+  | `buzzdome-backend-command` | add or change a Tauri command or backend event |
+  | `buzzdome-game-rules` | change game rules, scoring or the quiz file format |
+  | `buzzdome-ui-change` | change the Director, projector slides, editor or texts |
+  | `buzzdome-layout` | check every window for broken layout (bars, scrolling, covered controls) |
+  | `buzzdome-hardware` | work on the buzzers, the receiver or the stage lights |
+
+  The multi-agent workflow: `feature`, `review`, `bug-hunt`, `ux-audit`,
+  `adr`, `handoff`, run by the subagents in `.claude/agents/`
+  (`docs/agent-workflow.md`).
 - `docs/specification.md`: requirements with IDs (buzzer link, themes, plugins).
   `docs/design.md`: architecture, buzzer stack. `docs/quiz-format.md`: the quiz
   file format. `docs/ai-assistants.md`: quizzes written by AI assistants. `docs/hardware-test.md`:
