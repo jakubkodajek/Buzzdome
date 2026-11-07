@@ -717,6 +717,27 @@ fn every_buzzer_is_dark_before_a_question_runs() {
 }
 
 #[test]
+fn each_asking_of_a_question_is_counted_also_one_that_starts_as_shown_and_a_restart() {
+    // Default settings: the clock starts as the question is shown, so the
+    // windows never see it ready; the count still grows (BF150).
+    let mut show = Show { game: Game::new(Quiz::new("Test", vec![question("q1", AnswerMode::Everyone), question("q2", AnswerMode::Everyone)])), journal: Vec::new() };
+    show.press(0, 1, Button::Big);
+    show.press(0, 2, Button::Big);
+    assert_eq!(show.game.view(0).askings, 0, "the lobby");
+    show.run(1_000, Command::Next).unwrap();
+    assert!(matches!(show.game.phase(), Phase::Question(QuestionStep::Running { .. })), "started as shown");
+    assert_eq!(show.game.view(1_000).askings, 1);
+    show.press(2_000, 1, Button::B);
+    assert_eq!(show.game.view(2_000).askings, 1, "answering is the same asking");
+    show.run(3_000, Command::RestartQuestion).unwrap();
+    assert_eq!(show.game.view(3_000).askings, 2, "asked again from its start");
+    show.run(4_000, Command::Next).unwrap();
+    assert_eq!(show.game.view(4_000).askings, 2, "its clock starting is the same asking");
+    // A replayed show counts the same.
+    assert_eq!(Game::replay(show.game.quiz().clone(), &show.journal, RULES_VERSION).view(4_000).askings, 2);
+}
+
+#[test]
 fn judging_needs_a_buzz_and_next_waits_for_the_verdict() {
     let mut show = Show::new(vec![question("q1", AnswerMode::FastestFinger)]);
     show.press(0, 1, Button::Big);

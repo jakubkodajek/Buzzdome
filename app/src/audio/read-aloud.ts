@@ -15,7 +15,6 @@ import { settingsOf, soundsOf } from "../quiz";
 import { createStore, useStore } from "../store";
 import type { Translate } from "../i18n";
 import type { AppError, GameView, Question, Quiz, QuizLanguage, QuizSettings, ReadAloud, Slide, VoiceLine, VoiceModel } from "../types";
-import { useAsking } from "./asking";
 import { ClipPlayer, linearGain, playerLevel } from "./clip-player";
 import { playBundled } from "./show-audio";
 
@@ -370,7 +369,7 @@ export function useReadAloud(view: GameView | null, quiz: Quiz | null): ReadAlou
   // A question coming on is read once each time it is asked (a restarted
   // question again), unless its slide sounds itself.
   const slideIndex = view?.slideIndex ?? null;
-  const asked = useAsking(view);
+  const asked = view?.askings ?? null;
   const onQuestion = slide?.type === "question";
   const auto = what !== "off" && slide !== null && !soundsItself(slide);
   const arrived = useLatest(() => auto && read());

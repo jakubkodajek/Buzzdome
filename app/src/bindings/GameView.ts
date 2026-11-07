@@ -68,6 +68,10 @@ onHold: boolean,
  */
 videoPlays: number, 
 /**
+ * See `Game::askings`.
+ */
+askings: number, 
+/**
  * See `Game::step_no`.
  */
 stepNo: number, 

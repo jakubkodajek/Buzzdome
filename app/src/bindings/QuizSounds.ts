@@ -14,10 +14,10 @@ export type QuizSounds = {
  */
 slots: { [key in SoundSlot]?: SoundChoice }, 
 /**
- * Percent, up to 100 (`MAX_SOUND_VOLUME`).
+ * Percent, up to `MAX_SOUND_VOLUME`.
  */
 effectsVolume: number, 
 /**
- * Percent, up to 100 (`MAX_SOUND_VOLUME`).
+ * Percent, up to `MAX_SOUND_VOLUME`.
  */
 musicVolume: number, };

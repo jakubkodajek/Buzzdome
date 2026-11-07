@@ -54,6 +54,8 @@ pub struct GameView {
     pub on_hold: bool,
     /// See `Game::video_plays`.
     pub video_plays: u32,
+    /// See `Game::askings`.
+    pub askings: u32,
     /// See `Game::step_no`.
     pub step_no: u32,
     /// The step the show takes by itself (`Game::pending_step`); none
@@ -298,6 +300,7 @@ impl Game {
             controls: self.controls(),
             on_hold: self.on_hold(),
             video_plays: self.video_plays(),
+            askings: self.askings(),
             step_no: self.step_no(),
             auto_step: self.pending_step().zip(self.auto_step_wait()).map(|((action, _, at), (_, total_ms))| AutoStepView {
                 action,

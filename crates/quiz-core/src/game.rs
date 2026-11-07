@@ -661,6 +661,10 @@ pub struct Game {
     /// How many times the quizmaster started the current slide's video
     /// (`Command::PlayVideo`); the projector starts it whenever this grows.
     video_plays: u32,
+    /// How many times a question was asked from its start in this show:
+    /// shown ready, or restarted (`Command::RestartQuestion`). The windows
+    /// start a question's sound and reading afresh whenever this grows.
+    askings: u32,
     /// The question on screen was shown waiting for the Director to read it
     /// out before its clock starts (`Command::ReadingDone`).
     awaiting_reading: bool,
@@ -697,6 +701,7 @@ impl Game {
             leaderboard_visible: false,
             teams: Vec::new(),
             video_plays: 0,
+            askings: 0,
             awaiting_reading: false,
             step_no: 0,
             rules_version: RULES_VERSION,
@@ -1054,6 +1059,11 @@ impl Game {
     /// See `video_plays`.
     pub fn video_plays(&self) -> u32 {
         self.video_plays
+    }
+
+    /// See `askings`.
+    pub fn askings(&self) -> u32 {
+        self.askings
     }
 
     /// See `step_no`.
@@ -1809,6 +1819,9 @@ impl Game {
         self.leaderboard_visible = false;
         self.video_plays = 0;
         self.awaiting_reading = false;
+        if phase == Phase::Question(QuestionStep::Ready) {
+            self.askings = self.askings.saturating_add(1);
+        }
         self.slide = index;
         self.phase = phase;
         vec![self.lights_now()]

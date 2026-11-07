@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useLatest, usePlayerVolume } from "../hooks";
 import { useMediaUrl } from "../media";
 import type { GameView, Span } from "../types";
-import { useAsking } from "./asking";
 import { ClipPlayer, linearGain, playerLevel } from "./clip-player";
 import { useReplay } from "./replay";
 
@@ -25,8 +24,9 @@ export function useSlideSound(view: GameView | null): SlideSound {
   const sound = view?.slide?.sound ?? null;
   const url = toUrl(sound?.file ?? null);
   const slideIndex = view?.slideIndex ?? null;
-  // A restarted question is asked again: its sound starts afresh.
-  const asking = useAsking(view);
+  // A restarted question is asked again: its sound starts afresh
+  // (`GameView.askings`, counted by the core).
+  const asking = view?.askings ?? null;
   // Views arrive many times a second, so effects depend on plain values only.
   const start = sound?.start ?? null;
   const repeat = sound?.repeat ?? false;
