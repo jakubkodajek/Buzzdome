@@ -105,7 +105,8 @@ jobs:
 
       # A draft until every file is in and checked: the apps never see half a
       # release. Its notes are the tag's message (git tag -a), which the
-      # quizmaster reads before installing.
+      # quizmaster reads before installing: Czech, then a line "[en]" and
+      # English (ReleaseNotes in app/src-tauri/src/updates.rs).
       - name: Start the release as a draft
         working-directory: source
         env:
@@ -114,6 +115,9 @@ jobs:
         run: |
           if [ "$(git cat-file -t "refs/tags/$TAG")" = tag ]; then
             git for-each-ref --format='%(contents:subject)%0a%0a%(contents:body)' "refs/tags/$TAG" > ../notes.md
+            if ! grep -qx '[[:space:]]*\[en\][[:space:]]*' ../notes.md; then
+              echo "::warning::$TAG's message has no [en] line, so an English app shows its notes in Czech."
+            fi
           else
             echo "::warning::$TAG is not an annotated tag, so the release has no notes."
             : > ../notes.md

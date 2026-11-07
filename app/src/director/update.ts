@@ -1,17 +1,19 @@
 // What the Director says of a newer version of the app (`UpdateBanner`).
 
-import type { Translate } from "../i18n";
+import type { Lang, Translate } from "../i18n";
 import { isAppError } from "../messages";
 import type { AvailableUpdate, UpdateProgress } from "../types";
 
 /**
  * The question that confirms installing `update`, with what its release says
- * changed, and that connected AI apps must be opened again to use the new version's AI tools.
+ * changed in the quizmaster's language `lang`, and that connected AI apps
+ * must be opened again to use the new version's AI tools.
  */
-export function installQuestion(t: Translate, update: AvailableUpdate): string {
+export function installQuestion(t: Translate, lang: Lang, update: AvailableUpdate): string {
   const confirm = t("updateConfirm", { version: update.version });
   const question = update.aiApps ? `${confirm} ${t("updateRestartAiApps")}` : confirm;
-  return update.notes ? `${question}\n\n${t("updateNotes")}\n${update.notes}` : question;
+  const notes = update.notes[lang];
+  return notes ? `${question}\n\n${t("updateNotes")}\n${notes}` : question;
 }
 
 /**

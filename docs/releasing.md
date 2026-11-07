@@ -24,12 +24,22 @@ finds them can download the installers.
    app offers only a version higher than its own. Wait until the Build workflow's `check` and `windows-tests` have
    passed on that commit.
 2. Tag that commit of main with the version, with what changed as the tag's
-   message, in Czech: the quizmaster reads it before installing.
+   message: the quizmaster reads it before installing, in the app's
+   language. Write it in Czech, then a line `[en]` alone, then the same in
+   English (each `-m` is a paragraph):
 
    ```sh
-   git tag -a v0.2.0 -m "Opravy po akci" -m "- Rychlejší start" origin/main
+   git tag -a v0.2.0 -m "Opravy po akci" -m "- Rychlejší start" \
+     -m "[en]" -m "Fixes after the event" -m "- Faster start" origin/main
    git push origin v0.2.0
    ```
+
+   An app in Czech shows the part before `[en]`, one in English the part
+   after it (`ReleaseNotes` in `app/src-tauri/src/updates.rs`). Notes in
+   one language only (no `[en]`, or nothing after it) are shown in both,
+   and the Release workflow warns that the English part is missing. Apps of
+   version 0.7.0 and older show the whole message, `[en]` line included. The
+   GitHub release page shows the message as it is.
 
    Make the tag with git, not on GitHub's Releases page: the workflow makes
    the release itself.

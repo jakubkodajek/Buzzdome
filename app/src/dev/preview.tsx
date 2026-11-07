@@ -917,7 +917,7 @@ mockIPC(
       case "receiver_devices":
         return [];
       case "update_check":
-        return update ? { version: "0.2.0", notes: "Fixes the podium for shared places.\nThe Director offers newer versions.", aiApps: true } : null;
+        return update ? { version: "0.2.0", notes: { cs: "Opravuje stupně vítězů pro sdílená místa.\nRežie nabízí novější verze.", en: "Fixes the podium for shared places.\nThe Director offers newer versions." }, aiApps: true } : null;
       case "update_install":
         called.push({ cmd });
         return update === "installing" ? new Promise(() => undefined) : Promise.reject({ code: "updateFailed", detail: "error sending request" });
