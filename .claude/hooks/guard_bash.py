@@ -26,7 +26,7 @@ SHELLS = {"sh", "bash", "zsh", "dash", "fish", "python", "python3", "node"}
 PREFIXES = {"sudo", "command", "exec", "nohup", "time", "builtin"}
 # Places whose recursive delete is never wanted.
 ROOT_TARGETS = {"/", "/*", "~", "~/", "~/*", "$HOME", "$HOME/", "$HOME/*", "${HOME}", "${HOME}/", ".", "./", "./*", "*", "..", "../"}
-TAG_REF = re.compile(r"^(?:\+)?(?:refs/tags/|v\d)")
+TAG_REF = re.compile(r"^(?:\+)?(?:refs/tags/|v\d+\.\d+)")
 
 
 def block(reason: str) -> None:
@@ -37,7 +37,8 @@ def block(reason: str) -> None:
 
 def split_commands(command: str) -> list[list[list[str]]]:
     """Return pipelines, each a list of simple commands (lists of words)."""
-    lexer = shlex.shlex(command.replace("\n", " ; "), posix=True, punctuation_chars=";&|")
+    # A backslash before a newline continues the command.
+    lexer = shlex.shlex(command.replace("\\\n", " ").replace("\n", " ; "), posix=True, punctuation_chars=";&|")
     lexer.whitespace_split = True
     lexer.commenters = ""
     try:
@@ -145,6 +146,10 @@ def check(command: str) -> None:
                 continue
             name = words[0]
             names.append(name)
+            if name in SHELLS and "-c" in words[1:-1]:
+                check(words[words.index("-c", 1) + 1])  # the script a shell is given
+            elif name == "eval":
+                check(" ".join(words[1:]))
             if name == "rm":
                 check_rm(words[1:])
             elif name == "git":

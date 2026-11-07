@@ -113,7 +113,8 @@ does not read (a wrong type, a name or language the format does not have) or
 is cut to its range, take their default, and opening the file lists each by
 its path under File › Info (`valueUnread`, such as `settings.jokers`); the AI
 tools' checks list them under `leftOut`. One of the app's sounds that does not
-fit its moment is kept and listed the same way.
+fit its moment is kept (a newer build may have it) and only the AI tools'
+checks list it.
 
 ### Every slide
 
@@ -345,7 +346,8 @@ moment of the show in `slots` plays one of the app's own sounds
 folder), or nothing (`"none"`). A moment left out plays its default. A
 moment, a choice or an id that a build does not know reads as left out, as
 does one of the app's effects chosen for music or the other way round, so a
-quiz always opens and plays; each is listed as `valueUnread`.
+quiz always opens and plays; each is listed as `valueUnread`, but for one
+of the app's sounds that does not fit, which is kept.
 
 | Field | Type | Meaning |
 | --- | --- | --- |

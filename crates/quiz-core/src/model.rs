@@ -7,7 +7,7 @@ use crate::media::{
     MAX_INTRO_PAUSE_MS, MAX_REPLAY_DELAY_MS, MAX_VIDEO_SPEED, MIN_GAIN_DB, MIN_VIDEO_SPEED,
 };
 use crate::settings::QuizSettings;
-use crate::sounds::{QuizSounds, SoundChoice, SoundSlot};
+use crate::sounds::{QuizSounds, SoundSlot};
 use crate::style::SlideStyle;
 use crate::text::file_key;
 use crate::welcome::{Welcome, WelcomeFile};
@@ -777,7 +777,10 @@ impl Quiz {
     /// slides, categories and theme that the quiz read without: a field of
     /// the quiz it does not know, and a value of `settings`, `sounds` or
     /// `welcome` that read as its default or was cut to its range. Each by
-    /// its path in the file (`settings.jokers`, `timeLimit`).
+    /// its path in the file (`settings.jokers`, `timeLimit`). One of the
+    /// app's sounds a moment does not play is kept, so a newer build's
+    /// sound comes back there, and is not listed: listing it would mark the
+    /// quiz changed each time it opens (`QuizSounds::unplayed` names them).
     fn unread_values(&self, written: &serde_json::Value) -> Vec<String> {
         use serde_json::Value;
         let Value::Object(written) = written else {
@@ -799,13 +802,6 @@ impl Quiz {
                 "schemaVersion" | "title" | "theme" | "slides" | "categories" => {}
                 _ if !value.is_null() => paths.push(key.clone()),
                 _ => {}
-            }
-        }
-        // Kept, so a newer build's sound comes back there, but played as the default.
-        for (slot, choice) in &self.sounds.slots {
-            if matches!(choice, SoundChoice::BuiltIn(id) if !slot.plays(id)) {
-                let slot = serde_json::to_value(slot).expect("a moment serializes");
-                paths.push(format!("sounds.slots.{}", slot.as_str().unwrap_or_default()));
             }
         }
         paths
@@ -1541,7 +1537,7 @@ mod tests {
             .collect();
         let expected = [
             "settings.jokers", "settings.readAloud", "settings.language", "settings.readaloud",
-            "sounds.effectsVolume", "sounds.slots.noSuchMoment", "sounds.slots.buzz", "timeLimit",
+            "sounds.effectsVolume", "sounds.slots.noSuchMoment", "timeLimit",
             "welcome.on", "welcome.logo",
         ];
         let mut sorted = paths.clone();
@@ -1552,9 +1548,9 @@ mod tests {
         // What did read stays.
         assert_eq!((quiz.settings.jokers, quiz.settings.voice, quiz.settings.start_on_next), (MAX_JOKERS, 3, true));
         assert_eq!(quiz.welcome.heading, "Hi");
-        // A sound that does not fit its moment is kept, and said again.
-        let again: Vec<_> = Quiz::read_json(&serde_json::to_string(&quiz).unwrap()).unwrap().dropped.into_iter().map(|error| error.problem).collect();
-        assert_eq!(again, [Problem::ValueUnread { path: "sounds.slots.buzz".into() }]);
+        // A sound that does not fit its moment is kept, not listed, and named by `unplayed`.
+        assert_eq!(Quiz::read_json(&serde_json::to_string(&quiz).unwrap()).unwrap().dropped, []);
+        assert_eq!(quiz.sounds.unplayed().collect::<Vec<_>>(), [(SoundSlot::Buzz, "music.victory")]);
     }
 
     #[test]

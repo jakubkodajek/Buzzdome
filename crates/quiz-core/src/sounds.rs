@@ -192,6 +192,16 @@ impl QuizSounds {
         }
     }
 
+    /// The app's own sounds the quiz chose for a moment that does not play
+    /// them (`SoundSlot::plays`): one from a newer build, or one that does
+    /// not fit. The moment plays its default.
+    pub fn unplayed(&self) -> impl Iterator<Item = (SoundSlot, &str)> {
+        self.slots.iter().filter_map(|(&slot, choice)| match choice {
+            SoundChoice::BuiltIn(id) if !slot.plays(id) => Some((slot, id.as_str())),
+            _ => None,
+        })
+    }
+
     /// Each file that is not a sound in the quiz's media folder, with its moment.
     pub fn problems(&self) -> impl Iterator<Item = (SoundSlot, &str, MediaIssue)> {
         self.files().filter_map(|(slot, file)| check_reference(file, &[MediaKind::Audio]).err().map(|issue| (slot, file, issue)))
