@@ -29,8 +29,12 @@ export type EditorState =
   | ({ status: "open" } & OpenQuiz);
 
 export type EditorAction =
-  /** A draft came from the backend (null: there is none). */
-  | { type: "loaded"; draft: EditorDraft | null }
+  /**
+   * A draft came from the backend (null: there is none). With `kept`, the
+   * editor's state as it left that draft, which it goes on from (undo too)
+   * while the draft still holds the same quiz.
+   */
+  | { type: "loaded"; draft: EditorDraft | null; kept?: OpenQuiz | null }
   /** The draft is being read again. */
   | { type: "loading" }
   /** The draft could not be read. */
@@ -46,8 +50,14 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
   if (action.type === "loading") return LOADING;
   if (action.type === "unreadable") return { status: "unreadable", error: action.error };
   if (action.type === "loaded") {
-    const { draft } = action;
+    const { draft, kept } = action;
     if (!draft) return { status: "empty" };
+    if (kept && kept.draftId === draft.id && sameData(kept.history.present, draft.quiz)) {
+      const { history } = kept;
+      // As the backend has it now; what the file holds as the editor knew it.
+      const saved = draft.unsaved ? (kept.saved === history.present ? null : kept.saved) : history.present;
+      return { ...kept, status: "open", saved, sourcePath: draft.sourcePath, savesInPlace: draft.savesInPlace, mediaRoot: draft.mediaRoot, problems: draft.problems, dropped: draft.dropped };
+    }
     return {
       status: "open",
       draftId: draft.id,
@@ -81,6 +91,20 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
  */
 export function isUnsaved(open: OpenQuiz): boolean {
   return open.history.present !== open.saved;
+}
+
+/**
+ * Whether two values hold the same data as JSON carries it: keys in any
+ * order, a missing or undefined value the same as null.
+ */
+export function sameData(a: unknown, b: unknown): boolean {
+  if (a === b || (a ?? null) === (b ?? null)) return true;
+  if (typeof a !== "object" || typeof b !== "object" || a === null || b === null) return false;
+  if (Array.isArray(a) || Array.isArray(b)) {
+    return Array.isArray(a) && Array.isArray(b) && a.length === b.length && a.every((value, i) => sameData(value, b[i]));
+  }
+  const [x, y] = [a as Record<string, unknown>, b as Record<string, unknown>];
+  return [...new Set([...Object.keys(x), ...Object.keys(y)])].every((key) => sameData(x[key], y[key]));
 }
 
 /** File › Info has something to tell: problems to fix, or what opening the file left out. */

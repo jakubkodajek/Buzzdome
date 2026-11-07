@@ -6,7 +6,8 @@ import { mediaPicker, type MediaKind } from "../media";
 import { quizPicker } from "../quiz";
 import type { EditorDraft, Quiz, SheetExport, SheetImport } from "../types";
 import { BUSY, DraftSession, heldIn, type DraftApi, type DraftHeld, type DraftOperation, type DraftStatus } from "./draft-session";
-import { editorReducer, isUnsaved, LOADING, type EditorState } from "./editor-state";
+import { createStore, useStore, type Store } from "../store";
+import { editorReducer, isUnsaved, LOADING, type EditorState, type OpenQuiz } from "./editor-state";
 import type { Edit } from "./history";
 import { listSeparator } from "./sheet";
 import { confirmAction, confirmSave } from "../confirm";
@@ -14,6 +15,9 @@ import { confirmAction, confirmSave } from "../confirm";
 // One draft for the whole app, so one session, outliving the editor screen:
 // whatever it wrote is on disk before the screen opens again and loads it.
 const drafts = new DraftSession(api);
+
+/** The open quiz with its undo as the screen last had it, to go on from when it opens again (after a test run, say). */
+const lastOpen = createStore<OpenQuiz | null>(null);
 
 export interface QuizEditor {
   state: EditorState;
@@ -77,7 +81,7 @@ export function useQuizEditor(onTestRun: () => void): QuizEditor {
       (draft) => {
         if (!alive) return;
         written.current = draft?.quiz ?? null;
-        dispatch({ type: "loaded", draft });
+        dispatch({ type: "loaded", draft, kept: lastOpen.get() });
       },
       // Not "no draft": the quizmaster chooses what becomes of it.
       (error: unknown) => {
@@ -90,6 +94,9 @@ export function useQuizEditor(onTestRun: () => void): QuizEditor {
   }, [loads]);
 
   const open = state.status === "open" ? state : null;
+  useEffect(() => {
+    if (state.status !== "loading") lastOpen.set(state.status === "open" ? state : null);
+  }, [state]);
   const draftId = open?.draftId ?? null;
   const present = open?.history.present ?? null;
   const unsaved = open !== null && isUnsaved(open);
@@ -223,14 +230,20 @@ export function useQuizEditor(onTestRun: () => void): QuizEditor {
   };
 }
 
+/** A store for `useDraftState`, made once outside the screen so its value outlives it. */
+export function draftStore<T>(): Store<DraftHeld<T>> {
+  return createStore<DraftHeld<T>>({ draftId: null, value: null });
+}
+
 /**
- * State that belongs to the open draft, such as a clipboard: once another
- * draft is open it reads as null, so nothing of one quiz (the name of one
- * of its media files) lands in another.
+ * State that belongs to the open draft, such as a clipboard, kept in
+ * `store` while the screen is not shown: once another draft is open it
+ * reads as null, so nothing of one quiz (the name of one of its media
+ * files) lands in another.
  */
-export function useDraftState<T>(draftId: string | null): [T | null, (value: T | null) => void] {
-  const [held, setHeld] = useState<DraftHeld<T>>({ draftId, value: null });
-  const set = useCallback((value: T | null) => setHeld({ draftId, value }), [draftId]);
+export function useDraftState<T>(store: Store<DraftHeld<T>>, draftId: string | null): [T | null, (value: T | null) => void] {
+  const held = useStore(store);
+  const set = useCallback((value: T | null) => store.set({ draftId, value }), [store, draftId]);
   return [heldIn(held, draftId), set];
 }
 

@@ -82,6 +82,8 @@ const maybeBroken = (slides: Quiz["slides"]): Quiz["slides"] =>
   broken === "slide" ? slides.map((slide, i) => (i === 3 ? ({ ...slide, answers: null } as unknown as Quiz["slides"][number]) : slide)) : slides;
 /** The editor's drafts are numbered as the backend names their folders. */
 let drafts = 1;
+/** What the editor last wrote into the first draft, which it loads again when it opens again. */
+let firstDraft: { quiz: Quiz; unsaved: boolean } | null = null;
 /** The quizmaster's own AI instructions; null while they are the default ones. */
 let aiInstructions: string | null = null;
 
@@ -743,7 +745,7 @@ mockIPC(
         return { meta: { quizTitle: quiz.title, sourcePath: null, startedMs: Date.now() - 3_600_000 }, commandCount: 57 };
       case "editor_load":
         if (draft === "unreadable") return Promise.reject({ code: "draftNotRead", detail: "expected value at line 1 column 1" });
-        return { id: "draft-1", quiz: editorQuiz, sourcePath: "C:\\Kvizy\\hospodsky-kviz.quiz", savesInPlace: true, unsaved: false, mediaRoot: "/src/dev/", problems: [], dropped: [] };
+        return { id: "draft-1", quiz: firstDraft?.quiz ?? editorQuiz, sourcePath: "C:\\Kvizy\\hospodsky-kviz.quiz", savesInPlace: true, unsaved: firstDraft?.unsaved ?? false, mediaRoot: "/src/dev/", problems: [], dropped: [] };
       case "editor_new":
         return { id: `draft-${++drafts}`, quiz: { ...editorQuiz, title: (payload as { title: string }).title, slides: [] }, sourcePath: null, savesInPlace: false, unsaved: false, mediaRoot: "/src/dev/", problems: [], dropped: [] };
       case "recent_files":
@@ -779,6 +781,11 @@ mockIPC(
       case "editor_update":
         called.push({ cmd, ...(payload as object) });
         if (draft === "failing") return Promise.reject({ code: "file", action: "write", path: "C:\\Users\\q\\AppData\\Local\\cz.kodajek.quizshow\\editor\\draft-1\\quiz.json", reason: "diskFull", detail: "No space left on device (os error 28)" });
+        {
+          // As the backend gives it back: JSON.
+          const written = payload as { draft: string; quiz: Quiz; unsaved: boolean };
+          if (written.draft === "draft-1") firstDraft = { quiz: JSON.parse(JSON.stringify(written.quiz)) as Quiz, unsaved: written.unsaved };
+        }
         return [];
       case "editor_save":
         called.push({ cmd, ...(payload as object) });

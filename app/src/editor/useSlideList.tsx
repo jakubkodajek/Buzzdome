@@ -2,15 +2,20 @@
 // part of the one on the canvas, and what is done with them in order:
 // the clipboard, moving them, going from one to the next.
 
-import { useState, type Dispatch, type SetStateAction } from "react";
+import type { Dispatch, SetStateAction } from "react";
 import { useApp } from "../app-context";
 import { ArrowDownIcon, ArrowUpIcon, CopyIcon, CutIcon, DuplicateIcon, PasteIcon, TrashIcon } from "../icons";
 import type { Quiz, Slide } from "../types";
 import type { Action, SlideListActionId } from "./actions";
 import { hasElement, type ElementId } from "./elements";
 import { FIRST, insertSlides, moveByOne, positions, removeSlides, selectAll, selectedIds, selectIds, selectOne, type Selection } from "./selection";
+import { heldIn } from "./draft-session";
 import { withFreshIds } from "./slides";
-import { openDraftId, useDraftState, type QuizEditor } from "./useQuizEditor";
+import { draftStore, openDraftId, useDraftState, type QuizEditor } from "./useQuizEditor";
+
+// Kept while the editor is not shown (a test run, the Director), so it opens again where it was left.
+const selections = draftStore<Selection>();
+const clipboards = draftStore<Slide[]>();
 
 export interface SlideList {
   slides: Slide[];
@@ -39,9 +44,13 @@ export interface SlideList {
 
 export function useSlideList(editor: QuizEditor, quiz: Quiz | null): SlideList {
   const { t } = useApp();
-  const [selection, setSelection] = useState<Selection>(FIRST);
+  const draftId = openDraftId(editor);
+  const [held, hold] = useDraftState(selections, draftId);
+  const selection = held ?? FIRST;
+  const setSelection: Dispatch<SetStateAction<Selection>> = (next) =>
+    hold(typeof next === "function" ? next(heldIn(selections.get(), draftId) ?? FIRST) : next);
   // Slides keep their media by name, which another quiz does not have.
-  const [clipboard, setClipboard] = useDraftState<Slide[]>(openDraftId(editor));
+  const [clipboard, setClipboard] = useDraftState(clipboards, draftId);
   const slides = quiz?.slides ?? [];
   const found = selection.id === null ? -1 : slides.findIndex((s) => s.id === selection.id);
   const index = slides.length === 0 ? -1 : found >= 0 ? found : Math.min(selection.index, slides.length - 1);

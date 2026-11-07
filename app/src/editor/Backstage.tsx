@@ -13,7 +13,7 @@ import type { MediaKind } from "../media";
 import { LANGUAGE_LABEL, NO_CONTEXT, questionCount, settingsOf, soundsOf, welcomeOf } from "../quiz";
 import { RecentFileList } from "../recent-files";
 import type { AllAnswered, Quiz, QuizLanguage, QuizSettings, QuizSounds, ReadAloud, ValidationError, Welcome } from "../types";
-import { shortcutLabel, tooltip, type Action, type Actions } from "./actions";
+import { tooltip, type Action, type Actions } from "./actions";
 import { AiPage } from "./AiPage";
 import { MediaPicker, NumberBox, Select, Switch } from "./controls";
 import type { OpenQuiz } from "./editor-state";
@@ -64,11 +64,10 @@ export function Backstage(props: BackstageProps) {
     // Opened by a key, the menu takes the focus, so Tab and Enter go on from the page shown; not from a field or dialog that has it.
     if (document.activeElement === document.body) menu.current?.querySelector<HTMLElement>(".backstage-item.active")?.focus();
   }, []);
-  // Each item says its keys, as the quick-access buttons do.
+  // Each item's tooltip says its keys, as the quick-access buttons' do.
   const item = (action: Action) => (
     <button type="button" className="backstage-item" title={tooltip(action)} disabled={action.disabled} onClick={action.run}>
       {action.label}
-      {action.keys && <small>{shortcutLabel(action)}</small>}
     </button>
   );
   const pageItem = (id: BackstagePage, label: string, keys?: string[]) => (
@@ -80,7 +79,6 @@ export function Backstage(props: BackstageProps) {
       onClick={() => onPage(id)}
     >
       {label}
-      {keys && <small>{shortcutLabel({ keys })}</small>}
     </button>
   );
 

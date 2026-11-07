@@ -26,6 +26,7 @@ import { MediaRootContext } from "../media";
 import { NO_CONTEXT, slideContexts } from "../quiz";
 import { ThemeContext } from "../theme/context";
 import { useLatest } from "../hooks";
+import { createStore, useStore } from "../store";
 import type { StringKey } from "../i18n";
 import type { EditorDraft, Slide } from "../types";
 import type { DraftOperation } from "./draft-session";
@@ -52,7 +53,7 @@ import { styleProperties } from "./style-properties";
 import { TableView } from "./TableView";
 import { Thumbnails } from "./Thumbnails";
 import { useCategories } from "./useCategories";
-import { useDraftState, useQuizEditor, type QuizEditor } from "./useQuizEditor";
+import { draftStore, useDraftState, useQuizEditor, type QuizEditor } from "./useQuizEditor";
 import { useSheetActions } from "./useSheetActions";
 import { useSlideList } from "./useSlideList";
 import { useSlideMedia } from "./useSlideMedia";
@@ -65,6 +66,15 @@ const GALLERY_AT = { x: 180, y: 120 };
 
 /** A category's properties are its own: nothing is mixed. */
 const NOTHING_MIXED: ReadonlySet<string> = new Set();
+
+type View = "graphical" | "table" | "categories";
+
+// How the editor was left, kept while it is not shown (a test run, the Director), so it opens again as it was.
+const shownTab = createStore<RibbonTab>("home");
+const shownView = createStore<View>("graphical");
+const panelShown = createStore(true);
+const notesOn = createStore(true);
+const copiedValues = draftStore<CopiedValue>();
 
 /** What the status bar says while each file operation runs. */
 const BUSY_TEXT: Record<DraftOperation, StringKey> = {
@@ -138,13 +148,17 @@ function Studio({ editor, open, ask, onExit }: { editor: QuizEditor; open: OpenQ
   const { t } = useApp();
   /** What to work on is asked: everything (as the editor opens) or a new quiz's name. */
   const [asking, setAsking] = useState<"start" | "new" | null>(ask ? "start" : null);
-  const [tab, setTab] = useState<RibbonTab>("home");
+  const tab = useStore(shownTab);
+  const setTab = shownTab.set;
   const [backstage, setBackstage] = useState<BackstagePage | null>(null);
-  const [view, setView] = useState<"graphical" | "table" | "categories">("graphical");
-  const [panel, setPanel] = useState(true);
-  const [notesShown, setNotesShown] = useState(true);
+  const view = useStore(shownView);
+  const setView = shownView.set;
+  const panel = useStore(panelShown);
+  const setPanel = panelShown.set;
+  const notesShown = useStore(notesOn);
+  const setNotesShown = notesOn.set;
   /** The value last copied from a property, to paste into another; a media file only in its own quiz. */
-  const [copiedValue, setCopiedValue] = useDraftState<CopiedValue>(open?.draftId ?? null);
+  const [copiedValue, setCopiedValue] = useDraftState(copiedValues, open?.draftId ?? null);
   /** Ctrl+F asked for the property search, which the panel focuses once it is shown. */
   const [findProperty, setFindProperty] = useState(false);
   const [menu, setMenu] = useState<{ x: number; y: number; target: MenuTarget } | null>(null);
@@ -345,7 +359,10 @@ function Studio({ editor, open, ask, onExit }: { editor: QuizEditor; open: OpenQ
   const sameCategory = slide?.category !== undefined && selectedSlides.every((s) => s.category === slide.category);
   // The picture, video or sound tab shows only while one is selected, and goes back to HOME once none is.
   const ribbonElement = view === "categories" ? categories.element : element;
-  if (tab === "media" && !isMediaElement(ribbonElement)) setTab("home");
+  const mediaShown = isMediaElement(ribbonElement);
+  useEffect(() => {
+    if (!mediaShown && shownTab.get() === "media") shownTab.set("home");
+  }, [mediaShown]);
 
   return (
     <MediaRootContext value={open?.mediaRoot ?? null}>

@@ -2179,12 +2179,6 @@
   color: #fff;
 }
 
-/* An item's keys, at its right end. */
-.backstage-item small {
-  float: right;
-  margin-left: 16px;
-  opacity: 0.7;
-}
 
 .studio .backstage-item:hover:not(:disabled) {
   background: rgba(255, 255, 255, 0.16);

@@ -967,7 +967,7 @@ const strings = {
     descGain: "Zesílení nebo zeslabení zvuku v dB navíc k hlasitosti: hlasitost umí jen ztlumit, zisk i zesílit. Nastavuje ho vyrovnání hlasitosti.",
     normalizeAction: "Vyrovnat",
     descNormalize: "Změří úsek, který hraje, a nastaví zisk na cílovou hlasitost naposledy zvolenou v okně Vyrovnat hlasitost.",
-    normalizeAll: "Vyrovnat hlasitost všech zvuků…",
+    normalizeAll: "Vyrovnat zvuky…",
     normalizeAllTitle: "Vyrovnat hlasitost všech zvuků",
     normalizeDone: "Hlasitost vyrovnána, zisk {gain} dB. Zpět Ctrl+Z.",
     normalizeLimited: "Hlasitost vyrovnána jen zčásti, zisk {gain} dB, aby se zvuk nepřebudil. Zpět Ctrl+Z.",
