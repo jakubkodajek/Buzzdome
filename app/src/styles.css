@@ -106,10 +106,17 @@ body,
   opacity: 0.85;
 }
 
-/* A window or a part of it that failed to render (`RenderFailed`). */
-.render-failed {
-  max-width: 640px;
+/* A window or a part of it that failed to render (`RenderFailed`), in the
+   Director's look (director.css), filling the window or the part. */
+.director.render-failed {
+  display: block;
+  min-height: 100%;
   padding: 24px;
+  background: var(--surface);
+}
+
+.render-failed .notice {
+  max-width: 640px;
 }
 
 /* A slide that failed to render, in the box it was drawn in (`SlideBoundary`). */
