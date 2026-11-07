@@ -38,7 +38,9 @@ finds them can download the installers.
    after it (`ReleaseNotes` in `app/src-tauri/src/updates.rs`). Notes in
    one language only (no `[en]`, or nothing after it) are shown in both,
    and the Release workflow warns that the English part is missing. Apps of
-   version 0.7.0 and older show the whole message, `[en]` line included. The
+   version 0.7.0 and older show the message from its start, `[en]` line
+   and English included, up to its first 1,000 characters
+   (`MAX_NOTES_CHARS`). The
    GitHub release page shows the message as it is.
 
    Make the tag with git, not on GitHub's Releases page: the workflow makes
