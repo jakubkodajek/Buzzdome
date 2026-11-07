@@ -665,7 +665,7 @@ const strings = {
     aiNotConnectedState: "Nepřipojeno",
     aiOutdatedState: "Je třeba připojit znovu",
     aiNotInstalled: "Není nainstalováno",
-    aiSettingsFile: "Nastavení: {path}",
+    aiSettingsFile: "Nastavení: {path}.",
     aiOtherApp: "Jiná AI aplikace",
     aiOtherAppHint:
       "Aplikaci, která umí místní MCP servery, připojíte tak, že do jejích MCP serverů přidáte položku buzzdome z tohoto nastavení (ve většině aplikací pod mcpServers, ve VS Code pod servers) a aplikaci otevřete znovu. Ostatní servery v jejím nastavení nechte.",
@@ -2040,7 +2040,7 @@ const strings = {
     aiNotConnectedState: "Not connected",
     aiOutdatedState: "Needs connecting again",
     aiNotInstalled: "Not installed",
-    aiSettingsFile: "Settings: {path}",
+    aiSettingsFile: "Settings: {path}.",
     aiOtherApp: "Another AI app",
     aiOtherAppHint:
       "To connect another app that runs local MCP servers, add the buzzdome entry from these settings to its MCP servers (under mcpServers in most apps, servers in VS Code) and open the app again. Keep the other servers in its settings.",
