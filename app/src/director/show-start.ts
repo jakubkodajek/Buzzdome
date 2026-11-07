@@ -34,13 +34,14 @@ export interface StartQuestion {
 
 /**
  * What to ask before a new show starts, in one question: that it ends the
- * way back to the show that can be resumed (`last`), and that `file`, the
+ * way back to the show that can be resumed (`last`) unless that show was
+ * finished (it loses nothing worth asking about), and that `file`, the
  * quiz file it plays when known, has newer changes in the editor's draft.
  * Null when neither applies.
  */
 export function startQuestion(t: Translate, last: SessionSummary | null, draft: DraftState | null, file?: string): StartQuestion | null {
   const stale = file === undefined ? null : staleFor(draft, file);
-  const replaces = last && t("replaceLastShowConfirm", { title: last.meta.quizTitle });
+  const replaces = last && !last.finished && t("replaceLastShowConfirm", { title: last.meta.quizTitle });
   const older = stale && t("startStaleConfirm", { title: stale.title });
   if (replaces && older) return { text: `${replaces}\n\n${older}`, ok: t("startNewShow") };
   if (replaces) return { text: replaces, ok: t("startNewShow") };

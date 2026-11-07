@@ -21,6 +21,15 @@ describe("startQuestion", () => {
     expect(startQuestion(t, last, null, "/quizzes/b.quiz")).toEqual({ text: replaces, ok: t("startNewShow") });
   });
 
+  it("asks nothing of a last show that was finished, which a new one loses nothing of", () => {
+    expect(startQuestion(t, { ...last, finished: "ended" }, null)).toBeNull();
+    expect(startQuestion(t, { ...last, finished: "playedOut" }, null, "/quizzes/b.quiz")).toBeNull();
+    expect(startQuestion(t, { ...last, finished: "ended" }, edited, "/quizzes/a.quiz")).toEqual({
+      text: t("startStaleConfirm", { title: "Edited" }),
+      ok: t("startSavedVersion"),
+    });
+  });
+
   it("asks before playing the file of a draft with unsaved changes, in the same question as the one about the last show", () => {
     expect(startQuestion(t, null, edited, "/quizzes/a.quiz")).toEqual({ text: stale, ok: t("startSavedVersion") });
     expect(startQuestion(t, last, edited, "/quizzes/a.quiz")).toEqual({ text: `${replaces}\n\n${stale}`, ok: t("startNewShow") });
