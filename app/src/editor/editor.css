@@ -574,6 +574,12 @@
   padding: 4px 0;
 }
 
+/* The current slide or category takes Tab and the arrow keys. */
+.thumbnail:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
 .thumbnail-number {
   width: 22px;
   padding-top: 2px;

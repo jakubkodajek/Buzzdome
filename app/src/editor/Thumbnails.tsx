@@ -27,19 +27,32 @@ interface ThumbnailsProps {
   add: Action;
 }
 
+/**
+ * A list's current item (a slide, a category) in sight and its one Tab stop
+ * (a roving tab stop); while the list has the focus, the focus goes with it
+ * as the arrow keys move it, so the menu key and Enter act on it.
+ */
+export function useCurrentItem(current: number) {
+  const currentItem = useRef<HTMLLIElement>(null);
+  useEffect(() => {
+    const element = currentItem.current;
+    if (!element) return;
+    element.scrollIntoView({ block: "nearest" });
+    const focused = document.activeElement;
+    if (focused !== element && focused instanceof HTMLLIElement && element.parentElement?.contains(focused)) element.focus();
+  }, [current]);
+  return (i: number) => ({ ref: i === current ? currentItem : undefined, tabIndex: i === current ? 0 : -1 });
+}
+
 /** The slides down the left side: click to select (Ctrl or Shift for several), drag to reorder. */
 export function Thumbnails({ quiz, contexts, current, selected, problems, onSelect, onOpen, onMenu, onMove, add }: ThumbnailsProps) {
   const { t } = useApp();
   // While dragging: the slide dragged and the gap (0..count) it would drop into.
   const [drag, setDrag] = useState<{ from: number; gap: number } | null>(null);
-  const selectedItem = useRef<HTMLLIElement>(null);
+  const item = useCurrentItem(current);
   // Gaps next to a slide dragged alone would leave it where it is: no marker.
   const alone = drag !== null && !(selected.size > 1 && selected.has(quiz.slides[drag.from]?.id ?? ""));
   const gap = drag && !(alone && (drag.gap === drag.from || drag.gap === drag.from + 1)) ? drag.gap : null;
-
-  useEffect(() => {
-    selectedItem.current?.scrollIntoView({ block: "nearest" });
-  }, [current]);
 
   const drop = () => {
     if (!drag) return;
@@ -61,7 +74,7 @@ export function Thumbnails({ quiz, contexts, current, selected, problems, onSele
         {quiz.slides.map((slide, i) => (
           <li
             key={slide.id}
-            ref={i === current ? selectedItem : undefined}
+            {...item(i)}
             aria-selected={selected.has(slide.id)}
             className={[
               "thumbnail",

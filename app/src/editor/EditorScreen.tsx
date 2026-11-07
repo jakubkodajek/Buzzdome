@@ -89,6 +89,12 @@ const BUSY_TEXT: Record<DraftOperation, StringKey> = {
   testRun: "busyTestRun",
 };
 
+/** The middle of the first element shown that matches `selector`, where a menu opened by the keys appears; null when none shows. */
+function centreOf(selector: string): { x: number; y: number } | null {
+  const rect = document.querySelector(selector)?.getBoundingClientRect();
+  return rect && rect.width > 0 ? { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 } : null;
+}
+
 /** The commands in the title bar, as an office suite's quick-access toolbar. */
 const QUICK_ACCESS: ActionId[] = ["save", "undo", "redo"];
 
@@ -330,10 +336,27 @@ function Studio({ editor, open, ask, onExit }: { editor: QuizEditor; open: OpenQ
     inFields: true,
     run: () => (open && backstage ? setBackstage(null) : view === "categories" ? categories.selectPart("slide") : list.selectPart("slide")),
   };
+  // The menu key and Shift+F10 open the right click's menu: of the slide or category in the list that has the focus, else of the part selected on the canvas.
+  const menuKey: Action = {
+    label: "",
+    keys: ["ContextMenu", "Shift+F10"],
+    disabled: view === "table",
+    run: () => {
+      const inList = document.activeElement?.closest(".thumbnails") != null;
+      const [target, place]: [MenuTarget, string] =
+        view === "categories"
+          ? [{ kind: "category" }, inList ? ".thumbnail.selected" : ".design-area"]
+          : inList || !slide
+            ? [slide ? { kind: "thumbnail" } : { kind: "list" }, slide ? ".thumbnail.selected" : ".thumbnails"]
+            : [{ kind: "canvas", element }, `.design-area [data-element="${element}"]`];
+      const at = centreOf(place) ?? centreOf(".design-area") ?? centreOf(".thumbnails");
+      if (at) setMenu({ ...at, target });
+    },
+  };
   const all =
     view === "categories"
-      ? [...CATEGORY_VIEW_KEYS.map((id) => actions[id]), ...Object.values(categories.actions), escape]
-      : [...Object.values(actions), escape];
+      ? [...CATEGORY_VIEW_KEYS.map((id) => actions[id]), ...Object.values(categories.actions), escape, menuKey]
+      : [...Object.values(actions), escape, menuKey];
   // Dialogs and menus take the keys; the FILE page only the ones that work anywhere.
   useActionKeys(asking || dialog || menu || gallery || sound.windowOpen || sheet.windowOpen ? [] : backstageShown ? all.filter((a) => a.inFields) : all);
 

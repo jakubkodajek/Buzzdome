@@ -1,6 +1,6 @@
 // Small form controls of the editor, in the look of a desktop app.
 
-import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { ANSWER_LETTERS } from "../answers";
 import { useApp } from "../app-context";
 import { confirmAction } from "../confirm";
@@ -353,10 +353,39 @@ export function Dialog(props: {
 /**
  * A box over the window at a point, kept inside the window also as it grows
  * (a picker folding a part open); closes on any click outside or Escape.
+ * Closing gives the focus back to the control that had it as the box
+ * opened. `children` given as a function of `close` close it so before
+ * running what was picked, so a dialog that opens then returns the focus
+ * there too.
  */
-export function Popup(props: { x: number; y: number; onClose: () => void; className: string; role: string; label?: string; children: ReactNode }) {
+export function Popup(props: {
+  x: number;
+  y: number;
+  onClose: () => void;
+  className: string;
+  role: string;
+  label?: string;
+  children: ReactNode | ((close: () => void) => ReactNode);
+}) {
   const { x, y, onClose, className, role, label, children } = props;
   const box = useRef<HTMLDivElement>(null);
+  // Read while rendering, before the box takes the focus.
+  const [opener] = useState(() => document.activeElement);
+  const giveBack = useCallback(() => {
+    if (opener instanceof HTMLElement && opener.isConnected) opener.focus();
+  }, [opener]);
+  const close = () => {
+    giveBack();
+    onClose();
+  };
+  useLayoutEffect(
+    () => () => {
+      // Closed some other way (its owner went): the focus would fall to the page with the box.
+      const focused = document.activeElement;
+      if (focused === document.body || (focused && box.current?.contains(focused))) giveBack();
+    },
+    [giveBack],
+  );
   useLayoutEffect(() => {
     const element = box.current;
     if (!element) return;
@@ -374,10 +403,10 @@ export function Popup(props: { x: number; y: number; onClose: () => void; classN
   return (
     <div
       className="popup-backdrop"
-      onMouseDown={onClose}
+      onMouseDown={close}
       onContextMenu={(e) => {
         e.preventDefault();
-        onClose();
+        close();
       }}
     >
       <div
@@ -393,29 +422,36 @@ export function Popup(props: { x: number; y: number; onClose: () => void; classN
           if (e.key !== "Escape") return;
           // Only the popup closes, not what the editor's Esc does.
           e.stopPropagation();
-          onClose();
+          close();
         }}
       >
-        {children}
+        {typeof children === "function" ? children(close) : children}
       </div>
     </div>
   );
 }
 
+type FocusMove = Record<string, (at: number, count: number) => number>;
+
 /** The keys that move through a menu's items, to where they go from item `at` of `count`. */
-const MENU_KEYS: Record<string, (at: number, count: number) => number> = {
+const MENU_KEYS: FocusMove = {
   ArrowDown: (at, count) => (at + 1) % count,
   ArrowUp: (at, count) => (at - 1 + count) % count,
   Home: () => 0,
   End: (_, count) => count - 1,
 };
 
-/** Moves the focus through the enabled items of the menu `item` is in, as `key` says; whether it was a menu key. */
-function moveInMenu(item: HTMLElement, key: string): boolean {
-  const to = MENU_KEYS[key];
-  const menu = item.parentElement;
-  if (!to || !menu) return false;
-  const items = [...menu.querySelectorAll<HTMLElement>("[role^=menuitem]:not(:disabled)")];
+/** A gallery's tiles run in rows: the side arrows go through them too. */
+export const GALLERY_KEYS: FocusMove = { ...MENU_KEYS, ArrowRight: MENU_KEYS.ArrowDown, ArrowLeft: MENU_KEYS.ArrowUp };
+
+/**
+ * Moves the focus from `item` through the enabled controls in `box` that
+ * match `selector`, as `key` says by `keys`; whether it was one of them.
+ */
+export function moveFocus(item: HTMLElement, key: string, box: Element | null, selector: string, keys: FocusMove = MENU_KEYS): boolean {
+  const to = keys[key];
+  if (!to || !box) return false;
+  const items = [...box.querySelectorAll<HTMLElement>(`${selector}:not(:disabled)`)];
   if (items.length > 0) items[to(items.indexOf(item), items.length)].focus();
   return true;
 }
@@ -428,31 +464,33 @@ export function ContextMenu({ x, y, items, onClose }: { x: number; y: number; it
   useEffect(() => first.current?.focus(), []);
   return (
     <Popup x={x} y={y} onClose={onClose} className="context-menu" role="menu">
-      {items.map((item, i) =>
-        item === "separator" ? (
-          <div key={i} className="menu-separator" />
-        ) : (
-          <button
-            key={i}
-            ref={i === firstEnabled ? first : undefined}
-            type="button"
-            role={item.checked === undefined ? "menuitem" : "menuitemcheckbox"}
-            aria-checked={item.checked}
-            disabled={item.disabled}
-            onKeyDown={(e) => {
-              if (moveInMenu(e.currentTarget, e.key)) e.preventDefault();
-            }}
-            onClick={() => {
-              onClose();
-              item.run();
-            }}
-          >
-            <span className="menu-icon">{item.checked ? <CheckIcon /> : item.icon}</span>
-            <span>{item.label}</span>
-            {item.keys && <small>{shortcutLabel(item)}</small>}
-          </button>
-        ),
-      )}
+      {(close) =>
+        items.map((item, i) =>
+          item === "separator" ? (
+            <div key={i} className="menu-separator" />
+          ) : (
+            <button
+              key={i}
+              ref={i === firstEnabled ? first : undefined}
+              type="button"
+              role={item.checked === undefined ? "menuitem" : "menuitemcheckbox"}
+              aria-checked={item.checked}
+              disabled={item.disabled}
+              onKeyDown={(e) => {
+                if (moveFocus(e.currentTarget, e.key, e.currentTarget.parentElement, "[role^=menuitem]")) e.preventDefault();
+              }}
+              onClick={() => {
+                close();
+                item.run();
+              }}
+            >
+              <span className="menu-icon">{item.checked ? <CheckIcon /> : item.icon}</span>
+              <span>{item.label}</span>
+              {item.keys && <small>{shortcutLabel(item)}</small>}
+            </button>
+          ),
+        )
+      }
     </Popup>
   );
 }
