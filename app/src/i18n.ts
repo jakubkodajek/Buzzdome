@@ -190,7 +190,7 @@ const strings = {
     lightCorrect: "Správná odpověď",
     lightCorrectHint: "Po vyhodnocení otázky",
     lightWrong: "Špatná odpověď",
-    lightWrongHint: "Po vyhodnocení otázky, a po špatné odpovědi u otázky s rychlou odpovědí až do jejího konce",
+    lightWrongHint: "Po vyhodnocení otázky a u otázky s rychlou odpovědí od špatné odpovědi až do jejího konce",
     remoteInLog: "ovladač: {keys}",
     remoteKeyBack: "Šipka zpět",
     remoteKeyForward: "Šipka vpřed",

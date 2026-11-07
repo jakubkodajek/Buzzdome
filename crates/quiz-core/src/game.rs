@@ -1126,14 +1126,15 @@ impl Game {
 
     /// The light a switched-on buzzer shows in the current step: ready while
     /// its player can press (before the slides, to register), answered once
-    /// they answered an everyone-answers question or buzzed and wait their
-    /// turn, locked once they buzzed wrong or sit out (and, where buzzes do
-    /// not queue, once another player buzzed), first for the buzz being
-    /// judged, and from the reveal the result: right or wrong
-    /// for the players an everyone-answers question counted, right for the
-    /// fastest finger judged right. Dark otherwise, also once a question
-    /// closed, until its reveal. A switched-off buzzer shows locked. A
-    /// buzz judged wrong shows wrong until the step after it (`judge`).
+    /// they answered an everyone-answers question, waiting once they buzzed
+    /// and wait their turn, wrong once their buzz was judged wrong, locked
+    /// once they sit out (and, where buzzes do not queue, once another
+    /// player buzzed), first for the buzz being judged, and from the reveal
+    /// the result: right or wrong for the players an everyone-answers
+    /// question counted, right for the fastest finger judged right. Dark
+    /// otherwise, also once a question closed, until its reveal; a buzz
+    /// judged wrong that closed it still shows wrong then (`judge`). A
+    /// switched-off buzzer shows locked.
     fn light_of(&self, buzzer: BuzzerId) -> Light {
         match &self.phase {
             Phase::Welcome | Phase::Lobby => Light::Ready,
