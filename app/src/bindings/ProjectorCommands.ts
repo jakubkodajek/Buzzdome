@@ -3,7 +3,7 @@
 import type { Command } from "./Command";
 
 /** The commands the projector window may give. */
-export const PROJECTOR_COMMANDS: readonly Command["type"][] = ["press","next","judgeRight","judgeWrong","pauseClock","resumeClock","showLeaderboard"];
+export const PROJECTOR_COMMANDS: readonly Command["type"][] = ["press","next","judgeRight","judgeWrong","pauseClock","resumeClock","showLeaderboard","goTo"];
 
 /** The buzzers the projector's keys may press, always with the big button. */
 export const KEY_BUZZERS: readonly number[] = [1,2,3,4,5,6,7,8,9,10];

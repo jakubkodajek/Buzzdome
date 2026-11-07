@@ -6,6 +6,7 @@ import type { ClockView } from "./ClockView";
 import type { Controls } from "./Controls";
 import type { Phase } from "./Phase";
 import type { PlayerView } from "./PlayerView";
+import type { QuestionEndView } from "./QuestionEndView";
 import type { QuizSettings } from "./QuizSettings";
 import type { Slide } from "./Slide";
 import type { SoundSlot } from "./SoundSlot";
@@ -23,7 +24,14 @@ nextSlide: number | null,
  * The slide the quizmaster's Back goes to (`Game::previous`), none
  * where it goes nowhere.
  */
-previousSlide: number | null, clock: ClockView | null, players: Array<PlayerView>, 
+previousSlide: number | null, clock: ClockView | null, 
+/**
+ * How the current question's clock stood as the question ended, for
+ * the projector once `clock` is gone: none before it ends, and on a
+ * question the show came back to after it ended (`Game::question_end`).
+ * Left out when none, so a window's own made-up views need not say it.
+ */
+questionEnd?: QuestionEndView, players: Array<PlayerView>, 
 /**
  * The team names prepared for the show, in order, with their buzzers.
  */

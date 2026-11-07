@@ -363,6 +363,34 @@ pub struct Controls {
     /// reading to end (`QuizSettings::clock_after_reading`); Next starts
     /// it as well.
     pub reading_done: bool,
+    /// What `Next` does now, for the button that gives it; None when
+    /// `next` is false.
+    pub next_step: Option<NextStep>,
+}
+
+/// What `Next` does in the current step (`Controls::next_step`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
+#[serde(rename_all = "camelCase")]
+pub enum NextStep {
+    /// From the welcome screen to the players' registration.
+    Registration,
+    /// Starts the question's clock (also once it was read out).
+    StartQuestion,
+    /// Ends the running question at once.
+    EndQuestion,
+    /// Shows the closed question's answer.
+    ShowAnswer,
+    /// From the registration (the lobby) to the first slide.
+    StartQuiz,
+    /// From the last slide to the final ranking after it.
+    FinalRanking,
+    /// The final ranking's next step: it reveals `place` (3, 2, then the
+    /// winner, 1), or the whole ranking (none). A place that nobody holds,
+    /// after shared places, reveals nobody, though the step is still taken.
+    FinalStep { place: Option<u8> },
+    /// Goes on to the next slide.
+    NextSlide,
 }
 
 /// A countdown that can pause. `limit_ms == None` means untimed.
@@ -491,6 +519,22 @@ pub enum Phase {
     Final { step: u8 },
 }
 
+/// Where a show stands (`Game::position`), as the Director names it when
+/// it offers to resume the show.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
+#[serde(tag = "at", rename_all = "camelCase")]
+pub enum ShowPosition {
+    /// The welcome screen or the lobby, before the first slide.
+    BeforeSlides,
+    /// A question: the `number`th (from 1) of the quiz's `count` questions.
+    Question { number: usize, count: usize },
+    /// Another slide: the `number`th (from 1) of the quiz's `count` slides.
+    Slide { number: usize, count: usize },
+    /// The final ranking after the last slide of a quiz without a final slide.
+    FinalRanking,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Player {
     pub buzzer: BuzzerId,
@@ -612,6 +656,18 @@ pub struct Asked {
     pub marks: BTreeMap<BuzzerId, Mark>,
 }
 
+/// How the current question's clock stood as the question ended
+/// (`Game::question_end`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct QuestionEnd {
+    /// Its time ran out.
+    pub timed_out: bool,
+    /// What a right answer scored as the clock stopped, before a joker
+    /// doubles it: a fastest finger judged right scores what it stood at
+    /// when they buzzed.
+    pub points: i32,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Game {
     quiz: Quiz,
@@ -645,6 +701,9 @@ pub struct Game {
     /// shows its answer (rules version 6): its scores stand, and asking it
     /// again would score it twice.
     closed_questions: BTreeSet<usize>,
+    /// How the current question's clock stood as it ended, once it has
+    /// (`question_end`).
+    question_end: Option<QuestionEnd>,
     /// The questions players play their joker on, as (slide, buzzer): the
     /// ones that ended, and the current or next one (`joker_slide`,
     /// `QuizSettings::jokers`).
@@ -692,6 +751,7 @@ impl Game {
             asked: Vec::new(),
             asking: None,
             closed_questions: BTreeSet::new(),
+            question_end: None,
             jokers: BTreeSet::new(),
             auto_step_from: None,
             leaderboard_visible: false,
@@ -765,6 +825,23 @@ impl Game {
         match self.phase {
             Phase::Welcome | Phase::Lobby => None,
             _ => self.quiz.slides.get(self.slide),
+        }
+    }
+
+    /// Where the show stands: on a question, its place among the quiz's
+    /// questions; on another slide, its place among the slides.
+    pub fn position(&self) -> ShowPosition {
+        if self.before_slides() {
+            return ShowPosition::BeforeSlides;
+        }
+        let Some(slide) = self.current_slide() else { return ShowPosition::FinalRanking };
+        let slides = &self.quiz.slides;
+        let is_question = |slide: &&Slide| matches!(slide.content, SlideContent::Question(_));
+        if is_question(&slide) {
+            let number = slides[..=self.slide].iter().filter(is_question).count();
+            ShowPosition::Question { number, count: slides.iter().filter(is_question).count() }
+        } else {
+            ShowPosition::Slide { number: self.slide + 1, count: slides.len() }
         }
     }
 
@@ -944,6 +1021,13 @@ impl Game {
         held.then_some(if step == WINNER_STEP { Cue::Winner } else { Cue::Place })
     }
 
+    /// How the current question's clock stood as the question ended: none
+    /// before it ends, and on a question the show came back to after it
+    /// ended (rules version 6), whose clock is gone.
+    pub fn question_end(&self) -> Option<QuestionEnd> {
+        self.question_end
+    }
+
     pub fn clock(&self) -> Option<&Clock> {
         match &self.phase {
             Phase::Question(QuestionStep::Running { clock } | QuestionStep::Buzzed { clock, .. }) => Some(clock),
@@ -963,10 +1047,10 @@ impl Game {
             _ => None,
         };
         let buzzed = matches!(step, Some(QuestionStep::Buzzed { .. }));
-        let show_over = self.next_leaves_slide() && self.following().is_none();
+        let next_step = self.next_step();
         Controls {
-            next: !buzzed && !show_over,
-            remote_next: !buzzed && !show_over && running.is_none(),
+            next: next_step.is_some(),
+            remote_next: next_step.is_some() && running.is_none(),
             judge: buzzed,
             pause_clock: running.is_some_and(Clock::is_running) || self.pending_step().is_some(),
             resume_clock: running.is_some_and(|clock| !clock.is_running()),
@@ -976,6 +1060,36 @@ impl Game {
             restart_question: self.question_restartable(),
             set_joker: self.open_joker_slide().is_some(),
             reading_done: self.awaiting_reading,
+            next_step,
+        }
+    }
+
+    /// The show is over: its last slide is done, and Next goes nowhere.
+    pub fn is_over(&self) -> bool {
+        self.next_leaves_slide() && self.following().is_none()
+    }
+
+    /// What `next` does in this step; None when it refuses (`NotNow`):
+    /// while a buzz waits to be judged, and past the last slide. The one
+    /// place that says it: `next` takes the step it gives.
+    fn next_step(&self) -> Option<NextStep> {
+        if self.next_leaves_slide() {
+            let following = self.following()?;
+            // A quiz of no slides goes from its lobby to the final ranking.
+            return Some(match self.phase {
+                _ if following == self.quiz.slides.len() => NextStep::FinalRanking,
+                Phase::Lobby => NextStep::StartQuiz,
+                _ => NextStep::NextSlide,
+            });
+        }
+        match &self.phase {
+            Phase::Welcome => Some(NextStep::Registration),
+            Phase::Question(QuestionStep::Ready) => Some(NextStep::StartQuestion),
+            Phase::Question(QuestionStep::Running { .. }) => Some(NextStep::EndQuestion),
+            Phase::Question(QuestionStep::Closed) => Some(NextStep::ShowAnswer),
+            Phase::Final { step } => Some(NextStep::FinalStep { place: FINAL_LAST_STEP.checked_sub(step + 1).filter(|&place| place > 0) }),
+            // Buzzed; the other phases leave the slide (`next_leaves_slide`).
+            _ => None,
         }
     }
 
@@ -1285,7 +1399,7 @@ impl Game {
                     let timed_out = clock.expired(now);
                     // A clock left to run out with nobody left to answer (`closes_as_answered`).
                     let answered = timed_out && self.quiz.settings.run_clock_out && self.nobody_left_to_answer();
-                    let mut effects = if answered { self.close_answered(now) } else { self.close_question() };
+                    let mut effects = if answered { self.close_answered(now) } else { self.close_question(now) };
                     if timed_out {
                         effects.push(Effect::Sound { cue: Cue::TimeUp });
                     }
@@ -1533,17 +1647,17 @@ impl Game {
     /// answer it, for the step the quiz's settings then take (`pending_step`).
     fn close_answered(&mut self, now: u64) -> Vec<Effect> {
         self.auto_step_from = Some(now);
-        self.close_question()
+        self.close_question(now)
     }
 
     /// Closes the running question. An everyone-answers question counts
     /// the players switched on now (`counted`) and scores their answers;
     /// a right answer adds its time to the player's answering time.
-    fn close_question(&mut self) -> Vec<Effect> {
+    fn close_question(&mut self, now: u64) -> Vec<Effect> {
         let Some(q) = self.question().cloned() else {
             return vec![];
         };
-        self.end_question(QuestionStep::Closed);
+        self.end_question(QuestionStep::Closed, now);
         if q.mode == AnswerMode::Everyone {
             self.counted = self.enabled_buzzers().collect();
             for buzzer in self.counted.clone() {
@@ -1565,9 +1679,13 @@ impl Game {
     /// (`closed_questions`). Ended from play, it is in the show's results
     /// (`asked`) also when it gave nobody anything; the reveal of a closed
     /// question adds it to them no more, so a reset of the scores
-    /// (`ResetScores`) between the two leaves it out.
-    fn end_question(&mut self, step: QuestionStep) {
+    /// (`ResetScores`) between the two leaves it out. A question that ends
+    /// at `now` from its clock keeps how the clock stood (`question_end`).
+    fn end_question(&mut self, step: QuestionStep, now: u64) {
         let from_play = self.question_in_play();
+        if let (Some(clock), Some(q)) = (self.clock(), self.question()) {
+            self.question_end = Some(QuestionEnd { timed_out: clock.expired(now), points: q.points_at(clock.elapsed_ms(now)) });
+        }
         self.phase = Phase::Question(step);
         self.closed_questions.insert(self.slide);
         if from_play {
@@ -1664,34 +1782,30 @@ impl Game {
     /// closed (a fastest finger judged right), for the step the quiz's
     /// settings then take (`pending_step`).
     fn reveal(&mut self, winner: Option<BuzzerId>, now: u64) {
-        self.end_question(QuestionStep::Revealed { winner });
+        self.end_question(QuestionStep::Revealed { winner }, now);
         self.auto_step_from = Some(now);
     }
 
     fn next(&mut self, now: u64) -> Result<Vec<Effect>, GameError> {
-        if self.next_leaves_slide() {
-            let following = self.following().ok_or(GameError::NotNow)?;
-            return Ok(self.show_slide(following, now));
-        }
-        match self.phase.clone() {
-            Phase::Welcome => {
+        match self.next_step().ok_or(GameError::NotNow)? {
+            NextStep::NextSlide | NextStep::StartQuiz | NextStep::FinalRanking => {
+                let following = self.following().ok_or(GameError::NotNow)?;
+                Ok(self.show_slide(following, now))
+            }
+            NextStep::Registration => {
                 self.phase = Phase::Lobby;
                 Ok(vec![])
             }
-            Phase::Lobby | Phase::Billboard | Phase::Explanation | Phase::EndOfRound => Err(GameError::NotNow),
-            Phase::Question(step) => match step {
-                QuestionStep::Ready => Ok(self.start_clock(now)),
-                QuestionStep::Running { .. } => Ok(self.close_question()),
-                QuestionStep::Buzzed { .. } => Err(GameError::NotNow),
-                QuestionStep::Closed => {
-                    self.reveal(None, now);
-                    // Dark after a fastest-finger question nobody won, also
-                    // the last buzz judged wrong (`judge`).
-                    Ok(vec![self.lights_now(), Effect::Sound { cue: Cue::Reveal }])
-                }
-                QuestionStep::Revealed { .. } => Err(GameError::NotNow),
-            },
-            Phase::Final { step } => {
+            NextStep::StartQuestion => Ok(self.start_clock(now)),
+            NextStep::EndQuestion => Ok(self.close_question(now)),
+            NextStep::ShowAnswer => {
+                self.reveal(None, now);
+                // Dark after a fastest-finger question nobody won, also
+                // the last buzz judged wrong (`judge`).
+                Ok(vec![self.lights_now(), Effect::Sound { cue: Cue::Reveal }])
+            }
+            NextStep::FinalStep { .. } => {
+                let Phase::Final { step } = &self.phase else { return Err(GameError::NotNow) };
                 let step = step + 1;
                 self.phase = Phase::Final { step };
                 Ok(self.final_cue(step).map(|cue| Effect::Sound { cue }).into_iter().collect())
@@ -1799,6 +1913,7 @@ impl Game {
         self.locked_out.clear();
         self.buzzes.clear();
         self.joins_next.clear();
+        self.question_end = None;
         self.auto_step_from = None;
         self.leaderboard_visible = false;
         self.video_plays = 0;

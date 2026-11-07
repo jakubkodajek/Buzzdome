@@ -151,7 +151,7 @@ describe("AI assistants write quizzes", () => {
 
   test("the editor's AI assistants page connects AI apps where they are installed and keeps the instructions", async () => {
     app ??= await App.launch(data);
-    await app.press("quizEditor");
+    await app.openEditor();
     await app.$(".studio, .backstage");
     if ((await app.count(".backstage")) === 0) await app.press("ribbonFile");
     // Codex is installed here: the app knows it by its folder (CODEX_HOME, harness.ts).
@@ -186,6 +186,9 @@ describe("AI assistants write quizzes", () => {
     await app.seeText(t("aiInstructionsSaved"));
     expect(JSON.parse(readFileSync(SETTINGS, "utf8")).instructions).toBe("Kids' quizzes, easy questions.");
     await app.press("aiDefaultInstructions");
+    await app.seeText(t("aiDefaultInstructionsDone"));
+    // Their own instructions went for good: asked first.
+    expect(await app.asked()).toContain(t("aiDefaultInstructionsConfirm"));
     await waitFor("the default instructions", async () => JSON.parse(readFileSync(SETTINGS, "utf8")).instructions === null);
     expect(await app.errors()).toEqual([]);
     await app.assertHealthy();

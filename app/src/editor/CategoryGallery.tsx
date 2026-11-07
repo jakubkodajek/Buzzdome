@@ -2,7 +2,7 @@ import { useApp } from "../app-context";
 import { SlideThumbnail } from "../host/SlideThumbnail";
 import { NO_CONTEXT } from "../quiz";
 import type { Category } from "../types";
-import { sampleSlide } from "./categories";
+import { categoryName, sampleSlide } from "./categories";
 
 export interface CategoryGalleryProps {
   categories: readonly Category[];
@@ -23,12 +23,12 @@ export function CategoryGallery({ categories, current, apply }: CategoryGalleryP
           key={category.id}
           type="button"
           className="theme-tile"
-          title={t("applyCategory", { name: category.name })}
+          title={t("applyCategory", { name: categoryName(t, category) })}
           aria-pressed={category.id === current}
           onClick={() => apply(category.id)}
         >
           <SlideThumbnail className="theme-thumbnail" slide={sampleSlide(category)} index={0} count={1} context={NO_CONTEXT} />
-          <span>{category.name || t("unnamedCategory")}</span>
+          <span>{categoryName(t, category)}</span>
         </button>
       ))}
     </div>

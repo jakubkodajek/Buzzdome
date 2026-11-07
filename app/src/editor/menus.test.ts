@@ -44,7 +44,7 @@ describe("the editor's context menus", () => {
   it("open the gallery of new slides where the list or a thumbnail was clicked", () => {
     const galleries: [number, number][] = [];
     const items = menuItems(t, { kind: "list" }, 10, 20, context(question, [], [], galleries));
-    expect(labels(items)).toEqual(["paste", "newSlide"]);
+    expect(labels(items)).toEqual(["paste", "newSlide", "addQuestion"]);
     (items[1] as Action).run();
     expect(galleries).toEqual([[10, 20]]);
     expect(menu({ kind: "thumbnail" })).toContain("newSlide");
@@ -60,7 +60,8 @@ describe("the editor's context menus", () => {
   });
 
   it("offer a medium's tools on it, and the background's on the slide", () => {
-    expect(menu({ kind: "canvas", element: "sound" })).toEqual(["edit", "changeMedia", "removeMedia", "-", "trimSound", "normalizeSound", "-", "cut", "copy", "paste"]);
+    const wholeSlide = [t("cutSlide"), t("copySlide"), t("pasteSlide")];
+    expect(menu({ kind: "canvas", element: "sound" })).toEqual(["edit", "changeMedia", "removeMedia", "-", "trimSound", "normalizeSound", "-", ...wholeSlide]);
     expect(menu({ kind: "canvas", element: "video" })).toContain("trimVideo");
     expect(menu({ kind: "canvas", element: "picture" })).not.toContain("trimVideo");
     expect(menu({ kind: "canvas", element: "slide" }, context(question, ["toggleBackground", "removeBackground"]))).toEqual([
@@ -72,6 +73,6 @@ describe("the editor's context menus", () => {
       "copy",
       "paste",
     ]);
-    expect(menu({ kind: "canvas", element: "timer" })).toEqual(["edit", "-", "cut", "copy", "paste"]);
+    expect(menu({ kind: "canvas", element: "timer" })).toEqual(["edit", "-", ...wholeSlide]);
   });
 });

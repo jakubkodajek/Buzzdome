@@ -12,13 +12,18 @@ import { isVideo, type MediaKind } from "../media";
 import { NO_CONTEXT } from "../quiz";
 import type { Category, Quiz, Slide } from "../types";
 import type { Action } from "./actions";
-import { freshCategoryId, newCategory, sampleSlide, slidesOf, withLook } from "./categories";
+import { categoryName, freshCategoryId, newCategory, sampleSlide, slidesOf, withLook } from "./categories";
 import { hasElement, type ElementId } from "./elements";
 import type { SlideEditing } from "./properties";
 import { categoryPages, type Page } from "./property-pages";
 import { rowBuilders } from "./row-builders";
 import { setBackground } from "./slides";
-import type { QuizEditor } from "./useQuizEditor";
+import { draftStore, openDraftId, useDraftState, type QuizEditor } from "./useQuizEditor";
+
+/** The category shown and its part selected; kept while the editor is not shown (a test run), for its draft only. */
+type CategorySelection = { id: string | null; index: number; element: ElementId };
+const FIRST_CATEGORY: CategorySelection = { id: null, index: 0, element: "slide" };
+const categorySelections = draftStore<CategorySelection>();
 
 export type CategoryActionId =
   | "newCategory"
@@ -55,7 +60,8 @@ export interface CategoryEditor {
 export function useCategories(editor: QuizEditor, quiz: Quiz | null): CategoryEditor {
   const { t, notify } = useApp();
   const report = useReport();
-  const [selection, setSelection] = useState<{ id: string | null; index: number; element: ElementId }>({ id: null, index: 0, element: "slide" });
+  const [held, setSelection] = useDraftState(categorySelections, openDraftId(editor));
+  const selection = held ?? FIRST_CATEGORY;
   /** A category is being named, so the next waits for it. */
   const creating = useRef(false);
   const [playingBackgroundOf, setPlayingBackgroundOf] = useState<string | null>(null);
@@ -126,12 +132,15 @@ export function useCategories(editor: QuizEditor, quiz: Quiz | null): CategoryEd
     deleteCategory: {
       label: t("deleteCategory"),
       icon: <TrashIcon />,
-      keys: ["Delete", "Backspace"],
+      // Not while a part of its sample slide is selected.
+      keys: element === "slide" ? ["Delete", "Backspace"] : undefined,
       disabled: !category,
       run: () => {
         if (!category) return;
         editor.edit({ type: "removeCategory", id: category.id });
         setSelection({ id: null, index, element: "slide" });
+        // Its slides look as they did, which is easy to miss: say so.
+        if (slides.length > 0) notify(t("categoryDeleted", { name: categoryName(t, category), n: slides.length }));
       },
     },
     reapplyCategory: {
@@ -141,7 +150,7 @@ export function useCategories(editor: QuizEditor, quiz: Quiz | null): CategoryEd
       run: () => {
         if (!category) return;
         editor.edit({ type: "applyCategory", id: category.id, slides });
-        notify(t("categoryReapplied", { n: slides.length, name: category.name }));
+        notify(t("categoryReapplied", { n: slides.length, name: categoryName(t, category) }));
       },
     },
     previousCategory: { label: t("previousCategory"), keys: ["ArrowUp", "ArrowLeft", "PageUp"], repeats: true, disabled: index <= 0, run: () => select(index - 1) },

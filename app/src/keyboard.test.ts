@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { NO_CONTROLS, previewView } from "./host/preview";
 import { translator } from "./i18n";
 import { KEY_BUZZERS, PROJECTOR_COMMANDS } from "./bindings/ProjectorCommands";
-import { commandForAction, commandForKey, commandForRemote, isFieldTarget, isHeldButtonPress, isPlainKey, isProjectorCloseKey, isTypingTarget, keyCombo, keyHint, KEYS } from "./keyboard";
+import { commandForAction, commandForKey, commandForRemote, ESC_AGAIN_MS, isFieldTarget, isHeldButtonPress, isPlainKey, isProjectorCloseKey, isTypingTarget, keyboardHelp, keyCombo, keyHint, KEYS, projectorKeyActs, showKey } from "./keyboard";
 import type { Controls, GameView, Phase } from "./types";
 
 const slide = { id: "q1", type: "billboard", title: "Round 1", text: "", notes: "", picture: null, video: null, sound: null, background: null } as const;
@@ -30,10 +30,31 @@ describe("commandForKey", () => {
     expect(commandForKey("p", viewWith({ next: true }))).toBeNull();
   });
 
+  it("takes the digits by their place, so the top row presses buzzers on a Czech layout too", () => {
+    expect(showKey({ key: "ě", code: "Digit2" })).toBe("2");
+    expect(showKey({ key: "é", code: "Digit0" })).toBe("0");
+    expect(showKey({ key: "7", code: "Numpad7" })).toBe("7");
+    // NumLock off: the keypad's arrows and Page keys stay the quizmaster's keys.
+    expect(showKey({ key: "ArrowRight", code: "Numpad6" })).toBe("ArrowRight");
+    expect(showKey({ key: "PageUp", code: "Numpad9" })).toBe("PageUp");
+    expect(showKey({ key: "End", code: "Numpad1" })).toBe("End");
+    expect(showKey({ key: "y", code: "KeyZ" })).toBe("y");
+    expect(commandForKey(showKey({ key: "+", code: "Digit1" }), viewWith({}))).toEqual({ type: "press", buzzer: 1, button: "big" });
+  });
+
+  it("goes back a slide with Left and Page Up when the show may jump, on the projector only if it may jump", () => {
+    const view = { ...viewWith({ goTo: true }), previousSlide: 3 };
+    for (const key of ["ArrowLeft", "PageUp"]) {
+      expect(commandForKey(key, view, true)).toEqual({ type: "goTo", slide: 3 });
+      expect(commandForKey(key, view)).toEqual(PROJECTOR_COMMANDS.includes("goTo") ? { type: "goTo", slide: 3 } : null);
+      expect(commandForKey(key, { ...view, controls: { ...view.controls, goTo: false } }, true)).toBeNull();
+    }
+  });
+
   it("gives only commands the projector may give, as its keys are the same", () => {
-    const keys = [..."abcdefghijklmnopqrstuvwxyz0123456789", " ", "ArrowRight", "PageDown", "Enter", "Escape", "Backspace"];
-    const all: Controls = { next: true, remoteNext: true, judge: true, pauseClock: true, resumeClock: true, closeQuestion: true, playVideo: true, goTo: true, restartQuestion: true, setJoker: true, readingDone: false };
-    const views = [viewWith(all), viewWith({ ...all, pauseClock: false }, true)];
+    const keys = [..."abcdefghijklmnopqrstuvwxyz0123456789", " ", "ArrowRight", "PageDown", "ArrowLeft", "PageUp", "Enter", "Escape", "Backspace"];
+    const all: Controls = { next: true, remoteNext: true, judge: true, pauseClock: true, resumeClock: true, closeQuestion: true, playVideo: true, goTo: true, restartQuestion: true, setJoker: true, readingDone: false, nextStep: "nextSlide" };
+    const views = [viewWith(all), viewWith({ ...all, pauseClock: false }, true)].map((view) => ({ ...view, previousSlide: 1 }));
     const given = new Set(views.flatMap((view) => keys.map((key) => commandForKey(key, view)?.type).filter((type) => type !== undefined)));
     expect([...given].filter((type) => !PROJECTOR_COMMANDS.includes(type))).toEqual([]);
     expect(given.size).toBe(PROJECTOR_COMMANDS.length);
@@ -55,7 +76,7 @@ describe("commandForKey", () => {
 
 describe("commandForAction", () => {
   it("does what the keyboard's key for the action does", () => {
-    const all: Controls = { next: true, remoteNext: true, judge: true, pauseClock: true, resumeClock: false, closeQuestion: true, playVideo: true, goTo: true, restartQuestion: true, setJoker: true, readingDone: false };
+    const all: Controls = { next: true, remoteNext: true, judge: true, pauseClock: true, resumeClock: false, closeQuestion: true, playVideo: true, goTo: true, restartQuestion: true, setJoker: true, readingDone: false, nextStep: "nextSlide" };
     const pairs = [
       ["next", " "],
       ["judgeRight", "y"],
@@ -81,7 +102,7 @@ describe("commandForAction", () => {
 });
 
 describe("commandForRemote", () => {
-  const all: Controls = { next: true, remoteNext: true, judge: true, pauseClock: true, resumeClock: false, closeQuestion: true, playVideo: true, goTo: true, restartQuestion: true, setJoker: true, readingDone: false };
+  const all: Controls = { next: true, remoteNext: true, judge: true, pauseClock: true, resumeClock: false, closeQuestion: true, playVideo: true, goTo: true, restartQuestion: true, setJoker: true, readingDone: false, nextStep: "nextSlide" };
   const clock = { limitMs: 30_000, elapsedBeforeMs: 0, runningSinceMs: 0, pressesFromMs: 0 };
   const inStep = (step: "ready" | "running" | "closed"): GameView => {
     const phase: Phase = step === "running" ? { phase: "question", step, clock } : { phase: "question", step };
@@ -105,6 +126,20 @@ describe("keyHint", () => {
   it("writes keys as on the keyboard, in the quizmaster's language", () => {
     expect(keyHint(translator("cs"), KEYS.next)).toBe("Mezerník");
     expect(keyHint(translator("en"), KEYS.right)).toBe("Y");
+    expect(keyHint(translator("en"), "pagedown")).toBe("PgDn");
+  });
+});
+
+describe("keyboardHelp", () => {
+  it("names every key the Director takes", () => {
+    const help = keyboardHelp(translator("en"));
+    for (const name of ["Space", "→", "PgDn", "←", "PgUp", "Y/N", "P =", "S =", "M =", "1–0"]) expect(help, name).toContain(name);
+  });
+});
+
+describe("projectorKeyActs", () => {
+  it("opens the projector at any time but closes it only without a show", () => {
+    expect([projectorKeyActs(false, false), projectorKeyActs(false, true), projectorKeyActs(true, false), projectorKeyActs(true, true)]).toEqual([true, true, true, false]);
   });
 });
 
@@ -148,11 +183,18 @@ describe("isPlainKey", () => {
 
 describe("isProjectorCloseKey", () => {
   const key = (k: string, more: Partial<KeyboardEvent> = {}) =>
-    ({ key: k, repeat: false, metaKey: false, ctrlKey: false, altKey: false, defaultPrevented: false, target: null, ...more }) as KeyboardEvent;
+    ({ key: k, repeat: false, metaKey: false, ctrlKey: false, altKey: false, defaultPrevented: false, target: null, timeStamp: 10_000, ...more }) as KeyboardEvent;
 
   it("closes the projector with M or Esc", () => {
-    expect([key("m"), key("M"), key("Escape")].map(isProjectorCloseKey)).toEqual([true, true, true]);
-    expect([key("n"), key(" "), key("Enter")].map(isProjectorCloseKey)).toEqual([false, false, false]);
+    expect([key("m"), key("M"), key("Escape")].map((k) => isProjectorCloseKey(k))).toEqual([true, true, true]);
+    expect([key("n"), key(" "), key("Enter")].map((k) => isProjectorCloseKey(k))).toEqual([false, false, false]);
+  });
+
+  it("during a show closes it only with a second Esc soon after the first", () => {
+    expect([key("m"), key("M"), key("Escape")].map((k) => isProjectorCloseKey(k, true))).toEqual([false, false, false]);
+    expect(isProjectorCloseKey(key("Escape"), true, 10_000 - ESC_AGAIN_MS)).toBe(true);
+    expect(isProjectorCloseKey(key("Escape"), true, 10_000 - ESC_AGAIN_MS - 1)).toBe(false);
+    expect(isProjectorCloseKey(key("m"), true, 9_500)).toBe(false);
   });
 
   it("leaves a held key, a key with a modifier, typing and a key a control took", () => {

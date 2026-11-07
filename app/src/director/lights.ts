@@ -5,7 +5,7 @@
 
 import { CHANNEL_KINDS, LIT_BY_LOOKS, UNIVERSE_SIZE } from "../bindings/LightsConstants";
 import type { StringKey } from "../i18n";
-import type { Channel, ChannelValue, Fixture, LightsSetup, Look, OutputChoice } from "../types";
+import type { Channel, ChannelValue, Cue, Fixture, LightsSetup, Look, OutputChoice, Stage } from "../types";
 
 /** The channel layouts most fixtures have, to start a fixture from. */
 export const FIXTURE_PRESETS: { id: string; label: StringKey; channels: Channel[] }[] = [
@@ -116,6 +116,23 @@ export function addLook(setup: LightsSetup, name: string): LightsSetup {
   return { ...setup, looks: [...setup.looks, look] };
 }
 
+/** Whether `look` lights fixture `id`: a look that lists none lights every fixture. */
+export function lookLights(look: Look, id: number): boolean {
+  return look.fixtures.length === 0 || look.fixtures.includes(id);
+}
+
+/**
+ * The fixtures `look` lists once fixture `id` of the setup's `fixtures` is
+ * ticked `on` or not. With every fixture ticked it lists none, so that
+ * fixtures added later shine too; the last ticked one stays, as listing
+ * none would light them all.
+ */
+export function tickLookFixture(look: Look, fixtures: Fixture[], id: number, on: boolean): number[] {
+  const lit = fixtures.map((fixture) => fixture.id).filter((fixture) => (fixture === id ? on : lookLights(look, fixture)));
+  if (lit.length === 0) return look.fixtures;
+  return lit.length === fixtures.length ? [] : lit;
+}
+
 /** `setup` with look `id` changed by `change`. */
 export function changeLook(setup: LightsSetup, id: number, change: Partial<Omit<Look, "id">>): LightsSetup {
   return { ...setup, looks: setup.looks.map((look) => (look.id === id ? { ...look, ...change } : look)) };
@@ -128,6 +145,14 @@ export function removeLook(setup: LightsSetup, id: number): LightsSetup {
     looks: setup.looks.filter((look) => look.id !== id),
     stages: Object.fromEntries(Object.entries(setup.stages).filter(([, look]) => look !== id)),
     flashes: Object.fromEntries(Object.entries(setup.flashes).filter(([, flash]) => flash?.look !== id)),
+  };
+}
+
+/** The stages that take look `id` and the cues that flash it, which `removeLook` would leave without it. */
+export function lookUses(setup: LightsSetup, id: number): { stages: Stage[]; cues: Cue[] } {
+  return {
+    stages: (Object.keys(setup.stages) as Stage[]).filter((stage) => setup.stages[stage] === id),
+    cues: (Object.keys(setup.flashes) as Cue[]).filter((cue) => setup.flashes[cue]?.look === id),
   };
 }
 

@@ -231,8 +231,9 @@ fn logged_problem(message: &str) -> String {
     }
 }
 
-/// Ends the app, once the quizmaster confirmed it during a show. Every
-/// command is on disk already, so the show can be resumed.
+/// Ends the app, once the quizmaster confirmed it (`close-requested`):
+/// during a show, every command is on disk already, so the show can be
+/// resumed; the editor's draft keeps unsaved changes for the next start.
 #[tauri::command]
 pub fn quit_app(app: AppHandle) {
     app.exit(0);
@@ -257,7 +258,8 @@ impl CloseRequest {
     }
 }
 
-/// The quizmaster chose not to close the app: the next close asks again.
+/// The quizmaster chose not to close the app after all
+/// (`close-requested`): the next close asks again.
 #[tauri::command]
 pub fn close_declined(request: State<CloseRequest>) {
     request.forget();
@@ -286,21 +288,46 @@ fn close_answer(asked: &mut Option<Instant>, now: Instant) -> CloseAnswer {
     }
 }
 
-/// Whether the app may close now. During a show it waits for the Director
-/// to confirm it (`close-requested`, then `quit_app` or `close_declined`),
+/// Why closing the app asks the quizmaster first (`close-requested`):
+/// every reason that holds, so the question names them all.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
+#[serde(rename_all = "camelCase")]
+pub struct CloseReason {
+    /// A show is running; it stays saved for resuming.
+    pub show: bool,
+    /// The quiz in the editor has changes that are not in its file (the
+    /// draft keeps them for the next start).
+    pub unsaved_quiz: bool,
+}
+
+impl CloseReason {
+    /// The reason to ask before closing, none when nothing would be left
+    /// behind.
+    fn of(show: bool, unsaved_quiz: bool) -> Option<CloseReason> {
+        (show || unsaved_quiz).then_some(CloseReason { show, unsaved_quiz })
+    }
+}
+
+/// Whether the app may close now. During a show or with unsaved changes in
+/// the editor, it waits for the Director to
+/// confirm it (`close-requested`, then `quit_app` or `close_declined`),
 /// asking once, unless a recent request went unanswered (`close_answer`).
 fn may_close(app: &AppHandle) -> bool {
-    if !show_may_run(app) || app.get_webview_window(DIRECTOR_LABEL).is_none() {
+    if app.get_webview_window(DIRECTOR_LABEL).is_none() {
         return true;
     }
+    let Some(reason) = CloseReason::of(show_may_run(app), crate::editor::has_unsaved_draft(app)) else {
+        return true;
+    };
     match app.state::<CloseRequest>().answer(Instant::now()) {
         CloseAnswer::Ask => {
-            let _ = app.emit_to(DIRECTOR_LABEL, CLOSE_REQUESTED_EVENT, ());
+            let _ = app.emit_to(DIRECTOR_LABEL, CLOSE_REQUESTED_EVENT, reason);
             false
         }
         CloseAnswer::Wait => false,
         CloseAnswer::Close => {
-            app_log::note("the Director did not answer a request to close during a show: the app closes");
+            app_log::note(&format!("the Director did not answer a request to close ({reason:?}): the app closes"));
             true
         }
     }
@@ -482,6 +509,15 @@ mod tests {
     use super::*;
 
     #[test]
+    fn closing_asks_for_every_reason_that_holds_and_none_without_one() {
+        assert_eq!(CloseReason::of(false, false), None, "nothing is left behind: it closes");
+        let reason = |show, unsaved_quiz| Some(CloseReason { show, unsaved_quiz });
+        assert_eq!(CloseReason::of(true, false), reason(true, false));
+        assert_eq!(CloseReason::of(false, true), reason(false, true));
+        assert_eq!(CloseReason::of(true, true), reason(true, true), "a show does not hide the unsaved quiz");
+    }
+
+    #[test]
     fn the_windows_stay_on_the_apps_pages() {
         let url = |s: &str| Url::parse(s).unwrap();
         let dev = url("http://localhost:1420/");
@@ -527,7 +563,7 @@ mod tests {
         for command in ["dispatch", "get_view", "close_host_window"] {
             assert!(projector.iter().any(|c| c == command), "the projector shows the show and its keys step it: {command}");
         }
-        for command in ["editor_save", "editor_open", "start_show_from_file", "start_show_from_recent", "receiver_select", "quit_app", "update_check", "update_install"] {
+        for command in ["editor_save", "editor_open", "pick_quiz_file", "start_show_from_recent", "receiver_select", "quit_app", "update_check", "update_install"] {
             assert!(!projector.iter().any(|c| c == command), "the projector opens no file and changes no setting: {command}");
         }
     }

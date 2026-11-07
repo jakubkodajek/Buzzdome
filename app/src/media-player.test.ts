@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MAX_BOARD_COLUMNS } from "./bindings/Constants";
-import type { LibraryFile, NowPlaying, SoundBoard } from "./types";
-import { heard, heardNow, msToEnd, overAtCheck, padColor, positionAt, progressOf, searchFiles, showClockAt, showClockNow, shownRows } from "./media-player";
+import type { LibraryFile, NowPlaying, Pad, SoundBoard } from "./types";
+import { heard, heardNow, msToEnd, overAtCheck, padColor, padsWithFile, positionAt, progressOf, searchFiles, showClockAt, showClockNow, shownRows, stepSelection } from "./media-player";
 // The cases quiz-core tests `NowPlaying::position_at` with.
 import POSITION_CASES from "../../crates/quiz-core/tests/data/position-at.json";
 
@@ -56,6 +56,34 @@ describe("media player", () => {
     expect(padColor(pad, 0)).toBe("red");
     expect(padColor(pad, MAX_BOARD_COLUMNS + 1)).toBe(padColor(pad, 1));
     expect(padColor({ ...pad, color: "teal" }, 0)).toBe("teal");
+  });
+
+  it("counts the shown pads that hold a file", () => {
+    const empty: Pad = { source: null, label: "", color: null };
+    const song: Pad = { source: { type: "file", reference: "media/song.mp3" }, label: "", color: null };
+    const pads = Array.from({ length: 2 * MAX_BOARD_COLUMNS }, () => empty);
+    pads[0] = song;
+    pads[MAX_BOARD_COLUMNS + 1] = song;
+    // Past the shown columns: the grid does not show it.
+    pads[3] = song;
+    const board = { rows: 2, columns: 2, pads } as SoundBoard;
+    expect(padsWithFile(board, "media/song.mp3")).toBe(2);
+    expect(padsWithFile(board, "media/other.mp3")).toBe(0);
+  });
+
+  it("moves the list's selection with the arrows, Home and End", () => {
+    const list = ["a", "b", "c"];
+    expect(stepSelection(list, null, "ArrowDown")).toBe("a");
+    expect(stepSelection(list, null, "ArrowUp")).toBe("a");
+    expect(stepSelection(list, "a", "ArrowDown")).toBe("b");
+    expect(stepSelection(list, "c", "ArrowDown")).toBe("c");
+    expect(stepSelection(list, "a", "ArrowUp")).toBe("a");
+    expect(stepSelection(list, "b", "Home")).toBe("a");
+    expect(stepSelection(list, "a", "End")).toBe("c");
+    // A selection the search hides starts again from the top.
+    expect(stepSelection(list, "z", "ArrowDown")).toBe("a");
+    expect(stepSelection(list, "a", "Enter")).toBeNull();
+    expect(stepSelection([], null, "ArrowDown")).toBeNull();
   });
 
   it("finds files by any part of their name, whatever its case", () => {

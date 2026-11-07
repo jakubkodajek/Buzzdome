@@ -100,7 +100,7 @@ Status keys: `[x]` done, `[~]` in progress, `[ ]` not started.
 ## Phase 5: Run
 
 - [~] Installers for Windows, macOS and Linux from CI (unsigned); code signing and a portable build to do
-- [~] Automatic updates (Windows and macOS): the app offers and installs signed GitHub releases of this repository, built from `v*` tags (`docs/releasing.md`); v0.2.0, v0.5.0, v0.5.1 and v0.7.0 (questions that start as shown, the buzz queue, reading aloud) are released, and 0.7.1 (release notes in the app's language) is the next update
+- [~] Automatic updates (Windows and macOS): the app offers and installs signed GitHub releases of this repository, built from `v*` tags (`docs/releasing.md`); v0.2.0, v0.5.0, v0.5.1, v0.7.0 (questions that start as shown, the buzz queue, reading aloud) and v0.7.1 (release notes in the app's language) are released, and 0.8.0 (the editor's start dialog, Save that greys out once saved, and the fixes of a UX audit of the whole UI) is the next update
 - [ ] Event checklist: laptop power, display settings, receiver, spare batteries, backup quiz file
 - [ ] First live event
 - [ ] Retrospective: what to fix and what to build next

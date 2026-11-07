@@ -5,6 +5,7 @@ import { useTheme } from "../theme/context";
 import { themeStyle } from "../theme/themes";
 import { TIMER_DESIGNS, TIMER_LABEL } from "../timers";
 import type { TimerDesign } from "../types";
+import { GalleryStrip } from "./GalleryStrip";
 import type { PropertyRow } from "./property-rows";
 
 /** Each design is drawn in the quiz's theme with this much time left. */
@@ -25,7 +26,7 @@ export function TimerGallery({ row, mixed }: TimerGalleryProps) {
   const value = row.value;
   if (value?.kind !== "choice") return null;
   return (
-    <div className="theme-gallery" style={look}>
+    <GalleryStrip style={look}>
       {TIMER_DESIGNS.map((design) => (
         <button
           key={design}
@@ -39,7 +40,7 @@ export function TimerGallery({ row, mixed }: TimerGalleryProps) {
           <span>{t(TIMER_LABEL[design])}</span>
         </button>
       ))}
-    </div>
+    </GalleryStrip>
   );
 }
 

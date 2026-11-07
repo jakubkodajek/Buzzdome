@@ -1,9 +1,11 @@
 // Small form controls of the editor, in the look of a desktop app.
 
-import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 import { ANSWER_LETTERS } from "../answers";
 import { useApp } from "../app-context";
+import { confirmAction } from "../confirm";
 import { parseTrackTime, trackTime } from "../format";
+import { useLatest } from "../hooks";
 import { CheckIcon, ChevronRightIcon, CrossIcon, MoreIcon } from "../icons";
 import { mediaFileName } from "../media";
 import { shortcutLabel, type Action } from "./actions";
@@ -14,12 +16,13 @@ import { shortcutLabel, type Action } from "./actions";
  */
 export const MixedContext = createContext(false);
 
-export function Switch({ checked, onChange, disabled = false, label }: { checked: boolean; onChange: (on: boolean) => void; disabled?: boolean; label: string }) {
+export function Switch({ checked, onChange, disabled = false, label, id }: { checked: boolean; onChange: (on: boolean) => void; disabled?: boolean; label: string; id?: string }) {
   const { t } = useApp();
   const mixed = useContext(MixedContext);
   return (
     <button
       type="button"
+      id={id}
       role="switch"
       aria-checked={checked && !mixed}
       aria-label={mixed ? `${label}: ${t("mixedValues")}` : label}
@@ -41,12 +44,14 @@ export function Switch({ checked, onChange, disabled = false, label }: { checked
  */
 export function AnswerToggles(props: { label: string; count: number; value: number[]; keepOne: boolean; none: string; onChange: (answers: number[]) => void }) {
   const { label, count, value, keepOne, none, onChange } = props;
+  const { t } = useApp();
   const mixed = useContext(MixedContext);
   const pressed = mixed ? [] : value;
   return (
     <span className="answer-toggles" role="group" aria-label={label}>
       {ANSWER_LETTERS.slice(0, count).map((letter, i) => {
         const on = pressed.includes(i);
+        const kept = on && keepOne && pressed.length === 1;
         return (
           <button
             key={letter}
@@ -54,7 +59,8 @@ export function AnswerToggles(props: { label: string; count: number; value: numb
             className={on ? "answer-toggle on" : "answer-toggle"}
             aria-pressed={on}
             aria-label={`${label}: ${letter}`}
-            disabled={on && keepOne && pressed.length === 1}
+            title={kept ? t("keepOneCorrect") : undefined}
+            disabled={kept}
             onClick={() => onChange(on ? pressed.filter((answer) => answer !== i) : [...pressed, i])}
           >
             {letter}
@@ -196,13 +202,17 @@ export function Select<T extends string | number>(props: {
       {text}
     </option>
   );
+  const all = options.flatMap((entry) => (Array.isArray(entry) ? [entry] : entry.options));
+  const find = (text: string) => all.find(([option]) => String(option) === text);
   return (
     <select
       aria-label={label}
       value={mixed ? MIXED_OPTION : String(value)}
+      // A narrow panel cuts a long choice: the tooltip holds it whole.
+      title={mixed ? t("mixedValues") : find(String(value))?.[1]}
       disabled={disabled}
       onChange={(e) => {
-        const picked = options.flatMap((entry) => (Array.isArray(entry) ? [entry] : entry.options)).find(([option]) => String(option) === e.target.value);
+        const picked = find(e.target.value);
         if (picked) onChange(picked[0]);
       }}
     >
@@ -245,39 +255,106 @@ export function MediaPicker({ file, onChoose, onRemove, label }: { file: string 
   );
 }
 
-/** A dialog over the window; Escape or the close button cancels. */
-export function Dialog(props: { title: string; onClose: () => void; children: ReactNode; footer: ReactNode; className?: string }) {
-  const { title, onClose, children, footer, className } = props;
+/** What can take the focus in a dialog. */
+const FOCUSABLE = "button, [href], input, select, textarea, [tabindex]:not([tabindex='-1'])";
+
+/** The controls in `box` that Tab reaches, in order: enabled, shown and not taken off the Tab order. */
+function tabStops(box: HTMLElement): HTMLElement[] {
+  return [...box.querySelectorAll<HTMLElement>(FOCUSABLE)].filter((e) => !e.matches(":disabled") && e.tabIndex >= 0 && e.getClientRects().length > 0);
+}
+
+/**
+ * Keeps Tab and Shift+Tab going round the controls of the box the key went
+ * to (`e.currentTarget`): past the last one to the first and back, never
+ * behind it to the window. A box with none keeps the focus itself.
+ */
+function keepTabInside(e: ReactKeyboardEvent<HTMLElement>) {
+  if (e.key !== "Tab") return;
+  const stops = tabStops(e.currentTarget);
+  const at = stops.indexOf(document.activeElement as HTMLElement);
+  const wrapTo = stops.length === 0 ? e.currentTarget : e.shiftKey ? (at <= 0 ? stops[stops.length - 1] : null) : at === -1 || at === stops.length - 1 ? stops[0] : null;
+  if (!wrapTo) return;
+  e.preventDefault();
+  wrapTo.focus();
+}
+
+/**
+ * A dialog over the window. Escape, the close button and the footer's
+ * Cancel (a `footer` given as a function of it) cancel it; while `dirty`
+ * they ask first and a click beside the dialog does nothing, so nothing
+ * typed is lost by mistake. With `staysOpen`, a click beside it never
+ * closes it, for a dialog whose Cancel leaves more than the dialog. The
+ * focus stays inside while it is open, and goes back where it was once it
+ * closes.
+ */
+export function Dialog(props: {
+  title: string;
+  onClose: () => void;
+  children: ReactNode;
+  footer: ReactNode | ((cancel: () => void) => ReactNode);
+  className?: string;
+  dirty?: boolean;
+  staysOpen?: boolean;
+}) {
+  const { title, onClose, children, footer, className, dirty = false, staysOpen = false } = props;
   const { t } = useApp();
   const box = useRef<HTMLDivElement>(null);
+  // Read while rendering, before anything inside takes the focus.
+  const [opener] = useState(() => document.activeElement);
+  const cancel = useLatest(() => {
+    if (!dirty) onClose();
+    else void confirmAction(t, t("discardEdits"), t("discardEditsOk")).then((discard) => discard && onClose());
+  });
   useEffect(() => {
     // Focus the control marked for it (a footer button too), or else the first field, so typing starts at once.
     const body = box.current?.querySelector(".dialog-body");
     (box.current?.querySelector<HTMLElement>("[data-autofocus]") ?? body?.querySelector<HTMLElement>("textarea, input, select, button"))?.focus();
-  }, []);
+    // The focused control went or was disabled: Escape and Tab still act on the dialog, not on the window behind it.
+    const focusLost = (event: KeyboardEvent) => {
+      const element = box.current;
+      if (!element || (event.target !== document.body && event.target !== document.documentElement)) return;
+      if (event.key === "Escape") {
+        event.preventDefault();
+        cancel.current();
+      } else if (event.key === "Tab") {
+        event.preventDefault();
+        (tabStops(element)[0] ?? element).focus();
+      }
+    };
+    window.addEventListener("keydown", focusLost);
+    return () => {
+      window.removeEventListener("keydown", focusLost);
+      if (opener instanceof HTMLElement && opener.isConnected) opener.focus();
+    };
+  }, [cancel, opener]);
   return (
-    <div className="dialog-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+    <div className="dialog-backdrop" onMouseDown={(e) => e.target === e.currentTarget && !dirty && !staysOpen && onClose()}>
       <div
         ref={box}
         className={className ? `dialog ${className}` : "dialog"}
         role="dialog"
         aria-modal="true"
         aria-label={title}
+        // A click on its text keeps the focus in the dialog, so Escape still cancels it.
+        tabIndex={-1}
         onKeyDown={(e) => {
           if (e.key === "Escape") {
             e.stopPropagation();
-            onClose();
+            cancel.current();
+          } else {
+            // Tab goes round the dialog's own controls.
+            keepTabInside(e);
           }
         }}
       >
         <header className="dialog-title">
           <span>{title}</span>
-          <button type="button" className="dialog-close" aria-label={t("closeDialog")} title={t("closeDialog")} onClick={onClose}>
+          <button type="button" className="dialog-close" aria-label={t("closeDialog")} title={t("closeDialog")} onClick={() => cancel.current()}>
             <CrossIcon />
           </button>
         </header>
         <div className="dialog-body">{children}</div>
-        <footer className="dialog-footer">{footer}</footer>
+        <footer className="dialog-footer">{typeof footer === "function" ? footer(() => cancel.current()) : footer}</footer>
       </div>
     </div>
   );
@@ -285,11 +362,41 @@ export function Dialog(props: { title: string; onClose: () => void; children: Re
 
 /**
  * A box over the window at a point, kept inside the window also as it grows
- * (a picker folding a part open); closes on any click outside or Escape.
+ * (a picker folding a part open); closes on any click outside or Escape,
+ * and Tab goes round its own controls.
+ * Closing gives the focus back to the control that had it as the box
+ * opened. `children` given as a function of `close` close it so before
+ * running what was picked, so a dialog that opens then returns the focus
+ * there too.
  */
-export function Popup(props: { x: number; y: number; onClose: () => void; className: string; role: string; label?: string; children: ReactNode }) {
+export function Popup(props: {
+  x: number;
+  y: number;
+  onClose: () => void;
+  className: string;
+  role: string;
+  label?: string;
+  children: ReactNode | ((close: () => void) => ReactNode);
+}) {
   const { x, y, onClose, className, role, label, children } = props;
   const box = useRef<HTMLDivElement>(null);
+  // Read while rendering, before the box takes the focus.
+  const [opener] = useState(() => document.activeElement);
+  const giveBack = useCallback(() => {
+    if (opener instanceof HTMLElement && opener.isConnected) opener.focus();
+  }, [opener]);
+  const close = () => {
+    giveBack();
+    onClose();
+  };
+  useLayoutEffect(
+    () => () => {
+      // Closed some other way (its owner went): the focus would fall to the page with the box.
+      const focused = document.activeElement;
+      if (focused === document.body || (focused && box.current?.contains(focused))) giveBack();
+    },
+    [giveBack],
+  );
   useLayoutEffect(() => {
     const element = box.current;
     if (!element) return;
@@ -307,10 +414,10 @@ export function Popup(props: { x: number; y: number; onClose: () => void; classN
   return (
     <div
       className="popup-backdrop"
-      onMouseDown={onClose}
+      onMouseDown={close}
       onContextMenu={(e) => {
         e.preventDefault();
-        onClose();
+        close();
       }}
     >
       <div
@@ -323,43 +430,80 @@ export function Popup(props: { x: number; y: number; onClose: () => void; classN
         onMouseDown={(e) => e.stopPropagation()}
         onContextMenu={(e) => e.stopPropagation()}
         onKeyDown={(e) => {
+          // Tab stays in the box while it is open: behind it the editor's keys are muted.
+          keepTabInside(e);
           if (e.key !== "Escape") return;
           // Only the popup closes, not what the editor's Esc does.
           e.stopPropagation();
-          onClose();
+          close();
         }}
       >
-        {children}
+        {typeof children === "function" ? children(close) : children}
       </div>
     </div>
   );
 }
 
-/** A context menu of actions at a point of the window. */
+type FocusMove = Record<string, (at: number, count: number) => number>;
+
+/** The keys that move through a menu's items, to where they go from item `at` of `count`. */
+const MENU_KEYS: FocusMove = {
+  ArrowDown: (at, count) => (at + 1) % count,
+  ArrowUp: (at, count) => (at - 1 + count) % count,
+  Home: () => 0,
+  End: (_, count) => count - 1,
+};
+
+/** A gallery's tiles run in rows: the side arrows go through them too. */
+export const GALLERY_KEYS: FocusMove = { ...MENU_KEYS, ArrowRight: MENU_KEYS.ArrowDown, ArrowLeft: MENU_KEYS.ArrowUp };
+
+/**
+ * Moves the focus from `item` through the enabled controls in `box` that
+ * match `selector`, as `key` says by `keys`; whether it was one of them.
+ */
+export function moveFocus(item: HTMLElement, key: string, box: Element | null, selector: string, keys: FocusMove = MENU_KEYS): boolean {
+  const to = keys[key];
+  if (!to || !box) return false;
+  const items = [...box.querySelectorAll<HTMLElement>(`${selector}:not(:disabled)`)];
+  if (items.length > 0) items[to(items.indexOf(item), items.length)].focus();
+  return true;
+}
+
+/** A context menu of actions at a point of the window; the arrow keys, Home and End go through its items. */
 export function ContextMenu({ x, y, items, onClose }: { x: number; y: number; items: (Action | "separator")[]; onClose: () => void }) {
+  const first = useRef<HTMLButtonElement>(null);
+  const firstEnabled = items.findIndex((item) => item !== "separator" && !item.disabled);
+  // After the popup took the focus, so Enter runs the first item at once.
+  useEffect(() => first.current?.focus(), []);
   return (
     <Popup x={x} y={y} onClose={onClose} className="context-menu" role="menu">
-      {items.map((item, i) =>
-        item === "separator" ? (
-          <div key={i} className="menu-separator" />
-        ) : (
-          <button
-            key={i}
-            type="button"
-            role={item.checked === undefined ? "menuitem" : "menuitemcheckbox"}
-            aria-checked={item.checked}
-            disabled={item.disabled}
-            onClick={() => {
-              onClose();
-              item.run();
-            }}
-          >
-            <span className="menu-icon">{item.checked ? <CheckIcon /> : item.icon}</span>
-            <span>{item.label}</span>
-            {item.keys && <small>{shortcutLabel(item)}</small>}
-          </button>
-        ),
-      )}
+      {(close) =>
+        items.map((item, i) =>
+          item === "separator" ? (
+            <div key={i} className="menu-separator" />
+          ) : (
+            <button
+              key={i}
+              ref={i === firstEnabled ? first : undefined}
+              type="button"
+              role={item.checked === undefined ? "menuitem" : "menuitemcheckbox"}
+              aria-checked={item.checked}
+              disabled={item.disabled}
+              onKeyDown={(e) => {
+                if (moveFocus(e.currentTarget, e.key, e.currentTarget.parentElement, "[role^=menuitem]")) e.preventDefault();
+              }}
+              onClick={() => {
+                close();
+                item.run();
+              }}
+            >
+              <span className="menu-icon">{item.checked ? <CheckIcon /> : item.icon}</span>
+              <span>{item.label}</span>
+              {item.keys && <small>{shortcutLabel(item)}</small>}
+            </button>
+          ),
+        )
+      }
     </Popup>
   );
 }

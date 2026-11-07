@@ -41,6 +41,15 @@ function setTitleBar(theme: "dark" | null) {
     .catch((error: unknown) => api.logProblem(thrownText(error)).catch(() => undefined));
 }
 
+/**
+ * Whether the Director shows dark by the look kept on this computer, read
+ * outside React: for what draws itself in the Director's look when the
+ * Director that would give it is gone (`RenderFailed`).
+ */
+export function storedLookIsDark(): boolean {
+  return showsDark(readLook(readPreference(LOOK_KEY)), systemIsDark());
+}
+
 export interface DirectorLook {
   look: Look;
   setLook: (look: Look) => void;

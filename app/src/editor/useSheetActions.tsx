@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { useApp } from "../app-context";
 import { mediaFileName } from "../media";
+import { quizName } from "../quiz";
 import type { ImportNote, Quiz, Slide } from "../types";
 import type { Action } from "./actions";
 import { ImportNotesDialog } from "./ImportNotesDialog";
@@ -25,10 +26,12 @@ export interface SheetActions {
 export function useSheetActions(editor: QuizEditor, quiz: Quiz | null, insertImported: (slides: Slide[]) => number): SheetActions {
   const { t, notify, caution } = useApp();
   const [importNotes, setImportNotes] = useState<{ imported: number; notes: ImportNote[] } | null>(null);
+  // Not while the editor works on a file.
+  const off = !quiz || editor.status.busy !== null;
   return {
     importSheet: {
       label: t("importFromSheet"),
-      disabled: !quiz,
+      disabled: off,
       run: () =>
         void editor.importSheet().then((result) => {
           if (!result) return;
@@ -40,15 +43,15 @@ export function useSheetActions(editor: QuizEditor, quiz: Quiz | null, insertImp
     },
     sheetTemplate: {
       label: t("saveSheetTemplate"),
-      disabled: !quiz,
+      disabled: off,
       run: () => quiz && void editor.exportSheet(templateQuiz(t, quiz), t("templateFileName")).then((done) => done && notify(t("sheetTemplateSaved"))),
     },
     exportSheet: {
       label: t("exportToSheet"),
-      disabled: !quiz,
+      disabled: off,
       run: () =>
         quiz &&
-        void editor.exportSheet(quiz, quiz.title || t("untitledQuiz")).then((report) => {
+        void editor.exportSheet(quiz, quizName(t, quiz)).then((report) => {
           if (!report) return;
           const missing = report.missing.map(mediaFileName).join(", ");
           const refused = report.refused.join(", ");

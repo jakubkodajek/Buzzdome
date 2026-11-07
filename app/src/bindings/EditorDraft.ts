@@ -16,15 +16,29 @@ id: string, quiz: Quiz,
  */
 sourcePath: string | null, 
 /**
+ * Save writes over that file: it is a quiz file, not a plain JSON quiz
+ * (which Save writes as a new quiz file, as for a quiz without a file).
+ */
+savesInPlace: boolean, 
+/**
  * It has changes that are not in that file.
  */
 unsaved: boolean, 
 /**
  * Folder of the draft's media, ending with a path separator.
  */
-mediaRoot: string, problems: Array<ValidationError>, 
+mediaRoot: string, 
 /**
  * What the file has that the quiz cannot keep (`quiz_core::ReadQuiz`),
  * so saving leaves it out.
  */
-dropped: Array<ValidationError>, };
+dropped: Array<ValidationError>, 
+/**
+ * What keeps it from being saved or played (`quiz_file::problems`).
+ */
+problems: Array<ValidationError>, 
+/**
+ * What looks unfinished but plays (`Quiz::warnings`), which keeps it
+ * from nothing.
+ */
+warnings: Array<ValidationError>, };

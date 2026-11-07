@@ -267,6 +267,9 @@ describe("a simulated buzzer receiver", () => {
     await fake.remote("centre");
     await app.stepPause();
     expect(await app.view()).toMatchObject({ phase: { phase: "question", step: "running" } });
+    // ...and says so, rather than doing nothing; the notes are closed so they cover no button later.
+    await app.seeText(t("remoteNextNoEnd"));
+    while ((await app.count(".toast-close")) > 0) await app.page.click(await app.$(".toast-close"));
 
     await roundRuns(150);
     await fake.press(7, "big", 150);

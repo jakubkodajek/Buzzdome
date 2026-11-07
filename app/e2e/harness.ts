@@ -126,7 +126,10 @@ const PAGE_SETUP = `
         const { message, buttons } = JSON.parse(init.body);
         window.__e2e.asked.push(message);
         // The plugin's ask() sends its Yes and No labels and reads back the one chosen.
-        const [yes, no] = (buttons && buttons.OkCancelCustom) || ["Yes", "No"];
+        // The unsaved-changes question (confirmSave) sends Save, Don't save and Cancel:
+        // going on answers Don't save, as the tests never mean to save there; not going on, Cancel.
+        const three = buttons && buttons.YesNoCancelCustom;
+        const [yes, no] = three ? [three[1], three[2]] : (buttons && buttons.OkCancelCustom) || ["Yes", "No"];
         const chosen = window.__e2e.answer ? yes : no;
         return Promise.resolve(new Response(JSON.stringify(chosen), { headers: { "Tauri-Response": "ok", "Content-Type": "application/json" } }));
       }
@@ -305,8 +308,34 @@ export class App {
     return false;
   }
 
+  /** Whether a shown button with `label` can be pressed now: the command panel keeps a step's buttons, greyed out while the step does not offer them. */
+  async offersButton(label: StringKey): Promise<boolean> {
+    const literal = `"${t(label)}"`;
+    for (const element of await this.page.findAllXPath(`//button[contains(normalize-space(.), ${literal})]`)) {
+      if ((await this.page.displayed(element)) && (await this.page.enabled(element))) return true;
+    }
+    return false;
+  }
+
   async press(label: StringKey | { text: string }): Promise<void> {
     await this.page.click(await this.button(label));
+  }
+
+  /**
+   * Opens the quiz editor from the Director and answers what it asks first:
+   * a new quiz called `newTitle` when given, else the quiz left open, or a
+   * new untitled one when none is.
+   */
+  async openEditor(newTitle?: string): Promise<void> {
+    await this.press("quizEditor");
+    await this.$(".quiz-start-dialog");
+    if (newTitle === undefined && (await this.count(".quiz-start-dialog .continue")) > 0) {
+      await this.page.click(await this.$(".quiz-start-dialog .continue"));
+    } else {
+      if (newTitle) await this.page.type(await this.$(".new-quiz-form input"), newTitle);
+      await this.press("createQuiz");
+    }
+    await waitFor("the start dialog to close", async () => (await this.count(".quiz-start-dialog")) === 0);
   }
 
   /**

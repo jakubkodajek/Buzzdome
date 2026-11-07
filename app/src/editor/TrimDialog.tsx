@@ -271,16 +271,25 @@ export function TrimDialog({ url, name, sound, canReplay, onApply, onClose }: Tr
       title={t("trimTitle", { name })}
       className="trim-dialog"
       onClose={onClose}
-      footer={
+      dirty={parts.changed}
+      footer={(cancel) => (
         <>
+          {measuring && (
+            <>
+              <span className="dialog-status" role="status">
+                {t("trimMeasuring")}
+              </span>
+              <span className="spacer" />
+            </>
+          )}
           <button type="button" className="primary" disabled={!ready || measuring} onClick={() => void apply()}>
             {t("ok")}
           </button>
-          <button type="button" onClick={onClose}>
+          <button type="button" onClick={cancel}>
             {t("cancel")}
           </button>
         </>
-      }
+      )}
     >
       <div className="trim" style={PART_COLORS} onKeyDown={(e) => ready && onPartKeys(e, { togglePlay, setStart, setEnd })}>
         {canReplay && <ReplayChoice parts={parts} />}

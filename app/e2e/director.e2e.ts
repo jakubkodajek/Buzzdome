@@ -44,6 +44,7 @@ const NOT_CLICKED: (StringKey | { text: string })[] = [
   "resultsPrint",
   "mediaAddHint",
   "quizEditor",
+  "backToEditor",
   "endShow",
   "closeAppKeepShow",
   "demoQuiz",
@@ -93,7 +94,9 @@ describe("the Director", () => {
     await app.page.click(await app.$(".buzzer-grid .buzzer:nth-child(1) .key-big"));
     await app.seeText(t("launchBuzzersRegistered", { players: 1 }));
     await app.seeText(t("launchProjectorClosed"));
-    await app.press("launchOpenProjector");
+    // The check's own fix, not the command panel's button of the same name.
+    const [openFix] = await app.page.findAllXPath(`//section[contains(@class, "launch-check")]//button[normalize-space(.) = "${t("openProjectorWindow")}"]`);
+    await app.page.click(openFix);
     await waitFor("the projector open", async () => !(await app.bodyText()).includes(t("launchProjectorClosed")));
     await app.press("launchPlaySound");
     await app.press("launchSoundHeardButton");
@@ -121,7 +124,7 @@ describe("the Director", () => {
     for (let round = 0; round < 80; round++) {
       const view = (await app.view())!;
       if (!view.controls.next && !view.controls.judge) break;
-      await app.clickEverything(".command-panel", [...NOT_CLICKED, "restartQuestion", "projectorToggle"]);
+      await app.clickEverything(".command-panel", [...NOT_CLICKED, "restartQuestion", "previousSlide", "openProjectorWindow", "closeProjectorWindow"]);
       if (view.controls.judge) await app.step("right");
       else await app.step("next");
       await app.waitView("the next step", (v) => v.slideIndex !== view.slideIndex || JSON.stringify(v.phase) !== JSON.stringify(view.phase));
@@ -182,7 +185,7 @@ describe("the Director", () => {
     await app.page.type(name, "Žluťoučký kůň");
     await app.waitView("the name", (v) => player(v, 2).name === "Žluťoučký kůň");
     // A new buzzer by number.
-    const number = await app.$(".teams-tab input[type=number]");
+    const number = await app.$(".teams-tab input.add-buzzer");
     await app.page.type(number, "42");
     await app.press("addPlayer");
     await app.waitView("buzzer 42", (v) => v.players.some((p) => p.buzzer === 42));

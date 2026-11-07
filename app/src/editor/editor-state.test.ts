@@ -1,15 +1,17 @@
 import { describe, expect, it } from "vitest";
 import type { EditorDraft, Quiz, ValidationError } from "../types";
-import { editorReducer, isUnsaved, LOADING, needsInfo, type EditorState, type OpenQuiz } from "./editor-state";
+import { editorReducer, isUnsaved, LOADING, needsInfo, sameData, type EditorState, type OpenQuiz } from "./editor-state";
 
 const quiz: Quiz = { schemaVersion: 1, title: "Quiz", theme: null, slides: [] };
 const draft = (unsaved: boolean, dropped: ValidationError[] = []): EditorDraft => ({
   id: "draft-1",
   quiz,
   sourcePath: "/q.quiz",
+  savesInPlace: true,
   unsaved,
   mediaRoot: "/d/",
   problems: [],
+  warnings: [],
   dropped,
 });
 
@@ -29,8 +31,38 @@ describe("editor state", () => {
     // A draft left unsaved last time stays unsaved until it is saved.
     state = editorReducer(state, { type: "loaded", draft: draft(true) });
     expect(isUnsaved(opened(state))).toBe(true);
-    state = editorReducer(state, { type: "saved", quiz: opened(state).history.present, path: "/other.quiz" });
-    expect(opened(state)).toMatchObject({ sourcePath: "/other.quiz" });
+    state = editorReducer(state, { type: "saved", quiz: opened(state).history.present, path: "/other.quiz", savesInPlace: true });
+    expect(opened(state)).toMatchObject({ sourcePath: "/other.quiz", savesInPlace: true });
+    expect(isUnsaved(opened(state))).toBe(false);
+  });
+
+  it("saves in place from then on only when the backend says the file it saved allows it", () => {
+    let state = editorReducer(LOADING, { type: "loaded", draft: draft(true) });
+    state = editorReducer(state, { type: "saved", quiz: opened(state).history.present, path: "/q.json", savesInPlace: false });
+    expect(opened(state)).toMatchObject({ sourcePath: "/q.json", savesInPlace: false });
+  });
+
+  it("starts a new undo step for typing on after a save, so undo comes back to the quiz as saved", () => {
+    let state = editorReducer(LOADING, { type: "loaded", draft: draft(false) });
+    state = editorReducer(state, { type: "edit", edit: { type: "setTitle", title: "Pub" }, merge: "title", at: 0 });
+    state = editorReducer(state, { type: "saved", quiz: opened(state).history.present, path: "/q.quiz", savesInPlace: true });
+    state = editorReducer(state, { type: "edit", edit: { type: "setTitle", title: "Pub 2026" }, merge: "title", at: 500 });
+    expect(isUnsaved(opened(state))).toBe(true);
+    state = editorReducer(state, { type: "undo" });
+    expect(opened(state).history.present.title).toBe("Pub");
+    expect(isUnsaved(opened(state))).toBe(false);
+  });
+
+  it("keeps typing while the quiz is saved out of the step that is saved", () => {
+    let state = editorReducer(LOADING, { type: "loaded", draft: draft(false) });
+    state = editorReducer(state, { type: "edit", edit: { type: "setTitle", title: "Pub" }, merge: "title", at: 0 });
+    const saving = opened(state).history.present;
+    state = editorReducer(state, { type: "closeStep" });
+    state = editorReducer(state, { type: "edit", edit: { type: "setTitle", title: "Pub 2026" }, merge: "title", at: 500 });
+    state = editorReducer(state, { type: "saved", quiz: saving, path: "/q.quiz", savesInPlace: true });
+    expect(isUnsaved(opened(state))).toBe(true);
+    state = editorReducer(state, { type: "undo" });
+    expect(opened(state).history.present).toBe(saving);
     expect(isUnsaved(opened(state))).toBe(false);
   });
 
@@ -39,9 +71,10 @@ describe("editor state", () => {
     const before = opened(state).history.present;
     state = editorReducer(state, { type: "edit", edit: { type: "setTitle", title: "New" }, at: 0 });
     const problem: ValidationError[] = [{ slideId: null, problem: { code: "duplicateSlideId" } }];
-    expect(editorReducer(state, { type: "checked", quiz: before, problems: problem })).toBe(state);
-    state = editorReducer(state, { type: "checked", quiz: opened(state).history.present, problems: problem });
-    expect(opened(state).problems).toEqual(problem);
+    const warning: ValidationError[] = [{ slideId: null, problem: { code: "noSlides" } }];
+    expect(editorReducer(state, { type: "checked", quiz: before, problems: problem, warnings: warning })).toBe(state);
+    state = editorReducer(state, { type: "checked", quiz: opened(state).history.present, problems: problem, warnings: warning });
+    expect(opened(state)).toMatchObject({ problems: problem, warnings: warning });
   });
 
   it("tells what opening left out until the quiz is saved without it", () => {
@@ -51,9 +84,35 @@ describe("editor state", () => {
     expect(needsInfo(opened(state))).toBe(true);
     state = editorReducer(state, { type: "edit", edit: { type: "setTitle", title: "New" }, at: 0 });
     expect(opened(state).dropped).toEqual(dropped);
-    state = editorReducer(state, { type: "saved", quiz: opened(state).history.present, path: "/q.quiz" });
+    state = editorReducer(state, { type: "saved", quiz: opened(state).history.present, path: "/q.quiz", savesInPlace: true });
     expect(opened(state).dropped).toEqual([]);
     expect(needsInfo(opened(state))).toBe(false);
+  });
+
+  it("goes on with undo where it left the draft, while the draft holds the same quiz", () => {
+    let left = editorReducer(LOADING, { type: "loaded", draft: draft(false) });
+    left = editorReducer(left, { type: "edit", edit: { type: "setTitle", title: "New" }, at: 0 });
+    const kept = opened(left);
+    // The backend gives the quiz back as JSON: another object, with nulls for what was left out.
+    const back = { ...draft(true), quiz: { ...JSON.parse(JSON.stringify(kept.history.present)), theme: null }, problems: [{ slideId: null, problem: { code: "duplicateSlideId" } }] } as EditorDraft;
+    let state = editorReducer(LOADING, { type: "loaded", draft: back, kept });
+    expect(opened(state).history).toBe(kept.history);
+    expect(opened(state).problems).toEqual(back.problems);
+    expect(isUnsaved(opened(state))).toBe(true);
+    state = editorReducer(state, { type: "undo" });
+    expect(isUnsaved(opened(state))).toBe(false);
+    // Another draft, or the same one changed meanwhile, starts afresh.
+    expect(opened(editorReducer(LOADING, { type: "loaded", draft: { ...back, id: "draft-2" }, kept })).history.past).toEqual([]);
+    expect(opened(editorReducer(LOADING, { type: "loaded", draft: { ...back, quiz: { ...back.quiz, title: "Other" } }, kept })).history.past).toEqual([]);
+  });
+
+  it("compares data as JSON carries it", () => {
+    expect(sameData({ a: 1, b: [1, { c: null }] }, { b: [1, {}], a: 1 })).toBe(true);
+    expect(sameData({ a: undefined }, { a: null })).toBe(true);
+    expect(sameData({ a: 1 }, { a: 2 })).toBe(false);
+    expect(sameData([1, 2], [1])).toBe(false);
+    expect(sameData({ a: [] }, { a: {} })).toBe(false);
+    expect(sameData(0, null)).toBe(false);
   });
 
   it("has nothing open without a draft", () => {
@@ -68,5 +127,15 @@ describe("editor state", () => {
     expect(editorReducer(state, { type: "undo" })).toBe(state);
     expect(editorReducer(state, { type: "loading" })).toBe(LOADING);
     expect(opened(editorReducer(LOADING, { type: "loaded", draft: draft(false) })).draftId).toBe("draft-1");
+  });
+});
+
+describe("needsInfo", () => {
+  const noCorrect: ValidationError = { slideId: "q", problem: { code: "noCorrectAnswer" } };
+
+  // Which are warnings the backend tells apart (`editor::checked`): the editor only reads its two lists.
+  it("opens File › Info for problems to fix, not for warnings only", () => {
+    expect(needsInfo({ problems: [], dropped: [] })).toBe(false);
+    expect(needsInfo({ problems: [noCorrect], dropped: [] })).toBe(true);
   });
 });

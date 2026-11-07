@@ -1,7 +1,8 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useDispatch } from "./app-context";
+import { PROJECTOR_COMMANDS } from "./bindings/ProjectorCommands";
 import { useBackendEvent } from "./hooks";
-import type { Translate } from "./i18n";
+import type { StringKey, Translate } from "./i18n";
 import type { Command, GameView, RemoteAction } from "./types";
 
 /** What a quizmaster's key or a key of the remote does in a show: a `RemoteAction` but nothing. */
@@ -10,6 +11,7 @@ export type ShowAction = Exclude<RemoteAction, "nothing">;
 /** The quizmaster's keys, as `KeyboardEvent.key` in lower case. Digits 1-0 are the keyboard buzzers. */
 export const KEYS = {
   next: " ",
+  previous: "arrowleft",
   right: "y",
   wrong: "n",
   clock: "p",
@@ -20,9 +22,59 @@ export const KEYS = {
 /** Keys that also go to the next step. */
 const NEXT_KEYS: readonly string[] = [KEYS.next, "arrowright", "pagedown"];
 
+/** Keys that go back to the previous slide, as a presenter's clicker sends them. */
+const PREVIOUS_KEYS: readonly string[] = [KEYS.previous, "pageup"];
+
+/**
+ * The key a show key press stands for: a top-row key that types a character
+ * is its digit, since on a Czech layout the top row types ě, š, č... without
+ * Shift; a keypad key is a digit only when it types that digit, because with
+ * NumLock off it is an arrow or Page key; any other key as typed.
+ */
+export function showKey(event: Pick<KeyboardEvent, "key" | "code">): string {
+  const digit = /^(Digit|Numpad)([0-9])$/.exec(event.code ?? "");
+  if (!digit) return event.key;
+  const [, row, number] = digit;
+  const typesDigit = row === "Digit" ? event.key.length === 1 : event.key === number;
+  return typesDigit ? number : event.key;
+}
+
+/** The keys written with a word or sign rather than as typed. */
+const KEY_NAMES: Partial<Record<string, StringKey>> = {
+  " ": "keySpace",
+  arrowright: "keyArrowRight",
+  arrowleft: "keyArrowLeft",
+  pagedown: "keyPageDown",
+  pageup: "keyPageUp",
+};
+
 /** How a key is written on the button it stands for. */
 export function keyHint(t: Translate, key: string): string {
-  return key === " " ? t("keySpace") : key.toUpperCase();
+  const name = KEY_NAMES[key];
+  return name ? t(name) : key.toUpperCase();
+}
+
+/** The Director's keys in one line, made from the keys themselves so it cannot leave one out. */
+export function keyboardHelp(t: Translate): string {
+  const keys = (list: readonly string[]) => list.map((key) => keyHint(t, key)).join(", ");
+  return [
+    t("keyHelpBuzzers"),
+    t("keyHelpNext", { keys: keys(NEXT_KEYS) }),
+    t("keyHelpPrevious", { keys: keys(PREVIOUS_KEYS) }),
+    t("keyHelpJudge", { right: keyHint(t, KEYS.right), wrong: keyHint(t, KEYS.wrong) }),
+    t("keyHelpClock", { key: keyHint(t, KEYS.clock) }),
+    t("keyHelpRanking", { key: keyHint(t, KEYS.leaderboard) }),
+    t("keyHelpProjector", { key: keyHint(t, KEYS.projector) }),
+  ].join(" · ");
+}
+
+/**
+ * Whether M (or the remote's projector key) opens or closes the projector
+ * now: always without a show, but during one it only opens it, so a stray
+ * press beside N never takes the hall's screen away.
+ */
+export function projectorKeyActs(showRunning: boolean, projectorOpen: boolean): boolean {
+  return !(showRunning && projectorOpen);
 }
 
 /** Input types that take typed text; the others (sliders, checkboxes, colours) take none. */
@@ -80,10 +132,15 @@ export function isPlainKey(event: Pick<KeyboardEvent, "metaKey" | "ctrlKey" | "a
   return !event.defaultPrevented && !event.metaKey && !event.ctrlKey && !event.altKey && !isTypingTarget(event.target);
 }
 
-/** True for the keys a running show takes, whether or not the current step has a use for them. */
-function isShowKey(key: string): boolean {
+/** Whether a window may give a command: the Director every one, the projector those Rust lets it (`PROJECTOR_COMMANDS`). */
+function mayGive(type: Command["type"], director: boolean): boolean {
+  return director || PROJECTOR_COMMANDS.includes(type);
+}
+
+/** True for the keys a running show takes, whether or not the current step has a use for them (`director`: in the Director). */
+function isShowKey(key: string, director: boolean): boolean {
   const lower = key.toLowerCase();
-  return /^[0-9]$/.test(key) || NEXT_KEYS.includes(lower) || [KEYS.right, KEYS.wrong, KEYS.clock, KEYS.leaderboard].some((k) => k === lower);
+  return /^[0-9]$/.test(key) || NEXT_KEYS.includes(lower) || (mayGive("goTo", director) && PREVIOUS_KEYS.includes(lower)) || [KEYS.right, KEYS.wrong, KEYS.clock, KEYS.leaderboard].some((k) => k === lower);
 }
 
 /** True for Enter held down on a button, which would press it again with every repeat. */
@@ -93,8 +150,10 @@ export function isHeldButtonPress(event: Pick<KeyboardEvent, "key" | "repeat" | 
 
 /**
  * Quizmaster keys, the same in the Director and on the projector window.
- * `onToggleProjector` adds M, which opens or closes the projector from the
- * Director; the projector closes itself (`useProjectorCloseKeys`).
+ * `onToggleProjector`, given in the Director, adds the Director's own keys:
+ * M, which opens or closes the projector (the projector closes itself,
+ * `useProjectorCloseKeys`). Left / Page Up go back to the previous slide in
+ * every window that may jump to a slide (`mayGive`).
  */
 export function useShortcuts(view: GameView | null, onToggleProjector?: () => void) {
   const dispatch = useDispatch();
@@ -110,12 +169,14 @@ export function useShortcuts(view: GameView | null, onToggleProjector?: () => vo
         if (!event.repeat) onToggleProjector();
         return;
       }
-      if (!view || !isShowKey(event.key)) return;
+      const key = showKey(event);
+      const director = onToggleProjector !== undefined;
+      if (!view || !isShowKey(key, director)) return;
       // Taken even when the step has no use for it, so Space never presses a focused button mid-show.
       event.preventDefault();
       // A key held down sends one command, not one per repeat.
       if (event.repeat) return;
-      const command = commandForKey(event.key, view);
+      const command = commandForKey(key, view, director);
       if (command) dispatch(command);
     };
     // A slider keeps no focus once let go, so the arrow keys never move it unseen.
@@ -133,40 +194,64 @@ export function useShortcuts(view: GameView | null, onToggleProjector?: () => vo
   }, [view, dispatch, onToggleProjector]);
 }
 
-/** True for a key press that closes the projector from itself: M or Esc, plain (`isPlainKey`) and not held down. */
-export function isProjectorCloseKey(event: Pick<KeyboardEvent, "key" | "repeat" | "metaKey" | "ctrlKey" | "altKey" | "defaultPrevented" | "target">): boolean {
-  return isPlainKey(event) && !event.repeat && (event.key === "Escape" || event.key.toLowerCase() === KEYS.projector);
+/** How soon a second Esc must follow the first to close the projector during a show. */
+export const ESC_AGAIN_MS = 2000;
+
+/**
+ * True for a key press that closes the projector from itself, plain
+ * (`isPlainKey`) and not held down: without a show Esc or M; during one
+ * (`showRunning`) only an Esc within `ESC_AGAIN_MS` of the Esc before it
+ * (`lastEscape`, that press's `timeStamp`), so one reflexive Esc never takes
+ * the hall's screen away.
+ */
+export function isProjectorCloseKey(
+  event: Pick<KeyboardEvent, "key" | "repeat" | "metaKey" | "ctrlKey" | "altKey" | "defaultPrevented" | "target" | "timeStamp">,
+  showRunning = false,
+  lastEscape: number | null = null,
+): boolean {
+  if (!isPlainKey(event) || event.repeat) return false;
+  if (event.key === "Escape") return !showRunning || (lastEscape !== null && event.timeStamp - lastEscape <= ESC_AGAIN_MS);
+  return event.key.toLowerCase() === KEYS.projector && projectorKeyActs(showRunning, true);
 }
 
 /**
- * M or Esc closes the projector from itself: full screen over the Director,
- * it is the window that has the keys, also once its screen failed.
+ * Esc, and M while no show runs, closes the projector from itself (during a
+ * show Esc twice, `isProjectorCloseKey`): full screen over the Director, it
+ * is the window that has the keys, also once its screen failed.
  */
-export function useProjectorCloseKeys(close: () => void) {
+export function useProjectorCloseKeys(close: () => void, showRunning = false) {
+  const lastEscape = useRef<number | null>(null);
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (!isProjectorCloseKey(event)) return;
+      const closes = isProjectorCloseKey(event, showRunning, lastEscape.current);
+      if (event.key === "Escape" && !event.repeat) lastEscape.current = closes ? null : event.timeStamp;
+      if (!closes) return;
       event.preventDefault();
       close();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [close]);
+  }, [close, showRunning]);
 }
 
-/** The command a key stands for, or null when the current step does not take it (see `Controls`). */
-export function commandForKey(key: string, view: GameView): Command | null {
+/**
+ * The command a key stands for, or null when the current step does not take it (see `Controls`) or the
+ * window may not give it (`director`: in the Director, else on the projector; `mayGive`).
+ */
+export function commandForKey(key: string, view: GameView, director = false): Command | null {
   if (/^[0-9]$/.test(key)) {
     // Keyboard buzzers as in the original: 1..9 and 0 for buzzer 10.
     return { type: "press", buzzer: key === "0" ? 10 : Number(key), button: "big" };
   }
   const action = actionForKey(key.toLowerCase());
-  return action && commandForAction(action, view);
+  const command = action && commandForAction(action, view);
+  return command && mayGive(command.type, director) ? command : null;
 }
 
 /** The show action of a key, in lower case; M, the projector's, is the Director's own (`useShortcuts`). */
 function actionForKey(lower: string): ShowAction | null {
   if (NEXT_KEYS.includes(lower)) return "next";
+  if (PREVIOUS_KEYS.includes(lower)) return "previous";
   switch (lower) {
     case KEYS.right:
       return "judgeRight";
@@ -191,7 +276,7 @@ export function commandForAction(action: ShowAction, view: GameView): Command | 
     case "next":
       return controls.next ? { type: "next" } : null;
     case "previous":
-      return view.previousSlide === null ? null : { type: "goTo", slide: view.previousSlide };
+      return view.previousSlide === null || !controls.goTo ? null : { type: "goTo", slide: view.previousSlide };
     case "clock":
       if (controls.pauseClock) return { type: "pauseClock" };
       return controls.resumeClock ? { type: "resumeClock" } : null;

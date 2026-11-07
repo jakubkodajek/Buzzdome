@@ -3,7 +3,7 @@ import type { EditorDraft, Quiz } from "../types";
 import { BUSY, DraftSession, heldIn, type DraftApi } from "./draft-session";
 
 const quiz = (title: string): Quiz => ({ schemaVersion: 1, title, theme: null, slides: [] });
-const draft = (id: string, title = id): EditorDraft => ({ id, quiz: quiz(title), sourcePath: null, unsaved: false, mediaRoot: "/d/", problems: [], dropped: [] });
+const draft = (id: string, title = id): EditorDraft => ({ id, quiz: quiz(title), sourcePath: null, savesInPlace: false, unsaved: false, mediaRoot: "/d/", problems: [], warnings: [], dropped: [] });
 const FULL_DISK = { code: "file", action: "write", path: "/d/quiz.json", detail: "No space left on device" };
 
 /** A promise with its resolver, to finish a backend call when a test says so. */
@@ -32,12 +32,12 @@ function fakeApi(start = "draft-1") {
       calls.push(`update ${id} ${written.title}`);
       if (current === null) throw { code: "noDraft" };
       if (id !== current) throw { code: "draftChanged" };
-      return [];
+      return { problems: [], warnings: [] };
     }),
     editorSave: vi.fn(async (id: string, saved: Quiz, saveAs: boolean) => {
       calls.push(`save ${id} ${saved.title}${saveAs ? " as" : ""}`);
       if (id !== current) throw { code: "draftChanged" };
-      return "/q.quiz";
+      return { path: "/q.quiz", savesInPlace: true };
     }),
     editorAddMedia: vi.fn(async () => "media/a.png"),
     editorImportSheet: vi.fn(),
@@ -107,6 +107,45 @@ describe("DraftSession", () => {
     await vi.advanceTimersByTimeAsync(5000);
     expect(calls).toEqual(["update draft-1 B"]);
     expect(session.getStatus().notWritten).toBe(null);
+  });
+
+  it("writes a failing change that is then saved as saved, also when its retry came due during the save", async () => {
+    for (const saveMs of [0, 1500]) {
+      const { draftApi, calls } = fakeApi();
+      const session = new DraftSession(draftApi, 1000);
+      draftApi.editorUpdate.mockRejectedValueOnce(FULL_DISK);
+      const a = quiz("A");
+      session.write("draft-1", a, true, () => undefined);
+      await vi.advanceTimersByTimeAsync(0);
+      const save = session.exclusive("save", async (api) => {
+        const saved = await api.editorSave("draft-1", a, false, PICKER);
+        await vi.advanceTimersByTimeAsync(saveMs);
+        session.saved("draft-1", a);
+        return saved;
+      });
+      await save;
+      await vi.advanceTimersByTimeAsync(5000);
+      // The failed write is not in `calls`; the retry gives way to the write as saved.
+      expect(calls).toEqual(["save draft-1 A", "update draft-1 A"]);
+      expect(draftApi.editorUpdate).toHaveBeenCalledTimes(2);
+      expect(draftApi.editorUpdate).toHaveBeenLastCalledWith("draft-1", a, false);
+      expect(session.getStatus().notWritten).toBe(null);
+    }
+  });
+
+  it("leaves a change made after the quiz that was saved unsaved", async () => {
+    const { draftApi } = fakeApi();
+    const session = new DraftSession(draftApi, 1000);
+    draftApi.editorUpdate.mockRejectedValueOnce(FULL_DISK);
+    const b = quiz("B");
+    session.write("draft-1", b, true, () => undefined);
+    await vi.advanceTimersByTimeAsync(0);
+    await session.exclusive("save", async (api) => {
+      await api.editorSave("draft-1", quiz("A"), false, PICKER);
+      session.saved("draft-1", quiz("A"));
+    });
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(draftApi.editorUpdate).toHaveBeenLastCalledWith("draft-1", b, true);
   });
 
   it("lets go of a write for a draft another has replaced, and of the old draft's failing changes", async () => {
@@ -222,9 +261,28 @@ describe("DraftSession", () => {
     const loaded = await session.load();
     expect(loaded?.quiz.title).toBe("Edited");
     expect(loaded?.unsaved).toBe(true);
-    draftApi.editorUpdate.mockResolvedValue([]);
+    draftApi.editorUpdate.mockResolvedValue({ problems: [], warnings: [] });
     await vi.advanceTimersByTimeAsync(1000);
     expect((await session.load())?.quiz.title).toBe("draft-1");
+  });
+
+  it("peeks at the draft after the writes given before, without making it the open one", async () => {
+    const { draftApi, calls } = fakeApi();
+    const session = new DraftSession(draftApi);
+    await session.load();
+    session.write("draft-1", quiz("A"), true, () => undefined);
+    const peeked = session.peek();
+    draftApi.editorLoad.mockImplementation(async () => {
+      calls.push("load");
+      return draft("draft-2");
+    });
+    expect((await peeked)?.id).toBe("draft-2");
+    expect(calls).toEqual(["update draft-1 A", "load"]);
+    // Still the open one: its failed write is tried again, not let go as a replaced draft's.
+    draftApi.editorUpdate.mockRejectedValueOnce({ code: "draftChanged" });
+    session.write("draft-1", quiz("B"), true, () => undefined);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(session.getStatus().notWritten).toEqual({ code: "draftChanged" });
   });
 
   it("tells its listeners when it gets busy and when writing fails", async () => {

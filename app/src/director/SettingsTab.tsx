@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type KeyboardEvent } from "react";
 import blueIcon from "../../src-tauri/icons/colors/buzzdome-blue.png";
 import greenIcon from "../../src-tauri/icons/colors/buzzdome-green.png";
 import orangeIcon from "../../src-tauri/icons/colors/buzzdome-orange.png";
@@ -9,6 +9,9 @@ import { api } from "../api";
 import { useApp, useRun } from "../app-context";
 import { useAppIcon, useAppVersion, useHostWindowOpen } from "../hooks";
 import type { Lang, StringKey } from "../i18n";
+import { readPreference, writePreference } from "../preferences";
+import { keyboardHelp } from "../keyboard";
+import { stepSelection } from "../media-player";
 import type { IconColor, MonitorInfo } from "../types";
 import type { LaunchCheckSetting } from "./launch-check";
 import { VoicesSettings } from "./VoicesSettings";
@@ -24,6 +27,11 @@ const ICONS: Record<IconColor, { label: StringKey; image: string }> = {
   yellow: { label: "iconYellow", image: yellowIcon },
 };
 
+const ICON_COLORS = Object.keys(ICONS) as IconColor[];
+
+/** The arrow keys of a row of choices as `stepSelection` reads a list's. */
+const ROW_KEYS: Record<string, string> = { ArrowLeft: "ArrowUp", ArrowRight: "ArrowDown" };
+
 const LOOK_LABEL: Record<Look, StringKey> = { light: "lookLight", dark: "lookDark", system: "lookSystem" };
 
 export interface ProjectorSettings {
@@ -32,30 +40,56 @@ export interface ProjectorSettings {
   refreshMonitors: () => void;
   /** The chosen monitor's `MonitorInfo.id`, or null for one the Director is not on. */
   monitor: string | null;
-  setMonitor: (id: string | null) => void;
   fullscreen: boolean;
+  /** Sets full screen, for the projector the caller opens next. */
   setFullscreen: (on: boolean) => void;
+  /** Sets the monitor or full screen, and moves an open projector there at once. */
+  choose: (change: { monitor?: string | null; fullscreen?: boolean }) => void;
   isOpen: boolean;
   toggle: () => void;
 }
 
+/** The projector's monitor (none for one the Director is not on) and full screen, kept on this computer, so they last a restart. */
+const MONITOR_KEY = "quiz-show.projector-monitor";
+const FULLSCREEN_KEY = "quiz-show.projector-fullscreen";
+
+const storedMonitor = () => readPreference(MONITOR_KEY) || null;
+
 export function useProjectorSettings(): ProjectorSettings {
   const run = useRun();
   const [monitors, setMonitors] = useState<MonitorInfo[]>([]);
-  const [monitor, setMonitor] = useState<string | null>(null);
-  const [fullscreen, setFullscreen] = useState(true);
+  const [monitor, setMonitorState] = useState<string | null>(storedMonitor);
+  const [fullscreen, setFullscreenState] = useState(() => readPreference(FULLSCREEN_KEY) !== "off");
   const isOpen = useHostWindowOpen();
 
   const refreshMonitors = useCallback(() => {
     run(
       api.listMonitors().then((list) => {
         setMonitors(list);
-        // A chosen monitor that is gone gives way to one the Director is not on.
-        setMonitor((chosen) => (list.some((m) => m.id === chosen) ? chosen : null));
+        // A chosen monitor that is gone gives way to one the Director is not on, and is chosen again once it is back.
+        const kept = storedMonitor();
+        setMonitorState(list.some((m) => m.id === kept) ? kept : null);
       }),
     );
   }, [run]);
   useEffect(() => refreshMonitors(), [refreshMonitors]);
+
+  const setFullscreen = useCallback((on: boolean) => {
+    setFullscreenState(on);
+    writePreference(FULLSCREEN_KEY, on ? "on" : "off");
+  }, []);
+
+  // The backend moves an open projector as it opens a closed one.
+  const choose = useCallback(
+    (change: { monitor?: string | null; fullscreen?: boolean }) => {
+      const next = { monitor: change.monitor === undefined ? monitor : change.monitor, fullscreen: change.fullscreen ?? fullscreen };
+      setMonitorState(next.monitor);
+      writePreference(MONITOR_KEY, next.monitor ?? "");
+      setFullscreen(next.fullscreen);
+      if (isOpen) run(api.openHostWindow(next.monitor, next.fullscreen));
+    },
+    [monitor, fullscreen, isOpen, run, setFullscreen],
+  );
 
   // The backend lists the monitors again when it opens the projector.
   const toggle = useCallback(() => {
@@ -63,8 +97,8 @@ export function useProjectorSettings(): ProjectorSettings {
   }, [isOpen, monitor, fullscreen, run]);
 
   return useMemo(
-    () => ({ monitors, refreshMonitors, monitor, setMonitor, fullscreen, setFullscreen, isOpen, toggle }),
-    [monitors, refreshMonitors, monitor, fullscreen, isOpen, toggle],
+    () => ({ monitors, refreshMonitors, monitor, fullscreen, setFullscreen, choose, isOpen, toggle }),
+    [monitors, refreshMonitors, monitor, fullscreen, setFullscreen, choose, isOpen, toggle],
   );
 }
 
@@ -79,7 +113,7 @@ export function SettingsTab({ projector, look, launch, showRunning }: { projecto
           <select
             value={projector.monitor ?? ""}
             onFocus={projector.refreshMonitors}
-            onChange={(e) => projector.setMonitor(e.target.value || null)}
+            onChange={(e) => projector.choose({ monitor: e.target.value || null })}
           >
             <option value="">{t("monitorAuto")}</option>
             {projector.monitors.map((m, i) => (
@@ -91,9 +125,10 @@ export function SettingsTab({ projector, look, launch, showRunning }: { projecto
         </label>
         <label>
           <span>{t("fullscreen")}</span>
-          <input type="checkbox" checked={projector.fullscreen} onChange={(e) => projector.setFullscreen(e.target.checked)} />
+          <input type="checkbox" checked={projector.fullscreen} onChange={(e) => projector.choose({ fullscreen: e.target.checked })} />
         </label>
-        <button onClick={projector.toggle}>{projector.isOpen ? t("closeProjector") : t("openProjector")}</button>
+        {noSecondMonitor(projector) && <p className="muted">{t("monitorNoSecond")}</p>}
+        <button onClick={projector.toggle}>{projector.isOpen ? t("closeProjectorWindow") : t("openProjectorWindow")}</button>
       </fieldset>
       <AppIconPicker />
       <fieldset>
@@ -123,10 +158,15 @@ export function SettingsTab({ projector, look, launch, showRunning }: { projecto
         </label>
         <p className="muted">{t("launchCheckHint")}</p>
       </fieldset>
-      <p className="muted">{t("keyboardHint")}</p>
+      <p className="muted">{keyboardHelp(t)}</p>
       <AppVersion />
     </div>
   );
+}
+
+/** Whether the projector would find no monitor but the Director's, so it opens in a window over the Director (`projector_place`). */
+function noSecondMonitor({ monitors, monitor }: ProjectorSettings): boolean {
+  return monitor === null && monitors.length > 0 && monitors.every((m) => m.director);
 }
 
 /** The app's version, which an update changes. */
@@ -136,19 +176,32 @@ function AppVersion() {
   return version && <p className="muted">{t("appVersion", { name: t("appTitle"), version })}</p>;
 }
 
-/** The colour of the windows' icon, orange unless another is chosen. */
+/**
+ * The colour of the windows' icon, orange unless another is chosen. A radio
+ * group: one tab stop, the arrow keys, Home and End choose another.
+ */
 function AppIconPicker() {
   const { t } = useApp();
   const run = useRun();
   const current = useAppIcon();
+  const focused = current ?? ICON_COLORS[0];
+  const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+    const next = stepSelection(ICON_COLORS, focused, ROW_KEYS[e.key] ?? e.key) as IconColor | null;
+    if (next === null) return;
+    e.preventDefault();
+    e.currentTarget.querySelector<HTMLButtonElement>(`[data-color="${next}"]`)?.focus();
+    if (next !== current) run(api.setAppIcon(next));
+  };
   return (
     <fieldset>
       <legend>{t("appIcon")}</legend>
-      <div className="icon-picker" role="radiogroup" aria-label={t("appIcon")}>
-        {(Object.keys(ICONS) as IconColor[]).map((color) => (
+      <div className="icon-picker" role="radiogroup" aria-label={t("appIcon")} onKeyDown={onKeyDown}>
+        {ICON_COLORS.map((color) => (
           <button
             key={color}
             role="radio"
+            data-color={color}
+            tabIndex={color === focused ? 0 : -1}
             aria-checked={color === current}
             className={color === current ? "icon-choice chosen" : "icon-choice"}
             title={t(ICONS[color].label)}

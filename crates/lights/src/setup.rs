@@ -273,6 +273,10 @@ pub enum SetupError {
     /// a name up can take seconds, and the lights thread would stop meanwhile.
     #[error("\"{host}\" is no IPv4 address")]
     NotIpv4 { host: String },
+    /// The look named `look` listed only fixtures this change removes: an
+    /// empty list would light every fixture (`LightsSetup::check_change`).
+    #[error("look \"{look}\" would light every fixture once its own are removed")]
+    LookLosesFixtures { look: String },
 }
 
 /// The part of a setup a `SetupError` is about.
@@ -405,6 +409,21 @@ impl LightsSetup {
         check_messages(&self.messages)
     }
 
+    /// Checks a change from `before` to this setup: a look that listed
+    /// only fixtures the change removes is refused, as with none listed it
+    /// would light them all. A look whose fixtures are all ticked lists
+    /// none on purpose, and its fixtures are still there.
+    pub fn check_change(&self, before: &LightsSetup) -> Result<(), SetupError> {
+        let there = |id: &FixtureId| self.fixtures.iter().any(|f| f.id == *id);
+        for look in self.looks.iter().filter(|look| look.fixtures.is_empty()) {
+            let listed = before.looks.iter().find(|old| old.id == look.id).map_or(&[][..], |old| &old.fixtures[..]);
+            if !listed.is_empty() && !listed.iter().any(there) {
+                return Err(SetupError::LookLosesFixtures { look: look.name.clone() });
+            }
+        }
+        Ok(())
+    }
+
     fn check_fixtures(&self) -> Result<(), SetupError> {
         ensure(self.fixtures.len() <= MAX_FIXTURES, SetupError::TooMany { what: Part::Fixture })?;
         let mut ids = BTreeSet::new();
@@ -528,6 +547,25 @@ mod tests {
         let mut setup = LightsSetup::default();
         setup.flashes.insert(Cue::Buzz, Flash { look: 5, ms: 50 });
         assert_eq!(setup.check(), Err(SetupError::OutOfRange { what: Part::Flash }));
+    }
+
+    #[test]
+    fn a_change_that_removes_every_fixture_a_look_lists_is_refused() {
+        let mut before = LightsSetup { fixtures: vec![par(1, 1), par(2, 10)], ..LightsSetup::default() };
+        before.looks[0].fixtures = vec![2];
+        let name = before.looks[0].name.clone();
+        // Fixture 2 removed, and with it the look's only one.
+        let mut after = LightsSetup { fixtures: vec![par(1, 1)], ..before.clone() };
+        after.looks[0].fixtures = Vec::new();
+        assert_eq!(after.check_change(&before), Err(SetupError::LookLosesFixtures { look: name }));
+        // Every fixture ticked: none listed on purpose, its own are still there.
+        let mut all = before.clone();
+        all.looks[0].fixtures = Vec::new();
+        assert_eq!(all.check_change(&before), Ok(()));
+        // A look that lit all of them goes on doing so.
+        let mut before_all = before.clone();
+        before_all.looks[0].fixtures = Vec::new();
+        assert_eq!(after.check_change(&before_all), Ok(()));
     }
 
     #[test]

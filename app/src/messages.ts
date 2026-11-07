@@ -2,7 +2,7 @@
 // English sentence for the UI: errors, quiz problems and receiver states come
 // as codes with parameters (generated types), worded here from `i18n.ts`.
 
-import { buttonLabel } from "./answers";
+import { ANSWER_LETTERS, buttonName } from "./answers";
 import { slotLabel } from "./audio/library";
 import { MEDIA_EXTENSIONS } from "./bindings/MediaExtensions";
 import { fileName } from "./format";
@@ -44,7 +44,7 @@ function params(fields: object): Params {
 }
 
 /** Codes worded with their own parameters, see `errorText`. */
-type WordedApart = "file" | "noSuchSlide" | "noSuchPad" | "notInLibrary" | "learnConflict" | "buzzerColours" | "quizInvalid" | "journalBroken" | "lightsRefused";
+type WordedApart = "file" | "noSuchSlide" | "questionRestarted" | "noSuchPad" | "notInLibrary" | "learnConflict" | "buzzerColours" | "quizInvalid" | "journalBroken" | "lightsRefused";
 
 const ERROR_KEYS: Record<Exclude<AppError["code"], WordedApart>, StringKey> = {
   noShow: "noShow",
@@ -65,6 +65,7 @@ const ERROR_KEYS: Record<Exclude<AppError["code"], WordedApart>, StringKey> = {
   fileLeftUnread: "errFileLeftUnread",
   rulesChanged: "errRulesChanged",
   mediaFolderRefused: "errMediaFolderRefused",
+  autoStepHeld: "errAutoStepHeld",
   notAQuizFile: "errNotAQuizFile",
   missingQuizJson: "errMissingQuizJson",
   badQuizJson: "errBadQuizJson",
@@ -111,6 +112,7 @@ const ERROR_KEYS: Record<Exclude<AppError["code"], WordedApart>, StringKey> = {
   voiceDownload: "errVoiceDownload",
   voiceDamaged: "errVoiceDamaged",
   voiceDownloadStopped: "errVoiceDownloadStopped",
+  voiceDownloadCancelled: "errVoiceDownloadCancelled",
   voiceMissing: "errVoiceMissing",
   voiceFailed: "errVoiceFailed",
   voiceDisk: "errVoiceDisk",
@@ -195,12 +197,14 @@ function errorWords(t: Translate, error: Exclude<AppError, { code: "file" }>): s
   switch (error.code) {
     case "noSuchSlide":
       return t("errNoSuchSlide", { slide: error.slide + 1 });
+    case "questionRestarted":
+      return t("errQuestionRestarted", { slide: error.slide + 1 });
     case "noSuchPad":
       return t("errNoSuchPad", { pad: error.pad + 1 });
     case "notInLibrary":
       return t("errNotInLibrary", { reference: mediaFileName(error.reference) });
     case "learnConflict":
-      return t("errLearnConflict", { buzzer: error.buzzer, button: buttonLabel(error.button) });
+      return t("errLearnConflict", { buzzer: error.buzzer, button: buttonName(t, error.button) });
     case "buzzerColours":
       return colourClashText(t, error.clash);
     case "journalBroken":
@@ -217,7 +221,7 @@ function errorWords(t: Translate, error: Exclude<AppError, { code: "file" }>): s
 }
 
 /** Problems worded with their own parameters, see `problemText`. */
-type ProblemApart = "media" | "categoryMedia" | "soundMedia" | "welcomeMedia" | "volume" | "partEmpty" | "replayNotOnQuestion";
+type ProblemApart = "media" | "categoryMedia" | "soundMedia" | "welcomeMedia" | "volume" | "partEmpty" | "replayNotOnQuestion" | "answerEmpty";
 
 const PROBLEM_KEYS: Record<Exclude<Problem["code"], ProblemApart>, StringKey> = {
   duplicateSlideId: "problemDuplicateSlideId",
@@ -249,6 +253,8 @@ const PROBLEM_KEYS: Record<Exclude<Problem["code"], ProblemApart>, StringKey> = 
   pointsOutOfRange: "problemPointsOutOfRange",
   penaltyOutOfRange: "problemPenaltyOutOfRange",
   timeLimitTooLong: "problemTimeLimitTooLong",
+  noSlides: "problemNoSlides",
+  questionTextEmpty: "problemQuestionTextEmpty",
 };
 
 const MEDIA_ISSUE_KEYS: Record<MediaIssue["type"], StringKey> = {
@@ -281,6 +287,8 @@ export function problemText(t: Translate, problem: Problem): string {
       return t("problemSoundMedia", { moment: slotLabel(t, problem.slot), file: problem.file, issue: mediaIssueText(t, problem.issue) });
     case "welcomeMedia":
       return t("problemWelcomeMedia", { place: t(WELCOME_FILE_LABEL[problem.place]), file: problem.file, issue: mediaIssueText(t, problem.issue) });
+    case "answerEmpty":
+      return t("problemAnswerEmpty", { letter: ANSWER_LETTERS[problem.answer] ?? String(problem.answer + 1) });
     // Rules a sound and a video share, said of the one that breaks them.
     case "volume":
       return t(problem.media === "audio" ? "problemSoundVolume" : "problemVideoVolume");
@@ -500,6 +508,8 @@ export function setupErrorText(t: Translate, error: SetupError): string {
       return t("lightsProblemPastUniverse", { name: error.name });
     case "notIpv4":
       return t("lightsProblemNotIpv4", { host: error.host });
+    case "lookLosesFixtures":
+      return t("lightsProblemLookLosesFixtures", { look: error.look });
   }
 }
 

@@ -10,11 +10,13 @@ import {
   FIXTURE_PRESETS,
   formatChannelValues,
   freeAddress,
+  lookUses,
   outputOfKind,
   overlapping,
   parseChannelValues,
   removeFixture,
   removeLook,
+  tickLookFixture,
 } from "./lights";
 
 const rgb = FIXTURE_PRESETS.find((preset) => preset.id === "rgb")!.channels;
@@ -62,6 +64,20 @@ describe("lights setup", () => {
     expect(changeFixture(setup, 2, { address: 100 }).fixtures[1].address).toBe(100);
   });
 
+  it("ticks a look's fixtures as they show, never flipping to every fixture", () => {
+    const three = [fixture(1, 1), fixture(2, 4), fixture(3, 7)];
+    const look = addLook(empty, "Look").looks[0];
+    // Every fixture shines: unticking one lists the others.
+    expect(tickLookFixture(look, three, 2, false)).toEqual([1, 3]);
+    const two = { ...look, fixtures: [1, 3] };
+    expect(tickLookFixture(two, three, 1, false)).toEqual([3]);
+    // The last one stays ticked.
+    expect(tickLookFixture({ ...look, fixtures: [3] }, three, 3, false)).toEqual([3]);
+    // Ticking every fixture lists none, so that new ones shine too.
+    expect(tickLookFixture(two, three, 2, true)).toEqual([]);
+    expect(tickLookFixture(look, [fixture(1, 1)], 1, false)).toEqual([]);
+  });
+
   it("takes a removed look out of the stages and flashes", () => {
     let setup = addLook(addLook(empty, "A"), "B");
     setup = { ...setup, stages: { lobby: 1, answering: 2 }, flashes: { correct: { look: 1, ms: 1000 }, wrong: { look: 2, ms: 1000 } } };
@@ -69,6 +85,13 @@ describe("lights setup", () => {
     expect(removed.looks.map((look) => look.id)).toEqual([2]);
     expect(removed.stages).toEqual({ answering: 2 });
     expect(removed.flashes).toEqual({ wrong: { look: 2, ms: 1000 } });
+  });
+
+  it("finds the stages and flashes a look is used by", () => {
+    let setup = addLook(addLook(empty, "A"), "B");
+    setup = { ...setup, stages: { lobby: 1, answering: 2, winner: 1 }, flashes: { correct: { look: 1, ms: 1000 }, wrong: { look: 2, ms: 1000 } } };
+    expect(lookUses(setup, 1)).toEqual({ stages: ["lobby", "winner"], cues: ["correct"] });
+    expect(lookUses(removeLook(setup, 1), 1)).toEqual({ stages: [], cues: [] });
   });
 
   it("keeps a port when the output changes between the two Enttec kinds", () => {

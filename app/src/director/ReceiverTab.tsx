@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
-import { BUTTONS, buttonLabel } from "../answers";
+import { BUTTONS, buttonName } from "../answers";
 import { api } from "../api";
 import { useApp, useRun } from "../app-context";
-import { useBackendEvent, useLearnProgress } from "../hooks";
+import { timeOfDay } from "../format";
+import { useBackendEvent, useGameView, useLearnProgress } from "../hooks";
 import type { Translate } from "../i18n";
 import { CrossIcon } from "../icons";
 import { awaitsAnswer, errorNotice, hex4, receiverStatusText, REMOTE_ACTIONS, remoteActionText, remoteKeyText, settingsLostNotice, vidPid } from "../messages";
@@ -16,7 +17,7 @@ const LOG_LEN = 40;
 const hexBytes = (bytes: number[]) => bytes.map((b) => b.toString(16).padStart(2, "0")).join(" ");
 /** A press as the logs show it, with the buzzer's own timer when it sends one. */
 const pressLabel = (t: Translate, p: Press) =>
-  `${p.buzzer} ${buttonLabel(p.button)}${p.timer === null ? "" : ` · ${t("pressTimer", { timer: p.timer })}`}`;
+  `${p.buzzer} ${buttonName(t, p.button)}${p.timer === null ? "" : ` · ${t("pressTimer", { timer: p.timer })}`}`;
 const isKeyboardOrMouse = (d: DeviceInfo) => d.usagePage === 1 && (d.usage === 2 || d.usage === 6);
 
 /** The status line's look: blue while the receiver is waited for. */
@@ -30,8 +31,10 @@ const stateClass = (status: ReceiverStatus | null) => {
  * do and the buzzers' colours, watch its raw data, teach buttons.
  */
 export function ReceiverTab() {
-  const { t } = useApp();
+  const { t, lang, notify, fail } = useApp();
   const run = useRun();
+  // The backend refuses to forget learned buttons in a show, and learning would mute its presses.
+  const showRunning = useGameView() !== null;
   const [info, setInfo] = useState<ReceiverInfo | null>(null);
   const [status, setStatus] = useState<ReceiverStatus | null>(null);
   const [devices, setDevices] = useState<DeviceInfo[]>([]);
@@ -93,13 +96,15 @@ export function ReceiverTab() {
   const teaches = status?.kind !== "connected" || status.learnable;
 
   const setRemoteAction = (key: RemoteKey, action: RemoteAction) => run(api.receiverSetRemoteAction(key, action).then(reload));
+  const resetRemote = () => run(confirmAction(t, t("remoteKeysResetConfirm"), t("remoteKeysReset")).then((yes) => (yes ? api.receiverResetRemote().then(reload) : undefined)));
 
-  const exportLog = () => run(api.receiverExportLog({ filter: t("textFile"), fileName: "receiver-log" }));
+  const exportLog = () => run(api.receiverExportLog({ filter: t("textFile"), fileName: "receiver-log" }).then((saved) => saved && notify(t("receiverLogSaved"))));
+  const copyUdev = () => run(navigator.clipboard.writeText(udev).then(() => notify(t("copied")), () => fail(t("notCopied"))));
 
   const finishLearn = async () => {
     try {
       const learned = await api.receiverLearnFinish();
-      setLearnt({ tone: "info", text: t("learned", { buzzer: learned.buzzer, button: buttonLabel(learned.button) }) });
+      setLearnt({ tone: "info", text: t("learned", { buzzer: learned.buzzer, button: buttonName(t, learned.button) }) });
       // Move on to the next button, then the next buzzer.
       const i = BUTTONS.indexOf(button);
       if (i < BUTTONS.length - 1) setButton(BUTTONS[i + 1]);
@@ -136,10 +141,11 @@ export function ReceiverTab() {
           </button>
         )}
         {info?.platform === "linux" && udev && (
-          <details>
+          // Open by itself while the receiver cannot be opened, which the rule is for.
+          <details open={(status?.kind === "error" && status.problem === "cannotOpen") || undefined}>
             <summary>{t("linuxAccess")}</summary>
             <pre className="code">{udev}</pre>
-            <button onClick={() => navigator.clipboard.writeText(udev)}>{t("copy")}</button>
+            <button onClick={copyUdev}>{t("copy")}</button>
           </details>
         )}
       </fieldset>
@@ -152,8 +158,8 @@ export function ReceiverTab() {
             {buzzers.map((b) => (
               <li key={b.buzzer} className={b.buzzer === latest ? "latest" : ""}>
                 <strong>{b.buzzer}</strong>
-                <span>{buttonLabel(b.button)}</span>
-                <span className="muted">{new Date(b.atMs).toLocaleTimeString()}</span>
+                <span>{buttonName(t, b.button)}</span>
+                <span className="muted">{timeOfDay(b.atMs, lang)}</span>
               </li>
             ))}
           </ul>
@@ -186,7 +192,7 @@ export function ReceiverTab() {
         <div className="row">
           {pressedKey && <span>{t("remoteKeyPressed", { key: remoteKeyText(t, pressedKey) })}</span>}
           <span className="spacer" />
-          <button onClick={() => run(api.receiverResetRemote().then(reload))}>{t("remoteKeysReset")}</button>
+          <button onClick={resetRemote}>{t("remoteKeysReset")}</button>
         </div>
       </fieldset>
 
@@ -228,7 +234,13 @@ export function ReceiverTab() {
                       </button>
                     </>
                   ) : (
-                    <button onClick={() => run(api.receiverSelect(d).then(reload))}>{t("useReceiver")}</button>
+                    <button
+                      disabled={isKeyboardOrMouse(d)}
+                      title={isKeyboardOrMouse(d) ? t("devicesHint") : undefined}
+                      onClick={() => run(api.receiverSelect(d).then(reload))}
+                    >
+                      {t("useReceiver")}
+                    </button>
                   )}
                 </td>
               </tr>
@@ -250,7 +262,7 @@ export function ReceiverTab() {
           <p className="muted">{t("learnHint", { n: info?.learnedButtons ?? 0 })}</p>
           {learn?.active ? (
             <div className="row learn-active">
-              <span>{t("learnPress", { button: buttonLabel(learn.button ?? "a"), buzzer: learn.buzzer ?? 0, n: learn.samples })}</span>
+              <span>{t("learnPress", { button: buttonName(t, learn.button ?? "a"), buzzer: learn.buzzer ?? 0, n: learn.samples })}</span>
               <button disabled={!learn.canSave} onClick={finishLearn}>
                 {t("learnSave")}
               </button>
@@ -273,13 +285,14 @@ export function ReceiverTab() {
                 <select value={button} onChange={(e) => setButton(e.target.value as Button)}>
                   {BUTTONS.map((b) => (
                     <option key={b} value={b}>
-                      {buttonLabel(b)}
+                      {buttonName(t, b)}
                     </option>
                   ))}
                 </select>
               </label>
               <button
-                disabled={!connected}
+                disabled={!connected || showRunning}
+                title={showRunning ? t("learnDuringShow") : connected ? undefined : t("learnNeedsReceiver")}
                 onClick={() => {
                   setLearnt(null);
                   run(api.receiverLearnStart(buzzer, button));
@@ -289,13 +302,15 @@ export function ReceiverTab() {
               </button>
               <span className="spacer" />
               <button
-                disabled={!info?.learnedButtons}
-                onClick={() => run(confirmAction(t, t("learnForgetConfirm")).then((yes) => (yes ? api.receiverForgetLearned().then(reload) : undefined)))}
+                disabled={!info?.learnedButtons || showRunning}
+                title={showRunning ? t("learnDuringShow") : undefined}
+                onClick={() => run(confirmAction(t, t("learnForgetConfirm"), t("learnForget")).then((yes) => (yes ? api.receiverForgetLearned().then(reload) : undefined)))}
               >
                 {t("learnForget")}
               </button>
             </div>
           )}
+          {!learn?.active && (showRunning ? <p className="muted">{t("learnDuringShow")}</p> : !connected && <p className="muted">{t("learnNeedsReceiver")}</p>)}
           {learnt && <NoticeBox notice={learnt} tone={learnt.tone} />}
         </fieldset>
       )}
@@ -311,9 +326,10 @@ export function ReceiverTab() {
           <div>
             <h4>{t("presses")}</h4>
             <ul className="log">
+              {presses.length === 0 && <li className="muted">{t("noPresses")}</li>}
               {presses.map((p, i) => (
                 <li key={i} className={p.used ? "used" : ""}>
-                  {new Date(p.at).toLocaleTimeString()} · {pressLabel(t, p.press)}
+                  {timeOfDay(p.at, lang)} · {pressLabel(t, p.press)}
                   {p.used && ` · ${t("pressUsed")}`}
                 </li>
               ))}
@@ -322,6 +338,7 @@ export function ReceiverTab() {
           <div>
             <h4>{t("rawReports")}</h4>
             <ul className="log mono">
+              {raw.length === 0 && <li className="muted">{t("noRawReports")}</li>}
               {raw.map((r, i) => (
                 <li key={i}>
                   {hexBytes(r.bytes)}

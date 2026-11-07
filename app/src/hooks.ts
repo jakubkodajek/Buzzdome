@@ -1,8 +1,10 @@
 import { listen } from "@tauri-apps/api/event";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { api, type BackendEvents } from "./api";
 import { MAX_PLAYER_VOLUME } from "./bindings/Constants";
 import { heardNow, type HeardMedia } from "./media-player";
+import { thrownText } from "./messages";
 import type {
   AppError,
   AvailableUpdate,
@@ -146,10 +148,12 @@ export function useGameView(): GameView | null {
  * The show's results (spec SF-11), loaded again whenever the show changes
  * (`view`). A change while a load is under way loads once more after it,
  * so a burst of answers costs two loads, not one each, and the loads come
- * back in order.
+ * back in order. `results` is null until the first load; `problem` is why
+ * the last load failed, null once one succeeds.
  */
-export function useShowResults(view: GameView): ShowResults | null {
+export function useShowResults(view: GameView): { results: ShowResults | null; problem: unknown } {
   const [results, setResults] = useState<ShowResults | null>(null);
+  const [problem, setProblem] = useState<unknown>(null);
   const loads = useRef({ busy: false, again: false, alive: true });
   useEffect(() => {
     const state = loads.current;
@@ -158,10 +162,16 @@ export function useShowResults(view: GameView): ShowResults | null {
       state.busy = true;
       api
         .showResults()
-        .then((next) => {
-          if (state.alive) setResults(next);
-        })
-        .catch((e) => console.error(e))
+        .then(
+          (next) => {
+            if (!state.alive) return;
+            setResults(next);
+            setProblem(null);
+          },
+          (error: unknown) => {
+            if (state.alive) setProblem(error);
+          },
+        )
         .finally(() => {
           state.busy = false;
           if (state.again && state.alive) {
@@ -176,7 +186,7 @@ export function useShowResults(view: GameView): ShowResults | null {
       state.alive = false;
     };
   }, [view]);
-  return results;
+  return { results, problem };
 }
 
 /** Whether the projector window is open, however it was opened or closed. */
@@ -207,9 +217,29 @@ export function useAppVersion(): string | null {
   return useLoadedValue<string | null>(api.appVersion, null)[0];
 }
 
-/** The newer version of the app the update server offers, read once; null when there is none or until loaded. */
-export function useAvailableUpdate(): AvailableUpdate | null {
-  return useLoadedValue<AvailableUpdate | null>(api.updateCheck, null)[0];
+/** How often the update server is asked again while it has not answered, such as before the venue's network is up. */
+const UPDATE_RECHECK_MS = 5 * 60_000;
+
+/**
+ * The newer version of the app the update server offers; null when there is
+ * none or until known. Until the server answers once, it is asked again
+ * every few minutes and when the computer comes online (the backend keeps
+ * the first answer, `update_check`), but not while a show runs
+ * (`showRunning`): a show needs no network, and each try may wait and log.
+ */
+export function useAvailableUpdate(showRunning: boolean): AvailableUpdate | null {
+  const [update, reload] = useLoadedValue<AvailableUpdate | null | undefined>(api.updateCheck, undefined);
+  const answered = update !== undefined;
+  useEffect(() => {
+    if (answered || showRunning) return;
+    const timer = setInterval(reload, UPDATE_RECHECK_MS);
+    window.addEventListener("online", reload);
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener("online", reload);
+    };
+  }, [answered, reload, showRunning]);
+  return update ?? null;
 }
 
 /** The receiver's state and set-up, loaded again whenever its state changes; null until loaded. */
@@ -308,8 +338,27 @@ export function useLastSession(): LastSession {
  * backend keeps them (`RecentFiles`). `reload` reads them again after a
  * call that may have changed them; `forget` takes one off the list.
  */
-export function useRecentFiles(): { files: string[]; reload: () => void; forget: (path: string) => Promise<void> } {
+export interface RecentFiles {
+  files: string[];
+  reload: () => void;
+  forget: (path: string) => Promise<void>;
+}
+
+/** The recent quiz files (`RecentFiles`). */
+export function useRecentFiles(): RecentFiles {
   const [files, reload] = useLoadedValue(api.recentFiles, []);
   const forget = useCallback((path: string) => api.forgetRecentFile(path).finally(reload), [reload]);
   return { files, reload, forget };
+}
+
+/**
+ * Names the window in the system's title bar and task bar: `what` (the
+ * quiz, the editor's quiz with its unsaved mark) before the app's name.
+ */
+export function useWindowTitle(what: string, appName: string) {
+  useEffect(() => {
+    getCurrentWindow()
+      .setTitle(`${what} – ${appName}`)
+      .catch((error: unknown) => api.logProblem(thrownText(error)).catch(() => undefined));
+  }, [what, appName]);
 }

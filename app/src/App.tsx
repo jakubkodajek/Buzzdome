@@ -1,7 +1,7 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useEffect } from "react";
 import { api } from "./api";
-import { confirmAction } from "./confirm";
+import { answerClose, closeDeps } from "./close-app";
 import { Director } from "./director/Director";
 import { ErrorBoundary, RenderFailed } from "./error-boundary";
 import { useBackendEvent } from "./hooks";
@@ -26,6 +26,10 @@ const logProblem = (error: unknown) => {
 export default function App() {
   const [lang] = useLang();
   const t = translator(lang);
+  // The page's language follows the UI's, for the system's text tools and screen readers.
+  useEffect(() => {
+    document.documentElement.lang = lang;
+  }, [lang]);
   if (isHost) {
     return (
       <ErrorBoundary fallback={() => <HostFailed />} onError={(message) => reportToDirector(t("projectorFailed", { message }))}>
@@ -42,12 +46,10 @@ export default function App() {
  * screen's boundary, and the fallback can close the app itself.
  */
 function DirectorWindow({ lang, t }: { lang: Lang; t: Translate }) {
-  // Closing this window during a show asks first; the app ends with it.
-  useBackendEvent("close-requested", () => {
+  // Closing this window during a show, or with unsaved changes in the editor or to the AI instructions, asks first; the app ends with it.
+  useBackendEvent("close-requested", (reason) => {
     // A dialog that does not open leaves the request unanswered, so a close in the next minute goes through.
-    confirmAction(t, t("quitDuringShow"))
-      .then((quit) => (quit ? api.quitApp() : api.closeDeclined()))
-      .catch(logProblem);
+    answerClose(t, reason, closeDeps(t)).catch(logProblem);
   });
   // The macOS app menu in the UI's language.
   useEffect(() => {
