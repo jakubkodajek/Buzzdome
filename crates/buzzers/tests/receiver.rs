@@ -604,22 +604,23 @@ fn a_stale_buzz_sent_again_once_the_round_ran_longer_than_its_timer_is_dropped()
     let backend = FakeBackend::default();
     let (handle, rx) = start_303s(&backend, ReceiverConfig { timer_window: Duration::from_millis(20), ..config() });
     set_mode_now(&handle, &backend, &rx, BuzzerMode::FastestFinger);
-    // Pressed before the round with a timer longer than the round so far...
-    backend.0.lock().unwrap().inbox.push_back(buzz_303s(6, 150));
+    // Pressed before the round with a timer longer than the round so far
+    // (stale while it is read within 960 ms, so a slow runner still sees it)...
+    backend.0.lock().unwrap().inbox.push_back(buzz_303s(6, 1_000));
     let pressed = |e: &ReceiverEvent| matches!(e, ReceiverEvent::Raw(r) if r.bytes.get(4) == Some(&0x32));
     let ReceiverEvent::Raw(raw) = wait_for(&rx, pressed) else { unreachable!() };
-    assert_eq!(raw.dropped, [Press::timed(6, Button::Big, 150)]);
-    // ...and sent again by the receiver once the round ran longer than that.
-    round_runs_for(200);
-    backend.0.lock().unwrap().inbox.push_back(buzz_303s(6, 150));
+    assert_eq!(raw.dropped, [Press::timed(6, Button::Big, 1_000)]);
+    // ...then its real press in the round, which counts...
+    backend.0.lock().unwrap().inbox.push_back(buzz_303s(6, 5));
+    let ReceiverEvent::Press { press, .. } = wait_for(&rx, |e| matches!(e, ReceiverEvent::Press { .. })) else { unreachable!() };
+    assert_eq!(press, Press::timed(6, Button::Big, 5));
+    // ...and the stale one sent again by the receiver once the round ran
+    // longer than its timer: still dropped, though the real press came between.
+    round_runs_for(1_100);
+    backend.0.lock().unwrap().inbox.push_back(buzz_303s(6, 1_000));
     let ReceiverEvent::Raw(again) = wait_for(&rx, pressed) else { unreachable!() };
     assert!(again.decoded.is_empty());
-    assert_eq!(again.dropped, [Press::timed(6, Button::Big, 150)]);
-    // Its real press in the round still counts.
-    round_runs_for(200);
-    backend.0.lock().unwrap().inbox.push_back(buzz_303s(6, 400));
-    let ReceiverEvent::Press { press, .. } = wait_for(&rx, |e| matches!(e, ReceiverEvent::Press { .. })) else { unreachable!() };
-    assert_eq!(press, Press::timed(6, Button::Big, 400));
+    assert_eq!(again.dropped, [Press::timed(6, Button::Big, 1_000)]);
     handle.shutdown();
 }
 

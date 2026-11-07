@@ -22,26 +22,38 @@ const REMOTE_REPEAT_MS: u64 = 700;
 /// button state while a button is held. Either way a press must count once: a
 /// press is passed on only if the same (buzzer, button) was not in the previous
 /// report, or if more than `repeat_gap_ms` passed since that report. A press
-/// that carries its buzzer's timer is also dropped when it repeats that
-/// buzzer's last one, timer and all, within `TIMED_REPEAT_MS`: the receiver
-/// sent it again.
+/// that carries its buzzer's timer is also dropped when it repeats one of
+/// that buzzer's timed presses of the last `TIMED_REPEAT_MS`, timer and all:
+/// the receiver sent it again.
 #[derive(Debug)]
 pub struct EdgeFilter {
     previous: HashSet<(u16, u8)>,
     previous_at_ms: Option<u64>,
     repeat_gap_ms: u64,
-    /// Each buzzer's last press that carried a timer, and when it came.
-    last_timed: HashMap<u16, (Press, u64)>,
+    /// Each buzzer's presses that carried a timer within the last
+    /// `TIMED_REPEAT_MS`, counted or stale, and when they came. A list, not
+    /// the last one: a stale press, then a real one, then the stale one sent
+    /// again must still know the stale one.
+    recent_timed: HashMap<u16, Vec<(Press, u64)>>,
     /// The remote's last key that counted, and when it came.
     last_remote: Option<(RemoteKey, u64)>,
 }
 
 impl EdgeFilter {
     pub fn new(repeat_gap_ms: u64) -> EdgeFilter {
-        EdgeFilter { previous: HashSet::new(), previous_at_ms: None, repeat_gap_ms, last_timed: HashMap::new(), last_remote: None }
+        EdgeFilter { previous: HashSet::new(), previous_at_ms: None, repeat_gap_ms, recent_timed: HashMap::new(), last_remote: None }
     }
 
     pub fn filter(&mut self, presses: Vec<Press>, at_ms: u64) -> Vec<Press> {
+        self.filter_stale(presses, at_ms, |_| false)
+    }
+
+    /// Like `filter`, but a press for which `stale` holds never counts. It
+    /// is still remembered by its timer, in the receiver's order, so that
+    /// the receiver sending it again later is known as that; it is not
+    /// noted as in this report, so the same buzzer's real press still
+    /// counts.
+    pub fn filter_stale(&mut self, presses: Vec<Press>, at_ms: u64, stale: impl Fn(&Press) -> bool) -> Vec<Press> {
         let fresh = self.previous_at_ms.is_none_or(|t| at_ms.saturating_sub(t) >= self.repeat_gap_ms);
         let mut seen = HashSet::new();
         let mut out = Vec::new();
@@ -49,7 +61,7 @@ impl EdgeFilter {
             let key = (press.buzzer, press.button as u8);
             // A press sent again is not noted as in this report: it would
             // hide the buzzer's next press within the repeat gap.
-            if seen.contains(&key) || self.sent_again(press, at_ms) {
+            if seen.contains(&key) || self.sent_again(press, at_ms) || stale(&press) {
                 continue;
             }
             seen.insert(key);
@@ -62,22 +74,17 @@ impl EdgeFilter {
         out
     }
 
-    /// Notes `press`, which does not count, as its buzzer's last timed
-    /// press, so that the receiver sending it again is known as that: not
-    /// as the report before, so the buzzer's next press still counts.
-    pub fn note_timed(&mut self, press: Press, at_ms: u64) {
-        self.sent_again(press, at_ms);
-    }
-
-    /// Whether `press` is its buzzer's last timed press sent again; notes
-    /// it as the last one otherwise.
+    /// Whether `press` is one of its buzzer's recent timed presses sent
+    /// again; remembers it otherwise.
     fn sent_again(&mut self, press: Press, at_ms: u64) -> bool {
         if press.timer.is_none() {
             return false;
         }
-        let again = self.last_timed.get(&press.buzzer).is_some_and(|&(last, last_ms)| last == press && at_ms.saturating_sub(last_ms) <= TIMED_REPEAT_MS);
+        let recent = self.recent_timed.entry(press.buzzer).or_default();
+        recent.retain(|&(_, then)| at_ms.saturating_sub(then) <= TIMED_REPEAT_MS);
+        let again = recent.iter().any(|&(earlier, _)| earlier == press);
         if !again {
-            self.last_timed.insert(press.buzzer, (press, at_ms));
+            recent.push((press, at_ms));
         }
         again
     }
@@ -140,6 +147,25 @@ mod tests {
         assert_eq!(f.filter(vec![Press::timed(1, Button::A, 1_843_900)], 1_570), vec![Press::timed(1, Button::A, 1_843_900)]);
         // Long after, the same timer counts again: the window covers only the receiver's repeats.
         assert_eq!(f.filter(vec![next], 1_560 + TIMED_REPEAT_MS + 1), vec![next]);
+    }
+
+    #[test]
+    fn a_stale_press_sent_again_after_a_real_one_stays_dropped() {
+        let mut f = EdgeFilter::new(150);
+        let stale = Press::timed(2, Button::A, 150);
+        let real = Press::timed(2, Button::B, 40);
+        let is_stale = |press: &Press| press.timer == Some(150);
+        // S then R in one report: S is dropped, R counts.
+        assert_eq!(f.filter_stale(vec![stale, real], 0, is_stale), vec![real]);
+        // S sent again later, when the round has run longer than its timer.
+        assert_eq!(f.filter_stale(vec![stale], 400, |_| false), vec![]);
+        // And R sent again too.
+        assert_eq!(f.filter_stale(vec![real], 600, |_| false), vec![]);
+        // S, R and S' in separate reports.
+        let mut f = EdgeFilter::new(150);
+        assert_eq!(f.filter_stale(vec![stale], 0, is_stale), vec![]);
+        assert_eq!(f.filter_stale(vec![real], 20, is_stale), vec![real]);
+        assert_eq!(f.filter_stale(vec![stale], 541, |_| false), vec![]);
     }
 
     #[test]
