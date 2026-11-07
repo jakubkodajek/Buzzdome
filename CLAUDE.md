@@ -184,9 +184,10 @@ UI conventions (keep one way of doing each thing):
   only a release reaches them. To release: raise `version` in
   `app/src-tauri/tauri.conf.json`, merge to main, wait for `check` and
   `windows-tests`, then push an annotated tag of that commit,
-  `git tag -a v<version> -m "<notes in Czech>" origin/main && git push origin v<version>`,
+  `git tag -a v<version> -m "<notes in Czech>" -m "[en]" -m "<notes in English>" origin/main && git push origin v<version>`,
   and Jakub approves the run (Review deployments, environment `release`).
-  The tag's message is what the quizmaster reads before updating.
+  The tag's message is what the quizmaster reads before updating, in the
+  app's language: Czech, then a line `[en]`, then English.
   `release.yml` builds, signs and publishes; never make the release or the
   tag on GitHub's Releases page, and never push a tag without Jakub's
   go-ahead (`docs/releasing.md`).

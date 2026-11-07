@@ -20,8 +20,11 @@ use ts_rs::TS;
 const CHECK_TIMEOUT: Duration = Duration::from_secs(15);
 /// The longest the download of an update may take, on a slow connection.
 const DOWNLOAD_TIMEOUT: Duration = Duration::from_secs(10 * 60);
-/// The most of a release's notes the Director is given.
+/// The most of a release's notes the Director is given, in each language.
 const MAX_NOTES_CHARS: usize = 1_000;
+/// The line of a release's notes that starts its English part; the text
+/// before it is Czech (docs/releasing.md).
+const ENGLISH_NOTES: &str = "[en]";
 /// How often the download reports its progress when the server does not
 /// say how large the update is.
 const UNSIZED_PROGRESS_STEP: u64 = 512 * 1024;
@@ -32,12 +35,40 @@ const UNSIZED_PROGRESS_STEP: u64 = 512 * 1024;
 #[serde(rename_all = "camelCase")]
 pub struct AvailableUpdate {
     pub version: String,
-    /// What the release says changed, cut after `MAX_NOTES_CHARS`; empty
-    /// when it says nothing.
-    pub notes: String,
+    /// What the release says changed, in each language of the app.
+    pub notes: ReleaseNotes,
     /// An AI app runs this app's MCP server (`--mcp`), which it keeps
     /// running in the old version until it is opened again.
     pub ai_apps: bool,
+}
+
+/// What a release says changed, in Czech and in English, each cut after
+/// `MAX_NOTES_CHARS`. A release that writes its notes in one language only
+/// gives them in both; empty when it says nothing.
+#[derive(Debug, Clone, PartialEq, Serialize, TS)]
+#[ts(export)]
+pub struct ReleaseNotes {
+    pub cs: String,
+    pub en: String,
+}
+
+impl ReleaseNotes {
+    /// The notes `text` gives: Czech up to a line `ENGLISH_NOTES`, English
+    /// after it.
+    fn parse(text: &str) -> ReleaseNotes {
+        let mut lines = text.lines();
+        let czech: Vec<&str> = lines.by_ref().take_while(|line| line.trim() != ENGLISH_NOTES).collect();
+        let english: Vec<&str> = lines.collect();
+        let (cs, en) = (czech.join("\n"), english.join("\n"));
+        let (cs, en) = (cs.trim(), en.trim());
+        let (cs, en) = match (cs.is_empty(), en.is_empty()) {
+            (true, false) => (en, en),
+            (false, true) => (cs, cs),
+            _ => (cs, en),
+        };
+        let cut = |notes: &str| notes.chars().take(MAX_NOTES_CHARS).collect();
+        ReleaseNotes { cs: cut(cs), en: cut(en) }
+    }
 }
 
 /// How much of an update has been downloaded.
@@ -88,8 +119,8 @@ async fn check(app: &AppHandle) -> tauri_plugin_updater::Result<Checked> {
 
 /// What the Director is told of `update`.
 fn available(update: &Update) -> AvailableUpdate {
-    let notes = update.body.as_deref().unwrap_or_default().trim();
-    AvailableUpdate { version: update.version.clone(), notes: notes.chars().take(MAX_NOTES_CHARS).collect(), ai_apps: crate::ai::connected_somewhere() }
+    let notes = ReleaseNotes::parse(update.body.as_deref().unwrap_or_default());
+    AvailableUpdate { version: update.version.clone(), notes, ai_apps: crate::ai::connected_somewhere() }
 }
 
 /// Downloads the update the check found, verifies its signature and
@@ -186,6 +217,36 @@ mod tests {
     fn a_tiny_update_reports_every_byte() {
         assert!(progress_step_crossed(0, 1, Some(50)));
         assert!(progress_step_crossed(1, 2, Some(50)));
+    }
+
+    fn notes(cs: &str, en: &str) -> ReleaseNotes {
+        ReleaseNotes { cs: cs.into(), en: en.into() }
+    }
+
+    #[test]
+    fn release_notes_are_czech_up_to_the_english_line() {
+        let text = "Opravy po akci\n\n- Rychlejší start\n\n[en]\nFixes after the event\n\n- Faster start\n";
+        assert_eq!(ReleaseNotes::parse(text), notes("Opravy po akci\n\n- Rychlejší start", "Fixes after the event\n\n- Faster start"));
+        // Spaces around the marker, as an editor may leave them.
+        assert_eq!(ReleaseNotes::parse("Opravy\n  [en] \nFixes"), notes("Opravy", "Fixes"));
+    }
+
+    #[test]
+    fn release_notes_in_one_language_are_given_in_both() {
+        // Every release before the English part was written, and one that forgets it.
+        assert_eq!(ReleaseNotes::parse("Opravy po akci\n- Rychlejší start"), notes("Opravy po akci\n- Rychlejší start", "Opravy po akci\n- Rychlejší start"));
+        assert_eq!(ReleaseNotes::parse("[en]\nFixes"), notes("Fixes", "Fixes"));
+        assert_eq!(ReleaseNotes::parse("Opravy\n[en]\n  \n"), notes("Opravy", "Opravy"));
+        assert_eq!(ReleaseNotes::parse(""), notes("", ""));
+        assert_eq!(ReleaseNotes::parse("[en]"), notes("", ""));
+    }
+
+    #[test]
+    fn release_notes_are_cut_in_each_language() {
+        let long = "á".repeat(MAX_NOTES_CHARS + 5);
+        let parsed = ReleaseNotes::parse(&format!("{long}\n[en]\n{long}"));
+        assert_eq!(parsed.cs.chars().count(), MAX_NOTES_CHARS);
+        assert_eq!(parsed.en.chars().count(), MAX_NOTES_CHARS);
     }
 
     #[test]

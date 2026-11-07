@@ -12,7 +12,7 @@ import { installQuestion, installStatus, waitsForShow } from "./update";
  * backend logs why).
  */
 export function UpdateBanner({ showRunning }: { showRunning: boolean }) {
-  const { t } = useApp();
+  const { t, lang } = useApp();
   const report = useReport();
   const update = useAvailableUpdate();
   // The download's progress while installing (null before its first report); undefined otherwise.
@@ -21,7 +21,7 @@ export function UpdateBanner({ showRunning }: { showRunning: boolean }) {
   if (!update || (showRunning && !installing)) return null;
 
   const install = () => {
-    confirmAction(t, installQuestion(t, update))
+    confirmAction(t, installQuestion(t, lang, update))
       .then((yes) => {
         if (!yes) return;
         setProgress(null);
