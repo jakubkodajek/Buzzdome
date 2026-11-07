@@ -1,10 +1,10 @@
-# Buzzdome architecture (for AI coding assistants)
+# Buzzdome architecture
 
-A map of the codebase for an assistant that has never seen it. It says what
+A map of the codebase for a person or an AI agent that has never seen it. It says what
 each part owns, which rules hold everywhere, and where to look next. The
 full design, with the reasons behind each choice, is
-[`docs/design.md`](../docs/design.md); requirements with IDs are in
-[`docs/specification.md`](../docs/specification.md). When this file and
+[`docs/design.md`](design.md); requirements with IDs are in
+[`docs/specification.md`](specification.md). When this file and
 those disagree, the docs and the code win: fix this file.
 
 ## What the app is
@@ -60,13 +60,36 @@ quiz-core (crates/quiz-core)    pure game state machine, rules, scoring, view
 | `crates/quiz-ai` | quiz writing for AI assistants: JSON Schema, quiz folders, MCP server, the folder and instructions, connecting AI apps | `docs/ai-assistants.md`. |
 | `crates/voice` | reading questions aloud offline: the voice model's download check and unpacking (`model.rs`), the sherpa-onnx engine (`engine.rs`), the voice process's line protocol (`server.rs`), clip names and WAV files | The engine runs only in the voice process (`app/src-tauri/src/read_aloud.rs`, `docs/design.md` §1.8). |
 | `crates/show-sim` | random quizzes and shows for soak tests | Used by CI nightly. |
-| `app/src-tauri` | Tauri shell: commands, windows, show thread and event order (`show_thread.rs`, `pump.rs`), journal (`session.rs`), error codes (`error.rs`), editor draft, file pickers (`dialogs.rs`), recent quiz files, receiver setup and buzzer colours (`hardware.rs`), what the remote's keys do (`remote.rs`), media player, themes, fonts, lights setup, AI assistants (`ai.rs`), app updates (`updates.rs`), the voice model and voice process (`read_aloud.rs`), log, crash drills (`crash_drill.rs`) | Module list in `CLAUDE.md`. The same exe also runs as a child process with no window: the spreadsheet reader (`--read-sheet`, `sheet_reader.rs`), the voice that reads questions aloud (`--voice`, `read_aloud.rs`) and an AI app's MCP server (`--mcp`, `ai.rs`). |
-| `app/src` | React UI: `director/`, `host/` (slides), `editor/` (Studio), `theme/`, `audio/`, messages (`notice.tsx`), icons (`icons.tsx`), shared helpers | Conventions in `CLAUDE.md`. |
+| `app/src-tauri` | Tauri shell: commands, windows, show thread and event order (`show_thread.rs`, `pump.rs`), journal (`session.rs`), error codes (`error.rs`), editor draft, file pickers (`dialogs.rs`), recent quiz files, receiver setup and buzzer colours (`hardware.rs`), what the remote's keys do (`remote.rs`), media player, themes, fonts, lights setup, AI assistants (`ai.rs`), app updates (`updates.rs`), the voice model and voice process (`read_aloud.rs`), log, crash drills (`crash_drill.rs`) | Module list in `AGENTS.md`. The same exe also runs as a child process with no window: the spreadsheet reader (`--read-sheet`, `sheet_reader.rs`), the voice that reads questions aloud (`--voice`, `read_aloud.rs`) and an AI app's MCP server (`--mcp`, `ai.rs`). |
+| `app/src` | React UI: `director/`, `host/` (slides), `editor/` (Studio), `theme/`, `audio/`, messages (`notice.tsx`), icons (`icons.tsx`), shared helpers | Conventions in `AGENTS.md`. |
 | `app/e2e` | E2E tests of the real app through WebDriver | Linux locally, Windows on CI only. |
 | `app/src-tauri/themes/<id>/` | built-in theme packages (`theme.json`, fonts, pictures) | |
 | `samples/demo-quiz.json` | the demo quiz the app ships | |
 | `docs/` | our own specification, design, quiz format, AI assistants, hardware test, releasing | The reference manual copy there is gitignored. |
 | `replica/` | recon of the reference app (screens, flows, scoring), feature matrix, buzzer research | `replica/sources/` and `replica/screens/` are gitignored. |
+
+## A press, from buzzer to projector
+
+```mermaid
+sequenceDiagram
+    participant B as Buzzer / key / on-screen
+    participant R as Receiver thread (crates/buzzers)
+    participant S as Show thread (show_thread.rs)
+    participant G as Game (quiz-core)
+    participant J as Journal (session.rs)
+    participant W as Director + projector
+    B->>R: HID report (303S over CP2110)
+    R->>S: Press with the buzzer's own timer
+    W->>S: dispatch(Command) from a button or key
+    S->>G: apply(Command, at_ms)
+    G-->>S: new state + Effects (sounds, lights)
+    S->>J: append the command line, flushed
+    S-->>W: game-state (GameView), only after the journal write
+    S-->>R: buzzer lights (Effect::Lights)
+```
+
+The journal write comes before the view: that is invariant 1 below. After a
+crash the shell replays the journal through the same `Game::apply`.
 
 ## Threads
 
@@ -114,7 +137,7 @@ quiz-core (crates/quiz-core)    pure game state machine, rules, scoring, view
 
 | Task | Start here | Skill |
 | --- | --- | --- |
-| Check a change before a PR | the commands table in `CLAUDE.md` | `buzzdome-verify` |
+| Check a change before a PR | the commands table in `AGENTS.md`, `make check` | `buzzdome-verify` |
 | Add or change a backend command | `app/src-tauri/build.rs`, `src/lib.rs`, `capabilities/`, `app/src/api.ts` | `buzzdome-backend-command` |
 | Change a game rule or the quiz format | `crates/quiz-core/src/game.rs`, `model.rs`, `docs/quiz-format.md` | `buzzdome-game-rules` |
 | Change a screen, the editor or a text | `app/src`, `i18n.ts`, `editor/slides.ts`, `host/SlideScreen.tsx` | `buzzdome-ui-change` |
@@ -122,6 +145,7 @@ quiz-core (crates/quiz-core)    pure game state machine, rules, scoring, view
 | A message to the quizmaster, an icon | `useApp()` (`notify`, `caution`, `fail`), `notice.tsx`, `icons.tsx` | `buzzdome-ui-change` |
 | Buzzers, receiver, remote, buzzer colours or stage lights | `crates/buzzers`, `crates/lights`, `app/src-tauri/src/hardware.rs`, `remote.rs`, `docs/hardware-test.md` | `buzzdome-hardware` |
 | AI assistants: MCP tools, connecting AI apps, instructions | `crates/quiz-ai`, `app/src-tauri/src/ai.rs`, `editor/AiPage.tsx`, `docs/ai-assistants.md` | none |
+| Agents, skills, hooks, project memory | `.claude/agents`, `.claude/skills`, `.claude/settings.json`, `memory/`, then `python3 scripts/sync_agents.py` | `docs/agent-workflow.md` |
 | Release a version, in-app updates | `version` in `app/src-tauri/tauri.conf.json`, `.github/workflows/release.yml`, `app/src-tauri/src/updates.rs`, `docs/releasing.md` | none (only Jakub's go-ahead pushes a tag) |
 
 The skills are in `.claude/skills/<name>/SKILL.md`. Assistants that do not
@@ -160,6 +184,6 @@ load skills can read them as plain checklists.
   must stay so: every path `.gitignore` lists for the manual (`docs/`
   subfolders, `docs/index.md`, `docs/solo.md`, `docs/tips-and-tricks.md`,
   `replica/sources/`, `replica/screens/`). Never quote them into our docs.
-- **No trademarked names** in the product or UI (see `CLAUDE.md`).
+- **No trademarked names** in the product or UI (see `AGENTS.md`).
 - **Languages.** UI in Czech (default) and English; all code, comments,
   commits and docs in English.

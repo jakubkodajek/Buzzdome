@@ -123,7 +123,7 @@ A quiz is a single `.quiz` file: a ZIP with a versioned `quiz.json` and a
 | --- | --- |
 | Quizmasters using **Claude Desktop, Antigravity or Codex** | In Buzzdome, File › AI assistants › *Connect*. The app becomes the AI app's MCP server, limited to one folder; then type a topic in its chat. |
 | Quizmasters using **another AI app** that runs local MCP servers | File › AI assistants › *Copy settings*, then add its `buzzdome` entry to the app's MCP servers (`mcpServers` in most apps, `servers` in VS Code). |
-| AI coding assistants working **on this codebase** | Start with [`CLAUDE.md`](CLAUDE.md) (or [`AGENTS.md`](AGENTS.md)), then [`.claude/ARCHITECTURE.md`](.claude/ARCHITECTURE.md). Task checklists are in [`.claude/skills/`](.claude/skills). |
+| AI coding agents working **on this codebase** | Start with [`AGENTS.md`](AGENTS.md) (Claude Code reads it through [`CLAUDE.md`](CLAUDE.md)), then [`docs/architecture.md`](docs/architecture.md) and the project memory in [`memory/`](memory). Agents, skills and the review workflow: [`docs/agent-workflow.md`](docs/agent-workflow.md). |
 
 Details are in [`docs/ai-assistants.md`](docs/ai-assistants.md).
 
@@ -185,11 +185,13 @@ crates/show-sim    random quizzes and shows for soak tests
 app/src-tauri      Tauri shell: commands, windows, show thread, journal
 app/src            React UI: director/, host/ (slides), editor/ (Studio)
 app/e2e            end-to-end tests through WebDriver
-docs/              specification, design, quiz format, AI assistants, hardware test
+docs/              specification, architecture, design, quiz format, AI assistants, hardware test, ADRs
 replica/           behaviour map and feature matrix of the reference app
+memory/            project memory for people and AI agents: context, open work, decisions, lessons, log
+.claude/           AI agents, skills, hooks and path rules (Codex/Copilot copies are generated)
 ```
 
-The architecture in one page is [`.claude/ARCHITECTURE.md`](.claude/ARCHITECTURE.md),
+The architecture in one page is [`docs/architecture.md`](docs/architecture.md),
 and the full design is [`docs/design.md`](docs/design.md).
 
 ### CI
