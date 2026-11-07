@@ -1,6 +1,6 @@
 // Small form controls of the editor, in the look of a desktop app.
 
-import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 import { ANSWER_LETTERS } from "../answers";
 import { useApp } from "../app-context";
 import { confirmAction } from "../confirm";
@@ -258,9 +258,24 @@ export function MediaPicker({ file, onChoose, onRemove, label }: { file: string 
 /** What can take the focus in a dialog. */
 const FOCUSABLE = "button, [href], input, select, textarea, [tabindex]:not([tabindex='-1'])";
 
-/** The controls in `box` that Tab reaches, in order: enabled and shown. */
+/** The controls in `box` that Tab reaches, in order: enabled, shown and not taken off the Tab order. */
 function tabStops(box: HTMLElement): HTMLElement[] {
-  return [...box.querySelectorAll<HTMLElement>(FOCUSABLE)].filter((e) => !e.matches(":disabled") && e.getClientRects().length > 0);
+  return [...box.querySelectorAll<HTMLElement>(FOCUSABLE)].filter((e) => !e.matches(":disabled") && e.tabIndex >= 0 && e.getClientRects().length > 0);
+}
+
+/**
+ * Keeps Tab and Shift+Tab going round the controls of the box the key went
+ * to (`e.currentTarget`): past the last one to the first and back, never
+ * behind it to the window. A box with none keeps the focus itself.
+ */
+function keepTabInside(e: ReactKeyboardEvent<HTMLElement>) {
+  if (e.key !== "Tab") return;
+  const stops = tabStops(e.currentTarget);
+  const at = stops.indexOf(document.activeElement as HTMLElement);
+  const wrapTo = stops.length === 0 ? e.currentTarget : e.shiftKey ? (at <= 0 ? stops[stops.length - 1] : null) : at === -1 || at === stops.length - 1 ? stops[0] : null;
+  if (!wrapTo) return;
+  e.preventDefault();
+  wrapTo.focus();
 }
 
 /**
@@ -326,14 +341,9 @@ export function Dialog(props: {
           if (e.key === "Escape") {
             e.stopPropagation();
             cancel.current();
-          } else if (e.key === "Tab") {
+          } else {
             // Tab goes round the dialog's own controls.
-            const stops = tabStops(e.currentTarget);
-            const at = stops.indexOf(document.activeElement as HTMLElement);
-            const wrapTo = stops.length === 0 ? e.currentTarget : e.shiftKey ? (at <= 0 ? stops[stops.length - 1] : null) : at === -1 || at === stops.length - 1 ? stops[0] : null;
-            if (!wrapTo) return;
-            e.preventDefault();
-            wrapTo.focus();
+            keepTabInside(e);
           }
         }}
       >
@@ -352,7 +362,8 @@ export function Dialog(props: {
 
 /**
  * A box over the window at a point, kept inside the window also as it grows
- * (a picker folding a part open); closes on any click outside or Escape.
+ * (a picker folding a part open); closes on any click outside or Escape,
+ * and Tab goes round its own controls.
  * Closing gives the focus back to the control that had it as the box
  * opened. `children` given as a function of `close` close it so before
  * running what was picked, so a dialog that opens then returns the focus
@@ -419,6 +430,8 @@ export function Popup(props: {
         onMouseDown={(e) => e.stopPropagation()}
         onContextMenu={(e) => e.stopPropagation()}
         onKeyDown={(e) => {
+          // Tab stays in the box while it is open: behind it the editor's keys are muted.
+          keepTabInside(e);
           if (e.key !== "Escape") return;
           // Only the popup closes, not what the editor's Esc does.
           e.stopPropagation();
