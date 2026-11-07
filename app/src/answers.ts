@@ -1,4 +1,5 @@
 import { ANSWER_BUTTONS } from "./bindings/Constants";
+import type { Translate } from "./i18n";
 import type { Button } from "./types";
 
 /** Buzzer buttons in the order the UI lists them. */
@@ -19,4 +20,9 @@ export function answerIndex(button: Button): number | null {
 /** How a button is written on screen: its letter, or a dot for the big button. */
 export function buttonLabel(button: Button): string {
   return button === "big" ? "●" : button.toUpperCase();
+}
+
+/** A button in words, where a dot would not say which it is (a list, a log): its letter, or "big button". */
+export function buttonName(t: Translate, button: Button): string {
+  return button === "big" ? t("bigButton") : button.toUpperCase();
 }

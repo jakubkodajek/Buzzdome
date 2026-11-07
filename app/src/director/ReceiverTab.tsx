@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { BUTTONS, buttonLabel } from "../answers";
+import { BUTTONS, buttonName } from "../answers";
 import { api } from "../api";
 import { useApp, useRun } from "../app-context";
 import { timeOfDay } from "../format";
@@ -17,7 +17,7 @@ const LOG_LEN = 40;
 const hexBytes = (bytes: number[]) => bytes.map((b) => b.toString(16).padStart(2, "0")).join(" ");
 /** A press as the logs show it, with the buzzer's own timer when it sends one. */
 const pressLabel = (t: Translate, p: Press) =>
-  `${p.buzzer} ${buttonLabel(p.button)}${p.timer === null ? "" : ` · ${t("pressTimer", { timer: p.timer })}`}`;
+  `${p.buzzer} ${buttonName(t, p.button)}${p.timer === null ? "" : ` · ${t("pressTimer", { timer: p.timer })}`}`;
 const isKeyboardOrMouse = (d: DeviceInfo) => d.usagePage === 1 && (d.usage === 2 || d.usage === 6);
 
 /** The status line's look: blue while the receiver is waited for. */
@@ -104,7 +104,7 @@ export function ReceiverTab() {
   const finishLearn = async () => {
     try {
       const learned = await api.receiverLearnFinish();
-      setLearnt({ tone: "info", text: t("learned", { buzzer: learned.buzzer, button: buttonLabel(learned.button) }) });
+      setLearnt({ tone: "info", text: t("learned", { buzzer: learned.buzzer, button: buttonName(t, learned.button) }) });
       // Move on to the next button, then the next buzzer.
       const i = BUTTONS.indexOf(button);
       if (i < BUTTONS.length - 1) setButton(BUTTONS[i + 1]);
@@ -141,7 +141,8 @@ export function ReceiverTab() {
           </button>
         )}
         {info?.platform === "linux" && udev && (
-          <details>
+          // Open by itself while the receiver cannot be opened, which the rule is for.
+          <details open={(status?.kind === "error" && status.problem === "cannotOpen") || undefined}>
             <summary>{t("linuxAccess")}</summary>
             <pre className="code">{udev}</pre>
             <button onClick={copyUdev}>{t("copy")}</button>
@@ -157,7 +158,7 @@ export function ReceiverTab() {
             {buzzers.map((b) => (
               <li key={b.buzzer} className={b.buzzer === latest ? "latest" : ""}>
                 <strong>{b.buzzer}</strong>
-                <span>{buttonLabel(b.button)}</span>
+                <span>{buttonName(t, b.button)}</span>
                 <span className="muted">{timeOfDay(b.atMs, lang)}</span>
               </li>
             ))}
@@ -261,7 +262,7 @@ export function ReceiverTab() {
           <p className="muted">{t("learnHint", { n: info?.learnedButtons ?? 0 })}</p>
           {learn?.active ? (
             <div className="row learn-active">
-              <span>{t("learnPress", { button: buttonLabel(learn.button ?? "a"), buzzer: learn.buzzer ?? 0, n: learn.samples })}</span>
+              <span>{t("learnPress", { button: buttonName(t, learn.button ?? "a"), buzzer: learn.buzzer ?? 0, n: learn.samples })}</span>
               <button disabled={!learn.canSave} onClick={finishLearn}>
                 {t("learnSave")}
               </button>
@@ -284,7 +285,7 @@ export function ReceiverTab() {
                 <select value={button} onChange={(e) => setButton(e.target.value as Button)}>
                   {BUTTONS.map((b) => (
                     <option key={b} value={b}>
-                      {buttonLabel(b)}
+                      {buttonName(t, b)}
                     </option>
                   ))}
                 </select>

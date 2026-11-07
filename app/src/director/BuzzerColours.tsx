@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import { useApp, useRun } from "../app-context";
 import { confirmAction } from "../confirm";
@@ -49,7 +49,8 @@ const COMMON_COLOURS: readonly { colour: Rgb; name: StringKey }[] = [
 export function BuzzerColours({ info, reload }: { info: ReceiverInfo; reload: () => void }) {
   const { t } = useApp();
   const run = useRun();
-  const [error, setError] = useState<Notice | null>(null);
+  // Why the last colour chosen was refused, shown in its light's row.
+  const [error, setError] = useState<{ light: Light; notice: Notice } | null>(null);
   const reset = () =>
     run(confirmAction(t, t("buzzerColoursResetConfirm"), t("buzzerColoursReset")).then((yes) => (yes ? api.receiverResetColours().then(() => setError(null)).finally(reload) : undefined)));
   const choose = (light: Light, colour: Rgb) => {
@@ -58,7 +59,7 @@ export function BuzzerColours({ info, reload }: { info: ReceiverInfo; reload: ()
       .receiverSetColours({ ...info.colours, [light]: colour })
       .then(
         () => setError(null),
-        (e: unknown) => setError(errorNotice(t, e)),
+        (e: unknown) => setError({ light, notice: errorNotice(t, e) }),
       )
       .finally(reload);
   };
@@ -68,31 +69,46 @@ export function BuzzerColours({ info, reload }: { info: ReceiverInfo; reload: ()
       <p className="muted">{t("buzzerColoursHint")}</p>
       {info.coloursRefused && <NoticeBox notice={{ text: t("buzzerColoursRefusedKept", { problem: colourClashText(t, info.coloursRefused) }) }} />}
       <table className="grid">
+        <thead>
+          <tr>
+            <th scope="col">{t("buzzerColourState")}</th>
+            <th scope="col">{t("buzzerColour")}</th>
+            <th scope="col">{t("buzzerShade")}</th>
+          </tr>
+        </thead>
         <tbody>
           {LIGHTS.map((light) => (
-            <tr key={light}>
-              <th scope="row">
-                {lightText(t, light)}
-                <small className="muted">{t(LIGHT_HINTS[light])}</small>
-              </th>
-              <td>
-                <BuzzerColourBox
-                  label={lightText(t, light)}
-                  value={info.colours[light]}
-                  mine={info.myColours}
-                  full={info.myColours.length >= info.maxMyColours}
-                  onChoose={(colour) => choose(light, colour)}
-                  onKeep={(mine) => run(api.receiverSetMyColours(mine).then(reload))}
-                />
-              </td>
-              <td className="buzzer-shade" title={t("buzzerShade")}>
-                <Swatch color={info.shownColours[light]} />
-              </td>
-            </tr>
+            <Fragment key={light}>
+              <tr>
+                <th scope="row">
+                  {lightText(t, light)}
+                  <small className="muted">{t(LIGHT_HINTS[light])}</small>
+                </th>
+                <td>
+                  <BuzzerColourBox
+                    label={lightText(t, light)}
+                    value={info.colours[light]}
+                    mine={info.myColours}
+                    full={info.myColours.length >= info.maxMyColours}
+                    onChoose={(colour) => choose(light, colour)}
+                    onKeep={(mine) => run(api.receiverSetMyColours(mine).then(reload))}
+                  />
+                </td>
+                <td className="buzzer-shade">
+                  <Swatch color={info.shownColours[light]} />
+                </td>
+              </tr>
+              {error?.light === light && (
+                <tr>
+                  <td colSpan={3}>
+                    <NoticeBox notice={error.notice} />
+                  </td>
+                </tr>
+              )}
+            </Fragment>
           ))}
         </tbody>
       </table>
-      {error && <NoticeBox notice={error} />}
       <div className="row">
         <span className="spacer" />
         <button onClick={reset}>{t("buzzerColoursReset")}</button>
