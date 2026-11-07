@@ -3,7 +3,7 @@ import { useVoiceGain, useVoiceModel, useVoicePreview, useVoiceSample, voiceLine
 import { welcomePreviewView } from "../host/preview";
 import { SlideScreen } from "../host/SlideScreen";
 import { Stage } from "../host/Stage";
-import { useEffect, useId, useRef } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { BackIcon, CheckIcon, PlayIcon, StopIcon } from "../icons";
 import { keyHint, KEYS } from "../keyboard";
 import { problemText } from "../messages";
@@ -271,6 +271,7 @@ function ReadAloudSettings({ quiz, settings, set }: { quiz: Quiz; settings: Quiz
   const languages = QUIZ_LANGUAGES.map((value): [QuizLanguage, string] => [value, t(LANGUAGE_LABEL[value])]);
   const voices = VOICES.map((value): [number, string] => [value, voiceName(t, value)]);
   const trying = preview.playing || sample.playing;
+  const [preparing, setPreparing] = useState(false);
   const tryVoice = () => {
     if (trying) {
       preview.stop();
@@ -281,7 +282,9 @@ function ReadAloudSettings({ quiz, settings, set }: { quiz: Quiz; settings: Quiz
     const what = settings.readAloud === "off" ? "questionAndAnswers" : settings.readAloud;
     const line = quiz.slides.map((slide) => voiceLine(slide, settings, what)).find((found) => found !== null);
     if (!line) return sample.play(settings.language, settings.voice);
-    run(preview.play(line, gain));
+    // The clip renders for a few seconds before it plays (or is stopped): that wait is shown.
+    setPreparing(true);
+    run(preview.play(line, gain).finally(() => setPreparing(false)));
   };
   return (
     <>
@@ -308,9 +311,21 @@ function ReadAloudSettings({ quiz, settings, set }: { quiz: Quiz; settings: Quiz
         <span>{t("voiceChoice")}</span>
         <div className="voice-choice">
           <Select label={t("voiceChoice")} value={settings.voice} options={voices} onChange={(voice) => set({ voice })} />
-          <button type="button" className="mini" aria-label={t(trying ? "stopTryVoice" : "tryVoice")} title={t(trying ? "stopTryVoice" : "tryVoice")} onClick={tryVoice}>
+          <button
+            type="button"
+            className={preparing ? "mini preparing" : "mini"}
+            aria-label={t(trying ? "stopTryVoice" : "tryVoice")}
+            aria-busy={preparing}
+            title={t(trying ? "stopTryVoice" : "tryVoice")}
+            onClick={tryVoice}
+          >
             {trying ? <StopIcon /> : <PlayIcon />}
           </button>
+          {preparing && (
+            <span className="voice-preparing" role="status">
+              {t("voicePreparing")}
+            </span>
+          )}
         </div>
       </div>
       {model && !model.installed && <p className="backstage-hint">{t("voiceNotDownloaded")}</p>}

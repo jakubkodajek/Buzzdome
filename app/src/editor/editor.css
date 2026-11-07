@@ -2295,6 +2295,17 @@
   flex: 1;
 }
 
+/* While the voice's clip renders, before it is heard. */
+.voice-choice .preparing {
+  cursor: progress;
+}
+
+.voice-preparing {
+  font-size: 12px;
+  white-space: nowrap;
+  color: var(--muted);
+}
+
 .sound-rows {
   display: grid;
   grid-template-columns: minmax(180px, 1fr) minmax(200px, 260px) auto;
