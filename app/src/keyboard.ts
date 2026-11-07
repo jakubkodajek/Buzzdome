@@ -20,6 +20,19 @@ export const KEYS = {
 /** Keys that also go to the next step. */
 const NEXT_KEYS: readonly string[] = [KEYS.next, "arrowright", "pagedown"];
 
+/** Keys that go back to the previous slide, as a presenter's clicker sends them. */
+const PREVIOUS_KEYS: readonly string[] = ["arrowleft", "pageup"];
+
+/**
+ * The key a show key press stands for: a digit by the key's place (the top
+ * row or the keypad), since on a Czech layout the top row types ě, š, č...
+ * without Shift; any other key as typed.
+ */
+export function showKey(event: Pick<KeyboardEvent, "key" | "code">): string {
+  const digit = /^(?:Digit|Numpad)([0-9])$/.exec(event.code ?? "");
+  return digit ? digit[1] : event.key;
+}
+
 /** How a key is written on the button it stands for. */
 export function keyHint(t: Translate, key: string): string {
   return key === " " ? t("keySpace") : key.toUpperCase();
@@ -80,10 +93,10 @@ export function isPlainKey(event: Pick<KeyboardEvent, "metaKey" | "ctrlKey" | "a
   return !event.defaultPrevented && !event.metaKey && !event.ctrlKey && !event.altKey && !isTypingTarget(event.target);
 }
 
-/** True for the keys a running show takes, whether or not the current step has a use for them. */
-function isShowKey(key: string): boolean {
+/** True for the keys a running show takes, whether or not the current step has a use for them (`director`: the Director's too). */
+function isShowKey(key: string, director: boolean): boolean {
   const lower = key.toLowerCase();
-  return /^[0-9]$/.test(key) || NEXT_KEYS.includes(lower) || [KEYS.right, KEYS.wrong, KEYS.clock, KEYS.leaderboard].some((k) => k === lower);
+  return /^[0-9]$/.test(key) || NEXT_KEYS.includes(lower) || (director && PREVIOUS_KEYS.includes(lower)) || [KEYS.right, KEYS.wrong, KEYS.clock, KEYS.leaderboard].some((k) => k === lower);
 }
 
 /** True for Enter held down on a button, which would press it again with every repeat. */
@@ -93,8 +106,9 @@ export function isHeldButtonPress(event: Pick<KeyboardEvent, "key" | "repeat" | 
 
 /**
  * Quizmaster keys, the same in the Director and on the projector window.
- * `onToggleProjector` adds M, which opens or closes the projector from the
- * Director; the projector closes itself (`useProjectorCloseKeys`).
+ * `onToggleProjector`, given in the Director, adds the Director's own keys:
+ * M, which opens or closes the projector (the projector closes itself,
+ * `useProjectorCloseKeys`), and Left / Page Up, back to the previous slide.
  */
 export function useShortcuts(view: GameView | null, onToggleProjector?: () => void) {
   const dispatch = useDispatch();
@@ -110,12 +124,14 @@ export function useShortcuts(view: GameView | null, onToggleProjector?: () => vo
         if (!event.repeat) onToggleProjector();
         return;
       }
-      if (!view || !isShowKey(event.key)) return;
+      const key = showKey(event);
+      const director = onToggleProjector !== undefined;
+      if (!view || !isShowKey(key, director)) return;
       // Taken even when the step has no use for it, so Space never presses a focused button mid-show.
       event.preventDefault();
       // A key held down sends one command, not one per repeat.
       if (event.repeat) return;
-      const command = commandForKey(event.key, view);
+      const command = commandForKey(key, view, director);
       if (command) dispatch(command);
     };
     // A slider keeps no focus once let go, so the arrow keys never move it unseen.
@@ -154,19 +170,24 @@ export function useProjectorCloseKeys(close: () => void) {
   }, [close]);
 }
 
-/** The command a key stands for, or null when the current step does not take it (see `Controls`). */
-export function commandForKey(key: string, view: GameView): Command | null {
+/**
+ * The command a key stands for, or null when the current step does not take it (see `Controls`);
+ * `director`: in the Director, where going back a slide is a key too.
+ */
+export function commandForKey(key: string, view: GameView, director = false): Command | null {
   if (/^[0-9]$/.test(key)) {
     // Keyboard buzzers as in the original: 1..9 and 0 for buzzer 10.
     return { type: "press", buzzer: key === "0" ? 10 : Number(key), button: "big" };
   }
   const action = actionForKey(key.toLowerCase());
+  if (action === "previous" && !director) return null;
   return action && commandForAction(action, view);
 }
 
 /** The show action of a key, in lower case; M, the projector's, is the Director's own (`useShortcuts`). */
 function actionForKey(lower: string): ShowAction | null {
   if (NEXT_KEYS.includes(lower)) return "next";
+  if (PREVIOUS_KEYS.includes(lower)) return "previous";
   switch (lower) {
     case KEYS.right:
       return "judgeRight";
@@ -191,7 +212,7 @@ export function commandForAction(action: ShowAction, view: GameView): Command | 
     case "next":
       return controls.next ? { type: "next" } : null;
     case "previous":
-      return view.previousSlide === null ? null : { type: "goTo", slide: view.previousSlide };
+      return view.previousSlide === null || !controls.goTo ? null : { type: "goTo", slide: view.previousSlide };
     case "clock":
       if (controls.pauseClock) return { type: "pauseClock" };
       return controls.resumeClock ? { type: "resumeClock" } : null;

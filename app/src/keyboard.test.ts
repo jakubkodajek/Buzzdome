@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { NO_CONTROLS, previewView } from "./host/preview";
 import { translator } from "./i18n";
 import { KEY_BUZZERS, PROJECTOR_COMMANDS } from "./bindings/ProjectorCommands";
-import { commandForAction, commandForKey, commandForRemote, isFieldTarget, isHeldButtonPress, isPlainKey, isProjectorCloseKey, isTypingTarget, keyCombo, keyHint, KEYS } from "./keyboard";
+import { commandForAction, commandForKey, commandForRemote, isFieldTarget, isHeldButtonPress, isPlainKey, isProjectorCloseKey, isTypingTarget, keyCombo, keyHint, KEYS, showKey } from "./keyboard";
 import type { Controls, GameView, Phase } from "./types";
 
 const slide = { id: "q1", type: "billboard", title: "Round 1", text: "", notes: "", picture: null, video: null, sound: null, background: null } as const;
@@ -28,6 +28,23 @@ describe("commandForKey", () => {
     expect(commandForKey("p", viewWith({ pauseClock: true }))).toEqual({ type: "pauseClock" });
     expect(commandForKey("p", viewWith({ resumeClock: true }))).toEqual({ type: "resumeClock" });
     expect(commandForKey("p", viewWith({ next: true }))).toBeNull();
+  });
+
+  it("takes the digits by their place, so the top row presses buzzers on a Czech layout too", () => {
+    expect(showKey({ key: "ě", code: "Digit2" })).toBe("2");
+    expect(showKey({ key: "é", code: "Digit0" })).toBe("0");
+    expect(showKey({ key: "7", code: "Numpad7" })).toBe("7");
+    expect(showKey({ key: "y", code: "KeyZ" })).toBe("y");
+    expect(commandForKey(showKey({ key: "+", code: "Digit1" }), viewWith({}))).toEqual({ type: "press", buzzer: 1, button: "big" });
+  });
+
+  it("goes back a slide with Left and Page Up in the Director only, when the show may jump", () => {
+    const view = { ...viewWith({ goTo: true }), previousSlide: 3 };
+    for (const key of ["ArrowLeft", "PageUp"]) {
+      expect(commandForKey(key, view, true)).toEqual({ type: "goTo", slide: 3 });
+      expect(commandForKey(key, view)).toBeNull();
+      expect(commandForKey(key, { ...view, controls: { ...view.controls, goTo: false } }, true)).toBeNull();
+    }
   });
 
   it("gives only commands the projector may give, as its keys are the same", () => {
