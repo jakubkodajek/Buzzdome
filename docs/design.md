@@ -492,14 +492,20 @@ media, looks and settings may all differ. The quizmaster then chooses With
 the edits, Without them, or Cancel; edits it cannot take are said and the
 show resumes without them. With the edits, the file is unpacked as for a
 new show, and after the recovery the show journals `TakeQuiz` with the
-whole edited quiz, so the journal replays without the file; `meta.json`
-then names the new media folder and title. What the show did stands:
-scores, questions that ended and jokers are not worked out again, so a
-right answer changed on a question already played changes no score. A
-question in play refuses it, but none is after the recovery; when the
-journal refuses the recovery, the edits are not taken either
-(`editsNotTaken`). No rules version is needed: older journals hold no
-`TakeQuiz`.
+whole edited quiz, so the journal replays without the file. That quiz is
+read as a quiz file is (`Quiz::read_value`, migrated from an older schema
+version), so a migration must read journals too (`docs/quiz-format.md`).
+`meta.json` then names the new media folder and title. What the show did
+stands: scores, questions that ended and jokers are not worked out again,
+so a right answer changed on a question already played changes no score.
+The question on screen once it has results (closed or its answer shown,
+`Game::scored_slide`) keeps its slide as played, since its lights, counts
+and marks on screen are judged by its answers, and the Director says so
+(`editedSlideKept`); a later resume offers the edit again, once the show
+has left it. A question in play refuses it, but none is after the
+recovery; when the journal refuses the recovery, the edits are not taken
+either (`editsNotTaken`). No rules version is needed: older journals hold
+no `TakeQuiz`.
 
 The windows load media through Tauri's asset protocol. Its scope is empty
 in `tauri.conf.json`; at startup the shell allows the folder of unpacked

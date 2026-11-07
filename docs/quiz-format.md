@@ -545,6 +545,12 @@ the next `schemaVersion` and a migration that opens older files unchanged.
 Readers keep a quiz in the current version, so saving an older file writes
 the current one.
 
+Quizzes are not kept in quiz files alone: a show's session folder keeps its
+copy (`quiz.json`), and its journal keeps every quiz the show took as edited
+since it began (a `takeQuiz` line, `docs/design.md`). Both are read as a
+file is (`Quiz::read_value`), so a migration must read them too: a journal
+written by an older app has to resume after an update.
+
 Builds of the editor within version 4 kept a few fields when a slide changed
 type that its new type cannot play: a `picture` or `video` on a `final` or
 `endOfRound` slide, and `sound.start: withClock`, `sound.replay`,

@@ -34,6 +34,9 @@ Template:
   `Session::rewrite_meta` for the new media folder; the Director asks With the
   edits / Without / Cancel when Resume is pressed. BF173: the restart warning
   only once the recovery is journaled (`resume_session` test with a broken journal).
-- State: make check green apart from the uncommitted bindings; branch `claude/project-thread-u9fky8`.
+- State: make check green; branch `claude/project-thread-u9fky8`, PR #78.
+  Guardian BF178 (journaled quiz read through `Quiz::read_value`, migrated)
+  and BF179 (the scored question on screen keeps its slide as played,
+  `editedSlideKept`) fixed; BF180 this line.
 - Next: guardian review of the PR, then Jakub's OK to merge.
 - Blockers / open questions: none.

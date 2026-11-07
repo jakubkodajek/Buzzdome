@@ -781,9 +781,16 @@ impl Quiz {
 
     /// Reads a quiz and says what reading left out.
     pub fn read_json(json: &str) -> Result<ReadQuiz, QuizJsonError> {
+        let value = serde_json::from_str(json).map_err(|e| QuizJsonError::Syntax(e.to_string()))?;
+        Quiz::read_value(value)
+    }
+
+    /// `read_json` for a quiz already parsed as JSON, as a show's journal
+    /// holds one (`Command::TakeQuiz`): every stored quiz is read this one
+    /// way, so an older one is migrated wherever it is kept.
+    pub fn read_value(mut value: serde_json::Value) -> Result<ReadQuiz, QuizJsonError> {
         use serde_json::Value;
         let syntax = |e: serde_json::Error| QuizJsonError::Syntax(e.to_string());
-        let mut value: Value = serde_json::from_str(json).map_err(syntax)?;
         let version = value.get("schemaVersion").and_then(Value::as_u64).unwrap_or(0);
         if version > u64::from(SCHEMA_VERSION) {
             let found = u32::try_from(version).unwrap_or(u32::MAX);

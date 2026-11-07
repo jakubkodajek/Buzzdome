@@ -1,7 +1,7 @@
 //! The journal contract: every command a show journals reads back as it was
 //! written, and lines written by earlier versions still read.
 
-use quiz_core::{Button, Command, Quiz, Stamped};
+use quiz_core::{AnswerMode, Button, Command, CorrectAnswer, Question, Quiz, Slide, SlideContent, Stamped};
 use std::collections::BTreeSet;
 use ts_rs::{Config, TS};
 
@@ -47,6 +47,11 @@ fn lines() -> Vec<(&'static str, u64, Command)> {
             27,
             Command::TakeQuiz { quiz: Box::new(Quiz::new("T", vec![])) },
         ),
+        (
+            r#"{"atMs":28,"command":{"type":"takeQuiz","quiz":{"schemaVersion":5,"title":"Q","theme":null,"slides":[{"id":"q1","notes":"","picture":null,"video":null,"sound":null,"background":null,"type":"question","text":"Which?","mode":"everyone","answers":["A","B"],"correct":[{"answer":1,"share":100}],"timeLimitS":20,"points":100,"pointsEnd":null,"penalty":0}]}}}"#,
+            28,
+            Command::TakeQuiz { quiz: Box::new(one_question()) },
+        ),
     ]
 }
 
@@ -81,4 +86,27 @@ fn every_journal_line_reads_as_its_command_and_is_written_as_it_was() {
         assert_eq!(serde_json::from_str::<Stamped>(line).unwrap(), stamped, "{line}");
         assert_eq!(serde_json::to_string(&stamped).unwrap(), line);
     }
+}
+
+/// The quiz of the journal line with a question.
+fn one_question() -> Quiz {
+    let question = Question {
+        text: "Which?".into(),
+        mode: AnswerMode::Everyone,
+        answers: vec!["A".into(), "B".into()],
+        correct: vec![CorrectAnswer::full(1)],
+        time_limit_s: 20,
+        points: 100,
+        points_end: None,
+        penalty: 0,
+    };
+    Quiz::new("Q", vec![Slide::new("q1", SlideContent::Question(question))])
+}
+
+#[test]
+fn a_journaled_quiz_of_an_older_schema_reads_migrated() {
+    // Schema version 4 named the right answer by its index.
+    let line = r#"{"atMs":28,"command":{"type":"takeQuiz","quiz":{"schemaVersion":4,"title":"Q","slides":[{"id":"q1","type":"question","text":"Which?","mode":"everyone","answers":["A","B"],"correct":1,"timeLimitS":20,"points":100}]}}}"#;
+    let stamped: Stamped = serde_json::from_str(line).unwrap();
+    assert_eq!(stamped.command, Command::TakeQuiz { quiz: Box::new(one_question()) });
 }

@@ -90,6 +90,10 @@ pub enum AppError {
     /// not be saved; it runs with the quiz it had.
     #[error("the show goes on without the quiz's edits: {change:?}")]
     EditsNotTaken { change: Option<ShapeChange> },
+    /// A resumed show took its quiz as edited, but for the question on
+    /// screen (`slide`), whose results stand as scored (`Game::scored_slide`).
+    #[error("slide {slide} keeps the version it was played in")]
+    EditedSlideKept { slide: usize },
     /// A resumed show stopped while the question on `slide` was in play: it
     /// starts again, its answers and score changes taken back
     /// (`Game::recovery_command`), and waits for the quizmaster.

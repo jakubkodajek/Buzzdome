@@ -45,7 +45,7 @@ function params(fields: object): Params {
 }
 
 /** Codes worded with their own parameters, see `errorText`. */
-type WordedApart = "file" | "editsNotTaken" | "noSuchSlide" | "questionRestarted" | "noSuchPad" | "notInLibrary" | "learnConflict" | "buzzerColours" | "quizInvalid" | "journalBroken" | "lightsRefused";
+type WordedApart = "file" | "editsNotTaken" | "editedSlideKept" | "noSuchSlide" | "questionRestarted" | "noSuchPad" | "notInLibrary" | "learnConflict" | "buzzerColours" | "quizInvalid" | "journalBroken" | "lightsRefused";
 
 const ERROR_KEYS: Record<Exclude<AppError["code"], WordedApart>, StringKey> = {
   noShow: "noShow",
@@ -212,6 +212,8 @@ function errorWords(t: Translate, error: Exclude<AppError, { code: "file" }>): s
       return t("errNoSuchSlide", { slide: error.slide + 1 });
     case "questionRestarted":
       return t("errQuestionRestarted", { slide: error.slide + 1 });
+    case "editedSlideKept":
+      return t("errEditedSlideKept", { slide: error.slide + 1 });
     case "editsNotTaken":
       return error.change ? t("errEditsNotTaken", { reason: shapeChangeText(t, error.change) }) : t("errEditsNotSaved");
     case "noSuchPad":

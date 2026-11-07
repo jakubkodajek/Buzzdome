@@ -728,10 +728,10 @@ fn resume_session(resumed: Resumed, at_ms: u64, media_folders: &[PathBuf], edite
     if refused.is_none() {
         warnings.extend(recovery.and_then(|command| recovery_warning(&command, game.slide_index())));
     }
-    let (game, edits_refused) = match edited {
+    let (game, edit_warnings) = match edited {
         Some(package) if refused.is_none() => take_edited(game, &mut session, &mut meta, package, at_ms),
-        Some(_) => (game, Some(AppError::EditsNotTaken { change: None })),
-        None => (game, None),
+        Some(_) => (game, vec![AppError::EditsNotTaken { change: None }]),
+        None => (game, Vec::new()),
     };
     // A journal edited by hand, or one where an earlier version unpacked,
     // may name another folder.
@@ -740,7 +740,7 @@ fn resume_session(resumed: Resumed, at_ms: u64, media_folders: &[PathBuf], edite
         named => (named, None),
     };
     // The show must go on: without its media it still runs, and the Director says why.
-    let warnings = resume_warnings(game.quiz(), media_root.as_deref(), refused_folder.as_deref(), meta.rules_changed()).into_iter().chain(warnings).chain(edits_refused).collect();
+    let warnings = resume_warnings(game.quiz(), media_root.as_deref(), refused_folder.as_deref(), meta.rules_changed()).into_iter().chain(warnings).chain(edit_warnings).collect();
     let recovery_due = refused.is_some();
     session.resumed();
     let save_problem = resume_save_problem(refused, not_cut, session.torn_left());
@@ -753,26 +753,29 @@ fn resume_session(resumed: Resumed, at_ms: u64, media_folders: &[PathBuf], edite
 /// The resumed `game` goes on with the quiz of `edited`, its file as
 /// saved since the show began (`Command::TakeQuiz`), journaled at
 /// `at_ms`; the show's `meta` then names its media folder and title, so
-/// it resumes with them again. Gives the show, and why it is the one
-/// before, if it is: the edited quiz is of another shape, or the journal
-/// refused the change, which the show then does not make.
-fn take_edited(game: Game, session: &mut Session, meta: &mut SessionMeta, edited: Package, at_ms: u64) -> (Game, Option<AppError>) {
+/// it resumes with them again. Gives the show, and what the quizmaster is
+/// told: that the question on screen keeps its edits out, as its results
+/// stand (`Game::scored_slide`); or why the show is the one before, if it
+/// is: the edited quiz is of another shape, or the journal refused the
+/// change, which the show then does not make.
+fn take_edited(game: Game, session: &mut Session, meta: &mut SessionMeta, edited: Package, at_ms: u64) -> (Game, Vec<AppError>) {
+    let kept_out = game.scored_slide().filter(|&slide| edited.quiz.slides.get(slide) != game.quiz().slides.get(slide));
     let command = Command::TakeQuiz { quiz: Box::new(edited.quiz) };
     match apply_and_journal(&game, Some(&mut *session), &Stamped { at_ms, command }) {
         Ok((next, _)) => {
             meta.quiz_title = next.quiz().title.clone();
             meta.media_root = Some(edited.root.to_string_lossy().into_owned());
             // Not kept, the next resume looks for the media where the show began.
-            let kept = session.rewrite_meta(meta).err().map(AppError::from);
-            if let Some(e) = &kept {
+            let not_kept = session.rewrite_meta(meta).err().map(AppError::from);
+            if let Some(e) = &not_kept {
                 app_log::note(&format!("the media folder of the edited quiz is not kept: {e}"));
             }
-            (next, kept)
+            (next, kept_out.map(|slide| AppError::EditedSlideKept { slide }).into_iter().chain(not_kept).collect())
         }
-        Err(AppError::EditsNotTaken { change }) => (game, Some(AppError::EditsNotTaken { change })),
+        Err(AppError::EditsNotTaken { change }) => (game, vec![AppError::EditsNotTaken { change }]),
         Err(e) => {
             app_log::note(&format!("the edited quiz is not taken: {e}"));
-            (game, Some(AppError::EditsNotTaken { change: None }))
+            (game, vec![AppError::EditsNotTaken { change: None }])
         }
     }
 }
@@ -1463,10 +1466,10 @@ mod tests {
         std::fs::remove_dir_all(&root).unwrap();
     }
 
-    /// The demo quiz saved as the file `source` under `base`, and a show of
-    /// it journaled under `base/sessions`, up to its first question, then
-    /// stopped as by a crash. Gives the sessions folder.
-    fn show_of_a_file(base: &Path, source: &Path, quiz: &Quiz) -> PathBuf {
+    /// `quiz` saved as the file `source` under `base`, and a show of it
+    /// journaled under `base/sessions` with `commands`, then stopped as by
+    /// a crash. Gives the sessions folder.
+    fn show_of_a_file(base: &Path, source: &Path, quiz: &Quiz, commands: Vec<Command>) -> PathBuf {
         fs::create_dir_all(base).unwrap();
         fs::write(source, serde_json::to_string(quiz).unwrap()).unwrap();
         let root = base.join("sessions");
@@ -1474,7 +1477,7 @@ mod tests {
         let meta = SessionMeta { quiz_title: quiz.title.clone(), source_path, started_ms: 1, media_root: None, rules_version: quiz_core::RULES_VERSION };
         let session = Session::create(&root, quiz, &meta).unwrap();
         let mut inner = Inner { game: Some(Game::new(quiz.clone())), session: Some(session), ..Inner::new() };
-        for (n, command) in up_to_the_first_question().into_iter().enumerate() {
+        for (n, command) in commands.into_iter().enumerate() {
             apply_journaled(&mut inner, command, 1_000 * (n as u64 + 1)).unwrap();
         }
         root
@@ -1485,7 +1488,7 @@ mod tests {
         let base = sessions_dir("edited");
         let (source, cache) = (base.join("quiz.json"), base.join("quizzes"));
         let quiz = Quiz::from_json(DEMO_QUIZ).unwrap();
-        let root = show_of_a_file(&base, &source, &quiz);
+        let root = show_of_a_file(&base, &source, &quiz, up_to_the_first_question());
         let summary = || Session::latest_summary(&root).unwrap().unwrap();
         assert_eq!(summary().edited, None, "the file is as the show began with it");
 
@@ -1517,7 +1520,7 @@ mod tests {
         let base = sessions_dir("reshaped");
         let (source, cache) = (base.join("quiz.json"), base.join("quizzes"));
         let quiz = Quiz::from_json(DEMO_QUIZ).unwrap();
-        let root = show_of_a_file(&base, &source, &quiz);
+        let root = show_of_a_file(&base, &source, &quiz, up_to_the_first_question());
         let mut edited = quiz.clone();
         edited.slides.remove(0);
         fs::write(&source, serde_json::to_string(&edited).unwrap()).unwrap();
@@ -1531,6 +1534,29 @@ mod tests {
         assert_eq!(resumed.game.quiz(), &quiz);
         assert_eq!(resumed.warnings.last(), Some(&AppError::EditsNotTaken { change: Some(change) }));
         assert_eq!(journal_len(&root), journaled + 1, "only the restart is journaled");
+        fs::remove_dir_all(&base).unwrap();
+    }
+
+    #[test]
+    fn a_show_resumed_on_a_scored_question_keeps_it_as_played_and_says_so() {
+        let base = sessions_dir("scored");
+        let (source, cache) = (base.join("quiz.json"), base.join("quizzes"));
+        let quiz = Quiz::from_json(DEMO_QUIZ).unwrap();
+        let mut commands = up_to_the_first_question();
+        commands.extend([Command::Press { buzzer: 2, button: quiz_core::Button::C }, Command::Next]);
+        let root = show_of_a_file(&base, &source, &quiz, commands);
+        let slide = Session::resume_latest(&root).map(|r| r.unwrap()).map(|r| Game::replay(r.quiz, &r.journal, r.meta.rules_version)).unwrap().scored_slide().unwrap();
+        let mut edited = quiz.clone();
+        edited.title = "Edited".into();
+        if let quiz_core::SlideContent::Question(q) = &mut edited.slides[slide].content {
+            q.text = "Edited?".into();
+        }
+        fs::write(&source, serde_json::to_string(&edited).unwrap()).unwrap();
+
+        let package = quiz_file::open(&source, &cache).unwrap();
+        let resumed = resume_show(&root, 60_000, std::slice::from_ref(&cache), Some(package)).unwrap();
+        assert_eq!(resumed.warnings, [AppError::EditedSlideKept { slide }]);
+        assert_eq!((resumed.game.quiz().title.as_str(), &resumed.game.quiz().slides[slide]), ("Edited", &quiz.slides[slide]));
         fs::remove_dir_all(&base).unwrap();
     }
 

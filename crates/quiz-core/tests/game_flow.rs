@@ -2820,3 +2820,29 @@ fn a_show_refuses_an_edited_quiz_of_other_slides_and_while_a_question_is_in_play
     assert_eq!(show.run(6_500, Command::TakeQuiz { quiz: Box::new(original.clone()) }), Err(GameError::NotNow));
     assert_eq!(show.game.quiz(), &original);
 }
+
+#[test]
+fn an_edited_quiz_taken_on_a_scored_question_keeps_that_slide_as_played() {
+    let mut show = Show::new(vec![question("q1", AnswerMode::Everyone), question("q2", AnswerMode::Everyone)]);
+    show.press(0, 1, Button::Big);
+    show.run(1_000, Command::Next).unwrap();
+    show.run(2_000, Command::Next).unwrap();
+    show.press(2_000, 1, Button::B); // right: B
+    show.run(3_000, Command::Next).unwrap(); // the answer shown
+    assert_eq!(show.game.lights(), [(1, Light::Correct)]);
+    // The room says A was right: the quiz is fixed and taken while B's results are on screen.
+    let original = show.game.quiz().clone();
+    let mut edited = original.clone();
+    for slide in &mut edited.slides {
+        if let SlideContent::Question(q) = &mut slide.content {
+            q.correct = vec![CorrectAnswer::full(0)];
+        }
+    }
+    assert_eq!(show.game.scored_slide(), Some(0));
+    show.run(4_000, Command::TakeQuiz { quiz: Box::new(edited.clone()) }).unwrap();
+    assert_eq!(show.game.quiz().slides[0], original.slides[0], "the question on screen stays as scored");
+    assert_eq!(show.game.quiz().slides[1], edited.slides[1], "the rest is taken");
+    assert_eq!((show.game.lights(), show.score(1)), (vec![(1, Light::Correct)], 100));
+    let view = show.game.view(4_000);
+    assert_eq!(view.players[0].answer_correct, Some(true));
+}

@@ -300,13 +300,26 @@ pub enum Command {
     PlayVideo,
     /// The show goes on with `quiz`, its quiz as edited and saved since the
     /// show began, in place of its copy: as it resumes, when the
-    /// quizmaster chooses so. The journal keeps the whole quiz, so the show
-    /// replays without the file. What the show has done stands (scores,
-    /// questions that ended, jokers). Refused while a question is in play,
-    /// whose clock and answers go by the quiz it began with, and for a
-    /// quiz of another shape (`Quiz::shape_change`). Only the app gives it,
-    /// never a window (`may_give`).
-    TakeQuiz { quiz: Box<Quiz> },
+    /// quizmaster chooses so. The journal keeps the whole quiz, read as a
+    /// quiz file is (`Quiz::read_value`), so the show replays without the
+    /// file. What the show has done stands (scores, questions that ended,
+    /// jokers), and so does the question on screen once it has results
+    /// (`Game::scored_slide`), which keeps its slide as played. Refused
+    /// while a question is in play, whose clock and answers go by the quiz
+    /// it began with, and for a quiz of another shape
+    /// (`Quiz::shape_change`). Only the app gives it, never a window
+    /// (`may_give`).
+    TakeQuiz {
+        #[serde(deserialize_with = "journaled_quiz")]
+        quiz: Box<Quiz>,
+    },
+}
+
+/// Reads the quiz of a journaled `Command::TakeQuiz` as a quiz file is
+/// read, migrated from an older schema version.
+fn journaled_quiz<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<Box<Quiz>, D::Error> {
+    let value = serde_json::Value::deserialize(deserializer)?;
+    Quiz::read_value(value).map(|read| Box::new(read.quiz)).map_err(serde::de::Error::custom)
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -806,6 +819,13 @@ impl Game {
             return Some(Command::PauseClock);
         }
         self.question_in_play().then_some(Command::RestartQuestion)
+    }
+
+    /// The slide of the question on screen once it has results (closed, or
+    /// its answer shown): they stand as scored, so taking an edited quiz
+    /// keeps this slide as played (`Command::TakeQuiz`).
+    pub fn scored_slide(&self) -> Option<usize> {
+        matches!(self.phase, Phase::Question(QuestionStep::Closed | QuestionStep::Revealed { .. })).then_some(self.slide)
     }
 
     /// A question's clock runs (or stands paused), or a buzz waits for the
@@ -1516,7 +1536,12 @@ impl Game {
                 if let Some(change) = self.quiz.shape_change(quiz) {
                     return Err(GameError::OtherShape(change));
                 }
-                self.quiz = (**quiz).clone();
+                let mut taken = (**quiz).clone();
+                // Its results on screen and on the buzzers go by the answers it was scored by.
+                if let Some(slide) = self.scored_slide() {
+                    taken.slides[slide] = self.quiz.slides[slide].clone();
+                }
+                self.quiz = taken;
                 Ok(vec![])
             }
             Command::PlayVideo => {
