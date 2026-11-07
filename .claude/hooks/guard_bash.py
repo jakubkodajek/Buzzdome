@@ -170,9 +170,17 @@ def main() -> None:
         data = json.load(sys.stdin)
     except ValueError:
         block("the hook's input is not JSON")
-    command = (data.get("tool_input") or {}).get("command") or ""
+    tool_input = data.get("tool_input") if isinstance(data, dict) else None
+    command = tool_input.get("command") if isinstance(tool_input, dict) else None
+    if command is None:
+        return
+    if not isinstance(command, str):
+        block("the command is not text")
     check(command)
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as error:  # noqa: BLE001 - a crash must block, not let the call through
+        block(f"the check failed ({type(error).__name__})")

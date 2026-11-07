@@ -32,24 +32,38 @@ def main() -> None:
     try:
         data = json.load(sys.stdin)
     except ValueError:
-        print("Blocked by .claude/hooks/protect_files.py: the hook's input is not JSON", file=sys.stderr)
-        sys.exit(2)
-    tool_input = data.get("tool_input") or {}
+        block("the hook's input is not JSON")
+    tool_input = data.get("tool_input") if isinstance(data, dict) else None
+    if not isinstance(tool_input, dict):
+        return
     file = tool_input.get("file_path") or tool_input.get("path") or ""
     if not file:
         return
+    if not isinstance(file, str):
+        block("the path is not text")
     root = os.path.realpath(os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd())
     path = os.path.realpath(os.path.join(root, file))
     rel = os.path.relpath(path, root).replace(os.sep, "/")
     if rel.startswith("../"):
         return  # outside the project: not this hook's business
-    if rel.endswith(".env.example"):
+    # macOS and Windows file systems ignore case by default, so
+    # App/Src/Bindings/X.ts is app/src/bindings/X.ts there.
+    fold = sys.platform in ("darwin", "win32")
+    folded = rel.lower() if fold else rel
+    if folded.endswith(".env.example"):
         return
     for patterns, reason in RULES:
-        if any(fnmatch.fnmatchcase(rel, p) for p in patterns):
-            print(f"Blocked by .claude/hooks/protect_files.py: {rel} - {reason}", file=sys.stderr)
-            sys.exit(2)
+        if any(fnmatch.fnmatchcase(folded, p.lower() if fold else p) for p in patterns):
+            block(f"{rel} - {reason}")
+
+
+def block(reason: str) -> None:
+    print(f"Blocked by .claude/hooks/protect_files.py: {reason}", file=sys.stderr)
+    sys.exit(2)
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as error:  # noqa: BLE001 - a crash must block, not let the call through
+        block(f"the check failed ({type(error).__name__})")

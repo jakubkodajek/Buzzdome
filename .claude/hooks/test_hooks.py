@@ -105,9 +105,23 @@ ALLOWED_FILES = [
 ]
 
 
-def run(hook: str, tool_input: dict[str, str]) -> int:
+# Input a hook must block on rather than crash through (exit 1 lets a call
+# through): (hook, raw stdin).
+MALFORMED = [
+    ("guard-bash.sh", "[]"),
+    ("guard-bash.sh", '{"tool_input": "x"}'),
+    ("guard-bash.sh", '{"tool_input": {"command": ["git", "push", "--tags"]}}'),
+    ("guard-bash.sh", '{"tool_input": {"command": 7}}'),
+    ("guard-bash.sh", json.dumps({"tool_input": {"command": "eval " * 2000 + "ls"}})),
+    ("guard-bash.sh", "not json"),
+    ("protect-files.sh", '{"tool_input": {"file_path": 7}}'),
+    ("protect-files.sh", "not json"),
+]
+
+
+def run(hook: str, tool_input: dict[str, str], raw: str | None = None) -> int:
     env = {**os.environ, "CLAUDE_PROJECT_DIR": str(ROOT)}
-    payload = json.dumps({"tool_input": tool_input})
+    payload = raw if raw is not None else json.dumps({"tool_input": tool_input})
     result = subprocess.run([str(HOOKS / hook)], input=payload, text=True, capture_output=True, env=env, cwd=ROOT)
     return result.returncode
 
@@ -128,9 +142,18 @@ def main() -> int:
         path = file if file.startswith("/") else str(ROOT / file)
         if run("protect-files.sh", {"file_path": path}) != 0:
             failures.append(f"blocked: {file}")
+    for hook, raw in MALFORMED:
+        code = run(hook, {}, raw)
+        # `[]` and a tool_input that is not an object carry no command: let
+        # through or blocked are both fine, a crash (1) is not.
+        if code not in (0, 2) or (code == 0 and ("command" in raw or "file_path" in raw or raw == "not json")):
+            failures.append(f"{hook} gave {code} for {raw[:60]}")
+    # On macOS and Windows a path differing only in case is the same file.
+    if sys.platform in ("darwin", "win32") and run("protect-files.sh", {"file_path": str(ROOT / "App/Src/Bindings/X.ts")}) != 2:
+        failures.append("not blocked: App/Src/Bindings/X.ts")
     for line in failures:
         print(line)
-    total = len(BLOCKED_COMMANDS) + len(ALLOWED_COMMANDS) + len(BLOCKED_FILES) + len(ALLOWED_FILES)
+    total = len(BLOCKED_COMMANDS) + len(ALLOWED_COMMANDS) + len(BLOCKED_FILES) + len(ALLOWED_FILES) + len(MALFORMED)
     print(f"{total - len(failures)}/{total} hook cases pass")
     return 1 if failures else 0
 
