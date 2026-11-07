@@ -26,3 +26,20 @@ Template:
 - Next: Jakub reviews the PR and confirms the acceptance criteria in
   `memory/features.json` (drafted from `ROADMAP.md`).
 - Blockers / open questions: ADR-0001 is Proposed until Jakub accepts it.
+
+## 2026-11-07 - read-aloud-quality
+- Done: the voice says numbers, dates, ordinals (gender from the next
+  word, case from a preposition), Roman numerals, units, currencies and
+  common abbreviations as words (`crates/voice/src/speech/`); the
+  question, each answer's letter ("Á", "Bé") and each answer render as
+  separate parts, trimmed, levelled and joined with pauses
+  (`crates/voice/src/audio.rs`); 12 denoising steps; quiz setting
+  `voiceSpeed` (80-120 %); question field `readAs` (editor Text page);
+  `voice_clip` returns the spoken words for the system voice.
+- State: make check green but for the bindings step before the commit;
+  branch `claude/project-thread-s4llq8`. Checked with the real model and
+  Whisper small as listener (design.md 1.8).
+- Next: guardian review, Jakub listens on Windows, then merge with his OK.
+- Blockers / open questions: Czech locative nouns in -e ("ve 2. kole")
+  read as feminine; `readAs` fixes such cases. Spreadsheet import has no
+  read-as column yet.

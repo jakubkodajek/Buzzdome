@@ -107,7 +107,7 @@ Shuffle questions with a percentage to play,settings,could,yes,no,§4.6 Randomiz
 Headless mode without a projector,settings,could,yes,no,§4.2.1
 Mini games (random winner draw wheel auction and others),mini games,could,yes,no,§3.5; randomizer and auction fit fundraisers; the rest is post-MVP
 AI question generation,studio,could,yes,yes,"§3.8; original sells AI credits; would use our own API key; clone: AI apps on the quizmaster's computer write quizzes through the app's MCP server (spec QZ-12); no credits"
-Read questions aloud with text-to-speech,studio,could,yes,yes,§3.7.3; spec SN-10: offline neural voices (Supertonic 3 via sherpa-onnx) rendered ahead in the Director; system voice as fallback
+Read questions aloud with text-to-speech,studio,could,yes,yes,§3.7.3; spec SN-10: offline neural voices (Supertonic 3 via sherpa-onnx) rendered ahead in the Director; system voice as fallback; numbers, dates, units and abbreviations said as words, letters and pauses, reading speed, per-question read-as text
 Connection quality test for players,director,could,yes,skip,"§5.7.8.1; desktop scope (2026-10-05): players answer on hardware buzzers, no phones"
 Generic USB buzzers in the browser,hardware,could,yes,skip,via WebHID in Chromium only; not their proprietary receivers; desktop scope: buzzers through the USB receiver driver
 Proprietary keypads buzzers and receivers,hardware,must,yes,yes,"scope changed 2026-10-05: the Enjoy 303S (Jakub's set) from Enjoy's SDK, with each buzzer's timer, lights and the quizmaster's remote; tested on the hardware 2026-10-25; see docs/specification.md section 4"
