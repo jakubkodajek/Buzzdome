@@ -399,9 +399,9 @@ function CommandPanel(props: {
   const [resumeProblem, setResumeProblem] = useState<unknown>(null);
   useBackendEvent("show-changed", () => setResumeProblem(null));
   const resume = () =>
-    showStart.resume(() => {
+    showStart.resume((takeEdits) => {
       setResumeProblem(null);
-      return api.resumeLastSession().then((warnings) => warnings.length > 0 && caution(warnings.map((w) => errorText(t, w)).join(" ")), setResumeProblem);
+      return api.resumeLastSession(takeEdits).then((warnings) => warnings.length > 0 && caution(warnings.map((w) => errorText(t, w)).join(" ")), setResumeProblem);
     });
   const problem = resumeProblem ?? last.problem;
 

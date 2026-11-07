@@ -4,7 +4,7 @@
 //! the same quiz rebuilds the exact state after a crash. Time never comes from a
 //! clock inside this module: each command carries its own `at_ms`.
 
-use crate::model::{AnswerMode, Question, Quiz, Slide, SlideContent};
+use crate::model::{AnswerMode, Question, Quiz, ShapeChange, Slide, SlideContent};
 use crate::settings::AutoStep;
 use crate::text::{composed, name_key};
 use serde::{Deserialize, Serialize};
@@ -228,7 +228,7 @@ impl Effect {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[ts(export)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum Command {
@@ -298,9 +298,31 @@ pub enum Command {
     /// Start the current slide's video from the start of its part, or start
     /// it again. A video that does not start by itself waits for this.
     PlayVideo,
+    /// The show goes on with `quiz`, its quiz as edited and saved since the
+    /// show began, in place of its copy: as it resumes, when the
+    /// quizmaster chooses so. The journal keeps the whole quiz, read as a
+    /// quiz file is (`Quiz::read_value`), so the show replays without the
+    /// file. What the show has done stands (scores, questions that ended,
+    /// jokers), and so does the question on screen once it has results
+    /// (`Game::scored_slide`), which keeps its slide as played. Refused
+    /// while a question is in play, whose clock and answers go by the quiz
+    /// it began with, and for a quiz of another shape
+    /// (`Quiz::shape_change`). Only the app gives it, never a window
+    /// (`may_give`).
+    TakeQuiz {
+        #[serde(deserialize_with = "journaled_quiz")]
+        quiz: Box<Quiz>,
+    },
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+/// Reads the quiz of a journaled `Command::TakeQuiz` as a quiz file is
+/// read, migrated from an older schema version.
+fn journaled_quiz<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<Box<Quiz>, D::Error> {
+    let value = serde_json::Value::deserialize(deserializer)?;
+    Quiz::read_value(value).map(|read| Box::new(read.quiz)).map_err(serde::de::Error::custom)
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Stamped {
     /// When the command was given or the press received, in milliseconds
@@ -325,6 +347,9 @@ pub enum GameError {
     DuplicateBuzzer(BuzzerId),
     #[error("more than {MAX_TEAMS} team names")]
     TooManyTeams,
+    /// `Command::TakeQuiz` with a quiz of another shape.
+    #[error("the edited quiz has other slides: {0:?}")]
+    OtherShape(ShapeChange),
 }
 
 /// Which step-dependent quizmaster commands the current step takes
@@ -794,6 +819,13 @@ impl Game {
             return Some(Command::PauseClock);
         }
         self.question_in_play().then_some(Command::RestartQuestion)
+    }
+
+    /// The slide of the question on screen once it has results (closed, or
+    /// its answer shown): they stand as scored, so taking an edited quiz
+    /// keeps this slide as played (`Command::TakeQuiz`).
+    pub fn scored_slide(&self) -> Option<usize> {
+        matches!(self.phase, Phase::Question(QuestionStep::Closed | QuestionStep::Revealed { .. })).then_some(self.slide)
     }
 
     /// A question's clock runs (or stands paused), or a buzz waits for the
@@ -1496,6 +1528,21 @@ impl Game {
                     self.hold_pending_step();
                 }
                 Ok(if opens { vec![Effect::Sound { cue: Cue::Leaderboard }] } else { vec![] })
+            }
+            Command::TakeQuiz { quiz } => {
+                if self.question_in_play() {
+                    return Err(GameError::NotNow);
+                }
+                if let Some(change) = self.quiz.shape_change(quiz) {
+                    return Err(GameError::OtherShape(change));
+                }
+                let mut taken = (**quiz).clone();
+                // Its results on screen and on the buzzers go by the answers it was scored by.
+                if let Some(slide) = self.scored_slide() {
+                    taken.slides[slide] = self.quiz.slides[slide].clone();
+                }
+                self.quiz = taken;
+                Ok(vec![])
             }
             Command::PlayVideo => {
                 if !self.shows_video() {

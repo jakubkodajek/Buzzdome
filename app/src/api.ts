@@ -94,8 +94,13 @@ export const api = {
   forgetRecentFile: (path: string) => invoke<void>("forget_recent_file", { path }),
   startDemoShow: () => invoke<void>("start_demo_show"),
   lastSession: () => invoke<SessionSummary | null>("last_session"),
-  /** Resumes the last show; returns warnings when it runs but not quite as before (its media are missing, other rules, a question started again, a step held). */
-  resumeLastSession: () => invoke<AppError[]>("resume_last_session"),
+  /**
+   * Resumes the last show, with its quiz file as saved since the show began
+   * if `takeEdits` (`SessionSummary.edited`); returns warnings when it runs
+   * but not quite as before (its media are missing, other rules, a question
+   * started again, a step held, the edits not taken).
+   */
+  resumeLastSession: (takeEdits: boolean) => invoke<AppError[]>("resume_last_session", { takeEdits }),
   endShow: () => invoke<void>("end_show"),
   /** `seen`: the step the window shows, for a command that moves the show on (`StepGuard`). */
   dispatch: (command: Command, seen: number | null = null) => invoke<void>("dispatch", { command, seen }),

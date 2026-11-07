@@ -120,6 +120,8 @@ export type { Replay } from "./bindings/Replay";
 export type { SavedDraft } from "./bindings/SavedDraft";
 export type { ScreenKey } from "./bindings/ScreenKey";
 export type { SessionSummary } from "./bindings/SessionSummary";
+export type { QuizEdited } from "./bindings/QuizEdited";
+export type { ShapeChange } from "./bindings/ShapeChange";
 export type { ShowFinish } from "./bindings/ShowFinish";
 export type { ShowPosition } from "./bindings/ShowPosition";
 export type { SettingsLost } from "./bindings/SettingsLost";

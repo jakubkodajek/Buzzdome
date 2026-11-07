@@ -80,7 +80,7 @@ fn drill(seed: u64, root: &Path) {
             // Only what the recovery the show needs did is told: nothing is missing, the rules are the show's own.
             let told: Vec<AppError> = sim.game.recovery_command().and_then(|command| recovery_warning(&command, sim.game.slide_index())).into_iter().collect();
             sim.crash_and_resume();
-            let resumed = resume_show(root, sim.now, &[]).unwrap_or_else(|e| panic!("resume after a {tail:?} crash failed: {e:?}"));
+            let resumed = resume_show(root, sim.now, &[], None).unwrap_or_else(|e| panic!("resume after a {tail:?} crash failed: {e:?}"));
             assert_eq!(resumed.game, sim.game, "after a {tail:?} crash the show resumed differently");
             assert_eq!(resumed.warnings, told);
             app = Inner { game: Some(resumed.game), session: Some(resumed.session), ..Inner::new() };

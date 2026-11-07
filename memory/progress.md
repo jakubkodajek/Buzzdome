@@ -36,10 +36,25 @@ Template:
   (`crates/voice/src/audio.rs`); 12 denoising steps; quiz setting
   `voiceSpeed` (80-120 %); question field `readAs` (editor Text page);
   `voice_clip` returns the spoken words for the system voice.
-- State: make check green but for the bindings step before the commit;
-  branch `claude/project-thread-s4llq8`. Checked with the real model and
-  Whisper small as listener (design.md 1.8).
-- Next: guardian review, Jakub listens on Windows, then merge with his OK.
+  The spreadsheet carries it as a `READ-AS` column. Version 1.1.0.
+- State: make check green; branch `claude/project-thread-s4llq8`, PR #79,
+  merged with main after #78; guardian BF181-BF186 fixed. Checked with the
+  real model and Whisper small as listener (design.md 1.8).
+- Next: merge with Jakub's OK (given for 1.1.0); Jakub pushes the tag and
+  listens on Windows.
 - Blockers / open questions: Czech locative nouns in -e ("ve 2. kole")
-  read as feminine; `readAs` fixes such cases. Spreadsheet import has no
-  read-as column yet.
+  read as feminine; `readAs` fixes such cases.
+
+## 2026-11-07 - resume-quiz-edits
+- Done: a resumed show can take its quiz file as saved since the show began
+  (Jakub's choice): `Quiz::shape_change`, journaled `Command::TakeQuiz` with the
+  whole quiz, `SessionSummary.edited`, `resume_last_session(takeEdits)`,
+  `Session::rewrite_meta` for the new media folder; the Director asks With the
+  edits / Without / Cancel when Resume is pressed. BF173: the restart warning
+  only once the recovery is journaled (`resume_session` test with a broken journal).
+- State: make check green; branch `claude/project-thread-u9fky8`, PR #78.
+  Guardian BF178 (journaled quiz read through `Quiz::read_value`, migrated)
+  and BF179 (the scored question on screen keeps its slide as played,
+  `editedSlideKept`) fixed; BF180 this line.
+- Next: guardian review of the PR, then Jakub's OK to merge.
+- Blockers / open questions: none.

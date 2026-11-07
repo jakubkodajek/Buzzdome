@@ -9,7 +9,7 @@
 //! taken back. Every line is written at the end of the whole lines instead.
 
 use crate::app_log;
-use quiz_core::{Game, Quiz, QuizJsonError, ShowPosition, Stamped};
+use quiz_core::{Game, Quiz, QuizJsonError, ShapeChange, ShowPosition, Stamped};
 use quiz_file::{Context, FileAction, QuizFileError};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
@@ -69,6 +69,35 @@ pub struct SessionSummary {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub position: Option<ShowPosition>,
+    /// The quiz file the show began from (`SessionMeta::source_path`) was
+    /// saved with changes since, which the show can take as it resumes
+    /// (`Command::TakeQuiz`); none when it reads as the show's quiz, is
+    /// gone or does not read.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub edited: Option<QuizEdited>,
+}
+
+/// The quiz file of a show that can be resumed has changes the show does
+/// not have (`SessionSummary::edited`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
+#[serde(rename_all = "camelCase")]
+pub struct QuizEdited {
+    /// Why the show cannot take them (`Quiz::shape_change`); none when it can.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub refused: Option<ShapeChange>,
+}
+
+/// The quiz in the file `meta` names, if it reads and differs from the
+/// show's `quiz`, and how the show could take it. A network path is not
+/// looked at: Windows could sign in to its server just to look it up
+/// (`quiz_file::network_or_device`).
+fn edited(quiz: &Quiz, meta: &SessionMeta) -> Option<QuizEdited> {
+    let source = meta.source_path.as_deref().filter(|source| !quiz_file::network_or_device(source))?;
+    let saved = quiz_file::inspect(Path::new(source)).ok()?.read.quiz;
+    (saved != *quiz).then(|| QuizEdited { refused: quiz.shape_change(&saved) })
 }
 
 /// How a show was done with (`SessionSummary::finished`).
@@ -196,18 +225,31 @@ impl Session {
         } else {
             game.as_ref().is_some_and(Game::is_over).then_some(ShowFinish::PlayedOut)
         };
-        Ok(Some(SessionSummary { meta, command_count: journal.len(), finished, position: game.as_ref().map(Game::position) }))
+        let edited = game.as_ref().and_then(|game| edited(game.quiz(), &meta));
+        Ok(Some(SessionSummary { meta, command_count: journal.len(), finished, position: game.as_ref().map(Game::position), edited }))
     }
 
-    /// The show resumed (`resume_latest`, then its recovery journaled): an
-    /// ended show is no longer done with, so its end mark goes. Only once
-    /// the resume worked, so one that failed leaves the show ended and the
-    /// next start does not ask to give it up.
+    /// The show resumed (`resume_latest`, then its recovery journaled or
+    /// refused, to be tried again): an ended show is no longer done with,
+    /// so its end mark goes. Only once the resume worked, so one that
+    /// failed leaves the show ended and the next start does not ask to
+    /// give it up.
     pub fn resumed(&self) {
         match fs::remove_file(self.dir.join(ENDED_FILE)) {
             Err(e) if e.kind() != io::ErrorKind::NotFound => app_log::note(&format!("the end mark of {} stays: {e}", self.dir.display())),
             _ => {}
         }
+    }
+
+    /// The meta of the latest session under `root`, if any.
+    pub fn latest_meta(root: &Path) -> Result<Option<SessionMeta>, ResumeError> {
+        latest_dir(root)?.map(|dir| read_meta(&dir)).transpose()
+    }
+
+    /// Keeps `meta` in place of the show's: once the show took its quiz
+    /// as edited (`Command::TakeQuiz`), whose media are in another folder.
+    pub fn rewrite_meta(&self, meta: &SessionMeta) -> Result<(), QuizFileError> {
+        write_json(&self.dir.join(META_FILE), meta)
     }
 
     /// The quizmaster ended the show (End show): marked on disk, so the

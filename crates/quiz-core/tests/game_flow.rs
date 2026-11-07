@@ -2759,3 +2759,91 @@ fn a_joker_is_played_between_questions_for_the_next_one() {
     assert_eq!(older.joker_slide(), None);
     assert!(!older.controls().set_joker);
 }
+
+/// A two-question quiz played to its second question's start, with the
+/// first answered right by buzzer 1 (100 points).
+fn played_to_the_second_question() -> Show {
+    let mut show = Show::new(vec![question("q1", AnswerMode::Everyone), question("q2", AnswerMode::Everyone)]);
+    show.press(0, 1, Button::Big);
+    show.run(1_000, Command::Next).unwrap();
+    show.run(2_000, Command::Next).unwrap();
+    show.press(2_000, 1, Button::B);
+    show.run(3_000, Command::Next).unwrap(); // the answer
+    show.run(4_000, Command::Next).unwrap(); // q2, ready
+    show
+}
+
+#[test]
+fn a_show_takes_the_quiz_edited_since_it_began_and_keeps_what_it_did() {
+    let mut show = played_to_the_second_question();
+    let mut edited = show.game.quiz().clone();
+    edited.settings.read_aloud = ReadAloud::QuestionAndAnswers;
+    if let SlideContent::Question(q) = &mut edited.slides[1].content {
+        q.text = "Edited?".into();
+        q.points = 300;
+    }
+    show.run(5_000, Command::TakeQuiz { quiz: Box::new(edited.clone()) }).unwrap();
+    assert_eq!(show.game.quiz(), &edited);
+    assert_eq!((show.game.slide_index(), show.score(1)), (1, 100), "the show stays where it was, with its scores");
+    // The edited question plays as edited.
+    show.run(6_000, Command::Next).unwrap();
+    show.press(6_000, 1, Button::B);
+    assert_eq!(show.score(1), 400);
+    // Its journal replays into the same show.
+    let replayed = Game::replay(quiz(vec![question("q1", AnswerMode::Everyone), question("q2", AnswerMode::Everyone)]), &show.journal, RULES_VERSION);
+    assert_eq!((replayed.quiz(), replayed.players().next().unwrap().score), (&edited, 400));
+}
+
+#[test]
+fn a_show_refuses_an_edited_quiz_of_other_slides_and_while_a_question_is_in_play() {
+    use quiz_core::ShapeChange;
+    let mut show = played_to_the_second_question();
+    let original = show.game.quiz().clone();
+    let mut fewer = original.clone();
+    fewer.slides.pop();
+    assert_eq!(show.run(5_000, Command::TakeQuiz { quiz: Box::new(fewer) }), Err(GameError::OtherShape(ShapeChange::SlideCount { was: 2, now: 1 })));
+    let mut retyped = original.clone();
+    retyped.slides[1] = billboard("b");
+    assert_eq!(show.run(5_000, Command::TakeQuiz { quiz: Box::new(retyped) }), Err(GameError::OtherShape(ShapeChange::Slide { slide: 1 })));
+    let mut answers = original.clone();
+    if let SlideContent::Question(q) = &mut answers.slides[0].content {
+        q.answers.pop();
+    }
+    assert_eq!(show.run(5_000, Command::TakeQuiz { quiz: Box::new(answers) }), Err(GameError::OtherShape(ShapeChange::Slide { slide: 0 })));
+    let mut mode = original.clone();
+    mode.slides[1] = question("q2", AnswerMode::FastestFinger);
+    if let SlideContent::Question(q) = &mut mode.slides[1].content {
+        q.answers = vec!["A".into(), "B".into(), "C".into(), "D".into()];
+    }
+    assert_eq!(show.run(5_000, Command::TakeQuiz { quiz: Box::new(mode) }), Err(GameError::OtherShape(ShapeChange::Slide { slide: 1 })));
+    // A question in play goes by the quiz it began with.
+    show.run(6_000, Command::Next).unwrap();
+    assert_eq!(show.run(6_500, Command::TakeQuiz { quiz: Box::new(original.clone()) }), Err(GameError::NotNow));
+    assert_eq!(show.game.quiz(), &original);
+}
+
+#[test]
+fn an_edited_quiz_taken_on_a_scored_question_keeps_that_slide_as_played() {
+    let mut show = Show::new(vec![question("q1", AnswerMode::Everyone), question("q2", AnswerMode::Everyone)]);
+    show.press(0, 1, Button::Big);
+    show.run(1_000, Command::Next).unwrap();
+    show.run(2_000, Command::Next).unwrap();
+    show.press(2_000, 1, Button::B); // right: B
+    show.run(3_000, Command::Next).unwrap(); // the answer shown
+    assert_eq!(show.game.lights(), [(1, Light::Correct)]);
+    // The room says A was right: the quiz is fixed and taken while B's results are on screen.
+    let original = show.game.quiz().clone();
+    let mut edited = original.clone();
+    for slide in &mut edited.slides {
+        if let SlideContent::Question(q) = &mut slide.content {
+            q.correct = vec![CorrectAnswer::full(0)];
+        }
+    }
+    assert_eq!(show.game.scored_slide(), Some(0));
+    show.run(4_000, Command::TakeQuiz { quiz: Box::new(edited.clone()) }).unwrap();
+    assert_eq!(show.game.quiz().slides[0], original.slides[0], "the question on screen stays as scored");
+    assert_eq!(show.game.quiz().slides[1], edited.slides[1], "the rest is taken");
+    assert_eq!((show.game.lights(), show.score(1)), (vec![(1, Light::Correct)], 100));
+    let view = show.game.view(4_000);
+    assert_eq!(view.players[0].answer_correct, Some(true));
+}

@@ -479,6 +479,34 @@ scores may differ (`RulesChanged`); from version 3 on
 (`REPLAYS_AS_PLAYED_FROM`) a show replays as it was played and resumes
 without one.
 
+A show plays the copy of the quiz its session keeps (`quiz.json`), never
+the file it began from, so edits saved to that file later do not reach it
+on their own. When Resume is pressed, the Director asks the backend again
+for the last show (`last_session`): its `edited` says that the file
+(`meta.json`'s `sourcePath`) reads and differs from the show's quiz, and
+whether the show can take it (`Quiz::shape_change`). It can when the slides
+are the same in number and order, each of the same type and, as a
+question, of the same mode and number of answers, since what the show has
+done is kept by slide number and by answer; texts, points, right answers,
+media, looks and settings may all differ. The quizmaster then chooses With
+the edits, Without them, or Cancel; edits it cannot take are said and the
+show resumes without them. With the edits, the file is unpacked as for a
+new show, and after the recovery the show journals `TakeQuiz` with the
+whole edited quiz, so the journal replays without the file. That quiz is
+read as a quiz file is (`Quiz::read_value`, migrated from an older schema
+version), so a migration must read journals too (`docs/quiz-format.md`).
+`meta.json` then names the new media folder and title. What the show did
+stands: scores, questions that ended and jokers are not worked out again,
+so a right answer changed on a question already played changes no score.
+The question on screen once it has results (closed or its answer shown,
+`Game::scored_slide`) keeps its slide as played, since its lights, counts
+and marks on screen are judged by its answers, and the Director says so
+(`editedSlideKept`); a later resume offers the edit again, once the show
+has left it. A question in play refuses it, but none is after the
+recovery; when the journal refuses the recovery, the edits are not taken
+either (`editsNotTaken`). No rules version is needed: older journals hold
+no `TakeQuiz`.
+
 The windows load media through Tauri's asset protocol. Its scope is empty
 in `tauri.conf.json`; at startup the shell allows the folder of unpacked
 quizzes, the editor's drafts folder, the built-in theme packages, the

@@ -34,7 +34,7 @@ pub use settings::{
     FIRST_MALE_VOICE, MAX_JOKERS, MAX_VOICE, QuizLanguage, ReadAloud, DEFAULT_VOICE_SPEED, MAX_VOICE_SPEED, MIN_VOICE_SPEED, VOICE_SPEED_STEP,
 };
 pub use model::{
-    AnswerLimits, AnswerMode, CorrectAnswer, Plays, Problem, Question, Quiz, QuizJsonError, ReadQuiz, Slide, SlideContent, SlideType, ValidationError,
+    AnswerLimits, AnswerMode, CorrectAnswer, Plays, Problem, Question, Quiz, QuizJsonError, ReadQuiz, ShapeChange, Slide, SlideContent, SlideType, ValidationError,
     DEFAULT_POINTS, DEFAULT_TIME_LIMIT_S, FULL_SHARE, MAX_ANSWERS, MAX_EVERYONE_ANSWERS, MAX_POINTS, MAX_TIME_LIMIT_S,
     MIN_EVERYONE_ANSWERS, SCHEMA_VERSION,
 };
