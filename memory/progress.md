@@ -26,3 +26,14 @@ Template:
 - Next: Jakub reviews the PR and confirms the acceptance criteria in
   `memory/features.json` (drafted from `ROADMAP.md`).
 - Blockers / open questions: ADR-0001 is Proposed until Jakub accepts it.
+
+## 2026-11-07 - resume-quiz-edits
+- Done: a resumed show can take its quiz file as saved since the show began
+  (Jakub's choice): `Quiz::shape_change`, journaled `Command::TakeQuiz` with the
+  whole quiz, `SessionSummary.edited`, `resume_last_session(takeEdits)`,
+  `Session::rewrite_meta` for the new media folder; the Director asks With the
+  edits / Without / Cancel when Resume is pressed. BF173: the restart warning
+  only once the recovery is journaled (`resume_session` test with a broken journal).
+- State: make check green apart from the uncommitted bindings; branch `claude/project-thread-u9fky8`.
+- Next: guardian review of the PR, then Jakub's OK to merge.
+- Blockers / open questions: none.

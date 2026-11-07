@@ -724,7 +724,42 @@ fn migrate(quiz: &mut serde_json::Value, version: u64) {
     }
 }
 
+/// Why a show cannot take a quiz edited since it began in place of its
+/// copy (`Quiz::shape_change`, `Command::TakeQuiz`): what the show has
+/// done is kept by slide number and by answer, so the edited quiz must
+/// have the same slides, in the same order, each of the same type, and its
+/// questions the same mode and number of answers.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
+#[serde(tag = "change", rename_all = "camelCase")]
+pub enum ShapeChange {
+    /// Slides were added or removed.
+    #[serde(rename_all = "camelCase")]
+    SlideCount { was: usize, now: usize },
+    /// Slide `slide` (from 0) has another type, or as a question another
+    /// mode or number of answers.
+    #[serde(rename_all = "camelCase")]
+    Slide { slide: usize },
+}
+
 impl Quiz {
+    /// How `edited` differs from this quiz in what a show of it keeps
+    /// (`ShapeChange`), if it does: none when a show can take it in this
+    /// quiz's place. Texts, points, right answers, media, looks and
+    /// settings may all differ.
+    pub fn shape_change(&self, edited: &Quiz) -> Option<ShapeChange> {
+        let (was, now) = (self.slides.len(), edited.slides.len());
+        if was != now {
+            return Some(ShapeChange::SlideCount { was, now });
+        }
+        let shape = |slide: &Slide| match &slide.content {
+            SlideContent::Question(question) => (slide.content.slide_type(), Some((question.mode, question.answers.len()))),
+            content => (content.slide_type(), None),
+        };
+        let slide = self.slides.iter().zip(&edited.slides).position(|(old, new)| shape(old) != shape(new))?;
+        Some(ShapeChange::Slide { slide })
+    }
+
     /// A quiz of the current schema version in the default look.
     pub fn new(title: impl Into<String>, slides: Vec<Slide>) -> Quiz {
         Quiz {

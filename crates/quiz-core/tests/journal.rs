@@ -1,7 +1,7 @@
 //! The journal contract: every command a show journals reads back as it was
 //! written, and lines written by earlier versions still read.
 
-use quiz_core::{Button, Command, Stamped};
+use quiz_core::{Button, Command, Quiz, Stamped};
 use std::collections::BTreeSet;
 use ts_rs::{Config, TS};
 
@@ -42,6 +42,11 @@ fn lines() -> Vec<(&'static str, u64, Command)> {
         (r#"{"atMs":24,"command":{"type":"startOver"}}"#, 24, Command::StartOver),
         (r#"{"atMs":25,"command":{"type":"resetScores"}}"#, 25, Command::ResetScores),
         (r#"{"atMs":26,"command":{"type":"readingDone","slide":2}}"#, 26, Command::ReadingDone { slide: 2 }),
+        (
+            r#"{"atMs":27,"command":{"type":"takeQuiz","quiz":{"schemaVersion":5,"title":"T","theme":null,"slides":[]}}}"#,
+            27,
+            Command::TakeQuiz { quiz: Box::new(Quiz::new("T", vec![])) },
+        ),
     ]
 }
 

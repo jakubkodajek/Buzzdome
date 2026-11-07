@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import { useApp, useRun } from "../app-context";
-import { confirmAction } from "../confirm";
+import { confirmAction, confirmEdits } from "../confirm";
 import { loadDraftAfterWrites } from "../editor/useQuizEditor";
 import { dayAndTime } from "../format";
 import { useLastSession, useLatest, useRecentFiles, type LastSession, type RecentFiles } from "../hooks";
 import type { Lang, Translate } from "../i18n";
-import { isAppError } from "../messages";
+import { errorText, isAppError } from "../messages";
 import { quizPicker } from "../quiz";
 import type { EditorDraft, SessionSummary, ShowPosition } from "../types";
 
@@ -90,8 +90,13 @@ export interface ShowStart {
    * question starts nothing.
    */
   startFile: (file?: string) => void;
-  /** Resumes the last show with `call`, which asks nothing. */
-  resume: (call: () => Promise<unknown>) => void;
+  /**
+   * Resumes the last show with `call`, after asking whether it goes on with
+   * its quiz as saved since it began, if it was (`SessionSummary.edited`):
+   * `takeEdits` is the answer. Edits the show cannot take are said, and the
+   * show resumes without them; a cancelled question resumes nothing.
+   */
+  resume: (call: (takeEdits: boolean) => Promise<unknown>) => void;
 }
 
 /**
@@ -100,7 +105,7 @@ export interface ShowStart {
  * second quiz file start meanwhile (`showStarting`), which needs no word here.
  */
 export function useShowStart(): ShowStart {
-  const { t } = useApp();
+  const { t, caution } = useApp();
   const run = useRun();
   const last = useLastSession();
   const draft = useDraftState();
@@ -158,13 +163,30 @@ export function useShowStart(): ShowStart {
       ),
     [startOf, t, reload],
   );
+  // The file is looked at again as Resume is pressed: it may have been
+  // saved since the Director read the last show.
   const resume = useCallback(
-    (call: () => Promise<unknown>) => {
+    (call: (takeEdits: boolean) => Promise<unknown>) => {
       if (busy.current) return;
       busy.current = true;
-      begin(call);
+      const ask = async (session: SessionSummary | null) => {
+        const edited = session?.edited;
+        if (edited?.refused) caution(errorText(t, { code: "editsNotTaken", change: edited.refused }));
+        const choice = session && edited && !edited.refused ? await confirmEdits(t, t("resumeEditedConfirm", { title: session.meta.quizTitle })) : "asBegun";
+        if (choice === "cancel") busy.current = false;
+        else begin(() => call(choice === "edits"));
+      };
+      run(
+        api
+          .lastSession()
+          .then(ask)
+          .catch((error: unknown) => {
+            busy.current = false;
+            throw error;
+          }),
+      );
     },
-    [begin],
+    [t, caution, run, begin],
   );
   return { starting, last, draft, recent, start, startFile, resume };
 }

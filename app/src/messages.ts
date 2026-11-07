@@ -31,6 +31,7 @@ import type {
   RemoteKey,
   SettingsLost,
   SetupError,
+  ShapeChange,
   WelcomeFile,
 } from "./types";
 
@@ -44,7 +45,7 @@ function params(fields: object): Params {
 }
 
 /** Codes worded with their own parameters, see `errorText`. */
-type WordedApart = "file" | "noSuchSlide" | "questionRestarted" | "noSuchPad" | "notInLibrary" | "learnConflict" | "buzzerColours" | "quizInvalid" | "journalBroken" | "lightsRefused";
+type WordedApart = "file" | "editsNotTaken" | "noSuchSlide" | "questionRestarted" | "noSuchPad" | "notInLibrary" | "learnConflict" | "buzzerColours" | "quizInvalid" | "journalBroken" | "lightsRefused";
 
 const ERROR_KEYS: Record<Exclude<AppError["code"], WordedApart>, StringKey> = {
   noShow: "noShow",
@@ -194,6 +195,16 @@ export function errorText(t: Translate, error: unknown): string {
   return detail ? `${text} (${detail})` : text;
 }
 
+/** How a quiz edited since its show began differs in what the show keeps, in words. */
+function shapeChangeText(t: Translate, change: ShapeChange): string {
+  switch (change.change) {
+    case "slideCount":
+      return t("shapeSlideCount", { was: change.was, now: change.now });
+    case "slide":
+      return t("shapeSlide", { slide: change.slide + 1 });
+  }
+}
+
 /** The quizmaster's words for `error`, without its detail. */
 function errorWords(t: Translate, error: Exclude<AppError, { code: "file" }>): string {
   switch (error.code) {
@@ -201,6 +212,8 @@ function errorWords(t: Translate, error: Exclude<AppError, { code: "file" }>): s
       return t("errNoSuchSlide", { slide: error.slide + 1 });
     case "questionRestarted":
       return t("errQuestionRestarted", { slide: error.slide + 1 });
+    case "editsNotTaken":
+      return error.change ? t("errEditsNotTaken", { reason: shapeChangeText(t, error.change) }) : t("errEditsNotSaved");
     case "noSuchPad":
       return t("errNoSuchPad", { pad: error.pad + 1 });
     case "notInLibrary":
