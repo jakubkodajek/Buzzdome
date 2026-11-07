@@ -21,7 +21,7 @@ export function UpdateBanner({ showRunning }: { showRunning: boolean }) {
   if (!update || (showRunning && !installing)) return null;
 
   const install = () => {
-    confirmAction(t, installQuestion(t, lang, update))
+    confirmAction(t, installQuestion(t, lang, update), t("updateInstall"))
       .then((yes) => {
         if (!yes) return;
         setProgress(null);

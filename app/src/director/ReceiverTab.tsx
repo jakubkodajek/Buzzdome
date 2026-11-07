@@ -96,7 +96,7 @@ export function ReceiverTab() {
   const teaches = status?.kind !== "connected" || status.learnable;
 
   const setRemoteAction = (key: RemoteKey, action: RemoteAction) => run(api.receiverSetRemoteAction(key, action).then(reload));
-  const resetRemote = () => run(confirmAction(t, t("remoteKeysResetConfirm")).then((yes) => (yes ? api.receiverResetRemote().then(reload) : undefined)));
+  const resetRemote = () => run(confirmAction(t, t("remoteKeysResetConfirm"), t("remoteKeysReset")).then((yes) => (yes ? api.receiverResetRemote().then(reload) : undefined)));
 
   const exportLog = () => run(api.receiverExportLog({ filter: t("textFile"), fileName: "receiver-log" }).then((saved) => saved && notify(t("receiverLogSaved"))));
   const copyUdev = () => run(navigator.clipboard.writeText(udev).then(() => notify(t("copied")), () => fail(t("notCopied"))));

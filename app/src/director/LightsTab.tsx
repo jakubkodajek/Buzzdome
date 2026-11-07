@@ -421,7 +421,7 @@ function FixturesSection({ setup, change }: { setup: LightsSetup; change: Change
     change((s) => addFixture(s, t("lightsNewFixture", { n: s.fixtures.length + 1 }), channels));
   };
   const remove = (fixture: Fixture) =>
-    run(confirmAction(t, t("lightsRemoveFixtureConfirm", { name: fixture.name })).then((yes) => (yes ? change((s) => removeFixture(s, fixture.id)) : undefined)));
+    run(confirmAction(t, t("lightsRemoveFixtureConfirm", { name: fixture.name }), t("lightsRemove")).then((yes) => (yes ? change((s) => removeFixture(s, fixture.id)) : undefined)));
   return (
     <fieldset>
       <legend>{t("lightsFixtures")}</legend>
@@ -566,7 +566,7 @@ function LibraryPicker({ disabled, onAdd }: { disabled: boolean; onAdd: (name: s
   };
   // The downloaded library is deleted, and only the internet brings it back.
   const reset = () =>
-    run(confirmAction(t, t("lightsLibraryResetConfirm")).then((yes) => (yes ? replace(api.lightsLibraryReset, false) : undefined)));
+    run(confirmAction(t, t("lightsLibraryResetConfirm"), t("lightsLibraryReset")).then((yes) => (yes ? replace(api.lightsLibraryReset, false) : undefined)));
   useEffect(() => {
     if (query.trim() === "") return;
     // Searches run side by side: one that ends after the query changed is not shown.
@@ -684,7 +684,7 @@ function LooksSection({ setup, change }: { setup: LightsSetup; change: Change })
     const { stages, cues } = lookUses(setup, look.id);
     const uses = [...stages.map((stage) => stageText(t, stage)), ...cues.map((cue) => t(CUE_LABEL[cue]))];
     const message = t("lightsRemoveLookConfirm", { name: look.name }) + (uses.length > 0 ? ` ${t("lightsRemoveLookUsed", { uses: uses.join(", ") })}` : "");
-    run(confirmAction(t, message).then((yes) => (yes ? change((s) => removeLook(s, look.id)) : undefined)));
+    run(confirmAction(t, message, t("lightsRemove")).then((yes) => (yes ? change((s) => removeLook(s, look.id)) : undefined)));
   };
   return (
     <fieldset>

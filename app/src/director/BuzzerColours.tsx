@@ -51,7 +51,7 @@ export function BuzzerColours({ info, reload }: { info: ReceiverInfo; reload: ()
   const run = useRun();
   const [error, setError] = useState<Notice | null>(null);
   const reset = () =>
-    run(confirmAction(t, t("buzzerColoursResetConfirm")).then((yes) => (yes ? api.receiverResetColours().then(() => setError(null)).finally(reload) : undefined)));
+    run(confirmAction(t, t("buzzerColoursResetConfirm"), t("buzzerColoursReset")).then((yes) => (yes ? api.receiverResetColours().then(() => setError(null)).finally(reload) : undefined)));
   const choose = (light: Light, colour: Rgb) => {
     if (sameColor(colour, info.colours[light])) return;
     api
