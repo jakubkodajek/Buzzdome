@@ -54,6 +54,7 @@ Status keys: `[x]` done, `[~]` in progress, `[ ]` not started.
 - [~] Buzzer colours of the quizmaster's own for each light, black for off, from a colour picker, a row of the most used colours and colours kept at hand (spec BZ-22); colours other than the defaults still to see on the hardware
 - [x] Buzzer registration (any press registers in the lobby); the receiver is found by itself, and the Receiver tab lists each buzzer as it is pressed
 - [~] Every fastest-finger buzz waits its turn in the buzzers' order, and a wrong answer passes the question to the next team in the queue (spec BZ-23, rules version 8); still to try on the hardware
+- [~] Read questions aloud with an offline voice (spec SN-10); still to try on the Windows event laptop (BF62, BF63)
 - [~] The quizmaster's remote: all 12 keys drive the Director, each key's action chosen in the Receiver tab (spec BZ-21); the three arrows' codes to check on the hardware
 - [ ] Fallback: vendor keystroke mode through the keyboard driver
 

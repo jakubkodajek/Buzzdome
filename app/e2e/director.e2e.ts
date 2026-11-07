@@ -32,6 +32,9 @@ const TABS: StringKey[] = ["tabQuestions", "tabTeams", "tabResponses", "tabResul
  * final, starting over and resetting the scores have their own tests: in a
  * crawl they would skip the questions the command panel test plays, or
  * clear what the results test reads, whenever they happen to be enabled.
+ * Downloading the voices fetches and unpacks a model of over 100 MB, and no
+ * show starts while it unpacks (`VoiceInstalling`), so the tests after the
+ * crawl could not start theirs; the editor's tests read with no model.
  */
 const NOT_CLICKED: (StringKey | { text: string })[] = [
   "openQuiz",
@@ -48,6 +51,7 @@ const NOT_CLICKED: (StringKey | { text: string })[] = [
   "goToFinal",
   "startOver",
   "resetScores",
+  "voicesDownload",
 ];
 
 const player = (view: GameView, buzzer: number) => {
