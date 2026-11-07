@@ -1717,14 +1717,15 @@ neither can slip in between the other's check and its start.
 
 `Game::apply` returns `Effect::Lights` with the light state of every affected
 buzzer, from one function (`Game::light_of`): ready while a player can press,
-answered once they answered an everyone-answers question or buzzed to
-wait their turn, locked once they sit out (and, before rules version 8,
-once another player buzzed), first for the buzz being judged, dark while a
-question is closed, and the result from the reveal; the others stay ready
-while a buzz is judged, as they can still buzz in (BZ-23). A
-buzz judged wrong shows wrong while the others get the lights of the step
-that follows (ready again, or dark when it closed the question), until the
-next step's lights: another buzz, the question's close or its reveal. A
+answered once they answered an everyone-answers question, waiting once
+they buzzed to wait their turn, locked once they sit out (and, before rules
+version 8, once another player buzzed), first for the buzz being judged
+(the team answering), dark while a question is closed, and the result from
+the reveal; the others stay ready while a buzz is judged, as they can
+still buzz in (BZ-23). A buzz judged wrong shows wrong while the question
+runs, also as the next buzzes are judged, while the others get the lights
+of the step that follows (ready again, or dark when it closed the
+question); when it closed the question, it shows wrong until the reveal. A
 player who joins (switched on, or new to the show by a press or by being
 added in the Teams tab) gets the light of the step at once; but one who
 joins while a fastest-finger question is under way plays from the next
@@ -1750,7 +1751,9 @@ the Director says "this receiver does not light the buzzers yet".
 
 The 303S shows them as colours, by default: ready blue, answered and
 locked dim white (Jakub's choice, told apart from the red of a wrong
-answer next to it), first white, right green, wrong red, off dark
+answer next to it), waiting yellow (so the white of the team answering
+stands out from the teams in the queue, 2026-11-07; not yet seen on the
+hardware), first white, right green, wrong red, off dark
 (`LightColours::default` in `crates/buzzers/src/colours.rs`). Locked and first are both white, told apart by brightness
 alone, told apart at arm's length in the 2026-10-25 test, and Jakub kept
 dim white for locked after it (both read as white on the hardware;

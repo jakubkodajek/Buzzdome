@@ -33,7 +33,7 @@ journaled.
 ## Where things are
 
 - **Light states** (`quiz_core::Light`: off, ready, locked, answered,
-  first, correct, wrong) are decided by the game (`Game::light_of`,
+  waiting, first, correct, wrong) are decided by the game (`Game::light_of`,
   `Effect::Lights`); the driver only shows them.
 - **Light colours** are the quizmaster's, per computer, picked in the
   Receiver tab (`director/BuzzerColours.tsx`): `LightColours` in

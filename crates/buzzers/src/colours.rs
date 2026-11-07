@@ -104,7 +104,9 @@ impl Shade {
 
 /// The colour of each light the quizmaster picks. The defaults are those
 /// the buzzers always showed: dark off, blue ready, dim white for out of
-/// the question or answered, white first, green right, red wrong.
+/// the question or answered, white first, green right, red wrong; and
+/// yellow for waiting its turn, told apart from the white of the player
+/// answering.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[ts(export)]
 #[serde(rename_all = "camelCase", default)]
@@ -114,9 +116,11 @@ pub struct LightColours {
     pub ready: Rgb,
     /// Answered an everyone-answers question, waiting for its reveal.
     pub answered: Rgb,
-    /// Out of the question: buzzed wrong, another player buzzed, or switched off.
+    /// Buzzed in a fastest-finger question, waiting its turn to answer.
+    pub waiting: Rgb,
+    /// Out of the question: another player buzzed, or switched off.
     pub locked: Rgb,
-    /// Buzzed first, being judged.
+    /// Buzzed, being judged: the player answering.
     pub first: Rgb,
     pub correct: Rgb,
     pub wrong: Rgb,
@@ -131,6 +135,7 @@ impl Default for LightColours {
             off: Rgb::BLACK,
             ready: Rgb::new(0, 0, 0xff),
             answered: DIM_WHITE,
+            waiting: Rgb::new(0xff, 0xff, 0),
             locked: DIM_WHITE,
             first: Rgb::new(0xff, 0xff, 0xff),
             correct: Rgb::new(0, 0xff, 0),
@@ -158,6 +163,7 @@ impl LightColours {
             Light::Off => self.off,
             Light::Ready => self.ready,
             Light::Answered => self.answered,
+            Light::Waiting => self.waiting,
             Light::Locked => self.locked,
             Light::First => self.first,
             Light::Correct => self.correct,
@@ -177,6 +183,7 @@ impl LightColours {
             off: shown(Light::Off),
             ready: shown(Light::Ready),
             answered: shown(Light::Answered),
+            waiting: shown(Light::Waiting),
             locked: shown(Light::Locked),
             first: shown(Light::First),
             correct: shown(Light::Correct),
@@ -275,6 +282,6 @@ mod tests {
         assert_eq!(with(|c| c.answered = Rgb::BLACK), Ok(()));
         assert_eq!(with(|c| c.locked = Rgb::new(0x80, 0, 0x80)), Ok(()));
         // A press from a buzzer showing a colour no light has counts.
-        assert!(!LightColours::default().not_ready(Shade::nearest(Rgb::new(255, 255, 0))));
+        assert!(!LightColours::default().not_ready(Shade::nearest(Rgb::new(0, 255, 255))));
     }
 }

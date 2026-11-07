@@ -216,8 +216,8 @@ passes nothing until the app has set the receiver up.
    answers A to D they do nothing, as only A to D answer or buzz there.
 
 With the Enjoy 303S also. The default colours: ready blue, answered and
-locked out dim white, first white, right green, wrong red, no question
-dark (step 25 changes them). Spare buzzers
+locked out dim white, waiting its turn yellow, answering (first) white,
+right green, wrong red, no question dark (step 25 changes them). Spare buzzers
 switched on light with the others and join by pressing, as a late team
 (in a fastest-finger question, from the next question): keep them
 switched off. Times below are read from the exported
@@ -298,11 +298,14 @@ press that leaves no line under "Raw data", and what came before it.
     counted under "Presses"), and the first press once blue buzzes.
 12. **The queue.** While one team's buzz is judged, three other teams
     press one after the other, two of them almost together. Expected:
-    each turns dim white as it presses and joins the projector's bar in
+    each turns yellow as it presses and joins the projector's bar in
     the order they pressed, the near tie in the order the players think
-    is right; the clock stays stopped. Judge wrong: that buzzer turns red,
-    the next team in the bar turns white and the clock still stands, and
-    no buzzer still blue blinks or changes. Judge each wrong in turn:
+    is right; the clock stays stopped. Judge wrong: that buzzer turns red
+    and stays red until the question ends, the next team in the bar turns
+    from yellow to white and the clock still stands, and no buzzer still
+    blue blinks or changes. Note whether yellow (waiting), white
+    (answering) and red (wrong) are easy to tell apart at arm's length
+    and from across the room. Judge each wrong in turn:
     once nobody waits, the clock goes on, and the first press of a blue
     buzzer buzzes in. Note the order the Raw data's timers give for the
     presses made during the judging: they must count from the question's
@@ -335,8 +338,8 @@ press that leaves no line under "Raw data", and what came before it.
 17. Fastest-finger question with no answers (the keys stand for the big
     button): buzz first with a keyboard key (say `5`).
     Expected: the buzzers that have not buzzed stay blue while it is judged,
-    and one pressed meanwhile turns dim white and waits its turn. Judge
-    it wrong: the one waiting answers next; once nobody waits, the first
+    and one pressed meanwhile turns yellow and waits its turn. Judge
+    it wrong: the one waiting turns white and answers next; once nobody waits, the first
     to press counts. (With one buzz only, or in a show begun before
     rules version 8, the others turn dim white while it is judged.)
 18. **Late teams.** Between questions (a billboard, or a closed question),
@@ -407,8 +410,9 @@ press that leaves no line under "Raw data", and what came before it.
    the show. With the Enjoy
    303S the buzzers show their lights again once it is back: blue in a
    fastest-finger round, the results if they were showing, and while a buzz
-   is judged white for the team answering, dim white for those waiting or
-   out, and blue for those that can still buzz. Also pull it while a buzz is being judged:
+   is judged white for the team answering, yellow for those waiting, red
+   for those judged wrong, dim white for those out, and blue for those
+   that can still buzz. Also pull it while a buzz is being judged:
    once back, no buzz counts until the quizmaster judges.
 2. Mid-question, pull the RJ45 plug at the receiver and plug it back,
    leaving the USB side in. The computer cannot see this, as the cable

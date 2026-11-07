@@ -345,13 +345,13 @@ fn every_buzz_waits_its_turn_and_the_clock_goes_on_only_once_nobody_waits() {
     show.press(4_000, 2, Button::Big);
     let paused = show.game.clock().copied().unwrap();
     assert!(!paused.is_running());
-    // Teams 4 and 7 buzz while team 2 answers: they wait their turn, lit as answered, and nobody hears it.
-    assert_eq!(show.press(5_000, 4, Button::Big), [Effect::Lights { lights: vec![(4, Light::Answered)] }]);
+    // Teams 4 and 7 buzz while team 2 answers: they wait their turn, lit as waiting, and nobody hears it.
+    assert_eq!(show.press(5_000, 4, Button::Big), [Effect::Lights { lights: vec![(4, Light::Waiting)] }]);
     show.press(5_500, 7, Button::Big);
     assert_eq!(buzz_states(&show.game), [(2, Answering), (4, Waiting), (7, Waiting)]);
     let lights = show.game.lights();
     assert_eq!(lights[1], (2, Light::First));
-    assert_eq!((lights[3], lights[6], lights[0]), ((4, Light::Answered), (7, Light::Answered), (1, Light::Ready)), "team 1 can still buzz in");
+    assert_eq!((lights[3], lights[6], lights[0]), ((4, Light::Waiting), (7, Light::Waiting), (1, Light::Ready)), "team 1 can still buzz in");
     assert!(show.game.ignores(&Stamped { at_ms: 5_600, command: Command::Press { buzzer: 4, button: Button::Big } }), "one buzz a team");
 
     // Wrong: team 4 answers, the clock still stopped, and the quizmaster cannot start it.
@@ -379,6 +379,7 @@ fn every_buzz_waits_its_turn_and_the_clock_goes_on_only_once_nobody_waits() {
     assert_eq!(clock.remaining_ms(13_000), Some(7_000));
     assert_eq!([2, 4, 7, 5].map(|b| show.score(b)), [-20; 4]);
     assert_eq!(show.game.lights()[0], (1, Light::Ready), "untouched, so its timer still counts from the question's start");
+    assert!([2, 4, 7, 5].iter().all(|&b| show.game.lights()[usize::from(b) - 1] == (b, Light::Wrong)), "judged wrong, red until the question ends");
     assert!(show.game.ignores(&Stamped { at_ms: 13_500, command: Command::Press { buzzer: 7, button: Button::Big } }));
 
     // Team 1 buzzes in what was left and is right: it scores at its own time, 4 s into the clock.
@@ -1553,7 +1554,7 @@ fn the_last_wrong_buzz_closes_the_question_and_darkens_the_other_lights() {
 }
 
 #[test]
-fn a_wrong_buzz_shows_wrong_until_the_next_buzz() {
+fn a_wrong_buzz_shows_wrong_until_its_question_is_revealed() {
     let mut show = Show::new(vec![question("q1", AnswerMode::FastestFinger)]);
     for buzzer in 1..=3 {
         show.press(0, buzzer, Button::Big);
@@ -1571,7 +1572,12 @@ fn a_wrong_buzz_shows_wrong_until_the_next_buzz() {
         ]
     );
     let effects = show.press(3_000, 2, Button::Big);
-    assert!(effects.contains(&Effect::Lights { lights: vec![(1, Light::Locked), (2, Light::First), (3, Light::Ready)] }), "{effects:?}");
+    assert!(effects.contains(&Effect::Lights { lights: vec![(1, Light::Wrong), (2, Light::First), (3, Light::Ready)] }), "{effects:?}");
+    // Team 3 waits its turn behind team 2, which answers right: the winner is lit, the others out.
+    show.press(3_500, 3, Button::Big);
+    assert_eq!(show.game.lights(), [(1, Light::Wrong), (2, Light::First), (3, Light::Waiting)]);
+    show.run(4_000, Command::JudgeRight).unwrap();
+    assert_eq!(show.game.lights(), [(1, Light::Locked), (2, Light::Correct), (3, Light::Locked)]);
 }
 
 #[test]
@@ -2113,7 +2119,7 @@ fn a_fastest_finger_question_can_take_one_buzz() {
     show.press(3_000, 1, Button::Big);
     show.run(4_000, Command::JudgeWrong).unwrap();
     assert!(matches!(step(&show.game), QuestionStep::Running { .. }));
-    assert_eq!(show.game.lights(), [(1, Light::Locked), (2, Light::Locked)]);
+    assert_eq!(show.game.lights(), [(1, Light::Wrong), (2, Light::Locked)]);
     assert!(show.game.ignores(&Stamped { at_ms: 5_000, command: Command::Press { buzzer: 2, button: Button::Big } }));
 }
 

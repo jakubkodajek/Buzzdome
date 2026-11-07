@@ -109,26 +109,32 @@ impl Button {
 pub enum Light {
     Off,
     Ready,
-    /// Out of the question: a fastest-finger buzz judged wrong, the
-    /// question's one buzz used, or the player is switched off; while
-    /// another player's buzz is judged too, where buzzes do not queue
+    /// Out of the question: the question's one buzz used by another
+    /// player, the player plays from the next question or is switched off;
+    /// while another player's buzz is judged too, where buzzes do not queue
     /// (`Game::queues_buzzes`).
     Locked,
-    /// Answered an everyone-answers question, waiting for its reveal, or
-    /// buzzed in and waiting its turn (`Game::queues_buzzes`).
+    /// Answered an everyone-answers question, waiting for its reveal.
     Answered,
+    /// Buzzed in a fastest-finger question and waiting its turn
+    /// (`Game::queues_buzzes`).
+    Waiting,
+    /// The buzz being judged: the player answering.
     First,
     Correct,
+    /// Judged wrong: after the reveal, or a fastest-finger buzz for the rest
+    /// of its question.
     Wrong,
 }
 
 impl Light {
-    pub const ALL: [Light; 7] = [Light::Off, Light::Ready, Light::Locked, Light::Answered, Light::First, Light::Correct, Light::Wrong];
+    pub const ALL: [Light; 8] =
+        [Light::Off, Light::Ready, Light::Locked, Light::Answered, Light::Waiting, Light::First, Light::Correct, Light::Wrong];
 }
 
 /// Stops compiling when a light is added: add it to `Light::ALL` too, then here.
 const _: fn(Light) = |light| match light {
-    Light::Off | Light::Ready | Light::Locked | Light::Answered | Light::First | Light::Correct | Light::Wrong => {}
+    Light::Off | Light::Ready | Light::Locked | Light::Answered | Light::Waiting | Light::First | Light::Correct | Light::Wrong => {}
 };
 
 /// What the buzzers take in the current step, as a whole: for receivers
@@ -1134,6 +1140,8 @@ impl Game {
             Phase::Question(QuestionStep::Running { .. }) => {
                 if self.responses.contains_key(&buzzer) {
                     Light::Answered
+                } else if self.locked_out.contains(&buzzer) {
+                    Light::Wrong
                 } else if self.sits_out(buzzer) || self.buzzed_in(buzzer) {
                     Light::Locked
                 } else {
@@ -1143,11 +1151,14 @@ impl Game {
             Phase::Question(QuestionStep::Buzzed { buzzer: first, .. }) => {
                 if *first == buzzer {
                     Light::First
+                } else if self.locked_out.contains(&buzzer) {
+                    // Judged wrong: it stays so while the question runs.
+                    Light::Wrong
                 } else if !self.queues_buzzes() || self.sits_out(buzzer) {
                     Light::Locked
                 } else if self.buzzed_in(buzzer) {
                     // Waiting their turn, or passed over as switched off.
-                    Light::Answered
+                    Light::Waiting
                 } else {
                     // Can still buzz: the light, and so the buzzer's timer, goes on unchanged (`docs/design.md` 2.6).
                     Light::Ready
@@ -1615,7 +1626,8 @@ impl Game {
         ];
         let follow = if self.closes_as_answered() { self.close_answered(now) } else { vec![self.lights_now()] };
         // The others get the lights of the step that follows; the judged
-        // buzzer shows wrong until the next step's lights.
+        // buzzer shows wrong, also when the buzz closed the question, until
+        // its reveal (`light_of`).
         effects.extend(follow.into_iter().map(|effect| match effect {
             Effect::Lights { mut lights } => {
                 lights.retain(|&(lit, _)| lit != buzzer);

@@ -471,7 +471,7 @@ const called: unknown[] = [];
 (window as unknown as { called: unknown[] }).called = called;
 /** A venue's lights for the Lights tab: two fixtures, three looks. */
 /** The buzzers' default colours (`colours::LightColours`). */
-const BUZZER_COLOURS: LightColours = { off: "#000000", ready: "#0000ff", answered: "#2a2a2a", locked: "#2a2a2a", first: "#ffffff", correct: "#00ff00", wrong: "#ff0000" };
+const BUZZER_COLOURS: LightColours = { off: "#000000", ready: "#0000ff", answered: "#2a2a2a", waiting: "#ffff00", locked: "#2a2a2a", first: "#ffffff", correct: "#00ff00", wrong: "#ff0000" };
 
 const LIGHTS_SETUP: LightsSetup = {
   output: { kind: "artNet", host: "255.255.255.255", universe: 0 },

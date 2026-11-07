@@ -4,7 +4,9 @@ import type { Rgb } from "./Rgb";
 /**
  * The colour of each light the quizmaster picks. The defaults are those
  * the buzzers always showed: dark off, blue ready, dim white for out of
- * the question or answered, white first, green right, red wrong.
+ * the question or answered, white first, green right, red wrong; and
+ * yellow for waiting its turn, told apart from the white of the player
+ * answering.
  */
 export type LightColours = { 
 /**
@@ -16,10 +18,14 @@ off: Rgb, ready: Rgb,
  */
 answered: Rgb, 
 /**
- * Out of the question: buzzed wrong, another player buzzed, or switched off.
+ * Buzzed in a fastest-finger question, waiting its turn to answer.
+ */
+waiting: Rgb, 
+/**
+ * Out of the question: another player buzzed, or switched off.
  */
 locked: Rgb, 
 /**
- * Buzzed first, being judged.
+ * Buzzed, being judged: the player answering.
  */
 first: Rgb, correct: Rgb, wrong: Rgb, };
