@@ -720,12 +720,19 @@ fn resume_show(root: &Path, at_ms: u64, media_folders: &[PathBuf]) -> CmdResult<
     let game = Game::replay(quiz, &journal, meta.rules_version);
     let (game, effects, refused) = recover_resumed(game, &mut session, at_ms)?;
     let recovery_due = refused.is_some();
-    // A torn line that is still there is cut off before the next write.
-    let save_problem = refused.or_else(|| not_cut.filter(|_| session.torn_left()).map(|e| NotSaved::Io(e).into()));
+    let save_problem = resume_save_problem(refused, not_cut, session.torn_left());
     if let Some(problem) = &save_problem {
         app_log::note(&format!("the resumed show is not saved: {problem}"));
     }
     Ok(ResumedShow { game, session, media_root: media_root.filter(|root| root.is_dir()), effects, warnings, recovery_due, save_problem })
+}
+
+/// What the Director shows as not saved when a show resumes: the journal's
+/// refusal of the recovery, or else that the torn line could not be cut
+/// off (`not_cut`) and is still there (`torn_left`; it is cut off before the
+/// next write).
+fn resume_save_problem(refused: Option<AppError>, not_cut: Option<std::io::Error>, torn_left: bool) -> Option<AppError> {
+    refused.or_else(|| not_cut.filter(|_| torn_left).map(|e| NotSaved::Io(e).into()))
 }
 
 /// Journals the recovery of the replayed `game`, if it needs one, at
@@ -1335,6 +1342,16 @@ mod tests {
         assert_eq!(on_disk.journal[before], Stamped { at_ms: 62_000, command: Command::RestartQuestion });
         assert_eq!(Game::replay(on_disk.quiz, &on_disk.journal, on_disk.meta.rules_version), inner.game.unwrap());
         std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn a_resumed_show_says_it_is_not_saved_while_its_torn_line_could_not_be_cut_off() {
+        let full = || std::io::Error::other("disk full");
+        assert_eq!(resume_save_problem(None, None, false), None);
+        let not_cut = resume_save_problem(None, Some(full()), true).expect("the torn line is still there");
+        assert!(not_cut.is_not_saved(), "{not_cut:?}");
+        assert_eq!(resume_save_problem(None, Some(full()), false), None, "cut off since");
+        assert_eq!(resume_save_problem(Some(AppError::JournalBroken), Some(full()), true), Some(AppError::JournalBroken), "the refused recovery first");
     }
 
     #[test]

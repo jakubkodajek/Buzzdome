@@ -23,6 +23,10 @@ pub enum AppError {
     NoShow,
     #[error("a show is running; end it first")]
     ShowRunning,
+    /// Media are copied into the library only between shows: a large copy
+    /// would compete with the show for the disk.
+    #[error("media are not copied during a show")]
+    MediaDuringShow,
     #[error("a show is starting")]
     ShowStarting,
     #[error("there is no show to resume")]

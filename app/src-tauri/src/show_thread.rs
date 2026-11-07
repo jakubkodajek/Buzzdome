@@ -88,7 +88,7 @@ pub fn start(app: &AppHandle, queue: Sender<ShowEvent>, events: Receiver<ShowEve
         .spawn(move || {
             let (app, watch) = (show_app, show_watch);
             let mut pump = Pump::new(events);
-            let mut ticker = Ticker { last_clock_event: Instant::now(), retry_due_at: None, watch: watch.clone() };
+            let mut ticker = Ticker { last_clock_event: Instant::now(), retry: Retry::default(), watch: watch.clone() };
             // The app keeps a sender as long as it runs.
             while pump.once(TICK, now_ms, |event| watch.busy(|| handle(&app, event)), |now| watch.busy(|| ticker.tick(&app, now))) {}
         })
@@ -282,9 +282,49 @@ impl Watched {
 /// The show thread's bookkeeping between rounds.
 struct Ticker {
     last_clock_event: Instant,
-    /// A due command that failed is tried again from then on, not 20 times a second.
-    retry_due_at: Option<Instant>,
+    retry: Retry,
     watch: Watch,
+}
+
+/// What time makes due at a round of the show thread.
+#[derive(Debug, PartialEq)]
+enum Due {
+    /// A resumed show's recovery that the journal refused (`retry_recovery`).
+    Recovery,
+    /// A time-driven command, such as "time is up" (`Game::due_command`).
+    Command(quiz_core::Command),
+}
+
+/// What is due at `now`. A refused recovery goes first: nothing else is
+/// journaled before it (`Inner::recovery_due`), so a command that falls due
+/// meanwhile waits for it.
+fn due_now(inner: &Inner, now: u64) -> Option<Due> {
+    if inner.recovery_due {
+        return Some(Due::Recovery);
+    }
+    inner.game.as_ref().and_then(|g| g.due_command(now)).map(Due::Command)
+}
+
+/// When a due step that failed (its journal write was refused) is tried
+/// again: from `RETRY_DUE_AFTER` on, not 20 times a second.
+#[derive(Debug, Default)]
+struct Retry {
+    at: Option<Instant>,
+}
+
+impl Retry {
+    fn may_try(&self, now: Instant) -> bool {
+        self.at.is_none_or(|at| now >= at)
+    }
+
+    fn tried(&mut self, failed: bool, now: Instant) {
+        self.at = failed.then(|| now + RETRY_DUE_AFTER);
+    }
+
+    /// Nothing is due any more.
+    fn clear(&mut self) {
+        self.at = None;
+    }
 }
 
 impl Ticker {
@@ -295,23 +335,20 @@ impl Ticker {
     /// longer hangs (`Watch::tell_if_stuck`).
     fn tick(&mut self, app: &AppHandle, now: u64) {
         let mut inner = lock_show(app);
-        // A resumed show's recovery that the journal refused goes first:
-        // nothing else is journaled before it (`Inner::recovery_due`).
-        let due = if inner.recovery_due { Some(None) } else { inner.game.as_ref().and_then(|g| g.due_command(now)).map(Some) };
-        match due {
-            Some(command) => {
-                if self.retry_due_at.is_none_or(|at| Instant::now() >= at) {
+        match due_now(&inner, now) {
+            Some(due) => {
+                if self.retry.may_try(Instant::now()) {
                     // Why it failed is the Director's to show (`save_problem`).
-                    let failed = match command {
-                        Some(command) => execute_at(app, &mut inner, command, now).map(drop),
-                        None => retry_recovery(app, &mut inner, now),
+                    let failed = match due {
+                        Due::Command(command) => execute_at(app, &mut inner, command, now).map(drop),
+                        Due::Recovery => retry_recovery(app, &mut inner, now),
                     }
                     .is_err();
-                    self.retry_due_at = failed.then(|| Instant::now() + RETRY_DUE_AFTER);
+                    self.retry.tried(failed, Instant::now());
                 }
             }
             None => {
-                self.retry_due_at = None;
+                self.retry.clear();
                 if self.last_clock_event.elapsed() >= CLOCK_EVENT_EVERY {
                     self.last_clock_event = Instant::now();
                     // As the windows' views are (`emit_state`), at the time
@@ -336,6 +373,56 @@ mod tests {
 
     /// How often a test's caller looks whether the thread is stuck.
     const EVERY: Duration = Duration::from_millis(1);
+
+    /// A show whose question's clock (10 s) started at 1000 ms.
+    fn show_with_a_running_question() -> quiz_core::Game {
+        use quiz_core::{AnswerMode, Button, Command, CorrectAnswer, Game, Question, Quiz, Slide, SlideContent, Stamped};
+        let question = Question {
+            text: "Q?".into(),
+            mode: AnswerMode::Everyone,
+            answers: vec!["A".into(), "B".into()],
+            correct: vec![CorrectAnswer::full(1)],
+            time_limit_s: 10,
+            points: 100,
+            points_end: None,
+            penalty: 0,
+        };
+        let mut game = Game::new(Quiz::new("Test", vec![Slide::new("q1", SlideContent::Question(question))]));
+        game.apply(&Stamped { at_ms: 0, command: Command::Press { buzzer: 1, button: Button::Big } }).unwrap();
+        game.apply(&Stamped { at_ms: 1_000, command: Command::Next }).unwrap();
+        game
+    }
+
+    #[test]
+    fn a_refused_recovery_is_due_before_a_command_time_makes_due() {
+        let game = show_with_a_running_question();
+        let time_up = game.due_command(20_000).expect("time is up");
+        let mut inner = Inner { game: Some(game), ..Inner::new() };
+        assert_eq!(due_now(&inner, 5_000), None, "the clock runs");
+        assert_eq!(due_now(&inner, 20_000), Some(Due::Command(time_up.clone())));
+        // While the recovery is due, nothing else is: no command goes in
+        // the journal before it, also when its clock ran out meanwhile.
+        inner.recovery_due = true;
+        assert_eq!(due_now(&inner, 5_000), Some(Due::Recovery));
+        assert_eq!(due_now(&inner, 20_000), Some(Due::Recovery));
+        inner.recovery_due = false;
+        assert_eq!(due_now(&inner, 20_000), Some(Due::Command(time_up)), "and once it is made, the command is due");
+    }
+
+    #[test]
+    fn a_due_step_that_failed_is_tried_again_after_a_second_and_at_once_after_one_that_worked() {
+        let start = Instant::now();
+        let mut retry = Retry::default();
+        assert!(retry.may_try(start));
+        retry.tried(true, start);
+        assert!(!retry.may_try(start + RETRY_DUE_AFTER / 2), "not 20 times a second");
+        assert!(retry.may_try(start + RETRY_DUE_AFTER));
+        retry.tried(false, start + RETRY_DUE_AFTER);
+        assert!(retry.may_try(start + RETRY_DUE_AFTER), "the next due step at once");
+        retry.tried(true, start);
+        retry.clear();
+        assert!(retry.may_try(start), "nothing due any more forgets the wait");
+    }
 
     #[test]
     fn a_job_given_up_never_runs() {

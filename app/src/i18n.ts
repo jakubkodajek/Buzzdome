@@ -102,6 +102,7 @@ const strings = {
     // The media player and sound board (director/MediaPlayerTab.tsx).
     mediaAdd: "Přidat",
     mediaAddHint: "Zkopíruje obrázky, zvuky a videa do knihovny tohoto počítače",
+    mediaAddDuringShow: "Během show se média nepřidávají. Přidejte je před show nebo po ní.",
     mediaRemove: "Odebrat",
     mediaRemoveConfirm: "Odebrat {name} z knihovny? Kopie souboru se smaže, původní soubor zůstane.",
     mediaPlay: "Přehrát",
@@ -1013,6 +1014,7 @@ const strings = {
     layoutWithVideo: "{layout} + video",
     // Backend errors (AppError), in messages.ts.
     errShowRunning: "Show už běží. Nejdřív ji ukončete.",
+    errMediaDuringShow: "Během show se média do knihovny nekopírují. Přidejte je před show nebo po ní.",
     errShowStarting: "Show se právě spouští.",
     errNoShowToResume: "Není žádná show, ve které by šlo pokračovat.",
     errNotNow: "V tomto kroku to nejde.",
@@ -1465,6 +1467,7 @@ const strings = {
     // The media player and sound board (director/MediaPlayerTab.tsx).
     mediaAdd: "Add",
     mediaAddHint: "Copies pictures, sounds and videos into this computer's library",
+    mediaAddDuringShow: "Media are not added during a show. Add them before or after it.",
     mediaRemove: "Remove",
     mediaRemoveConfirm: "Remove {name} from the library? Its copy is deleted; the original file stays.",
     mediaPlay: "Play",
@@ -2374,6 +2377,7 @@ const strings = {
     layoutWithVideo: "{layout} + video",
     // Backend errors (AppError), in messages.ts.
     errShowRunning: "A show is running. End it first.",
+    errMediaDuringShow: "Media are not copied into the library during a show. Add them before or after it.",
     errShowStarting: "A show is starting.",
     errNoShowToResume: "There is no show to resume.",
     errNotNow: "That cannot be done in this step.",

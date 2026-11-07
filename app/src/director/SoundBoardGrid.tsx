@@ -105,7 +105,9 @@ export function SoundBoardGrid({ player, sound, view, selected, onSelect, import
     if (references.length > 0) change({ type: "place", pad: place, references });
   };
 
-  const accepts = (e: DragEvent) => e.dataTransfer.types.includes(PAD_TYPE) || e.dataTransfer.types.includes(LIBRARY_FILE_TYPE) || carriesFiles(e);
+  // Files from the system are copied into the library only between shows;
+  // pads and library files move at any time.
+  const accepts = (e: DragEvent) => e.dataTransfer.types.includes(PAD_TYPE) || e.dataTransfer.types.includes(LIBRARY_FILE_TYPE) || (carriesFiles(e) && view === null);
 
   const padMenu = (place: number, x: number, y: number): (Action | "separator")[] => {
     const pad = board.pads[place];
