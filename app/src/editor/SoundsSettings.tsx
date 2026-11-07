@@ -45,12 +45,12 @@ export function SoundsSettings({ sounds, onSounds, onPickFile }: SoundsSettingsP
   );
   return (
     <>
-      <h2>{t("soundsAndMusic")}</h2>
+      <h3>{t("soundsAndMusic")}</h3>
       <p className="backstage-hint">{t("soundsHint")}</p>
-      <h3>{t("soundEffects")}</h3>
+      <h4>{t("soundEffects")}</h4>
       {rows(EFFECT_SLOTS)}
       {volume(t("effectsVolume"), sounds.effectsVolume, (effectsVolume) => onSounds({ ...sounds, effectsVolume }))}
-      <h3>{t("soundMusic")}</h3>
+      <h4>{t("soundMusic")}</h4>
       {rows(MUSIC_SLOTS)}
       {volume(t("musicVolume"), sounds.musicVolume, (musicVolume) => onSounds({ ...sounds, musicVolume }))}
     </>

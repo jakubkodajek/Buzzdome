@@ -16,12 +16,13 @@ import { shortcutLabel, type Action } from "./actions";
  */
 export const MixedContext = createContext(false);
 
-export function Switch({ checked, onChange, disabled = false, label }: { checked: boolean; onChange: (on: boolean) => void; disabled?: boolean; label: string }) {
+export function Switch({ checked, onChange, disabled = false, label, id }: { checked: boolean; onChange: (on: boolean) => void; disabled?: boolean; label: string; id?: string }) {
   const { t } = useApp();
   const mixed = useContext(MixedContext);
   return (
     <button
       type="button"
+      id={id}
       role="switch"
       aria-checked={checked && !mixed}
       aria-label={mixed ? `${label}: ${t("mixedValues")}` : label}
@@ -201,13 +202,17 @@ export function Select<T extends string | number>(props: {
       {text}
     </option>
   );
+  const all = options.flatMap((entry) => (Array.isArray(entry) ? [entry] : entry.options));
+  const find = (text: string) => all.find(([option]) => String(option) === text);
   return (
     <select
       aria-label={label}
       value={mixed ? MIXED_OPTION : String(value)}
+      // A narrow panel cuts a long choice: the tooltip holds it whole.
+      title={mixed ? t("mixedValues") : find(String(value))?.[1]}
       disabled={disabled}
       onChange={(e) => {
-        const picked = options.flatMap((entry) => (Array.isArray(entry) ? [entry] : entry.options)).find(([option]) => String(option) === e.target.value);
+        const picked = find(e.target.value);
         if (picked) onChange(picked[0]);
       }}
     >
@@ -283,7 +288,7 @@ export function Dialog(props: {
   const [opener] = useState(() => document.activeElement);
   const cancel = useLatest(() => {
     if (!dirty) onClose();
-    else void confirmAction(t, t("discardEdits")).then((discard) => discard && onClose());
+    else void confirmAction(t, t("discardEdits"), t("discardEditsOk")).then((discard) => discard && onClose());
   });
   useEffect(() => {
     // Focus the control marked for it (a footer button too), or else the first field, so typing starts at once.

@@ -17,6 +17,7 @@ import { SLIDE_TYPE_LABEL, slideTitle } from "../quiz";
 import { DEFAULT_TIMER, TIMER_LABEL } from "../timers";
 import type { Category, Slide } from "../types";
 import { keyCombo } from "../keyboard";
+import { mediaFileName } from "../media";
 import type { Action } from "./actions";
 import { categoryName } from "./categories";
 import { ContextMenu, Fold, MixedContext } from "./controls";
@@ -429,11 +430,11 @@ export function selectionHeader(t: Translate, slide: Slide, count: number, eleme
     case "text":
       return { icon: <TextIcon />, title: t(ELEMENT_TITLE[element]), subtitle: slideTitle(slide) };
     case "picture":
-      return { icon: <PictureIcon />, title: t("mediaPicture"), subtitle: slide.picture ?? "" };
+      return { icon: <PictureIcon />, title: t("mediaPicture"), subtitle: mediaFileName(slide.picture ?? "") };
     case "video":
-      return { icon: <VideoIcon />, title: t("mediaVideo"), subtitle: slide.video?.file ?? "" };
+      return { icon: <VideoIcon />, title: t("mediaVideo"), subtitle: mediaFileName(slide.video?.file ?? "") };
     case "sound":
-      return { icon: <SoundIcon />, title: t("mediaSound"), subtitle: slide.sound?.file ?? "" };
+      return { icon: <SoundIcon />, title: t("mediaSound"), subtitle: mediaFileName(slide.sound?.file ?? "") };
     case "timer":
       return { icon: <TimerIcon />, title: t("sectionTimer"), subtitle: t(TIMER_LABEL[slide.style?.timer ?? DEFAULT_TIMER]) };
     default:

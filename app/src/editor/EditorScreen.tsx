@@ -23,7 +23,7 @@ import {
   WarningIcon,
 } from "../icons";
 import { MediaRootContext } from "../media";
-import { NO_CONTEXT, quizName, slideContexts } from "../quiz";
+import { NO_CONTEXT, quizName, settingsOf, slideContexts, soundsOf, welcomeOf } from "../quiz";
 import { ThemeContext } from "../theme/context";
 import { useLatest, useWindowTitle } from "../hooks";
 import { createStore, useStore } from "../store";
@@ -38,6 +38,7 @@ import { DesignArea, NotesBox } from "./DesignArea";
 import { EditSlideDialog } from "./EditSlideDialog";
 import { isUnsaved, needsInfo, type OpenQuiz } from "./editor-state";
 import { isMediaElement, type ElementId } from "./elements";
+import { fieldsMerge } from "./history";
 import { LayoutGallery } from "./LayoutGallery";
 import { NewQuizDialog, QuizStartDialog } from "./QuizStartDialog";
 import { DEFAULT_LAYOUT, slideFromLayout, type SlideLayout } from "./layouts";
@@ -316,7 +317,7 @@ function Studio({ editor, open, ask, onExit }: { editor: QuizEditor; open: OpenQ
     },
     notes: { label: t("viewNotes"), icon: <NotesIcon />, checked: notesShown, run: () => setNotesShown(!notesShown) },
     testRun: { label: t("testFromStart"), icon: <PlayIcon />, keys: ["F5"], inFields: true, appliesField: true, disabled: slides.length === 0 || busy, run: () => testRun() },
-    testRunHere: { label: t("testFromHere"), icon: <PreviewIcon />, keys: ["Shift+F5"], inFields: true, appliesField: true, disabled: noSlide || busy, run: () => testRun(index) },
+    testRunHere: { label: t("testFromHere"), icon: <PreviewIcon />, keys: ["Shift+F5"], inFields: true, appliesField: true, disabled: noSlide || busy || view === "categories", run: () => testRun(index) },
     importSheet: sheet.importSheet,
     sheetTemplate: sheet.sheetTemplate,
     exportSheet: sheet.exportSheet,
@@ -361,7 +362,7 @@ function Studio({ editor, open, ask, onExit }: { editor: QuizEditor; open: OpenQ
       ? categories.category
         ? t("categoryNumber", { n: categories.index + 1, total: categories.categories.length })
         : t("noCategories")
-      : `${slide ? t("slide", { n: index + 1, total: slides.length }) : t("noSlideSelected")}${several ? ` · ${t("slidesSelected", { n: selected.length })}` : ""}`;
+      : `${slide ? t("slide", { n: index + 1, total: slides.length }) : t(slides.length === 0 ? "statusNoSlides" : "noSlideSelected")}${several ? ` · ${t("slidesSelected", { n: selected.length })}` : ""}`;
   const sameCategory = slide?.category !== undefined && selectedSlides.every((s) => s.category === slide.category);
   // The picture, video or sound tab shows only while one is selected, and goes back to HOME once none is.
   const ribbonElement = view === "categories" ? categories.element : element;
@@ -410,9 +411,10 @@ function Studio({ editor, open, ask, onExit }: { editor: QuizEditor; open: OpenQ
               onOpenFile={openQuiz}
               onForgetFile={editor.forgetRecentFile}
               onTitle={(text) => editor.edit({ type: "setTitle", title: text }, "title")}
-              onSettings={(settings) => editor.edit({ type: "setSettings", settings }, "settings")}
-              onSounds={(sounds) => editor.edit({ type: "setSounds", sounds }, "sounds")}
-              onWelcome={(welcome) => editor.edit({ type: "setWelcome", welcome }, "welcome")}
+              // Quick changes of one setting are one undo step, of two different ones two.
+              onSettings={(settings) => quiz && editor.edit({ type: "setSettings", settings }, fieldsMerge("settings", settingsOf(quiz), settings))}
+              onSounds={(sounds) => quiz && editor.edit({ type: "setSounds", sounds }, fieldsMerge("sounds", soundsOf(quiz), sounds))}
+              onWelcome={(welcome) => quiz && editor.edit({ type: "setWelcome", welcome }, fieldsMerge("welcome", welcomeOf(quiz), welcome))}
               onPickMedia={(kinds) => editor.pickMedia(kinds)}
               onShowSlide={(id) => {
                 list.setSelection(selectIds([id], 0));

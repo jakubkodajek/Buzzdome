@@ -3,7 +3,7 @@ import { useVoiceGain, useVoiceModel, useVoicePreview, useVoiceSample, voiceLine
 import { welcomePreviewView } from "../host/preview";
 import { SlideScreen } from "../host/SlideScreen";
 import { Stage } from "../host/Stage";
-import { useEffect, useRef } from "react";
+import { useEffect, useId, useRef } from "react";
 import { BackIcon, CheckIcon, PlayIcon, StopIcon } from "../icons";
 import { keyHint, KEYS } from "../keyboard";
 import { problemText } from "../messages";
@@ -338,7 +338,7 @@ function WelcomeSettings({ quiz, onWelcome, onPickMedia }: { quiz: Quiz; onWelco
   const view = welcomePreviewView(welcome, quiz.title, quiz.slides.length);
   return (
     <>
-      <h2>{t("welcomeScreen")}</h2>
+      <h3>{t("welcomeScreen")}</h3>
       <SettingSwitch label={t("welcomeOn")} hint={t("welcomeOnHint", { key: keyHint(t, KEYS.next) })} checked={welcome.on} onChange={(on) => set({ on })} />
       <div className="welcome-fields">
         {text(t("welcomeHeading"), welcome.heading, (heading) => ({ heading }), quiz.title)}
@@ -354,12 +354,13 @@ function WelcomeSettings({ quiz, onWelcome, onPickMedia }: { quiz: Quiz; onWelco
   );
 }
 
-/** A setting that is on or off, with what it does. */
+/** A setting that is on or off, with what it does; a click on its name switches it too. */
 function SettingSwitch(props: { label: string; hint: string; checked: boolean; onChange: (on: boolean) => void }) {
+  const id = useId();
   return (
     <div className="setting-switch">
-      <span>{props.label}</span>
-      <Switch label={props.label} checked={props.checked} onChange={props.onChange} />
+      <label htmlFor={id}>{props.label}</label>
+      <Switch id={id} label={props.label} checked={props.checked} onChange={props.onChange} />
       <p className="backstage-hint">{props.hint}</p>
     </div>
   );
