@@ -404,6 +404,7 @@ const LIGHT_KEYS: Record<Light, StringKey> = {
   off: "lightOff",
   ready: "lightReady",
   answered: "lightAnswered",
+  waiting: "lightWaiting",
   locked: "lightLocked",
   first: "lightFirst",
   correct: "lightCorrect",

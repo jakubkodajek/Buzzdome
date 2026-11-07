@@ -659,10 +659,12 @@ mod tests {
     }
 
     /// The colour bytes of the default colours, which the buzzers showed
-    /// before the quizmaster could pick them.
+    /// before the quizmaster could pick them, but for waiting's, newer.
     const READY: u8 = colour(true, 0, 0, 3);
     /// Dim white.
     const LOCKED: u8 = colour(false, 1, 1, 1);
+    /// Yellow.
+    const WAITING: u8 = colour(true, 3, 3, 0);
     const FIRST: u8 = colour(true, 3, 3, 3);
     const CORRECT: u8 = colour(true, 0, 3, 0);
     const WRONG: u8 = colour(true, 3, 0, 0);
@@ -905,15 +907,16 @@ mod tests {
     fn the_default_colours_are_those_the_buzzers_always_showed() {
         let colours = LightColours::default();
         let bytes = Light::ALL.map(|light| colour_of(&colours, light));
-        assert_eq!(bytes, [OFF, READY, LOCKED, LOCKED, FIRST, CORRECT, WRONG], "{:?}", Light::ALL);
+        assert_eq!(bytes, [OFF, READY, LOCKED, LOCKED, WAITING, FIRST, CORRECT, WRONG], "{:?}", Light::ALL);
         // Apart from answered and locked, they differ by more than brightness.
-        let apart = [OFF, READY, LOCKED, FIRST, CORRECT, WRONG];
+        let apart = [OFF, READY, LOCKED, WAITING, FIRST, CORRECT, WRONG];
         for (i, a) in apart.iter().enumerate() {
             for b in &apart[i + 1..] {
                 assert_ne!(rgb(*a), rgb(*b), "{a:#04x} and {b:#04x}");
             }
         }
         assert_eq!(light_of(LOCKED), Some(Light::Locked));
+        assert_eq!(light_of(WAITING), Some(Light::Waiting));
         assert_eq!(light_of(colour(true, 3, 2, 0)), None, "a colour no light has");
     }
 

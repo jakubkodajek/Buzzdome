@@ -3,4 +3,4 @@
 /**
  * What the buzzer lights should show. Drivers map these to their hardware.
  */
-export type Light = "off" | "ready" | "locked" | "answered" | "first" | "correct" | "wrong";
+export type Light = "off" | "ready" | "locked" | "answered" | "waiting" | "first" | "correct" | "wrong";

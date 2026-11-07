@@ -10,12 +10,13 @@ import { sameColor } from "../theme/color";
 import type { Light, ReceiverInfo, Rgb } from "../types";
 
 /** The lights in the order a question shows them. */
-const LIGHTS: readonly Light[] = ["ready", "answered", "first", "locked", "correct", "wrong", "off"];
+const LIGHTS: readonly Light[] = ["ready", "answered", "waiting", "first", "locked", "correct", "wrong", "off"];
 
 const LIGHT_HINTS: Record<Light, StringKey> = {
   off: "lightOffHint",
   ready: "lightReadyHint",
   answered: "lightAnsweredHint",
+  waiting: "lightWaitingHint",
   locked: "lightLockedHint",
   first: "lightFirstHint",
   correct: "lightCorrectHint",
