@@ -12,7 +12,7 @@ const reason = (show: boolean, unsavedQuiz: boolean, unsavedInstructions = false
 
 function deps(answers: Partial<CloseDeps> = {}) {
   return {
-    editorLoad: vi.fn(async () => draft),
+    loadDraft: vi.fn(async () => draft),
     editorSave: vi.fn(async () => "/q/pub.quiz"),
     quitApp: vi.fn(async () => undefined),
     closeDeclined: vi.fn(async () => undefined),
@@ -31,7 +31,7 @@ describe("answerClose", () => {
       [t("quitShowRuns"), t("quitQuizUnsaved"), t("quitInstructionsUnsaved"), t("quitAnyway")].join(" "),
       t("closeApp"),
     );
-    expect(d.editorLoad).not.toHaveBeenCalled();
+    expect(d.loadDraft).not.toHaveBeenCalled();
     expect(d.quitApp).toHaveBeenCalled();
   });
 

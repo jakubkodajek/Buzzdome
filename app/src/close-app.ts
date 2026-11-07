@@ -3,6 +3,7 @@
 
 import { api } from "./api";
 import { confirmAction, confirmSave, tellFailure, type SaveChoice } from "./confirm";
+import { loadDraftAfterWrites } from "./editor/useQuizEditor";
 import type { Translate } from "./i18n";
 import { errorText } from "./messages";
 import { quizPicker } from "./quiz";
@@ -10,7 +11,8 @@ import type { CloseReason, EditorDraft, Picker } from "./types";
 
 /** What answering a close request uses: the backend and the system's dialogs. */
 export interface CloseDeps {
-  editorLoad: () => Promise<EditorDraft | null>;
+  /** The editor's draft, after its changes still being written. */
+  loadDraft: () => Promise<EditorDraft | null>;
   editorSave: (draft: string, quiz: EditorDraft["quiz"], saveAs: boolean, picker: Picker) => Promise<string | null>;
   quitApp: () => Promise<void>;
   closeDeclined: () => Promise<void>;
@@ -23,7 +25,7 @@ export interface CloseDeps {
 /** The backend and the system's dialogs, worded by `t`. */
 export function closeDeps(t: Translate): CloseDeps {
   return {
-    editorLoad: api.editorLoad,
+    loadDraft: loadDraftAfterWrites,
     editorSave: api.editorSave,
     quitApp: api.quitApp,
     closeDeclined: api.closeDeclined,
@@ -41,7 +43,7 @@ export function closeDeps(t: Translate): CloseDeps {
  */
 export async function answerClose(t: Translate, reason: CloseReason, deps: CloseDeps): Promise<void> {
   const instructions = reason.unsavedInstructions ? [t("quitInstructionsUnsaved")] : [];
-  const draft = reason.unsavedQuiz && !reason.show ? await deps.editorLoad() : null;
+  const draft = reason.unsavedQuiz && !reason.show ? await deps.loadDraft() : null;
   let quit: boolean;
   if (draft) {
     const title = draft.quiz.title || t("untitledQuiz");

@@ -96,8 +96,17 @@ export class DraftSession {
    * editor left meanwhile, say).
    */
   async load(): Promise<EditorDraft | null> {
-    const draft = await this.queue.run(() => this.api.editorLoad());
+    const draft = await this.peek();
     this.open = draft?.id ?? null;
+    return draft;
+  }
+
+  /**
+   * The draft as `load` gives it, for a reader other than the editor (the
+   * Director): what the editor has open stays as it is.
+   */
+  async peek(): Promise<EditorDraft | null> {
+    const draft = await this.queue.run(() => this.api.editorLoad());
     const pending = this.latest;
     if (draft && pending?.draft === draft.id && this.status.notWritten !== null) {
       return { ...draft, quiz: pending.quiz, unsaved: pending.unsaved };

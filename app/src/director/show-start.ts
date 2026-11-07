@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import { useApp, useRun } from "../app-context";
 import { confirmAction } from "../confirm";
+import { loadDraftAfterWrites } from "../editor/useQuizEditor";
 import { useLastSession, useLatest, type LastSession } from "../hooks";
 import type { Translate } from "../i18n";
 import { isAppError } from "../messages";
@@ -10,7 +11,7 @@ import type { EditorDraft, SessionSummary } from "../types";
 /** What the Director knows of the quiz editor's draft: whether it holds changes its file does not have. */
 export type DraftState = Pick<EditorDraft, "sourcePath" | "unsaved"> & { title: string };
 
-/** The draft as the Director needs it, from what `editorLoad` gives. */
+/** The draft as the Director needs it, from what `loadDraftAfterWrites` gives. */
 export function draftState(draft: EditorDraft | null): DraftState | null {
   return draft && { title: draft.quiz.title, sourcePath: draft.sourcePath, unsaved: draft.unsaved };
 }
@@ -148,14 +149,14 @@ export function useShowStart(): ShowStart {
 /**
  * The editor's draft, read once when the Director's show controls open
  * (they open again on the way back from the editor, the only place it
- * changes). One that cannot be read is no draft here: the editor says why
+ * changes), after the editor's changes still being written. One that cannot be read is no draft here: the editor says why
  * when it opens.
  */
 function useDraftState(): DraftState | null {
   const [draft, setDraft] = useState<DraftState | null>(null);
   useEffect(() => {
     let alive = true;
-    api.editorLoad().then(
+    loadDraftAfterWrites().then(
       (loaded) => alive && setDraft(draftState(loaded)),
       () => alive && setDraft(null),
     );

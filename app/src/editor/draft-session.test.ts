@@ -227,6 +227,25 @@ describe("DraftSession", () => {
     expect((await session.load())?.quiz.title).toBe("draft-1");
   });
 
+  it("peeks at the draft after the writes given before, without making it the open one", async () => {
+    const { draftApi, calls } = fakeApi();
+    const session = new DraftSession(draftApi);
+    await session.load();
+    session.write("draft-1", quiz("A"), true, () => undefined);
+    const peeked = session.peek();
+    draftApi.editorLoad.mockImplementation(async () => {
+      calls.push("load");
+      return draft("draft-2");
+    });
+    expect((await peeked)?.id).toBe("draft-2");
+    expect(calls).toEqual(["update draft-1 A", "load"]);
+    // Still the open one: its failed write is tried again, not let go as a replaced draft's.
+    draftApi.editorUpdate.mockRejectedValueOnce({ code: "draftChanged" });
+    session.write("draft-1", quiz("B"), true, () => undefined);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(session.getStatus().notWritten).toEqual({ code: "draftChanged" });
+  });
+
   it("tells its listeners when it gets busy and when writing fails", async () => {
     const { draftApi } = fakeApi();
     const session = new DraftSession(draftApi, 1000);

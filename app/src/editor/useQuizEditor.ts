@@ -16,6 +16,14 @@ import { confirmAction, confirmSave } from "../confirm";
 // whatever it wrote is on disk before the screen opens again and loads it.
 const drafts = new DraftSession(api);
 
+/**
+ * The editor's draft for a reader outside it (the Director), after every
+ * change the editor gave before; what the editor has open stays as it is.
+ */
+export function loadDraftAfterWrites(): Promise<EditorDraft | null> {
+  return drafts.peek();
+}
+
 /** The open quiz with its undo as the screen last had it, to go on from when it opens again (after a test run, say). */
 const lastOpen = createStore<OpenQuiz | null>(null);
 
