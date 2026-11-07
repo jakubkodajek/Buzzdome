@@ -175,20 +175,32 @@ jobs:
           node --version
           npm ci --ignore-scripts --engine-strict
 
-      - name: Build and sign
+      # Everything that compiles (the UI build, every crate's build script and
+      # proc macro) runs here, with no secret in its environment (BF102).
+      # The app's own CLI (package.json), and cargo held to Cargo.lock.
+      - name: Build
+        working-directory: source/app
+        env:
+          TARGET: ${{ matrix.target }}
+        run: npm run tauri -- build --no-bundle ${TARGET:+--target "$TARGET"} --config src-tauri/tauri.release.conf.json -- --locked
+
+      # The only step that holds the signing key: it bundles the app built
+      # above (no build command runs; the config sets no beforeBundleCommand),
+      # signs the macOS app ad hoc, and writes and signs the updater files
+      # with their version.
+      - name: Bundle and sign
         working-directory: source/app
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
           TARGET: ${{ matrix.target }}
           BUNDLES: ${{ matrix.bundles }}
-        # The app's own CLI (package.json), and cargo held to Cargo.lock.
         run: |
           if [ -z "$TAURI_SIGNING_PRIVATE_KEY" ]; then
             echo "::error::The secret TAURI_SIGNING_PRIVATE_KEY is not set (docs/releasing.md, one-time setup)."
             exit 1
           fi
-          npm run tauri -- build ${TARGET:+--target "$TARGET"} --bundles "$BUNDLES" --config src-tauri/tauri.release.conf.json -- --locked
+          npm run tauri -- bundle ${TARGET:+--target "$TARGET"} --bundles "$BUNDLES" --config src-tauri/tauri.release.conf.json
 
       - name: Add the files to the draft
         env:

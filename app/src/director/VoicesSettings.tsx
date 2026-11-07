@@ -4,6 +4,7 @@ import { setVoiceModel, useVoiceModel, useVoiceSample, VOICES, voiceName } from 
 import { QUIZ_LANGUAGES } from "../bindings/Constants";
 import { confirmAction } from "../confirm";
 import { diskSize } from "../format";
+import { errorNotice, isAppError } from "../messages";
 import { PlayIcon, StopIcon } from "../icons";
 import { LANGUAGE_LABEL } from "../quiz";
 import { createStore, useStore } from "../store";
@@ -20,13 +21,18 @@ function whileBusy<T>(call: () => Promise<T>): Promise<T> {
   return call().finally(() => progress.set(undefined));
 }
 
+/** Whether the voices download stopped because a show began (`voice_install`). */
+function downloadStopped(error: unknown): boolean {
+  return isAppError(error) && error.code === "voiceDownloadStopped";
+}
+
 /**
  * The voices questions are read in (spec SN-10): a sample of each voice in
  * each language, which plays before anything is downloaded, and the one
  * download that brings them all.
  */
 export function VoicesSettings({ showRunning }: { showRunning: boolean }) {
-  const { t } = useApp();
+  const { t, caution } = useApp();
   const run = useRun();
   const model = useVoiceModel();
   const sample = useVoiceSample();
@@ -34,8 +40,14 @@ export function VoicesSettings({ showRunning }: { showRunning: boolean }) {
   // The download writes much to the disk the show is saved to (design §1.1).
   const busy = done !== undefined || showRunning;
 
+  // A show that began stopped the download: nothing failed (BF118).
   const install = () =>
-    run(whileBusy(() => api.voiceInstall((got) => progress.set(got.received < got.total ? got : null))).then(setVoiceModel));
+    run(
+      whileBusy(() => api.voiceInstall((got) => progress.set(got.received < got.total ? got : null))).then(setVoiceModel, (error: unknown) => {
+        if (!downloadStopped(error)) throw error;
+        caution(errorNotice(t, error));
+      }),
+    );
   const remove = () =>
     run(confirmAction(t, t("voicesRemoveConfirm")).then((yes) => (yes ? whileBusy(api.voiceRemove).then(setVoiceModel) : undefined)));
   const status = () => {

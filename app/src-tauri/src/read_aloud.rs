@@ -262,7 +262,8 @@ pub async fn voice_model(app: AppHandle) -> CmdResult<VoiceModel> {
 /// Downloads the voice model, checks it and unpacks it, telling `progress`
 /// how the download goes. A model already there is kept until the new one
 /// is whole. Refused during a show, as the editor's large files are
-/// (`refuse_during_show`): the journal shares the disk.
+/// (`refuse_during_show`): the journal shares the disk. A show that begins
+/// meanwhile stops the download at its next progress report (BF111).
 #[tauri::command]
 pub async fn voice_install(app: AppHandle, progress: Channel<VoiceDownload>) -> CmdResult<VoiceModel> {
     off_ui(move || {
@@ -277,8 +278,9 @@ pub async fn voice_install(app: AppHandle, progress: Channel<VoiceDownload>) -> 
         let archive = state.root.join(format!("{}.download", MODEL.id));
         let downloaded = download(&archive, |done| {
             let _ = progress.send(done);
+            refuse_during_show(&app).is_ok()
         });
-        // A show started while it downloaded: its journal keeps the disk,
+        // A show started after the last report: its journal keeps the disk,
         // and its clips the voice process. None starts while it unpacks.
         let installed = downloaded.and_then(|sha| {
             let _unpacking = Unpacking::begin(&app)?;
@@ -302,9 +304,7 @@ impl<'a> Unpacking<'a> {
     /// Marks it, unless a show runs.
     fn begin(app: &'a AppHandle) -> CmdResult<Unpacking<'a>> {
         let mut inner = crate::lock_show(app);
-        if inner.game.is_some() {
-            return Err(AppError::ShowRunning);
-        }
+        crate::refuse_show(&inner)?;
         inner.voice_unpacking = true;
         Ok(Unpacking(app))
     }
@@ -347,9 +347,10 @@ pub async fn voice_clip(app: AppHandle, line: Line, render: bool) -> CmdResult<O
     .await
 }
 
-/// Downloads the model into `archive`, telling `progress` how far it got:
-/// the download's SHA-256.
-fn download(archive: &Path, mut progress: impl FnMut(VoiceDownload)) -> CmdResult<String> {
+/// Downloads the model into `archive`, telling `progress` how far it got
+/// every `PROGRESS_EVERY`: the download's SHA-256. `progress` stops it by
+/// answering false, which fails it with `VoiceDownloadStopped`.
+fn download(archive: &Path, mut progress: impl FnMut(VoiceDownload) -> bool) -> CmdResult<String> {
     let failed = |detail: String| AppError::VoiceDownload { detail };
     let mut response = agent().get(MODEL.url).call().map_err(|e| failed(e.to_string()))?;
     let file = fs::File::create(archive).map_err(|e| AppError::file(FileAction::Write, archive, e))?;
@@ -357,10 +358,11 @@ fn download(archive: &Path, mut progress: impl FnMut(VoiceDownload)) -> CmdResul
     let mut last = Instant::now();
     let total = MODEL.bytes;
     let sha = voice::model::receive(body.take(MODEL.bytes + 1), std::io::BufWriter::new(&file), |received| {
-        if last.elapsed() >= PROGRESS_EVERY || received == total {
-            last = Instant::now();
-            progress(VoiceDownload { received, total });
+        if last.elapsed() < PROGRESS_EVERY && received != total {
+            return true;
         }
+        last = Instant::now();
+        progress(VoiceDownload { received, total })
     })
     .map_err(voice_error)?;
     file.sync_all().map_err(|e| AppError::file(FileAction::Write, archive, e))?;
@@ -395,6 +397,8 @@ fn voice_error(e: voice::VoiceError) -> AppError {
         voice::VoiceError::Download(detail) => AppError::VoiceDownload { detail },
         voice::VoiceError::Disk(detail) => AppError::VoiceDisk { detail },
         voice::VoiceError::Damaged => AppError::VoiceDamaged,
+        // The app stops a download only for a show that began (`voice_install`).
+        voice::VoiceError::Stopped => AppError::VoiceDownloadStopped,
         voice::VoiceError::Load | voice::VoiceError::Render => AppError::VoiceFailed,
     }
 }

@@ -110,6 +110,7 @@ const ERROR_KEYS: Record<Exclude<AppError["code"], WordedApart>, StringKey> = {
   libraryTooSmall: "errLibraryTooSmall",
   voiceDownload: "errVoiceDownload",
   voiceDamaged: "errVoiceDamaged",
+  voiceDownloadStopped: "errVoiceDownloadStopped",
   voiceMissing: "errVoiceMissing",
   voiceFailed: "errVoiceFailed",
   voiceDisk: "errVoiceDisk",

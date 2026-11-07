@@ -32,6 +32,9 @@ pub enum VoiceError {
     Damaged,
     #[error("disk: {0}")]
     Disk(String),
+    /// The one receiving it stopped the download (`model::receive`).
+    #[error("the download was stopped")]
+    Stopped,
     #[error("the voice model could not be loaded")]
     Load,
     #[error("the words could not be rendered")]

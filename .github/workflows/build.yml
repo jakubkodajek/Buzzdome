@@ -132,20 +132,21 @@ jobs:
         include:
           - name: windows
             os: windows-latest
-            args: --bundles nsis
+            bundles: nsis
             artifacts: |
               target/release/bundle/nsis/*.exe
               target/release/buzzdome.exe
           - name: macos
             os: macos-latest
             # One build for Apple silicon and Intel Macs.
-            args: --target universal-apple-darwin --bundles dmg
+            target: universal-apple-darwin
+            bundles: dmg
             rust-targets: aarch64-apple-darwin,x86_64-apple-darwin
             artifacts: target/universal-apple-darwin/release/bundle/dmg/*.dmg
           - name: linux
             # The oldest supported runner keeps the glibc requirement low.
             os: ubuntu-22.04
-            args: --bundles deb,appimage
+            bundles: deb,appimage
             artifacts: |
               target/release/bundle/deb/*.deb
               target/release/bundle/appimage/*.AppImage
@@ -180,9 +181,23 @@ jobs:
         working-directory: app
         run: npm ci
 
-      - name: Build the installer
+      # Built, then bundled, in two steps as release.yml does, so that the
+      # release's split (the signing key only in the bundling step, BF102)
+      # is tried here on every system first.
+      - name: Build
         working-directory: app
-        run: npm run tauri build -- ${{ matrix.args }}
+        shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
+        run: npm run tauri -- build --no-bundle ${TARGET:+--target "$TARGET"} -- --locked
+
+      - name: Bundle the installer
+        working-directory: app
+        shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
+          BUNDLES: ${{ matrix.bundles }}
+        run: npm run tauri -- bundle ${TARGET:+--target "$TARGET"} --bundles "$BUNDLES"
 
       - uses: actions/upload-artifact@v4
         with:

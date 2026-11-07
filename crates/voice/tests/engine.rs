@@ -28,7 +28,7 @@ fn the_real_download_unpacks() {
         return;
     };
     let file = std::fs::File::open(&archive).unwrap();
-    let sha = voice::model::receive(file, std::io::sink(), |_| {}).unwrap();
+    let sha = voice::model::receive(file, std::io::sink(), |_| true).unwrap();
     let root = std::env::temp_dir().join(format!("voice-real-unpack-{}", std::process::id()));
     std::fs::create_dir_all(&root).unwrap();
     voice::model::unpack(std::path::Path::new(&archive), &sha, &root).unwrap();
