@@ -56,8 +56,9 @@ pub fn installed(root: &Path) -> bool {
 }
 
 /// Copies `from` into `to`, hashing what passes; `progress` hears the bytes
-/// so far. Fails once more than `MODEL.bytes` arrive.
-pub fn receive(mut from: impl Read, mut to: impl Write, mut progress: impl FnMut(u64)) -> Result<String, VoiceError> {
+/// so far, and stops it by answering false (`VoiceError::Stopped`). Fails
+/// once more than `MODEL.bytes` arrive.
+pub fn receive(mut from: impl Read, mut to: impl Write, mut progress: impl FnMut(u64) -> bool) -> Result<String, VoiceError> {
     let mut hasher = Sha256::new();
     let mut buffer = vec![0u8; 1 << 16];
     let mut total = 0u64;
@@ -72,7 +73,9 @@ pub fn receive(mut from: impl Read, mut to: impl Write, mut progress: impl FnMut
         }
         hasher.update(&buffer[..n]);
         to.write_all(&buffer[..n]).map_err(VoiceError::disk)?;
-        progress(total);
+        if !progress(total) {
+            return Err(VoiceError::Stopped);
+        }
     }
     to.flush().map_err(VoiceError::disk)?;
     Ok(hex(&hasher.finalize()))
@@ -163,9 +166,19 @@ mod tests {
     fn a_download_is_hashed_as_it_arrives() {
         let mut out = Vec::new();
         let mut heard = 0;
-        let sha = receive(&b"abc"[..], &mut out, |n| heard = n).unwrap();
+        let sha = receive(&b"abc"[..], &mut out, |n| {
+            heard = n;
+            true
+        })
+        .unwrap();
         assert_eq!(sha, "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
         assert_eq!((out, heard), (b"abc".to_vec(), 3));
+    }
+
+    #[test]
+    fn a_download_stops_when_asked() {
+        let mut out = Vec::new();
+        assert!(matches!(receive(&b"abc"[..], &mut out, |_| false), Err(VoiceError::Stopped)));
     }
 
     #[test]

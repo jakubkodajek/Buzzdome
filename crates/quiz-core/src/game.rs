@@ -968,15 +968,15 @@ impl Game {
             play_video: self.shows_video(),
             go_to: self.can_jump(),
             restart_question: self.question_restartable(),
-            set_joker: self.jokers_open(),
+            set_joker: self.open_joker_slide().is_some(),
             reading_done: self.awaiting_reading,
         }
     }
 
-    /// Whether jokers can be played now: in a quiz with jokers, while a
-    /// question takes them (`joker_slide`).
-    fn jokers_open(&self) -> bool {
-        self.quiz.settings.jokers > 0 && self.joker_slide().is_some()
+    /// The question jokers can be played on now: in a quiz with jokers,
+    /// the one a joker played now goes on (`joker_slide`).
+    fn open_joker_slide(&self) -> Option<usize> {
+        self.joker_slide().filter(|_| self.quiz.settings.jokers > 0)
     }
 
     /// The question a joker played now goes on: the current one while it
@@ -1004,14 +1004,21 @@ impl Game {
         }
     }
 
-    /// Whether the player's joker can be played (`on`) or taken back now:
-    /// while jokers can be played (`jokers_open`), as long as the question
-    /// gave the player nothing yet, and to play it, with one left.
+    /// Whether the player's joker can be played (`on`) or taken back now
+    /// (`joker_slot`).
     pub fn can_set_joker(&self, buzzer: BuzzerId, on: bool) -> bool {
-        let Some(slide) = self.joker_slide().filter(|_| self.quiz.settings.jokers > 0) else { return false };
+        self.joker_slot(buzzer, on).is_some()
+    }
+
+    /// The question the player's joker is played on (`on`) or taken back
+    /// from now, when it can be: while jokers can be played
+    /// (`open_joker_slide`), as long as the question gave the player
+    /// nothing yet, and to play it, with one left.
+    fn joker_slot(&self, buzzer: BuzzerId, on: bool) -> Option<usize> {
+        let slide = self.open_joker_slide()?;
         let given = slide == self.slide && self.mark(buzzer).is_some();
         let open = self.players.contains_key(&buzzer) && !given;
-        open && (!on || self.jokers.contains(&(slide, buzzer)) || self.jokers_left(buzzer) > 0)
+        (open && (!on || self.jokers.contains(&(slide, buzzer)) || self.jokers_left(buzzer) > 0)).then_some(slide)
     }
 
     /// Whether the player plays their joker on the current question.
@@ -1332,7 +1339,7 @@ impl Game {
             }
             Command::SetJoker { buzzer, on } => {
                 self.player_mut(*buzzer)?;
-                let slide = self.joker_slide().filter(|_| self.can_set_joker(*buzzer, *on)).ok_or(GameError::NotNow)?;
+                let slide = self.joker_slot(*buzzer, *on).ok_or(GameError::NotNow)?;
                 if *on {
                     self.jokers.insert((slide, *buzzer));
                 } else {

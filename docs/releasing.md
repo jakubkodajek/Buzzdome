@@ -144,6 +144,12 @@ signing settings ([Tauri docs: macOS](https://v2.tauri.app/distribute/sign/macos
    ([GitHub docs: Deployments and environments](https://docs.github.com/en/actions/reference/workflows-and-actions/deployments-and-environments)).
 3. **Secrets** of that environment: `TAURI_SIGNING_PRIVATE_KEY` (the content
    of `~/.tauri/buzzdome.key`) and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`.
+   Only one step of `release.yml` holds them, "Bundle and sign": the step
+   before it, "Build", compiles the UI and every crate (build scripts and
+   proc macros, which run code from the dependencies) with no secret in
+   its environment, and "Bundle and sign" only bundles and signs the app
+   already built (`tauri bundle`). `build.yml` builds its test installers
+   in the same two steps, so a change to them shows there first.
 4. **Who may push tags.** Settings > Rules > Rulesets > New tag ruleset:
    target `v*`, rules "Restrict creations", "Restrict updates" and
    "Restrict deletions", with Repository admin in the bypass list. That

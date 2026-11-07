@@ -415,11 +415,17 @@ impl<E: From<ReceiverEvent>> Worker<E> {
                 if !mode.takes_buzzes() {
                     let held = self.order.flush();
                     self.send_presses(held);
-                } else if began {
-                    // A press while the round had not begun must not hide the
-                    // first one in it as a held button's repeat.
-                    self.edge.reset();
-                    self.round_from_ms = self.config.clock.now_ms();
+                } else {
+                    // A press the game did not take (before the round, or
+                    // while a buzz was judged) must not hide the next one
+                    // as a held button's repeat: the round goes on afresh
+                    // after a wrong buzz under rules before version 8 (BF115).
+                    if mode == BuzzerMode::FastestFinger {
+                        self.edge.reset();
+                    }
+                    if began {
+                        self.round_from_ms = self.config.clock.now_ms();
+                    }
                 }
                 if let Some(conn) = self.conn.as_mut() {
                     let reports = conn.protocol.encode_mode(mode);

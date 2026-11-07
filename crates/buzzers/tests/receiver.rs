@@ -618,6 +618,27 @@ fn a_press_just_before_a_round_begins_does_not_hide_the_first_one_in_it() {
 }
 
 #[test]
+fn a_press_while_a_buzz_is_judged_does_not_hide_the_next_one_as_the_round_goes_on() {
+    let backend = FakeBackend::default();
+    // A long repeat gap, so that the next report comes within it.
+    let (handle, rx) = start_303s(&backend, ReceiverConfig { repeat_gap_ms: 5_000, ..config() });
+    // Under rules before version 8 the round goes on after a wrong buzz: a
+    // team pressed while the buzz was judged (the game did not take it)...
+    set_mode_now(&handle, &backend, &rx, BuzzerMode::Buzzed);
+    backend.0.lock().unwrap().inbox.push_back(buzz_303s(5, 30));
+    wait_for(&rx, |e| matches!(e, ReceiverEvent::Press { press, .. } if press.buzzer == 5));
+    // ...and again, in the next report, as the round went on (BF115). No
+    // report between them (`set_mode_now` sends one): the thread takes the
+    // mode within a read's timeout.
+    handle.set_mode(BuzzerMode::FastestFinger);
+    std::thread::sleep(Duration::from_millis(200));
+    backend.0.lock().unwrap().inbox.push_back(buzz_303s(5, 8));
+    let ReceiverEvent::Press { press, .. } = wait_for(&rx, |e| matches!(e, ReceiverEvent::Press { .. })) else { unreachable!() };
+    assert_eq!(press, Press::timed(5, Button::Big, 8));
+    handle.shutdown();
+}
+
+#[test]
 fn reconnecting_to_an_enjoy_303s_in_use_sets_it_up_again_and_a_press_says_it_is_open() {
     let backend = FakeBackend::default();
     let (handle, rx) = start_303s(&backend, config());

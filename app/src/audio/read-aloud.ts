@@ -6,7 +6,7 @@
 
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { api } from "../api";
-import { useDispatch } from "../app-context";
+import { useDispatch, useReport } from "../app-context";
 import { ANSWER_LETTERS } from "../answers";
 import { DEFAULT_QUIZ_SETTINGS, DEFAULT_QUIZ_SOUNDS, FIRST_MALE_VOICE, MAX_VOICE } from "../bindings/Constants";
 import { useLatest, usePlayerVolume } from "../hooks";
@@ -146,13 +146,16 @@ export function setVoiceModel(model: VoiceModel) {
 }
 
 export function useVoiceModel(): VoiceModel | null {
+  const report = useReport();
   useEffect(() => {
     if (askedModel) return;
     askedModel = true;
-    api.voiceModel().then(setVoiceModel, () => {
+    // Asked again by the next window or tab that needs it.
+    api.voiceModel().then(setVoiceModel, (error: unknown) => {
       askedModel = false;
+      report(error);
     });
-  }, []);
+  }, [report]);
   return useStore(voiceModel);
 }
 
@@ -341,10 +344,13 @@ export function soundsItself(slide: Slide): boolean {
 /**
  * Reads the question on screen out when it comes on, as the quiz's
  * settings say, as loud as the show's effects; a buzz, the question's end
- * or its answer stops it, and so does leaving the slide.
+ * or its answer stops it, and so does leaving the slide. The settings come
+ * with the view (`GameView.settings`), as `controls.readingDone` does: the
+ * quiz itself loads after a resumed show's first view, and only gives the
+ * effects' volume.
  */
 export function useReadAloud(view: GameView | null, quiz: Quiz | null): ReadAloudControl {
-  const settings = quiz ? settingsOf(quiz) : null;
+  const settings = view?.settings ?? null;
   const what = settings?.readAloud ?? "off";
   const slide = view?.slide ?? null;
   const line = settings ? voiceLine(slide, settings) : null;
