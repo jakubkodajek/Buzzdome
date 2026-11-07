@@ -89,6 +89,7 @@
     "allow-receiver-udev-rule",
     "allow-lights-info",
     "allow-lights-store",
+    "allow-lights-check-change",
     "allow-lights-devices",
     "allow-lights-library",
     "allow-lights-library-info",

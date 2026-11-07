@@ -2088,14 +2088,18 @@ change what a replay does.
   held until the lights have the setup, so the last kept is the one used),
   keeps the quizmaster's blackout and held look in `lights-live.json`
   (`lights_hold`, `lights_blackout`), which the lights take again at
-  the next start, so a restart or crash does not light a blacked-out room,
+  the next start, so a restart or crash does not light a blacked-out room
+  (a held look the setup no longer has is let go of when the setup is kept
+  and at start, as look ids are reused),
   and tells the lights thread what the show did: after every show change and
   every tick of the show thread it queues the cues of the change's effects,
   then the stage, slide and buzz, only when they changed. Sending is a
   channel push; the show thread never waits.
 - The Director's Lights tab (`app/src/director/LightsTab.tsx`, changes as
   pure functions in `lights.ts`) keeps a change 400 ms after the last one
-  and polls the universe for its preview four times a second.
+  and polls the universe for its preview four times a second. Before it
+  offers to remove a fixture it asks `lights_check_change`, which judges
+  the change against the setup kept, as `lights_store` will.
 
 ### 7.2 Lights thread
 

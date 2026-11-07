@@ -1021,6 +1021,8 @@ mockIPC(
         const host = [setup.output.kind === "artNet" || setup.output.kind === "sacn" ? setup.output.host : null, setup.messages.osc?.host].find((h) => h && /[a-z]/i.test(h));
         return host ? Promise.reject({ code: "lightsRefused", refused: { problem: "notIpv4", host } }) : null;
       }
+      case "lights_check_change":
+        return null;
       case "lights_universe": {
         // The first fixture in the "Question" blue, the second in red.
         const slots = new Array<number>(512).fill(0);

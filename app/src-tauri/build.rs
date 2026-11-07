@@ -83,6 +83,7 @@ const COMMANDS: &[&str] = &[
     "receiver_udev_rule",
     "lights_info",
     "lights_store",
+    "lights_check_change",
     "lights_devices",
     "lights_library",
     "lights_library_info",

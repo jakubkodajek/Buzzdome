@@ -173,6 +173,8 @@ export const api = {
   lightsInfo: () => invoke<LightsInfo>("lights_info"),
   /** Checks and keeps the lights setup, then the lights take it. */
   lightsStore: (setup: LightsSetup) => invoke<void>("lights_store", { setup }),
+  /** Refuses `setup` as `lightsStore` would as a change from the setup kept, keeping nothing. */
+  lightsCheckChange: (setup: LightsSetup) => invoke<void>("lights_check_change", { setup }),
   /** The USB-DMX interfaces and MIDI outputs on this computer. */
   lightsDevices: () => invoke<LightsDevices>("lights_devices"),
   /** The fixture models of the built-in library whose names hold every word of `query`. */

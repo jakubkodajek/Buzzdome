@@ -671,8 +671,9 @@ async fn end_show(app: AppHandle) -> CmdResult<()> {
 /// The commands the projector window may give: those its keys stand for
 /// (`commandForKey`, whose tests check it against this list in the
 /// bindings): `goTo` for Left and Page Up, which go back a slide where the
-/// show lets them (`Controls::go_to`). Scores, names and the other jumps
-/// are the Director's alone.
+/// show lets them (`Controls::go_to`), and only to `Game::previous`
+/// (`goes_back_only`). Scores, names and the other jumps are the Director's
+/// alone.
 const PROJECTOR_COMMANDS: [&str; 8] = ["press", "next", "judgeRight", "judgeWrong", "pauseClock", "resumeClock", "showLeaderboard", "goTo"];
 
 /// The buzzers the projector's keys press, 1 to 9 and 0 for 10, always
@@ -696,6 +697,17 @@ fn may_give(window: &str, command: &Command) -> bool {
     }
 }
 
+/// Whether a projector's `command` stays within its keys in the show as it
+/// stands: its `GoTo` only to the slide before (`Game::previous`), never a
+/// jump forwards that would show an answer early. Anything else `may_give`
+/// has judged.
+fn goes_back_only(game: Option<&Game>, command: &Command) -> bool {
+    match command {
+        Command::GoTo { slide } => game.and_then(Game::previous) == Some(*slide),
+        _ => true,
+    }
+}
+
 /// A window's command that moves the show on was meant for the step it
 /// showed (`seen`, `Game::step_no`), and the show has taken another since.
 fn step_gone(game: Option<&Game>, seen: Option<u32>) -> bool {
@@ -714,10 +726,14 @@ async fn dispatch(app: AppHandle, window: Window, command: Command, seen: Option
     if let Command::Press { buzzer, button } = command {
         return show_thread::press(&app, Press::new(buzzer, button));
     }
+    let projector = window.label() == app_windows::HOST_LABEL;
     show_thread::run(&app, move |app, inner, at_ms| {
         if step_gone(inner.game.as_ref(), seen) {
             emit_state(app, inner.game.as_ref());
             return Ok(());
+        }
+        if projector && !goes_back_only(inner.game.as_ref(), &command) {
+            return Err(AppError::NotFromProjector);
         }
         match command {
             // The names a show is given are the prepared ones, also kept on disk.
@@ -883,6 +899,7 @@ pub fn run() {
             hardware::receiver_udev_rule,
             stage_lights::lights_info,
             stage_lights::lights_store,
+            stage_lights::lights_check_change,
             stage_lights::lights_devices,
             fixture_library::lights_library,
             fixture_library::lights_library_info,
@@ -1251,6 +1268,21 @@ mod tests {
             assert!(may_give(app_windows::DIRECTOR_LABEL, command), "{command:?}");
             assert!(!may_give("editor", command), "a window the app does not know: {command:?}");
         }
+    }
+
+    #[test]
+    fn the_projector_goes_back_only_to_the_slide_before() {
+        let mut game = Game::new(Quiz::from_json(DEMO_QUIZ).unwrap());
+        let explanation = game.quiz().slides.iter().position(|slide| matches!(slide.content, quiz_core::SlideContent::Explanation { .. })).unwrap();
+        assert!(!goes_back_only(Some(&game), &Command::GoTo { slide: 0 }), "no slide before the lobby");
+        assert!(!goes_back_only(None, &Command::GoTo { slide: 0 }), "no show");
+        game.apply(&Stamped { at_ms: 1_000, command: Command::GoTo { slide: explanation } }).unwrap();
+        assert_eq!(game.previous(), Some(explanation - 1));
+        assert!(goes_back_only(Some(&game), &Command::GoTo { slide: explanation - 1 }));
+        for slide in [explanation + 1, game.quiz().slides.len() - 1, 0] {
+            assert!(!goes_back_only(Some(&game), &Command::GoTo { slide }), "a jump to {slide}");
+        }
+        assert!(goes_back_only(Some(&game), &Command::Next), "judged by `may_give`");
     }
 
     /// For the tests of the projector's keys: the commands typed as command
