@@ -224,20 +224,21 @@ const UPDATE_RECHECK_MS = 5 * 60_000;
  * The newer version of the app the update server offers; null when there is
  * none or until known. Until the server answers once, it is asked again
  * every few minutes and when the computer comes online (the backend keeps
- * the first answer, `update_check`).
+ * the first answer, `update_check`), but not while a show runs
+ * (`showRunning`): a show needs no network, and each try may wait and log.
  */
-export function useAvailableUpdate(): AvailableUpdate | null {
+export function useAvailableUpdate(showRunning: boolean): AvailableUpdate | null {
   const [update, reload] = useLoadedValue<AvailableUpdate | null | undefined>(api.updateCheck, undefined);
   const answered = update !== undefined;
   useEffect(() => {
-    if (answered) return;
+    if (answered || showRunning) return;
     const timer = setInterval(reload, UPDATE_RECHECK_MS);
     window.addEventListener("online", reload);
     return () => {
       clearInterval(timer);
       window.removeEventListener("online", reload);
     };
-  }, [answered, reload]);
+  }, [answered, reload, showRunning]);
   return update ?? null;
 }
 

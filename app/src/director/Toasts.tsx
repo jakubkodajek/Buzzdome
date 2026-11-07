@@ -28,15 +28,16 @@ interface Shown extends TonedNotice {
 }
 
 /**
- * The messages that stay when `shown` holds more than `MAX_TOASTS`: the
- * oldest that is not a failure makes way first, so a failure that stays
- * until closed (`toastMs`) is not pushed out by news; only failures alone
- * push out the oldest failure.
+ * The messages that stay when `shown` holds more than `MAX_TOASTS`. The
+ * newest (last) always stays, so a message is seen however many failures
+ * are open; of the others, the oldest that is not a failure makes way
+ * first, so a failure that stays until closed (`toastMs`) is not pushed
+ * out by news, and else the oldest failure.
  */
 export function trimToasts<T extends TonedNotice>(shown: T[], max = MAX_TOASTS): T[] {
   const kept = [...shown];
-  while (kept.length > max) {
-    const news = kept.findIndex((toast) => toast.tone !== "error");
+  while (kept.length > Math.max(max, 1)) {
+    const news = kept.slice(0, -1).findIndex((toast) => toast.tone !== "error");
     kept.splice(news === -1 ? 0 : news, 1);
   }
   return kept;

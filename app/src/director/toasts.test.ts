@@ -24,10 +24,18 @@ describe("trimToasts", () => {
     expect(trimToasts(shown.slice(0, 3))).toHaveLength(3);
   });
 
-  it("drops the oldest failure only when only failures are left", () => {
+  it("drops the oldest failure only when only failures are left before the newest", () => {
     const shown = [toast("error", "A"), toast("error", "B"), toast("error", "C"), toast("error", "D")];
     expect(trimToasts(shown).map((t) => t.text)).toEqual(["B", "C", "D"]);
     const newest = [toast("error", "A"), toast("error", "B"), toast("error", "C"), toast("info", "Saved")];
-    expect(trimToasts(newest).map((t) => t.text)).toEqual(["A", "B", "C"]);
+    expect(trimToasts(newest).map((t) => t.text)).toEqual(["B", "C", "Saved"]);
+    const caution = [toast("error", "A"), toast("error", "B"), toast("error", "C"), toast("warn", "Receiver stopped")];
+    expect(trimToasts(caution).map((t) => t.text)).toEqual(["B", "C", "Receiver stopped"]);
+  });
+
+  it("never drops the newest message", () => {
+    const shown = [toast("error", "A"), toast("info", "Saved"), toast("error", "B"), toast("info", "Copied"), toast("warn", "Partly")];
+    expect(trimToasts(shown).map((t) => t.text)).toEqual(["A", "B", "Partly"]);
+    expect(trimToasts(shown, 1).map((t) => t.text)).toEqual(["Partly"]);
   });
 });
