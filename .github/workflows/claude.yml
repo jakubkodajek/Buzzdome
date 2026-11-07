@@ -2,7 +2,10 @@
 # repository variable ENABLE_CLAUDE is "true"; needs the Claude GitHub App
 # (https://github.com/apps/claude) and the ANTHROPIC_API_KEY (or
 # CLAUDE_CODE_OAUTH_TOKEN) secret. Only the repository owner can trigger it,
-# as the repository is public. Docs: https://code.claude.com/docs/en/github-actions
+# so nobody else spends the key or the limited Actions minutes. It may read a
+# PR's code but not build or run it (a PR's build.rs, Makefile or npm scripts
+# would run with the key and a write token), and the action is pinned to a
+# commit. Docs: https://code.claude.com/docs/en/github-actions
 name: Claude Code
 
 on:
@@ -35,7 +38,8 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 1
-      - uses: anthropics/claude-code-action@v1
+      - uses: anthropics/claude-code-action@61a9c274fa7110a66dfafc1bbbced03833eb25fe # v1.0.269
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          claude_args: "--max-turns 30"
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          claude_args: '--max-turns 30 --disallowedTools "Bash(make:*)" "Bash(cargo:*)" "Bash(npm:*)" "Bash(npx:*)" "Bash(node:*)" "Bash(python3:*)" "Bash(python:*)"'

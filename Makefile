@@ -1,5 +1,7 @@
-# One entry point for people, agents and CI. Each target runs the commands
-# listed in AGENTS.md (Commands), in the order CI's `check` job runs them.
+# One entry point for people and agents. Each target runs the commands listed
+# in AGENTS.md (Commands). `check` runs the steps of build.yml's `check` job
+# (UI built before Rust, bindings regenerated from an empty folder, voice
+# libraries checked); keep the two in step when either changes.
 .PHONY: help setup voice-libs lint ui-build test bindings check agents e2e soak dev preview layout
 
 # Rust on Jakub's Mac comes from Homebrew's keg-only rustup.
@@ -21,15 +23,18 @@ setup: voice-libs ## Install the UI as locked and fetch the voice libraries
 voice-libs: ## Fetch and check the sherpa-onnx libraries (once per machine)
 	.github/scripts/sherpa-onnx-libs.sh .
 
-lint: ## ESLint (UI) and clippy (Rust), warnings are errors
+lint: ui-build ## ESLint (UI) and clippy (Rust), warnings are errors
 	cd app && npm run lint
 	cargo clippy --workspace --all-targets -- -D warnings
 
 ui-build: ## Type-check and build the UI (Tauri embeds it, so Rust needs it first)
 	cd app && npm run build
 
+# The tests write the TypeScript bindings (ts-rs). Like CI, they start from
+# an empty folder, so a type removed in Rust is noticed too.
 test: ui-build ## vitest, then the Rust workspace (also rewrites app/src/bindings)
 	cd app && npm test
+	rm -r -f app/src/bindings
 	cargo test --workspace
 
 bindings: ## Fail if app/src/bindings differs from what the Rust types generate
@@ -38,7 +43,7 @@ bindings: ## Fail if app/src/bindings differs from what the Rust types generate
 	  echo "app/src/bindings is out of date: commit what cargo test --workspace wrote."; exit 1; \
 	fi
 
-check: agents lint test bindings ## Everything CI's check job runs, plus the agent config
+check: agents voice-libs lint test bindings ## The steps of CI's check job (build.yml), plus the agent config
 
 agents: ## Generated Codex/Copilot agent files are in sync with .claude/
 	python3 scripts/sync_agents.py --check

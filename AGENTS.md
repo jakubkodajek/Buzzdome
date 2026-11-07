@@ -190,10 +190,10 @@ UI conventions (keep one way of doing each thing):
   official 303S kit (Jakub's, 2026-10-21) and that copy (`docs/design.md`
   2.4). No file or code from either goes into the repository.
 - Never commit the reference manual copies or any vendor SDK file. The
-  manual copies are every path `.gitignore` lists for it: `docs/`
-  subfolders, `docs/index.md`, `docs/solo.md`, `docs/tips-and-tricks.md`,
+  manual copies are every path `.gitignore` lists for it: the `docs/`
+  subfolders except our `docs/adr/`, `docs/index.md`, `docs/solo.md`, `docs/tips-and-tricks.md`,
   `replica/sources/` and `replica/screens/`. They are not our docs; never
-  quote them into ours (`.claude/hooks/protect-files.sh` refuses edits there).
+  quote them into ours (`.claude/hooks/protect_files.py` refuses edits there).
 - No trademarked names in the product or UI: not QuizXpress, Jeopardy!, Who Wants to
   Be a Millionaire?, Family Feud or Wheel of Fortune. Use generic names
   ("topic board", "ladder round", "survey round").

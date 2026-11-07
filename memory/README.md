@@ -14,7 +14,8 @@ sessions, tools (Claude Code, Codex, Copilot) and people.
 
 ## Rules
 
-- Keep always-loaded files short (target < 100 lines each). Long instruction files
+- Keep the memory files loaded every session short (target < 100 lines each;
+  `AGENTS.md` holds the project's rules and is longer by design). Long instruction files
   reduce adherence (Claude Code docs, "How Claude remembers your project":
   https://code.claude.com/docs/en/memory).
 - Facts that only matter for part of the code belong in `.claude/rules/` with `paths:`

@@ -171,11 +171,15 @@ own sandbox and approval settings.
   (`make layout`) is the one Playwright script kept in the repository.
 - **The real app:** `make e2e` on Linux (WebDriver through `tauri-driver`);
   Windows E2E only on CI.
-- **Hooks** (`.claude/hooks/`): `guard-bash.sh` blocks destructive commands,
-  force pushes, release tags, force-adding ignored files and printing
-  secrets; `protect-files.sh` blocks edits to secrets, lockfiles,
-  `app/src/bindings`, generated agent copies and the reference manual
-  copies. They need `jq` or `python3`.
+- **Hooks** (`.claude/hooks/`): a speed bump, not a sandbox.
+  `guard_bash.py` reads the words of each command and blocks destructive
+  deletes, force pushes, pushing tags, making releases, force-adding ignored
+  files and piping a download into a shell; `protect_files.py` blocks edits
+  to secrets, lockfiles, `app/src/bindings`, generated agent copies and the
+  reference manual copies. Both need `python3` and block the call without
+  it. `test_hooks.py` lists what each must block and let through (CI runs
+  it). The real guards are CI's checks, `.gitignore` and the `release`
+  environment's approval.
 - **Cost control:** multi-agent runs use many more tokens than one chat
   (Anthropic measured about 15x for its research system,
   https://www.anthropic.com/engineering/multi-agent-research-system), and

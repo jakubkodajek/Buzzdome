@@ -20,9 +20,10 @@
 - Subagents start with an empty context: when you delegate, pass the task
   slug, the files involved, the acceptance criteria and which `buzzdome-*`
   skill applies.
-- Hooks in `.claude/settings.json` block dangerous shell commands, pushing a
-  release tag, and edits to secrets, lockfiles, generated bindings and the
-  reference manual copies. If a hook blocks you, do not work around it; ask
-  Jakub.
+- Hooks in `.claude/settings.json` are a speed bump against dangerous shell
+  commands, pushing a tag, and edits to secrets, lockfiles, generated
+  bindings and the reference manual copies. If one blocks you, do not work
+  around it: rephrase if it misread a harmless command (and add the case to
+  `.claude/hooks/test_hooks.py`), otherwise ask Jakub.
 - Read the latest entries of `memory/progress.md` at the start of a session
   to pick up where the previous one stopped.
