@@ -670,8 +670,10 @@ async fn end_show(app: AppHandle) -> CmdResult<()> {
 
 /// The commands the projector window may give: those its keys stand for
 /// (`commandForKey`, whose tests check it against this list in the
-/// bindings). Scores, names and jumps are the Director's alone.
-const PROJECTOR_COMMANDS: [&str; 7] = ["press", "next", "judgeRight", "judgeWrong", "pauseClock", "resumeClock", "showLeaderboard"];
+/// bindings): `goTo` for Left and Page Up, which go back a slide where the
+/// show lets them (`Controls::go_to`). Scores, names and the other jumps
+/// are the Director's alone.
+const PROJECTOR_COMMANDS: [&str; 8] = ["press", "next", "judgeRight", "judgeWrong", "pauseClock", "resumeClock", "showLeaderboard", "goTo"];
 
 /// The buzzers the projector's keys press, 1 to 9 and 0 for 10, always
 /// with the big button (`commandForKey`).
@@ -754,6 +756,7 @@ pub fn run() {
         .on_menu_event(app_windows::on_menu_event)
         .manage(inner.close_request.clone())
         .manage(editor::EditorLock::default())
+        .manage(editor::UnkeptEdits::default())
         .manage(updates::Updates::default())
         .manage(AppState(Mutex::new(inner)))
         .setup(|app| {
@@ -863,6 +866,7 @@ pub fn run() {
             ai::ai_connect,
             ai::ai_server_config,
             ai::ai_set_instructions,
+            ai::ai_instructions_unsaved,
             hardware::receiver_info,
             hardware::receiver_devices,
             hardware::receiver_select,
@@ -1210,14 +1214,22 @@ mod tests {
     #[test]
     fn the_projector_may_give_only_what_its_keys_stand_for() {
         let press = Command::Press { buzzer: 3, button: quiz_core::Button::Big };
-        let keys = [press, Command::Next, Command::JudgeRight, Command::JudgeWrong, Command::PauseClock, Command::ResumeClock, Command::ShowLeaderboard { visible: true }];
+        let keys = [
+            press,
+            Command::Next,
+            Command::JudgeRight,
+            Command::JudgeWrong,
+            Command::PauseClock,
+            Command::ResumeClock,
+            Command::ShowLeaderboard { visible: true },
+            Command::GoTo { slide: 2 },
+        ];
         for command in &keys {
             assert!(may_give(app_windows::HOST_LABEL, command), "{command:?}");
         }
         let directors = [
             Command::AdjustScore { buzzer: 3, delta: 100 },
             Command::SetTeams { names: vec!["A".into()] },
-            Command::GoTo { slide: 2 },
             Command::GoToFinal,
             Command::StartOver,
             Command::ResetScores,

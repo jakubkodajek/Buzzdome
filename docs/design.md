@@ -142,7 +142,7 @@ draws slides without a show.
 | `receiver-remote` | `RemoteKeyAction` | a key of the quizmaster's remote was pressed, with what it does (the Director does it, `commandForRemote`) |
 | `host-window` | bool | the projector window opened or closed (also from its title bar) |
 | `host-problem` | `HostProblem` | the projector met a problem, worded for the Director to show (text, and detail under it) |
-| `close-requested` | none | the quizmaster closed the Director or quit during a show (the Director asks, then `quit_app` or `close_declined`) |
+| `close-requested` | `CloseReason` | the quizmaster closed the Director or quit while something would be left behind: a show runs, the editor's quiz has unsaved changes (also a write of them under way or failed, `UnkeptEdits`), or the AI instructions do (`ai_instructions_unsaved`); the Director asks, naming all that hold, then `quit_app` or `close_declined` |
 | `show-not-saved` | `AppError` or null | the running show's journal refused a write, or works again |
 | `teams-changed` | string list | the prepared team names changed, or a show started or ended |
 | `media-library`, `sound-board` | `MediaLibrary`, `SoundBoard` | the media player's library or pads changed |
@@ -205,8 +205,12 @@ draws slides without a show.
   keys and on-screen buzzers alike, are never given up: they wait in the
   queue and count by their time once the write finishes.
 - **Windows.** `app_windows.rs` keeps both windows through a show. Closing
-  the Director during a show asks first (`close-requested`), and the app
-  ends with the Director, so a full-screen projector is never left alone.
+  the Director during a show, with unsaved changes in the editor or to the
+  AI instructions asks first (`close-requested` with every `CloseReason`
+  that holds), and the app ends with the Director, so a full-screen
+  projector is never left alone. With an unsaved quiz and no show the
+  question offers Save, Don't save and Cancel (`close-app.ts`); during a
+  show it only says that the draft stays, since the editor cannot save then.
   The question is asked above the Director's screen (`App.tsx`), so it
   comes even when the screen failed to render. A second close in the next
   10 s adds no dialog. A Director that does not answer within 10 s (its
@@ -226,7 +230,8 @@ draws slides without a show.
   Director is not on, and full screen over the Director only when chosen
   there. The monitors are listed when it opens, so one plugged in late
   counts; a monitor is known by its name and position (`MonitorInfo.id`).
-  M and Esc close the projector from itself.
+  M and Esc close the projector from itself, but during a show only Esc
+  pressed twice within 2 s does, and M does nothing there.
 - **Pages.** The windows stay on the app's own pages: a navigation guard
   (`app_windows::navigation_guard`) refuses every other URL, and
   `browser-guard.ts` takes the web view's own keys (reload, back, find,

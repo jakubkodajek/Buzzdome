@@ -18,6 +18,7 @@ use quiz_file::FileAction;
 use serde::Serialize;
 use std::io;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use tauri::{AppHandle, Manager, State, Window};
 use ts_rs::TS;
@@ -48,6 +49,10 @@ pub fn serve_mcp_if_asked(version: &str, identifier: &str) {
 pub struct SavedAiSettings {
     file: Mutex<AppFile>,
     settings: Mutex<AiSettings>,
+    /// The editor's AI assistants page has changes to the instructions
+    /// that it has not kept (`ai_instructions_unsaved`), which closing
+    /// the app would lose.
+    instructions_unsaved: AtomicBool,
 }
 
 impl SavedAiSettings {
@@ -56,7 +61,12 @@ impl SavedAiSettings {
         if let Some(lost) = file.lost() {
             app_log::note(&format!("AI settings not read: {} (kept as {:?})", lost.detail, lost.kept_as));
         }
-        SavedAiSettings { file: Mutex::new(file), settings: Mutex::new(settings) }
+        SavedAiSettings { file: Mutex::new(file), settings: Mutex::new(settings), instructions_unsaved: AtomicBool::new(false) }
+    }
+
+    /// Whether the page has changes to the instructions it has not kept.
+    pub fn instructions_unsaved(&self) -> bool {
+        self.instructions_unsaved.load(Ordering::Relaxed)
     }
 
     fn get(&self) -> AiSettings {
@@ -196,6 +206,14 @@ pub async fn ai_server_config(app: AppHandle, language: Language) -> CmdResult<S
 #[tauri::command]
 pub async fn ai_set_instructions(state: State<'_, SavedAiSettings>, instructions: String, language: Language) -> CmdResult<()> {
     state.change(|settings| settings.set_instructions(&instructions, language)).map(drop)
+}
+
+/// The AI assistants page has changes to the instructions that are not
+/// kept (`unsaved`), or no longer: closing the app asks first while it has
+/// (`app_windows::CloseReason`). The page keeps its changes in memory only.
+#[tauri::command]
+pub fn ai_instructions_unsaved(state: State<SavedAiSettings>, unsaved: bool) {
+    state.instructions_unsaved.store(unsaved, Ordering::Relaxed);
 }
 
 /// Whether an AI app runs this app's server, which it keeps running in the
