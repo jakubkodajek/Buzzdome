@@ -77,6 +77,8 @@ const recentGone = params.get("recent") === "gone";
 const update = params.get("update");
 /** `slide`: the fourth slide has no answers list, so it fails to render; `view`: the show's view has no players, so the Director's screen does. */
 const broken = params.get("broken");
+/** `refused`: the backend refuses every lights setup the Lights tab stores. */
+const lightsStore = params.get("lights");
 /** The slides, the fourth broken when asked (`broken`). */
 const maybeBroken = (slides: Quiz["slides"]): Quiz["slides"] =>
   broken === "slide" ? slides.map((slide, i) => (i === 3 ? ({ ...slide, answers: null } as unknown as Quiz["slides"][number]) : slide)) : slides;
@@ -863,6 +865,9 @@ mockIPC(
         };
       case "lights_info":
         return { setup: LIGHTS_SETUP, status: { output: { kind: "connected", name: "Art-Net 255.255.255.255" }, messages: null, look: 2, hold: null, blackout: false }, settingsError: null, refused: null };
+      case "lights_store":
+        called.push({ cmd, ...(payload as object) });
+        return lightsStore === "refused" ? Promise.reject({ code: "lightsRefused", refused: { problem: "pastUniverse", name: "Par vlevo" } }) : null;
       case "lights_universe": {
         // The first fixture in the "Question" blue, the second in red.
         const slots = new Array<number>(512).fill(0);

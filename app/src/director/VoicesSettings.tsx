@@ -55,6 +55,8 @@ export function VoicesSettings({ showRunning }: { showRunning: boolean }) {
     if (done)
       return t("voicesDownloading", {
         percent: Math.floor((100 * done.received) / done.total),
+        received: diskSize(done.received),
+        total: diskSize(done.total),
       });
     return t(model?.installed ? "voicesInstalled" : "voicesNotInstalled");
   };

@@ -1,11 +1,18 @@
 import { describe, expect, it } from "vitest";
-import { calendarDay, decibels, fileName, minutesAndSeconds, parseTrackTime, scoreDigits, signed, trackTime } from "./format";
+import { calendarDay, decibels, fileName, minutesAndSeconds, parseTrackTime, scoreDigits, signed, timeOfDay, trackTime } from "./format";
 
 describe("format", () => {
   it("writes a day as each language does", () => {
     const day = Date.UTC(2026, 9, 26, 12);
     expect(calendarDay(day, "cs")).toBe("26. 10. 2026");
     expect(calendarDay(day, "en")).toBe("26/10/2026");
+  });
+
+  it("writes a time of day in either language to the second, on a 24-hour clock", () => {
+    const morning = new Date(2026, 9, 26, 9, 7, 5).getTime();
+    const evening = new Date(2026, 9, 26, 21, 47, 50).getTime();
+    expect([timeOfDay(morning, "cs"), timeOfDay(evening, "cs")]).toEqual(["09:07:05", "21:47:50"]);
+    expect([timeOfDay(morning, "en"), timeOfDay(evening, "en")]).toEqual(["09:07:05", "21:47:50"]);
   });
 
   it("writes scores", () => {

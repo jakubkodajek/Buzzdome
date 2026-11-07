@@ -2,7 +2,8 @@ import { useCallback, useEffect, useState } from "react";
 import { BUTTONS, buttonLabel } from "../answers";
 import { api } from "../api";
 import { useApp, useRun } from "../app-context";
-import { useBackendEvent, useLearnProgress } from "../hooks";
+import { timeOfDay } from "../format";
+import { useBackendEvent, useGameView, useLearnProgress } from "../hooks";
 import type { Translate } from "../i18n";
 import { CrossIcon } from "../icons";
 import { awaitsAnswer, errorNotice, hex4, receiverStatusText, REMOTE_ACTIONS, remoteActionText, remoteKeyText, settingsLostNotice, vidPid } from "../messages";
@@ -30,8 +31,10 @@ const stateClass = (status: ReceiverStatus | null) => {
  * do and the buzzers' colours, watch its raw data, teach buttons.
  */
 export function ReceiverTab() {
-  const { t } = useApp();
+  const { t, lang, notify, fail } = useApp();
   const run = useRun();
+  // The backend refuses to forget learned buttons in a show, and learning would mute its presses.
+  const showRunning = useGameView() !== null;
   const [info, setInfo] = useState<ReceiverInfo | null>(null);
   const [status, setStatus] = useState<ReceiverStatus | null>(null);
   const [devices, setDevices] = useState<DeviceInfo[]>([]);
@@ -93,8 +96,10 @@ export function ReceiverTab() {
   const teaches = status?.kind !== "connected" || status.learnable;
 
   const setRemoteAction = (key: RemoteKey, action: RemoteAction) => run(api.receiverSetRemoteAction(key, action).then(reload));
+  const resetRemote = () => run(confirmAction(t, t("remoteKeysResetConfirm")).then((yes) => (yes ? api.receiverResetRemote().then(reload) : undefined)));
 
-  const exportLog = () => run(api.receiverExportLog({ filter: t("textFile"), fileName: "receiver-log" }));
+  const exportLog = () => run(api.receiverExportLog({ filter: t("textFile"), fileName: "receiver-log" }).then((saved) => saved && notify(t("receiverLogSaved"))));
+  const copyUdev = () => run(navigator.clipboard.writeText(udev).then(() => notify(t("copied")), () => fail(t("notCopied"))));
 
   const finishLearn = async () => {
     try {
@@ -139,7 +144,7 @@ export function ReceiverTab() {
           <details>
             <summary>{t("linuxAccess")}</summary>
             <pre className="code">{udev}</pre>
-            <button onClick={() => navigator.clipboard.writeText(udev)}>{t("copy")}</button>
+            <button onClick={copyUdev}>{t("copy")}</button>
           </details>
         )}
       </fieldset>
@@ -153,7 +158,7 @@ export function ReceiverTab() {
               <li key={b.buzzer} className={b.buzzer === latest ? "latest" : ""}>
                 <strong>{b.buzzer}</strong>
                 <span>{buttonLabel(b.button)}</span>
-                <span className="muted">{new Date(b.atMs).toLocaleTimeString()}</span>
+                <span className="muted">{timeOfDay(b.atMs, lang)}</span>
               </li>
             ))}
           </ul>
@@ -186,7 +191,7 @@ export function ReceiverTab() {
         <div className="row">
           {pressedKey && <span>{t("remoteKeyPressed", { key: remoteKeyText(t, pressedKey) })}</span>}
           <span className="spacer" />
-          <button onClick={() => run(api.receiverResetRemote().then(reload))}>{t("remoteKeysReset")}</button>
+          <button onClick={resetRemote}>{t("remoteKeysReset")}</button>
         </div>
       </fieldset>
 
@@ -228,7 +233,13 @@ export function ReceiverTab() {
                       </button>
                     </>
                   ) : (
-                    <button onClick={() => run(api.receiverSelect(d).then(reload))}>{t("useReceiver")}</button>
+                    <button
+                      disabled={isKeyboardOrMouse(d)}
+                      title={isKeyboardOrMouse(d) ? t("devicesHint") : undefined}
+                      onClick={() => run(api.receiverSelect(d).then(reload))}
+                    >
+                      {t("useReceiver")}
+                    </button>
                   )}
                 </td>
               </tr>
@@ -279,7 +290,8 @@ export function ReceiverTab() {
                 </select>
               </label>
               <button
-                disabled={!connected}
+                disabled={!connected || showRunning}
+                title={showRunning ? t("learnDuringShow") : connected ? undefined : t("learnNeedsReceiver")}
                 onClick={() => {
                   setLearnt(null);
                   run(api.receiverLearnStart(buzzer, button));
@@ -289,13 +301,15 @@ export function ReceiverTab() {
               </button>
               <span className="spacer" />
               <button
-                disabled={!info?.learnedButtons}
+                disabled={!info?.learnedButtons || showRunning}
+                title={showRunning ? t("learnDuringShow") : undefined}
                 onClick={() => run(confirmAction(t, t("learnForgetConfirm")).then((yes) => (yes ? api.receiverForgetLearned().then(reload) : undefined)))}
               >
                 {t("learnForget")}
               </button>
             </div>
           )}
+          {!learn?.active && (showRunning ? <p className="muted">{t("learnDuringShow")}</p> : !connected && <p className="muted">{t("learnNeedsReceiver")}</p>)}
           {learnt && <NoticeBox notice={learnt} tone={learnt.tone} />}
         </fieldset>
       )}
@@ -311,9 +325,10 @@ export function ReceiverTab() {
           <div>
             <h4>{t("presses")}</h4>
             <ul className="log">
+              {presses.length === 0 && <li className="muted">{t("noPresses")}</li>}
               {presses.map((p, i) => (
                 <li key={i} className={p.used ? "used" : ""}>
-                  {new Date(p.at).toLocaleTimeString()} · {pressLabel(t, p.press)}
+                  {timeOfDay(p.at, lang)} · {pressLabel(t, p.press)}
                   {p.used && ` · ${t("pressUsed")}`}
                 </li>
               ))}
@@ -322,6 +337,7 @@ export function ReceiverTab() {
           <div>
             <h4>{t("rawReports")}</h4>
             <ul className="log mono">
+              {raw.length === 0 && <li className="muted">{t("noRawReports")}</li>}
               {raw.map((r, i) => (
                 <li key={i}>
                   {hexBytes(r.bytes)}

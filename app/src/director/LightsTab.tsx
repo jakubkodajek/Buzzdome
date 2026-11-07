@@ -25,8 +25,9 @@ import {
 } from "../bindings/LightsConstants";
 import { ColorBox } from "../editor/ColorPicker";
 import { NumberBox, Select, Switch } from "../editor/controls";
+import { confirmAction } from "../confirm";
 import { calendarDay } from "../format";
-import { useLightsStatus } from "../hooks";
+import { useLatest, useLightsStatus } from "../hooks";
 import type { StringKey, Translate } from "../i18n";
 import { AddIcon, MinusIcon } from "../icons";
 import { errorNotice, outputErrorText, settingsLostNotice, setupErrorText, type Notice } from "../messages";
@@ -44,6 +45,8 @@ import {
   fixtureColor,
   followsLooks,
   formatChannelValues,
+  isIpv4,
+  lookUses,
   outputOfKind,
   overlapping,
   parseChannelValues,
@@ -56,6 +59,8 @@ import {
 const STORE_AFTER_MS = 400;
 /** How often the preview reads the channels. */
 const PREVIEW_EVERY_MS = 250;
+/** Room for every channel of the universe typed as "512=255, ". */
+const EXTRA_CHANNELS_CHARS = UNIVERSE_SIZE * 10;
 
 const OUTPUT_KINDS: [OutputChoice["kind"], StringKey][] = [
   ["none", "lightsOutputNone"],
@@ -117,31 +122,67 @@ export function LightsTab() {
   const [info, setInfo] = useState<LightsInfo | null>(null);
   const [setup, setSetup] = useState<LightsSetup | null>(null);
   const pending = useRef<{ setup: LightsSetup; timer: number } | null>(null);
+  // Whether the changes are kept: all of them, one is waiting, or the last store was refused and why.
+  const [stored, setStored] = useState<"kept" | "pending" | Notice>("kept");
+  // The setup the lights use: as loaded, or as last kept.
+  const kept = useRef<LightsSetup | null>(null);
+  // Counts the stores sent, so only the last one's answer is shown.
+  const sent = useRef(0);
 
   useEffect(() => {
     run(
       api.lightsInfo().then((loaded) => {
+        kept.current = loaded.setup;
         setInfo(loaded);
         setSetup(loaded.setup);
       }),
     );
   }, [run]);
 
-  // A setup kept is the one in use, so a setup refused at start no longer is the news.
-  const store = useCallback((next: LightsSetup) => run(api.lightsStore(next).then(() => setInfo((i) => i && { ...i, refused: null }))), [run]);
-  // A change still waiting is kept when the tab closes.
+  // The backend checks each setup whole and refuses it whole, so the lights keep the one before.
+  const store = useCallback(
+    (next: LightsSetup) => {
+      const number = ++sent.current;
+      const last = () => number === sent.current && !pending.current;
+      api.lightsStore(next).then(
+        () => {
+          kept.current = next;
+          // A setup kept is the one in use, so a setup refused at start no longer is the news.
+          setInfo((i) => i && { ...i, refused: null });
+          if (last()) setStored("kept");
+        },
+        (error: unknown) => {
+          if (last()) setStored(errorNotice(t, error));
+        },
+      );
+    },
+    [t],
+  );
+  // A change still waiting is kept when the tab closes; a refusal can then only be told by a toast.
+  const runLater = useLatest(run);
   useEffect(
     () => () => {
       if (pending.current) {
         window.clearTimeout(pending.current.timer);
-        store(pending.current.setup);
+        runLater.current(api.lightsStore(pending.current.setup));
+        pending.current = null;
       }
     },
-    [store],
+    [runLater],
   );
+
+  /** Drops the changes since the setup last kept, and any change still waiting. */
+  const backToKept = () => {
+    if (pending.current) window.clearTimeout(pending.current.timer);
+    pending.current = null;
+    sent.current++;
+    if (kept.current) setSetup(kept.current);
+    setStored("kept");
+  };
 
   const change = useCallback(
     (edit: (setup: LightsSetup) => LightsSetup) => {
+      setStored("pending");
       setSetup((current) => {
         if (!current) return current;
         const next = edit(current);
@@ -160,6 +201,15 @@ export function LightsTab() {
   if (!info || !setup) return <div className="lights" />;
   return (
     <div className="lights">
+      {typeof stored === "string" ? (
+        <p className="muted lights-stored" role="status">
+          {t(stored === "kept" ? "lightsStored" : "lightsStoring")}
+        </p>
+      ) : (
+        <NoticeBox notice={{ text: `${stored.text} ${t("lightsNotStored")}`, detail: stored.detail }}>
+          <button onClick={backToKept}>{t("lightsBackToStored")}</button>
+        </NoticeBox>
+      )}
       <LiveControl setup={setup} change={change} />
       {info.settingsError && (
         <NoticeBox notice={settingsLostNotice(t, t("lightsSettingsLost"), info.settingsError)} />
@@ -248,7 +298,7 @@ function OutputSection({ output, onChange }: { output: OutputChoice; onChange: (
           <>
             <label className="inline">
               <span>{t("lightsHost")}</span>
-              <TextBox label={t("lightsHost")} value={output.host} onChange={(host) => onChange({ ...output, host })} />
+              <HostBox label={t("lightsHost")} value={output.host} onChange={(host) => onChange({ ...output, host })} />
             </label>
             <label className="inline">
               <span>{t("lightsUniverse")}</span>
@@ -270,7 +320,7 @@ function OutputSection({ output, onChange }: { output: OutputChoice; onChange: (
             </label>
             <label className="inline">
               <span>{t("lightsSacnHost")}</span>
-              <TextBox label={t("lightsSacnHost")} value={output.host ?? ""} empty onChange={(host) => onChange({ ...output, host: host || null })} />
+              <HostBox label={t("lightsSacnHost")} value={output.host ?? ""} empty onChange={(host) => onChange({ ...output, host: host || null })} />
             </label>
           </>
         )}
@@ -304,41 +354,74 @@ function OutputSection({ output, onChange }: { output: OutputChoice; onChange: (
   );
 }
 
-/** A line of text, applied on Enter or when the field is left. Empty text is refused unless `empty`. */
-function TextBox({ value, onChange, label, empty = false }: { value: string; onChange: (text: string) => void; label: string; empty?: boolean }) {
+/**
+ * A line of text, applied on Enter or when the field is left; Esc goes back
+ * to the value. Empty text is refused unless `empty`, and other text unless
+ * it passes `check`: the field is marked while it does not, with `hint`
+ * as its tooltip, and goes back to the value when left.
+ */
+function TextBox(props: {
+  value: string;
+  onChange: (text: string) => void;
+  label: string;
+  empty?: boolean;
+  check?: (text: string) => boolean;
+  hint?: string;
+  placeholder?: string;
+  maxLength?: number;
+}) {
+  const { value, onChange, label, empty = false, check = () => true, hint, placeholder, maxLength = MAX_LIGHTS_NAME_CHARS * 4 } = props;
   const [text, setText] = useState(value);
   const [shown, setShown] = useState(value);
   if (value !== shown) {
     setShown(value);
     setText(value);
   }
+  const fits = (next: string) => (next === "" ? empty : check(next));
+  const invalid = text.trim() !== "" && !check(text.trim());
   const apply = () => {
     const next = text.trim();
     if (next === value) return;
-    if (next !== "" || empty) onChange(next);
+    if (fits(next)) onChange(next);
     else setText(value);
   };
   return (
     <input
       aria-label={label}
+      aria-invalid={invalid || undefined}
+      className={invalid ? "invalid" : undefined}
+      title={invalid ? hint : undefined}
       value={text}
-      maxLength={MAX_LIGHTS_NAME_CHARS * 4}
+      placeholder={placeholder}
+      maxLength={maxLength}
       onChange={(e) => setText(e.target.value)}
       onBlur={apply}
-      onKeyDown={(e) => e.key === "Enter" && apply()}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") apply();
+        else if (e.key === "Escape") setText(value);
+      }}
     />
   );
+}
+
+/** A host's IPv4 address, the only kind network outputs and OSC take (`isIpv4`). */
+function HostBox(props: { value: string; onChange: (host: string) => void; label: string; empty?: boolean }) {
+  const { t } = useApp();
+  return <TextBox {...props} check={isIpv4} hint={t("lightsHostIpv4")} />;
 }
 
 /** The fixtures: name, address and channels, each started from a preset. */
 function FixturesSection({ setup, change }: { setup: LightsSetup; change: Change }) {
   const { t } = useApp();
+  const run = useRun();
   const [preset, setPreset] = useState(FIXTURE_PRESETS[0].id);
   const clashes = overlapping(setup.fixtures);
   const add = () => {
     const channels = FIXTURE_PRESETS.find((p) => p.id === preset)?.channels ?? [];
     change((s) => addFixture(s, t("lightsNewFixture", { n: s.fixtures.length + 1 }), channels));
   };
+  const remove = (fixture: Fixture) =>
+    run(confirmAction(t, t("lightsRemoveFixtureConfirm", { name: fixture.name })).then((yes) => (yes ? change((s) => removeFixture(s, fixture.id)) : undefined)));
   return (
     <fieldset>
       <legend>{t("lightsFixtures")}</legend>
@@ -359,7 +442,7 @@ function FixturesSection({ setup, change }: { setup: LightsSetup; change: Change
           fixture={fixture}
           clash={clashes.has(fixture.id)}
           onChange={(edit) => change((s) => changeFixture(s, fixture.id, edit))}
-          onRemove={() => change((s) => removeFixture(s, fixture.id))}
+          onRemove={() => remove(fixture)}
         />
       ))}
     </fieldset>
@@ -454,7 +537,7 @@ const SEARCH_AFTER_MS = 250;
  * The library can be brought up to date from the internet, or set back to the built-in one.
  */
 function LibraryPicker({ disabled, onAdd }: { disabled: boolean; onAdd: (name: string, mode: LibraryMode) => void }) {
-  const { t, lang } = useApp();
+  const { t, lang, notify } = useApp();
   const run = useRun();
   const [query, setQuery] = useState("");
   const [found, setFound] = useState<LibraryMatches | null>(null);
@@ -476,10 +559,14 @@ function LibraryPicker({ disabled, onAdd }: { disabled: boolean; onAdd: (name: s
           setInfo(next);
           setModel(null);
           setBefore(update ? models : null);
+          if (update) notify(t("lightsLibraryUpdatedNotice", { models: next.models }));
         })
         .finally(() => setUpdating(false)),
     );
   };
+  // The downloaded library is deleted, and only the internet brings it back.
+  const reset = () =>
+    run(confirmAction(t, t("lightsLibraryResetConfirm")).then((yes) => (yes ? replace(api.lightsLibraryReset, false) : undefined)));
   useEffect(() => {
     if (query.trim() === "") return;
     // Searches run side by side: one that ends after the query changed is not shown.
@@ -573,7 +660,7 @@ function LibraryPicker({ disabled, onAdd }: { disabled: boolean; onAdd: (name: s
               {t(updating ? "lightsLibraryUpdating" : "lightsLibraryUpdate")}
             </button>
             {downloaded && (
-              <button disabled={updating} onClick={() => replace(api.lightsLibraryReset, false)}>
+              <button disabled={updating} onClick={reset}>
                 {t("lightsLibraryReset")}
               </button>
             )}
@@ -591,6 +678,14 @@ function LibraryPicker({ disabled, onAdd }: { disabled: boolean; onAdd: (name: s
 /** The looks: colours, intensity, effect, fade, which fixtures, extra channels; each can be held to try it. */
 function LooksSection({ setup, change }: { setup: LightsSetup; change: Change }) {
   const { t } = useApp();
+  const run = useRun();
+  // The stages and flashes that use the look lose it too, so the question names them.
+  const remove = (look: Look) => {
+    const { stages, cues } = lookUses(setup, look.id);
+    const uses = [...stages.map((stage) => stageText(t, stage)), ...cues.map((cue) => t(CUE_LABEL[cue]))];
+    const message = t("lightsRemoveLookConfirm", { name: look.name }) + (uses.length > 0 ? ` ${t("lightsRemoveLookUsed", { uses: uses.join(", ") })}` : "");
+    run(confirmAction(t, message).then((yes) => (yes ? change((s) => removeLook(s, look.id)) : undefined)));
+  };
   return (
     <fieldset>
       <legend>{t("lightsLooks")}</legend>
@@ -601,7 +696,7 @@ function LooksSection({ setup, change }: { setup: LightsSetup; change: Change })
           look={look}
           fixtures={setup.fixtures}
           onChange={(edit) => change((s) => changeLook(s, look.id, edit))}
-          onRemove={() => change((s) => removeLook(s, look.id))}
+          onRemove={() => remove(look)}
         />
       ))}
       <button disabled={setup.looks.length >= MAX_LOOKS} onClick={() => change((s) => addLook(s, t("lightsNewLook", { n: s.looks.length + 1 })))}>
@@ -617,7 +712,6 @@ function LookRow(props: { look: Look; fixtures: Fixture[]; onChange: (edit: Part
   const run = useRun();
   const status = useLightsStatus();
   const held = status?.hold === look.id;
-  const [channelsText, setChannelsText] = useState(formatChannelValues(look.channels));
   const toggleFixture = (id: number, on: boolean) => onChange({ fixtures: on ? [...look.fixtures, id] : look.fixtures.filter((f) => f !== id) });
   return (
     <div className="lights-item">
@@ -702,17 +796,15 @@ function LookRow(props: { look: Look; fixtures: Fixture[]; onChange: (edit: Part
       <div className="row">
         <label className="inline">
           <span>{t("lightsExtraChannels")}</span>
-          <input
-            aria-label={t("lightsExtraChannels")}
-            className={parseChannelValues(channelsText) ? undefined : "invalid"}
-            value={channelsText}
+          <TextBox
+            label={t("lightsExtraChannels")}
+            value={formatChannelValues(look.channels)}
+            empty
+            check={(text) => parseChannelValues(text) !== null}
+            hint={t("lightsExtraChannelsHint")}
             placeholder="100=255"
-            onChange={(e) => setChannelsText(e.target.value)}
-            onBlur={() => {
-              const channels = parseChannelValues(channelsText);
-              if (channels) onChange({ channels });
-              else setChannelsText(formatChannelValues(look.channels));
-            }}
+            maxLength={EXTRA_CHANNELS_CHARS}
+            onChange={(text) => onChange({ channels: parseChannelValues(text) ?? [] })}
           />
         </label>
         <span className="muted">{t("lightsExtraChannelsHint")}</span>
@@ -796,7 +888,18 @@ function MessagesSection({ setup, change }: { setup: LightsSetup; change: Change
   const [midiPorts, setMidiPorts] = useState<string[] | null>(null);
   const { osc, midi } = setup.messages;
   const setMessages = (edit: Partial<LightsSetup["messages"]>) => change((s) => ({ ...s, messages: { ...s.messages, ...edit } }));
-  const findPorts = () => run(api.lightsDevices().then((devices) => setMidiPorts(devices.midiPorts)));
+  const findPorts = () =>
+    api.lightsDevices().then((devices) => {
+      setMidiPorts(devices.midiPorts);
+      return devices.midiPorts;
+    });
+  // MIDI goes on with a port found, never with none: the backend refuses a setup without one.
+  const midiOn = () =>
+    run(
+      findPorts().then((ports) => {
+        if (ports[0] !== undefined) setMessages({ midi: { port: ports[0], channel: 1 } });
+      }),
+    );
   return (
     <fieldset>
       <legend>{t("lightsMessages")}</legend>
@@ -806,32 +909,34 @@ function MessagesSection({ setup, change }: { setup: LightsSetup; change: Change
         <span>{t("lightsOsc")}</span>
         {osc && (
           <>
-            <TextBox label={t("lightsHost")} value={osc.host} onChange={(host) => setMessages({ osc: { ...osc, host } })} />
-            <NumberBox label={t("lightsPort")} value={osc.port} min={1} max={65535} onChange={(port) => setMessages({ osc: { ...osc, port } })} />
+            <label className="inline">
+              <span>{t("lightsHost")}</span>
+              <HostBox label={t("lightsHost")} value={osc.host} onChange={(host) => setMessages({ osc: { ...osc, host } })} />
+            </label>
+            <label className="inline">
+              <span>{t("lightsPort")}</span>
+              <NumberBox label={t("lightsPort")} value={osc.port} min={1} max={65535} onChange={(port) => setMessages({ osc: { ...osc, port } })} />
+            </label>
           </>
         )}
       </div>
       <div className="row">
-        <Switch
-          label={t("lightsMidi")}
-          checked={midi !== null}
-          onChange={(on) => {
-            if (on) findPorts();
-            setMessages({ midi: on ? { port: midiPorts?.[0] ?? "", channel: 1 } : null });
-          }}
-        />
+        <Switch label={t("lightsMidi")} checked={midi !== null} onChange={(on) => (on ? midiOn() : setMessages({ midi: null }))} />
         <span>{t("lightsMidi")}</span>
         {midi && (
           <>
-            <span onFocus={() => midiPorts === null && findPorts()}>
+            <span onFocus={() => midiPorts === null && run(findPorts())}>
               <Select
                 label={t("lightsMidiPort")}
                 value={midi.port}
-                options={[...new Set([midi.port, ...(midiPorts ?? [])])].filter((port) => port !== "").map((port): [string, string] => [port, port])}
-                onChange={(port) => setMessages({ midi: { ...midi, port } })}
+                options={[
+                  ...(midi.port === "" ? [["", t("lightsMidiChoosePort")] as [string, string]] : []),
+                  ...[...new Set([midi.port, ...(midiPorts ?? [])])].filter((port) => port !== "").map((port): [string, string] => [port, port]),
+                ]}
+                onChange={(port) => port !== "" && setMessages({ midi: { ...midi, port } })}
               />
             </span>
-            <button onClick={findPorts}>{t("lightsFind")}</button>
+            <button onClick={() => run(findPorts())}>{t("lightsFind")}</button>
             <label className="inline">
               <span>{t("lightsMidiChannel")}</span>
               <NumberBox label={t("lightsMidiChannel")} value={midi.channel} min={1} max={16} onChange={(channel) => setMessages({ midi: { ...midi, channel } })} />
@@ -839,7 +944,7 @@ function MessagesSection({ setup, change }: { setup: LightsSetup; change: Change
           </>
         )}
       </div>
-      {midi && midiPorts?.length === 0 && <p className="muted">{t("lightsNoMidiPorts")}</p>}
+      {midiPorts?.length === 0 && <p className="muted">{t("lightsNoMidiPorts")}</p>}
       {midi && (
         <p className="muted">
           {t("lightsMidiNotes", { stage: FIRST_STAGE_NOTE, cue: FIRST_CUE_NOTE, start: SHOW_STARTED_NOTE, end: SHOW_ENDED_NOTE, buzz: BUZZ_NOTE })}
@@ -859,7 +964,11 @@ function Preview({ fixtures }: { fixtures: Fixture[] }) {
     const read = () =>
       api
         .lightsUniverse()
-        .then((next) => live && setSlots(next))
+        .then((next) => {
+          if (!live) return;
+          setSlots(next);
+          setFailed(null);
+        })
         .catch((e) => live && setFailed(errorNotice(t, e)));
     read();
     const timer = window.setInterval(read, PREVIEW_EVERY_MS);
