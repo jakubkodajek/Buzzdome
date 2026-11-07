@@ -20,7 +20,7 @@ show without training.
 "Almost identical" means the same screens, flows, scoring rules and buzzer
 behaviour. It does not mean the same code, wording, artwork, sounds, skins or
 example quizzes: those are rebuilt from the documented behaviour only
-(clean-room rule in `CLAUDE.md`). No trademarked product or format names
+(clean-room rule in `AGENTS.md`). No trademarked product or format names
 appear in the product.
 
 Later, users can add their own **plugins** (section 6) and their own

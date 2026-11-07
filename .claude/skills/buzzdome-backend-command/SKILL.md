@@ -12,7 +12,7 @@ shell. Every step below is needed, and tests check most of them.
    the UI derive `serde` and `ts_rs::TS` with `#[ts(export)]`. Game types
    belong in `crates/quiz-core`; shell-only types in `app/src-tauri/src`.
 2. **Command.** Write the `#[tauri::command]` in the module that owns the
-   state (see the module list in `CLAUDE.md`). A command that writes a
+   state (see the module list in `AGENTS.md`). A command that writes a
    file, lists USB devices or takes the show state is `async` and runs off
    the windows' thread. Never hold a lock while the disk works; take locks
    in the order in `docs/design.md` §1.1 (Threads).
@@ -37,6 +37,6 @@ shell. Every step below is needed, and tests check most of them.
    `app/src/dev/preview.tsx` so the browser preview keeps working.
 8. **Bindings and docs.** Run `cargo test --workspace` to write the
    bindings, then update `docs/design.md` (§1.1 event table, the module's
-   section) and `CLAUDE.md` if a new module was added.
+   section) and `AGENTS.md` and `docs/architecture.md` if a new module was added.
 
 Then run the `buzzdome-verify` skill.
