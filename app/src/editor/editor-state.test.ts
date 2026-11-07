@@ -35,6 +35,17 @@ describe("editor state", () => {
     expect(isUnsaved(opened(state))).toBe(false);
   });
 
+  it("starts a new undo step for typing on after a save, so undo comes back to the quiz as saved", () => {
+    let state = editorReducer(LOADING, { type: "loaded", draft: draft(false) });
+    state = editorReducer(state, { type: "edit", edit: { type: "setTitle", title: "Pub" }, merge: "title", at: 0 });
+    state = editorReducer(state, { type: "saved", quiz: opened(state).history.present, path: "/q.quiz" });
+    state = editorReducer(state, { type: "edit", edit: { type: "setTitle", title: "Pub 2026" }, merge: "title", at: 500 });
+    expect(isUnsaved(opened(state))).toBe(true);
+    state = editorReducer(state, { type: "undo" });
+    expect(opened(state).history.present.title).toBe("Pub");
+    expect(isUnsaved(opened(state))).toBe(false);
+  });
+
   it("takes the backend's problems only for the quiz as it is now", () => {
     let state = editorReducer(LOADING, { type: "loaded", draft: draft(false) });
     const before = opened(state).history.present;
