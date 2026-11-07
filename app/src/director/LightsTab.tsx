@@ -50,6 +50,7 @@ import {
   outputOfKind,
   overlapping,
   parseChannelValues,
+  lookLosingFixtures,
   removeFixture,
   removeLook,
   sameOutput,
@@ -440,7 +441,7 @@ function HostBox(props: { value: string; onChange: (host: string) => void; label
 
 /** The fixtures: name, address and channels, each started from a preset. */
 function FixturesSection({ setup, change }: { setup: LightsSetup; change: Change }) {
-  const { t } = useApp();
+  const { t, caution } = useApp();
   const run = useRun();
   const [preset, setPreset] = useState(FIXTURE_PRESETS[0].id);
   const clashes = overlapping(setup.fixtures);
@@ -448,8 +449,15 @@ function FixturesSection({ setup, change }: { setup: LightsSetup; change: Change
     const channels = FIXTURE_PRESETS.find((p) => p.id === preset)?.channels ?? [];
     change((s) => addFixture(s, t("lightsNewFixture", { n: s.fixtures.length + 1 }), channels));
   };
-  const remove = (fixture: Fixture) =>
+  // Said before asking, in the backend's words for the change it would refuse.
+  const remove = (fixture: Fixture) => {
+    const look = lookLosingFixtures(setup, fixture.id);
+    if (look) {
+      caution(t("lightsFixtureNotRemoved", { name: fixture.name, problem: setupErrorText(t, { problem: "lookLosesFixtures", look: look.name }) }));
+      return;
+    }
     run(confirmAction(t, t("lightsRemoveFixtureConfirm", { name: fixture.name }), t("lightsRemove")).then((yes) => (yes ? change((s) => removeFixture(s, fixture.id)) : undefined)));
+  };
   return (
     <fieldset>
       <legend>{t("lightsFixtures")}</legend>

@@ -99,6 +99,16 @@ export function removeFixture(setup: LightsSetup, id: number): LightsSetup {
   };
 }
 
+/**
+ * A look that lists only fixture `id` of the fixtures still there, which
+ * `removeFixture` would leave listing none, so lighting every fixture: the
+ * backend refuses that change (`LightsSetup::check_change`).
+ */
+export function lookLosingFixtures(setup: LightsSetup, id: number): Look | undefined {
+  const kept = (fixture: number) => fixture !== id && setup.fixtures.some((f) => f.id === fixture);
+  return setup.looks.find((look) => look.fixtures.length > 0 && !look.fixtures.some(kept));
+}
+
 /** `setup` with a new static look named `name`, in white on every fixture. */
 export function addLook(setup: LightsSetup, name: string): LightsSetup {
   const look: Look = {
