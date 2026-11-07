@@ -124,7 +124,7 @@ describe("the Director", () => {
     for (let round = 0; round < 80; round++) {
       const view = (await app.view())!;
       if (!view.controls.next && !view.controls.judge) break;
-      await app.clickEverything(".command-panel", [...NOT_CLICKED, "restartQuestion", "openProjectorWindow", "closeProjectorWindow"]);
+      await app.clickEverything(".command-panel", [...NOT_CLICKED, "restartQuestion", "previousSlide", "openProjectorWindow", "closeProjectorWindow"]);
       if (view.controls.judge) await app.step("right");
       else await app.step("next");
       await app.waitView("the next step", (v) => v.slideIndex !== view.slideIndex || JSON.stringify(v.phase) !== JSON.stringify(view.phase));
