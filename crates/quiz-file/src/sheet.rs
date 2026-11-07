@@ -319,13 +319,98 @@ fn unpacked_size(path: &Path, max: u64) -> Result<u64> {
     Ok(total)
 }
 
-/// A cell as text: a number as Excel shows it without formatting (`30`, `1.5`).
+/// A cell as text, near what a Czech spreadsheet program shows, as the
+/// sheet's language is not known and quizzes are written in Czech Excel
+/// (which turns a typed `17.11.1989` or `Pravda` into a date or a flag): a
+/// number without formatting (`30`, `1.5`), a date `17.11.1989`, a time
+/// `10:30` (`10:30:15` with seconds), both `17.11.1989 10:30`, a duration
+/// `25:30`, a flag `PRAVDA` / `NEPRAVDA`. An error, or a formula with no
+/// value saved, is empty.
 fn cell_text(cell: &Data) -> String {
     match cell {
-        Data::Error(_) => String::new(),
+        Data::Error(_) | Data::Empty => String::new(),
         Data::String(text) => text.replace("\r\n", "\n"),
+        Data::Bool(true) => "PRAVDA".to_string(),
+        Data::Bool(false) => "NEPRAVDA".to_string(),
+        Data::DateTime(value) if value.is_duration() => duration_text((value.as_f64() * 86_400.0).round() as i64),
+        Data::DateTime(value) => {
+            let (year, month, day, hour, minute, second, _) = value.to_ymd_hms_milli();
+            let time = (hour, minute, second);
+            // A serial number below 1 is a time without a day.
+            if value.as_f64() < 1.0 && value.as_f64() >= 0.0 {
+                time_text(time)
+            } else {
+                date_time_text((year, month, day), time)
+            }
+        }
+        Data::DateTimeIso(iso) => iso_date_time_text(iso).unwrap_or_else(|| iso.clone()),
+        Data::DurationIso(iso) => iso_duration_seconds(iso).map(duration_text).unwrap_or_else(|| iso.clone()),
         other => other.to_string(),
     }
+}
+
+/// `17.11.1989`, with ` 10:30` after it unless the time is midnight.
+fn date_time_text((year, month, day): (u16, u8, u8), time: (u8, u8, u8)) -> String {
+    let date = format!("{day}.{month}.{year}");
+    if time == (0, 0, 0) {
+        date
+    } else {
+        format!("{date} {}", time_text(time))
+    }
+}
+
+/// `10:30`, or `10:30:15` when there are seconds.
+fn time_text((hour, minute, second): (u8, u8, u8)) -> String {
+    if second == 0 {
+        format!("{hour:02}:{minute:02}")
+    } else {
+        format!("{hour:02}:{minute:02}:{second:02}")
+    }
+}
+
+/// Seconds as hours, minutes and any seconds (`25:30`, `-0:05`).
+fn duration_text(seconds: i64) -> String {
+    let sign = if seconds < 0 { "-" } else { "" };
+    let seconds = seconds.unsigned_abs();
+    let (hours, minutes, seconds) = (seconds / 3600, seconds / 60 % 60, seconds % 60);
+    if seconds == 0 {
+        format!("{sign}{hours}:{minutes:02}")
+    } else {
+        format!("{sign}{hours}:{minutes:02}:{seconds:02}")
+    }
+}
+
+/// An OpenDocument date (`1989-11-17`, `1989-11-17T10:30:00.5`) as `date_time_text` words it.
+fn iso_date_time_text(iso: &str) -> Option<String> {
+    let (date, time) = iso.split_once('T').unwrap_or((iso, "00:00:00"));
+    let mut date = date.splitn(3, '-').map(str::parse::<u16>);
+    let (year, month, day) = (date.next()?.ok()?, date.next()?.ok()?, date.next()?.ok()?);
+    let mut time = time.trim_end_matches('Z').splitn(3, ':');
+    let (hour, minute) = (time.next()?.parse::<u8>().ok()?, time.next()?.parse::<u8>().ok()?);
+    let second = time.next().map_or(Some(0.0), |second| second.parse::<f64>().ok())?;
+    let (month, day) = (u8::try_from(month).ok()?, u8::try_from(day).ok()?);
+    Some(date_time_text((year, month, day), (hour, minute, second.round() as u8)))
+}
+
+/// An OpenDocument duration (`PT10H30M00S`, `-PT1H`) in whole seconds.
+fn iso_duration_seconds(iso: &str) -> Option<i64> {
+    let (sign, rest) = iso.strip_prefix('-').map_or((1, iso), |rest| (-1, rest));
+    let rest = rest.strip_prefix('P')?;
+    let (days, time) = rest.split_once('T').unwrap_or((rest, ""));
+    let mut seconds = 0.0;
+    for (part, units) in [(days, &[('D', 86_400.0)][..]), (time, &[('H', 3600.0), ('M', 60.0), ('S', 1.0)][..])] {
+        let mut part = part;
+        for &(unit, factor) in units {
+            if let Some((number, after)) = part.split_once(unit) {
+                seconds += number.parse::<f64>().ok()? * factor;
+                part = after;
+            }
+        }
+        if !part.is_empty() {
+            return None;
+        }
+    }
+    Some(sign * (seconds.round() as i64))
 }
 
 /// A CSV file as a table. Excel writes it in the system's code page and
@@ -440,6 +525,32 @@ mod tests {
     /// A room of `rows` rows and all the text.
     fn room(rows: usize) -> Room {
         Room { rows, ..Room::FULL }
+    }
+
+    #[test]
+    fn dates_times_and_flags_are_read_as_a_czech_spreadsheet_shows_them() {
+        use calamine::{ExcelDateTime, ExcelDateTimeType::*};
+        let date = |value, kind| cell_text(&Data::DateTime(ExcelDateTime::new(value, kind, false)));
+        // 17 November 1989, typed into Czech Excel as `17.11.1989`.
+        assert_eq!(date(32829.0, DateTime), "17.11.1989");
+        assert_eq!(date(46054.0, DateTime), "1.2.2026");
+        assert_eq!(date(0.4375, DateTime), "10:30");
+        assert_eq!(date(0.0, DateTime), "00:00");
+        assert_eq!(date(0.43767361111, DateTime), "10:30:15");
+        assert_eq!(date(32829.75, DateTime), "17.11.1989 18:00");
+        assert_eq!(date(1.0625, TimeDelta), "25:30");
+        assert_eq!(cell_text(&Data::DateTime(ExcelDateTime::new(31367.0, DateTime, true))), "17.11.1989");
+
+        assert_eq!(cell_text(&Data::DateTimeIso("1989-11-17".into())), "17.11.1989");
+        assert_eq!(cell_text(&Data::DateTimeIso("1989-11-17T10:30:00".into())), "17.11.1989 10:30");
+        assert_eq!(cell_text(&Data::DurationIso("PT10H30M00S".into())), "10:30");
+        assert_eq!(cell_text(&Data::DurationIso("PT25H30M15S".into())), "25:30:15");
+        assert_eq!(cell_text(&Data::DurationIso("odd".into())), "odd");
+
+        assert_eq!((cell_text(&Data::Bool(true)), cell_text(&Data::Bool(false))), ("PRAVDA".into(), "NEPRAVDA".into()));
+        assert_eq!((cell_text(&Data::Int(30)), cell_text(&Data::Float(1.5))), ("30".into(), "1.5".into()));
+        assert_eq!(cell_text(&Data::String("a\r\nb".into())), "a\nb");
+        assert_eq!(cell_text(&Data::Empty), "");
     }
 
     #[test]
