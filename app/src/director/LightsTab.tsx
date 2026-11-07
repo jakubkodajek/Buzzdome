@@ -46,6 +46,7 @@ import {
   followsLooks,
   formatChannelValues,
   isIpv4,
+  lookLights,
   lookUses,
   outputOfKind,
   overlapping,
@@ -53,6 +54,7 @@ import {
   removeFixture,
   removeLook,
   sameOutput,
+  tickLookFixture,
 } from "./lights";
 
 /** How long the tab waits after the last change before it keeps the setup. */
@@ -712,7 +714,7 @@ function LookRow(props: { look: Look; fixtures: Fixture[]; onChange: (edit: Part
   const run = useRun();
   const status = useLightsStatus();
   const held = status?.hold === look.id;
-  const toggleFixture = (id: number, on: boolean) => onChange({ fixtures: on ? [...look.fixtures, id] : look.fixtures.filter((f) => f !== id) });
+  const lit = fixtures.filter((fixture) => lookLights(look, fixture.id)).length;
   return (
     <div className="lights-item">
       <div className="row">
@@ -784,12 +786,17 @@ function LookRow(props: { look: Look; fixtures: Fixture[]; onChange: (edit: Part
       {fixtures.length > 0 && (
         <div className="row">
           <span>{t("lightsLookFixtures")}</span>
-          {fixtures.map((fixture) => (
-            <label key={fixture.id} className="inline">
-              <input type="checkbox" checked={look.fixtures.includes(fixture.id)} onChange={(e) => toggleFixture(fixture.id, e.target.checked)} />
-              {fixture.name}
-            </label>
-          ))}
+          {fixtures.map((fixture) => {
+            const on = lookLights(look, fixture.id);
+            // The last lit fixture stays: a look that lists none lights them all.
+            const last = on && lit === 1;
+            return (
+              <label key={fixture.id} className="inline" title={last ? t("lightsLastFixture") : undefined}>
+                <input type="checkbox" checked={on} disabled={last} onChange={(e) => onChange({ fixtures: tickLookFixture(look, fixtures, fixture.id, e.target.checked) })} />
+                {fixture.name}
+              </label>
+            );
+          })}
           {look.fixtures.length === 0 && <span className="muted">{t("lightsAllFixtures")}</span>}
         </div>
       )}

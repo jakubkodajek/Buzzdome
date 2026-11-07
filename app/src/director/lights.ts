@@ -116,6 +116,23 @@ export function addLook(setup: LightsSetup, name: string): LightsSetup {
   return { ...setup, looks: [...setup.looks, look] };
 }
 
+/** Whether `look` lights fixture `id`: a look that lists none lights every fixture. */
+export function lookLights(look: Look, id: number): boolean {
+  return look.fixtures.length === 0 || look.fixtures.includes(id);
+}
+
+/**
+ * The fixtures `look` lists once fixture `id` of the setup's `fixtures` is
+ * ticked `on` or not. With every fixture ticked it lists none, so that
+ * fixtures added later shine too; the last ticked one stays, as listing
+ * none would light them all.
+ */
+export function tickLookFixture(look: Look, fixtures: Fixture[], id: number, on: boolean): number[] {
+  const lit = fixtures.map((fixture) => fixture.id).filter((fixture) => (fixture === id ? on : lookLights(look, fixture)));
+  if (lit.length === 0) return look.fixtures;
+  return lit.length === fixtures.length ? [] : lit;
+}
+
 /** `setup` with look `id` changed by `change`. */
 export function changeLook(setup: LightsSetup, id: number, change: Partial<Omit<Look, "id">>): LightsSetup {
   return { ...setup, looks: setup.looks.map((look) => (look.id === id ? { ...look, ...change } : look)) };

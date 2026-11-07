@@ -17,6 +17,7 @@ import {
   parseChannelValues,
   removeFixture,
   removeLook,
+  tickLookFixture,
 } from "./lights";
 
 const rgb = FIXTURE_PRESETS.find((preset) => preset.id === "rgb")!.channels;
@@ -62,6 +63,20 @@ describe("lights setup", () => {
     setup = { ...setup, looks: [{ ...setup.looks[0], fixtures: [1, 2] }] };
     expect(removeFixture(setup, 1).looks[0].fixtures).toEqual([2]);
     expect(changeFixture(setup, 2, { address: 100 }).fixtures[1].address).toBe(100);
+  });
+
+  it("ticks a look's fixtures as they show, never flipping to every fixture", () => {
+    const three = [fixture(1, 1), fixture(2, 4), fixture(3, 7)];
+    const look = addLook(empty, "Look").looks[0];
+    // Every fixture shines: unticking one lists the others.
+    expect(tickLookFixture(look, three, 2, false)).toEqual([1, 3]);
+    const two = { ...look, fixtures: [1, 3] };
+    expect(tickLookFixture(two, three, 1, false)).toEqual([3]);
+    // The last one stays ticked.
+    expect(tickLookFixture({ ...look, fixtures: [3] }, three, 3, false)).toEqual([3]);
+    // Ticking every fixture lists none, so that new ones shine too.
+    expect(tickLookFixture(two, three, 2, true)).toEqual([]);
+    expect(tickLookFixture(look, [fixture(1, 1)], 1, false)).toEqual([]);
   });
 
   it("takes a removed look out of the stages and flashes", () => {
