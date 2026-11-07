@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { useDispatch } from "./app-context";
 import { useBackendEvent } from "./hooks";
-import type { Translate } from "./i18n";
+import type { StringKey, Translate } from "./i18n";
 import type { Command, GameView, RemoteAction } from "./types";
 
 /** What a quizmaster's key or a key of the remote does in a show: a `RemoteAction` but nothing. */
@@ -33,9 +33,42 @@ export function showKey(event: Pick<KeyboardEvent, "key" | "code">): string {
   return digit ? digit[1] : event.key;
 }
 
+/** The keys written with a word or sign rather than as typed. */
+const KEY_NAMES: Partial<Record<string, StringKey>> = {
+  " ": "keySpace",
+  arrowright: "keyArrowRight",
+  arrowleft: "keyArrowLeft",
+  pagedown: "keyPageDown",
+  pageup: "keyPageUp",
+};
+
 /** How a key is written on the button it stands for. */
 export function keyHint(t: Translate, key: string): string {
-  return key === " " ? t("keySpace") : key.toUpperCase();
+  const name = KEY_NAMES[key];
+  return name ? t(name) : key.toUpperCase();
+}
+
+/** The Director's keys in one line, made from the keys themselves so it cannot leave one out. */
+export function keyboardHelp(t: Translate): string {
+  const keys = (list: readonly string[]) => list.map((key) => keyHint(t, key)).join(", ");
+  return [
+    t("keyHelpBuzzers"),
+    t("keyHelpNext", { keys: keys(NEXT_KEYS) }),
+    t("keyHelpPrevious", { keys: keys(PREVIOUS_KEYS) }),
+    t("keyHelpJudge", { right: keyHint(t, KEYS.right), wrong: keyHint(t, KEYS.wrong) }),
+    t("keyHelpClock", { key: keyHint(t, KEYS.clock) }),
+    t("keyHelpRanking", { key: keyHint(t, KEYS.leaderboard) }),
+    t("keyHelpProjector", { key: keyHint(t, KEYS.projector) }),
+  ].join(" · ");
+}
+
+/**
+ * Whether M (or the remote's projector key) opens or closes the projector
+ * now: always without a show, but during one it only opens it, so a stray
+ * press beside N never takes the hall's screen away.
+ */
+export function projectorKeyActs(showRunning: boolean, projectorOpen: boolean): boolean {
+  return !(showRunning && projectorOpen);
 }
 
 /** Input types that take typed text; the others (sliders, checkboxes, colours) take none. */
@@ -149,25 +182,30 @@ export function useShortcuts(view: GameView | null, onToggleProjector?: () => vo
   }, [view, dispatch, onToggleProjector]);
 }
 
-/** True for a key press that closes the projector from itself: M or Esc, plain (`isPlainKey`) and not held down. */
-export function isProjectorCloseKey(event: Pick<KeyboardEvent, "key" | "repeat" | "metaKey" | "ctrlKey" | "altKey" | "defaultPrevented" | "target">): boolean {
-  return isPlainKey(event) && !event.repeat && (event.key === "Escape" || event.key.toLowerCase() === KEYS.projector);
+/**
+ * True for a key press that closes the projector from itself: Esc, or M while
+ * no show runs (`projectorKeyActs`), plain (`isPlainKey`) and not held down.
+ */
+export function isProjectorCloseKey(event: Pick<KeyboardEvent, "key" | "repeat" | "metaKey" | "ctrlKey" | "altKey" | "defaultPrevented" | "target">, showRunning = false): boolean {
+  if (!isPlainKey(event) || event.repeat) return false;
+  return event.key === "Escape" || (event.key.toLowerCase() === KEYS.projector && projectorKeyActs(showRunning, true));
 }
 
 /**
- * M or Esc closes the projector from itself: full screen over the Director,
- * it is the window that has the keys, also once its screen failed.
+ * Esc, and M while no show runs, closes the projector from itself: full
+ * screen over the Director, it is the window that has the keys, also once
+ * its screen failed.
  */
-export function useProjectorCloseKeys(close: () => void) {
+export function useProjectorCloseKeys(close: () => void, showRunning = false) {
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (!isProjectorCloseKey(event)) return;
+      if (!isProjectorCloseKey(event, showRunning)) return;
       event.preventDefault();
       close();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [close]);
+  }, [close, showRunning]);
 }
 
 /**

@@ -26,6 +26,10 @@ const logProblem = (error: unknown) => {
 export default function App() {
   const [lang] = useLang();
   const t = translator(lang);
+  // The page's language follows the UI's, for the system's text tools and screen readers.
+  useEffect(() => {
+    document.documentElement.lang = lang;
+  }, [lang]);
   if (isHost) {
     return (
       <ErrorBoundary fallback={() => <HostFailed />} onError={(message) => reportToDirector(t("projectorFailed", { message }))}>

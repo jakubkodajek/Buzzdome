@@ -2,6 +2,7 @@ import { useRef, useState, type DragEvent } from "react";
 import { api } from "../api";
 import { useApp, useDispatch, useRun } from "../app-context";
 import { MAX_NAME_CHARS } from "../bindings/Constants";
+import { confirmAction } from "../confirm";
 import { CrossIcon, TrashIcon } from "../icons";
 import type { BuzzerId, PlayerView, TeamView } from "../types";
 import { decodeText, parseTeamNames } from "./team-names";
@@ -145,7 +146,8 @@ export function TeamList({ teams, players, picked, onPick }: TeamListProps) {
               aria-label={t("removeTeam")}
               onClick={(e) => {
                 e.stopPropagation();
-                run(api.removeTeam(team.name));
+                // The name is kept from show to show, so its removal asks first.
+                run(confirmAction(t, t("removeTeamConfirm", { name: team.name })).then((yes) => (yes ? api.removeTeam(team.name) : undefined)));
               }}
             >
               <TrashIcon />

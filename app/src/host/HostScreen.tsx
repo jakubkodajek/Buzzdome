@@ -47,7 +47,7 @@ function HostLayout() {
   const close = useCallback(() => run(api.closeHostWindow()), [run]);
   useStepShown(view);
   useShortcuts(view);
-  useProjectorCloseKeys(close);
+  useProjectorCloseKeys(close, view !== null);
   const verdict = useVerdict();
 
   return (

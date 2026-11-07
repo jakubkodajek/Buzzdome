@@ -42,6 +42,16 @@ export function timeOfDay(ms: number, lang: Lang): string {
   return new Date(ms).toLocaleTimeString(lang === "cs" ? "cs-CZ" : "en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" });
 }
 
+/**
+ * A moment as the quizmaster's language writes it, day and time to the
+ * minute in this computer's time zone (`timeZone` for the tests):
+ * "7. 11. 2026 19:42", "07/11/2026, 19:42".
+ */
+export function dayAndTime(ms: number, lang: Lang, timeZone?: string): string {
+  const parts = { day: "numeric", month: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" } as const;
+  return new Date(ms).toLocaleString(lang === "cs" ? "cs-CZ" : "en-GB", { ...parts, timeZone });
+}
+
 /** A score padded to three digits for the score boards, e.g. "042". */
 export function scoreDigits(n: number): string {
   return n < 0 ? `-${String(-n).padStart(2, "0")}` : String(n).padStart(3, "0");

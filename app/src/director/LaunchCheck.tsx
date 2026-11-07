@@ -5,7 +5,7 @@ import { defaultChoice } from "../audio/library";
 import { useSoundPreview } from "../audio/show-sounds";
 import { DEFAULT_QUIZ_SETTINGS, DEFAULT_QUIZ_SOUNDS } from "../bindings/Constants";
 import { useBackendEvent, usePlayerVolume, useProjectorWindow, useReceiverInfo, useShowDiskSpace } from "../hooks";
-import type { StringKey } from "../i18n";
+import type { StringKey, Translate } from "../i18n";
 import { CheckIcon, CrossIcon, QuestionIcon, WarningIcon } from "../icons";
 import { LANGUAGE_LABEL, settingsOf, soundsOf } from "../quiz";
 import { usePreparing, useSystemVoice } from "../audio/read-aloud";
@@ -25,13 +25,22 @@ interface LaunchCheckProps {
 
 /**
  * The check before a show (spec SF-2), below the tabs while the show waits
- * before its first slide. Hide puts it away until another show starts.
+ * before its first slide. Hide folds it into a button that shows it again,
+ * until another show starts.
  */
 export function LaunchCheck(props: LaunchCheckProps) {
+  const { t } = useApp();
   const [hidden, setHidden] = useState(false);
   useBackendEvent("show-changed", () => setHidden(false));
   // Hidden, it reads nothing: the panel polls while it is on screen.
-  return hidden ? null : <LaunchCheckPanel {...props} onHide={() => setHidden(true)} />;
+  if (hidden) {
+    return (
+      <div className="launch-check-hidden">
+        <button onClick={() => setHidden(false)}>{t("launchShow")}</button>
+      </div>
+    );
+  }
+  return <LaunchCheckPanel {...props} onHide={() => setHidden(true)} />;
 }
 
 const PART_LABEL: Record<CheckPart, StringKey> = {
@@ -50,15 +59,21 @@ const STATE_ICON: Record<CheckState, ReactNode> = {
   todo: <QuestionIcon />,
 };
 
-const FIX_LABEL: Record<CheckFix, StringKey> = {
-  receiverTab: "tabReceiver",
-  teamsTab: "tabTeams",
-  mediaTab: "tabMedia",
-  openProjector: "launchOpenProjector",
+/** A fix's button: the tab it opens, or what it does. */
+const FIX_LABEL: Record<CheckFix, StringKey | { tab: StringKey }> = {
+  receiverTab: { tab: "tabReceiver" },
+  teamsTab: { tab: "tabTeams" },
+  mediaTab: { tab: "tabMedia" },
+  openProjector: "openProjectorWindow",
   placeProjector: "launchPlaceProjector",
   playSound: "launchPlaySound",
   soundHeard: "launchSoundHeardButton",
 };
+
+function fixLabel(t: Translate, action: CheckFix): string {
+  const label = FIX_LABEL[action];
+  return typeof label === "string" ? t(label) : t("launchGoTo", { tab: t(label.tab) });
+}
 
 function LaunchCheckPanel({ view, quiz, projector, onTab, onHide }: LaunchCheckProps & { onHide: () => void }) {
   const { t } = useApp();
@@ -119,7 +134,7 @@ function LaunchCheckPanel({ view, quiz, projector, onTab, onHide }: LaunchCheckP
             <span className="launch-fixes">
               {item.fixes.map((action) => (
                 <button key={action} onClick={() => fix(action)}>
-                  {t(FIX_LABEL[action])}
+                  {fixLabel(t, action)}
                 </button>
               ))}
             </span>

@@ -305,6 +305,15 @@ export class App {
     return false;
   }
 
+  /** Whether a shown button with `label` can be pressed now: the command panel keeps a step's buttons, greyed out while the step does not offer them. */
+  async offersButton(label: StringKey): Promise<boolean> {
+    const literal = `"${t(label)}"`;
+    for (const element of await this.page.findAllXPath(`//button[contains(normalize-space(.), ${literal})]`)) {
+      if ((await this.page.displayed(element)) && (await this.page.enabled(element))) return true;
+    }
+    return false;
+  }
+
   async press(label: StringKey | { text: string }): Promise<void> {
     await this.page.click(await this.button(label));
   }

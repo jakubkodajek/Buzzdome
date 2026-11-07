@@ -65,11 +65,11 @@ const playing = params.get("media");
 const theme = params.get("theme");
 /** A design to draw the scene's question clock in (`TimerDesign`); the slide's own when missing. */
 const timer = params.get("timer") as TimerDesign | null;
-/** `damaged`: the last show's journal does not read; `failing`: resuming the last show fails. */
+/** `damaged`: the last show's journal does not read; `failing`: resuming the last show fails; `none`: there is no last show. */
 const resume = params.get("resume");
 /** `full`: the running show's journal refuses writes, as on a full disk; `broken`: it cannot be repaired; `hangs`: a write does not finish. */
 const saving = params.get("saving");
-/** `unreadable`: the editor's draft does not read; `failing`: writing it fails, as on a full disk; `busy`: a sheet import does not finish. */
+/** `unreadable`: the editor's draft does not read; `failing`: writing it fails, as on a full disk; `busy`: a sheet import does not finish; `unsaved`: it has changes its quiz file does not have. */
 const draft = params.get("draft");
 /** `recent=gone`: the recent quiz files are no longer where they were, as after they were deleted. */
 const recentGone = params.get("recent") === "gone";
@@ -743,10 +743,11 @@ mockIPC(
         return [];
       case "last_session":
         if (resume === "damaged") return Promise.reject({ code: "journalDamaged", line: 58 });
+        if (resume === "none") return null;
         return { meta: { quizTitle: quiz.title, sourcePath: null, startedMs: Date.now() - 3_600_000 }, commandCount: 57 };
       case "editor_load":
         if (draft === "unreadable") return Promise.reject({ code: "draftNotRead", detail: "expected value at line 1 column 1" });
-        return { id: "draft-1", quiz: editorQuiz, sourcePath: "C:\\Kvizy\\hospodsky-kviz.quiz", savesInPlace: true, unsaved: false, mediaRoot: "/src/dev/", problems: [], dropped: [] };
+        return { id: "draft-1", quiz: editorQuiz, sourcePath: "C:\\Kvizy\\hospodsky-kviz.quiz", savesInPlace: true, unsaved: draft === "unsaved", mediaRoot: "/src/dev/", problems: [], dropped: [] };
       case "editor_new":
         return { id: `draft-${++drafts}`, quiz: { ...editorQuiz, title: (payload as { title: string }).title, slides: [] }, sourcePath: null, savesInPlace: false, unsaved: false, mediaRoot: "/src/dev/", problems: [], dropped: [] };
       case "recent_files":

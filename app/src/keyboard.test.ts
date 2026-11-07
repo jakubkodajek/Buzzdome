@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { NO_CONTROLS, previewView } from "./host/preview";
 import { translator } from "./i18n";
 import { KEY_BUZZERS, PROJECTOR_COMMANDS } from "./bindings/ProjectorCommands";
-import { commandForAction, commandForKey, commandForRemote, isFieldTarget, isHeldButtonPress, isPlainKey, isProjectorCloseKey, isTypingTarget, keyCombo, keyHint, KEYS, showKey } from "./keyboard";
+import { commandForAction, commandForKey, commandForRemote, isFieldTarget, isHeldButtonPress, isPlainKey, isProjectorCloseKey, isTypingTarget, keyboardHelp, keyCombo, keyHint, KEYS, projectorKeyActs, showKey } from "./keyboard";
 import type { Controls, GameView, Phase } from "./types";
 
 const slide = { id: "q1", type: "billboard", title: "Round 1", text: "", notes: "", picture: null, video: null, sound: null, background: null } as const;
@@ -122,6 +122,20 @@ describe("keyHint", () => {
   it("writes keys as on the keyboard, in the quizmaster's language", () => {
     expect(keyHint(translator("cs"), KEYS.next)).toBe("Mezerník");
     expect(keyHint(translator("en"), KEYS.right)).toBe("Y");
+    expect(keyHint(translator("en"), "pagedown")).toBe("PgDn");
+  });
+});
+
+describe("keyboardHelp", () => {
+  it("names every key the Director takes", () => {
+    const help = keyboardHelp(translator("en"));
+    for (const name of ["Space", "→", "PgDn", "←", "PgUp", "Y/N", "P =", "S =", "M =", "1–0"]) expect(help, name).toContain(name);
+  });
+});
+
+describe("projectorKeyActs", () => {
+  it("opens the projector at any time but closes it only without a show", () => {
+    expect([projectorKeyActs(false, false), projectorKeyActs(false, true), projectorKeyActs(true, false), projectorKeyActs(true, true)]).toEqual([true, true, true, false]);
   });
 });
 
@@ -168,8 +182,12 @@ describe("isProjectorCloseKey", () => {
     ({ key: k, repeat: false, metaKey: false, ctrlKey: false, altKey: false, defaultPrevented: false, target: null, ...more }) as KeyboardEvent;
 
   it("closes the projector with M or Esc", () => {
-    expect([key("m"), key("M"), key("Escape")].map(isProjectorCloseKey)).toEqual([true, true, true]);
-    expect([key("n"), key(" "), key("Enter")].map(isProjectorCloseKey)).toEqual([false, false, false]);
+    expect([key("m"), key("M"), key("Escape")].map((k) => isProjectorCloseKey(k))).toEqual([true, true, true]);
+    expect([key("n"), key(" "), key("Enter")].map((k) => isProjectorCloseKey(k))).toEqual([false, false, false]);
+  });
+
+  it("during a show closes it only with Esc", () => {
+    expect([key("m"), key("M"), key("Escape")].map((k) => isProjectorCloseKey(k, true))).toEqual([false, false, true]);
   });
 
   it("leaves a held key, a key with a modifier, typing and a key a control took", () => {

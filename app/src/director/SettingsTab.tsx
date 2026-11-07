@@ -10,6 +10,7 @@ import { useApp, useRun } from "../app-context";
 import { useAppIcon, useAppVersion, useHostWindowOpen } from "../hooks";
 import type { Lang, StringKey } from "../i18n";
 import { readPreference, writePreference } from "../preferences";
+import { keyboardHelp } from "../keyboard";
 import type { IconColor, MonitorInfo } from "../types";
 import type { LaunchCheckSetting } from "./launch-check";
 import { VoicesSettings } from "./VoicesSettings";
@@ -120,7 +121,7 @@ export function SettingsTab({ projector, look, launch, showRunning }: { projecto
           <span>{t("fullscreen")}</span>
           <input type="checkbox" checked={projector.fullscreen} onChange={(e) => projector.choose({ fullscreen: e.target.checked })} />
         </label>
-        <button onClick={projector.toggle}>{projector.isOpen ? t("projectorClose") : t("projectorOpen")}</button>
+        <button onClick={projector.toggle}>{projector.isOpen ? t("closeProjectorWindow") : t("openProjectorWindow")}</button>
       </fieldset>
       <AppIconPicker />
       <fieldset>
@@ -150,7 +151,7 @@ export function SettingsTab({ projector, look, launch, showRunning }: { projecto
         </label>
         <p className="muted">{t("launchCheckHint")}</p>
       </fieldset>
-      <p className="muted">{t("keyboardHint")}</p>
+      <p className="muted">{keyboardHelp(t)}</p>
       <AppVersion />
     </div>
   );

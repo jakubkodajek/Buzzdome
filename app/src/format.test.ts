@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { calendarDay, decibels, fileName, minutesAndSeconds, parseTrackTime, scoreDigits, signed, timeOfDay, trackTime } from "./format";
+import { calendarDay, dayAndTime, decibels, fileName, minutesAndSeconds, parseTrackTime, scoreDigits, signed, timeOfDay, trackTime } from "./format";
 
 describe("format", () => {
   it("writes a day as each language does", () => {
@@ -13,6 +13,12 @@ describe("format", () => {
     const evening = new Date(2026, 9, 26, 21, 47, 50).getTime();
     expect([timeOfDay(morning, "cs"), timeOfDay(evening, "cs")]).toEqual(["09:07:05", "21:47:50"]);
     expect([timeOfDay(morning, "en"), timeOfDay(evening, "en")]).toEqual(["09:07:05", "21:47:50"]);
+  });
+
+  it("writes a moment to the minute as each language does", () => {
+    const moment = Date.UTC(2026, 10, 7, 18, 42);
+    expect(dayAndTime(moment, "cs", "Europe/Prague")).toBe("7. 11. 2026 19:42");
+    expect(dayAndTime(moment, "en", "Europe/Prague")).toBe("07/11/2026, 19:42");
   });
 
   it("writes scores", () => {
