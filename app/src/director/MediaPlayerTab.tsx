@@ -8,6 +8,8 @@ import { trackTime } from "../format";
 import { usePlayerVolume } from "../hooks";
 import { AddIcon, GridIcon, ListIcon, PauseIcon, PlayIcon, RewindIcon, SoundIcon, StopIcon, TrashIcon } from "../icons";
 import { mediaFileName, mediaPicker } from "../media";
+import { settingsLostNotice } from "../messages";
+import { NoticeBox } from "../notice";
 import { padsWithFile, progressOf, searchFiles, stepSelection } from "../media-player";
 import { readPreference, writePreference } from "../preferences";
 import type { GameView, LibraryFile, MediaKind } from "../types";
@@ -205,6 +207,7 @@ export function MediaPlayerTab({ player, sound, view }: { player: MediaPlayer; s
           <GridIcon /> {t("mediaShowBoard")}
         </button>
       </div>
+      {library?.settingsError && <NoticeBox notice={settingsLostNotice(t, t("mediaSettingsLost"), library.settingsError)} />}
       <div
         ref={body}
         className="media-body"

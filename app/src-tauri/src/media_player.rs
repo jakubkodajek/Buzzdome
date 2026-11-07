@@ -12,7 +12,7 @@
 //! holding only `imports`, so the board and the player answer while a big
 //! video comes in.
 
-use crate::app_file::AppFile;
+use crate::app_file::{AppFile, SettingsLost};
 use crate::error::{AppError, CmdResult};
 use crate::dialogs::{self, Picker};
 use crate::{app_log, folder_prefix, now_ms, off_ui};
@@ -46,6 +46,8 @@ pub struct MediaState {
     board_file: Mutex<AppFile>,
     /// Where the player's volume is kept; held while it is written.
     player_file: Mutex<AppFile>,
+    /// Why the sound board or the volume as they were left are not in the app, when a file could not be read.
+    settings_error: Option<SettingsLost>,
     /// The volume changed since it was last kept.
     volume_changed: AtomicBool,
     /// Held while files come into the library or leave it, so each change
@@ -90,6 +92,9 @@ pub struct MediaLibrary {
     /// can append a file's reference to it.
     pub root: String,
     pub files: Vec<LibraryFile>,
+    /// The sound board or the volume could not be read as they were left,
+    /// so the board started empty or the volume full.
+    pub settings_error: Option<SettingsLost>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, TS)]
@@ -112,6 +117,7 @@ impl MediaState {
                 app_log::note(&format!("{what} not read: {} (kept as {:?})", lost.detail, lost.kept_as));
             }
         }
+        let settings_error = board_file.lost().or(player_file.lost()).cloned();
         let board = board.normalized(&files);
         let settings = PlayerSettings { volume: settings.volume.min(MAX_PLAYER_VOLUME) };
         let library = Mutex::new(Library { files, board, player: MediaPlayer::default(), settings });
@@ -119,6 +125,7 @@ impl MediaState {
             root,
             board_file: Mutex::new(board_file),
             player_file: Mutex::new(player_file),
+            settings_error,
             volume_changed: AtomicBool::new(false),
             file_changes: Mutex::new(()),
             library,
@@ -131,7 +138,7 @@ impl MediaState {
 
     fn view(&self, library: &Library) -> MediaLibrary {
         let files = library.files.iter().filter_map(|reference| Some(LibraryFile { reference: reference.clone(), kind: MediaKind::of(reference)? })).collect();
-        MediaLibrary { root: folder_prefix(&self.root), files }
+        MediaLibrary { root: folder_prefix(&self.root), files, settings_error: self.settings_error.clone() }
     }
 
     /// Lists the library's files again after some came or went, tells the

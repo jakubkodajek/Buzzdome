@@ -510,6 +510,7 @@ const LIBRARY: MediaLibrary = {
     { reference: "media/jingle.wav", kind: "audio" },
     { reference: "media/landscape.svg", kind: "image" },
   ],
+  settingsError: null,
 };
 const filePad = (reference: string, label = "", color: Pad["color"] = null): Pad => ({ source: { type: "file", reference }, label, color });
 let board: SoundBoard = {
