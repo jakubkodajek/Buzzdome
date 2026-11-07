@@ -22,15 +22,19 @@ interface StageProps {
   onHold?: boolean;
   /** The editor plays the slide's background video. */
   playingBackground?: boolean;
+  /** The background fills the whole element, beyond the letterboxed stage (the projector). */
+  bleed?: boolean;
   children: ReactNode;
 }
 
 /**
  * A fixed 1920x1080 canvas scaled to fit the element it is placed in,
  * letterboxed. Sizes inside are in stage pixels. It is drawn in the theme of
- * `ThemeContext`, behind it the background `resolveBackground` picks.
+ * `ThemeContext`, behind it the background `resolveBackground` picks: on the
+ * stage, or with `bleed` over the whole element, so a screen of another
+ * shape shows the background where the stage leaves bars.
  */
-export function Stage({ className, screen, slide, mode, onHold, playingBackground, children }: StageProps) {
+export function Stage({ className, screen, slide, mode, onHold, playingBackground, bleed = false, children }: StageProps) {
   const frame = useRef<HTMLDivElement>(null);
   const theme = useTheme();
   const builtIn = useResolvedTheme(null);
@@ -47,10 +51,16 @@ export function Stage({ className, screen, slide, mode, onHold, playingBackgroun
     observer.observe(element);
     return () => observer.disconnect();
   }, []);
+  const background = <StageBackground layers={resolveBackground(slide, theme, screen, builtIn)} mode={mode} onHold={onHold} playing={playingBackground} />;
   return (
     <div ref={frame} className={className}>
-      <div className="stage" style={{ ...look, width: STAGE_W, height: STAGE_H, transform: `translate(-50%, -50%) scale(${scale})` }}>
-        <StageBackground layers={resolveBackground(slide, theme, screen, builtIn)} mode={mode} onHold={onHold} playing={playingBackground} />
+      {bleed && (
+        <div className="stage-bleed" style={look}>
+          {background}
+        </div>
+      )}
+      <div className={bleed ? "stage bled" : "stage"} style={{ ...look, width: STAGE_W, height: STAGE_H, transform: `translate(-50%, -50%) scale(${scale})` }}>
+        {!bleed && background}
         {children}
       </div>
     </div>

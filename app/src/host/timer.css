@@ -1,8 +1,8 @@
 /* A question's clock (Timer.tsx) at the left of the info panel, in stage
    pixels like slide.css. The ring and the stopwatch are clock faces, the
    same in every look; what runs out (--timer-fill) and the seconds
-   (--timer-digits) take the theme's accent, and turn red in the last
-   seconds. Rounded corners follow the theme (--theme-roundness). */
+   (--timer-digits) take the theme's accent, and its colour for a wrong
+   answer in the last seconds while the clock counts. Rounded corners follow the theme (--theme-roundness). */
 
 .timer {
   --timer-fill: var(--theme-accent);
@@ -13,9 +13,9 @@
 }
 
 .timer.urgent {
-  --timer-fill: #ff3b3b;
-  --timer-digits: #ff3b3b;
-  --timer-glow: rgba(255, 59, 59, 0.6);
+  --timer-fill: var(--theme-wrong);
+  --timer-digits: var(--theme-wrong);
+  --timer-glow: var(--theme-wrong-glow);
 }
 
 .timer svg {
@@ -86,7 +86,7 @@
 }
 
 .timer-ring.urgent .ring-seconds {
-  color: #d41f1f;
+  color: var(--theme-wrong);
 }
 
 .ring-label {

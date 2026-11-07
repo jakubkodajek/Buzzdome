@@ -8,7 +8,7 @@ import { DEFAULT_TIMER } from "../timers";
 import type { TimerDesign } from "../types";
 import "./timer.css";
 
-/** Seconds left from which the clock urges the players on. */
+/** Seconds left from which a counting clock urges the players on. */
 const URGENT_SECONDS = 5;
 
 export interface TimerProps {
@@ -18,13 +18,16 @@ export interface TimerProps {
   seconds: number | null;
   /** How much of the answer time is left, 0 to 1. */
   fraction: number;
+  /** The clock is counting down; only then do its last seconds urge (none: it stands still). */
+  counting?: boolean;
   /** The question's place in the quiz, such as 3/12. */
   label: string;
 }
 
-export function Timer({ design = DEFAULT_TIMER, seconds, fraction, label }: TimerProps) {
+export function Timer({ design = DEFAULT_TIMER, seconds, fraction, counting = false, label }: TimerProps) {
   const Design = DESIGNS[design];
-  const urgent = seconds !== null && seconds <= URGENT_SECONDS;
+  // A paused or closed question has nothing to hurry; its clock stays calm.
+  const urgent = counting && seconds !== null && seconds <= URGENT_SECONDS;
   return (
     <div className={`timer timer-${design}${urgent ? " urgent" : ""}`} data-element="timer">
       <Design left={Math.max(0, Math.min(1, fraction))} shown={seconds === null ? "∞" : String(seconds)} seconds={seconds} label={label} />
