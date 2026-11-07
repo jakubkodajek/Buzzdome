@@ -363,7 +363,7 @@ const SCENES: Record<string, GameView | null> = {
     phase: { phase: "question", step: "running", clock: { limitMs: 20000, elapsedBeforeMs: 0, runningSinceMs: 0, pressesFromMs: 0 } },
     clock: { limitMs: 20000, remainingMs: 12000, elapsedMs: 8000, running: true, points: 81 },
     controls: { ...NO_CONTROLS, next: true, pauseClock: true, closeQuestion: true, playVideo: true, restartQuestion: true },
-    autoStep: { action: "reveal", inMs: 3000 },
+    autoStep: { action: "reveal", inMs: 3000, totalMs: 5000 },
     settings: { ...DEFAULT_QUIZ_SETTINGS, readAloud: "question" },
   }, "endQuestion"),
   // Two winners share first place and two teams third (1, 1, 3, 3): no second place.
