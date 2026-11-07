@@ -66,12 +66,25 @@ impl UnkeptEdits {
     /// the whole quiz, so an earlier failure is mended; one of a quiz the
     /// file has already loses nothing.
     fn end(&self, draft: &str, unsaved: bool, kept: bool) {
+        self.change(draft, |unkept| {
+            if unsaved {
+                unkept.writing = unkept.writing.saturating_sub(1);
+            }
+            unkept.failed = unsaved && !kept;
+        });
+    }
+
+    /// The draft `draft` was saved whole, so the changes of a write that
+    /// failed are in its file; writes under way still count.
+    fn saved(&self, draft: &str) {
+        self.change(draft, |unkept| unkept.failed = false);
+    }
+
+    /// Changes what `draft` has unkept, forgetting it once nothing is.
+    fn change(&self, draft: &str, change: impl FnOnce(&mut Unkept)) {
         let mut drafts = self.0.lock().unwrap();
         let unkept = drafts.entry(draft.to_owned()).or_default();
-        if unsaved {
-            unkept.writing = unkept.writing.saturating_sub(1);
-        }
-        unkept.failed = unsaved && !kept;
+        change(unkept);
         if *unkept == Unkept::default() {
             drafts.remove(draft);
         }
@@ -390,6 +403,7 @@ pub async fn editor_update(app: AppHandle, draft: String, quiz: Quiz, unsaved: b
 /// the quiz file it came from, unless `save_as`, else where the quizmaster
 /// picks (none when they cancel; a plain JSON quiz is never written over).
 /// Gives the file's path and whether Save writes over it from now on.
+/// A write of the draft that failed is mended by it (`UnkeptEdits::saved`).
 /// Refused during a show (`refuse_during_show`).
 #[tauri::command]
 pub async fn editor_save(app: AppHandle, window: Window, draft: String, quiz: Quiz, save_as: bool, picker: Picker) -> CmdResult<Option<SavedDraft>> {
@@ -401,7 +415,7 @@ pub async fn editor_save(app: AppHandle, window: Window, draft: String, quiz: Qu
             None => return Ok(None),
         },
     };
-    on_draft(app, draft, move |app, dir, root, pointer| {
+    let saved = on_draft(app.clone(), draft.clone(), move |app, dir, root, pointer| {
         refuse_during_show(app)?;
         quiz_file::write_quiz_json(&root, &quiz)?;
         quiz_file::save(&quiz, &root, &path)?;
@@ -410,7 +424,9 @@ pub async fn editor_save(app: AppHandle, window: Window, draft: String, quiz: Qu
         app.state::<RecentFiles>().remember(&saved);
         Ok(Some(SavedDraft { saves_in_place: is_quiz_file(&path), path: saved }))
     })
-    .await
+    .await?;
+    app.state::<UnkeptEdits>().saved(&draft);
+    Ok(saved)
 }
 
 /// Whether `path` names a quiz file (not a plain JSON quiz).
@@ -559,6 +575,19 @@ mod tests {
         assert!(unkept.has("draft-1"), "the second is still under way");
         unkept.end("draft-1", true, true);
         assert!(!unkept.has("draft-1"));
+        // A failed write, then the quiz is saved: its changes are in the file.
+        unkept.begin("draft-1", true);
+        unkept.end("draft-1", true, false);
+        unkept.saved("draft-1");
+        assert!(!unkept.has("draft-1"), "saved");
+        // A write under way when the save ends still counts.
+        unkept.begin("draft-1", true);
+        unkept.saved("draft-1");
+        assert!(unkept.has("draft-1"), "still under way");
+        unkept.end("draft-1", true, true);
+        assert!(!unkept.has("draft-1"));
+        unkept.saved("draft-2");
+        assert!(!unkept.has("draft-2"), "nothing to forget");
     }
 
     #[test]

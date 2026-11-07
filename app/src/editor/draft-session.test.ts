@@ -109,6 +109,45 @@ describe("DraftSession", () => {
     expect(session.getStatus().notWritten).toBe(null);
   });
 
+  it("writes a failing change that is then saved as saved, also when its retry came due during the save", async () => {
+    for (const saveMs of [0, 1500]) {
+      const { draftApi, calls } = fakeApi();
+      const session = new DraftSession(draftApi, 1000);
+      draftApi.editorUpdate.mockRejectedValueOnce(FULL_DISK);
+      const a = quiz("A");
+      session.write("draft-1", a, true, () => undefined);
+      await vi.advanceTimersByTimeAsync(0);
+      const save = session.exclusive("save", async (api) => {
+        const saved = await api.editorSave("draft-1", a, false, PICKER);
+        await vi.advanceTimersByTimeAsync(saveMs);
+        session.saved("draft-1", a);
+        return saved;
+      });
+      await save;
+      await vi.advanceTimersByTimeAsync(5000);
+      // The failed write is not in `calls`; the retry gives way to the write as saved.
+      expect(calls).toEqual(["save draft-1 A", "update draft-1 A"]);
+      expect(draftApi.editorUpdate).toHaveBeenCalledTimes(2);
+      expect(draftApi.editorUpdate).toHaveBeenLastCalledWith("draft-1", a, false);
+      expect(session.getStatus().notWritten).toBe(null);
+    }
+  });
+
+  it("leaves a change made after the quiz that was saved unsaved", async () => {
+    const { draftApi } = fakeApi();
+    const session = new DraftSession(draftApi, 1000);
+    draftApi.editorUpdate.mockRejectedValueOnce(FULL_DISK);
+    const b = quiz("B");
+    session.write("draft-1", b, true, () => undefined);
+    await vi.advanceTimersByTimeAsync(0);
+    await session.exclusive("save", async (api) => {
+      await api.editorSave("draft-1", quiz("A"), false, PICKER);
+      session.saved("draft-1", quiz("A"));
+    });
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(draftApi.editorUpdate).toHaveBeenLastCalledWith("draft-1", b, true);
+  });
+
   it("lets go of a write for a draft another has replaced, and of the old draft's failing changes", async () => {
     const { draftApi, calls } = fakeApi();
     const session = new DraftSession(draftApi, 1000);

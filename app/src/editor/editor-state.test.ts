@@ -52,6 +52,19 @@ describe("editor state", () => {
     expect(isUnsaved(opened(state))).toBe(false);
   });
 
+  it("keeps typing while the quiz is saved out of the step that is saved", () => {
+    let state = editorReducer(LOADING, { type: "loaded", draft: draft(false) });
+    state = editorReducer(state, { type: "edit", edit: { type: "setTitle", title: "Pub" }, merge: "title", at: 0 });
+    const saving = opened(state).history.present;
+    state = editorReducer(state, { type: "closeStep" });
+    state = editorReducer(state, { type: "edit", edit: { type: "setTitle", title: "Pub 2026" }, merge: "title", at: 500 });
+    state = editorReducer(state, { type: "saved", quiz: saving, path: "/q.quiz", savesInPlace: true });
+    expect(isUnsaved(opened(state))).toBe(true);
+    state = editorReducer(state, { type: "undo" });
+    expect(opened(state).history.present).toBe(saving);
+    expect(isUnsaved(opened(state))).toBe(false);
+  });
+
   it("takes the backend's problems only for the quiz as it is now", () => {
     let state = editorReducer(LOADING, { type: "loaded", draft: draft(false) });
     const before = opened(state).history.present;

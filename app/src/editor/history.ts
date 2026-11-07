@@ -35,7 +35,9 @@ export type HistoryAction =
   /** `merge` joins quick changes with the same key (typing in one field) into one undo step. */
   | { type: "edit"; edit: Edit; merge?: string; at: number }
   | { type: "undo" }
-  | { type: "redo" };
+  | { type: "redo" }
+  /** Ends the open undo step, so the next change starts its own: the quiz as it is now is one step (a save begins). */
+  | { type: "closeStep" };
 
 export interface History {
   past: Quiz[];
@@ -166,6 +168,8 @@ export function historyReducer(state: History, action: HistoryAction): History {
         open: null,
       };
     }
+    case "closeStep":
+      return state.open === null ? state : { ...state, open: null };
     case "redo": {
       if (state.future.length === 0) return state;
       return {

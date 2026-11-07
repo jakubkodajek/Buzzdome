@@ -159,6 +159,19 @@ export class DraftSession {
     this.queue.push(write);
   }
 
+  /**
+   * The draft `draft` was saved with `quiz` (inside the save's `exclusive`,
+   * so no write has run since). A change of that quiz still waiting to be
+   * tried again is in the file now: it is written as saved instead, as a
+   * retry with its old `unsaved` would mark the saved quiz unsaved again. A
+   * later change is not saved and stays as it is.
+   */
+  saved(draft: string, quiz: Quiz): void {
+    const pending = this.latest;
+    if (pending?.draft !== draft || pending.quiz !== quiz || this.status.notWritten === null) return;
+    this.write(draft, quiz, false, pending.checked);
+  }
+
   private async store(write: Write): Promise<void> {
     try {
       write.checked(await this.api.editorUpdate(write.draft, write.quiz, write.unsaved));
