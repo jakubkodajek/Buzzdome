@@ -1,12 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
-import { confirmAction, openDialogs, saveChoice } from "./confirm";
+import { confirmAction, confirmEdits, openDialogs, saveChoice } from "./confirm";
 import { translator } from "./i18n";
 
 const answers: { resolve: (yes: boolean) => void; reject: (error: unknown) => void }[] = [];
 vi.mock("@tauri-apps/plugin-dialog", () => ({
   ask: () => new Promise<boolean>((resolve, reject) => answers.push({ resolve, reject })),
-  message: () => Promise.resolve("Uložit"),
+  message: () => Promise.resolve(pressed.shift() ?? ""),
 }));
+const pressed: string[] = [];
 const t = translator("en");
 
 describe("openDialogs", () => {
@@ -34,5 +35,14 @@ describe("saveChoice", () => {
 
   it("cancels on any other answer, so nothing is lost unasked", () => {
     for (const answer of ["Cancel", "Yes", "No", "Ok", ""]) expect(saveChoice(answer, labels)).toBe("cancel");
+  });
+});
+
+describe("confirmEdits", () => {
+  it("reads the choice from the button pressed, and any other answer cancels", async () => {
+    pressed.push(t("resumeWithEdits"), t("resumeAsBegun"), t("cancel"), "");
+    const answers = [];
+    for (let n = 0; n < 4; n++) answers.push(await confirmEdits(t, "Go on with the edits?"));
+    expect(answers).toEqual(["edits", "asBegun", "cancel", "cancel"]);
   });
 });

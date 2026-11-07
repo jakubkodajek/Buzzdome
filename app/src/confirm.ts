@@ -33,8 +33,28 @@ export async function tellFailure(text: string): Promise<void> {
   await message(text, { kind: "error" });
 }
 
+/** Which of a three-button dialog's buttons was pressed (`askThreeWay`). */
+type Pressed = "yes" | "no" | "cancel";
+
+/**
+ * Asks `question` in the system's own dialog with the buttons `labels`
+ * (`yes`, `no` and `cancel`). Closing the dialog cancels.
+ */
+async function askThreeWay(question: string, labels: { yes: string; no: string; cancel: string }): Promise<Pressed> {
+  // With its own labels the dialog answers with the label pressed.
+  const pressed = await counted(() => message(question, { kind: "warning", buttons: labels }));
+  return pressedButton(pressed, labels);
+}
+
+/** The button for the dialog's answer `pressed`, given its button `labels`. */
+function pressedButton(pressed: string, labels: { yes: string; no: string }): Pressed {
+  return pressed === labels.yes ? "yes" : pressed === labels.no ? "no" : "cancel";
+}
+
 /** What the quizmaster chose to do with unsaved changes. */
 export type SaveChoice = "save" | "discard" | "cancel";
+
+const SAVE_CHOICES: Record<Pressed, SaveChoice> = { yes: "save", no: "discard", cancel: "cancel" };
 
 /**
  * Asks, in the system's own dialog, whether to save the unsaved changes
@@ -42,13 +62,24 @@ export type SaveChoice = "save" | "discard" | "cancel";
  * Closing the dialog cancels.
  */
 export async function confirmSave(t: Translate, question: string): Promise<SaveChoice> {
-  const labels = { yes: t("saveQuiz"), no: t("dontSave"), cancel: t("cancel") };
-  // With its own labels the dialog answers with the label pressed.
-  const pressed = await counted(() => message(question, { kind: "warning", buttons: labels }));
-  return saveChoice(pressed, labels);
+  return SAVE_CHOICES[await askThreeWay(question, { yes: t("saveQuiz"), no: t("dontSave"), cancel: t("cancel") })];
 }
 
 /** The choice for the dialog's answer `pressed`, given its button `labels`. */
 export function saveChoice(pressed: string, labels: { yes: string; no: string }): SaveChoice {
-  return pressed === labels.yes ? "save" : pressed === labels.no ? "discard" : "cancel";
+  return SAVE_CHOICES[pressedButton(pressed, labels)];
+}
+
+/** Whether a resumed show goes on with its quiz as edited since it began. */
+export type EditsChoice = "edits" | "asBegun" | "cancel";
+
+const EDITS_CHOICES: Record<Pressed, EditsChoice> = { yes: "edits", no: "asBegun", cancel: "cancel" };
+
+/**
+ * Asks, in the system's own dialog, whether the resumed show goes on with
+ * its quiz as edited since it began (`question`): With the edits, Without
+ * them or Cancel. Closing the dialog cancels.
+ */
+export async function confirmEdits(t: Translate, question: string): Promise<EditsChoice> {
+  return EDITS_CHOICES[await askThreeWay(question, { yes: t("resumeWithEdits"), no: t("resumeAsBegun"), cancel: t("cancel") })];
 }

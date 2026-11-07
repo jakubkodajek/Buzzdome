@@ -7,7 +7,7 @@ use crate::session::{NotSaved, ResumeError};
 use buzzers::colours::ColourClash;
 use buzzers::learned::LearnError;
 use lights::setup::SetupError;
-use quiz_core::{BoardError, BuzzerId, Button, GameError, QuizJsonError, SheetError, ValidationError, MAX_TEAMS};
+use quiz_core::{BoardError, BuzzerId, Button, GameError, QuizJsonError, ShapeChange, SheetError, ValidationError, MAX_TEAMS};
 use quiz_file::{FileAction, QuizFileError};
 use serde::Serialize;
 use std::io;
@@ -85,6 +85,15 @@ pub enum AppError {
     /// from; it runs without them.
     #[error("the show's media are in {folder}, which the windows may not load from")]
     MediaFolderRefused { folder: String },
+    /// A resumed show could not take its quiz as edited since it began
+    /// (`Command::TakeQuiz`): its slides differ (`change`), or it could
+    /// not be saved; it runs with the quiz it had.
+    #[error("the show goes on without the quiz's edits: {change:?}")]
+    EditsNotTaken { change: Option<ShapeChange> },
+    /// A resumed show took its quiz as edited, but for the question on
+    /// screen (`slide`), whose results stand as scored (`Game::scored_slide`).
+    #[error("slide {slide} keeps the version it was played in")]
+    EditedSlideKept { slide: usize },
     /// A resumed show stopped while the question on `slide` was in play: it
     /// starts again, its answers and score changes taken back
     /// (`Game::recovery_command`), and waits for the quizmaster.
@@ -344,6 +353,7 @@ impl From<GameError> for AppError {
             GameError::NoSuchSlide(slide) => AppError::NoSuchSlide { slide },
             GameError::DuplicateBuzzer(buzzer) => AppError::DuplicateBuzzer { buzzer },
             GameError::TooManyTeams => AppError::TooManyTeams { max: MAX_TEAMS },
+            GameError::OtherShape(change) => AppError::EditsNotTaken { change: Some(change) },
         }
     }
 }
