@@ -2085,7 +2085,10 @@ change what a replay does.
 - `app/src-tauri/src/stage_lights.rs` keeps the setup in `lights.json`
   (`AppFile`, checked with `LightsSetup::check` before it is kept or used;
   `lights_store` writes off the windows' thread under a lock of its own
-  held until the lights have the setup, so the last kept is the one used)
+  held until the lights have the setup, so the last kept is the one used),
+  keeps the quizmaster's blackout and held look in `lights-live.json`
+  (`lights_hold`, `lights_blackout`), which the lights take again at
+  the next start, so a restart or crash does not light a blacked-out room,
   and tells the lights thread what the show did: after every show change and
   every tick of the show thread it queues the cues of the change's effects,
   then the stage, slide and buzz, only when they changed. Sending is a

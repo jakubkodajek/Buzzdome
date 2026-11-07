@@ -771,7 +771,7 @@ pub fn run() {
                 send_mode(&mut inner);
             }
             app.manage(hardware);
-            app.manage(stage_lights::StageLights::start(app.handle(), stage_lights::lights_path(app.handle())?));
+            app.manage(stage_lights::StageLights::start(app.handle(), stage_lights::lights_path(app.handle())?, stage_lights::live_path(app.handle())?));
             app.manage(fixture_library::FixtureLibrary::new(fixture_library::library_path(app.handle())?));
             // The Director plays the voice's clips, rendered into a folder of their own.
             let voice = read_aloud::Voice::new(app.handle())?;
