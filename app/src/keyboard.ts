@@ -11,6 +11,7 @@ export type ShowAction = Exclude<RemoteAction, "nothing">;
 /** The quizmaster's keys, as `KeyboardEvent.key` in lower case. Digits 1-0 are the keyboard buzzers. */
 export const KEYS = {
   next: " ",
+  previous: "arrowleft",
   right: "y",
   wrong: "n",
   clock: "p",
@@ -22,7 +23,7 @@ export const KEYS = {
 const NEXT_KEYS: readonly string[] = [KEYS.next, "arrowright", "pagedown"];
 
 /** Keys that go back to the previous slide, as a presenter's clicker sends them. */
-const PREVIOUS_KEYS: readonly string[] = ["arrowleft", "pageup"];
+const PREVIOUS_KEYS: readonly string[] = [KEYS.previous, "pageup"];
 
 /**
  * The key a show key press stands for: a top-row key that types a character

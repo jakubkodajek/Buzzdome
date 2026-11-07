@@ -71,9 +71,6 @@ import { ToastStack, useToasts } from "./Toasts";
 import { VirtualBuzzers } from "./VirtualBuzzers";
 import "./director.css";
 
-/** The first of the keys that go back a slide (`keyboard.ts`), as the button names it. */
-const PREVIOUS_KEY = "arrowleft";
-
 /** What the remote does while a system dialog is open: nothing. */
 const ignore = () => undefined;
 
@@ -540,7 +537,7 @@ function StepCommands({ view, onRestart }: { view: GameView; onRestart: () => vo
       />
       <CommandButton icon={<StopIcon />} label={t("endQuestion")} disabled={!controls.closeQuestion} onClick={() => dispatch({ type: "closeQuestion" })} />
       <CommandButton icon={<RewindIcon />} label={t("restartQuestion")} disabled={!controls.restartQuestion} onClick={onRestart} />
-      <CommandButton icon={<PreviousIcon />} label={t("previousSlide")} hint={hint(PREVIOUS_KEY)} disabled={!previous} onClick={() => previous && dispatch(previous)} />
+      <CommandButton icon={<PreviousIcon />} label={t("previousSlide")} hint={hint(KEYS.previous)} disabled={!previous} onClick={() => previous && dispatch(previous)} />
     </>
   );
 }
