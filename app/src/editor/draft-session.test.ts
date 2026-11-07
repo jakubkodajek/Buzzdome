@@ -3,7 +3,7 @@ import type { EditorDraft, Quiz } from "../types";
 import { BUSY, DraftSession, heldIn, type DraftApi } from "./draft-session";
 
 const quiz = (title: string): Quiz => ({ schemaVersion: 1, title, theme: null, slides: [] });
-const draft = (id: string, title = id): EditorDraft => ({ id, quiz: quiz(title), sourcePath: null, unsaved: false, mediaRoot: "/d/", problems: [], dropped: [] });
+const draft = (id: string, title = id): EditorDraft => ({ id, quiz: quiz(title), sourcePath: null, savesInPlace: false, unsaved: false, mediaRoot: "/d/", problems: [], dropped: [] });
 const FULL_DISK = { code: "file", action: "write", path: "/d/quiz.json", detail: "No space left on device" };
 
 /** A promise with its resolver, to finish a backend call when a test says so. */

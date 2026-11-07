@@ -7,6 +7,7 @@ const draft = (unsaved: boolean, dropped: ValidationError[] = []): EditorDraft =
   id: "draft-1",
   quiz,
   sourcePath: "/q.quiz",
+  savesInPlace: true,
   unsaved,
   mediaRoot: "/d/",
   problems: [],

@@ -11,6 +11,8 @@ export interface OpenQuiz {
   saved: Quiz | null;
   /** The file it was opened from or last saved to. */
   sourcePath: string | null;
+  /** Save writes over `sourcePath` (`EditorDraft.savesInPlace`); else it asks where. */
+  savesInPlace: boolean;
   /** Folder of the draft's media (see `MediaRootContext`). */
   mediaRoot: string;
   /** What keeps the quiz from being played, as the backend last checked. */
@@ -52,6 +54,7 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
       history: startHistory(draft.quiz),
       saved: draft.unsaved ? null : draft.quiz,
       sourcePath: draft.sourcePath,
+      savesInPlace: draft.savesInPlace,
       mediaRoot: draft.mediaRoot,
       problems: draft.problems,
       dropped: draft.dropped,
@@ -61,7 +64,7 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
   switch (action.type) {
     case "saved":
       // The file no longer has what opening left out.
-      return { ...state, saved: action.quiz, sourcePath: action.path, dropped: [] };
+      return { ...state, saved: action.quiz, sourcePath: action.path, savesInPlace: true, dropped: [] };
     case "checked":
       // A check of a quiz that has changed since is already out of date.
       return action.quiz === state.history.present ? { ...state, problems: action.problems } : state;

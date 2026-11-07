@@ -143,8 +143,8 @@ function Studio({ editor, open, ask, onExit }: { editor: QuizEditor; open: OpenQ
   const several = selected.length > 1;
   const dialogSlide = dialog ? slides.find((s) => s.id === dialog.id) : undefined;
   const unsaved = open !== null && isUnsaved(open);
-  // Nothing to save: every change is in the quiz's file (a new quiz has no file yet).
-  const saved = open !== null && !unsaved && open.sourcePath !== null;
+  // Nothing to save: every change is in the quiz file that Save writes (a new quiz has none yet, a JSON quiz is saved as one).
+  const saved = open !== null && !unsaved && open.savesInPlace;
 
   /** How the properties change slide `s`, and with it every slide of `ids`. */
   const editingFor = (s: Slide, ids: string[] = [s.id]): SlideEditing => ({

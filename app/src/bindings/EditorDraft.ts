@@ -16,6 +16,11 @@ id: string, quiz: Quiz,
  */
 sourcePath: string | null, 
 /**
+ * Save writes over that file: it is a quiz file, not a plain JSON quiz
+ * (which Save writes as a new quiz file, as for a quiz without a file).
+ */
+savesInPlace: boolean, 
+/**
  * It has changes that are not in that file.
  */
 unsaved: boolean, 

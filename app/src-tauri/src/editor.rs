@@ -60,6 +60,9 @@ pub struct EditorDraft {
     pub quiz: Quiz,
     /// The file it was opened from or last saved to.
     pub source_path: Option<String>,
+    /// Save writes over that file: it is a quiz file, not a plain JSON quiz
+    /// (which Save writes as a new quiz file, as for a quiz without a file).
+    pub saves_in_place: bool,
     /// It has changes that are not in that file.
     pub unsaved: bool,
     /// Folder of the draft's media, ending with a path separator.
@@ -215,6 +218,7 @@ fn describe(root: &Path, pointer: Pointer, quiz: Quiz) -> EditorDraft {
         problems: quiz_file::problems(&quiz, root),
         id: pointer.folder,
         quiz,
+        saves_in_place: pointer.source_path.as_deref().is_some_and(|source| is_quiz_file(Path::new(source))),
         source_path: pointer.source_path,
         unsaved: pointer.unsaved,
         media_root: folder_prefix(root),

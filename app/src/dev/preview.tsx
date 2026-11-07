@@ -743,9 +743,9 @@ mockIPC(
         return { meta: { quizTitle: quiz.title, sourcePath: null, startedMs: Date.now() - 3_600_000 }, commandCount: 57 };
       case "editor_load":
         if (draft === "unreadable") return Promise.reject({ code: "draftNotRead", detail: "expected value at line 1 column 1" });
-        return { id: "draft-1", quiz: editorQuiz, sourcePath: "C:\\Kvizy\\hospodsky-kviz.quiz", unsaved: false, mediaRoot: "/src/dev/", problems: [], dropped: [] };
+        return { id: "draft-1", quiz: editorQuiz, sourcePath: "C:\\Kvizy\\hospodsky-kviz.quiz", savesInPlace: true, unsaved: false, mediaRoot: "/src/dev/", problems: [], dropped: [] };
       case "editor_new":
-        return { id: `draft-${++drafts}`, quiz: { ...editorQuiz, title: (payload as { title: string }).title, slides: [] }, sourcePath: null, unsaved: false, mediaRoot: "/src/dev/", problems: [], dropped: [] };
+        return { id: `draft-${++drafts}`, quiz: { ...editorQuiz, title: (payload as { title: string }).title, slides: [] }, sourcePath: null, savesInPlace: false, unsaved: false, mediaRoot: "/src/dev/", problems: [], dropped: [] };
       case "recent_files":
         return [...RECENT_FILES];
       case "forget_recent_file":
@@ -774,7 +774,7 @@ mockIPC(
         if (recent !== null && !RECENT_FILES.includes(recent)) return Promise.reject({ code: "notRecent" });
         const path = recent ?? dialogAnswer();
         if (!path) return null;
-        return { id: `draft-${++drafts}`, quiz: editorQuiz, sourcePath: path, unsaved: true, mediaRoot: "/src/dev/", problems: [], dropped };
+        return { id: `draft-${++drafts}`, quiz: editorQuiz, sourcePath: path, savesInPlace: path.endsWith(".quiz"), unsaved: true, mediaRoot: "/src/dev/", problems: [], dropped };
       }
       case "editor_update":
         called.push({ cmd, ...(payload as object) });
