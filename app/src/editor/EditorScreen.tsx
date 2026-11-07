@@ -25,7 +25,7 @@ import {
 import { MediaRootContext } from "../media";
 import { NO_CONTEXT, slideContexts } from "../quiz";
 import { ThemeContext } from "../theme/context";
-import { useLatest } from "../hooks";
+import { useLatest, useWindowTitle } from "../hooks";
 import { createStore, useStore } from "../store";
 import type { StringKey } from "../i18n";
 import type { EditorDraft, Slide } from "../types";
@@ -341,6 +341,7 @@ function Studio({ editor, open, ask, onExit }: { editor: QuizEditor; open: OpenQ
   const openMenu = (event: MouseEvent, target: MenuTarget) => setMenu({ x: event.clientX, y: event.clientY, target });
 
   const title = quiz ? quiz.title || t("untitledQuiz") : t("quizEditor");
+  useWindowTitle(quiz ? `${title}${unsaved ? " *" : ""} – ${t("quizEditor")}` : t("quizEditor"), t("appTitle"));
   const editings = selectedSlides.map((s) => editingFor(s, selected));
   const shared = selectionPages(t, editings, element);
   const properties = editings.length > 0 ? slideProperties(t, editings[0]) : null;

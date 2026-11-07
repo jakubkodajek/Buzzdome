@@ -19,6 +19,7 @@ import {
   useQuiz,
   useRecentFiles,
   useShowNotSaved,
+  useWindowTitle,
 } from "../hooks";
 import {
   BackIcon,
@@ -130,6 +131,7 @@ function DirectorLayout({ testRun, onEditor }: { testRun: boolean; onEditor: (as
   const { t, caution } = useApp();
   const view = useGameView();
   const quiz = useQuiz();
+  useWindowTitle(view ? view.quizTitle : t("groupDirector"), t("appTitle"));
   const theme = useResolvedTheme(quiz?.theme ?? null);
   const projector = useProjectorSettings();
   const look = useDirectorLook();

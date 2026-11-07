@@ -1,8 +1,10 @@
 import { listen } from "@tauri-apps/api/event";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { api, type BackendEvents } from "./api";
 import { MAX_PLAYER_VOLUME } from "./bindings/Constants";
 import { heardNow, type HeardMedia } from "./media-player";
+import { thrownText } from "./messages";
 import type {
   AppError,
   AvailableUpdate,
@@ -312,4 +314,16 @@ export function useRecentFiles(): { files: string[]; reload: () => void; forget:
   const [files, reload] = useLoadedValue(api.recentFiles, []);
   const forget = useCallback((path: string) => api.forgetRecentFile(path).finally(reload), [reload]);
   return { files, reload, forget };
+}
+
+/**
+ * Names the window in the system's title bar and task bar: `what` (the
+ * quiz, the editor's quiz with its unsaved mark) before the app's name.
+ */
+export function useWindowTitle(what: string, appName: string) {
+  useEffect(() => {
+    getCurrentWindow()
+      .setTitle(`${what} – ${appName}`)
+      .catch((error: unknown) => api.logProblem(thrownText(error)).catch(() => undefined));
+  }, [what, appName]);
 }
