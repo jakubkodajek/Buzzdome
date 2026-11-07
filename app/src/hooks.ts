@@ -148,10 +148,12 @@ export function useGameView(): GameView | null {
  * The show's results (spec SF-11), loaded again whenever the show changes
  * (`view`). A change while a load is under way loads once more after it,
  * so a burst of answers costs two loads, not one each, and the loads come
- * back in order.
+ * back in order. `results` is null until the first load; `problem` is why
+ * the last load failed, null once one succeeds.
  */
-export function useShowResults(view: GameView): ShowResults | null {
+export function useShowResults(view: GameView): { results: ShowResults | null; problem: unknown } {
   const [results, setResults] = useState<ShowResults | null>(null);
+  const [problem, setProblem] = useState<unknown>(null);
   const loads = useRef({ busy: false, again: false, alive: true });
   useEffect(() => {
     const state = loads.current;
@@ -160,10 +162,16 @@ export function useShowResults(view: GameView): ShowResults | null {
       state.busy = true;
       api
         .showResults()
-        .then((next) => {
-          if (state.alive) setResults(next);
-        })
-        .catch((e) => console.error(e))
+        .then(
+          (next) => {
+            if (!state.alive) return;
+            setResults(next);
+            setProblem(null);
+          },
+          (error: unknown) => {
+            if (state.alive) setProblem(error);
+          },
+        )
         .finally(() => {
           state.busy = false;
           if (state.again && state.alive) {
@@ -178,7 +186,7 @@ export function useShowResults(view: GameView): ShowResults | null {
       state.alive = false;
     };
   }, [view]);
-  return results;
+  return { results, problem };
 }
 
 /** Whether the projector window is open, however it was opened or closed. */
@@ -209,9 +217,28 @@ export function useAppVersion(): string | null {
   return useLoadedValue<string | null>(api.appVersion, null)[0];
 }
 
-/** The newer version of the app the update server offers, read once; null when there is none or until loaded. */
+/** How often the update server is asked again while it has not answered, such as before the venue's network is up. */
+const UPDATE_RECHECK_MS = 5 * 60_000;
+
+/**
+ * The newer version of the app the update server offers; null when there is
+ * none or until known. Until the server answers once, it is asked again
+ * every few minutes and when the computer comes online (the backend keeps
+ * the first answer, `update_check`).
+ */
 export function useAvailableUpdate(): AvailableUpdate | null {
-  return useLoadedValue<AvailableUpdate | null>(api.updateCheck, null)[0];
+  const [update, reload] = useLoadedValue<AvailableUpdate | null | undefined>(api.updateCheck, undefined);
+  const answered = update !== undefined;
+  useEffect(() => {
+    if (answered) return;
+    const timer = setInterval(reload, UPDATE_RECHECK_MS);
+    window.addEventListener("online", reload);
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener("online", reload);
+    };
+  }, [answered, reload]);
+  return update ?? null;
 }
 
 /** The receiver's state and set-up, loaded again whenever its state changes; null until loaded. */

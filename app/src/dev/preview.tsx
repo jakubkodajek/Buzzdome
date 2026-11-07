@@ -81,6 +81,10 @@ const update = params.get("update");
 const broken = params.get("broken");
 /** `refused`: the backend refuses every lights setup the Lights tab stores. */
 const lightsStore = params.get("lights");
+/** `one`: only the laptop's screen, the Director's, is connected. */
+const oneMonitor = params.get("monitors") === "one";
+/** `stalls`: the voices download connects without end, as on a captive network. */
+const voicesStall = params.get("voices") === "stalls";
 /** The slides, the fourth broken when asked (`broken`). */
 const maybeBroken = (slides: Quiz["slides"]): Quiz["slides"] =>
   broken === "slide" ? slides.map((slide, i) => (i === 3 ? ({ ...slide, answers: null } as unknown as Quiz["slides"][number]) : slide)) : slides;
@@ -112,6 +116,26 @@ function players(overrides: Partial<PlayerView>[] = []): PlayerView[] {
     ...overrides[i],
   }));
   return list;
+}
+
+/** A team name as long as a name may be, for the projector's scenes with long names. */
+const LONG_NAME = "Hospodští géniové z Dolní Lhoty nad Vltavou a okolí, z.s.";
+
+/**
+ * A full event: `n` teams, ranked by falling score, the first `answeredBy`
+ * of them having answered, for the projector's scenes with many teams.
+ */
+function crowd(n: number, answeredBy = 0): PlayerView[] {
+  const [first] = players();
+  return Array.from({ length: n }, (_, i) => ({
+    ...first,
+    buzzer: i + 1,
+    name: i < NAMES.length ? NAMES[i] : `Tým ${i + 1}`,
+    score: 900 - i * 17,
+    totalAnswerMs: 30_000 + i * 900,
+    rank: i + 1,
+    answered: i < answeredBy,
+  }));
 }
 
 /** A song for the scenes with media: played on demand, its chorus only. */
@@ -219,6 +243,8 @@ const SCENES: Record<string, GameView | null> = {
   lobby: view({
     phase: { phase: "lobby" },
     slide: null,
+    nextSlide: 0,
+    previousSlide: null,
     players: players([{}, {}, { name: "" }, { name: "" }, { name: "" }]).slice(0, 5),
     teams: [
       { name: NAMES[0], buzzer: 1 },
@@ -320,7 +346,27 @@ const SCENES: Record<string, GameView | null> = {
   explanation: view({ phase: { phase: "explanation" }, slideIndex: 4, slide: quiz.slides[4] }),
   leaderboard: view({ phase: { phase: "endOfRound" }, slideIndex: 5, slide: quiz.slides[5] }),
   overlay: view({ leaderboardVisible: true }),
-  final3: view({ phase: { phase: "final", step: 3 }, slideIndex: quiz.slides.length, slide: null }),
+  final3: view({ phase: { phase: "final", step: 3 }, slideIndex: quiz.slides.length, slide: null, nextSlide: null, previousSlide: quiz.slides.length - 1 }),
+  // The final ranking's first step, before the third place shows.
+  final0: view({ phase: { phase: "final", step: 0 }, slideIndex: quiz.slides.length, slide: null, nextSlide: null, previousSlide: quiz.slides.length - 1 }),
+  // The last slide of the quiz, from which Next opens the final ranking.
+  lastSlide: view({
+    phase: { phase: "endOfRound" },
+    slideIndex: quiz.slides.length - 1,
+    slide: quiz.slides[quiz.slides.length - 1],
+    nextSlide: quiz.slides.length,
+    previousSlide: quiz.slides.length - 2,
+  }),
+  // A running question with every extra command in the Director: its sound, reading it out, its video, and the step the show takes by itself.
+  crowded: view({
+    slideIndex: 2,
+    slide: { ...quiz.slides[2], video: VIDEO, sound: SONG },
+    phase: { phase: "question", step: "running", clock: { limitMs: 20000, elapsedBeforeMs: 0, runningSinceMs: 0, pressesFromMs: 0 } },
+    clock: { limitMs: 20000, remainingMs: 12000, elapsedMs: 8000, running: true, points: 81 },
+    controls: { ...NO_CONTROLS, next: true, pauseClock: true, closeQuestion: true, playVideo: true, restartQuestion: true },
+    autoStep: { action: "reveal", inMs: 3000 },
+    settings: { ...DEFAULT_QUIZ_SETTINGS, readAloud: "question" },
+  }),
   // Two winners share first place and two teams third (1, 1, 3, 3): no second place.
   finalShared: view({
     phase: { phase: "final", step: 3 },
@@ -383,6 +429,53 @@ const SCENES: Record<string, GameView | null> = {
   }),
   brokenBackground: view({ phase: { phase: "billboard" }, slideIndex: 0, slide: { ...quiz.slides[0], background: { ...BACKGROUND, file: "media/missing.png" } } }),
   styled: view({ slide: { ...quiz.slides[1], style: STYLE } }),
+  // A full event: 50 buzzers registered, 46 of them still to answer, a ranking of 47 that pages.
+  crowdLobby: view({ phase: { phase: "lobby" }, slide: null, players: crowd(50) }),
+  crowd: view({
+    phase: { phase: "question", step: "running", clock: { limitMs: 20000, elapsedBeforeMs: 0, runningSinceMs: 0, pressesFromMs: 0 } },
+    clock: { limitMs: 20000, remainingMs: 4400, elapsedMs: 15600, running: true, points: 81 },
+    players: crowd(50, 4),
+    enabledCount: 50,
+    answeredCount: 4,
+    controls: { ...NO_CONTROLS, next: true, pauseClock: true, closeQuestion: true, restartQuestion: true },
+  }),
+  crowdLeaderboard: view({ phase: { phase: "endOfRound" }, slideIndex: 5, slide: { ...quiz.slides[5], title: "" } as Quiz["slides"][number], players: crowd(47) }),
+  crowdOverlay: view({ leaderboardVisible: true, players: crowd(47) }),
+  // Names and texts as long as they may be: the buzz bar, the podium, a question and answers that need smaller text.
+  longName: view({
+    phase: { phase: "question", step: "buzzed", buzzer: 1, button: "big", clock: { limitMs: 30000, elapsedBeforeMs: 4300, runningSinceMs: null, pressesFromMs: 0 } },
+    slideIndex: 7,
+    slide: quiz.slides[7],
+    clock: { limitMs: 30000, remainingMs: 25700, elapsedMs: 4300, running: false, points: 129 },
+    players: players([{ name: LONG_NAME, delta: 129 }]),
+    buzzed: 1,
+    buzzes: [{ buzzer: 1, button: "big", state: "answering" }],
+    controls: { ...NO_CONTROLS, judge: true, restartQuestion: true },
+  }),
+  longFinal: view({ phase: { phase: "final", step: 3 }, slideIndex: quiz.slides.length, slide: null, players: players([{ name: LONG_NAME }, { name: "Mozkovna, kterou nikdo nepřekoná" }]) }),
+  longQuestion: view({
+    phase: { phase: "question", step: "closed" },
+    slide: {
+      ...quiz.slides[1],
+      text: "Které město je hlavním městem Moravskoslezského kraje a zároveň třetím největším městem České republiky, hned po Praze a Brně?",
+      answers: ["Opava, historická metropole českého Slezska", "Ostrava", "Frýdek-Místek, dvojměstí na řece Ostravici", "Nový Jičín, město klobouků pod Beskydami a Frenštátu"],
+    } as Quiz["slides"][number],
+    players: players(answered),
+    answeredCount: 4,
+    answerCounts: [1, 2, 1, 0],
+    results: { right: 2, wrong: 2, none: 1 },
+  }),
+  // The answer revealed with the quiz set to keep it off the screen: no marks, no counts that give it away.
+  hiddenAnswer: view({
+    phase: { phase: "question", step: "revealed", winner: null },
+    results: { right: 2, wrong: 2, none: 1 },
+    players: players(answered.map((a, i) => ({ ...a, delta: [84, 80, 0, 0, 0][i] || null }))),
+    answeredCount: 4,
+    answerCounts: [1, 2, 1, 0],
+    settings: { ...DEFAULT_QUIZ_SETTINGS, hideAnswer: true },
+  }),
+  // A question's video whose file is missing: no empty frame where it would be.
+  brokenVideo: view({ slideIndex: 2, slide: { ...quiz.slides[2], video: { ...VIDEO, file: "media/missing.webm" } } }),
   styledBillboard: view({ phase: { phase: "billboard" }, slideIndex: 0, slide: { ...setBodyText(quiz.slides[0], "Zeměpis a historie"), style: STYLE } }),
 };
 
@@ -723,7 +816,7 @@ mockIPC(
         return [
           { id: "Built-in Display@0,0", name: "Built-in Display", width: 2560, height: 1600, director: true },
           { id: "Projector@2560,0", name: "Projector", width: 1920, height: 1080, director: false },
-        ];
+        ].slice(0, oneMonitor ? 1 : 2);
       case "quit_app":
       case "close_declined":
         called.push({ cmd });
@@ -894,9 +987,14 @@ mockIPC(
         };
       case "lights_info":
         return { setup: LIGHTS_SETUP, status: { output: { kind: "connected", name: "Art-Net 255.255.255.255" }, messages: null, look: 2, hold: null, blackout: false }, settingsError: null, refused: null };
-      case "lights_store":
+      case "lights_store": {
         called.push({ cmd, ...(payload as object) });
-        return lightsStore === "refused" ? Promise.reject({ code: "lightsRefused", refused: { problem: "pastUniverse", name: "Par vlevo" } }) : null;
+        if (lightsStore === "refused") return Promise.reject({ code: "lightsRefused", refused: { problem: "pastUniverse", name: "Par vlevo" } });
+        // A host with a letter in it stands for any the backend refuses as not IPv4.
+        const { setup } = payload as { setup: LightsSetup };
+        const host = [setup.output.kind === "artNet" || setup.output.kind === "sacn" ? setup.output.host : null, setup.messages.osc?.host].find((h) => h && /[a-z]/i.test(h));
+        return host ? Promise.reject({ code: "lightsRefused", refused: { problem: "notIpv4", host } }) : null;
+      }
       case "lights_universe": {
         // The first fixture in the "Question" blue, the second in red.
         const slots = new Array<number>(512).fill(0);
@@ -943,7 +1041,7 @@ mockIPC(
       case "voice_remove":
         return { installed: false, bytes: 128_774_318, voices: 10 };
       case "voice_install":
-        return { installed: true, bytes: 128_774_318, voices: 10 };
+        return voicesStall ? new Promise(() => undefined) : { installed: true, bytes: 128_774_318, voices: 10 };
       case "voice_clip":
       case "voice_install_cancel":
       case "ai_instructions_unsaved":

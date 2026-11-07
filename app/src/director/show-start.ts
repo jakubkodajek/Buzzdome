@@ -20,17 +20,31 @@ export function staleFile(draft: DraftState | null): DraftState | null {
   return draft?.unsaved && draft.sourcePath !== null ? draft : null;
 }
 
-/**
- * What to ask before a new show starts, in order: that it ends the way back
- * to the show that can be resumed (`last`), and that `file`, the quiz file
- * it plays when known, has newer changes in the editor's draft.
- */
-export function startQuestions(t: Translate, last: SessionSummary | null, draft: DraftState | null, file?: string): string[] {
-  const questions: string[] = [];
-  if (last) questions.push(t("replaceLastShowConfirm", { title: last.meta.quizTitle }));
+/** The draft when it holds unsaved changes of the quiz file `file`, which a show of that file would not have; else null. */
+export function staleFor(draft: DraftState | null, file: string): DraftState | null {
   const stale = staleFile(draft);
-  if (stale && file !== undefined && stale.sourcePath === file) questions.push(t("startStaleConfirm", { title: stale.title }));
-  return questions;
+  return stale?.sourcePath === file ? stale : null;
+}
+
+/** A question before a show starts, and the step it names on its button. */
+export interface StartQuestion {
+  text: string;
+  ok: string;
+}
+
+/**
+ * What to ask before a new show starts, in one question: that it ends the
+ * way back to the show that can be resumed (`last`), and that `file`, the
+ * quiz file it plays when known, has newer changes in the editor's draft.
+ * Null when neither applies.
+ */
+export function startQuestion(t: Translate, last: SessionSummary | null, draft: DraftState | null, file?: string): StartQuestion | null {
+  const stale = file === undefined ? null : staleFor(draft, file);
+  const replaces = last && t("replaceLastShowConfirm", { title: last.meta.quizTitle });
+  const older = stale && t("startStaleConfirm", { title: stale.title });
+  if (replaces && older) return { text: `${replaces}\n\n${older}`, ok: t("startNewShow") };
+  if (replaces) return { text: replaces, ok: t("startNewShow") };
+  return older ? { text: older, ok: t("startSavedVersion") } : null;
 }
 
 /** Starting a show from the Director. */
@@ -42,11 +56,18 @@ export interface ShowStart {
   /** The editor's draft as it was when the Director opened; null when there is none or it could not be read. */
   draft: DraftState | null;
   /**
-   * Starts a new show with `call`, after asking what `startQuestions` asks
-   * (`file`: the quiz file it plays, when known before it starts); one
+   * Starts a new show with `call`, after asking what `startQuestion` asks
+   * (`file`: the quiz file it plays, when known before it starts); a
    * declined question starts nothing.
    */
   start: (call: () => Promise<unknown>, file?: string) => void;
+  /**
+   * Starts a new show with `call`, which picks its quiz file and is false
+   * when the quizmaster cancels, after asking what `startQuestion` asks of
+   * a file not known yet. Once it started the file whose newer changes are
+   * in the editor's draft, it says so: only then is the file known.
+   */
+  startPicked: (call: () => Promise<boolean>) => void;
   /** Resumes the last show with `call`, which asks nothing. */
   resume: (call: () => Promise<unknown>) => void;
 }
@@ -57,7 +78,7 @@ export interface ShowStart {
  * start meanwhile (`showStarting`), which needs no word here.
  */
 export function useShowStart(): ShowStart {
-  const { t } = useApp();
+  const { t, caution } = useApp();
   const run = useRun();
   const last = useLastSession();
   const draft = useDraftState();
@@ -81,8 +102,8 @@ export function useShowStart(): ShowStart {
     (call: () => Promise<unknown>, file?: string) => {
       if (busy.current) return;
       busy.current = true;
-      const questions = startQuestions(t, latest.current.last.session, latest.current.draft, file);
-      const asked = questions.reduce<Promise<boolean>>((yes, question) => yes.then((go) => go && confirmAction(t, question)), Promise.resolve(true));
+      const question = startQuestion(t, latest.current.last.session, latest.current.draft, file);
+      const asked = question ? confirmAction(t, question.text, question.ok) : Promise.resolve(true);
       const declined = () => {
         busy.current = false;
       };
@@ -98,6 +119,20 @@ export function useShowStart(): ShowStart {
     },
     [t, run, begin, latest],
   );
+  // A show opened from a file goes first in the recent files.
+  const startPicked = useCallback(
+    (call: () => Promise<boolean>) =>
+      start(() =>
+        call().then(async (started) => {
+          const draft = latest.current.draft;
+          if (!started || !staleFile(draft)) return;
+          const [opened] = await api.recentFiles();
+          const stale = opened === undefined ? null : staleFor(draft, opened);
+          if (stale) caution({ text: t("startedStale", { title: stale.title }), detail: opened });
+        }),
+      ),
+    [start, latest, caution, t],
+  );
   const resume = useCallback(
     (call: () => Promise<unknown>) => {
       if (busy.current) return;
@@ -106,7 +141,7 @@ export function useShowStart(): ShowStart {
     },
     [begin],
   );
-  return { starting, last, draft, start, resume };
+  return { starting, last, draft, start, startPicked, resume };
 }
 
 /**

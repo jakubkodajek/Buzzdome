@@ -1,5 +1,6 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useDispatch } from "./app-context";
+import { PROJECTOR_COMMANDS } from "./bindings/ProjectorCommands";
 import { useBackendEvent } from "./hooks";
 import type { StringKey, Translate } from "./i18n";
 import type { Command, GameView, RemoteAction } from "./types";
@@ -130,10 +131,15 @@ export function isPlainKey(event: Pick<KeyboardEvent, "metaKey" | "ctrlKey" | "a
   return !event.defaultPrevented && !event.metaKey && !event.ctrlKey && !event.altKey && !isTypingTarget(event.target);
 }
 
-/** True for the keys a running show takes, whether or not the current step has a use for them (`director`: the Director's too). */
+/** Whether a window may give a command: the Director every one, the projector those Rust lets it (`PROJECTOR_COMMANDS`). */
+function mayGive(type: Command["type"], director: boolean): boolean {
+  return director || PROJECTOR_COMMANDS.includes(type);
+}
+
+/** True for the keys a running show takes, whether or not the current step has a use for them (`director`: in the Director). */
 function isShowKey(key: string, director: boolean): boolean {
   const lower = key.toLowerCase();
-  return /^[0-9]$/.test(key) || NEXT_KEYS.includes(lower) || (director && PREVIOUS_KEYS.includes(lower)) || [KEYS.right, KEYS.wrong, KEYS.clock, KEYS.leaderboard].some((k) => k === lower);
+  return /^[0-9]$/.test(key) || NEXT_KEYS.includes(lower) || (mayGive("goTo", director) && PREVIOUS_KEYS.includes(lower)) || [KEYS.right, KEYS.wrong, KEYS.clock, KEYS.leaderboard].some((k) => k === lower);
 }
 
 /** True for Enter held down on a button, which would press it again with every repeat. */
@@ -145,7 +151,8 @@ export function isHeldButtonPress(event: Pick<KeyboardEvent, "key" | "repeat" | 
  * Quizmaster keys, the same in the Director and on the projector window.
  * `onToggleProjector`, given in the Director, adds the Director's own keys:
  * M, which opens or closes the projector (the projector closes itself,
- * `useProjectorCloseKeys`), and Left / Page Up, back to the previous slide.
+ * `useProjectorCloseKeys`). Left / Page Up go back to the previous slide in
+ * every window that may jump to a slide (`mayGive`).
  */
 export function useShortcuts(view: GameView | null, onToggleProjector?: () => void) {
   const dispatch = useDispatch();
@@ -186,24 +193,38 @@ export function useShortcuts(view: GameView | null, onToggleProjector?: () => vo
   }, [view, dispatch, onToggleProjector]);
 }
 
+/** How soon a second Esc must follow the first to close the projector during a show. */
+export const ESC_AGAIN_MS = 2000;
+
 /**
- * True for a key press that closes the projector from itself: Esc, or M while
- * no show runs (`projectorKeyActs`), plain (`isPlainKey`) and not held down.
+ * True for a key press that closes the projector from itself, plain
+ * (`isPlainKey`) and not held down: without a show Esc or M; during one
+ * (`showRunning`) only an Esc within `ESC_AGAIN_MS` of the Esc before it
+ * (`lastEscape`, that press's `timeStamp`), so one reflexive Esc never takes
+ * the hall's screen away.
  */
-export function isProjectorCloseKey(event: Pick<KeyboardEvent, "key" | "repeat" | "metaKey" | "ctrlKey" | "altKey" | "defaultPrevented" | "target">, showRunning = false): boolean {
+export function isProjectorCloseKey(
+  event: Pick<KeyboardEvent, "key" | "repeat" | "metaKey" | "ctrlKey" | "altKey" | "defaultPrevented" | "target" | "timeStamp">,
+  showRunning = false,
+  lastEscape: number | null = null,
+): boolean {
   if (!isPlainKey(event) || event.repeat) return false;
-  return event.key === "Escape" || (event.key.toLowerCase() === KEYS.projector && projectorKeyActs(showRunning, true));
+  if (event.key === "Escape") return !showRunning || (lastEscape !== null && event.timeStamp - lastEscape <= ESC_AGAIN_MS);
+  return event.key.toLowerCase() === KEYS.projector && projectorKeyActs(showRunning, true);
 }
 
 /**
- * Esc, and M while no show runs, closes the projector from itself: full
- * screen over the Director, it is the window that has the keys, also once
- * its screen failed.
+ * Esc, and M while no show runs, closes the projector from itself (during a
+ * show Esc twice, `isProjectorCloseKey`): full screen over the Director, it
+ * is the window that has the keys, also once its screen failed.
  */
 export function useProjectorCloseKeys(close: () => void, showRunning = false) {
+  const lastEscape = useRef<number | null>(null);
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (!isProjectorCloseKey(event, showRunning)) return;
+      const closes = isProjectorCloseKey(event, showRunning, lastEscape.current);
+      if (event.key === "Escape" && !event.repeat) lastEscape.current = closes ? null : event.timeStamp;
+      if (!closes) return;
       event.preventDefault();
       close();
     };
@@ -213,8 +234,8 @@ export function useProjectorCloseKeys(close: () => void, showRunning = false) {
 }
 
 /**
- * The command a key stands for, or null when the current step does not take it (see `Controls`);
- * `director`: in the Director, where going back a slide is a key too.
+ * The command a key stands for, or null when the current step does not take it (see `Controls`) or the
+ * window may not give it (`director`: in the Director, else on the projector; `mayGive`).
  */
 export function commandForKey(key: string, view: GameView, director = false): Command | null {
   if (/^[0-9]$/.test(key)) {
@@ -222,8 +243,8 @@ export function commandForKey(key: string, view: GameView, director = false): Co
     return { type: "press", buzzer: key === "0" ? 10 : Number(key), button: "big" };
   }
   const action = actionForKey(key.toLowerCase());
-  if (action === "previous" && !director) return null;
-  return action && commandForAction(action, view);
+  const command = action && commandForAction(action, view);
+  return command && mayGive(command.type, director) ? command : null;
 }
 
 /** The show action of a key, in lower case; M, the projector's, is the Director's own (`useShortcuts`). */

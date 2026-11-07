@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { NO_CONTROLS, previewView } from "./host/preview";
 import { translator } from "./i18n";
 import { KEY_BUZZERS, PROJECTOR_COMMANDS } from "./bindings/ProjectorCommands";
-import { commandForAction, commandForKey, commandForRemote, isFieldTarget, isHeldButtonPress, isPlainKey, isProjectorCloseKey, isTypingTarget, keyboardHelp, keyCombo, keyHint, KEYS, projectorKeyActs, showKey } from "./keyboard";
+import { commandForAction, commandForKey, commandForRemote, ESC_AGAIN_MS, isFieldTarget, isHeldButtonPress, isPlainKey, isProjectorCloseKey, isTypingTarget, keyboardHelp, keyCombo, keyHint, KEYS, projectorKeyActs, showKey } from "./keyboard";
 import type { Controls, GameView, Phase } from "./types";
 
 const slide = { id: "q1", type: "billboard", title: "Round 1", text: "", notes: "", picture: null, video: null, sound: null, background: null } as const;
@@ -42,11 +42,11 @@ describe("commandForKey", () => {
     expect(commandForKey(showKey({ key: "+", code: "Digit1" }), viewWith({}))).toEqual({ type: "press", buzzer: 1, button: "big" });
   });
 
-  it("goes back a slide with Left and Page Up in the Director only, when the show may jump", () => {
+  it("goes back a slide with Left and Page Up when the show may jump, on the projector only if it may jump", () => {
     const view = { ...viewWith({ goTo: true }), previousSlide: 3 };
     for (const key of ["ArrowLeft", "PageUp"]) {
       expect(commandForKey(key, view, true)).toEqual({ type: "goTo", slide: 3 });
-      expect(commandForKey(key, view)).toBeNull();
+      expect(commandForKey(key, view)).toEqual(PROJECTOR_COMMANDS.includes("goTo") ? { type: "goTo", slide: 3 } : null);
       expect(commandForKey(key, { ...view, controls: { ...view.controls, goTo: false } }, true)).toBeNull();
     }
   });
@@ -183,15 +183,18 @@ describe("isPlainKey", () => {
 
 describe("isProjectorCloseKey", () => {
   const key = (k: string, more: Partial<KeyboardEvent> = {}) =>
-    ({ key: k, repeat: false, metaKey: false, ctrlKey: false, altKey: false, defaultPrevented: false, target: null, ...more }) as KeyboardEvent;
+    ({ key: k, repeat: false, metaKey: false, ctrlKey: false, altKey: false, defaultPrevented: false, target: null, timeStamp: 10_000, ...more }) as KeyboardEvent;
 
   it("closes the projector with M or Esc", () => {
     expect([key("m"), key("M"), key("Escape")].map((k) => isProjectorCloseKey(k))).toEqual([true, true, true]);
     expect([key("n"), key(" "), key("Enter")].map((k) => isProjectorCloseKey(k))).toEqual([false, false, false]);
   });
 
-  it("during a show closes it only with Esc", () => {
-    expect([key("m"), key("M"), key("Escape")].map((k) => isProjectorCloseKey(k, true))).toEqual([false, false, true]);
+  it("during a show closes it only with a second Esc soon after the first", () => {
+    expect([key("m"), key("M"), key("Escape")].map((k) => isProjectorCloseKey(k, true))).toEqual([false, false, false]);
+    expect(isProjectorCloseKey(key("Escape"), true, 10_000 - ESC_AGAIN_MS)).toBe(true);
+    expect(isProjectorCloseKey(key("Escape"), true, 10_000 - ESC_AGAIN_MS - 1)).toBe(false);
+    expect(isProjectorCloseKey(key("m"), true, 9_500)).toBe(false);
   });
 
   it("leaves a held key, a key with a modifier, typing and a key a control took", () => {

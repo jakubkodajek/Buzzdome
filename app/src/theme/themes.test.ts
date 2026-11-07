@@ -63,6 +63,22 @@ describe("themes", () => {
     expect(withAlpha("#ffd21f80", 0)).toBe("#ffd21f00");
   });
 
+  it("gives the medals, the clock's last seconds, the right answer's ring and the faded answers theme variables", () => {
+    for (const theme of THEMES) {
+      const style = themeStyle(theme) as Record<string, string>;
+      for (const place of [1, 2, 3]) {
+        const medal = style[`--theme-medal-${place}`];
+        expect(contrast(style[`--theme-medal-${place}-text`], medal), `${theme.id} ${place}`).toBeGreaterThanOrEqual(3);
+      }
+      expect(style["--theme-wrong-glow"]).toBe(withAlpha(theme.colors.wrong, 0x99));
+      expect(style["--theme-ring"]).toBe(theme.colors.text);
+    }
+    // A light stage (dark text) fades wrong answers less, so their light text stays readable on it.
+    const dim = (id: string) => Number((themeStyle(THEMES.find((theme) => theme.id === id)!) as Record<string, string>)["--theme-dim"]);
+    expect(dim("builtin.daylight")).toBeGreaterThan(dim("builtin.classic"));
+    expect(dim("builtin.bakchus")).toBe(dim("builtin.daylight"));
+  });
+
   it("names a font by its file, so themes that share one share the family", () => {
     const night = THEMES.find((theme) => theme.id === "builtin.night")!;
     expect(fontFamily(night.fonts.body)).toBe(fontFamily(classic.fonts.body));
