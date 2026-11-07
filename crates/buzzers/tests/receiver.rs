@@ -583,6 +583,39 @@ fn a_buzz_whose_timer_counts_from_before_the_round_is_dropped_and_logged() {
 }
 
 #[test]
+fn a_stale_buzz_does_not_hide_the_same_buzzers_press_in_the_round() {
+    let stale: &[u8] = &[0x32, 5, 0x50, 0x43, 0xc0, 0x27, 0x09, 0, 0, 0];
+    let real: &[u8] = &[0x32, 5, 0x50, 0x43, 30, 0, 0, 0, 0, 0];
+    // In one report, and in two reports within the repeat gap.
+    for reports in [vec![from_303s_all(&[stale, real])], vec![buzz_303s(6, 600_000), buzz_303s(6, 30)]] {
+        let backend = FakeBackend::default();
+        let (handle, rx) = start_303s(&backend, ReceiverConfig { timer_window: Duration::from_millis(20), repeat_gap_ms: 5_000, ..config() });
+        set_mode_now(&handle, &backend, &rx, BuzzerMode::FastestFinger);
+        round_runs_for(30);
+        backend.0.lock().unwrap().inbox.extend(reports);
+        let ReceiverEvent::Press { press, .. } = wait_for(&rx, |e| matches!(e, ReceiverEvent::Press { .. })) else { unreachable!() };
+        assert_eq!(press, Press::timed(6, Button::Big, 30));
+        handle.shutdown();
+    }
+}
+
+#[test]
+fn a_press_the_edge_filter_drops_is_logged_as_dropped() {
+    let backend = FakeBackend::default();
+    let (handle, rx) = start_303s(&backend, config());
+    handle.set_mode(BuzzerMode::Answers);
+    let press: &[u8] = &[0x32, 3, 0x10, 0x43, 9, 0, 0, 0, 0, 0];
+    // The receiver sends the same press again, timer and all.
+    backend.0.lock().unwrap().inbox.extend([from_303s(press), from_303s(press)]);
+    let pressed = |e: &ReceiverEvent| matches!(e, ReceiverEvent::Raw(r) if r.bytes.get(4) == Some(&0x32));
+    let ReceiverEvent::Raw(first) = wait_for(&rx, pressed) else { unreachable!() };
+    assert_eq!((first.decoded.as_slice(), first.dropped.as_slice()), (&[Press::timed(4, Button::A, 9)][..], &[][..]));
+    let ReceiverEvent::Raw(again) = wait_for(&rx, pressed) else { unreachable!() };
+    assert_eq!((again.decoded.as_slice(), again.dropped.as_slice()), (&[][..], &[Press::timed(4, Button::A, 9)][..]));
+    handle.shutdown();
+}
+
+#[test]
 fn a_key_of_the_remote_reaches_the_app_once_after_the_presses_of_its_report() {
     let backend = FakeBackend::default();
     let (handle, rx) = start_303s(&backend, config());

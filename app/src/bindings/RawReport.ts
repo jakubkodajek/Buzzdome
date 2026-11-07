@@ -10,10 +10,16 @@ export type RawReport = {
  * When it arrived, on the show clock (`ReceiverConfig::clock`), as
  * the presses decoded from it.
  */
-atMs: number, bytes: Array<number>, decoded: Array<Press>, 
+atMs: number, bytes: Array<number>, 
 /**
- * Presses read but dropped as ones that cannot count now, such as a
- * buzz from a buzzer that was not ready (`Protocol::take_dropped`).
+ * Presses read that count, passed on as `ReceiverEvent::Press`.
+ */
+decoded: Array<Press>, 
+/**
+ * Presses read but dropped as ones that cannot count now: a buzz from
+ * a buzzer that was not ready (`Protocol::take_dropped`), one whose
+ * timer counts from before the fastest-finger round, or one the edge
+ * filter took for a press held or sent again.
  */
 dropped: Array<Press>, 
 /**
