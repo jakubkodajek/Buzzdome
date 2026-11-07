@@ -1769,6 +1769,12 @@
   border: none;
 }
 
+.answer-rows-hint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
 .answer-rows legend {
   padding: 0 0 4px;
   font-weight: 600;

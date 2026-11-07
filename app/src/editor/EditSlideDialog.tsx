@@ -67,11 +67,14 @@ export function EditSlideDialog(props: {
           onClose();
         }}
         onKeyDown={(e) => {
-          // Ctrl+Enter confirms from a multi-line field too.
-          if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
-            e.preventDefault();
-            e.currentTarget.requestSubmit();
-          }
+          if (e.key !== "Enter" || e.shiftKey || e.altKey) return;
+          // Ctrl+Enter confirms from a multi-line field too; Enter in an answer goes on to the next one, as in a list, and confirms after the last.
+          const answer = e.target instanceof HTMLInputElement ? /^answer-(\d+)$/.exec(e.target.dataset.field ?? "") : null;
+          if (!(e.ctrlKey || e.metaKey) && !answer) return;
+          e.preventDefault();
+          const next = answer && !(e.ctrlKey || e.metaKey) ? e.currentTarget.querySelector<HTMLInputElement>(`[data-field="answer-${Number(answer[1]) + 1}"]:not(:disabled)`) : null;
+          if (next) next.focus();
+          else e.currentTarget.requestSubmit();
         }}
       >
         {draft.type === "question" && <QuestionFields question={draft} onChange={setDraft} />}
@@ -146,9 +149,11 @@ function QuestionFields({ question, onChange }: { question: QuestionSlide; onCha
                 value={question.answers[i] ?? ""}
                 onChange={(e) => onChange(setAnswerAt(question, i, e.target.value))}
               />
+              {/* Off the Tab order, so Tab goes from an answer to the next one's tick and text; by keys, the properties' answer count removes answers. */}
               <button
                 type="button"
                 className="mini"
+                tabIndex={-1}
                 title={t("removeAnswer")}
                 aria-label={`${t("removeAnswer")} ${letter}`}
                 disabled={!used || removeAnswer(question, i) === question}
@@ -159,6 +164,7 @@ function QuestionFields({ question, onChange }: { question: QuestionSlide; onCha
             </div>
           );
         })}
+        <p className="answer-rows-hint">{t("answersFieldHint")}</p>
       </fieldset>
     </>
   );
