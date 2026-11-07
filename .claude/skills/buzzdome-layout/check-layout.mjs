@@ -186,7 +186,7 @@ for (const size of SIZES) {
     }
     if (!only || only === "editor") {
       const { page, visit, errors, close } = await check("editor", "/preview.html?window=director&scene=none", size, lang, async (p) => {
-        await p.locator(".command-panel .command").nth(2).click();
+        await p.locator(".command-panel .command", { hasText: /Editor kvízů|Quiz editor/ }).click();
         // The editor first asks what to work on: the preview's quiz, left open.
         await p.locator(".quiz-start-dialog .continue").click();
         await p.waitForSelector(".ribbon-tabs", { timeout: 10000 });
