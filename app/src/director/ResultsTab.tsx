@@ -4,7 +4,7 @@ import { useApp, useRun } from "../app-context";
 import { seconds, signed } from "../format";
 import { useShowResults } from "../hooks";
 import { playerName } from "../i18n";
-import { rightAnswers } from "../quiz";
+import { quizName, rightAnswers } from "../quiz";
 import type { BuzzerId, GameView, PlayerResult, Quiz, ShowResults, Slide } from "../types";
 import { listSeparator } from "../editor/sheet";
 import { marksByTime, questionLabels, resultRounds, resultsTable } from "./results";
@@ -21,7 +21,7 @@ export function ResultsTab({ view, quiz }: { view: GameView; quiz: Quiz | null }
   if (!results || !quiz) return null;
 
   const exportCsv = () => {
-    const picker = { filter: t("csvFile"), fileName: t("resultsFileName", { title: quiz.title || t("untitledQuiz") }) };
+    const picker = { filter: t("csvFile"), fileName: t("resultsFileName", { title: quizName(t, quiz) }) };
     const rows = resultsTable(t, quiz, results, listSeparator(lang));
     run(api.exportResults(rows, listSeparator(lang), picker).then((saved) => saved && notify(t("resultsSaved"))));
   };
@@ -35,7 +35,7 @@ export function ResultsTab({ view, quiz }: { view: GameView; quiz: Quiz | null }
         </button>
       </div>
       <div className="results-body">
-        <h1 className="results-title">{quiz.title || t("untitledQuiz")}</h1>
+        <h1 className="results-title">{quizName(t, quiz)}</h1>
         <h2>{t("resultsRanking")}</h2>
         <Ranking results={results} />
         <h2>{t("resultsQuestions")}</h2>

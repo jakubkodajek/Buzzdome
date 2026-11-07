@@ -7,6 +7,11 @@ export function quizPicker(t: Translate, fileName?: string): Picker {
   return { filter: t("quizFiles"), fileName };
 }
 
+/** What a quiz is called in titles, file names and messages: its title, or that it has none. */
+export function quizName(t: Translate, quiz: Pick<Quiz, "title">): string {
+  return quiz.title || t("untitledQuiz");
+}
+
 /** The quiz's settings: those of its file, the defaults where it has none. */
 export function settingsOf(quiz: Quiz): QuizSettings {
   return quiz.settings ?? DEFAULT_QUIZ_SETTINGS;

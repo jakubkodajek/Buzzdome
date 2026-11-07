@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { useApp } from "../app-context";
 import { EditIcon, FolderIcon, AddIcon } from "../icons";
+import { quizName } from "../quiz";
 import { RecentFileList } from "../recent-files";
 import { Dialog } from "./controls";
 import type { OpenQuiz } from "./editor-state";
@@ -25,7 +26,7 @@ interface StartChoices {
 export function QuizStartDialog(props: StartChoices & { open: OpenQuiz | null; unsaved: boolean; onContinue: () => void; onCancel: () => void }) {
   const { open, unsaved, onContinue, onCancel, onOpen, onForget, recentFiles, busy } = props;
   const { t } = useApp();
-  const title = open ? open.history.present.title || t("untitledQuiz") : null;
+  const title = open ? quizName(t, open.history.present) : null;
   return (
     <Dialog
       title={t("quizEditor")}

@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { FULL_SHARE } from "./bindings/Constants";
 import { newSlide } from "./editor/slides";
-import { hasTitle, isCorrect, plays, rightAnswers, sameContext, shareOf, slideContexts, slideTitle } from "./quiz";
+import { translator } from "./i18n";
+import { hasTitle, isCorrect, plays, quizName, rightAnswers, sameContext, shareOf, slideContexts, slideTitle } from "./quiz";
 import type { Quiz, SlideType } from "./types";
 
 const quizOf = (...types: SlideType[]): Quiz => ({
@@ -9,6 +10,14 @@ const quizOf = (...types: SlideType[]): Quiz => ({
   title: "",
   theme: null,
   slides: types.map((type, i) => newSlide(type, `s${i}`)),
+});
+
+describe("quizName", () => {
+  it("is the title, or says the quiz has none", () => {
+    const t = translator("en");
+    expect(quizName(t, { title: "Pub quiz" })).toBe("Pub quiz");
+    expect(quizName(t, { title: "" })).toBe(t("untitledQuiz"));
+  });
 });
 
 describe("slideContexts", () => {

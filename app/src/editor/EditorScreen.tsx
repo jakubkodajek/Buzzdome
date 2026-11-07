@@ -23,7 +23,7 @@ import {
   WarningIcon,
 } from "../icons";
 import { MediaRootContext } from "../media";
-import { NO_CONTEXT, slideContexts } from "../quiz";
+import { NO_CONTEXT, quizName, slideContexts } from "../quiz";
 import { ThemeContext } from "../theme/context";
 import { useLatest, useWindowTitle } from "../hooks";
 import { createStore, useStore } from "../store";
@@ -340,7 +340,7 @@ function Studio({ editor, open, ask, onExit }: { editor: QuizEditor; open: OpenQ
   };
   const openMenu = (event: MouseEvent, target: MenuTarget) => setMenu({ x: event.clientX, y: event.clientY, target });
 
-  const title = quiz ? quiz.title || t("untitledQuiz") : t("quizEditor");
+  const title = quiz ? quizName(t, quiz) : t("quizEditor");
   useWindowTitle(quiz ? `${title}${unsaved ? " *" : ""} – ${t("quizEditor")}` : t("quizEditor"), t("appTitle"));
   const editings = selectedSlides.map((s) => editingFor(s, selected));
   const shared = selectionPages(t, editings, element);
