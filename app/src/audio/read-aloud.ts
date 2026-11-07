@@ -7,7 +7,7 @@
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { api } from "../api";
 import { useDispatch, useReport } from "../app-context";
-import { DEFAULT_QUIZ_SETTINGS, DEFAULT_QUIZ_SOUNDS, FIRST_MALE_VOICE, MAX_VOICE, MAX_VOICE_SPEED, MIN_VOICE_SPEED } from "../bindings/Constants";
+import { DEFAULT_QUIZ_SETTINGS, DEFAULT_QUIZ_SOUNDS, FIRST_MALE_VOICE, MAX_VOICE, MAX_VOICE_SPEED, MIN_VOICE_SPEED, VOICE_SPEED_STEP } from "../bindings/Constants";
 import { useLatest, usePlayerVolume } from "../hooks";
 import { fileUrl } from "../media";
 import { settingsOf, soundsOf } from "../quiz";
@@ -24,7 +24,10 @@ export const SPEECH_TAGS: Record<QuizLanguage, string> = {
 };
 
 /** The reading speeds offered, in percent of the voice's own pace. */
-export const VOICE_SPEEDS: readonly number[] = Array.from({ length: (MAX_VOICE_SPEED - MIN_VOICE_SPEED) / 10 + 1 }, (_, i) => MIN_VOICE_SPEED + i * 10);
+export const VOICE_SPEEDS: readonly number[] = Array.from(
+  { length: (MAX_VOICE_SPEED - MIN_VOICE_SPEED) / VOICE_SPEED_STEP + 1 },
+  (_, i) => MIN_VOICE_SPEED + i * VOICE_SPEED_STEP,
+);
 
 /** Every voice of the model, by number. */
 export const VOICES: readonly number[] = Array.from({ length: MAX_VOICE + 1 }, (_, voice) => voice);

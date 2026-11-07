@@ -41,6 +41,7 @@ export const MAX_VOICE = 9;
 export const FIRST_MALE_VOICE = 5;
 export const MIN_VOICE_SPEED = 80;
 export const MAX_VOICE_SPEED = 120;
+export const VOICE_SPEED_STEP = 10;
 export const QUIZ_LANGUAGES = ["cs","en"] as const;
 export const LAST_SECONDS_MS = 5000;
 export const DEFAULT_QUIZ_SOUNDS = {"slots":{},"effectsVolume":100,"musicVolume":50} as const;

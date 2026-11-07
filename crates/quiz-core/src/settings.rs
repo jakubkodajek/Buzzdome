@@ -27,6 +27,8 @@ pub const FIRST_MALE_VOICE: u8 = 5;
 pub const MIN_VOICE_SPEED: u8 = 80;
 pub const DEFAULT_VOICE_SPEED: u8 = 100;
 pub const MAX_VOICE_SPEED: u8 = 120;
+/// The speeds offered are this many percent apart.
+pub const VOICE_SPEED_STEP: u8 = 10;
 /// Most jokers a player can have in a show.
 pub const MAX_JOKERS: u8 = 5;
 
@@ -288,9 +290,10 @@ count_up_to!(after_reveal_delay, super::DEFAULT_AFTER_REVEAL_DELAY_S, super::MAX
 count_up_to!(jokers, 0, super::MAX_JOKERS);
 count_up_to!(voice, 0, super::MAX_VOICE);
 
-/// The voice's speed: one outside the range reads as the nearest end of it.
+/// The voice's speed: one outside the range reads as the nearest end of
+/// it, and one between the steps as the nearest step.
 mod voice_speed {
-    use super::{DEFAULT_VOICE_SPEED, MAX_VOICE_SPEED, MIN_VOICE_SPEED};
+    use super::{DEFAULT_VOICE_SPEED, MAX_VOICE_SPEED, MIN_VOICE_SPEED, VOICE_SPEED_STEP};
     use serde::{Deserializer, Serialize, Serializer};
 
     pub fn serialize<S: Serializer>(speed: &u8, serializer: S) -> Result<S::Ok, S::Error> {
@@ -298,7 +301,9 @@ mod voice_speed {
     }
 
     pub fn deserialize<'de, D: Deserializer<'de>>(deserializer: D) -> Result<u8, D::Error> {
-        super::read_count_up_to(deserializer, DEFAULT_VOICE_SPEED, MAX_VOICE_SPEED).map(|speed| speed.max(MIN_VOICE_SPEED))
+        let speed = super::read_count_up_to(deserializer, DEFAULT_VOICE_SPEED, MAX_VOICE_SPEED)?.max(MIN_VOICE_SPEED);
+        let steps = (speed - MIN_VOICE_SPEED + VOICE_SPEED_STEP / 2) / VOICE_SPEED_STEP;
+        Ok(MIN_VOICE_SPEED + steps * VOICE_SPEED_STEP)
     }
 }
 
@@ -349,6 +354,10 @@ mod tests {
         assert_eq!(read(r#"{ "voiceSpeed": 10 }"#).voice_speed, MIN_VOICE_SPEED);
         assert_eq!(read(r#"{ "voiceSpeed": 400 }"#).voice_speed, MAX_VOICE_SPEED);
         assert_eq!(read(r#"{ "voiceSpeed": "fast" }"#).voice_speed, DEFAULT_VOICE_SPEED);
+        assert_eq!(read(r#"{ "voiceSpeed": -90 }"#).voice_speed, DEFAULT_VOICE_SPEED);
+        assert_eq!(read(r#"{ "voiceSpeed": 94 }"#).voice_speed, 90);
+        assert_eq!(read(r#"{ "voiceSpeed": 95 }"#).voice_speed, 100);
+        assert_eq!(read(r#"{ "voiceSpeed": 119 }"#).voice_speed, MAX_VOICE_SPEED);
     }
 
     #[test]

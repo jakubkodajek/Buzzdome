@@ -332,7 +332,7 @@ plays.
 | `language` | text | The language the quiz is written in, for the voice that reads it out: `cs` (default) or `en`. |
 | `readAloud` | text | What the Director reads out when a question comes on screen (spec SN-10): `off` (default), `question` (its text), or `questionAndAnswers` (its text, then each answer after its letter). |
 | `voice` | number | Which of the app's voices reads, 0 to 9 (default 0; more reads as 9): 0 to 4 sound female, 5 to 9 male. |
-| `voiceSpeed` | number | How fast the voice reads, in percent of its own pace, 80 to 120 (default 100; a number outside reads as the nearer end). |
+| `voiceSpeed` | number | How fast the voice reads, in percent of its own pace, 80 to 120 in steps of 10 (default 100). A whole number outside reads as the nearer end, one between the steps as the nearest step, and anything else (negative, fractional, not a number) as 100. |
 | `clockAfterReading` | true/false | With `readAloud` on and `startOnNext` off, a question shown waits until the Director has read it out, and its clock starts then (default false: the clock runs while the voice reads). A question that is not read waits for nothing; Next starts the clock sooner. |
 
 ### Sounds
@@ -465,6 +465,7 @@ billboard with the sheet's name opens. Each row with a value is a slide.
 | `POINTS-START`, `POINTS-END` | Points, falling from the start to the end value when both are given. |
 | `PENALTY-POINTS-START` | Points taken for a wrong answer (either sign). |
 | `CAT` | The name of one of the quiz's categories, in any case: the slide takes on its look, but keeps a `BACKGROUND` or `BACKGROUND-VIDEO` of its own. A name the quiz has no category of is listed in the notes, so categories are made in the quiz before importing. Export writes the name of the slide's category. |
+| `READ-AS` | This app's own. How the voice says a question when it reads it out (`readAs`). |
 
 **Prefixes.** `{Q}` question, `{T}` test question (imported with no
 points), `{B}` billboard (the first line is its title, the rest its text),

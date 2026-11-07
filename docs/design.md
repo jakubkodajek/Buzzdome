@@ -1173,7 +1173,7 @@ read (`audio/read-aloud.ts`, `voiceLine`: the question's `readAs` text or
 its text, and the answers); `crates/voice` decides how it is said
 (`Line::parts`):
 
-- **Words.** `speech.rs` writes the text as it is said in the quiz's
+- **Words.** `speech/` (`mod.rs`, `czech.rs`, `english.rs`) writes the text as it is said in the quiz's
   language before the model reads it: numbers (Czech thousands grouped by
   spaces, English by commas), decimals, ranges ("1914–1918"), minus signs,
   times, Czech dates ("17. 11. 1989"), ordinals ("2. světová válka",

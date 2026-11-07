@@ -97,6 +97,18 @@ fn cleaned(text: &str) -> String {
     cleaned.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
+/// `words` said aloud, at most `MAX_TEXT_CHARS` (written out, a number is
+/// longer than its digits): cut after the last whole word that fits.
+fn bounded(words: String) -> String {
+    match words.char_indices().nth(MAX_TEXT_CHARS) {
+        None => words,
+        Some((end, _)) => {
+            let fits = &words[..end];
+            fits[..fits.rfind(' ').unwrap_or(end)].to_string()
+        }
+    }
+}
+
 /// `words` ending as a sentence ends, so the voice falls at the end.
 fn sentence(mut words: String) -> String {
     if !words.ends_with(['.', '!', '?', '…', ':', ';']) {
@@ -126,7 +138,7 @@ impl Line {
     /// What is said, piece by piece, as it is said (`speech::spoken`): the
     /// question, then each answer's letter and the answer.
     pub fn parts(&self) -> Vec<Part> {
-        let spoken = |text: &str| speech::spoken(&cleaned(text), self.language);
+        let spoken = |text: &str| bounded(speech::spoken(&cleaned(text), self.language));
         let mut parts = Vec::new();
         let question = spoken(&self.question);
         if !question.is_empty() {
@@ -210,6 +222,15 @@ mod tests {
     fn words_are_on_one_line_without_control_characters() {
         assert_eq!(line("  Kolik\n nohou\0má\tpavouk? ", &[]).words(), "Kolik nohou má pavouk?");
         assert_eq!(cleaned(&"a".repeat(MAX_TEXT_CHARS + 10)).chars().count(), MAX_TEXT_CHARS);
+    }
+
+    #[test]
+    fn each_part_says_at_most_the_longest_text_cut_after_a_whole_word() {
+        let parts = line(&"7".repeat(MAX_TEXT_CHARS), &["Sedm"]).parts();
+        let said = &parts[0].words;
+        assert!(said.chars().count() <= MAX_TEXT_CHARS + 1, "{} chars", said.chars().count());
+        assert!(said.trim_end_matches('.').ends_with("sedm"), "cut after a whole word: {said}");
+        assert_eq!(bounded("krátká věta".into()), "krátká věta");
     }
 
     #[test]

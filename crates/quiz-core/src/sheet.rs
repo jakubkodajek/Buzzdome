@@ -151,11 +151,12 @@ enum Field {
     PointsEnd,
     Penalty,
     Category,
+    ReadAs,
 }
 
 /// The columns this app reads and writes, in the order an export writes
 /// them, under the reference template's headings.
-const FIELDS: [(&str, Field); 18] = [
+const FIELDS: [(&str, Field); 19] = [
     ("Q", Field::Text),
     ("A1", Field::Answer(0)),
     ("A2", Field::Answer(1)),
@@ -174,6 +175,8 @@ const FIELDS: [(&str, Field); 18] = [
     ("POINTS-END", Field::PointsEnd),
     ("PENALTY-POINTS-START", Field::Penalty),
     ("CAT", Field::Category),
+    // This app's own: how the voice says a question.
+    ("READ-AS", Field::ReadAs),
 ];
 
 /// Columns of the reference template this app has no place for.
@@ -552,7 +555,7 @@ fn question(
         points: DEFAULT_POINTS,
         points_end: None,
         penalty: 0,
-        read_as: String::new(),
+        read_as: row.get(Field::ReadAs).to_string(),
     };
     if test {
         notes.add(ImportIssue::TestQuestion, place);
@@ -958,6 +961,7 @@ fn export_row(slide: &Slide, categories: &[Category], file_name: &impl Fn(&str) 
             set(Field::PointsStart, question.points.to_string());
             set(Field::PointsEnd, question.points_end.map(|end| end.to_string()).unwrap_or_default());
             set(Field::Penalty, question.penalty.to_string());
+            set(Field::ReadAs, question.read_as.clone());
         }
         SlideContent::Billboard { title, text } if text.is_empty() => set(Field::Text, prefixed(BILLBOARD, title)),
         SlideContent::Billboard { title, text } => set(Field::Text, prefixed(BILLBOARD, &format!("{title}\n{text}"))),
@@ -1444,7 +1448,7 @@ mod tests {
             points: 100,
             points_end: Some(20),
             penalty: 5,
-            read_as: String::new(),
+            read_as: "Capital of France, the country?".into(),
         };
         let open = Question { text: "Name the song".into(), mode: AnswerMode::FastestFinger, answers: vec![], correct: vec![], ..everyone.clone() };
         let mut asked = Slide::new("q1", SlideContent::Question(everyone));
