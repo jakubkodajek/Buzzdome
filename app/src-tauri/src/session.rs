@@ -9,7 +9,7 @@
 //! taken back. Every line is written at the end of the whole lines instead.
 
 use crate::app_log;
-use quiz_core::{Quiz, QuizJsonError, Stamped};
+use quiz_core::{Game, Quiz, QuizJsonError, Stamped};
 use quiz_file::{Context, FileAction, QuizFileError};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
@@ -20,6 +20,8 @@ use std::path::{Path, PathBuf};
 const QUIZ_FILE: &str = "quiz.json";
 const META_FILE: &str = "meta.json";
 const JOURNAL_FILE: &str = "journal.jsonl";
+/// Marks a show the quizmaster ended (`Session::end`), until it is resumed.
+const ENDED_FILE: &str = "ended";
 /// Where the journal is kept as it was each time resuming cut a torn last
 /// line off it (`torn/journal-1.jsonl`, `-2`, ...).
 const TORN_DIR: &str = "torn";
@@ -56,9 +58,28 @@ impl SessionMeta {
 pub struct SessionSummary {
     pub meta: SessionMeta,
     pub command_count: usize,
+    /// How the show was done with, if it was: starting another one then
+    /// loses nothing worth asking about, though it can still be resumed.
+    /// None for a show that stopped mid-way (a crash, the app closed).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub finished: Option<ShowFinish>,
+}
+
+/// How a show was done with (`SessionSummary::finished`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
+#[serde(rename_all = "camelCase")]
+pub enum ShowFinish {
+    /// The quizmaster ended it (End show).
+    Ended,
+    /// It played to its end: the last slide is done.
+    PlayedOut,
 }
 
 pub struct Session {
+    /// The session's folder.
+    dir: PathBuf,
     journal: File,
     /// Bytes of whole, accepted lines in the journal.
     len: u64,
@@ -121,7 +142,7 @@ impl Session {
         let journal = open_journal(&path).context(FileAction::Write, &path)?;
         quiz_file::sync_dir(&dir)?;
         let len = journal.metadata().context(FileAction::Read, &path)?.len();
-        Ok(Session { journal, len, broken: false })
+        Ok(Session { dir, journal, len, broken: false })
     }
 
     /// Reopens the most recent session for appending, with its quiz and journal.
@@ -146,15 +167,31 @@ impl Session {
             file.set_len(kept)?;
             file.sync_data()?;
         }
-        let session = Session { journal: file, len: kept, broken: false };
+        // Resumed, an ended show is no longer done with.
+        match fs::remove_file(dir.join(ENDED_FILE)) {
+            Err(e) if e.kind() != io::ErrorKind::NotFound => app_log::note(&format!("the end mark of {} stays: {e}", dir.display())),
+            _ => {}
+        }
+        let session = Session { dir, journal: file, len: kept, broken: false };
         Ok(Some(Resumed { session, quiz, journal, meta }))
     }
 
     pub fn latest_summary(root: &Path) -> Result<Option<SessionSummary>, ResumeError> {
         let Some(dir) = latest_dir(root)? else { return Ok(None) };
         let meta = read_meta(&dir)?;
-        let command_count = read_journal(&dir.join(JOURNAL_FILE))?.0.len();
-        Ok(Some(SessionSummary { meta, command_count }))
+        let journal = read_journal(&dir.join(JOURNAL_FILE))?.0;
+        let finished = if dir.join(ENDED_FILE).exists() {
+            Some(ShowFinish::Ended)
+        } else {
+            played_out(&dir, &meta, &journal).then_some(ShowFinish::PlayedOut)
+        };
+        Ok(Some(SessionSummary { meta, command_count: journal.len(), finished }))
+    }
+
+    /// The quizmaster ended the show (End show): marked on disk, so the
+    /// next show starts without asking to give it up (`SessionSummary::finished`).
+    pub fn end(self) -> Result<(), QuizFileError> {
+        quiz_file::write_atomic(&self.dir.join(ENDED_FILE), b"")
     }
 
     /// Lets appends work again after `break_for_test`.
@@ -208,6 +245,13 @@ fn keep_aside(path: &Path, dir: &Path) -> io::Result<PathBuf> {
             Err(e) => return Err(e),
         }
     }
+}
+
+/// Whether the show in `dir` played to its end (`Game::is_over`). One whose
+/// quiz copy does not read is not: resuming it says why.
+fn played_out(dir: &Path, meta: &SessionMeta, journal: &[Stamped]) -> bool {
+    let quiz = fs::read_to_string(dir.join(QUIZ_FILE)).ok().and_then(|json| Quiz::from_json(&json).ok());
+    quiz.is_some_and(|quiz| Game::replay(quiz, journal, meta.rules_version).is_over())
 }
 
 fn read_meta(dir: &Path) -> Result<SessionMeta, ResumeError> {
@@ -599,6 +643,26 @@ mod tests {
         folders.sort();
         assert_eq!(folders, [60, 61]);
         assert_eq!(Session::latest_summary(&root).unwrap().unwrap().command_count, 0);
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn a_show_ended_or_played_to_its_end_is_finished_until_it_is_resumed() {
+        let root = temp_root("finished");
+        journaled_show(&root, 1);
+        let summary = || Session::latest_summary(&root).unwrap().unwrap();
+        assert_eq!(summary().finished, None, "stopped mid-show");
+        let resumed = Session::resume_latest(&root).unwrap().unwrap();
+        resumed.session.end().unwrap();
+        assert_eq!(summary().finished, Some(ShowFinish::Ended));
+        let mut resumed = Session::resume_latest(&root).unwrap().unwrap();
+        assert_eq!(summary().finished, None, "resumed, it runs again");
+        // A quiz of no slides: Next opens the final ranking, whose steps end the show.
+        for at_ms in 10..10 + u64::from(quiz_core::game::FINAL_LAST_STEP) {
+            assert_eq!(summary().finished, None);
+            resumed.session.append(&Stamped { at_ms, command: Command::Next }).unwrap();
+        }
+        assert_eq!(summary().finished, Some(ShowFinish::PlayedOut));
         fs::remove_dir_all(&root).unwrap();
     }
 

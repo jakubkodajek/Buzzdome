@@ -1599,7 +1599,14 @@ charged twice), and that command is journaled before `show-changed`
 reaches the windows, so no window shows the stopped question. One that
 stopped while a step was coming by itself (QZ-11) has the step held
 (`PauseClock`): the clock reads later after a restart, so the step would
-otherwise come at once, before the quizmaster saw where the show stands. The
+otherwise come at once, before the quizmaster saw where the show stands.
+Either way the Director is told (`QuestionRestarted`, `AutoStepHeld`
+among the resume warnings), so the hall can be asked to answer again.
+End show leaves an `ended` mark in the session folder (`Session::end`),
+which resuming removes; the last session's summary says the show was done
+with (`SessionSummary::finished`: ended, or played to its end, which a
+replay of its journal tells), so a new show starts without asking to give
+it up, though it can still be resumed. The
 quizmaster can restart a question in play too (Restart question, after a
 confirmation): it is the way to leave a question without scoring it, since
 a jump is refused then. Its score changes and answering times are taken

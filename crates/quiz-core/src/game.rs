@@ -1025,6 +1025,11 @@ impl Game {
         }
     }
 
+    /// The show is over: its last slide is done, and Next goes nowhere.
+    pub fn is_over(&self) -> bool {
+        self.next_leaves_slide() && self.following().is_none()
+    }
+
     /// What `next` does in this step; None when it refuses (`NotNow`):
     /// while a buzz waits to be judged, and past the last slide. The one
     /// place that says it: `next` takes the step it gives.

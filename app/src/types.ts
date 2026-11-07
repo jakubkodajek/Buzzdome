@@ -118,6 +118,7 @@ export type { RemoteKeyAction } from "./bindings/RemoteKeyAction";
 export type { Replay } from "./bindings/Replay";
 export type { ScreenKey } from "./bindings/ScreenKey";
 export type { SessionSummary } from "./bindings/SessionSummary";
+export type { ShowFinish } from "./bindings/ShowFinish";
 export type { SettingsLost } from "./bindings/SettingsLost";
 export type { SheetExport } from "./bindings/SheetExport";
 export type { SheetImport } from "./bindings/SheetImport";

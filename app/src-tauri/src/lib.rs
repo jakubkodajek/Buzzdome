@@ -656,6 +656,10 @@ async fn end_show(app: AppHandle) -> CmdResult<()> {
         if inner.before_show(at_ms) {
             return Ok(());
         }
+        // Done with: the next show starts without asking to give it up.
+        if let Some(Err(e)) = inner.session.take().map(Session::end) {
+            app_log::note(&format!("the ended show is not marked as ended: {e}"));
+        }
         replace_show(inner, None, None);
         inner.media_root = None;
         show_changed(app, inner);
