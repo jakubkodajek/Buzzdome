@@ -83,14 +83,13 @@ async function ribbonTab(label: StringKey): Promise<void> {
 }
 
 describe("the quiz editor", () => {
-  test("opens from the Director and starts a new quiz", async () => {
-    await app.press("quizEditor");
-    await app.$(".studio");
-    // Without a quiz the editor opens on its File page.
-    await app.$(".backstage");
-    await ctrl("n");
+  test("opens from the Director, asks what to work on and starts a new quiz under its name", async () => {
+    await app.openEditor("Kvíz z E2E");
     await app.$(".ribbon");
     await app.seeText(t("noSlides").slice(0, 20));
+    await app.seeText("Kvíz z E2E");
+    // A new quiz has no file yet: it can be saved.
+    expect(await app.page.enabled(await app.$(`.quick-access button[aria-label="${t("saveQuiz")}"]`))).toBe(true);
   });
 
   test("adds questions with the keys, and undo and redo take them back and forth", async () => {
@@ -213,7 +212,7 @@ describe("the quiz editor", () => {
     await waitFor("the draft on disk", async () => draftSlides().includes(slides));
     await app.crash();
     app = await App.launch(data);
-    await app.press("quizEditor");
+    await app.openEditor();
     await app.$(".studio");
     await waitFor(`${slides} slides back`, async () => (await slideCount()) === slides);
   });
@@ -226,6 +225,8 @@ describe("the quiz editor", () => {
     await waitFor("the quiz file", async () => existsSync(file));
     // A quiz file is a ZIP (docs/quiz-format.md).
     expect(readFileSync(file).subarray(0, 2).toString("latin1")).toBe("PK");
+    // Saved: the Save button greys out and says so, until the quiz changes again.
+    await waitFor("Save to grey out", async () => !(await app.page.enabled(await app.$(`.quick-access button[aria-label="${t("quizSaved")}"]`))));
     const slides = await slideCount();
     await app.press("backToDirector");
     await app.press("openQuiz");
@@ -293,7 +294,7 @@ describe("the quiz editor", () => {
       await waitFor("the show to end", async () => (await app.view()) === null);
     }
     // Where the tests before it run (Linux), they end in the Director; elsewhere the crash test ends in the editor.
-    if ((await app.count(".studio")) === 0) await app.press("quizEditor");
+    if ((await app.count(".studio")) === 0) await app.openEditor();
     await app.$(".studio");
     const themes = await app.invoke<{ id: string; name: { cs: string } }[]>("list_themes");
     const current = draftThemes();

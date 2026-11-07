@@ -310,6 +310,23 @@ export class App {
   }
 
   /**
+   * Opens the quiz editor from the Director and answers what it asks first:
+   * a new quiz called `newTitle` when given, else the quiz left open, or a
+   * new untitled one when none is.
+   */
+  async openEditor(newTitle?: string): Promise<void> {
+    await this.press("quizEditor");
+    await this.$(".quiz-start-dialog");
+    if (newTitle === undefined && (await this.count(".quiz-start-dialog .continue")) > 0) {
+      await this.page.click(await this.$(".quiz-start-dialog .continue"));
+    } else {
+      if (newTitle) await this.page.type(await this.$(".new-quiz-form input"), newTitle);
+      await this.press("createQuiz");
+    }
+    await waitFor("the start dialog to close", async () => (await this.count(".quiz-start-dialog")) === 0);
+  }
+
+  /**
    * Presses a step button (Next, Right, ...) as a person would: not within
    * `STEP_PAUSE_MS` of the last step, which the Director drops as a double
    * press (step-guard.ts).

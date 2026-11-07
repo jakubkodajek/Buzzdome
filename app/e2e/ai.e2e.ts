@@ -151,7 +151,7 @@ describe("AI assistants write quizzes", () => {
 
   test("the editor's AI assistants page connects AI apps where they are installed and keeps the instructions", async () => {
     app ??= await App.launch(data);
-    await app.press("quizEditor");
+    await app.openEditor();
     await app.$(".studio, .backstage");
     if ((await app.count(".backstage")) === 0) await app.press("ribbonFile");
     // Codex is installed here: the app knows it by its folder (CODEX_HOME, harness.ts).

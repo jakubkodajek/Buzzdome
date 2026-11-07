@@ -2697,3 +2697,100 @@
 .props-inline > span {
   white-space: nowrap;
 }
+
+/* What the editor asks as it opens (QuizStartDialog) */
+
+.quiz-start-dialog {
+  width: min(560px, 92vw);
+}
+
+.quiz-start-dialog section + section {
+  margin-top: 6px;
+  border-top: 1px solid var(--line);
+}
+
+.quiz-start-dialog h3 {
+  margin: 12px 0 8px;
+  font-size: 13px;
+}
+
+.quiz-start-dialog h4 {
+  margin: 12px 0 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.studio .start-choice {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  text-align: left;
+}
+
+.studio .start-choice:hover:not(:disabled) {
+  border-color: var(--hover-line);
+  background: var(--hover);
+}
+
+.start-choice svg {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  color: var(--accent);
+}
+
+.start-choice span {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.start-choice b {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.start-choice small {
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.new-quiz-form {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.new-quiz-form .field {
+  flex: 1;
+}
+
+.new-quiz-form input {
+  padding: 4px 6px;
+}
+
+.studio .new-quiz-form .primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 14px;
+  border: 1px solid var(--accent);
+  border-radius: 3px;
+  background: var(--accent);
+  color: #fff;
+}
+
+.studio .new-quiz-form .primary:hover:not(:disabled) {
+  background: var(--accent-dark);
+}
+
+.new-quiz-form .primary svg {
+  width: 14px;
+  height: 14px;
+}

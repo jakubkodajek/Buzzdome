@@ -25,7 +25,8 @@ export interface QuizEditor {
   redo: () => void;
   // File operations resolve to whether they happened (not cancelled, not
   // failed, not refused while another one was under way).
-  newQuiz: () => Promise<boolean>;
+  /** Starts a new quiz called `title` (the untitled name when empty). */
+  newQuiz: (title: string) => Promise<boolean>;
   /**
    * Opens `recent`, a file in `recentFiles`, or a file the user picks.
    * Resolves to the draft opened (a file from an older version may break
@@ -165,10 +166,10 @@ export function useQuizEditor(onTestRun: () => void): QuizEditor {
     redo: () => {
       if (editable()) dispatch({ type: "redo" });
     },
-    newQuiz: () =>
+    newQuiz: (title) =>
       attempt("new", async (draftApi) => {
         if (!(await mayDiscard())) return false;
-        load(await draftApi.editorNew(t("untitledQuiz")));
+        load(await draftApi.editorNew(title || t("untitledQuiz")));
         return true;
       }),
     openQuiz: (recent) =>

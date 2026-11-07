@@ -87,6 +87,12 @@ export function Director() {
 function DirectorScreens() {
   const { t, fail } = useApp();
   const [screen, setScreen] = useState<Screen>("show");
+  // From the Director's button the editor asks what to work on; back from a test run it does not.
+  const [askOnEditor, setAskOnEditor] = useState(false);
+  const openEditor = (ask: boolean) => {
+    setAskOnEditor(ask);
+    setScreen("editor");
+  };
   useBackendEvent("host-problem", ({ text, detail }) => fail({ text: t("hostProblem", { message: text }), detail }));
   // Provided above the show controls: their hooks (the slide sound) resolve media too.
   const mediaRoot = useMediaRoot();
@@ -100,13 +106,13 @@ function DirectorScreens() {
           </RenderFailed>
         )}
       >
-        <EditorScreen onTestRun={() => setScreen("testRun")} onExit={() => setScreen("show")} />
+        <EditorScreen ask={askOnEditor} onTestRun={() => setScreen("testRun")} onExit={() => setScreen("show")} />
       </ErrorBoundary>
     );
   }
   return (
     <MediaRootContext value={mediaRoot}>
-      <DirectorLayout testRun={screen === "testRun"} onEditor={() => setScreen("editor")} />
+      <DirectorLayout testRun={screen === "testRun"} onEditor={openEditor} />
     </MediaRootContext>
   );
 }
@@ -115,7 +121,7 @@ function DirectorScreens() {
  * The show controls. In a test run the show ends back in the editor;
  * `onEditor` opens it.
  */
-function DirectorLayout({ testRun, onEditor }: { testRun: boolean; onEditor: () => void }) {
+function DirectorLayout({ testRun, onEditor }: { testRun: boolean; onEditor: (ask: boolean) => void }) {
   const { t } = useApp();
   const view = useGameView();
   const quiz = useQuiz();
@@ -358,7 +364,8 @@ function CommandPanel(props: {
   voice: ReadAloudControl;
   showStart: ShowStart;
   testRun: boolean;
-  onEditor: () => void;
+  /** Opens the quiz editor; `ask`: asking first what to work on. */
+  onEditor: (ask: boolean) => void;
 }) {
   const { view, projector, sound, voice, showStart, testRun, onEditor } = props;
   const { t, notify, caution } = useApp();
@@ -402,7 +409,7 @@ function CommandPanel(props: {
         <>
           <CommandButton icon={<FolderIcon />} label={t("openQuiz")} disabled={showStart.starting} onClick={openQuiz} />
           <CommandButton icon={<PlayIcon />} label={t("demoQuiz")} disabled={showStart.starting} onClick={() => showStart.start(api.startDemoShow)} />
-          <CommandButton icon={<EditIcon />} label={t("quizEditor")} onClick={onEditor} />
+          <CommandButton icon={<EditIcon />} label={t("quizEditor")} onClick={() => onEditor(true)} />
           {last.session && (
             <CommandButton
               icon={<NextIcon />}
@@ -475,7 +482,7 @@ function CommandPanel(props: {
       <span className="spacer" />
       {view &&
         (testRun ? (
-          <CommandButton icon={<BackIcon />} label={t("backToEditor")} onClick={() => run(api.endShow().then(onEditor))} />
+          <CommandButton icon={<BackIcon />} label={t("backToEditor")} onClick={() => run(api.endShow().then(() => onEditor(false)))} />
         ) : (
           <CommandButton
             icon={<PowerIcon />}
