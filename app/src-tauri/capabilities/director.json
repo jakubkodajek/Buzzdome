@@ -8,6 +8,7 @@
   "permissions": [
     "core:default",
     "core:window:allow-set-theme",
+    "core:window:allow-set-title",
     "dialog:allow-message",
     "allow-get-view",
     "allow-show-results",
@@ -16,7 +17,7 @@
     "allow-media-root",
     "allow-show-not-saved",
     "allow-show-disk-space",
-    "allow-start-show-from-file",
+    "allow-pick-quiz-file",
     "allow-start-show-from-recent",
     "allow-start-demo-show",
     "allow-last-session",
@@ -87,6 +88,7 @@
     "allow-receiver-udev-rule",
     "allow-lights-info",
     "allow-lights-store",
+    "allow-lights-check-change",
     "allow-lights-devices",
     "allow-lights-library",
     "allow-lights-library-info",
@@ -99,6 +101,7 @@
     "allow-update-install",
     "allow-voice-model",
     "allow-voice-install",
+    "allow-voice-install-cancel",
     "allow-voice-remove",
     "allow-voice-clip"
   ]

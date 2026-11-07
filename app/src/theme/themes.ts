@@ -54,6 +54,21 @@ const ROUNDNESS: Record<Corners, string> = { round: "1", square: "0" };
 /** The `text-transform` of the text in the heading font. */
 const HEADING_CASE: Record<HeadingCase, string> = { asWritten: "none", uppercase: "uppercase" };
 
+/**
+ * The medals' colours, first to third place, for the leaderboard's top
+ * rows and the podium. Themes have none of their own yet, so every look
+ * shares these; the text on them is chosen to read (`readableText`).
+ */
+const MEDALS = ["#e5b80b", "#b9c2cf", "#c8803e"] as const;
+
+/**
+ * How far a wrong answer fades at the reveal: far on a dark stage, less on
+ * a light one, where a faded tile would melt into the background with its
+ * light text. A theme with dark text is a light one.
+ */
+const DIM_DARK_STAGE = "0.3";
+const DIM_LIGHT_STAGE = "0.85";
+
 /** Fonts for text a theme font has no letters for. */
 const FALLBACK_FONTS = '"Segoe UI", "Helvetica Neue", Arial, sans-serif';
 
@@ -84,6 +99,10 @@ export function themeStyle(theme: Theme): CSSProperties {
     "--theme-correct-text": readableText(colors.correct),
     "--theme-wrong": colors.wrong,
     "--theme-wrong-text": readableText(colors.wrong),
+    "--theme-wrong-glow": withAlpha(colors.wrong, 0x99),
+    // The ring round the right answer, in the stage's text colour, which reads on its background.
+    "--theme-ring": colors.text,
+    "--theme-dim": readableText(colors.text) === LIGHT_TEXT ? DIM_LIGHT_STAGE : DIM_DARK_STAGE,
     "--theme-font-heading": fontStack(fontFamily(fonts.heading)),
     "--theme-font-body": fontStack(fontFamily(fonts.body)),
     "--theme-roundness": ROUNDNESS[theme.corners],
@@ -92,6 +111,10 @@ export function themeStyle(theme: Theme): CSSProperties {
   ANSWER_KEYS.forEach((key, i) => {
     vars[`--theme-answer-${i}`] = colors[key];
     vars[`--theme-answer-${i}-text`] = readableText(colors[key]);
+  });
+  MEDALS.forEach((medal, i) => {
+    vars[`--theme-medal-${i + 1}`] = medal;
+    vars[`--theme-medal-${i + 1}-text`] = readableText(medal);
   });
   return vars as CSSProperties;
 }

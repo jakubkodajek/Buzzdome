@@ -94,16 +94,17 @@ export function VideoTrimDialog({ url, name, video, canReplay, onApply, onClose 
       title={t("trimVideoTitle", { name })}
       className="trim-dialog"
       onClose={onClose}
-      footer={
+      dirty={parts.changed}
+      footer={(cancel) => (
         <>
           <button type="button" className="primary" disabled={!ready} onClick={apply}>
             {t("ok")}
           </button>
-          <button type="button" onClick={onClose}>
+          <button type="button" onClick={cancel}>
             {t("cancel")}
           </button>
         </>
-      }
+      )}
     >
       <div className="trim" style={PART_COLORS} onKeyDown={(e) => ready && onPartKeys(e, { togglePlay, setStart, setEnd })}>
         {canReplay && <ReplayChoice parts={parts} />}

@@ -1,15 +1,18 @@
-import { useState } from "react";
-import { buttonLabel } from "../answers";
+import { useEffect, useState } from "react";
+import { buttonName } from "../answers";
 import { useApp, useDispatch, useRun } from "../app-context";
 import { MAX_NAME_CHARS } from "../bindings/Constants";
 import { confirmAction } from "../confirm";
 import { seconds, signed } from "../format";
 import { usePreparedTeams, useTeamsLost } from "../hooks";
+import { playerName } from "../i18n";
 import { CrossIcon } from "../icons";
+import { isPlainKey } from "../keyboard";
 import { settingsLostNotice } from "../messages";
 import { NoticeBox } from "../notice";
 import type { BuzzerId, Command, GameView, SettingsLost } from "../types";
 import { BuzzerChip, TeamList } from "./TeamList";
+import { clickSelection, typedBuzzer, typedDelta } from "./team-selection";
 
 /**
  * In a show, its players and teams (`ShowTeams`). Before one, the team
@@ -56,28 +59,36 @@ function ShowTeams({ view, lost }: { view: GameView; lost: SettingsLost | null }
   const jokers = view.settings.jokers > 0;
 
   const select = (buzzer: BuzzerId, e: React.MouseEvent) => {
-    const next = new Set(e.ctrlKey || e.metaKey ? selected : []);
-    if (e.shiftKey && anchor !== null) {
-      const ids = players.map((p) => p.buzzer);
-      const [from, to] = [ids.indexOf(anchor), ids.indexOf(buzzer)].sort((a, b) => a - b);
-      ids.slice(from, to + 1).forEach((id) => next.add(id));
-    } else if (next.has(buzzer)) {
-      next.delete(buzzer);
-    } else {
-      next.add(buzzer);
-      setAnchor(buzzer);
-    }
-    setSelected(next);
+    const keys = { toggle: e.ctrlKey || e.metaKey, range: e.shiftKey };
+    setSelected(clickSelection(selected, players.map((p) => p.buzzer), buzzer, keys, anchor));
+    if (!keys.range) setAnchor(buzzer);
   };
+  // Esc lets go of the selection, so a later score change cannot go to a row picked long ago.
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && isPlainKey(event)) setSelected(new Set());
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   const forSelected = (make: (buzzer: BuzzerId) => Command) => selected.forEach((buzzer) => dispatch(make(buzzer)));
+  const adjust = (delta: number) => forSelected((buzzer) => ({ type: "adjustScore", buzzer, delta }));
+  // Any number of points at once, to put a wrong judgement right.
+  const [deltaText, setDeltaText] = useState("");
+  const delta = typedDelta(deltaText);
+  const adjustTyped = () => {
+    if (delta === null || selected.size === 0) return;
+    adjust(delta);
+    setDeltaText("");
+  };
   // Refused mid-question like the jumps (`Controls.goTo`), and asks first.
-  const resetScores = () => run(confirmAction(t, t("resetScoresConfirm")).then((yes) => yes && dispatch({ type: "resetScores" })));
+  const resetScores = () => run(confirmAction(t, t("resetScoresConfirm"), t("resetScores")).then((yes) => yes && dispatch({ type: "resetScores" })));
 
+  const added = typedBuzzer(newBuzzer);
   const addPlayer = () => {
-    const buzzer = Number(newBuzzer);
-    if (!Number.isInteger(buzzer) || buzzer < 1) return;
-    dispatch({ type: "addPlayer", buzzer, name: "" });
+    if (added === null) return;
+    dispatch({ type: "addPlayer", buzzer: added, name: "" });
     setNewBuzzer("");
   };
 
@@ -86,11 +97,26 @@ function ShowTeams({ view, lost }: { view: GameView; lost: SettingsLost | null }
       <TeamsLost lost={lost} />
       <div className="toolbar">
         <span className="muted">{t("selectedPlayers", { n: selected.size })}</span>
-        {[-10, -1, 1, 10].map((delta) => (
-          <button key={delta} disabled={selected.size === 0} onClick={() => forSelected((buzzer) => ({ type: "adjustScore", buzzer, delta }))}>
-            {signed(delta)}
+        <button onClick={() => setSelected(new Set(players.map((p) => p.buzzer)))}>{t("selectAllPlayers")}</button>
+        {[-10, -1, 1, 10].map((step) => (
+          <button key={step} disabled={selected.size === 0} onClick={() => adjust(step)}>
+            {signed(step)}
           </button>
         ))}
+        <input
+          type="number"
+          step={1}
+          value={deltaText}
+          className="narrow score-delta"
+          placeholder={t("score")}
+          title={t("scoreDelta")}
+          aria-label={t("scoreDelta")}
+          onChange={(e) => setDeltaText(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && adjustTyped()}
+        />
+        <button disabled={selected.size === 0 || delta === null} title={t("scoreDelta")} onClick={adjustTyped}>
+          {t("scoreDeltaApply")}
+        </button>
         <button disabled={selected.size === 0} onClick={() => forSelected((buzzer) => ({ type: "setPlayerEnabled", buzzer, enabled: false }))}>
           {t("disable")}
         </button>
@@ -106,12 +132,16 @@ function ShowTeams({ view, lost }: { view: GameView; lost: SettingsLost | null }
           type="number"
           min={1}
           value={newBuzzer}
-          placeholder="#"
-          className="narrow"
+          placeholder={t("colBuzzer")}
+          title={t("addPlayerHint")}
+          aria-label={t("addPlayerHint")}
+          className="narrow add-buzzer"
           onChange={(e) => setNewBuzzer(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && addPlayer()}
         />
-        <button onClick={addPlayer}>{t("addPlayer")}</button>
+        <button disabled={added === null} onClick={addPlayer}>
+          {t("addPlayer")}
+        </button>
       </div>
       <div className="teams-body">
         <div className="table-wrap">
@@ -154,7 +184,7 @@ function ShowTeams({ view, lost }: { view: GameView; lost: SettingsLost | null }
                     {p.delta !== null && p.delta !== 0 && <span className={p.delta > 0 ? "good-text" : "bad-text"}> ({signed(p.delta)})</span>}
                   </td>
                   <td>
-                    {p.answer ? buttonLabel(p.answer) : p.lockedOut ? <CrossIcon className="inline-icon" /> : p.joinsNext ? <span className="muted">{t("joinsNext")}</span> : ""}
+                    {p.answer ? buttonName(t, p.answer) : p.lockedOut ? <CrossIcon className="inline-icon" /> : p.joinsNext ? <span className="muted">{t("joinsNext")}</span> : ""}
                     {p.answerMs !== null && <span className="muted"> · {seconds(p.answerMs, 1, lang)} s</span>}
                   </td>
                   <td className="num">{seconds(p.totalAnswerMs, 1, lang)} s</td>
@@ -165,13 +195,14 @@ function ShowTeams({ view, lost }: { view: GameView; lost: SettingsLost | null }
                         className="joker-toggle"
                         aria-pressed={p.joker.chosen}
                         disabled={!p.joker.canChange}
-                        title={t("colJokerHint")}
+                        title={t(p.joker.chosen ? "jokerTakeBackFor" : "jokerPlayFor", { name: playerName(t, p) })}
+                        aria-label={t(p.joker.chosen ? "jokerTakeBackFor" : "jokerPlayFor", { name: playerName(t, p) })}
                         onClick={(e) => {
                           e.stopPropagation();
                           dispatch({ type: "setJoker", buzzer: p.buzzer, on: !p.joker.chosen });
                         }}
                       >
-                        {t("jokerPlay")}
+                        {t(p.joker.chosen ? "jokerPlayed" : "jokerPlay")}
                       </button>
                       <span className="muted"> {t("jokersLeft", { n: p.joker.left })}</span>
                     </td>

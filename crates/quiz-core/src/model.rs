@@ -626,25 +626,42 @@ pub enum Problem {
     /// `max` in seconds.
     #[error("time limit must be at most {max} s")]
     TimeLimitTooLong { max: u32 },
+    /// A warning (`Problem::is_warning`): the quiz has no slides.
+    #[error("the quiz has no slides")]
+    NoSlides,
+    /// A warning: a question has no text.
+    #[error("the question has no text")]
+    QuestionTextEmpty,
+    /// A warning: answer `answer` (from 0) of a question is empty.
+    #[error("answer {answer} is empty")]
+    AnswerEmpty { answer: usize },
 }
 
 impl Problem {
+    /// A warning (`Quiz::warnings`): what looks unfinished but plays, so
+    /// it never keeps the quiz from being saved or played; the editor
+    /// shows it so a half-written quiz does not read as ready.
+    pub fn is_warning(&self) -> bool {
+        matches!(self, Problem::NoSlides | Problem::QuestionTextEmpty | Problem::AnswerEmpty { .. })
+    }
+
     /// Whether a show refuses the quiz for it. A show reads only the
     /// slides: a category's look and background were copied onto its
     /// slides when it was applied, so a category's problems only keep the
     /// quiz from being saved.
     pub fn keeps_from_playing(&self) -> bool {
-        !matches!(
-            self,
-            Problem::CategoryStyleUnread { .. }
-                | Problem::UnknownCategory
-                | Problem::DuplicateCategoryId { .. }
-                | Problem::CategoryIdInvalid { .. }
-                | Problem::CategoryUnnamed
-                | Problem::CategoryNameTooLong { .. }
-                | Problem::CategoryNameTaken { .. }
-                | Problem::CategoryMedia { .. }
-        )
+        !self.is_warning()
+            && !matches!(
+                self,
+                Problem::CategoryStyleUnread { .. }
+                    | Problem::UnknownCategory
+                    | Problem::DuplicateCategoryId { .. }
+                    | Problem::CategoryIdInvalid { .. }
+                    | Problem::CategoryUnnamed
+                    | Problem::CategoryNameTooLong { .. }
+                    | Problem::CategoryNameTaken { .. }
+                    | Problem::CategoryMedia { .. }
+            )
     }
 }
 
@@ -836,6 +853,26 @@ impl Quiz {
         }
         self.sounds.rename_media(renamed);
         self.welcome.rename_media(renamed);
+    }
+
+    /// What looks unfinished but plays (`Problem::is_warning`): no slides,
+    /// a question with no text, an empty answer. Never in `validate`.
+    pub fn warnings(&self) -> Vec<ValidationError> {
+        let mut warnings = Vec::new();
+        if self.slides.is_empty() {
+            warnings.push(ValidationError { slide_id: None, problem: Problem::NoSlides });
+        }
+        for slide in &self.slides {
+            let SlideContent::Question(question) = &slide.content else { continue };
+            let mut found = |problem| warnings.push(ValidationError { slide_id: Some(slide.id.clone()), problem });
+            if question.text.trim().is_empty() {
+                found(Problem::QuestionTextEmpty);
+            }
+            for (answer, _) in question.answers.iter().enumerate().filter(|(_, text)| text.trim().is_empty()) {
+                found(Problem::AnswerEmpty { answer });
+            }
+        }
+        warnings
     }
 
     pub fn validate(&self) -> Result<(), Vec<ValidationError>> {
@@ -1112,6 +1149,20 @@ mod tests {
         let mut q = question(10, None, 10);
         edit(&mut q);
         Slide::new("a", SlideContent::Question(q))
+    }
+
+    #[test]
+    fn an_unfinished_quiz_warns_but_saves_and_plays() {
+        let empty = Quiz::new("x", vec![]);
+        assert_eq!(empty.validate(), Ok(()));
+        assert_eq!(empty.warnings(), [ValidationError { slide_id: None, problem: Problem::NoSlides }]);
+        let blank = question_slide(|q| (q.text, q.answers[1]) = (" ".into(), String::new()));
+        let quiz = Quiz::new("x", vec![blank]);
+        assert_eq!(quiz.validate(), Ok(()), "no warning keeps it from being saved");
+        let warned: Vec<Problem> = quiz.warnings().into_iter().map(|w| w.problem).collect();
+        assert_eq!(warned, [Problem::QuestionTextEmpty, Problem::AnswerEmpty { answer: 1 }]);
+        assert!(warned.iter().all(|w| w.is_warning() && !w.keeps_from_playing()));
+        assert_eq!(Quiz::new("x", vec![question_slide(|_| {})]).warnings(), [], "a written question");
     }
 
     #[test]

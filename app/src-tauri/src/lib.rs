@@ -590,41 +590,42 @@ async fn show_disk_space(app: AppHandle) -> CmdResult<Option<u64>> {
     off_ui(move || Ok(root.ancestors().find(|dir| dir.is_dir()).and_then(|dir| fs4::available_space(dir).ok()))).await
 }
 
-/// Opens a quiz file the quizmaster picks (`.quiz` or a plain quiz JSON)
-/// and starts a show with it; false when they cancel.
+/// Picks a quiz file to play (`.quiz` or a plain quiz JSON) and puts it
+/// first in the recent list, so `start_show_from_recent` starts it once the
+/// Director asked what it asks before a show of that file; none when the
+/// quizmaster cancels.
 #[tauri::command]
-async fn start_show_from_file(app: AppHandle, window: Window, picker: Picker) -> CmdResult<bool> {
-    let Some(path) = dialogs::pick_file(window, picker, quiz_file::OPEN_EXTENSIONS.to_vec()).await? else { return Ok(false) };
-    off_ui(move || start_show_from(&app, &path).map(|()| true)).await
-}
-
-/// Starts a show with the `recent` quiz file, which has to be in the list
-/// (`RecentFiles`).
-#[tauri::command]
-async fn start_show_from_recent(app: AppHandle, recent: String) -> CmdResult<()> {
+async fn pick_quiz_file(app: AppHandle, window: Window, picker: Picker) -> CmdResult<Option<String>> {
+    let Some(path) = dialogs::pick_file(window, picker, quiz_file::OPEN_EXTENSIONS.to_vec()).await? else { return Ok(None) };
     off_ui(move || {
-        let path = app.state::<RecentFiles>().get(&recent)?;
-        start_show_from(&app, &path)
+        let path = path.to_string_lossy().into_owned();
+        app.state::<RecentFiles>().remember(&path);
+        Ok(Some(path))
     })
     .await
 }
 
-/// Opens the quiz file `path` and starts a show with it, one start at a
-/// time (`one_start`). The file goes first in the recent list once it
-/// opens; one that is not there is reported as such (`RecentFiles::explain`).
-fn start_show_from(app: &AppHandle, path: &Path) -> CmdResult<()> {
-    one_start(&STARTING, || {
-        let source_path = path.to_string_lossy().into_owned();
-        let recent = app.state::<RecentFiles>();
-        // Unpacking big media takes a moment: it runs before the show is locked.
-        let opened = {
-            let _cache = QUIZZES_CACHE.lock().unwrap();
-            quiz_file::open(path, &quizzes_cache(app)?)
-        };
-        let package = opened.map_err(|e| recent.explain(&source_path, e.into()))?;
-        recent.remember(&source_path);
-        start_show(app, package.quiz, Some(source_path), Some(package.root))
+/// Opens the `recent` quiz file, which has to be in the list
+/// (`RecentFiles`), and starts a show with it, one start at a time
+/// (`one_start`). The file goes first in the list once it opens; one that
+/// is not there is reported as such (`RecentFiles::explain`).
+#[tauri::command]
+async fn start_show_from_recent(app: AppHandle, recent: String) -> CmdResult<()> {
+    off_ui(move || {
+        let files = app.state::<RecentFiles>();
+        let path = files.get(&recent)?;
+        one_start(&STARTING, || {
+            // Unpacking big media takes a moment: it runs before the show is locked.
+            let opened = {
+                let _cache = QUIZZES_CACHE.lock().unwrap();
+                quiz_file::open(&path, &quizzes_cache(&app)?)
+            };
+            let package = opened.map_err(|e| files.explain(&recent, e.into()))?;
+            files.remember(&recent);
+            start_show(&app, package.quiz, Some(recent.clone()), Some(package.root))
+        })
     })
+    .await
 }
 
 /// Runs `start` unless another start holds `starting`, so a second click
@@ -716,10 +717,15 @@ fn resume_show(root: &Path, at_ms: u64, media_folders: &[PathBuf]) -> CmdResult<
         named => (named, None),
     };
     // The show must go on: without its media it still runs, and the Director says why.
-    let warnings = resume_warnings(&quiz, media_root.as_deref(), refused.as_deref(), meta.rules_changed());
+    let mut warnings = resume_warnings(&quiz, media_root.as_deref(), refused.as_deref(), meta.rules_changed());
     let game = Game::replay(quiz, &journal, meta.rules_version);
+    // Said also when the journal refused it: the show makes it as soon as it can.
+    if let Some(command) = game.recovery_command() {
+        warnings.extend(recovery_warning(&command, game.slide_index()));
+    }
     let (game, effects, refused) = recover_resumed(game, &mut session, at_ms)?;
     let recovery_due = refused.is_some();
+    session.resumed();
     let save_problem = resume_save_problem(refused, not_cut, session.torn_left());
     if let Some(problem) = &save_problem {
         app_log::note(&format!("the resumed show is not saved: {problem}"));
@@ -745,6 +751,17 @@ fn recover_resumed(game: Game, session: &mut Session, at_ms: u64) -> CmdResult<(
         Ok((next, effects)) => Ok((next, effects, None)),
         Err(e) if e.is_not_saved() => Ok((game, Vec::new(), Some(e))),
         Err(e) => Err(e),
+    }
+}
+
+/// What the quizmaster is told of the recovery `command` a resumed show
+/// took on `slide` (`Game::recovery_command`): the hall answers the
+/// question again, or the show waits for them to take its step.
+fn recovery_warning(command: &Command, slide: usize) -> Option<AppError> {
+    match command {
+        Command::RestartQuestion => Some(AppError::QuestionRestarted { slide }),
+        Command::PauseClock => Some(AppError::AutoStepHeld),
+        _ => None,
     }
 }
 
@@ -777,6 +794,10 @@ async fn end_show(app: AppHandle) -> CmdResult<()> {
         if inner.before_show(at_ms) {
             return Ok(());
         }
+        // Done with: the next show starts without asking to give it up.
+        if let Some(Err(e)) = inner.session.take().map(Session::end) {
+            app_log::note(&format!("the ended show is not marked as ended: {e}"));
+        }
         replace_show(inner, None, None);
         inner.media_root = None;
         show_changed(app, inner);
@@ -787,8 +808,11 @@ async fn end_show(app: AppHandle) -> CmdResult<()> {
 
 /// The commands the projector window may give: those its keys stand for
 /// (`commandForKey`, whose tests check it against this list in the
-/// bindings). Scores, names and jumps are the Director's alone.
-const PROJECTOR_COMMANDS: [&str; 7] = ["press", "next", "judgeRight", "judgeWrong", "pauseClock", "resumeClock", "showLeaderboard"];
+/// bindings): `goTo` for Left and Page Up, which go back a slide where the
+/// show lets them (`Controls::go_to`), and only to `Game::previous`
+/// (`goes_back_only`). Scores, names and the other jumps are the Director's
+/// alone.
+const PROJECTOR_COMMANDS: [&str; 8] = ["press", "next", "judgeRight", "judgeWrong", "pauseClock", "resumeClock", "showLeaderboard", "goTo"];
 
 /// The buzzers the projector's keys press, 1 to 9 and 0 for 10, always
 /// with the big button (`commandForKey`).
@@ -811,6 +835,17 @@ fn may_give(window: &str, command: &Command) -> bool {
     }
 }
 
+/// Whether a projector's `command` stays within its keys in the show as it
+/// stands: its `GoTo` only to the slide before (`Game::previous`), never a
+/// jump forwards that would show an answer early. Anything else `may_give`
+/// has judged.
+fn goes_back_only(game: Option<&Game>, command: &Command) -> bool {
+    match command {
+        Command::GoTo { slide } => game.and_then(Game::previous) == Some(*slide),
+        _ => true,
+    }
+}
+
 /// A window's command that moves the show on was meant for the step it
 /// showed (`seen`, `Game::step_no`), and the show has taken another since.
 fn step_gone(game: Option<&Game>, seen: Option<u32>) -> bool {
@@ -829,10 +864,14 @@ async fn dispatch(app: AppHandle, window: Window, command: Command, seen: Option
     if let Command::Press { buzzer, button } = command {
         return show_thread::press(&app, Press::new(buzzer, button));
     }
+    let projector = window.label() == app_windows::HOST_LABEL;
     show_thread::run(&app, move |app, inner, at_ms| {
         if step_gone(inner.game.as_ref(), seen) {
             emit_state(app, inner.game.as_ref());
             return Ok(());
+        }
+        if projector && !goes_back_only(inner.game.as_ref(), &command) {
+            return Err(AppError::NotFromProjector);
         }
         match command {
             // The names a show is given are the prepared ones, also kept on disk.
@@ -871,6 +910,7 @@ pub fn run() {
         .on_menu_event(app_windows::on_menu_event)
         .manage(inner.close_request.clone())
         .manage(editor::EditorLock::default())
+        .manage(editor::UnkeptEdits::default())
         .manage(updates::Updates::default())
         .manage(AppState(Mutex::new(inner)))
         .setup(|app| {
@@ -885,7 +925,7 @@ pub fn run() {
                 send_mode(&mut inner);
             }
             app.manage(hardware);
-            app.manage(stage_lights::StageLights::start(app.handle(), stage_lights::lights_path(app.handle())?));
+            app.manage(stage_lights::StageLights::start(app.handle(), stage_lights::lights_path(app.handle())?, stage_lights::live_path(app.handle())?));
             app.manage(fixture_library::FixtureLibrary::new(fixture_library::library_path(app.handle())?));
             // The Director plays the voice's clips, rendered into a folder of their own.
             let voice = read_aloud::Voice::new(app.handle())?;
@@ -925,7 +965,7 @@ pub fn run() {
             media_root,
             show_not_saved,
             show_disk_space,
-            start_show_from_file,
+            pick_quiz_file,
             start_show_from_recent,
             start_demo_show,
             last_session,
@@ -996,6 +1036,7 @@ pub fn run() {
             hardware::receiver_udev_rule,
             stage_lights::lights_info,
             stage_lights::lights_store,
+            stage_lights::lights_check_change,
             stage_lights::lights_devices,
             fixture_library::lights_library,
             fixture_library::lights_library_info,
@@ -1008,6 +1049,7 @@ pub fn run() {
             updates::update_install,
             read_aloud::voice_model,
             read_aloud::voice_install,
+            read_aloud::voice_install_cancel,
             read_aloud::voice_remove,
             read_aloud::voice_clip,
         ])
@@ -1176,6 +1218,7 @@ mod tests {
         assert_eq!(before.recovery_command(), Some(Command::RestartQuestion), "{:?}", before.phase());
 
         let resumed = resume_show(&root, 60_000, &[]).unwrap();
+        assert_eq!(resumed.warnings, [AppError::QuestionRestarted { slide }], "the quizmaster is told");
         // What the windows will see is on disk: the restart is journaled.
         let on_disk = Session::resume_latest(&root).unwrap().unwrap();
         assert_eq!(on_disk.journal.last(), Some(&Stamped { at_ms: 60_000, command: Command::RestartQuestion }));
@@ -1208,6 +1251,7 @@ mod tests {
         assert!(before.view(7_000).auto_step.is_some(), "the step was on its way");
 
         let resumed = resume_show(&root, 60_000, &[]).unwrap();
+        assert_eq!(resumed.warnings, [AppError::AutoStepHeld], "the quizmaster is told");
         // The question waits for the quizmaster, and the hold is on disk.
         let on_disk = Session::resume_latest(&root).unwrap().unwrap();
         assert_eq!(on_disk.journal.last(), Some(&Stamped { at_ms: 60_000, command: Command::PauseClock }));
@@ -1231,7 +1275,7 @@ mod tests {
         drop(inner);
 
         let resumed = resume_show(&root, 120_000, &[]).unwrap();
-        assert_eq!(resumed.warnings, [AppError::RulesChanged]);
+        assert_eq!(resumed.warnings, [AppError::RulesChanged, AppError::QuestionRestarted { slide }]);
         // Replayed with its jump, the question ran again, so it is restarted once more.
         let on_disk = Session::resume_latest(&root).unwrap().unwrap();
         assert_eq!(on_disk.journal.last(), Some(&Stamped { at_ms: 120_000, command: Command::RestartQuestion }));
@@ -1393,14 +1437,22 @@ mod tests {
     #[test]
     fn the_projector_may_give_only_what_its_keys_stand_for() {
         let press = Command::Press { buzzer: 3, button: quiz_core::Button::Big };
-        let keys = [press, Command::Next, Command::JudgeRight, Command::JudgeWrong, Command::PauseClock, Command::ResumeClock, Command::ShowLeaderboard { visible: true }];
+        let keys = [
+            press,
+            Command::Next,
+            Command::JudgeRight,
+            Command::JudgeWrong,
+            Command::PauseClock,
+            Command::ResumeClock,
+            Command::ShowLeaderboard { visible: true },
+            Command::GoTo { slide: 2 },
+        ];
         for command in &keys {
             assert!(may_give(app_windows::HOST_LABEL, command), "{command:?}");
         }
         let directors = [
             Command::AdjustScore { buzzer: 3, delta: 100 },
             Command::SetTeams { names: vec!["A".into()] },
-            Command::GoTo { slide: 2 },
             Command::GoToFinal,
             Command::StartOver,
             Command::ResetScores,
@@ -1422,6 +1474,21 @@ mod tests {
             assert!(may_give(app_windows::DIRECTOR_LABEL, command), "{command:?}");
             assert!(!may_give("editor", command), "a window the app does not know: {command:?}");
         }
+    }
+
+    #[test]
+    fn the_projector_goes_back_only_to_the_slide_before() {
+        let mut game = Game::new(Quiz::from_json(DEMO_QUIZ).unwrap());
+        let explanation = game.quiz().slides.iter().position(|slide| matches!(slide.content, quiz_core::SlideContent::Explanation { .. })).unwrap();
+        assert!(!goes_back_only(Some(&game), &Command::GoTo { slide: 0 }), "no slide before the lobby");
+        assert!(!goes_back_only(None, &Command::GoTo { slide: 0 }), "no show");
+        game.apply(&Stamped { at_ms: 1_000, command: Command::GoTo { slide: explanation } }).unwrap();
+        assert_eq!(game.previous(), Some(explanation - 1));
+        assert!(goes_back_only(Some(&game), &Command::GoTo { slide: explanation - 1 }));
+        for slide in [explanation + 1, game.quiz().slides.len() - 1, 0] {
+            assert!(!goes_back_only(Some(&game), &Command::GoTo { slide }), "a jump to {slide}");
+        }
+        assert!(goes_back_only(Some(&game), &Command::Next), "judged by `may_give`");
     }
 
     /// For the tests of the projector's keys: the commands typed as command

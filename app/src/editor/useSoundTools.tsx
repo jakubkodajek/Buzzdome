@@ -88,7 +88,10 @@ export function useSoundTools(open: OpenQuiz | null, edit: (edit: Edit, mergeKey
         <LoudnessDialog
           quiz={quiz}
           mediaRoot={open.mediaRoot}
-          onApply={(gains) => edit({ type: "batch", edits: [...gains].map(([id, gainDb]) => ({ type: "updateSlide", id, update: (s: Slide) => setSoundOptions(s, { gainDb }) })) })}
+          onApply={(gains) => {
+            edit({ type: "batch", edits: [...gains].map(([id, gainDb]) => ({ type: "updateSlide", id, update: (s: Slide) => setSoundOptions(s, { gainDb }) })) });
+            notify(t("loudnessApplied", { n: gains.size }));
+          }}
           onClose={() => setLoudness(false)}
         />
       )}

@@ -243,7 +243,7 @@ press that leaves no line under "Raw data", and what came before it.
    data" line: after `27 A5`, the length and `32`, come the buzzer's radio
    ID, the button code, then the colour the buzzer showed. Expected: `43`
    (blue). Brightness aside, a buzz showing any of the app's other colours
-   is not counted, and shows as "not counted (the buzzer was not ready, …)":
+   is not counted, and shows as "not counted, the buzzer was not ready, …":
    if every buzz does that, note the byte, as no buzzer could win.
 8. **The buzzer's timer.** It counts milliseconds from the buzzer's last
    colour change, and a colour order that repeats the colour it shows

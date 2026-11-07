@@ -1,13 +1,15 @@
 /* Slide screens, shared by the projector and the quiz editor. Everything
    is laid out on a 1920x1080 stage that is scaled to its frame (Stage.tsx),
    so sizes below are in stage pixels. Colours and fonts come from the theme
-   as --theme-* variables (themeStyle in theme/themes.ts); only colours that
-   mean the same in every look (medals, the clock face) are written here.
+   as --theme-* variables (themeStyle in theme/themes.ts), the medals' too;
+   only the clock face, the same in every look, is written in timer.css.
    A slide's own style (theme/slide-style.ts) sets only variables on the
    texts it changes: --style-* (read under "Styled texts" below, each
    falling back to the theme's look), --text-scale for their size and
-   --answer-fill for the answers' panels. Every rounded corner is
-   multiplied by --theme-roundness, 0 in a theme with square corners. */
+   --answer-fill for the answers' panels. A question's texts are also
+   multiplied by --fit, which makes them small enough to fit (fit-text.ts).
+   Every rounded corner is multiplied by --theme-roundness, 0 in a theme
+   with square corners. */
 
 .stage {
   position: absolute;
@@ -26,10 +28,23 @@
 }
 
 /* The theme's background (Stage.tsx), under everything else. */
-.stage .backdrop {
+.stage .backdrop,
+.stage-bleed .backdrop {
   position: absolute;
   inset: 0;
   z-index: 0;
+}
+
+/* The projector: the background fills the whole window behind the 16:9
+   stage, so a 16:10 or 4:3 projector shows no bars around it. */
+.stage-bleed {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+.stage.bled {
+  background: none;
 }
 
 /* Titles, names and big numbers. */
@@ -242,20 +257,22 @@
   white-space: nowrap;
 }
 
+/* Cells big enough to read from the room; a hundred buzzers take flatter ones. */
 .register-grid {
   display: grid;
-  grid-template-columns: repeat(10, 120px);
+  grid-template-columns: repeat(10, 160px);
   gap: 14px;
 }
 
 .register-grid span {
-  height: 76px;
+  height: 110px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  font-size: 38px;
+  font-size: 44px;
   font-weight: 700;
+  line-height: 1.1;
   border-radius: calc(12px * var(--theme-roundness));
   background: var(--theme-panel);
   border: 2px solid rgba(255, 255, 255, 0.1);
@@ -276,9 +293,22 @@
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
-  font-size: 15px;
-  font-weight: 600;
+  font-size: 24px;
+  font-weight: 700;
   line-height: 1.2;
+}
+
+.register-grid.dense {
+  gap: 8px 14px;
+}
+
+.register-grid.dense span {
+  height: 62px;
+  font-size: 30px;
+}
+
+.register-grid.dense small {
+  font-size: 18px;
 }
 
 /* Question screen */
@@ -308,6 +338,7 @@
   display: flex;
   align-items: center;
   min-width: 0;
+  overflow: hidden;
 }
 
 .info-stat {
@@ -337,10 +368,13 @@
   text-shadow: 0 0 18px var(--theme-accent-glow);
 }
 
+/* Up to 20 buzzers in two rows; more take three or four rows of smaller cells (crowd.ts). */
 .responders {
+  --cell-w: 62px;
+  --cell-h: 54px;
   display: grid;
   grid-auto-flow: column;
-  grid-template-rows: repeat(2, 54px);
+  grid-template-rows: repeat(var(--rows, 2), var(--cell-h));
   gap: 6px;
   padding: 8px;
   border-radius: calc(10px * var(--theme-roundness));
@@ -353,15 +387,34 @@
   display: none;
 }
 
+.responders.rows-3 {
+  --rows: 3;
+  --cell-w: 54px;
+  --cell-h: 38px;
+  gap: 4px;
+}
+
+.responders.rows-4 {
+  --rows: 4;
+  --cell-w: 46px;
+  --cell-h: 28px;
+  gap: 4px;
+}
+
 .responders span {
-  width: 62px;
+  width: var(--cell-w);
   display: grid;
   place-items: center;
-  font-size: 26px;
+  font-size: calc(var(--cell-h) * 0.48);
   font-weight: 700;
   border-radius: calc(6px * var(--theme-roundness));
   background: rgba(0, 0, 0, 0.3);
   border: 1px solid var(--theme-bar-edge);
+}
+
+/* The last cell: how many more wait than have a cell. */
+.responders span.more {
+  border-style: dashed;
 }
 
 .result-bars {
@@ -403,8 +456,9 @@
 
 .question-text {
   margin: 0 0 40px;
-  font-size: calc(66px * var(--text-scale, 1));
+  font-size: calc(66px * var(--text-scale, 1) * var(--fit, 1));
   line-height: 1.18;
+  overflow-wrap: break-word;
 }
 
 .answers {
@@ -423,7 +477,7 @@
   align-items: center;
   padding: 0 70px 0 110px;
   border-radius: calc(22px * var(--theme-roundness));
-  font-size: calc(52px * var(--text-scale, 1));
+  font-size: calc(52px * var(--text-scale, 1) * var(--fit, 1));
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.22), rgba(0, 0, 0, 0.12)), var(--answer-fill, var(--answer));
   border: 4px solid rgba(255, 255, 255, 0.55);
   box-shadow: inset 0 -10px 0 rgba(0, 0, 0, 0.18), 0 10px 26px rgba(0, 0, 0, 0.45);
@@ -444,6 +498,12 @@
   background: inherit;
   border: 4px solid #fff;
   box-shadow: 0 6px 14px rgba(0, 0, 0, 0.4);
+}
+
+/* A long word wraps rather than leaving its tile. */
+.answer-text {
+  min-width: 0;
+  overflow-wrap: break-word;
 }
 
 .answer-0 { --answer: var(--theme-answer-0); --answer-text: var(--theme-answer-0-text); }
@@ -505,19 +565,20 @@
   bottom: 30px;
 }
 
+/* The wrong answers fade as far as the theme lets them stay readable (--theme-dim). */
+.answer.is-dim {
+  opacity: var(--theme-dim);
+  filter: grayscale(0.6);
+}
+
 /* The chart reads on the wrong answers too. */
 .answer.has-chart.is-dim {
-  opacity: 0.55;
+  opacity: max(0.55, var(--theme-dim));
 }
 
 .answer.is-correct {
   transform: scale(1.04);
-  box-shadow: 0 0 0 6px #fff, 0 0 50px var(--theme-correct);
-}
-
-.answer.is-dim {
-  opacity: 0.3;
-  filter: grayscale(0.6);
+  box-shadow: 0 0 0 6px var(--theme-ring), 0 0 50px var(--theme-correct);
 }
 
 .answer-share {
@@ -570,6 +631,10 @@
 }
 
 .buzz-name {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
   font-size: 80px;
   font-weight: 900;
 }
@@ -737,11 +802,32 @@
   to { transform: translateY(0); }
 }
 
-/* Leaderboard: two columns of ten */
+/* Leaderboard: two columns of ten, pages of twenty taking turns (crowd.ts),
+   the medals' rows in their colours. */
 
 .leaderboard {
   display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 26px;
+}
+
+.leaderboard-columns {
+  display: flex;
+  align-items: flex-start;
   gap: 40px;
+}
+
+/* Every page as tall as a full one, so a short last page does not move the heading. */
+.leaderboard.paged .leaderboard-columns {
+  min-height: calc(10 * 70px + 9 * 10px);
+}
+
+.leaderboard-page {
+  margin: 0;
+  font-size: 34px;
+  font-weight: 700;
+  opacity: 0.85;
 }
 
 .leaderboard ol {
@@ -790,10 +876,22 @@
   font-variant-numeric: tabular-nums;
 }
 
-.leaderboard li.top { color: #fff; }
-.leaderboard li.top-1 { background: linear-gradient(180deg, #7a5a00, #3d2d00); border-color: #ffd21f; }
-.leaderboard li.top-2 { background: linear-gradient(180deg, #5a6170, #2d3038); border-color: #d8dee9; }
-.leaderboard li.top-3 { background: linear-gradient(180deg, #6b3d17, #35200d); border-color: #e09a5a; }
+.top-1,
+.place-1 { --medal: var(--theme-medal-1); --medal-text: var(--theme-medal-1-text); }
+.top-2,
+.place-2 { --medal: var(--theme-medal-2); --medal-text: var(--theme-medal-2-text); }
+.top-3,
+.place-3 { --medal: var(--theme-medal-3); --medal-text: var(--theme-medal-3-text); }
+
+.leaderboard li.top {
+  color: var(--medal-text);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.25), rgba(0, 0, 0, 0.2)), var(--medal);
+  border-color: rgba(255, 255, 255, 0.6);
+}
+
+.leaderboard li.top .score {
+  color: inherit;
+}
 
 @keyframes row-in {
   from { opacity: 0; transform: translateX(-30px); }
@@ -829,14 +927,24 @@
   animation: pop 0.5s ease-out;
 }
 
+/* A long name takes two lines at most, then ends in an ellipsis, as on the other screens. */
 .podium-name .name {
+  max-width: 100%;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: break-word;
   font-size: 58px;
   font-weight: 900;
+  line-height: 1.05;
 }
 
-/* Players sharing a place stand on one block: smaller names, so they fit. */
-.podium-name.lines-2 .name { font-size: 44px; }
-.podium-name.lines-3 .name { font-size: 34px; }
+.podium-name.long .name { font-size: 44px; }
+
+/* Players sharing a place stand on one block: smaller names on a line each, so they fit. */
+.podium-name.lines-2 .name { font-size: 44px; -webkit-line-clamp: 1; }
+.podium-name.lines-3 .name { font-size: 34px; -webkit-line-clamp: 1; }
 
 .podium-name .score {
   font-size: 50px;
@@ -852,11 +960,13 @@
   font-weight: 900;
   border-radius: calc(16px * var(--theme-roundness)) calc(16px * var(--theme-roundness)) 0 0;
   border: 3px solid rgba(255, 255, 255, 0.4);
+  color: var(--medal-text);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.35), rgba(0, 0, 0, 0.3)), var(--medal);
 }
 
-.place-1 .podium-block { height: 360px; background: linear-gradient(180deg, #ffd84a, #b88a00); }
-.place-2 .podium-block { height: 270px; background: linear-gradient(180deg, #e6ebf2, #8a93a3); color: #222; }
-.place-3 .podium-block { height: 200px; background: linear-gradient(180deg, #f0a865, #9a5520); }
+.place-1 .podium-block { height: 360px; }
+.place-2 .podium-block { height: 270px; }
+.place-3 .podium-block { height: 200px; }
 
 @keyframes pop {
   from { opacity: 0; transform: scale(0.5); }
@@ -874,6 +984,8 @@
 
 .stage .backdrop img,
 .stage .backdrop video,
+.stage-bleed .backdrop img,
+.stage-bleed .backdrop video,
 .slide-background img,
 .slide-background video {
   width: 100%;
@@ -959,7 +1071,7 @@
 
 .question-screen.has-media .question-text {
   margin-bottom: 30px;
-  font-size: calc(56px * var(--text-scale, 1));
+  font-size: calc(56px * var(--text-scale, 1) * var(--fit, 1));
 }
 
 /* Styled texts: the ones a slide's own style changes (slide-style.ts).

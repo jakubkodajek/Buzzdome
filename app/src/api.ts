@@ -12,7 +12,9 @@ import type {
   BuzzerId,
   BuzzerSeen,
   Category,
+  Checked,
   ClockView,
+  CloseReason,
   Command,
   Cue,
   DeviceInfo,
@@ -47,6 +49,7 @@ import type {
   RemoteAction,
   RemoteKey,
   RemoteKeyAction,
+  SavedDraft,
   SessionSummary,
   SettingsLost,
   SheetExport,
@@ -55,7 +58,6 @@ import type {
   SoundBoard,
   Theme,
   UpdateProgress,
-  ValidationError,
   VoiceDownload,
   VoiceLine,
   VoiceModel,
@@ -81,8 +83,8 @@ export const api = {
   /** Free space in bytes on the disk the shows are saved to; null when the system does not say. */
   showDiskSpace: () => invoke<number | null>("show_disk_space"),
   // The backend opens the file pickers: a window names no file to write.
-  /** Starts a show of a quiz file the quizmaster picks; false when they cancel. */
-  startShowFromFile: (picker: Picker) => invoke<boolean>("start_show_from_file", { picker }),
+  /** Picks a quiz file to play, which goes first in `recentFiles` so `startShowFromRecent` starts it; null when they cancel. */
+  pickQuizFile: (picker: Picker) => invoke<string | null>("pick_quiz_file", { picker }),
   /** Starts a show of `recent`, a file in `recentFiles`. */
   startShowFromRecent: (recent: string) => invoke<void>("start_show_from_recent", { recent }),
   /** Quiz files opened, saved or played lately, latest first. */
@@ -91,7 +93,7 @@ export const api = {
   forgetRecentFile: (path: string) => invoke<void>("forget_recent_file", { path }),
   startDemoShow: () => invoke<void>("start_demo_show"),
   lastSession: () => invoke<SessionSummary | null>("last_session"),
-  /** Resumes the last show; returns warnings when it runs but not quite as before (its media are missing, other rules). */
+  /** Resumes the last show; returns warnings when it runs but not quite as before (its media are missing, other rules, a question started again, a step held). */
   resumeLastSession: () => invoke<AppError[]>("resume_last_session"),
   endShow: () => invoke<void>("end_show"),
   /** `seen`: the step the window shows, for a command that moves the show on (`StepGuard`). */
@@ -105,11 +107,11 @@ export const api = {
   /** Where the projector window is; null while it is closed. */
   projectorWindow: () => invoke<ProjectorWindow | null>("projector_window"),
   reportHostProblem: (problem: HostProblem) => invoke<void>("report_host_problem", { problem }),
-  /** Ends the app; the running show stays saved for resuming. */
+  /** Ends the app, once the quizmaster confirmed a close (`close-requested`); a running show stays saved for resuming, the editor's draft for the next start. */
   quitApp: () => invoke<void>("quit_app"),
   /** The app's version, which an update changes. */
   appVersion: () => getVersion(),
-  /** The quizmaster chose not to close the app during a show: the next close asks again. */
+  /** The quizmaster chose not to close the app after a `close-requested`: the next close asks again. */
   closeDeclined: () => invoke<void>("close_declined"),
   /** Notes in the app's log a problem this window has nowhere to show. */
   logProblem: (message: string) => invoke<void>("log_problem", { message }),
@@ -171,6 +173,8 @@ export const api = {
   lightsInfo: () => invoke<LightsInfo>("lights_info"),
   /** Checks and keeps the lights setup, then the lights take it. */
   lightsStore: (setup: LightsSetup) => invoke<void>("lights_store", { setup }),
+  /** Refuses `setup` as `lightsStore` would as a change from the setup kept, keeping nothing. */
+  lightsCheckChange: (setup: LightsSetup) => invoke<void>("lights_check_change", { setup }),
   /** The USB-DMX interfaces and MIDI outputs on this computer. */
   lightsDevices: () => invoke<LightsDevices>("lights_devices"),
   /** The fixture models of the built-in library whose names hold every word of `query`. */
@@ -203,6 +207,8 @@ export const api = {
     progress.onmessage = onProgress;
     return invoke<VoiceModel>("voice_install", { progress });
   },
+  /** Cancels the voice model download under way; `voiceInstall` then fails with `voiceDownloadCancelled`. */
+  voiceInstallCancel: () => invoke<void>("voice_install_cancel"),
   /** Removes the voice model and the clips made with it. */
   voiceRemove: () => invoke<VoiceModel>("voice_remove"),
   /** The path of the kept clip that says `line`; with `render`, rendered first when it is not kept (a few seconds). Null when there is nothing to say, or it is not kept and not to be rendered. */
@@ -215,9 +221,9 @@ export const api = {
   /** Opens `recent`, a file in `recentFiles`, or a quiz file the quizmaster picks; null when they cancel. */
   editorOpen: (recent: string | null, picker: Picker) => invoke<EditorDraft | null>("editor_open", { recent, picker }),
   /** Stores the edited quiz; returns what keeps it from being played. */
-  editorUpdate: (draft: string, quiz: Quiz, unsaved: boolean) => invoke<ValidationError[]>("editor_update", { draft, quiz, unsaved }),
+  editorUpdate: (draft: string, quiz: Quiz, unsaved: boolean) => invoke<Checked>("editor_update", { draft, quiz, unsaved }),
   /** Saves over the quiz file the draft came from, unless `saveAs`, else where the quizmaster picks; returns the path, null when they cancel. */
-  editorSave: (draft: string, quiz: Quiz, saveAs: boolean, picker: Picker) => invoke<string | null>("editor_save", { draft, quiz, saveAs, picker }),
+  editorSave: (draft: string, quiz: Quiz, saveAs: boolean, picker: Picker) => invoke<SavedDraft | null>("editor_save", { draft, quiz, saveAs, picker }),
   /** Copies a media file of `kinds` the quizmaster picks into the draft; returns its reference (`media/...`), null when they cancel. */
   editorAddMedia: (draft: string, kinds: MediaKind[], picker: Picker) => invoke<string | null>("editor_add_media", { draft, kinds, picker }),
   /** A name for a new category, "`base` 2" or so, that none of `categories` has. */
@@ -271,8 +277,8 @@ export interface BackendEvents {
   "host-window": boolean;
   /** A problem the projector met, worded for the Director to show. */
   "host-problem": HostProblem;
-  /** The Director was asked to close during a show: the quizmaster confirms it (`quitApp`) or not (`closeDeclined`). */
-  "close-requested": null;
+  /** The Director was asked to close while something would be left behind (a show, an unsaved quiz or AI instructions, all that hold): the quizmaster confirms it (`quitApp`) or not (`closeDeclined`). */
+  "close-requested": CloseReason;
   /** The prepared team names changed, or a show started or ended. */
   "teams-changed": string[];
   /** Files came into the media library or left it. */

@@ -15,6 +15,7 @@ import { ANSWER_BUTTONS, DEFAULT_QUIZ_SETTINGS, MAX_BOARD_COLUMNS, MAX_BOARD_ROW
 import type {
   Background,
   BoardChange,
+  Checked,
   GameView,
   HostProblem,
   IconColor,
@@ -22,6 +23,7 @@ import type {
   LightsSetup,
   MediaLibrary,
   MediaNow,
+  NextStep,
   NowPlaying,
   Pad,
   PlayerCommand,
@@ -33,6 +35,7 @@ import type {
   SoundBoard,
   SoundClip,
   TimerDesign,
+  ValidationError,
   VideoClip,
   Welcome,
 } from "../types";
@@ -65,23 +68,33 @@ const playing = params.get("media");
 const theme = params.get("theme");
 /** A design to draw the scene's question clock in (`TimerDesign`); the slide's own when missing. */
 const timer = params.get("timer") as TimerDesign | null;
-/** `damaged`: the last show's journal does not read; `failing`: resuming the last show fails. */
+/** `damaged`: the last show's journal does not read; `failing`: resuming the last show fails; `none`: there is no last show. */
 const resume = params.get("resume");
 /** `full`: the running show's journal refuses writes, as on a full disk; `broken`: it cannot be repaired; `hangs`: a write does not finish. */
 const saving = params.get("saving");
-/** `unreadable`: the editor's draft does not read; `failing`: writing it fails, as on a full disk; `busy`: a sheet import does not finish. */
+/** `unreadable`: the editor's draft does not read; `failing`: writing it fails, as on a full disk; `busy`: a sheet import does not finish; `unsaved`: it has changes its quiz file does not have. */
 const draft = params.get("draft");
+/** `problems=warnings`: the editor's quiz has warnings only (it plays); `both`: a problem to fix too. */
+const quizChecks = params.get("problems");
 /** `recent=gone`: the recent quiz files are no longer where they were, as after they were deleted. */
 const recentGone = params.get("recent") === "gone";
 /** `available`: the update server offers a newer version; `installing`: it also downloads without end once asked. */
 const update = params.get("update");
 /** `slide`: the fourth slide has no answers list, so it fails to render; `view`: the show's view has no players, so the Director's screen does. */
 const broken = params.get("broken");
+/** `refused`: the backend refuses every lights setup the Lights tab stores. */
+const lightsStore = params.get("lights");
+/** `one`: only the laptop's screen, the Director's, is connected. */
+const oneMonitor = params.get("monitors") === "one";
+/** `stalls`: the voices download connects without end, as on a captive network. */
+const voicesStall = params.get("voices") === "stalls";
 /** The slides, the fourth broken when asked (`broken`). */
 const maybeBroken = (slides: Quiz["slides"]): Quiz["slides"] =>
   broken === "slide" ? slides.map((slide, i) => (i === 3 ? ({ ...slide, answers: null } as unknown as Quiz["slides"][number]) : slide)) : slides;
 /** The editor's drafts are numbered as the backend names their folders. */
 let drafts = 1;
+/** What the editor last wrote into the first draft, which it loads again when it opens again. */
+let firstDraft: { quiz: Quiz; unsaved: boolean } | null = null;
 /** The quizmaster's own AI instructions; null while they are the default ones. */
 let aiInstructions: string | null = null;
 
@@ -106,6 +119,26 @@ function players(overrides: Partial<PlayerView>[] = []): PlayerView[] {
     ...overrides[i],
   }));
   return list;
+}
+
+/** A team name as long as a name may be, for the projector's scenes with long names. */
+const LONG_NAME = "Hospodští géniové z Dolní Lhoty nad Vltavou a okolí, z.s.";
+
+/**
+ * A full event: `n` teams, ranked by falling score, the first `answeredBy`
+ * of them having answered, for the projector's scenes with many teams.
+ */
+function crowd(n: number, answeredBy = 0): PlayerView[] {
+  const [first] = players();
+  return Array.from({ length: n }, (_, i) => ({
+    ...first,
+    buzzer: i + 1,
+    name: i < NAMES.length ? NAMES[i] : `Tým ${i + 1}`,
+    score: 900 - i * 17,
+    totalAnswerMs: 30_000 + i * 900,
+    rank: i + 1,
+    answered: i < answeredBy,
+  }));
 }
 
 /** A song for the scenes with media: played on demand, its chorus only. */
@@ -151,7 +184,8 @@ const WELCOME: Welcome = { on: true, heading: "Páteční kvíz", logo: "media/l
 /** A picture behind a slide, with the options a new background gets. */
 const BACKGROUND: Background = { file: "media/landscape.svg", repeat: true, muted: true, sync: false };
 
-function view(partial: Partial<GameView>): GameView {
+/** A scene's view; `nextStep` is what its Next does. */
+function view(partial: Partial<GameView>, nextStep: NextStep | null = null): GameView {
   const shown: Omit<GameView, "answerShares"> = {
     quizTitle: quiz.title,
     slideIndex: 1,
@@ -181,7 +215,9 @@ function view(partial: Partial<GameView>): GameView {
     welcome: null,
     ...partial,
   };
-  return { ...shown, answerShares: answerShares(shown.slide) };
+  // What Next does, as `Game::controls` says it for the scene (`Game::next_step`); none where Next is not offered.
+  const controls = { ...shown.controls, nextStep: shown.controls.next ? nextStep : null };
+  return { ...shown, controls, answerShares: answerShares(shown.slide) };
 }
 
 const answered: Partial<PlayerView>[] = [
@@ -198,6 +234,8 @@ const SCENES: Record<string, GameView | null> = {
   lobby: view({
     phase: { phase: "lobby" },
     slide: null,
+    nextSlide: 0,
+    previousSlide: null,
     players: players([{}, {}, { name: "" }, { name: "" }, { name: "" }]).slice(0, 5),
     teams: [
       { name: NAMES[0], buzzer: 1 },
@@ -205,20 +243,20 @@ const SCENES: Record<string, GameView | null> = {
       { name: NAMES[1], buzzer: 2 },
       { name: "Sovy", buzzer: null },
     ],
-  }),
+  }, "startQuiz"),
   // The screen the show opens on: the logo by the heading, the intro picture, the footer.
-  welcome: view({ phase: { phase: "welcome" }, slide: null, welcome: WELCOME }),
+  welcome: view({ phase: { phase: "welcome" }, slide: null, welcome: WELCOME }, "registration"),
   // The same with the intro video, looping without its sound.
-  welcomeVideo: view({ phase: { phase: "welcome" }, slide: null, welcome: { ...WELCOME, intro: VIDEO.file } }),
-  billboard: view({ phase: { phase: "billboard" }, slideIndex: 0, slide: quiz.slides[0] }),
-  ready: view({}),
+  welcomeVideo: view({ phase: { phase: "welcome" }, slide: null, welcome: { ...WELCOME, intro: VIDEO.file } }, "registration"),
+  billboard: view({ phase: { phase: "billboard" }, slideIndex: 0, slide: quiz.slides[0] }, "nextSlide"),
+  ready: view({}, "startQuestion"),
   running: view({
     phase: { phase: "question", step: "running", clock: { limitMs: 20000, elapsedBeforeMs: 0, runningSinceMs: 0, pressesFromMs: 0 } },
     clock: { limitMs: 20000, remainingMs: 12400, elapsedMs: 7600, running: true, points: 81 },
     players: players(answered),
     answeredCount: 4,
     controls: { ...NO_CONTROLS, next: true, pauseClock: true, closeQuestion: true, restartQuestion: true },
-  }),
+  }, "endQuestion"),
   closed: view({
     phase: { phase: "question", step: "closed" },
     players: players(answered),
@@ -226,14 +264,14 @@ const SCENES: Record<string, GameView | null> = {
     answerCounts: [1, 2, 1, 0],
     results: { right: 2, wrong: 2, none: 1 },
     controls: { ...NO_CONTROLS, next: true, goTo: true },
-  }),
+  }, "showAnswer"),
   revealed: view({
     phase: { phase: "question", step: "revealed", winner: null },
     results: { right: 2, wrong: 2, none: 1 },
     players: players(answered.map((a, i) => ({ ...a, delta: [84, 80, 0, 0, 0][i] || null }))),
     answeredCount: 4,
     answerCounts: [1, 2, 1, 0],
-  }),
+  }, "nextSlide"),
   // The same with the answer chart on (quiz setting answerChart).
   chart: view({
     phase: { phase: "question", step: "revealed", winner: null },
@@ -242,7 +280,7 @@ const SCENES: Record<string, GameView | null> = {
     answeredCount: 4,
     answerCounts: [1, 2, 1, 0],
     settings: { ...DEFAULT_QUIZ_SETTINGS, answerChart: true },
-  }),
+  }, "nextSlide"),
   buzzed: view({
     phase: { phase: "question", step: "buzzed", buzzer: 3, button: "big", clock: { limitMs: 30000, elapsedBeforeMs: 4300, runningSinceMs: null, pressesFromMs: 0 } },
     slideIndex: 7,
@@ -252,6 +290,14 @@ const SCENES: Record<string, GameView | null> = {
     buzzes: [{ buzzer: 3, button: "big", state: "answering" }],
     controls: { ...NO_CONTROLS, judge: true, restartQuestion: true },
   }),
+  // A fastest-finger question whose time ran out with no buzz judged right: the bar says so, the trophy keeps the points the clock stopped at.
+  timeUp: view({
+    phase: { phase: "question", step: "closed" },
+    slideIndex: 7,
+    slide: quiz.slides[7],
+    questionEnd: { timedOut: true, points: 48 },
+    controls: { ...NO_CONTROLS, next: true, goTo: true },
+  }, "showAnswer"),
   // Teams 2, 4 and 7 buzzed in that order; 2 was wrong, 4 answers, 7 waits its turn.
   queue: view({
     phase: { phase: "question", step: "buzzed", buzzer: 4, button: "big", clock: { limitMs: 30000, elapsedBeforeMs: 4300, runningSinceMs: null, pressesFromMs: 0 } },
@@ -275,82 +321,102 @@ const SCENES: Record<string, GameView | null> = {
     answeredCount: 4,
     controls: { ...NO_CONTROLS, next: true, pauseClock: true, closeQuestion: true, restartQuestion: true, setJoker: true },
     settings: { ...DEFAULT_QUIZ_SETTINGS, jokers: 2 },
-  }),
+  }, "endQuestion"),
   ffJoker: view({
     phase: { phase: "question", step: "revealed", winner: 3 },
     slideIndex: 7,
     slide: quiz.slides[7],
     players: players([{}, {}, { delta: 258, joker: { on: true, chosen: true, left: 0, canChange: false } }]),
     settings: { ...DEFAULT_QUIZ_SETTINGS, jokers: 1 },
-  }),
+  }, "nextSlide"),
   ffRevealed: view({
     phase: { phase: "question", step: "revealed", winner: 3 },
     slideIndex: 7,
     slide: quiz.slides[7],
     players: players([{}, {}, { delta: 129 }]),
-  }),
+  }, "nextSlide"),
   sixAnswers: view({
     phase: { phase: "question", step: "revealed", winner: 3 },
     slideIndex: 8,
     slide: quiz.slides[8],
     players: players([{}, {}, { delta: 150 }]),
-  }),
-  sixAnswersPicture: view({ slideIndex: 8, slide: { ...quiz.slides[8], picture: "media/landscape.svg" } }),
-  explanation: view({ phase: { phase: "explanation" }, slideIndex: 4, slide: quiz.slides[4] }),
-  leaderboard: view({ phase: { phase: "endOfRound" }, slideIndex: 5, slide: quiz.slides[5] }),
-  overlay: view({ leaderboardVisible: true }),
-  final3: view({ phase: { phase: "final", step: 3 }, slideIndex: quiz.slides.length, slide: null }),
+  }, "nextSlide"),
+  sixAnswersPicture: view({ slideIndex: 8, slide: { ...quiz.slides[8], picture: "media/landscape.svg" } }, "startQuestion"),
+  explanation: view({ phase: { phase: "explanation" }, slideIndex: 4, slide: quiz.slides[4] }, "nextSlide"),
+  leaderboard: view({ phase: { phase: "endOfRound" }, slideIndex: 5, slide: quiz.slides[5] }, "nextSlide"),
+  overlay: view({ leaderboardVisible: true }, "startQuestion"),
+  final3: view({ phase: { phase: "final", step: 3 }, slideIndex: quiz.slides.length, slide: null, nextSlide: null, previousSlide: quiz.slides.length - 1 }, { finalStep: { place: null } }),
+  // The final ranking's first step, before the third place shows.
+  final0: view({ phase: { phase: "final", step: 0 }, slideIndex: quiz.slides.length, slide: null, nextSlide: null, previousSlide: quiz.slides.length - 1 }, { finalStep: { place: 3 } }),
+  // The last slide of the quiz, from which Next opens the final ranking.
+  lastSlide: view({
+    phase: { phase: "endOfRound" },
+    slideIndex: quiz.slides.length - 1,
+    slide: quiz.slides[quiz.slides.length - 1],
+    nextSlide: quiz.slides.length,
+    previousSlide: quiz.slides.length - 2,
+  }, "finalRanking"),
+  // A running question with every extra command in the Director: its sound, reading it out, its video, and the step the show takes by itself.
+  crowded: view({
+    slideIndex: 2,
+    slide: { ...quiz.slides[2], video: VIDEO, sound: SONG },
+    phase: { phase: "question", step: "running", clock: { limitMs: 20000, elapsedBeforeMs: 0, runningSinceMs: 0, pressesFromMs: 0 } },
+    clock: { limitMs: 20000, remainingMs: 12000, elapsedMs: 8000, running: true, points: 81 },
+    controls: { ...NO_CONTROLS, next: true, pauseClock: true, closeQuestion: true, playVideo: true, restartQuestion: true },
+    autoStep: { action: "reveal", inMs: 3000 },
+    settings: { ...DEFAULT_QUIZ_SETTINGS, readAloud: "question" },
+  }, "endQuestion"),
   // Two winners share first place and two teams third (1, 1, 3, 3): no second place.
   finalShared: view({
     phase: { phase: "final", step: 3 },
     slideIndex: quiz.slides.length,
     slide: null,
     players: players([{ score: 420, rank: 1 }, { score: 420, rank: 1 }, { score: 395, rank: 3 }, { score: 395, rank: 3 }]),
-  }),
+  }, { finalStep: { place: null } }),
   // The demo quiz's final slide, with the winners' music to play on demand.
-  finalSlide: view({ phase: { phase: "final", step: 3 }, slideIndex: quiz.slides.length - 1, slide: { ...quiz.slides[quiz.slides.length - 1], sound: SONG } }),
+  finalSlide: view({ phase: { phase: "final", step: 3 }, slideIndex: quiz.slides.length - 1, slide: { ...quiz.slides[quiz.slides.length - 1], sound: SONG } }, { finalStep: { place: null } }),
   picture: view({
     phase: { phase: "question", step: "ready" },
     slide: { ...quiz.slides[1], picture: "media/landscape.svg", sound: SONG },
-  }),
+  }, "startQuestion"),
   // The same question revealed: the song's replay part plays after its delay.
   pictureRevealed: view({
     phase: { phase: "question", step: "revealed", winner: null },
     slide: { ...quiz.slides[1], picture: "media/landscape.svg", sound: SONG },
-  }),
-  billboardPicture: view({ phase: { phase: "billboard" }, slideIndex: 0, slide: { ...quiz.slides[0], picture: "media/landscape.svg" } }),
-  background: view({ phase: { phase: "billboard" }, slideIndex: 0, slide: { ...quiz.slides[0], background: BACKGROUND } }),
+  }, "nextSlide"),
+  billboardPicture: view({ phase: { phase: "billboard" }, slideIndex: 0, slide: { ...quiz.slides[0], picture: "media/landscape.svg" } }, "nextSlide"),
+  background: view({ phase: { phase: "billboard" }, slideIndex: 0, slide: { ...quiz.slides[0], background: BACKGROUND } }, "nextSlide"),
   // A question's video in each step, with its effect fading over the answer time.
-  videoReady: view({ slideIndex: 2, slide: { ...quiz.slides[2], video: VIDEO } }),
+  videoReady: view({ slideIndex: 2, slide: { ...quiz.slides[2], video: VIDEO } }, "startQuestion"),
   videoRunning: view({
     slideIndex: 2,
     slide: { ...quiz.slides[2], video: VIDEO },
     phase: { phase: "question", step: "running", clock: { limitMs: 20000, elapsedBeforeMs: 0, runningSinceMs: 0, pressesFromMs: 0 } },
     clock: { limitMs: 20000, remainingMs: 12000, elapsedMs: 8000, running: true, points: 81 },
     controls: { ...NO_CONTROLS, next: true, pauseClock: true, closeQuestion: true, playVideo: true, restartQuestion: true },
-  }),
+  }, "endQuestion"),
   videoBlur: view({
     slideIndex: 2,
     slide: { ...quiz.slides[2], video: { ...VIDEO, effect: "blur" } },
     phase: { phase: "question", step: "running", clock: { limitMs: 20000, elapsedBeforeMs: 0, runningSinceMs: 0, pressesFromMs: 0 } },
     clock: { limitMs: 20000, remainingMs: 10000, elapsedMs: 10000, running: false, points: 81 },
     controls: { ...NO_CONTROLS, next: true, resumeClock: true, closeQuestion: true, playVideo: true, restartQuestion: true },
-  }),
+  }, "endQuestion"),
   videoClosed: view({
     slideIndex: 2,
     slide: { ...quiz.slides[2], video: VIDEO },
     phase: { phase: "question", step: "closed" },
     onHold: true,
     controls: { ...NO_CONTROLS, next: true, goTo: true, playVideo: true },
-  }),
-  videoRevealed: view({ slideIndex: 2, slide: { ...quiz.slides[2], video: VIDEO }, phase: { phase: "question", step: "revealed", winner: null }, onHold: true }),
+  }, "showAnswer"),
+  videoRevealed: view({ slideIndex: 2, slide: { ...quiz.slides[2], video: VIDEO }, phase: { phase: "question", step: "revealed", winner: null }, onHold: true }, "nextSlide"),
   // A video that waits for the quizmaster, before and after Play video.
   videoWaiting: view({
     phase: { phase: "billboard" },
     slideIndex: 0,
     slide: { ...quiz.slides[0], video: { ...VIDEO, autoplay: false, effect: null } },
     controls: { ...NO_CONTROLS, next: true, playVideo: true, goTo: true },
-  }),
+  }, "nextSlide"),
   videoPlayed: view({
     phase: { phase: "billboard" },
     slideIndex: 0,
@@ -359,10 +425,57 @@ const SCENES: Record<string, GameView | null> = {
     videoPlays: 1,
     autoStep: null,
     settings: DEFAULT_QUIZ_SETTINGS,
+  }, "nextSlide"),
+  brokenBackground: view({ phase: { phase: "billboard" }, slideIndex: 0, slide: { ...quiz.slides[0], background: { ...BACKGROUND, file: "media/missing.png" } } }, "nextSlide"),
+  styled: view({ slide: { ...quiz.slides[1], style: STYLE } }, "startQuestion"),
+  // A full event: 50 buzzers registered, 46 of them still to answer, a ranking of 47 that pages.
+  crowdLobby: view({ phase: { phase: "lobby" }, slide: null, players: crowd(50) }, "startQuiz"),
+  crowd: view({
+    phase: { phase: "question", step: "running", clock: { limitMs: 20000, elapsedBeforeMs: 0, runningSinceMs: 0, pressesFromMs: 0 } },
+    clock: { limitMs: 20000, remainingMs: 4400, elapsedMs: 15600, running: true, points: 81 },
+    players: crowd(50, 4),
+    enabledCount: 50,
+    answeredCount: 4,
+    controls: { ...NO_CONTROLS, next: true, pauseClock: true, closeQuestion: true, restartQuestion: true },
+  }, "endQuestion"),
+  crowdLeaderboard: view({ phase: { phase: "endOfRound" }, slideIndex: 5, slide: { ...quiz.slides[5], title: "" } as Quiz["slides"][number], players: crowd(47) }, "nextSlide"),
+  crowdOverlay: view({ leaderboardVisible: true, players: crowd(47) }, "startQuestion"),
+  // Names and texts as long as they may be: the buzz bar, the podium, a question and answers that need smaller text.
+  longName: view({
+    phase: { phase: "question", step: "buzzed", buzzer: 1, button: "big", clock: { limitMs: 30000, elapsedBeforeMs: 4300, runningSinceMs: null, pressesFromMs: 0 } },
+    slideIndex: 7,
+    slide: quiz.slides[7],
+    clock: { limitMs: 30000, remainingMs: 25700, elapsedMs: 4300, running: false, points: 129 },
+    players: players([{ name: LONG_NAME, delta: 129 }]),
+    buzzed: 1,
+    buzzes: [{ buzzer: 1, button: "big", state: "answering" }],
+    controls: { ...NO_CONTROLS, judge: true, restartQuestion: true },
   }),
-  brokenBackground: view({ phase: { phase: "billboard" }, slideIndex: 0, slide: { ...quiz.slides[0], background: { ...BACKGROUND, file: "media/missing.png" } } }),
-  styled: view({ slide: { ...quiz.slides[1], style: STYLE } }),
-  styledBillboard: view({ phase: { phase: "billboard" }, slideIndex: 0, slide: { ...setBodyText(quiz.slides[0], "Zeměpis a historie"), style: STYLE } }),
+  longFinal: view({ phase: { phase: "final", step: 3 }, slideIndex: quiz.slides.length, slide: null, players: players([{ name: LONG_NAME }, { name: "Mozkovna, kterou nikdo nepřekoná" }]) }, { finalStep: { place: null } }),
+  longQuestion: view({
+    phase: { phase: "question", step: "closed" },
+    slide: {
+      ...quiz.slides[1],
+      text: "Které město je hlavním městem Moravskoslezského kraje a zároveň třetím největším městem České republiky, hned po Praze a Brně?",
+      answers: ["Opava, historická metropole českého Slezska", "Ostrava", "Frýdek-Místek, dvojměstí na řece Ostravici", "Nový Jičín, město klobouků pod Beskydami a Frenštátu"],
+    } as Quiz["slides"][number],
+    players: players(answered),
+    answeredCount: 4,
+    answerCounts: [1, 2, 1, 0],
+    results: { right: 2, wrong: 2, none: 1 },
+  }, "showAnswer"),
+  // The answer revealed with the quiz set to keep it off the screen: no marks, no counts that give it away.
+  hiddenAnswer: view({
+    phase: { phase: "question", step: "revealed", winner: null },
+    results: { right: 2, wrong: 2, none: 1 },
+    players: players(answered.map((a, i) => ({ ...a, delta: [84, 80, 0, 0, 0][i] || null }))),
+    answeredCount: 4,
+    answerCounts: [1, 2, 1, 0],
+    settings: { ...DEFAULT_QUIZ_SETTINGS, hideAnswer: true },
+  }, "nextSlide"),
+  // A question's video whose file is missing: no empty frame where it would be.
+  brokenVideo: view({ slideIndex: 2, slide: { ...quiz.slides[2], video: { ...VIDEO, file: "media/missing.webm" } } }, "startQuestion"),
+  styledBillboard: view({ phase: { phase: "billboard" }, slideIndex: 0, slide: { ...setBodyText(quiz.slides[0], "Zeměpis a historie"), style: STYLE } }, "nextSlide"),
 };
 
 /**
@@ -432,6 +545,17 @@ const editorQuiz: Quiz = {
     },
   ],
 };
+
+/** What the backend's check finds in the editor's quiz, as `quizChecks` asks. */
+function editorProblems(): Checked {
+  if (quizChecks !== "warnings" && quizChecks !== "both") return { problems: [], warnings: [] };
+  const [, second, third] = editorQuiz.slides;
+  const warnings: ValidationError[] = [
+    { slideId: second.id, problem: { code: "questionTextEmpty" } },
+    { slideId: third.id, problem: { code: "answerEmpty", answer: 2 } },
+  ];
+  return { problems: quizChecks === "both" ? [{ slideId: third.id, problem: { code: "noCorrectAnswer" } }] : [], warnings };
+}
 
 clearMocks();
 mockWindows(windowLabel, windowLabel === "host" ? "director" : "host");
@@ -509,6 +633,7 @@ const LIBRARY: MediaLibrary = {
     { reference: "media/jingle.wav", kind: "audio" },
     { reference: "media/landscape.svg", kind: "image" },
   ],
+  settingsError: null,
 };
 const filePad = (reference: string, label = "", color: Pad["color"] = null): Pad => ({ source: { type: "file", reference }, label, color });
 let board: SoundBoard = {
@@ -701,7 +826,7 @@ mockIPC(
         return [
           { id: "Built-in Display@0,0", name: "Built-in Display", width: 2560, height: 1600, director: true },
           { id: "Projector@2560,0", name: "Projector", width: 1920, height: 1080, director: false },
-        ];
+        ].slice(0, oneMonitor ? 1 : 2);
       case "quit_app":
       case "close_declined":
         called.push({ cmd });
@@ -741,17 +866,24 @@ mockIPC(
         return [];
       case "last_session":
         if (resume === "damaged") return Promise.reject({ code: "journalDamaged", line: 58 });
-        return { meta: { quizTitle: quiz.title, sourcePath: null, startedMs: Date.now() - 3_600_000 }, commandCount: 57 };
+        if (resume === "none") return null;
+        return { meta: { quizTitle: quiz.title, sourcePath: null, startedMs: Date.now() - 3_600_000 }, commandCount: 57, position: { at: "question", number: 7, count: 20 } };
       case "editor_load":
         if (draft === "unreadable") return Promise.reject({ code: "draftNotRead", detail: "expected value at line 1 column 1" });
-        return { id: "draft-1", quiz: editorQuiz, sourcePath: "C:\\Kvizy\\hospodsky-kviz.quiz", unsaved: false, mediaRoot: "/src/dev/", problems: [], dropped: [] };
+        return { id: "draft-1", quiz: firstDraft?.quiz ?? editorQuiz, sourcePath: "C:\\Kvizy\\hospodsky-kviz.quiz", savesInPlace: true, unsaved: firstDraft?.unsaved ?? draft === "unsaved", mediaRoot: "/src/dev/", ...editorProblems(), dropped: [] };
       case "editor_new":
-        return { id: `draft-${++drafts}`, quiz: { ...editorQuiz, title: (payload as { title: string }).title, slides: [] }, sourcePath: null, unsaved: false, mediaRoot: "/src/dev/", problems: [], dropped: [] };
+        return { id: `draft-${++drafts}`, quiz: { ...editorQuiz, title: (payload as { title: string }).title, slides: [] }, sourcePath: null, savesInPlace: false, unsaved: false, mediaRoot: "/src/dev/", problems: [], warnings: [], dropped: [] };
       case "recent_files":
         return [...RECENT_FILES];
       case "forget_recent_file":
         forgetRecent((payload as { path: string }).path);
         return null;
+      case "pick_quiz_file": {
+        // The file picked (see `dialogAnswer`) goes first in the recent files.
+        const path = dialogAnswer();
+        if (path) RECENT_FILES.splice(0, RECENT_FILES.length, path, ...RECENT_FILES.filter((kept) => kept !== path));
+        return path;
+      }
       case "start_show_from_recent": {
         called.push({ cmd, ...(payload as object) });
         const path = (payload as { recent: string }).recent;
@@ -775,20 +907,27 @@ mockIPC(
         if (recent !== null && !RECENT_FILES.includes(recent)) return Promise.reject({ code: "notRecent" });
         const path = recent ?? dialogAnswer();
         if (!path) return null;
-        return { id: `draft-${++drafts}`, quiz: editorQuiz, sourcePath: path, unsaved: true, mediaRoot: "/src/dev/", problems: [], dropped };
+        return { id: `draft-${++drafts}`, quiz: editorQuiz, sourcePath: path, savesInPlace: path.endsWith(".quiz"), unsaved: true, mediaRoot: "/src/dev/", problems: [], warnings: [], dropped };
       }
       case "editor_update":
         called.push({ cmd, ...(payload as object) });
         if (draft === "failing") return Promise.reject({ code: "file", action: "write", path: "C:\\Users\\q\\AppData\\Local\\cz.kodajek.quizshow\\editor\\draft-1\\quiz.json", reason: "diskFull", detail: "No space left on device (os error 28)" });
-        return [];
+        {
+          // As the backend gives it back: JSON.
+          const written = payload as { draft: string; quiz: Quiz; unsaved: boolean };
+          if (written.draft === "draft-1") firstDraft = { quiz: JSON.parse(JSON.stringify(written.quiz)) as Quiz, unsaved: written.unsaved };
+        }
+        return editorProblems();
       case "editor_save":
         called.push({ cmd, ...(payload as object) });
-        return "C:\\Kvizy\\hospodsky-kviz.quiz";
+        return { path: "C:\\Kvizy\\hospodsky-kviz.quiz", savesInPlace: true };
       case "plugin:dialog|message": {
-        // "Yes" is the first button, which the app words itself.
-        const custom = (payload as { buttons?: { OkCancelCustom?: [string, string] } }).buttons?.OkCancelCustom;
+        // "Yes" is the first button and "No" the second, which the app words itself.
+        const { buttons } = payload as { buttons?: { OkCancelCustom?: [string, string]; YesNoCancelCustom?: [string, string, string] } };
+        const custom = buttons?.OkCancelCustom ?? buttons?.YesNoCancelCustom;
         const answer = dialogAnswer();
-        return answer === "Yes" && custom ? custom[0] : answer;
+        if (!custom) return answer;
+        return answer === "Yes" ? custom[0] : answer === "No" && buttons?.YesNoCancelCustom ? custom[1] : custom[custom.length - 1];
       }
       case "editor_category_name": {
         // A stand-in: the backend also skips the names taken.
@@ -864,6 +1003,16 @@ mockIPC(
         };
       case "lights_info":
         return { setup: LIGHTS_SETUP, status: { output: { kind: "connected", name: "Art-Net 255.255.255.255" }, messages: null, look: 2, hold: null, blackout: false }, settingsError: null, refused: null };
+      case "lights_store": {
+        called.push({ cmd, ...(payload as object) });
+        if (lightsStore === "refused") return Promise.reject({ code: "lightsRefused", refused: { problem: "pastUniverse", name: "Par vlevo" } });
+        // A host with a letter in it stands for any the backend refuses as not IPv4.
+        const { setup } = payload as { setup: LightsSetup };
+        const host = [setup.output.kind === "artNet" || setup.output.kind === "sacn" ? setup.output.host : null, setup.messages.osc?.host].find((h) => h && /[a-z]/i.test(h));
+        return host ? Promise.reject({ code: "lightsRefused", refused: { problem: "notIpv4", host } }) : null;
+      }
+      case "lights_check_change":
+        return null;
       case "lights_universe": {
         // The first fixture in the "Question" blue, the second in red.
         const slots = new Array<number>(512).fill(0);
@@ -910,8 +1059,9 @@ mockIPC(
       case "voice_remove":
         return { installed: false, bytes: 128_774_318, voices: 10 };
       case "voice_install":
-        return { installed: true, bytes: 128_774_318, voices: 10 };
+        return voicesStall ? new Promise(() => undefined) : { installed: true, bytes: 128_774_318, voices: 10 };
       case "voice_clip":
+      case "voice_install_cancel":
         return null;
       case "lights_devices":
         return { outputs: [{ choice: { kind: "enttecPro", port: "COM4" }, label: "COM4 (FTDI)" }], midiPorts: ["loopMIDI Port"] };

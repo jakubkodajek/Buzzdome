@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { DEFAULT_QUIZ_SETTINGS } from "../bindings/Constants";
 import { translator } from "../i18n";
 import type { Quiz, QuizSettings, Slide } from "../types";
-import { pickSystemVoice, questionLines, sampleUrl, soundsItself, spokenText, VOICES, voiceLine, voiceName, type SystemVoice } from "./read-aloud";
+import { mayTakeVoice, pickSystemVoice, questionLines, sampleUrl, soundsItself, spokenText, VOICES, voiceLine, voiceName, type SystemVoice } from "./read-aloud";
 
 const settings: QuizSettings = {
   ...DEFAULT_QUIZ_SETTINGS,
@@ -99,6 +99,16 @@ describe("voices", () => {
       "Male voice 5",
     ]);
     for (const language of ["cs", "en"] as const) for (const v of VOICES) expect(sampleUrl(language, v), `${language}-${v}`).not.toBeNull();
+  });
+
+  it("lets a try or a sample stop anything but the show's reading", () => {
+    expect(mayTakeVoice(null, "sample cs-0")).toBe(true);
+    expect(mayTakeVoice("preview", "sample cs-0")).toBe(true);
+    expect(mayTakeVoice("sample cs-0", "preview")).toBe(true);
+    expect(mayTakeVoice("sample cs-0", "show")).toBe(true);
+    expect(mayTakeVoice("show", "show")).toBe(true);
+    expect(mayTakeVoice("show", "preview")).toBe(false);
+    expect(mayTakeVoice("show", "sample en-3")).toBe(false);
   });
 });
 

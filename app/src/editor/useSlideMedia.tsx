@@ -48,21 +48,15 @@ export function useSlideMedia(editor: QuizEditor, list: SlideList, sound: SoundT
       if (part && ids.length === 1) setSelection((current) => (current.id === ids[0] ? { ...current, element: part } : current));
     });
   const choosePart = (id: string, part: MediaElement) => pick([id], MEDIA[part].kinds, MEDIA[part].set, part);
+  /** The selected slides that can have `part`: a sound any, a picture or video those that show one. */
+  const takers = (part: MediaElement) => selectedSlides.filter((s) => part === "sound" || plays(s.type).pictureAndVideo).map((s) => s.id);
+  /** Asks for `part` and puts it on every selected slide that can have it, as a background goes on all. */
+  const insert = (part: MediaElement) => pick(takers(part), MEDIA[part].kinds, MEDIA[part].set, part);
 
   const actions: Record<SlideMediaActionId, Action> = {
-    insertPicture: {
-      label: t("mediaPicture"),
-      icon: <PictureIcon />,
-      disabled: !slide || !plays(slide.type).pictureAndVideo,
-      run: () => slide && choosePart(slide.id, "picture"),
-    },
-    insertVideo: {
-      label: t("mediaVideo"),
-      icon: <VideoIcon />,
-      disabled: !slide || !plays(slide.type).pictureAndVideo,
-      run: () => slide && choosePart(slide.id, "video"),
-    },
-    insertSound: { label: t("mediaSound"), icon: <SoundIcon />, disabled: !slide, run: () => slide && choosePart(slide.id, "sound") },
+    insertPicture: { label: t("mediaPicture"), icon: <PictureIcon />, disabled: takers("picture").length === 0, run: () => insert("picture") },
+    insertVideo: { label: t("mediaVideo"), icon: <VideoIcon />, disabled: takers("video").length === 0, run: () => insert("video") },
+    insertSound: { label: t("mediaSound"), icon: <SoundIcon />, disabled: takers("sound").length === 0, run: () => insert("sound") },
     insertBackground: {
       label: t("mediaBackground"),
       icon: <BackgroundIcon />,

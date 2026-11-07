@@ -17,7 +17,10 @@ import { SLIDE_TYPE_LABEL, slideTitle } from "../quiz";
 import { DEFAULT_TIMER, TIMER_LABEL } from "../timers";
 import type { Category, Slide } from "../types";
 import { keyCombo } from "../keyboard";
+import { mediaFileName } from "../media";
+import { createStore, useStore, type Store } from "../store";
 import type { Action } from "./actions";
+import { categoryName } from "./categories";
 import { ContextMenu, Fold, MixedContext } from "./controls";
 import { answerIndex, type ElementId } from "./elements";
 import { withRows, type Page, type PageId, type Section } from "./property-pages";
@@ -59,6 +62,14 @@ const PAGE_ICON: Record<PageId, ReactNode> = {
 const DESCRIPTIONS_KEY = "quiz-show.properties.descriptions";
 const DARK_KEY = "quiz-show.properties.dark";
 const CLASSIC_KEY = "quiz-show.properties.classic";
+
+// Where the panel was left, kept while the editor is not shown (a test run, the Director), so it opens again as it was.
+const shownPage = createStore<PageId>("gameplay");
+const foldedSections = createStore<ReadonlySet<StringKey>>(new Set());
+/** Sections that show their rare rows too (More options). */
+const sectionsShownWhole = createStore<ReadonlySet<StringKey>>(new Set());
+/** Rows whose parts are folded open, by row id. */
+const openPartRows = createStore<ReadonlySet<string>>(new Set());
 
 /** A setting of the panel kept per computer, `initial` until changed. */
 function useStoredFlag(key: string, initial: boolean): [boolean, (on: boolean) => void] {
@@ -107,11 +118,11 @@ export function PropertiesPanel({ header, pages, mixed, copied, onCopy, focusSea
     onSearchFocused();
   }, [focusSearch, onSearchFocused]);
 
-  const [pageId, setPageId] = useState<PageId>("gameplay");
+  const pageId = useStore(shownPage);
   const [query, setQuery] = useState("");
-  const [folded, setFolded] = useState<ReadonlySet<StringKey>>(new Set());
-  const [more, setMore] = useState<ReadonlySet<StringKey>>(new Set());
-  const [openParts, setOpenParts] = useState<ReadonlySet<string>>(new Set());
+  const folded = useStore(foldedSections);
+  const more = useStore(sectionsShownWhole);
+  const openParts = useStore(openPartRows);
   const [described, setDescribed] = useState<PropertyRow | null>(null);
   // A row whose Ctrl+V waits for the web view's paste event.
   const pasteWaiting = useRef<PropertyRow | null>(null);
@@ -129,16 +140,15 @@ export function PropertiesPanel({ header, pages, mixed, copied, onCopy, focusSea
       ? [{ title: "classicList", rows: alphabetical(pages.flatMap((p) => p.sections.map((s) => ({ name: t(s.title), rows: s.rows }))), lang) }]
       : (page?.sections ?? []);
 
-  const toggle = <T,>(set: (change: (current: ReadonlySet<T>) => ReadonlySet<T>) => void, item: T) =>
-    set((current) => {
-      const next = new Set(current);
-      if (!next.delete(item)) next.add(item);
-      return next;
-    });
+  const toggle = <T,>(store: Store<ReadonlySet<T>>, item: T) => {
+    const next = new Set(store.get());
+    if (!next.delete(item)) next.add(item);
+    store.set(next);
+  };
 
   const optionsMenu: (Action | "separator")[] = [
-    { label: t("expandAll"), disabled: classic, run: () => setFolded(new Set()) },
-    { label: t("collapseAll"), disabled: classic, run: () => setFolded(new Set(pages.flatMap((p) => p.sections.map((s) => s.title)))) },
+    { label: t("expandAll"), disabled: classic, run: () => foldedSections.set(new Set()) },
+    { label: t("collapseAll"), disabled: classic, run: () => foldedSections.set(new Set(pages.flatMap((p) => p.sections.map((s) => s.title)))) },
     "separator",
     { label: t("showDescriptions"), checked: descriptions, run: () => setDescriptions(!descriptions) },
     { label: t("darkPanel"), checked: dark, run: () => setDark(!dark) },
@@ -217,7 +227,7 @@ export function PropertiesPanel({ header, pages, mixed, copied, onCopy, focusSea
           onKeyDown={rowKeys(row)}
           onPaste={rowPaste(row)}
         >
-          <RowLabel row={row} needle={needle} fold={parts.length > 0 ? { open: partsOpen, toggle: () => toggle(setOpenParts, row.id) } : undefined} />
+          <RowLabel row={row} needle={needle} fold={parts.length > 0 ? { open: partsOpen, toggle: () => toggle(openPartRows, row.id) } : undefined} />
           <span className="props-control">
             <MixedContext value={mixed.has(row.id)}>{row.control}</MixedContext>
           </span>
@@ -292,7 +302,7 @@ export function PropertiesPanel({ header, pages, mixed, copied, onCopy, focusSea
               aria-selected={p === page}
               className={p === page ? "active" : ""}
               title={t(PAGE_TITLE[p.id])}
-              onClick={() => setPageId(p.id)}
+              onClick={() => shownPage.set(p.id)}
             >
               {PAGE_ICON[p.id]}
               {p === page && <span>{t(PAGE_TITLE[p.id])}</span>}
@@ -309,13 +319,13 @@ export function PropertiesPanel({ header, pages, mixed, copied, onCopy, focusSea
           const showsAll = needle !== "" || more.has(section.title);
           return (
             <section key={section.title} className="props-section">
-              <button type="button" className="props-section-title" aria-expanded={open} onClick={() => toggle(setFolded, section.title)}>
+              <button type="button" className="props-section-title" aria-expanded={open} onClick={() => toggle(foldedSections, section.title)}>
                 <Fold open={open} />
                 {t(section.title)}
               </button>
               {open && section.rows.filter((row) => showsAll || !row.rare).map((row) => renderRow(row))}
               {open && rare && !needle && (
-                <button type="button" className="props-more" aria-expanded={showsAll} onClick={() => toggle(setMore, section.title)}>
+                <button type="button" className="props-more" aria-expanded={showsAll} onClick={() => toggle(sectionsShownWhole, section.title)}>
                   {t(showsAll ? "fewerOptions" : "moreOptions")}
                 </button>
               )}
@@ -428,11 +438,11 @@ export function selectionHeader(t: Translate, slide: Slide, count: number, eleme
     case "text":
       return { icon: <TextIcon />, title: t(ELEMENT_TITLE[element]), subtitle: slideTitle(slide) };
     case "picture":
-      return { icon: <PictureIcon />, title: t("mediaPicture"), subtitle: slide.picture ?? "" };
+      return { icon: <PictureIcon />, title: t("mediaPicture"), subtitle: mediaFileName(slide.picture ?? "") };
     case "video":
-      return { icon: <VideoIcon />, title: t("mediaVideo"), subtitle: slide.video?.file ?? "" };
+      return { icon: <VideoIcon />, title: t("mediaVideo"), subtitle: mediaFileName(slide.video?.file ?? "") };
     case "sound":
-      return { icon: <SoundIcon />, title: t("mediaSound"), subtitle: slide.sound?.file ?? "" };
+      return { icon: <SoundIcon />, title: t("mediaSound"), subtitle: mediaFileName(slide.sound?.file ?? "") };
     case "timer":
       return { icon: <TimerIcon />, title: t("sectionTimer"), subtitle: t(TIMER_LABEL[slide.style?.timer ?? DEFAULT_TIMER]) };
     default:
@@ -447,5 +457,5 @@ export function selectionHeader(t: Translate, slide: Slide, count: number, eleme
 
 /** The header for a category in the Categories view, with how many slides took it on. */
 export function categoryHeader(t: Translate, category: Category, slides: number): PanelHeader {
-  return { icon: <PaletteIcon />, title: category.name || t("unnamedCategory"), chip: t("categorySlides", { n: slides }), subtitle: t("categoryHint") };
+  return { icon: <PaletteIcon />, title: categoryName(t, category), chip: t("categorySlides", { n: slides }), subtitle: t("categoryHint") };
 }

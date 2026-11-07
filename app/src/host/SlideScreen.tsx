@@ -1,4 +1,4 @@
-import type { CSSProperties, ReactNode } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { timeLeft } from "../answer-time";
 import { ANSWER_LETTERS, answerIndex } from "../answers";
 import { useApp } from "../app-context";
@@ -8,10 +8,13 @@ import { playerName } from "../i18n";
 import { CheckIcon, CrossIcon, PeopleIcon, QuestionIcon, TrophyIcon } from "../icons";
 import { rightAnswers, type QuestionPosition, type SlideContext } from "../quiz";
 import { SlideMedia, type ScreenMode } from "../slide-media";
+import { useTheme } from "../theme/context";
 import { styleOf, textStyleCss, type StyledText } from "../theme/slide-style";
 import type { AnswerResults, BuzzView, ClockView, GameView, PlayerView, QuestionSlide, Slide } from "../types";
 import { podiumBlocks } from "./podium";
 import { chartShares } from "./answer-chart";
+import { LEADERBOARD_PAGE_MS, leaderboardPages, waitingStrip } from "./crowd";
+import { useFitText } from "./fit-text";
 import { Timer } from "./Timer";
 import { WelcomeScreen } from "./WelcomeScreen";
 import "./slide.css";
@@ -31,6 +34,8 @@ export function SlideScreen(props: { view: GameView; context: SlideContext; cloc
   const { t } = useApp();
   const phase = view.phase;
   const placeholder = (text: string, empty: string) => (text || mode === "show" ? text : <span className="placeholder">{empty}</span>);
+  // A ranking's heading: the slide's title, else in the show the default one, as a placeholder elsewhere.
+  const heading = (text: string, standard: string) => placeholder(text, standard) || standard;
   const look = (text: StyledText) => styledText(view.slide, text);
   switch (phase.phase) {
     case "welcome":
@@ -69,7 +74,7 @@ export function SlideScreen(props: { view: GameView; context: SlideContext; cloc
       return (
         <div className="center-slide">
           <h1 className="slide-title small" data-element="title" style={view.slide?.type === "endOfRound" ? look("title") : undefined}>
-            {view.slide?.type === "endOfRound" ? placeholder(view.slide.title, t("endOfRound")) : t("endOfRound")}
+            {view.slide?.type === "endOfRound" ? heading(view.slide.title, t("endOfRound")) : t("endOfRound")}
           </h1>
           <Leaderboard players={ranked(view)} />
         </div>
@@ -79,8 +84,7 @@ export function SlideScreen(props: { view: GameView; context: SlideContext; cloc
         <FinalScores
           players={ranked(view)}
           step={phase.step}
-          // A final slide's own title, or the default one.
-          title={(view.slide?.type === "final" && placeholder(view.slide.title, t("final"))) || t("final")}
+          title={view.slide?.type === "final" ? heading(view.slide.title, t("final")) : t("final")}
           titled={view.slide?.type === "final"}
           titleStyle={view.slide?.type === "final" ? look("title") : {}}
           sample={mode !== "show"}
@@ -105,18 +109,22 @@ function styledText(slide: Slide | null, text: StyledText): CSSProperties {
   return textStyleCss(styleOf(slide?.style, text), text);
 }
 
+/** The most buzzer numbers registration shows, and the most it shows in cells big enough to read from the room. */
+const MAX_REGISTER_CELLS = 100;
+const ROOMY_REGISTER_CELLS = 50;
+
 /** Registration: every buzzer number, lit once it is pressed, with its team's name once paired. */
 function Registration({ view }: { view: GameView }) {
   const { t } = useApp();
   const names = new Map(view.players.map((p) => [p.buzzer, p.name]));
   const highest = Math.max(20, ...view.players.map((p) => p.buzzer));
-  const cells = Array.from({ length: Math.min(highest, 100) }, (_, i) => i + 1);
+  const cells = Array.from({ length: Math.min(highest, MAX_REGISTER_CELLS) }, (_, i) => i + 1);
   return (
     <div className="welcome">
       <header className="welcome-header">{view.quizTitle}</header>
       <div className="welcome-body">
         <p className="slide-text">{t("lobbyHint")}</p>
-        <div className="register-grid">
+        <div className={cells.length > ROOMY_REGISTER_CELLS ? "register-grid dense" : "register-grid"}>
           {cells.map((n) => (
             <span key={n} className={names.has(n) ? "on" : ""}>
               {n}
@@ -179,18 +187,19 @@ function QuestionScreen(props: {
   const remaining = clock?.remainingMs ?? null;
   const enabled = view.players.filter((p) => p.enabled);
   const waiting = enabled.filter((p) => !p.answered);
+  // In the show the quiz's settings can keep the answer and a buzz's points off the screen (spec QZ-11);
+  // a hidden answer hides the counts that would give it away too.
+  const show = mode === "show";
+  const hidesAnswer = show && view.settings.hideAnswer;
+  const screen = useRef<HTMLDivElement>(null);
+  const themeId = useTheme()?.id ?? null;
+  useFitText(screen, ".answer", JSON.stringify([question.text, question.answers, question.style ?? null, question.picture, question.video?.file ?? null, themeId]));
 
   let middle: ReactNode = null;
   if (view.results) {
-    middle = <ResultBars results={view.results} />;
+    if (!hidesAnswer) middle = <ResultBars results={view.results} />;
   } else if (question.mode === "everyone" && !closed) {
-    middle = (
-      <div className="responders">
-        {waiting.slice(0, 40).map((p) => (
-          <span key={p.buzzer}>{p.buzzer}</span>
-        ))}
-      </div>
-    );
+    middle = <Waiting buzzers={waiting.map((p) => p.buzzer)} />;
   }
 
   const buzzed = view.players.find((p) => p.buzzer === view.buzzed);
@@ -200,9 +209,7 @@ function QuestionScreen(props: {
   const buzzedAnswer = view.phase.phase === "question" && view.phase.step === "buzzed" ? answerIndex(view.phase.button) : null;
   const hasMedia = question.picture !== null || question.video !== null;
   const answerStyle = styledText(question, "answer");
-  // In the show the quiz's settings can keep the answer and a buzz's points off the screen (spec QZ-11).
-  const show = mode === "show";
-  const marksAnswer = step === "revealed" && !(show && view.settings.hideAnswer);
+  const marksAnswer = step === "revealed" && !hidesAnswer;
   const chart = chartShares(view);
   const buzzPoints = barPlayer?.delta ?? 0;
   const jokers = enabled.filter((p) => p.joker.on);
@@ -212,12 +219,13 @@ function QuestionScreen(props: {
   const queue = turns.length > 1 || (turns.length === 1 && !barPlayer);
 
   return (
-    <div className={hasMedia ? "question-screen has-media" : "question-screen"}>
+    <div ref={screen} className={hasMedia ? "question-screen has-media" : "question-screen"}>
       <div className="info-panel">
         <Timer
           design={question.style?.timer}
           seconds={step === "ready" ? question.timeLimitS || null : closed ? 0 : remaining === null ? null : Math.ceil(remaining / 1000)}
           fraction={timeLeft(view.phase, clock)}
+          counting={clock?.running ?? false}
           label={position ? `${position.n}/${position.total}` : ""}
         />
         <div className="info-middle">{middle}</div>
@@ -229,7 +237,7 @@ function QuestionScreen(props: {
         )}
         <div className="info-stat">
           <TrophyIcon />
-          <span className="digits">{clock?.points ?? question.points}</span>
+          <span className="digits">{clock?.points ?? view.questionEnd?.points ?? question.points}</span>
         </div>
       </div>
 
@@ -252,7 +260,7 @@ function QuestionScreen(props: {
               >
                 <span className="letter">{ANSWER_LETTERS[i]}</span>
                 <span className="answer-text">{placeholder(answer, t("answerPlaceholder", { letter: ANSWER_LETTERS[i] }))}</span>
-                {closed && view.answerCounts && <span className="answer-count">{view.answerCounts[i]}</span>}
+                {closed && view.answerCounts && !hidesAnswer && <span className="answer-count">{view.answerCounts[i]}</span>}
                 {chart && <span className="answer-bar" style={{ "--share": `${chart[i] * 100}%` } as CSSProperties} />}
                 {(marksAnswer || !show) && isCorrect && <CorrectMark share={share} />}
               </div>
@@ -285,13 +293,27 @@ function QuestionScreen(props: {
         </div>
       )}
       {question.mode === "fastestFinger" && step === "running" && !barPlayer && !queue && <div className="buzz-bar idle">{t("waitingForBuzz")}</div>}
-      {question.mode === "fastestFinger" && step === "closed" && remaining === 0 && <div className="buzz-bar idle">{t("timeUp")}</div>}
+      {question.mode === "fastestFinger" && step === "closed" && view.questionEnd?.timedOut && <div className="buzz-bar idle">{t("timeUp")}</div>}
       {!buzzBar && jokers.length > 0 && (
         <div className="joker-strip">
           <span className="joker-label">{t("jokerStrip")}</span>
           <span className="joker-names">{jokers.map((p) => playerName(t, p)).join(", ")}</span>
         </div>
       )}
+    </div>
+  );
+}
+
+/** The buzzers still to answer, in the info bar: in more rows as more wait, the last cell counting those it has no room for. */
+function Waiting({ buzzers }: { buzzers: number[] }) {
+  const { t } = useApp();
+  const { rows, shown, more } = waitingStrip(buzzers.length);
+  return (
+    <div className={`responders rows-${rows}`}>
+      {buzzers.slice(0, shown).map((buzzer) => (
+        <span key={buzzer}>{buzzer}</span>
+      ))}
+      {more > 0 && <span className="more">{t("respondersMore", { n: more })}</span>}
     </div>
   );
 }
@@ -340,26 +362,52 @@ function ResultBars({ results }: { results: AnswerResults }) {
   );
 }
 
+/**
+ * The ranking in columns of ten. When the teams take more than one page,
+ * the pages take turns, each with the places it shows under it, so every
+ * team finds its place at the size the room reads.
+ */
 export function Leaderboard({ players }: { players: PlayerView[] }) {
   const { t } = useApp();
-  const top = players.slice(0, 20);
-  const columns = [top.slice(0, 10), top.slice(10, 20)].filter((c) => c.length > 0);
+  const pages = leaderboardPages(players);
+  const page = usePageTurns(pages.length);
+  const columns = pages[page] ?? [];
+  const first = pages.slice(0, page).flat(2).length;
+  const count = columns.flat().length;
   return (
-    <div className="leaderboard">
-      {columns.map((column, c) => (
-        <ol key={c}>
-          {column.map((p) => (
-            <li key={p.buzzer} className={p.rank !== null && p.rank <= 3 ? `top top-${p.rank}` : ""}>
-              <span className="rank">{p.rank}</span>
-              <span className="name">{playerName(t, p)}</span>
-              <span className="score">{scoreDigits(p.score)}</span>
-            </li>
-          ))}
-        </ol>
-      ))}
+    <div className={pages.length > 1 ? "leaderboard paged" : "leaderboard"}>
+      {/* A new element for each page, so its rows come in afresh. */}
+      <div key={page} className="leaderboard-columns">
+        {columns.map((column, c) => (
+          <ol key={c}>
+            {column.map((p) => (
+              <li key={p.buzzer} className={p.rank !== null && p.rank <= 3 ? `top top-${p.rank}` : ""}>
+                <span className="rank">{p.rank}</span>
+                <span className="name">{playerName(t, p)}</span>
+                <span className="score">{scoreDigits(p.score)}</span>
+              </li>
+            ))}
+          </ol>
+        ))}
+      </div>
+      {pages.length > 1 && <p className="leaderboard-page">{t("leaderboardPlaces", { from: first + 1, to: first + count, total: players.length })}</p>}
     </div>
   );
 }
+
+/** The page shown of `count`, the next one every `LEADERBOARD_PAGE_MS`, round and round. */
+function usePageTurns(count: number): number {
+  const [turn, setTurn] = useState(0);
+  useEffect(() => {
+    if (count <= 1) return;
+    const timer = setInterval(() => setTurn((current) => current + 1), LEADERBOARD_PAGE_MS);
+    return () => clearInterval(timer);
+  }, [count]);
+  return count > 0 ? turn % count : 0;
+}
+
+/** Characters from which a name on the podium is drawn smaller, so it fits its block in two lines. */
+const PODIUM_LONG_NAME = 18;
 
 interface FinalScoresProps {
   players: PlayerView[];
@@ -398,9 +446,10 @@ function FinalScores({ players, step, title, titled, titleStyle, sample }: Final
           const shown = step >= FINAL_LAST_STEP - place;
           const first: PlayerView | undefined = named[0];
           const lines = named.length + (more > 0 ? 1 : 0);
+          const long = named.some((p) => playerName(t, p).length > PODIUM_LONG_NAME);
           return (
             <div key={place} className={`podium-step place-${place}`}>
-              <div className={`podium-name lines-${lines} ${shown && (first || sample) ? "shown" : ""}`}>
+              <div className={`podium-name lines-${lines} ${long ? "long" : ""} ${shown && (first || sample) ? "shown" : ""}`}>
                 {shown && first && (
                   <>
                     {named.map((p) => (

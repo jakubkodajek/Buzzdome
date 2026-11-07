@@ -10,6 +10,9 @@ import { answerLimits, removeAnswer, setAnswerAt, toggleCorrect } from "./slides
 
 const FORM_ID = "edit-slide";
 
+/** The slide's main text, the first of them it has. */
+const MAIN_FIELDS = '[data-field="question"], [data-field="title"], [data-field="text"]';
+
 /**
  * The slide's texts in one form: the question and its answers with the
  * right one ticked, the title and text, or the explanation, and the notes. OK applies them
@@ -29,8 +32,10 @@ export function EditSlideDialog(props: {
   const form = useRef<HTMLFormElement>(null);
 
   useEffect(() => {
-    // Start where the quizmaster double-clicked (the Dialog focuses the first field otherwise).
-    const field = form.current?.querySelector<HTMLInputElement | HTMLTextAreaElement>(`[data-field="${focus}"]`);
+    // Start where the quizmaster double-clicked, else in the slide's main text, at its end so typing adds to it.
+    const field =
+      form.current?.querySelector<HTMLInputElement | HTMLTextAreaElement>(`[data-field="${focus}"]`) ??
+      form.current?.querySelector<HTMLInputElement | HTMLTextAreaElement>(MAIN_FIELDS);
     if (!field) return;
     field.focus();
     field.setSelectionRange(field.value.length, field.value.length);
@@ -40,16 +45,17 @@ export function EditSlideDialog(props: {
     <Dialog
       title={t("editSlideTitle", { type: t(SLIDE_TYPE_LABEL[slide.type]) })}
       onClose={onClose}
-      footer={
+      dirty={draft !== opened}
+      footer={(cancel) => (
         <>
           <button type="submit" form={FORM_ID} className="primary">
             {t("ok")}
           </button>
-          <button type="button" onClick={onClose}>
+          <button type="button" onClick={cancel}>
             {t("cancel")}
           </button>
         </>
-      }
+      )}
     >
       <form
         ref={form}
@@ -61,11 +67,14 @@ export function EditSlideDialog(props: {
           onClose();
         }}
         onKeyDown={(e) => {
-          // Ctrl+Enter confirms from a multi-line field too.
-          if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
-            e.preventDefault();
-            e.currentTarget.requestSubmit();
-          }
+          if (e.key !== "Enter" || e.shiftKey || e.altKey) return;
+          // Ctrl+Enter confirms from a multi-line field too; Enter in an answer goes on to the next one, as in a list, and confirms after the last.
+          const answer = e.target instanceof HTMLInputElement ? /^answer-(\d+)$/.exec(e.target.dataset.field ?? "") : null;
+          if (!(e.ctrlKey || e.metaKey) && !answer) return;
+          e.preventDefault();
+          const next = answer && !(e.ctrlKey || e.metaKey) ? e.currentTarget.querySelector<HTMLInputElement>(`[data-field="answer-${Number(answer[1]) + 1}"]:not(:disabled)`) : null;
+          if (next) next.focus();
+          else e.currentTarget.requestSubmit();
         }}
       >
         {draft.type === "question" && <QuestionFields question={draft} onChange={setDraft} />}
@@ -119,14 +128,15 @@ function QuestionFields({ question, onChange }: { question: QuestionSlide; onCha
           // Rows past the answers are greyed; the first of them takes a new answer.
           const used = i < count;
           const toggled = toggleCorrect(question, i);
+          const keptOne = used && toggled === question;
           return (
             <div key={letter} className={used ? "answer-row" : "answer-row unused"}>
               <span className={`answer-letter answer-${i}`}>{letter}</span>
-              <label className="answer-correct">
+              <label className="answer-correct" title={keptOne ? t("keepOneCorrect") : undefined}>
                 <input
                   type="checkbox"
                   checked={isCorrect(question, i)}
-                  disabled={!used || toggled === question}
+                  disabled={!used || keptOne}
                   onChange={() => onChange(toggled)}
                 />
                 {t("correctAnswer")}
@@ -139,9 +149,11 @@ function QuestionFields({ question, onChange }: { question: QuestionSlide; onCha
                 value={question.answers[i] ?? ""}
                 onChange={(e) => onChange(setAnswerAt(question, i, e.target.value))}
               />
+              {/* Off the Tab order, so Tab goes from an answer to the next one's tick and text; by keys, the properties' answer count removes answers. */}
               <button
                 type="button"
                 className="mini"
+                tabIndex={-1}
                 title={t("removeAnswer")}
                 aria-label={`${t("removeAnswer")} ${letter}`}
                 disabled={!used || removeAnswer(question, i) === question}
@@ -152,6 +164,7 @@ function QuestionFields({ question, onChange }: { question: QuestionSlide; onCha
             </div>
           );
         })}
+        <p className="answer-rows-hint">{t("answersFieldHint")}</p>
       </fieldset>
     </>
   );

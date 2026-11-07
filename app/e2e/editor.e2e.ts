@@ -83,14 +83,14 @@ async function ribbonTab(label: StringKey): Promise<void> {
 }
 
 describe("the quiz editor", () => {
-  test("opens from the Director and starts a new quiz", async () => {
-    await app.press("quizEditor");
-    await app.$(".studio");
-    // Without a quiz the editor opens on its File page.
-    await app.$(".backstage");
-    await ctrl("n");
+  test("opens from the Director, asks what to work on and starts a new quiz under its name", async () => {
+    await app.openEditor("Kvíz z E2E");
     await app.$(".ribbon");
     await app.seeText(t("noSlides").slice(0, 20));
+    // The title bar names it (its tooltip holds the whole title, which may be cut short on screen).
+    await app.$('.studio-title[title="Kvíz z E2E"]');
+    // A new quiz has no file yet: it can be saved.
+    expect(await app.page.attribute(await app.$(`.quick-access button[aria-label="${t("saveQuiz")}"]`), "aria-disabled")).toBe(null);
   });
 
   test("adds questions with the keys, and undo and redo take them back and forth", async () => {
@@ -103,6 +103,25 @@ describe("the quiz editor", () => {
     await waitFor("one undone", async () => (await slideCount()) === start + 2);
     await ctrl("y");
     await waitFor("one redone", async () => (await slideCount()) === start + 3);
+  });
+
+  test("Delete and Backspace take a slide only when no control or part of it has the keys", async () => {
+    // WebDriver's names for the keys (https://www.w3.org/TR/webdriver2/#keyboard-actions).
+    const [backspace, del] = ["", ""];
+    const start = await slideCount();
+    // After a switch in the properties, the keys are the switch's: no slide goes.
+    const toggle = `.properties-panel button[role="switch"]`;
+    await app.page.click(await app.$(toggle));
+    await app.page.keys([backspace, del]);
+    expect(await slideCount()).toBe(start);
+    // The switch as it was, for the tests after this one.
+    await app.page.click(await app.$(toggle));
+    // With the slide itself selected, Delete takes it, and undo brings it back.
+    await app.page.click(await app.$(".thumbnails .thumbnail.selected"));
+    await app.page.keys([del]);
+    await waitFor("one slide deleted", async () => (await slideCount()) === start - 1);
+    await ctrl("z");
+    await waitFor("the slide back", async () => (await slideCount()) === start);
   });
 
   test("every ribbon button on every ribbon tab works", async () => {
@@ -213,7 +232,7 @@ describe("the quiz editor", () => {
     await waitFor("the draft on disk", async () => draftSlides().includes(slides));
     await app.crash();
     app = await App.launch(data);
-    await app.press("quizEditor");
+    await app.openEditor();
     await app.$(".studio");
     await waitFor(`${slides} slides back`, async () => (await slideCount()) === slides);
   });
@@ -226,6 +245,8 @@ describe("the quiz editor", () => {
     await waitFor("the quiz file", async () => existsSync(file));
     // A quiz file is a ZIP (docs/quiz-format.md).
     expect(readFileSync(file).subarray(0, 2).toString("latin1")).toBe("PK");
+    // Saved: the Save button greys out (yet keeps the focus) and its tooltip says so, until the quiz changes again.
+    await waitFor("Save to grey out", async () => (await app.count(`.quick-access button[aria-label="${t("saveQuiz")}"][aria-disabled="true"][title^="${t("quizSavedHint")}"]`)) === 1);
     const slides = await slideCount();
     await app.press("backToDirector");
     await app.press("openQuiz");
@@ -293,7 +314,7 @@ describe("the quiz editor", () => {
       await waitFor("the show to end", async () => (await app.view()) === null);
     }
     // Where the tests before it run (Linux), they end in the Director; elsewhere the crash test ends in the editor.
-    if ((await app.count(".studio")) === 0) await app.press("quizEditor");
+    if ((await app.count(".studio")) === 0) await app.openEditor();
     await app.$(".studio");
     const themes = await app.invoke<{ id: string; name: { cs: string } }[]>("list_themes");
     const current = draftThemes();

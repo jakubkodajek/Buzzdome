@@ -3,17 +3,29 @@ import { api } from "../api";
 import { useApp, useReport } from "../app-context";
 import { useLatest, useRecentFiles } from "../hooks";
 import { mediaPicker, type MediaKind } from "../media";
-import { quizPicker } from "../quiz";
+import { quizName, quizPicker } from "../quiz";
 import type { EditorDraft, Quiz, SheetExport, SheetImport } from "../types";
 import { BUSY, DraftSession, heldIn, type DraftApi, type DraftHeld, type DraftOperation, type DraftStatus } from "./draft-session";
-import { editorReducer, isUnsaved, LOADING, type EditorState } from "./editor-state";
+import { createStore, useStore, type Store } from "../store";
+import { editorReducer, isUnsaved, LOADING, type EditorState, type OpenQuiz } from "./editor-state";
 import type { Edit } from "./history";
 import { listSeparator } from "./sheet";
-import { confirmAction } from "../confirm";
+import { confirmAction, confirmSave } from "../confirm";
 
 // One draft for the whole app, so one session, outliving the editor screen:
 // whatever it wrote is on disk before the screen opens again and loads it.
 const drafts = new DraftSession(api);
+
+/**
+ * The editor's draft for a reader outside it (the Director), after every
+ * change the editor gave before; what the editor has open stays as it is.
+ */
+export function loadDraftAfterWrites(): Promise<EditorDraft | null> {
+  return drafts.peek();
+}
+
+/** The open quiz with its undo as the screen last had it, to go on from when it opens again (after a test run, say). */
+const lastOpen = createStore<OpenQuiz | null>(null);
 
 export interface QuizEditor {
   state: EditorState;
@@ -25,7 +37,8 @@ export interface QuizEditor {
   redo: () => void;
   // File operations resolve to whether they happened (not cancelled, not
   // failed, not refused while another one was under way).
-  newQuiz: () => Promise<boolean>;
+  /** Starts a new quiz called `title` (the untitled name when empty). */
+  newQuiz: (title: string) => Promise<boolean>;
   /**
    * Opens `recent`, a file in `recentFiles`, or a file the user picks.
    * Resolves to the draft opened (a file from an older version may break
@@ -33,7 +46,10 @@ export interface QuizEditor {
    * nothing was opened.
    */
   openQuiz: (recent?: string) => Promise<EditorDraft | false>;
-  /** Quiz files opened, saved or played lately, newest first. */
+  /**
+   * Quiz files opened, saved or played lately, newest first; not the one
+   * open, which opening again would reload and so lose its undo.
+   */
   recentFiles: string[];
   /** Takes a file off `recentFiles`; the file itself stays where it is. */
   forgetRecentFile: (path: string) => void;
@@ -76,7 +92,7 @@ export function useQuizEditor(onTestRun: () => void): QuizEditor {
       (draft) => {
         if (!alive) return;
         written.current = draft?.quiz ?? null;
-        dispatch({ type: "loaded", draft });
+        dispatch({ type: "loaded", draft, kept: lastOpen.get() });
       },
       // Not "no draft": the quizmaster chooses what becomes of it.
       (error: unknown) => {
@@ -89,13 +105,16 @@ export function useQuizEditor(onTestRun: () => void): QuizEditor {
   }, [loads]);
 
   const open = state.status === "open" ? state : null;
+  useEffect(() => {
+    if (state.status !== "loading") lastOpen.set(state.status === "open" ? state : null);
+  }, [state]);
   const draftId = open?.draftId ?? null;
   const present = open?.history.present ?? null;
   const unsaved = open !== null && isUnsaved(open);
   useEffect(() => {
     if (!draftId || !present || present === written.current) return;
     written.current = present;
-    drafts.write(draftId, present, unsaved, (problems) => dispatch({ type: "checked", quiz: present, problems }));
+    drafts.write(draftId, present, unsaved, (checked) => dispatch({ type: "checked", quiz: present, ...checked }));
   }, [draftId, present, unsaved]);
 
   /**
@@ -123,27 +142,33 @@ export function useQuizEditor(onTestRun: () => void): QuizEditor {
     dispatch({ type: "loaded", draft });
   };
 
-  /** Whether unsaved changes may be thrown away (asks if there are any). */
-  const mayDiscard = async () =>
-    !open || !unsaved || (await confirmAction(t, t("discardChanges", { title: open.history.present.title || t("untitledQuiz") })));
+  /** Saves over the quiz file the draft came from, unless `saveAs`, else where the quizmaster picks; whether it was saved. */
+  const saveWith = async (draftApi: DraftApi, saveAs: boolean) => {
+    if (!open) return false;
+    const quiz = open.history.present;
+    // Typing on while the file is written starts a step of its own, so one step is the quiz as saved.
+    dispatch({ type: "closeStep" });
+    const picker = quizPicker(t, quizName(t, quiz));
+    const saved = await draftApi.editorSave(open.draftId, quiz, saveAs, picker);
+    if (saved === null) return false;
+    drafts.saved(open.draftId, quiz);
+    dispatch({ type: "saved", quiz, ...saved });
+    readRecentFiles();
+    return true;
+  };
+  const save = (saveAs: boolean) => attempt("save", (draftApi) => saveWith(draftApi, saveAs));
 
-  /** Saves over the quiz file the draft came from, unless `saveAs`, else where the quizmaster picks. */
-  const save = (saveAs: boolean) =>
-    attempt("save", async (draftApi) => {
-      if (!open) return false;
-      const quiz = open.history.present;
-      const picker = quizPicker(t, quiz.title || t("untitledQuiz"));
-      const path = await draftApi.editorSave(open.draftId, quiz, saveAs, picker);
-      if (path === null) return false;
-      dispatch({ type: "saved", quiz, path });
-      readRecentFiles();
-      return true;
-    });
+  /** Whether the open quiz may make way for another: asks to save unsaved changes first, and goes on once they are saved or let go. */
+  const mayLeave = async (draftApi: DraftApi) => {
+    if (!open || !unsaved) return true;
+    const choice = await confirmSave(t, t("unsavedAsk", { title: quizName(t, open.history.present) }));
+    return choice === "discard" || (choice === "save" && (await saveWith(draftApi, false)));
+  };
 
   /** Discards the draft, also one that cannot be read, once `confirmed`. */
-  const discard = (confirmed: () => Promise<boolean>) =>
+  const discard = (confirmed: (draftApi: DraftApi) => Promise<boolean>) =>
     attempt("close", async (draftApi) => {
-      if (!(await confirmed())) return false;
+      if (!(await confirmed(draftApi))) return false;
       await draftApi.editorClose();
       load(null);
       return true;
@@ -165,31 +190,31 @@ export function useQuizEditor(onTestRun: () => void): QuizEditor {
     redo: () => {
       if (editable()) dispatch({ type: "redo" });
     },
-    newQuiz: () =>
+    newQuiz: (title) =>
       attempt("new", async (draftApi) => {
-        if (!(await mayDiscard())) return false;
-        load(await draftApi.editorNew(t("untitledQuiz")));
+        if (!(await mayLeave(draftApi))) return false;
+        load(await draftApi.editorNew(quizName(t, { title })));
         return true;
       }),
     openQuiz: (recent) =>
       attempt("open", async (draftApi) => {
-        if (!(await mayDiscard())) return false;
+        if (!(await mayLeave(draftApi))) return false;
         // The list changes when a file opens, and when a recent one is gone.
         const draft = await draftApi.editorOpen(recent ?? null, quizPicker(t)).finally(readRecentFiles);
         if (!draft) return false;
         load(draft);
         return draft;
       }),
-    recentFiles,
+    recentFiles: recentFiles.filter((path) => path !== open?.sourcePath),
     forgetRecentFile: (path) => void forgetRecentFile(path).catch(report.current),
     save: () => save(false),
     saveAs: () => save(true),
-    closeQuiz: () => discard(mayDiscard),
+    closeQuiz: () => discard(mayLeave),
     reload: () => {
       dispatch({ type: "loading" });
       setLoads((n) => n + 1);
     },
-    discardUnreadable: () => discard(() => confirmAction(t, t("discardUnreadableDraft"))),
+    discardUnreadable: () => discard(() => confirmAction(t, t("discardUnreadableDraft"), t("discardDraft"))),
     pickMedia: async (kinds) => {
       const picked = await attempt("media", async (draftApi) => {
         if (!open) return false;
@@ -219,14 +244,20 @@ export function useQuizEditor(onTestRun: () => void): QuizEditor {
   };
 }
 
+/** A store for `useDraftState`, made once outside the screen so its value outlives it. */
+export function draftStore<T>(): Store<DraftHeld<T>> {
+  return createStore<DraftHeld<T>>({ draftId: null, value: null });
+}
+
 /**
- * State that belongs to the open draft, such as a clipboard: once another
- * draft is open it reads as null, so nothing of one quiz (the name of one
- * of its media files) lands in another.
+ * State that belongs to the open draft, such as a clipboard, kept in
+ * `store` while the screen is not shown: once another draft is open it
+ * reads as null, so nothing of one quiz (the name of one of its media
+ * files) lands in another.
  */
-export function useDraftState<T>(draftId: string | null): [T | null, (value: T | null) => void] {
-  const [held, setHeld] = useState<DraftHeld<T>>({ draftId, value: null });
-  const set = useCallback((value: T | null) => setHeld({ draftId, value }), [draftId]);
+export function useDraftState<T>(store: Store<DraftHeld<T>>, draftId: string | null): [T | null, (value: T | null) => void] {
+  const held = useStore(store);
+  const set = useCallback((value: T | null) => store.set({ draftId, value }), [store, draftId]);
   return [heldIn(held, draftId), set];
 }
 

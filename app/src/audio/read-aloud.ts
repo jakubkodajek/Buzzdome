@@ -253,15 +253,28 @@ async function say(line: VoiceLine, gain: number, system: SpeechSynthesisVoice |
 }
 
 /** What speaks: the show's question, the settings' try of a line, or a voice's sample (`sampleKey`). */
-type Speaker = "show" | "preview" | `sample ${string}`;
+export type Speaker = "show" | "preview" | `sample ${string}`;
 
 /**
- * The window's one voice: a new line or sample stops the one before.
+ * Whether `who` may start speaking while `now` speaks: anything may stop a
+ * try or a sample, but only the show stops the show's reading, so that a
+ * try or a sample never cuts a question off in the hall (nor lets its
+ * clock start early, `clockAfterReading`).
+ */
+export function mayTakeVoice(now: Speaker | null, who: Speaker): boolean {
+  return now !== "show" || who === "show";
+}
+
+/**
+ * The window's one voice: a new line or sample stops the one before, but
+ * not the show's reading (`mayTakeVoice`).
  * `speaking` holds what speaks now, so the buttons show it and the music
  * makes way.
  */
 const speaker = {
   speaking: createStore<Speaker | null>(null),
+  /** Who waits for its clip to render before it speaks (`say`); none once it speaks or is stopped. */
+  preparing: createStore<Speaker | null>(null),
   current: null as Speaking | null,
   turn: 0,
 
@@ -280,6 +293,7 @@ const speaker = {
 
   /** Starts what `start` plays as `who`; `start` is given what to call when it ends. */
   play(who: Speaker, start: (onEnd: () => void) => Speaking | null) {
+    if (!mayTakeVoice(this.speaking.get(), who)) return;
     const { ended } = this.begin(who);
     const started = start(ended);
     if (started) this.current = started;
@@ -292,15 +306,19 @@ const speaker = {
    * failure is passed on.
    */
   async say(who: "show" | "preview", line: VoiceLine, gain: number, system: SpeechSynthesisVoice | null | undefined, before?: Promise<unknown>) {
+    if (!mayTakeVoice(this.speaking.get(), who)) return;
     const { mine, ended } = this.begin(who);
     let failure: unknown = null;
+    if (before) this.preparing.set(who);
     try {
       await before;
     } catch (error) {
       // A rejection without a reason is the voice failing all the same.
       failure = error ?? ({ code: "voiceFailed" } satisfies AppError);
     }
+    // Stopped meanwhile (`stop`): a later turn's wait is that turn's own.
     if (this.turn !== mine) return;
+    this.preparing.set(null);
     const started = await say(line, gain, system, ended);
     if (this.turn !== mine) started?.stop();
     else if (started) this.current = started;
@@ -313,6 +331,7 @@ const speaker = {
     this.current?.stop();
     this.current = null;
     this.speaking.set(null);
+    this.preparing.set(null);
   },
 
   /** Stops what `who` reads, and nothing else. */
@@ -451,14 +470,17 @@ export function useVoiceSample(): {
 /** Plays a line once as a show would, rendering its clip first, to try the voice in the settings. */
 export function useVoicePreview(): {
   playing: boolean;
+  /** Its clip renders before it plays; over once it plays or is stopped. */
+  preparing: boolean;
   play: (line: VoiceLine, gain: number) => Promise<void>;
   stop: () => void;
 } {
   useEffect(watchVoices, []);
   const voices = useLatest(useStore(systemVoices));
   const playing = useStore(speaker.speaking) === "preview";
+  const preparing = useStore(speaker.preparing) === "preview";
   const play = useCallback((line: VoiceLine, gain: number) => speaker.say("preview", line, gain, pickSystemVoice(voices.current, line.language), api.voiceClip(line, true)), [voices]);
   const stop = useCallback(() => speaker.stopIf("preview"), []);
   useEffect(() => stop, [stop]);
-  return { playing, play, stop };
+  return { playing, preparing, play, stop };
 }

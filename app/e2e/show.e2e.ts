@@ -57,10 +57,10 @@ describe("a show of the demo quiz", () => {
     await app.press("demoQuiz");
     const view = await waitPhase("lobby");
     expect(view.quizTitle).toBe("Ukázkový kvíz");
-    expect(await app.hasButton("next")).toBe(true);
-    await app.press({ text: `${t("projectorToggle")}: ${t("openProjector")}` });
+    expect(await app.offersButton("next")).toBe(true);
+    await app.press("openProjectorWindow");
     await onProjector(() => app.seeText("Ukázkový kvíz"));
-    await app.seeText(`${t("projectorToggle")}: ${t("closeProjector")}`);
+    await app.button("closeProjectorWindow");
   });
 
   test("registers buzzers in the lobby, on screen and on the projector", async () => {
@@ -170,7 +170,7 @@ describe("a show of the demo quiz", () => {
     await waitPhase("question:buzzed", 7);
     // The Director draws the buzz's buttons a moment after the view changes.
     await app.button("right");
-    expect(await app.hasButton("next")).toBe(false);
+    expect(await app.offersButton("next")).toBe(false);
     await app.step("wrong");
     let running = await waitPhase("question:running", 7);
     expect(score(running, 3)).toBe(score(before!, 3) - 30);
@@ -234,7 +234,7 @@ describe("a show of the demo quiz", () => {
       await app.step("next");
       view = await app.waitView(`final step ${step + 1}`, (v) => phaseOf(v) === "final" && (v.phase as { step: number }).step === step + 1);
     }
-    expect(await app.hasButton("next")).toBe(false);
+    expect(await app.offersButton("next")).toBe(false);
     // The projector draws the last step a moment after the backend took it.
     const scores = view.players.map((player) => String(player.score));
     await waitFor("every score on the projector", async () => {

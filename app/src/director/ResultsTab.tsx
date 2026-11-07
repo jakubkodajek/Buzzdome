@@ -1,12 +1,14 @@
-import { ANSWER_LETTERS, buttonLabel } from "../answers";
+import { ANSWER_LETTERS, buttonName } from "../answers";
 import { api } from "../api";
 import { useApp, useRun } from "../app-context";
 import { seconds, signed } from "../format";
 import { useShowResults } from "../hooks";
 import { playerName } from "../i18n";
-import { rightAnswers } from "../quiz";
+import { quizName, rightAnswers } from "../quiz";
 import type { BuzzerId, GameView, PlayerResult, Quiz, ShowResults, Slide } from "../types";
 import { listSeparator } from "../editor/sheet";
+import { errorNotice } from "../messages";
+import { NoticeBox } from "../notice";
 import { marksByTime, questionLabels, resultRounds, resultsTable } from "./results";
 
 /**
@@ -17,11 +19,12 @@ import { marksByTime, questionLabels, resultRounds, resultsTable } from "./resul
 export function ResultsTab({ view, quiz }: { view: GameView; quiz: Quiz | null }) {
   const { t, lang, notify } = useApp();
   const run = useRun();
-  const results = useShowResults(view);
-  if (!results || !quiz) return null;
+  const { results, problem } = useShowResults(view);
+  if (!quiz) return null;
 
   const exportCsv = () => {
-    const picker = { filter: t("csvFile"), fileName: t("resultsFileName", { title: quiz.title || t("untitledQuiz") }) };
+    if (!results) return;
+    const picker = { filter: t("csvFile"), fileName: t("resultsFileName", { title: quizName(t, quiz) }) };
     const rows = resultsTable(t, quiz, results, listSeparator(lang));
     run(api.exportResults(rows, listSeparator(lang), picker).then((saved) => saved && notify(t("resultsSaved"))));
   };
@@ -29,20 +32,40 @@ export function ResultsTab({ view, quiz }: { view: GameView; quiz: Quiz | null }
   return (
     <div className="results-tab">
       <div className="toolbar">
-        <button onClick={exportCsv}>{t("resultsExport")}</button>
-        <button title={t("resultsPrintHint")} onClick={() => run(api.printWindow())}>
+        <button disabled={!results} onClick={exportCsv}>
+          {t("resultsExport")}
+        </button>
+        <button title={t("resultsPrintHint")} disabled={!results} onClick={() => run(api.printWindow())}>
           {t("resultsPrint")}
         </button>
       </div>
       <div className="results-body">
-        <h1 className="results-title">{quiz.title || t("untitledQuiz")}</h1>
-        <h2>{t("resultsRanking")}</h2>
-        <Ranking results={results} />
-        <h2>{t("resultsQuestions")}</h2>
-        <Questions results={results} quiz={quiz} />
+        <h1 className="results-title">{quizName(t, quiz)}</h1>
+        {problem !== null && <ResultsProblem problem={problem} />}
+        {results ? (
+          <>
+            <h2>{t("resultsRanking")}</h2>
+            <Ranking results={results} />
+            <h2>{t("resultsQuestions")}</h2>
+            <Questions results={results} quiz={quiz} />
+          </>
+        ) : (
+          problem === null && (
+            <p className="muted" role="status">
+              {t("loading")}
+            </p>
+          )
+        )}
       </div>
     </div>
   );
+}
+
+/** Why the results could not be read; they are read again at the show's next change. */
+function ResultsProblem({ problem }: { problem: unknown }) {
+  const { t } = useApp();
+  const { text, detail } = errorNotice(t, problem);
+  return <NoticeBox notice={{ text: t("resultsFailed", { problem: text }), detail }} />;
 }
 
 function Ranking({ results }: { results: ShowResults }) {
@@ -125,11 +148,11 @@ function Questions({ results, quiz }: { results: ShowResults; quiz: Quiz }) {
                     <tr key={buzzer}>
                       <td>{name(buzzer)}</td>
                       <td className="num">{buzzer}</td>
-                      <td className={mark.right ? "good-text strong" : ""}>{mark.answer ? buttonLabel(mark.answer.button) : t("noAnswer")}</td>
+                      <td className={mark.right ? "good-text strong" : ""}>{mark.answer ? buttonName(t, mark.answer.button) : t("noAnswer")}</td>
                       <td className="num">{mark.answer ? `${seconds(mark.answer.elapsedMs, 2, lang)} s` : ""}</td>
                       <td className="num">
                         {signed(mark.points)}
-                        {mark.joker && <span className="results-joker"> {t("jokerPlay")}</span>}
+                        {mark.joker && <span className="results-joker"> {t("resultsJoker")}</span>}
                       </td>
                     </tr>
                   ))}

@@ -1,4 +1,4 @@
-import { useCallback, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { useApp } from "../app-context";
 import { ChevronLeftIcon, ChevronRightIcon } from "../icons";
 
@@ -9,11 +9,12 @@ interface Hidden {
 }
 
 /**
- * A ribbon gallery's row of tiles (the themes). When the ribbon is too
- * narrow for all of them, the row scrolls a page at a time with the arrows
- * at its ends, as in an office suite, so the groups after it stay in sight.
+ * A ribbon gallery's row of tiles (the themes, the clocks drawn in the look
+ * `style` gives). When the ribbon is too narrow for all of them, the row
+ * scrolls a page at a time with the arrows at its ends, as in an office
+ * suite, so the groups after it stay in sight.
  */
-export function GalleryStrip({ children }: { children: ReactNode }) {
+export function GalleryStrip({ children, style }: { children: ReactNode; style?: CSSProperties }) {
   const { t } = useApp();
   const row = useRef<HTMLDivElement>(null);
   const [hidden, setHidden] = useState<Hidden>({ before: false, after: false });
@@ -37,7 +38,7 @@ export function GalleryStrip({ children }: { children: ReactNode }) {
   const page = (direction: 1 | -1) => row.current?.scrollBy({ left: direction * row.current.clientWidth, behavior: "smooth" });
   const scrolls = hidden.before || hidden.after;
   return (
-    <div className="gallery-strip">
+    <div className="gallery-strip" style={style}>
       {scrolls && (
         <button type="button" className="gallery-scroll" aria-label={t("galleryBack")} title={t("galleryBack")} disabled={!hidden.before} onClick={() => page(-1)}>
           <ChevronLeftIcon />

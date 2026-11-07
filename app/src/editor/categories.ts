@@ -3,6 +3,7 @@
 // so the slide's own background and look rows serve it too, and its look
 // is copied onto slides by `formatLike` (slides.ts).
 
+import type { Translate } from "../i18n";
 import type { Category, Quiz, Slide } from "../types";
 import { DEFAULT_LAYOUT, slideFromLayout } from "./layouts";
 import { freshId, randomId, setHeadline } from "./slides";
@@ -10,6 +11,11 @@ import { freshId, randomId, setHeadline } from "./slides";
 /** An id no category of `quiz` has yet. */
 export function freshCategoryId(quiz: Quiz, random: () => string = randomId): string {
   return freshId(new Set((quiz.categories ?? []).map((category) => category.id)), random, "c");
+}
+
+/** What a category is called in lists and messages: its name, or that it has none. */
+export function categoryName(t: Translate, category: Pick<Category, "name">): string {
+  return category.name || t("unnamedCategory");
 }
 
 /** A category of the theme's look, or of the look `look` has: its background and style. */

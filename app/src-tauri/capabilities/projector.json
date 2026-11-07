@@ -8,6 +8,7 @@
   "permissions": [
     "core:event:allow-listen",
     "core:event:allow-unlisten",
+    "core:window:allow-set-title",
     "allow-get-view",
     "allow-get-quiz",
     "allow-media-root",

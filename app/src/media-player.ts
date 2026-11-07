@@ -75,6 +75,37 @@ export function padFile(pad: Pad): string | null {
   return pad.source?.type === "file" ? pad.source.reference : null;
 }
 
+/** How many of the pads the grid shows hold the library file `reference`. */
+export function padsWithFile(board: SoundBoard, reference: string): number {
+  return shownRows(board)
+    .flat()
+    .filter((place) => padFile(board.pads[place]) === reference).length;
+}
+
+/**
+ * The file a key moves the list's selection to, in `references` as the
+ * list shows them: the arrows one up or down, Home and End to either end;
+ * the first file when none is selected. Null for any other key or an
+ * empty list.
+ */
+export function stepSelection(references: readonly string[], current: string | null, key: string): string | null {
+  if (references.length === 0) return null;
+  const last = references.length - 1;
+  const at = current === null ? -1 : references.indexOf(current);
+  switch (key) {
+    case "ArrowDown":
+      return references[at < 0 ? 0 : Math.min(last, at + 1)];
+    case "ArrowUp":
+      return references[at < 0 ? 0 : Math.max(0, at - 1)];
+    case "Home":
+      return references[0];
+    case "End":
+      return references[last];
+    default:
+      return null;
+  }
+}
+
 /** The files whose name holds `query`, whatever its case; all of them for an empty query. */
 export function searchFiles(files: readonly LibraryFile[], query: string): LibraryFile[] {
   const wanted = query.trim().toLocaleLowerCase();

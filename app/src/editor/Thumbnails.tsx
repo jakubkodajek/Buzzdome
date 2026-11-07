@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState, type MouseEvent } from "react";
+import { useEffect, useRef, useState, type FocusEvent, type MouseEvent } from "react";
 import { useApp } from "../app-context";
 import { SlideThumbnail } from "../host/SlideThumbnail";
 import { AddIcon, ExclamationIcon } from "../icons";
 import type { SlideContext } from "../quiz";
 import type { Quiz } from "../types";
+import { tooltip, type Action } from "./actions";
 
 interface ThumbnailsProps {
   quiz: Quiz;
@@ -13,8 +14,10 @@ interface ThumbnailsProps {
   current: number;
   /** The ids of the selected slides, the current one among them. */
   selected: ReadonlySet<string>;
-  /** Slide ids with problems. */
+  /** Slide ids with problems to fix. */
   problems: ReadonlySet<string>;
+  /** Slide ids with warnings only (`Checked::warnings`), badged more mildly. */
+  warnings: ReadonlySet<string>;
   /** A click on a slide, with Ctrl (Cmd) or Shift held or not. */
   onSelect: (index: number, keys: { ctrl: boolean; shift: boolean }) => void;
   onOpen: (index: number) => void;
@@ -22,22 +25,52 @@ interface ThumbnailsProps {
   onMenu: (event: MouseEvent, index: number | null) => void;
   /** The slide with id `dragged` was dropped into the gap before slide `gap` (the end when it is the count). */
   onMove: (dragged: string, gap: number) => void;
-  onAdd: () => void;
+  /** What the button under the slides does: adds a question. */
+  add: Action;
+}
+
+/**
+ * A list's current item (a slide, a category) in sight and its one Tab stop
+ * (a roving tab stop); while the list has the focus, the focus goes with it
+ * as the arrow keys move it, so the menu key and Enter act on it. An item
+ * deleted with the focus leaves it on the page, so the current item after
+ * it takes the focus then too.
+ */
+export function useCurrentItem(current: number) {
+  const currentItem = useRef<HTMLLIElement>(null);
+  // The current item as last shown, to act once each time it changes.
+  const shown = useRef<{ element: HTMLLIElement; current: number } | null>(null);
+  // The item that had the focus last, until the focus went to another control.
+  const focusedItem = useRef<HTMLLIElement | null>(null);
+  useEffect(() => {
+    const element = currentItem.current;
+    if (!element || (shown.current?.element === element && shown.current.current === current)) return;
+    shown.current = { element, current };
+    element.scrollIntoView({ block: "nearest" });
+    const focused = document.activeElement;
+    const inList = focused instanceof HTMLLIElement && element.parentElement?.contains(focused);
+    const lostWithItem = focused === document.body && focusedItem.current !== null && !focusedItem.current.isConnected;
+    if (focused !== element && (inList || lostWithItem)) element.focus();
+  });
+  return (i: number) => ({
+    ref: i === current ? currentItem : undefined,
+    tabIndex: i === current ? 0 : -1,
+    onFocus: (e: FocusEvent<HTMLLIElement>) => (focusedItem.current = e.currentTarget),
+    onBlur: (e: FocusEvent<HTMLLIElement>) => {
+      if (e.relatedTarget) focusedItem.current = null;
+    },
+  });
 }
 
 /** The slides down the left side: click to select (Ctrl or Shift for several), drag to reorder. */
-export function Thumbnails({ quiz, contexts, current, selected, problems, onSelect, onOpen, onMenu, onMove, onAdd }: ThumbnailsProps) {
+export function Thumbnails({ quiz, contexts, current, selected, problems, warnings, onSelect, onOpen, onMenu, onMove, add }: ThumbnailsProps) {
   const { t } = useApp();
   // While dragging: the slide dragged and the gap (0..count) it would drop into.
   const [drag, setDrag] = useState<{ from: number; gap: number } | null>(null);
-  const selectedItem = useRef<HTMLLIElement>(null);
+  const item = useCurrentItem(current);
   // Gaps next to a slide dragged alone would leave it where it is: no marker.
   const alone = drag !== null && !(selected.size > 1 && selected.has(quiz.slides[drag.from]?.id ?? ""));
   const gap = drag && !(alone && (drag.gap === drag.from || drag.gap === drag.from + 1)) ? drag.gap : null;
-
-  useEffect(() => {
-    selectedItem.current?.scrollIntoView({ block: "nearest" });
-  }, [current]);
 
   const drop = () => {
     if (!drag) return;
@@ -59,7 +92,7 @@ export function Thumbnails({ quiz, contexts, current, selected, problems, onSele
         {quiz.slides.map((slide, i) => (
           <li
             key={slide.id}
-            ref={i === current ? selectedItem : undefined}
+            {...item(i)}
             aria-selected={selected.has(slide.id)}
             className={[
               "thumbnail",
@@ -104,16 +137,22 @@ export function Thumbnails({ quiz, contexts, current, selected, problems, onSele
                 count={quiz.slides.length}
                 context={contexts[i]}
               />
-              {problems.has(slide.id) && (
+              {problems.has(slide.id) ? (
                 <span className="thumbnail-problem" title={t("slideHasProblems")}>
                   <ExclamationIcon />
                 </span>
+              ) : (
+                warnings.has(slide.id) && (
+                  <span className="thumbnail-problem warning" title={t("slideHasWarnings")}>
+                    <ExclamationIcon />
+                  </span>
+                )
               )}
             </div>
           </li>
         ))}
       </ol>
-      <button type="button" className="add-slide" title={t("newSlide")} aria-label={t("newSlide")} onClick={onAdd}>
+      <button type="button" className="add-slide" title={tooltip(add)} aria-label={add.label} disabled={add.disabled} onClick={add.run}>
         <AddIcon />
       </button>
     </nav>
