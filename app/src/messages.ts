@@ -2,7 +2,7 @@
 // English sentence for the UI: errors, quiz problems and receiver states come
 // as codes with parameters (generated types), worded here from `i18n.ts`.
 
-import { buttonLabel } from "./answers";
+import { buttonName } from "./answers";
 import { slotLabel } from "./audio/library";
 import { MEDIA_EXTENSIONS } from "./bindings/MediaExtensions";
 import { fileName } from "./format";
@@ -204,7 +204,7 @@ function errorWords(t: Translate, error: Exclude<AppError, { code: "file" }>): s
     case "notInLibrary":
       return t("errNotInLibrary", { reference: mediaFileName(error.reference) });
     case "learnConflict":
-      return t("errLearnConflict", { buzzer: error.buzzer, button: buttonLabel(error.button) });
+      return t("errLearnConflict", { buzzer: error.buzzer, button: buttonName(t, error.button) });
     case "buzzerColours":
       return colourClashText(t, error.clash);
     case "journalBroken":
