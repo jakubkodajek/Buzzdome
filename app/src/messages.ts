@@ -2,7 +2,7 @@
 // English sentence for the UI: errors, quiz problems and receiver states come
 // as codes with parameters (generated types), worded here from `i18n.ts`.
 
-import { buttonName } from "./answers";
+import { ANSWER_LETTERS, buttonName } from "./answers";
 import { slotLabel } from "./audio/library";
 import { MEDIA_EXTENSIONS } from "./bindings/MediaExtensions";
 import { fileName } from "./format";
@@ -221,7 +221,7 @@ function errorWords(t: Translate, error: Exclude<AppError, { code: "file" }>): s
 }
 
 /** Problems worded with their own parameters, see `problemText`. */
-type ProblemApart = "media" | "categoryMedia" | "soundMedia" | "welcomeMedia" | "volume" | "partEmpty" | "replayNotOnQuestion";
+type ProblemApart = "media" | "categoryMedia" | "soundMedia" | "welcomeMedia" | "volume" | "partEmpty" | "replayNotOnQuestion" | "answerEmpty";
 
 const PROBLEM_KEYS: Record<Exclude<Problem["code"], ProblemApart>, StringKey> = {
   duplicateSlideId: "problemDuplicateSlideId",
@@ -253,6 +253,8 @@ const PROBLEM_KEYS: Record<Exclude<Problem["code"], ProblemApart>, StringKey> = 
   pointsOutOfRange: "problemPointsOutOfRange",
   penaltyOutOfRange: "problemPenaltyOutOfRange",
   timeLimitTooLong: "problemTimeLimitTooLong",
+  noSlides: "problemNoSlides",
+  questionTextEmpty: "problemQuestionTextEmpty",
 };
 
 const MEDIA_ISSUE_KEYS: Record<MediaIssue["type"], StringKey> = {
@@ -285,6 +287,8 @@ export function problemText(t: Translate, problem: Problem): string {
       return t("problemSoundMedia", { moment: slotLabel(t, problem.slot), file: problem.file, issue: mediaIssueText(t, problem.issue) });
     case "welcomeMedia":
       return t("problemWelcomeMedia", { place: t(WELCOME_FILE_LABEL[problem.place]), file: problem.file, issue: mediaIssueText(t, problem.issue) });
+    case "answerEmpty":
+      return t("problemAnswerEmpty", { letter: ANSWER_LETTERS[problem.answer] ?? String(problem.answer + 1) });
     // Rules a sound and a video share, said of the one that breaks them.
     case "volume":
       return t(problem.media === "audio" ? "problemSoundVolume" : "problemVideoVolume");

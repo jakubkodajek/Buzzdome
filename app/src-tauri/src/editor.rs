@@ -114,6 +114,8 @@ pub struct EditorDraft {
     pub unsaved: bool,
     /// Folder of the draft's media, ending with a path separator.
     pub media_root: String,
+    /// What keeps it from being saved or played, then its warnings
+    /// (`Problem::is_warning`), which never do (`checked`).
     pub problems: Vec<ValidationError>,
     /// What the file has that the quiz cannot keep (`quiz_core::ReadQuiz`),
     /// so saving leaves it out.
@@ -273,10 +275,19 @@ fn new_draft_folder(dir: &Path) -> CmdResult<(String, PathBuf)> {
     Ok((folder, root))
 }
 
+/// What the editor shows of the quiz in `root`: what keeps it from being
+/// saved or played (`quiz_file::problems`), then what looks unfinished
+/// (`Quiz::warnings`), which keeps it from nothing.
+fn checked(quiz: &Quiz, root: &Path) -> Vec<ValidationError> {
+    let mut found = quiz_file::problems(quiz, root);
+    found.extend(quiz.warnings());
+    found
+}
+
 /// Describes the draft in `root` for the editor.
 fn describe(root: &Path, pointer: Pointer, quiz: Quiz) -> EditorDraft {
     EditorDraft {
-        problems: quiz_file::problems(&quiz, root),
+        problems: checked(&quiz, root),
         id: pointer.folder,
         quiz,
         saves_in_place: pointer.source_path.as_deref().is_some_and(|source| is_quiz_file(Path::new(source))),
@@ -345,7 +356,7 @@ pub async fn editor_open(app: AppHandle, window: Window, recent: Option<String>,
 }
 
 /// Stores the edited quiz in the draft `draft` and returns what keeps it
-/// from being played. `unsaved` tells whether it differs from the saved
+/// from being played, then its warnings (`checked`). `unsaved` tells whether it differs from the saved
 /// file; until such a change is written, closing the app asks
 /// (`UnkeptEdits`).
 #[tauri::command]
@@ -357,7 +368,7 @@ pub async fn editor_update(app: AppHandle, draft: String, quiz: Quiz, unsaved: b
         if pointer.unsaved != unsaved {
             write_pointer(dir, &Pointer { unsaved, ..pointer })?;
         }
-        Ok(quiz_file::problems(&quiz, &root))
+        Ok(checked(&quiz, &root))
     })
     .await;
     unkept.end(&draft, unsaved, written.is_ok());
