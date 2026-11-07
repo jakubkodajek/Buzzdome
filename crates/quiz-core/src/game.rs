@@ -363,6 +363,28 @@ pub struct Controls {
     /// reading to end (`QuizSettings::clock_after_reading`); Next starts
     /// it as well.
     pub reading_done: bool,
+    /// What `Next` does now, for the button that gives it; None when
+    /// `next` is false.
+    pub next_step: Option<NextStep>,
+}
+
+/// What `Next` does in the current step (`Controls::next_step`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
+#[serde(rename_all = "camelCase")]
+pub enum NextStep {
+    /// From the welcome screen to the players' registration.
+    Registration,
+    /// Starts the question's clock (also once it was read out).
+    StartQuestion,
+    /// Ends the running question at once.
+    EndQuestion,
+    /// Shows the closed question's answer.
+    ShowAnswer,
+    /// The final ranking's next step.
+    FinalStep,
+    /// Goes on to the next slide.
+    NextSlide,
 }
 
 /// A countdown that can pause. `limit_ms == None` means untimed.
@@ -976,6 +998,22 @@ impl Game {
             restart_question: self.question_restartable(),
             set_joker: self.open_joker_slide().is_some(),
             reading_done: self.awaiting_reading,
+            next_step: if buzzed || show_over { None } else { self.next_step() },
+        }
+    }
+
+    /// What `next` would do in this step, as long as it may.
+    fn next_step(&self) -> Option<NextStep> {
+        if self.next_leaves_slide() {
+            return Some(NextStep::NextSlide);
+        }
+        match &self.phase {
+            Phase::Welcome => Some(NextStep::Registration),
+            Phase::Question(QuestionStep::Ready) => Some(NextStep::StartQuestion),
+            Phase::Question(QuestionStep::Running { .. }) => Some(NextStep::EndQuestion),
+            Phase::Question(QuestionStep::Closed) => Some(NextStep::ShowAnswer),
+            Phase::Final { .. } => Some(NextStep::FinalStep),
+            _ => None,
         }
     }
 

@@ -1,5 +1,5 @@
 use quiz_core::{
-    AnswerMode, BuzzerMode, Button, Command, CorrectAnswer, Cue, Effect, Game, GameError, Light, Mark, Phase, Question, QuestionStep, Quiz,
+    AnswerMode, BuzzerMode, Button, Command, CorrectAnswer, Cue, Effect, Game, GameError, Light, Mark, NextStep, Phase, Question, QuestionStep, Quiz,
     Response, Slide, SlideContent, Stamped, VideoClip, team_names, FULL_SHARE, MAX_NAME_CHARS, MAX_TEAMS, PRESS_GRACE_MS, RULES_VERSION,
 };
 use quiz_core::game::FINAL_LAST_STEP;
@@ -749,6 +749,31 @@ fn assert_controls_match_apply(game: &Game, at_ms: u64) {
         let taken = game.clone().apply(&Stamped { at_ms, command: command.clone() }).is_ok();
         assert_eq!(allowed, taken, "{command:?} in {:?}", game.phase());
     }
+    assert_eq!(controls.next, controls.next_step.is_some(), "what Next does in {:?}", game.phase());
+}
+
+#[test]
+fn next_step_names_what_next_does() {
+    let mut show = Show::new(vec![billboard("intro"), question("q1", AnswerMode::Everyone), billboard("thanks")]);
+    show.press(0, 1, Button::Big);
+    let step = |show: &Show| show.game.controls().next_step;
+    assert_eq!(step(&show), Some(NextStep::NextSlide), "lobby");
+    show.run(0, Command::Next).unwrap();
+    assert_eq!(step(&show), Some(NextStep::NextSlide), "intro");
+    show.run(0, Command::Next).unwrap();
+    assert_eq!(step(&show), Some(NextStep::StartQuestion), "q1 ready");
+    show.run(0, Command::Next).unwrap();
+    assert_eq!(step(&show), Some(NextStep::EndQuestion), "q1 running");
+    show.run(1_000, Command::Next).unwrap();
+    assert_eq!(step(&show), Some(NextStep::ShowAnswer), "q1 closed");
+    show.run(2_000, Command::Next).unwrap();
+    assert_eq!(step(&show), Some(NextStep::NextSlide), "q1 revealed");
+    show.run(3_000, Command::Next).unwrap();
+    assert_eq!(step(&show), Some(NextStep::NextSlide), "the last slide, before the final ranking");
+    while show.game.controls().next {
+        show.run(4_000, Command::Next).unwrap();
+    }
+    assert_eq!(step(&show), None, "the end of the show");
 }
 
 #[test]
