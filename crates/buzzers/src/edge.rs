@@ -47,9 +47,12 @@ impl EdgeFilter {
         let mut out = Vec::new();
         for press in presses {
             let key = (press.buzzer, press.button as u8);
-            if !seen.insert(key) || self.sent_again(press, at_ms) {
+            // A press sent again is not noted as in this report: it would
+            // hide the buzzer's next press within the repeat gap.
+            if seen.contains(&key) || self.sent_again(press, at_ms) {
                 continue;
             }
+            seen.insert(key);
             if fresh || !self.previous.contains(&key) {
                 out.push(press);
             }
@@ -57,6 +60,13 @@ impl EdgeFilter {
         self.previous = seen;
         self.previous_at_ms = Some(at_ms);
         out
+    }
+
+    /// Notes `press`, which does not count, as its buzzer's last timed
+    /// press, so that the receiver sending it again is known as that: not
+    /// as the report before, so the buzzer's next press still counts.
+    pub fn note_timed(&mut self, press: Press, at_ms: u64) {
+        self.sent_again(press, at_ms);
     }
 
     /// Whether `press` is its buzzer's last timed press sent again; notes
