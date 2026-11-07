@@ -9,7 +9,7 @@ import { BUSY, DraftSession, heldIn, type DraftApi, type DraftHeld, type DraftOp
 import { editorReducer, isUnsaved, LOADING, type EditorState } from "./editor-state";
 import type { Edit } from "./history";
 import { listSeparator } from "./sheet";
-import { confirmAction } from "../confirm";
+import { confirmAction, confirmSave } from "../confirm";
 
 // One draft for the whole app, so one session, outliving the editor screen:
 // whatever it wrote is on disk before the screen opens again and loads it.
@@ -124,27 +124,30 @@ export function useQuizEditor(onTestRun: () => void): QuizEditor {
     dispatch({ type: "loaded", draft });
   };
 
-  /** Whether unsaved changes may be thrown away (asks if there are any). */
-  const mayDiscard = async () =>
-    !open || !unsaved || (await confirmAction(t, t("discardChanges", { title: open.history.present.title || t("untitledQuiz") })));
+  /** Saves over the quiz file the draft came from, unless `saveAs`, else where the quizmaster picks; whether it was saved. */
+  const saveWith = async (draftApi: DraftApi, saveAs: boolean) => {
+    if (!open) return false;
+    const quiz = open.history.present;
+    const picker = quizPicker(t, quiz.title || t("untitledQuiz"));
+    const path = await draftApi.editorSave(open.draftId, quiz, saveAs, picker);
+    if (path === null) return false;
+    dispatch({ type: "saved", quiz, path });
+    readRecentFiles();
+    return true;
+  };
+  const save = (saveAs: boolean) => attempt("save", (draftApi) => saveWith(draftApi, saveAs));
 
-  /** Saves over the quiz file the draft came from, unless `saveAs`, else where the quizmaster picks. */
-  const save = (saveAs: boolean) =>
-    attempt("save", async (draftApi) => {
-      if (!open) return false;
-      const quiz = open.history.present;
-      const picker = quizPicker(t, quiz.title || t("untitledQuiz"));
-      const path = await draftApi.editorSave(open.draftId, quiz, saveAs, picker);
-      if (path === null) return false;
-      dispatch({ type: "saved", quiz, path });
-      readRecentFiles();
-      return true;
-    });
+  /** Whether the open quiz may make way for another: asks to save unsaved changes first, and goes on once they are saved or let go. */
+  const mayLeave = async (draftApi: DraftApi) => {
+    if (!open || !unsaved) return true;
+    const choice = await confirmSave(t, t("unsavedAsk", { title: open.history.present.title || t("untitledQuiz") }));
+    return choice === "discard" || (choice === "save" && (await saveWith(draftApi, false)));
+  };
 
   /** Discards the draft, also one that cannot be read, once `confirmed`. */
-  const discard = (confirmed: () => Promise<boolean>) =>
+  const discard = (confirmed: (draftApi: DraftApi) => Promise<boolean>) =>
     attempt("close", async (draftApi) => {
-      if (!(await confirmed())) return false;
+      if (!(await confirmed(draftApi))) return false;
       await draftApi.editorClose();
       load(null);
       return true;
@@ -168,13 +171,13 @@ export function useQuizEditor(onTestRun: () => void): QuizEditor {
     },
     newQuiz: (title) =>
       attempt("new", async (draftApi) => {
-        if (!(await mayDiscard())) return false;
+        if (!(await mayLeave(draftApi))) return false;
         load(await draftApi.editorNew(title || t("untitledQuiz")));
         return true;
       }),
     openQuiz: (recent) =>
       attempt("open", async (draftApi) => {
-        if (!(await mayDiscard())) return false;
+        if (!(await mayLeave(draftApi))) return false;
         // The list changes when a file opens, and when a recent one is gone.
         const draft = await draftApi.editorOpen(recent ?? null, quizPicker(t)).finally(readRecentFiles);
         if (!draft) return false;
@@ -185,7 +188,7 @@ export function useQuizEditor(onTestRun: () => void): QuizEditor {
     forgetRecentFile: (path) => void forgetRecentFile(path).catch(report.current),
     save: () => save(false),
     saveAs: () => save(true),
-    closeQuiz: () => discard(mayDiscard),
+    closeQuiz: () => discard(mayLeave),
     reload: () => {
       dispatch({ type: "loading" });
       setLoads((n) => n + 1);

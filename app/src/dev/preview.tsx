@@ -784,10 +784,12 @@ mockIPC(
         called.push({ cmd, ...(payload as object) });
         return "C:\\Kvizy\\hospodsky-kviz.quiz";
       case "plugin:dialog|message": {
-        // "Yes" is the first button, which the app words itself.
-        const custom = (payload as { buttons?: { OkCancelCustom?: [string, string] } }).buttons?.OkCancelCustom;
+        // "Yes" is the first button and "No" the second, which the app words itself.
+        const { buttons } = payload as { buttons?: { OkCancelCustom?: [string, string]; YesNoCancelCustom?: [string, string, string] } };
+        const custom = buttons?.OkCancelCustom ?? buttons?.YesNoCancelCustom;
         const answer = dialogAnswer();
-        return answer === "Yes" && custom ? custom[0] : answer;
+        if (!custom) return answer;
+        return answer === "Yes" ? custom[0] : answer === "No" && buttons?.YesNoCancelCustom ? custom[1] : custom[custom.length - 1];
       }
       case "editor_category_name": {
         // A stand-in: the backend also skips the names taken.

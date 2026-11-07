@@ -1677,6 +1677,11 @@
   box-shadow: 0 10px 40px rgba(0, 0, 0, 0.35);
 }
 
+/* It takes the focus only to keep it inside (a click on its text). */
+.dialog:focus {
+  outline: none;
+}
+
 .dialog-title {
   display: flex;
   align-items: center;
@@ -2680,7 +2685,8 @@
   text-overflow: ellipsis;
 }
 
-.loudness-progress {
+/* What a dialog is doing, at the start of its footer. */
+.dialog-status {
   align-self: center;
   color: var(--muted);
 }

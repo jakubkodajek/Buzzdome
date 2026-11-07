@@ -4,7 +4,7 @@
 
 import { useState, type CSSProperties, type KeyboardEvent } from "react";
 import { useApp } from "../app-context";
-import { WHOLE_FILE } from "../audio/clip-player";
+import { sameSpan, WHOLE_FILE } from "../audio/clip-player";
 import { MAX_REPLAY_DELAY_MS } from "../bindings/Constants";
 import { trackTime } from "../format";
 import { isPlainKey } from "../keyboard";
@@ -41,6 +41,14 @@ export interface PartEditing {
    * plays to the end whatever the file's length on another computer.
    */
   result: () => { part: Span; replay: Replay | null };
+  /** The parts differ from the ones the window opened with. */
+  changed: boolean;
+}
+
+/** Whether two sets of parts play the same. */
+export function sameParts(a: { part: Span; replay: Replay | null }, b: { part: Span; replay: Replay | null }): boolean {
+  const sameReplay = a.replay === null || b.replay === null ? a.replay === b.replay : a.replay.delayMs === b.replay.delayMs && sameSpan(a.replay.part, b.replay.part);
+  return sameSpan(a.part, b.part) && sameReplay;
 }
 
 /** The parts of a file `durationMs` long (null until known); a replay part only if `canReplay`. */
@@ -65,6 +73,7 @@ export function usePartEditing(initial: { part: Span; replay: Replay | null }, c
     setEditingReplay,
     setReplay,
     result: () => ({ part: toEnd(part), replay: replay && { ...replay, part: toEnd(replay.part) } }),
+    changed: !sameParts({ part, replay }, { part: initial.part, replay: canReplay ? initial.replay : null }),
   };
 }
 

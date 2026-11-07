@@ -76,12 +76,12 @@ export function LoudnessDialog({ quiz, mediaRoot, onApply, onClose }: LoudnessDi
 
   return (
     <Dialog
-      title={t("normalizeAll")}
+      title={t("normalizeAllTitle")}
       className="loudness-dialog"
       onClose={onClose}
       footer={
         <>
-          <span className="loudness-progress">{done ? t("loudnessDone", { n: rows.length }) : t("loudnessMeasuring", { done: measured.size, n: rows.length })}</span>
+          <span className="dialog-status" role="status">{done ? t("loudnessDone", { n: rows.length }) : t("loudnessMeasuring", { done: measured.size, n: rows.length })}</span>
           <span className="spacer" />
           <button type="button" className="primary" disabled={!done || !results.some((row) => row.ticked)} onClick={apply}>
             {t("apply")}
