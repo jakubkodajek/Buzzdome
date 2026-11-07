@@ -8,7 +8,7 @@ vi.mock("./api", () => ({ api: {} }));
 
 const t = translator("en");
 const draft = { id: "draft-1", quiz: { title: "Pub quiz" } as Quiz } as EditorDraft;
-const reason = (show: boolean, unsavedQuiz: boolean, unsavedInstructions = false): CloseReason => ({ show, unsavedQuiz, unsavedInstructions });
+const reason = (show: boolean, unsavedQuiz: boolean): CloseReason => ({ show, unsavedQuiz });
 
 function deps(answers: Partial<CloseDeps> = {}) {
   return {
@@ -24,13 +24,10 @@ function deps(answers: Partial<CloseDeps> = {}) {
 }
 
 describe("answerClose", () => {
-  it("during a show names the unsaved quiz and the instructions too, and offers no save", async () => {
+  it("during a show names the unsaved quiz too, and offers no save", async () => {
     const d = deps();
-    await answerClose(t, reason(true, true, true), d);
-    expect(d.confirm).toHaveBeenCalledWith(
-      [t("quitShowRuns"), t("quitQuizUnsaved"), t("quitInstructionsUnsaved"), t("quitAnyway")].join(" "),
-      t("closeApp"),
-    );
+    await answerClose(t, reason(true, true), d);
+    expect(d.confirm).toHaveBeenCalledWith([t("quitShowRuns"), t("quitQuizUnsaved"), t("quitAnyway")].join(" "), t("closeApp"));
     expect(d.loadDraft).not.toHaveBeenCalled();
     expect(d.quitApp).toHaveBeenCalled();
   });
@@ -71,11 +68,5 @@ describe("answerClose", () => {
     const d = deps({ editorSave: vi.fn(async () => Promise.reject({ code: "noDraft" })) });
     await answerClose(t, reason(false, true), d);
     expect(d.failed).toHaveBeenCalledWith(t("errNoDraft"));
-  });
-
-  it("with only unsaved instructions asks to close anyway", async () => {
-    const d = deps();
-    await answerClose(t, reason(false, false, true), d);
-    expect(d.confirm).toHaveBeenCalledWith([t("quitInstructionsUnsaved"), t("quitAnyway")].join(" "), t("closeApp"));
   });
 });

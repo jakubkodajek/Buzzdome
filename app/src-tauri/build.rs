@@ -66,7 +66,6 @@ const COMMANDS: &[&str] = &[
     "ai_connect",
     "ai_server_config",
     "ai_set_instructions",
-    "ai_instructions_unsaved",
     "receiver_info",
     "receiver_devices",
     "receiver_select",

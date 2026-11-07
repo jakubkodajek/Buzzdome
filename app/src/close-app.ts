@@ -42,18 +42,16 @@ export function closeDeps(t: Translate): CloseDeps {
  * the editor cannot save, so the question only says that the draft stays.
  */
 export async function answerClose(t: Translate, reason: CloseReason, deps: CloseDeps): Promise<void> {
-  const instructions = reason.unsavedInstructions ? [t("quitInstructionsUnsaved")] : [];
   const draft = reason.unsavedQuiz && !reason.show ? await deps.loadDraft() : null;
   let quit: boolean;
   if (draft) {
     const title = draft.quiz.title || t("untitledQuiz");
-    const choice = await deps.confirmSave([t("quitSaveQuiz", { title }), ...instructions].join(" "));
+    const choice = await deps.confirmSave(t("quitSaveQuiz", { title }));
     quit = choice === "discard" || (choice === "save" && (await saved(t, draft, title, deps)));
   } else {
     const parts = [
       ...(reason.show ? [t("quitShowRuns")] : []),
       ...(reason.unsavedQuiz ? [t("quitQuizUnsaved")] : []),
-      ...instructions,
       t("quitAnyway"),
     ];
     quit = await deps.confirm(parts.join(" "), t("closeApp"));

@@ -72,7 +72,6 @@
     "allow-ai-connect",
     "allow-ai-server-config",
     "allow-ai-set-instructions",
-    "allow-ai-instructions-unsaved",
     "allow-receiver-info",
     "allow-receiver-devices",
     "allow-receiver-select",

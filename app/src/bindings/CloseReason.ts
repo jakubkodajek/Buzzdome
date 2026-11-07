@@ -13,9 +13,4 @@ show: boolean,
  * The quiz in the editor has changes that are not in its file (the
  * draft keeps them for the next start).
  */
-unsavedQuiz: boolean, 
-/**
- * The AI assistants page has changes to the instructions it has not
- * kept, which closing loses (`ai::ai_instructions_unsaved`).
- */
-unsavedInstructions: boolean, };
+unsavedQuiz: boolean, };

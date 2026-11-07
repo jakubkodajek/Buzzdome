@@ -142,7 +142,7 @@ draws slides without a show.
 | `receiver-remote` | `RemoteKeyAction` | a key of the quizmaster's remote was pressed, with what it does (the Director does it, `commandForRemote`) |
 | `host-window` | bool | the projector window opened or closed (also from its title bar) |
 | `host-problem` | `HostProblem` | the projector met a problem, worded for the Director to show (text, and detail under it) |
-| `close-requested` | `CloseReason` | the quizmaster closed the Director or quit while something would be left behind: a show runs, the editor's quiz has unsaved changes (also a write of them under way or failed, `UnkeptEdits`), or the AI instructions do (`ai_instructions_unsaved`); the Director asks, naming all that hold, then `quit_app` or `close_declined` |
+| `close-requested` | `CloseReason` | the quizmaster closed the Director or quit while something would be left behind: a show runs, the editor's quiz has unsaved changes (also a write of them under way or failed, `UnkeptEdits`); not the AI instructions being typed, which are kept over a restart; the Director asks, naming all that hold, then `quit_app` or `close_declined` |
 | `show-not-saved` | `AppError` or null | the running show's journal refused a write, or works again |
 | `teams-changed` | string list | the prepared team names changed, or a show started or ended |
 | `media-library`, `sound-board` | `MediaLibrary`, `SoundBoard` | the media player's library or pads changed |

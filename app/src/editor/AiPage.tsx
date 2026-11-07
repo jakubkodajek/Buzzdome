@@ -54,11 +54,6 @@ export function AiPage() {
   const saved = page && (page.instructions ?? page.defaultInstructions);
   // A draft kept from before that matches the saved instructions (saved since, say) is nothing unsaved.
   const draft = typed === saved ? null : typed;
-  // The backend asks before closing the app while there is one; not known until the page reads.
-  const unsaved = saved === null ? null : draft !== null;
-  useEffect(() => {
-    if (unsaved !== null) run(api.aiInstructionsUnsaved(unsaved));
-  }, [run, unsaved]);
   if (!page || saved === null) {
     return (
       <>

@@ -299,29 +299,25 @@ pub struct CloseReason {
     /// The quiz in the editor has changes that are not in its file (the
     /// draft keeps them for the next start).
     pub unsaved_quiz: bool,
-    /// The AI assistants page has changes to the instructions it has not
-    /// kept, which closing loses (`ai::ai_instructions_unsaved`).
-    pub unsaved_instructions: bool,
 }
 
 impl CloseReason {
     /// The reason to ask before closing, none when nothing would be left
     /// behind.
-    fn of(show: bool, unsaved_quiz: bool, unsaved_instructions: bool) -> Option<CloseReason> {
-        (show || unsaved_quiz || unsaved_instructions).then_some(CloseReason { show, unsaved_quiz, unsaved_instructions })
+    fn of(show: bool, unsaved_quiz: bool) -> Option<CloseReason> {
+        (show || unsaved_quiz).then_some(CloseReason { show, unsaved_quiz })
     }
 }
 
-/// Whether the app may close now. During a show, with unsaved changes in
-/// the editor or to the AI instructions, it waits for the Director to
+/// Whether the app may close now. During a show or with unsaved changes in
+/// the editor, it waits for the Director to
 /// confirm it (`close-requested`, then `quit_app` or `close_declined`),
 /// asking once, unless a recent request went unanswered (`close_answer`).
 fn may_close(app: &AppHandle) -> bool {
     if app.get_webview_window(DIRECTOR_LABEL).is_none() {
         return true;
     }
-    let instructions = app.try_state::<crate::ai::SavedAiSettings>().is_some_and(|ai| ai.instructions_unsaved());
-    let Some(reason) = CloseReason::of(show_may_run(app), crate::editor::has_unsaved_draft(app), instructions) else {
+    let Some(reason) = CloseReason::of(show_may_run(app), crate::editor::has_unsaved_draft(app)) else {
         return true;
     };
     match app.state::<CloseRequest>().answer(Instant::now()) {
@@ -514,12 +510,11 @@ mod tests {
 
     #[test]
     fn closing_asks_for_every_reason_that_holds_and_none_without_one() {
-        assert_eq!(CloseReason::of(false, false, false), None, "nothing is left behind: it closes");
-        let reason = |show, unsaved_quiz, unsaved_instructions| Some(CloseReason { show, unsaved_quiz, unsaved_instructions });
-        assert_eq!(CloseReason::of(true, false, false), reason(true, false, false));
-        assert_eq!(CloseReason::of(false, true, false), reason(false, true, false));
-        assert_eq!(CloseReason::of(false, false, true), reason(false, false, true));
-        assert_eq!(CloseReason::of(true, true, true), reason(true, true, true), "a show does not hide the unsaved quiz");
+        assert_eq!(CloseReason::of(false, false), None, "nothing is left behind: it closes");
+        let reason = |show, unsaved_quiz| Some(CloseReason { show, unsaved_quiz });
+        assert_eq!(CloseReason::of(true, false), reason(true, false));
+        assert_eq!(CloseReason::of(false, true), reason(false, true));
+        assert_eq!(CloseReason::of(true, true), reason(true, true), "a show does not hide the unsaved quiz");
     }
 
     #[test]

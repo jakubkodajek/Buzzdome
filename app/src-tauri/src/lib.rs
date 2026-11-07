@@ -882,7 +882,6 @@ pub fn run() {
             ai::ai_connect,
             ai::ai_server_config,
             ai::ai_set_instructions,
-            ai::ai_instructions_unsaved,
             hardware::receiver_info,
             hardware::receiver_devices,
             hardware::receiver_select,

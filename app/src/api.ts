@@ -250,8 +250,6 @@ export const api = {
   aiServerConfig: (language: Lang) => invoke<string>("ai_server_config", { language }),
   /** Keeps the quizmaster's instructions for every quiz; empty gives the default ones back. */
   aiSetInstructions: (instructions: string, language: Lang) => invoke<void>("ai_set_instructions", { instructions, language }),
-  /** Tells whether the AI assistants page has changes to the instructions it has not kept, so that closing the app asks first. */
-  aiInstructionsUnsaved: (unsaved: boolean) => invoke<void>("ai_instructions_unsaved", { unsaved }),
 };
 
 /** Events the backend emits (`app.emit` in app/src-tauri), with their payloads. */
