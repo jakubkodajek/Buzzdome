@@ -303,6 +303,14 @@ const SCENES: Record<string, GameView | null> = {
     buzzes: [{ buzzer: 3, button: "big", state: "answering" }],
     controls: { ...NO_CONTROLS, judge: true, restartQuestion: true },
   }),
+  // A fastest-finger question whose time ran out with no buzz judged right: the bar says so, the trophy keeps the points the clock stopped at.
+  timeUp: view({
+    phase: { phase: "question", step: "closed" },
+    slideIndex: 7,
+    slide: quiz.slides[7],
+    questionEnd: { timedOut: true, points: 48 },
+    controls: { ...NO_CONTROLS, next: true, goTo: true },
+  }),
   // Teams 2, 4 and 7 buzzed in that order; 2 was wrong, 4 answers, 7 waits its turn.
   queue: view({
     phase: { phase: "question", step: "buzzed", buzzer: 4, button: "big", clock: { limitMs: 30000, elapsedBeforeMs: 4300, runningSinceMs: null, pressesFromMs: 0 } },

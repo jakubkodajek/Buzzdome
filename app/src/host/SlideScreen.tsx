@@ -237,7 +237,7 @@ function QuestionScreen(props: {
         )}
         <div className="info-stat">
           <TrophyIcon />
-          <span className="digits">{clock?.points ?? question.points}</span>
+          <span className="digits">{clock?.points ?? view.questionEnd?.points ?? question.points}</span>
         </div>
       </div>
 
@@ -293,7 +293,7 @@ function QuestionScreen(props: {
         </div>
       )}
       {question.mode === "fastestFinger" && step === "running" && !barPlayer && !queue && <div className="buzz-bar idle">{t("waitingForBuzz")}</div>}
-      {question.mode === "fastestFinger" && step === "closed" && remaining === 0 && <div className="buzz-bar idle">{t("timeUp")}</div>}
+      {question.mode === "fastestFinger" && step === "closed" && view.questionEnd?.timedOut && <div className="buzz-bar idle">{t("timeUp")}</div>}
       {!buzzBar && jokers.length > 0 && (
         <div className="joker-strip">
           <span className="joker-label">{t("jokerStrip")}</span>
