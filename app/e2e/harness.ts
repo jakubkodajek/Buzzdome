@@ -126,7 +126,10 @@ const PAGE_SETUP = `
         const { message, buttons } = JSON.parse(init.body);
         window.__e2e.asked.push(message);
         // The plugin's ask() sends its Yes and No labels and reads back the one chosen.
-        const [yes, no] = (buttons && buttons.OkCancelCustom) || ["Yes", "No"];
+        // The unsaved-changes question (confirmSave) sends Save, Don't save and Cancel:
+        // going on answers Don't save, as the tests never mean to save there; not going on, Cancel.
+        const three = buttons && buttons.YesNoCancelCustom;
+        const [yes, no] = three ? [three[1], three[2]] : (buttons && buttons.OkCancelCustom) || ["Yes", "No"];
         const chosen = window.__e2e.answer ? yes : no;
         return Promise.resolve(new Response(JSON.stringify(chosen), { headers: { "Tauri-Response": "ok", "Content-Type": "application/json" } }));
       }

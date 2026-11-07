@@ -4,11 +4,13 @@ import type { Translate } from "./i18n";
 /**
  * Asks the quizmaster to confirm `message` in the system's own dialog,
  * which no window's state can hide, with buttons in the UI's language (the
- * system words them in English on macOS); true for Yes. The windows open no
- * file dialog themselves: the backend picks files.
+ * system words them in English on macOS); true for Yes. A step that cannot
+ * be undone names itself on the button (`ok`, e.g. "End show") beside
+ * Cancel, rather than Yes and No. The windows open no file dialog
+ * themselves: the backend picks files.
  */
-export function confirmAction(t: Translate, message: string): Promise<boolean> {
-  return ask(message, { kind: "warning", okLabel: t("yes"), cancelLabel: t("no") });
+export function confirmAction(t: Translate, message: string, ok?: string): Promise<boolean> {
+  return ask(message, { kind: "warning", okLabel: ok ?? t("yes"), cancelLabel: ok ? t("cancel") : t("no") });
 }
 
 /** What the quizmaster chose to do with unsaved changes. */

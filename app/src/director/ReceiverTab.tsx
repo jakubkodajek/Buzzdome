@@ -303,7 +303,7 @@ export function ReceiverTab() {
               <button
                 disabled={!info?.learnedButtons || showRunning}
                 title={showRunning ? t("learnDuringShow") : undefined}
-                onClick={() => run(confirmAction(t, t("learnForgetConfirm")).then((yes) => (yes ? api.receiverForgetLearned().then(reload) : undefined)))}
+                onClick={() => run(confirmAction(t, t("learnForgetConfirm"), t("learnForget")).then((yes) => (yes ? api.receiverForgetLearned().then(reload) : undefined)))}
               >
                 {t("learnForget")}
               </button>

@@ -54,8 +54,8 @@ export function QuestionsTab({ view, quiz }: { view: GameView; quiz: Quiz | null
   const jumps = view.controls.goTo;
   const noJumps = jumps ? undefined : t("jumpsNotMidQuestion");
   const goTo = (slide: number) => jumps && slide !== current && dispatch({ type: "goTo", slide });
-  const goToFinal = () => run(confirmAction(t, t("goToFinalConfirm")).then((yes) => yes && dispatch({ type: "goToFinal" })));
-  const startOver = () => run(confirmAction(t, t("startOverConfirm")).then((yes) => yes && dispatch({ type: "startOver" })));
+  const goToFinal = () => run(confirmAction(t, t("goToFinalConfirm"), t("goToFinal")).then((yes) => yes && dispatch({ type: "goToFinal" })));
+  const startOver = () => run(confirmAction(t, t("startOverConfirm"), t("startOver")).then((yes) => yes && dispatch({ type: "startOver" })));
 
   return (
     <div className="questions-tab">

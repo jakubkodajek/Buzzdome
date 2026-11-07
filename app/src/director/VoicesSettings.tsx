@@ -49,7 +49,7 @@ export function VoicesSettings({ showRunning }: { showRunning: boolean }) {
       }),
     );
   const remove = () =>
-    run(confirmAction(t, t("voicesRemoveConfirm")).then((yes) => (yes ? whileBusy(api.voiceRemove).then(setVoiceModel) : undefined)));
+    run(confirmAction(t, t("voicesRemoveConfirm"), t("voicesRemove")).then((yes) => (yes ? whileBusy(api.voiceRemove).then(setVoiceModel) : undefined)));
   const status = () => {
     if (done === null) return t("voicesUnpacking");
     if (done)

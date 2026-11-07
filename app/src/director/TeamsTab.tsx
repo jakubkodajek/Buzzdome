@@ -83,7 +83,7 @@ function ShowTeams({ view, lost }: { view: GameView; lost: SettingsLost | null }
     setDeltaText("");
   };
   // Refused mid-question like the jumps (`Controls.goTo`), and asks first.
-  const resetScores = () => run(confirmAction(t, t("resetScoresConfirm")).then((yes) => yes && dispatch({ type: "resetScores" })));
+  const resetScores = () => run(confirmAction(t, t("resetScoresConfirm"), t("resetScores")).then((yes) => yes && dispatch({ type: "resetScores" })));
 
   const added = typedBuzzer(newBuzzer);
   const addPlayer = () => {

@@ -147,7 +147,7 @@ export function TeamList({ teams, players, picked, onPick }: TeamListProps) {
               onClick={(e) => {
                 e.stopPropagation();
                 // The name is kept from show to show, so its removal asks first.
-                run(confirmAction(t, t("removeTeamConfirm", { name: team.name })).then((yes) => (yes ? api.removeTeam(team.name) : undefined)));
+                run(confirmAction(t, t("removeTeamConfirm", { name: team.name }), t("removeTeam")).then((yes) => (yes ? api.removeTeam(team.name) : undefined)));
               }}
             >
               <TrashIcon />

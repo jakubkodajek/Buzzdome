@@ -200,7 +200,7 @@ export function useQuizEditor(onTestRun: () => void): QuizEditor {
       dispatch({ type: "loading" });
       setLoads((n) => n + 1);
     },
-    discardUnreadable: () => discard(() => confirmAction(t, t("discardUnreadableDraft"))),
+    discardUnreadable: () => discard(() => confirmAction(t, t("discardUnreadableDraft"), t("discardDraft"))),
     pickMedia: async (kinds) => {
       const picked = await attempt("media", async (draftApi) => {
         if (!open) return false;

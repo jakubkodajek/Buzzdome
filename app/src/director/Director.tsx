@@ -404,7 +404,7 @@ function CommandPanel(props: {
       if (outcome && "command" in outcome) dispatch(outcome.command);
       else if (outcome) (outcome.tone === "warn" ? caution : notify)(t(outcome.notice));
     };
-    run(confirmAction(t, t("restartQuestionConfirm")).then(answered));
+    run(confirmAction(t, t("restartQuestionConfirm"), t("restartQuestion")).then(answered));
   };
 
   return (
@@ -467,7 +467,7 @@ function CommandPanel(props: {
             icon={<PowerIcon />}
             label={t("endShow")}
             tone="bad"
-            onClick={() => run(confirmAction(t, t("endShowConfirm")).then((yes) => (yes ? api.endShow() : undefined)))}
+            onClick={() => run(confirmAction(t, t("endShowConfirm"), t("endShow")).then((yes) => (yes ? api.endShow() : undefined)))}
           />
         ))}
     </aside>
