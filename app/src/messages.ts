@@ -44,7 +44,7 @@ function params(fields: object): Params {
 }
 
 /** Codes worded with their own parameters, see `errorText`. */
-type WordedApart = "file" | "noSuchSlide" | "noSuchPad" | "notInLibrary" | "learnConflict" | "buzzerColours" | "quizInvalid" | "journalBroken" | "lightsRefused";
+type WordedApart = "file" | "noSuchSlide" | "questionRestarted" | "noSuchPad" | "notInLibrary" | "learnConflict" | "buzzerColours" | "quizInvalid" | "journalBroken" | "lightsRefused";
 
 const ERROR_KEYS: Record<Exclude<AppError["code"], WordedApart>, StringKey> = {
   noShow: "noShow",
@@ -65,6 +65,7 @@ const ERROR_KEYS: Record<Exclude<AppError["code"], WordedApart>, StringKey> = {
   fileLeftUnread: "errFileLeftUnread",
   rulesChanged: "errRulesChanged",
   mediaFolderRefused: "errMediaFolderRefused",
+  autoStepHeld: "errAutoStepHeld",
   notAQuizFile: "errNotAQuizFile",
   missingQuizJson: "errMissingQuizJson",
   badQuizJson: "errBadQuizJson",
@@ -196,6 +197,8 @@ function errorWords(t: Translate, error: Exclude<AppError, { code: "file" }>): s
   switch (error.code) {
     case "noSuchSlide":
       return t("errNoSuchSlide", { slide: error.slide + 1 });
+    case "questionRestarted":
+      return t("errQuestionRestarted", { slide: error.slide + 1 });
     case "noSuchPad":
       return t("errNoSuchPad", { pad: error.pad + 1 });
     case "notInLibrary":

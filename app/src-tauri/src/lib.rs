@@ -609,13 +609,25 @@ fn resume_show(root: &Path, at_ms: u64, media_folders: &[PathBuf]) -> CmdResult<
         named => (named, None),
     };
     // The show must go on: without its media it still runs, and the Director says why.
-    let warnings = resume_warnings(&quiz, media_root.as_deref(), refused.as_deref(), meta.rules_changed());
+    let mut warnings = resume_warnings(&quiz, media_root.as_deref(), refused.as_deref(), meta.rules_changed());
     let mut game = Game::replay(quiz, &journal, meta.rules_version);
     let mut effects = Vec::new();
     if let Some(command) = game.recovery_command() {
+        warnings.extend(recovery_warning(&command, game.slide_index()));
         (game, effects) = apply_and_journal(&game, Some(&mut session), &Stamped { at_ms, command })?;
     }
     Ok(ResumedShow { game, session, media_root: media_root.filter(|root| root.is_dir()), effects, warnings })
+}
+
+/// What the quizmaster is told of the recovery `command` a resumed show
+/// took on `slide` (`Game::recovery_command`): the hall answers the
+/// question again, or the show waits for them to take its step.
+fn recovery_warning(command: &Command, slide: usize) -> Option<AppError> {
+    match command {
+        Command::RestartQuestion => Some(AppError::QuestionRestarted { slide }),
+        Command::PauseClock => Some(AppError::AutoStepHeld),
+        _ => None,
+    }
 }
 
 /// Resumes the last show. Returns warnings for the quizmaster when the show
@@ -1037,6 +1049,7 @@ mod tests {
         assert_eq!(before.recovery_command(), Some(Command::RestartQuestion), "{:?}", before.phase());
 
         let resumed = resume_show(&root, 60_000, &[]).unwrap();
+        assert_eq!(resumed.warnings, [AppError::QuestionRestarted { slide }], "the quizmaster is told");
         // What the windows will see is on disk: the restart is journaled.
         let on_disk = Session::resume_latest(&root).unwrap().unwrap();
         assert_eq!(on_disk.journal.last(), Some(&Stamped { at_ms: 60_000, command: Command::RestartQuestion }));
@@ -1069,6 +1082,7 @@ mod tests {
         assert!(before.view(7_000).auto_step.is_some(), "the step was on its way");
 
         let resumed = resume_show(&root, 60_000, &[]).unwrap();
+        assert_eq!(resumed.warnings, [AppError::AutoStepHeld], "the quizmaster is told");
         // The question waits for the quizmaster, and the hold is on disk.
         let on_disk = Session::resume_latest(&root).unwrap().unwrap();
         assert_eq!(on_disk.journal.last(), Some(&Stamped { at_ms: 60_000, command: Command::PauseClock }));
@@ -1092,7 +1106,7 @@ mod tests {
         drop(inner);
 
         let resumed = resume_show(&root, 120_000, &[]).unwrap();
-        assert_eq!(resumed.warnings, [AppError::RulesChanged]);
+        assert_eq!(resumed.warnings, [AppError::RulesChanged, AppError::QuestionRestarted { slide }]);
         // Replayed with its jump, the question ran again, so it is restarted once more.
         let on_disk = Session::resume_latest(&root).unwrap().unwrap();
         assert_eq!(on_disk.journal.last(), Some(&Stamped { at_ms: 120_000, command: Command::RestartQuestion }));
