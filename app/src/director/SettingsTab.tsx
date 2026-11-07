@@ -9,6 +9,7 @@ import { api } from "../api";
 import { useApp, useRun } from "../app-context";
 import { useAppIcon, useAppVersion, useHostWindowOpen } from "../hooks";
 import type { Lang, StringKey } from "../i18n";
+import { readPreference, writePreference } from "../preferences";
 import type { IconColor, MonitorInfo } from "../types";
 import type { LaunchCheckSetting } from "./launch-check";
 import { VoicesSettings } from "./VoicesSettings";
@@ -32,30 +33,56 @@ export interface ProjectorSettings {
   refreshMonitors: () => void;
   /** The chosen monitor's `MonitorInfo.id`, or null for one the Director is not on. */
   monitor: string | null;
-  setMonitor: (id: string | null) => void;
   fullscreen: boolean;
+  /** Sets full screen, for the projector the caller opens next. */
   setFullscreen: (on: boolean) => void;
+  /** Sets the monitor or full screen, and moves an open projector there at once. */
+  choose: (change: { monitor?: string | null; fullscreen?: boolean }) => void;
   isOpen: boolean;
   toggle: () => void;
 }
 
+/** The projector's monitor (none for one the Director is not on) and full screen, kept on this computer, so they last a restart. */
+const MONITOR_KEY = "quiz-show.projector-monitor";
+const FULLSCREEN_KEY = "quiz-show.projector-fullscreen";
+
+const storedMonitor = () => readPreference(MONITOR_KEY) || null;
+
 export function useProjectorSettings(): ProjectorSettings {
   const run = useRun();
   const [monitors, setMonitors] = useState<MonitorInfo[]>([]);
-  const [monitor, setMonitor] = useState<string | null>(null);
-  const [fullscreen, setFullscreen] = useState(true);
+  const [monitor, setMonitorState] = useState<string | null>(storedMonitor);
+  const [fullscreen, setFullscreenState] = useState(() => readPreference(FULLSCREEN_KEY) !== "off");
   const isOpen = useHostWindowOpen();
 
   const refreshMonitors = useCallback(() => {
     run(
       api.listMonitors().then((list) => {
         setMonitors(list);
-        // A chosen monitor that is gone gives way to one the Director is not on.
-        setMonitor((chosen) => (list.some((m) => m.id === chosen) ? chosen : null));
+        // A chosen monitor that is gone gives way to one the Director is not on, and is chosen again once it is back.
+        const kept = storedMonitor();
+        setMonitorState(list.some((m) => m.id === kept) ? kept : null);
       }),
     );
   }, [run]);
   useEffect(() => refreshMonitors(), [refreshMonitors]);
+
+  const setFullscreen = useCallback((on: boolean) => {
+    setFullscreenState(on);
+    writePreference(FULLSCREEN_KEY, on ? "on" : "off");
+  }, []);
+
+  // The backend moves an open projector as it opens a closed one.
+  const choose = useCallback(
+    (change: { monitor?: string | null; fullscreen?: boolean }) => {
+      const next = { monitor: change.monitor === undefined ? monitor : change.monitor, fullscreen: change.fullscreen ?? fullscreen };
+      setMonitorState(next.monitor);
+      writePreference(MONITOR_KEY, next.monitor ?? "");
+      setFullscreen(next.fullscreen);
+      if (isOpen) run(api.openHostWindow(next.monitor, next.fullscreen));
+    },
+    [monitor, fullscreen, isOpen, run, setFullscreen],
+  );
 
   // The backend lists the monitors again when it opens the projector.
   const toggle = useCallback(() => {
@@ -63,8 +90,8 @@ export function useProjectorSettings(): ProjectorSettings {
   }, [isOpen, monitor, fullscreen, run]);
 
   return useMemo(
-    () => ({ monitors, refreshMonitors, monitor, setMonitor, fullscreen, setFullscreen, isOpen, toggle }),
-    [monitors, refreshMonitors, monitor, fullscreen, isOpen, toggle],
+    () => ({ monitors, refreshMonitors, monitor, fullscreen, setFullscreen, choose, isOpen, toggle }),
+    [monitors, refreshMonitors, monitor, fullscreen, setFullscreen, choose, isOpen, toggle],
   );
 }
 
@@ -79,7 +106,7 @@ export function SettingsTab({ projector, look, launch, showRunning }: { projecto
           <select
             value={projector.monitor ?? ""}
             onFocus={projector.refreshMonitors}
-            onChange={(e) => projector.setMonitor(e.target.value || null)}
+            onChange={(e) => projector.choose({ monitor: e.target.value || null })}
           >
             <option value="">{t("monitorAuto")}</option>
             {projector.monitors.map((m, i) => (
@@ -91,9 +118,9 @@ export function SettingsTab({ projector, look, launch, showRunning }: { projecto
         </label>
         <label>
           <span>{t("fullscreen")}</span>
-          <input type="checkbox" checked={projector.fullscreen} onChange={(e) => projector.setFullscreen(e.target.checked)} />
+          <input type="checkbox" checked={projector.fullscreen} onChange={(e) => projector.choose({ fullscreen: e.target.checked })} />
         </label>
-        <button onClick={projector.toggle}>{projector.isOpen ? t("closeProjector") : t("openProjector")}</button>
+        <button onClick={projector.toggle}>{projector.isOpen ? t("projectorClose") : t("projectorOpen")}</button>
       </fieldset>
       <AppIconPicker />
       <fieldset>
