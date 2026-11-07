@@ -11,7 +11,7 @@ const COMMANDS: &[&str] = &[
     "media_root",
     "show_not_saved",
     "show_disk_space",
-    "start_show_from_file",
+    "pick_quiz_file",
     "start_show_from_recent",
     "start_demo_show",
     "last_session",

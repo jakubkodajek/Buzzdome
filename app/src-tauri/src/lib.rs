@@ -491,41 +491,42 @@ async fn show_disk_space(app: AppHandle) -> CmdResult<Option<u64>> {
     off_ui(move || Ok(root.ancestors().find(|dir| dir.is_dir()).and_then(|dir| fs4::available_space(dir).ok()))).await
 }
 
-/// Opens a quiz file the quizmaster picks (`.quiz` or a plain quiz JSON)
-/// and starts a show with it; false when they cancel.
+/// Picks a quiz file to play (`.quiz` or a plain quiz JSON) and puts it
+/// first in the recent list, so `start_show_from_recent` starts it once the
+/// Director asked what it asks before a show of that file; none when the
+/// quizmaster cancels.
 #[tauri::command]
-async fn start_show_from_file(app: AppHandle, window: Window, picker: Picker) -> CmdResult<bool> {
-    let Some(path) = dialogs::pick_file(window, picker, quiz_file::OPEN_EXTENSIONS.to_vec()).await? else { return Ok(false) };
-    off_ui(move || start_show_from(&app, &path).map(|()| true)).await
-}
-
-/// Starts a show with the `recent` quiz file, which has to be in the list
-/// (`RecentFiles`).
-#[tauri::command]
-async fn start_show_from_recent(app: AppHandle, recent: String) -> CmdResult<()> {
+async fn pick_quiz_file(app: AppHandle, window: Window, picker: Picker) -> CmdResult<Option<String>> {
+    let Some(path) = dialogs::pick_file(window, picker, quiz_file::OPEN_EXTENSIONS.to_vec()).await? else { return Ok(None) };
     off_ui(move || {
-        let path = app.state::<RecentFiles>().get(&recent)?;
-        start_show_from(&app, &path)
+        let path = path.to_string_lossy().into_owned();
+        app.state::<RecentFiles>().remember(&path);
+        Ok(Some(path))
     })
     .await
 }
 
-/// Opens the quiz file `path` and starts a show with it, one start at a
-/// time (`one_start`). The file goes first in the recent list once it
-/// opens; one that is not there is reported as such (`RecentFiles::explain`).
-fn start_show_from(app: &AppHandle, path: &Path) -> CmdResult<()> {
-    one_start(&STARTING, || {
-        let source_path = path.to_string_lossy().into_owned();
-        let recent = app.state::<RecentFiles>();
-        // Unpacking big media takes a moment: it runs before the show is locked.
-        let opened = {
-            let _cache = QUIZZES_CACHE.lock().unwrap();
-            quiz_file::open(path, &quizzes_cache(app)?)
-        };
-        let package = opened.map_err(|e| recent.explain(&source_path, e.into()))?;
-        recent.remember(&source_path);
-        start_show(app, package.quiz, Some(source_path), Some(package.root))
+/// Opens the `recent` quiz file, which has to be in the list
+/// (`RecentFiles`), and starts a show with it, one start at a time
+/// (`one_start`). The file goes first in the list once it opens; one that
+/// is not there is reported as such (`RecentFiles::explain`).
+#[tauri::command]
+async fn start_show_from_recent(app: AppHandle, recent: String) -> CmdResult<()> {
+    off_ui(move || {
+        let files = app.state::<RecentFiles>();
+        let path = files.get(&recent)?;
+        one_start(&STARTING, || {
+            // Unpacking big media takes a moment: it runs before the show is locked.
+            let opened = {
+                let _cache = QUIZZES_CACHE.lock().unwrap();
+                quiz_file::open(&path, &quizzes_cache(&app)?)
+            };
+            let package = opened.map_err(|e| files.explain(&recent, e.into()))?;
+            files.remember(&recent);
+            start_show(&app, package.quiz, Some(recent.clone()), Some(package.root))
+        })
     })
+    .await
 }
 
 /// Runs `start` unless another start holds `starting`, so a second click
@@ -811,7 +812,7 @@ pub fn run() {
             media_root,
             show_not_saved,
             show_disk_space,
-            start_show_from_file,
+            pick_quiz_file,
             start_show_from_recent,
             start_demo_show,
             last_session,

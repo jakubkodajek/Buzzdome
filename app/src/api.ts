@@ -83,8 +83,8 @@ export const api = {
   /** Free space in bytes on the disk the shows are saved to; null when the system does not say. */
   showDiskSpace: () => invoke<number | null>("show_disk_space"),
   // The backend opens the file pickers: a window names no file to write.
-  /** Starts a show of a quiz file the quizmaster picks; false when they cancel. */
-  startShowFromFile: (picker: Picker) => invoke<boolean>("start_show_from_file", { picker }),
+  /** Picks a quiz file to play, which goes first in `recentFiles` so `startShowFromRecent` starts it; null when they cancel. */
+  pickQuizFile: (picker: Picker) => invoke<string | null>("pick_quiz_file", { picker }),
   /** Starts a show of `recent`, a file in `recentFiles`. */
   startShowFromRecent: (recent: string) => invoke<void>("start_show_from_recent", { recent }),
   /** Quiz files opened, saved or played lately, latest first. */

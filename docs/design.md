@@ -267,7 +267,12 @@ draws slides without a show.
   title, the backend turns into a portable file name), never named by a
   page: the recent quiz files, which the editor opens and the Director
   plays, are kept by the backend (`recent_files.rs`), and the page opens
-  one by its path, which has to be in that list. A recent file that does
+  one by its path, which has to be in that list. The Director's Open quiz
+  picks a file (`pick_quiz_file`), which puts it first in that list, and
+  then starts it as a recent file (`start_show_from_recent`), so it asks
+  the same before the show starts: whether to give up the last show, and
+  whether to play the file without the editor's unsaved changes of it
+  (`show-start.ts`). A recent file that does
   not open because it is missing leaves the list when its folder is still
   there (`QuizFileGone`: it was deleted or moved); when its folder is
   missing too, as on a drive that is not plugged in, it stays

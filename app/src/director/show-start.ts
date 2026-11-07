@@ -4,9 +4,10 @@ import { useApp, useRun } from "../app-context";
 import { confirmAction } from "../confirm";
 import { loadDraftAfterWrites } from "../editor/useQuizEditor";
 import { dayAndTime } from "../format";
-import { useLastSession, useLatest, type LastSession } from "../hooks";
+import { useLastSession, useLatest, useRecentFiles, type LastSession, type RecentFiles } from "../hooks";
 import type { Lang, Translate } from "../i18n";
 import { isAppError } from "../messages";
+import { quizPicker } from "../quiz";
 import type { EditorDraft, SessionSummary, ShowPosition } from "../types";
 
 /** What the Director knows of the quiz editor's draft: whether it holds changes its file does not have. */
@@ -38,7 +39,7 @@ export interface StartQuestion {
  * What to ask before a new show starts, in one question: that it ends the
  * way back to the show that can be resumed (`last`) unless that show was
  * finished (it loses nothing worth asking about), and that `file`, the
- * quiz file it plays when known, has newer changes in the editor's draft.
+ * quiz file it plays if any, has newer changes in the editor's draft.
  * Null when neither applies.
  */
 export function startQuestion(t: Translate, last: SessionSummary | null, draft: DraftState | null, file?: string): StartQuestion | null {
@@ -78,33 +79,32 @@ export interface ShowStart {
   last: LastSession;
   /** The editor's draft as it was when the Director opened; null when there is none or it could not be read. */
   draft: DraftState | null;
+  /** The quiz files a show starts from in a click (`startFile`), latest first. */
+  recent: RecentFiles;
+  /** Starts a new show with `call`, which plays no quiz file, after asking what `startQuestion` asks; a declined question starts nothing. */
+  start: (call: () => Promise<unknown>) => void;
   /**
-   * Starts a new show with `call`, after asking what `startQuestion` asks
-   * (`file`: the quiz file it plays, when known before it starts); a
-   * declined question starts nothing.
+   * Starts a show of `file`, one of `recent`, or of a quiz file the
+   * quizmaster picks when none is given, after asking what
+   * `startQuestion` asks of that file; a cancelled pick or a declined
+   * question starts nothing.
    */
-  start: (call: () => Promise<unknown>, file?: string) => void;
-  /**
-   * Starts a new show with `call`, which picks its quiz file and is false
-   * when the quizmaster cancels, after asking what `startQuestion` asks of
-   * a file not known yet. Once it started the file whose newer changes are
-   * in the editor's draft, it says so: only then is the file known.
-   */
-  startPicked: (call: () => Promise<boolean>) => void;
+  startFile: (file?: string) => void;
   /** Resumes the last show with `call`, which asks nothing. */
   resume: (call: () => Promise<unknown>) => void;
 }
 
 /**
  * One show start at a time, so a double click opens a quiz once, also while
- * a question about it is open. The backend also refuses a second quiz file
- * start meanwhile (`showStarting`), which needs no word here.
+ * its picker or a question about it is open. The backend also refuses a
+ * second quiz file start meanwhile (`showStarting`), which needs no word here.
  */
 export function useShowStart(): ShowStart {
-  const { t, caution } = useApp();
+  const { t } = useApp();
   const run = useRun();
   const last = useLastSession();
   const draft = useDraftState();
+  const recent = useRecentFiles();
   const [starting, setStarting] = useState(false);
   // Also a ref: two clicks before the next render would both see `starting` false.
   const busy = useRef(false);
@@ -121,40 +121,42 @@ export function useShowStart(): ShowStart {
     },
     [run],
   );
-  const start = useCallback(
-    (call: () => Promise<unknown>, file?: string) => {
+  // The one way to a new show: the file it plays, picked first if need be
+  // (null when the quizmaster cancels), then the question, then the start.
+  const startOf = useCallback(
+    <F extends string | undefined>(file: () => Promise<F | null>, call: (file: F) => Promise<unknown>) => {
       if (busy.current) return;
       busy.current = true;
-      const question = startQuestion(t, latest.current.last.session, latest.current.draft, file);
-      const asked = question ? confirmAction(t, question.text, question.ok) : Promise.resolve(true);
       const declined = () => {
         busy.current = false;
       };
+      const ask = async (found: F | null) => {
+        if (found === null) return declined();
+        const question = startQuestion(t, latest.current.last.session, latest.current.draft, found);
+        const go = question === null || (await confirmAction(t, question.text, question.ok));
+        return go ? begin(() => call(found)) : declined();
+      };
       run(
-        asked.then(
-          (go) => (go ? begin(call) : declined()),
-          (error: unknown) => {
+        file()
+          .then(ask)
+          .catch((error: unknown) => {
             declined();
             throw error;
-          },
-        ),
+          }),
       );
     },
     [t, run, begin, latest],
   );
-  // A show opened from a file goes first in the recent files.
-  const startPicked = useCallback(
-    (call: () => Promise<boolean>) =>
-      start(() =>
-        call().then(async (started) => {
-          const draft = latest.current.draft;
-          if (!started || !staleFile(draft)) return;
-          const [opened] = await api.recentFiles();
-          const stale = opened === undefined ? null : staleFor(draft, opened);
-          if (stale) caution({ text: t("startedStale", { title: stale.title }), detail: opened });
-        }),
+  const start = useCallback((call: () => Promise<unknown>) => startOf(() => Promise.resolve(undefined), call), [startOf]);
+  // Read again either way: a file that is gone leaves the list, and one picked goes first in it.
+  const { reload } = recent;
+  const startFile = useCallback(
+    (file?: string) =>
+      startOf(
+        () => (file === undefined ? api.pickQuizFile(quizPicker(t)).finally(reload) : Promise.resolve(file)),
+        (path: string) => api.startShowFromRecent(path).finally(reload),
       ),
-    [start, latest, caution, t],
+    [startOf, t, reload],
   );
   const resume = useCallback(
     (call: () => Promise<unknown>) => {
@@ -164,7 +166,7 @@ export function useShowStart(): ShowStart {
     },
     [begin],
   );
-  return { starting, last, draft, start, startPicked, resume };
+  return { starting, last, draft, recent, start, startFile, resume };
 }
 
 /**

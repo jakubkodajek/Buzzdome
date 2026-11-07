@@ -17,7 +17,6 @@ import {
   useLearnProgress,
   useMediaRoot,
   useQuiz,
-  useRecentFiles,
   useShowNotSaved,
   useWindowTitle,
 } from "../hooks";
@@ -43,7 +42,7 @@ import {
 import { commandForAction, commandForRemote, keyHint, KEYS, projectorKeyActs, useRemote, useShortcuts } from "../keyboard";
 import { MediaRootContext } from "../media";
 import { beforeSlides, currentSlide, judgedLabel, nextLabel, phaseLabel } from "../phase";
-import { quizPicker, slideContext } from "../quiz";
+import { slideContext } from "../quiz";
 import { RecentFileList } from "../recent-files";
 import { ThemeContext, ThemesProvider, useResolvedTheme, useThemes } from "../theme/context";
 import { isThemeMissing } from "../theme/themes";
@@ -309,9 +308,7 @@ function TabBody({ tab, view, quiz, projector, look, launch, player, sound, show
 function StartPane({ showStart, onEditor }: { showStart: ShowStart; onEditor: (ask: boolean) => void }) {
   const { t } = useApp();
   const run = useRun();
-  const recent = useRecentFiles();
-  // Read again either way: a file that is gone leaves the list.
-  const open = (path: string) => showStart.start(() => api.startShowFromRecent(path).finally(recent.reload), path);
+  const { recent } = showStart;
   const stale = staleFile(showStart.draft);
   return (
     <div className="start-pane">
@@ -334,7 +331,7 @@ function StartPane({ showStart, onEditor }: { showStart: ShowStart; onEditor: (a
       {recent.files.length > 0 && (
         <>
           <h2>{t("recentFiles")}</h2>
-          <RecentFileList files={recent.files} disabled={showStart.starting} onOpen={open} onForget={(path) => run(recent.forget(path))} />
+          <RecentFileList files={recent.files} disabled={showStart.starting} onOpen={showStart.startFile} onForget={(path) => run(recent.forget(path))} />
         </>
       )}
     </div>
@@ -400,8 +397,6 @@ function CommandPanel(props: {
     });
   const problem = resumeProblem ?? last.problem;
 
-  const openQuiz = () => showStart.startPicked(() => api.startShowFromFile(quizPicker(t)));
-
   const latestView = useLatest(view);
   const hint = (key: string) => keyHint(t, key);
   const projectorHint = projectorKeyActs(view !== null, projector.isOpen) ? hint(KEYS.projector) : undefined;
@@ -437,7 +432,7 @@ function CommandPanel(props: {
               />
             )}
             {problem !== null && <ResumeProblem problem={problem} />}
-            <CommandButton icon={<FolderIcon />} label={t("openQuiz")} disabled={showStart.starting} onClick={openQuiz} />
+            <CommandButton icon={<FolderIcon />} label={t("openQuiz")} disabled={showStart.starting} onClick={() => showStart.startFile()} />
             <CommandButton icon={<PlayIcon />} label={t("demoQuiz")} disabled={showStart.starting} onClick={() => showStart.start(api.startDemoShow)} />
             <CommandButton icon={<EditIcon />} label={t("quizEditor")} disabled={showStart.starting} onClick={() => onEditor(true)} />
           </>

@@ -17,7 +17,7 @@
     "allow-media-root",
     "allow-show-not-saved",
     "allow-show-disk-space",
-    "allow-start-show-from-file",
+    "allow-pick-quiz-file",
     "allow-start-show-from-recent",
     "allow-start-demo-show",
     "allow-last-session",

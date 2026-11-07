@@ -894,6 +894,12 @@ mockIPC(
       case "forget_recent_file":
         forgetRecent((payload as { path: string }).path);
         return null;
+      case "pick_quiz_file": {
+        // The file picked (see `dialogAnswer`) goes first in the recent files.
+        const path = dialogAnswer();
+        if (path) RECENT_FILES.splice(0, RECENT_FILES.length, path, ...RECENT_FILES.filter((kept) => kept !== path));
+        return path;
+      }
       case "start_show_from_recent": {
         called.push({ cmd, ...(payload as object) });
         const path = (payload as { recent: string }).recent;

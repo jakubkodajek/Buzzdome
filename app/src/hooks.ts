@@ -337,7 +337,14 @@ export function useLastSession(): LastSession {
  * backend keeps them (`RecentFiles`). `reload` reads them again after a
  * call that may have changed them; `forget` takes one off the list.
  */
-export function useRecentFiles(): { files: string[]; reload: () => void; forget: (path: string) => Promise<void> } {
+export interface RecentFiles {
+  files: string[];
+  reload: () => void;
+  forget: (path: string) => Promise<void>;
+}
+
+/** The recent quiz files (`RecentFiles`). */
+export function useRecentFiles(): RecentFiles {
   const [files, reload] = useLoadedValue(api.recentFiles, []);
   const forget = useCallback((path: string) => api.forgetRecentFile(path).finally(reload), [reload]);
   return { files, reload, forget };

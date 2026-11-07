@@ -35,7 +35,7 @@ describe("startQuestion", () => {
     expect(startQuestion(t, null, edited, "/quizzes/a.quiz")).toEqual({ text: stale, ok: t("startSavedVersion") });
     expect(startQuestion(t, last, edited, "/quizzes/a.quiz")).toEqual({ text: `${replaces}\n\n${stale}`, ok: t("startNewShow") });
     expect(startQuestion(t, null, edited, "/quizzes/b.quiz")).toBeNull();
-    // A file not known before the start (the picker's): the Director says so once it opened.
+    // A show of no quiz file (the demo quiz).
     expect(startQuestion(t, null, edited)).toBeNull();
   });
 });
