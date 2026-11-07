@@ -46,7 +46,7 @@ export function ResultsTab({ view, quiz }: { view: GameView; quiz: Quiz | null }
 }
 
 function Ranking({ results }: { results: ShowResults }) {
-  const { t } = useApp();
+  const { t, lang } = useApp();
   const rounds = resultRounds(results);
   return (
     <table className="grid">
@@ -80,7 +80,7 @@ function Ranking({ results }: { results: ShowResults }) {
             ))}
             <td className="num">{player.adjusted === 0 ? "" : signed(player.adjusted)}</td>
             <td className="num strong">{player.score}</td>
-            <td className="num">{seconds(player.totalAnswerMs, 2)} s</td>
+            <td className="num">{seconds(player.totalAnswerMs, 2, lang)} s</td>
           </tr>
         ))}
       </tbody>
@@ -89,7 +89,7 @@ function Ranking({ results }: { results: ShowResults }) {
 }
 
 function Questions({ results, quiz }: { results: ShowResults; quiz: Quiz }) {
-  const { t } = useApp();
+  const { t, lang } = useApp();
   if (results.questions.length === 0) return <p className="muted">{t("noQuestionsAsked")}</p>;
   const label = questionLabels(quiz);
   const players = new Map<BuzzerId, PlayerResult>(results.players.map((player) => [player.buzzer, player]));
@@ -126,7 +126,7 @@ function Questions({ results, quiz }: { results: ShowResults; quiz: Quiz }) {
                       <td>{name(buzzer)}</td>
                       <td className="num">{buzzer}</td>
                       <td className={mark.right ? "good-text strong" : ""}>{mark.answer ? buttonLabel(mark.answer.button) : t("noAnswer")}</td>
-                      <td className="num">{mark.answer ? `${seconds(mark.answer.elapsedMs, 2)} s` : ""}</td>
+                      <td className="num">{mark.answer ? `${seconds(mark.answer.elapsedMs, 2, lang)} s` : ""}</td>
                       <td className="num">
                         {signed(mark.points)}
                         {mark.joker && <span className="results-joker"> {t("jokerPlay")}</span>}

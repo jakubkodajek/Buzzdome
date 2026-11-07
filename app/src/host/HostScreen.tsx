@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import { AppProvider, useApp, useRun, useStepShown } from "../app-context";
 import { ErrorBoundary } from "../error-boundary";
@@ -60,7 +60,11 @@ function HostLayout() {
               <ErrorBoundary key={view.slideIndex} fallback={() => null} onError={(message) => reportToDirector(t("slideNotShown", { message }))}>
                 <SlideScreen view={view} context={slideContext(quiz, view.slideIndex)} clock={clock} />
               </ErrorBoundary>
-              {verdict && <div className={`verdict verdict-${verdict}`}>{verdict === "correct" ? <CheckIcon /> : <CrossIcon />}</div>}
+              {verdict && (
+                <div key={verdict.n} className={`verdict verdict-${verdict.kind}`}>
+                  {verdict.kind === "correct" ? <CheckIcon /> : <CrossIcon />}
+                </div>
+              )}
               {view.leaderboardVisible && (
                 <StageOverlay screen="leaderboard">
                   <Leaderboard players={ranked(view)} />
@@ -75,11 +79,16 @@ function HostLayout() {
   );
 }
 
-/** A big check or cross for a moment after the quizmaster judges an answer. */
-function useVerdict(): "correct" | "wrong" | null {
-  const [verdict, setVerdict] = useState<"correct" | "wrong" | null>(null);
+/**
+ * A big check or cross for a moment after the quizmaster judges an answer.
+ * Each judgement counts, so the same verdict twice in a row (wrong, passed
+ * on, wrong again) shows again for its full moment.
+ */
+function useVerdict(): { kind: "correct" | "wrong"; n: number } | null {
+  const [verdict, setVerdict] = useState<{ kind: "correct" | "wrong"; n: number } | null>(null);
+  const count = useRef(0);
   useBackendEvent("sound-cue", (cue) => {
-    if (cue === "correct" || cue === "wrong") setVerdict(cue);
+    if (cue === "correct" || cue === "wrong") setVerdict({ kind: cue, n: ++count.current });
   });
   useEffect(() => {
     if (!verdict) return;

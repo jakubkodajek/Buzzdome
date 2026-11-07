@@ -60,9 +60,8 @@ const LABELS: Record<SoundSlot, StringKey> = {
 };
 
 /** Each moment of the show: its name and the app's sounds made for it. */
-export const SLOT_SOUNDS: Record<SoundSlot, SlotSounds> = Object.fromEntries(
-  SOUND_SLOTS.map((slot) => [slot, { label: LABELS[slot], madeFor: SLOT_SOUND_IDS[slot] }]),
-) as Record<SoundSlot, SlotSounds>;
+const slotSounds = (slot: SoundSlot): SlotSounds => ({ label: LABELS[slot], madeFor: SLOT_SOUND_IDS[slot] });
+export const SLOT_SOUNDS = Object.fromEntries(SOUND_SLOTS.map((slot) => [slot, slotSounds(slot)])) as Record<SoundSlot, SlotSounds>;
 
 /** What `slot` is called. */
 export function slotLabel(t: Translate, slot: SoundSlot): string {

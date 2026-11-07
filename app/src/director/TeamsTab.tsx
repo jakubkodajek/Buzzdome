@@ -43,7 +43,7 @@ function TeamsLost({ lost }: { lost: SettingsLost | null }) {
  * once. Beside them, the team names the buzzers are paired with.
  */
 function ShowTeams({ view, lost }: { view: GameView; lost: SettingsLost | null }) {
-  const { t } = useApp();
+  const { t, lang } = useApp();
   const dispatch = useDispatch();
   const run = useRun();
   const [selected, setSelected] = useState<Set<BuzzerId>>(new Set());
@@ -155,9 +155,9 @@ function ShowTeams({ view, lost }: { view: GameView; lost: SettingsLost | null }
                   </td>
                   <td>
                     {p.answer ? buttonLabel(p.answer) : p.lockedOut ? <CrossIcon className="inline-icon" /> : p.joinsNext ? <span className="muted">{t("joinsNext")}</span> : ""}
-                    {p.answerMs !== null && <span className="muted"> · {seconds(p.answerMs)} s</span>}
+                    {p.answerMs !== null && <span className="muted"> · {seconds(p.answerMs, 1, lang)} s</span>}
                   </td>
-                  <td className="num">{seconds(p.totalAnswerMs)} s</td>
+                  <td className="num">{seconds(p.totalAnswerMs, 1, lang)} s</td>
                   <td>{p.enabled ? t("yes") : t("no")}</td>
                   {jokers && (
                     <td className="joker-cell">

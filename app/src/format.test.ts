@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { calendarDay, decibels, fileName, minutesAndSeconds, parseTrackTime, scoreDigits, signed, trackTime } from "./format";
+import { calendarDay, decibels, fileName, minutesAndSeconds, parseTrackTime, scoreDigits, seconds, signed, trackTime } from "./format";
 
 describe("format", () => {
   it("writes a day as each language does", () => {
@@ -17,9 +17,16 @@ describe("format", () => {
     expect([minutesAndSeconds(0), minutesAndSeconds(7), minutesAndSeconds(90), minutesAndSeconds(600)]).toEqual(["0:00", "0:07", "1:30", "10:00"]);
   });
 
-  it("writes levels and changes in dB to a tenth", () => {
-    expect([decibels(2.46), decibels(-18.34), decibels(0), decibels(-0.01)]).toEqual(["+2.5", "-18.3", "0.0", "0.0"]);
-    expect(decibels(3, false)).toBe("3.0");
+  it("writes levels and changes in dB to a tenth, with the language's decimal mark", () => {
+    const levels = (lang: "cs" | "en") => [2.46, -18.34, 0, -0.01].map((value) => decibels(value, true, lang));
+    expect(levels("en")).toEqual(["+2.5", "-18.3", "0.0", "0.0"]);
+    expect(levels("cs")).toEqual(["+2,5", "-18,3", "0,0", "0,0"]);
+    expect([decibels(3, false, "en"), decibels(-0.01, false, "cs"), decibels(-3.24, false, "cs")]).toEqual(["3.0", "0,0", "-3,2"]);
+  });
+
+  it("writes seconds with the language's decimal mark, and with a point for files", () => {
+    expect([seconds(1250, 2, "cs"), seconds(1250, 2, "en"), seconds(2400, 1, "cs"), seconds(12_345_600, 1, "cs")]).toEqual(["1,25", "1.25", "2,4", "12345,6"]);
+    expect(seconds(1250, 2)).toBe("1.25");
   });
 
   it("writes times in a track to a tenth of a second", () => {

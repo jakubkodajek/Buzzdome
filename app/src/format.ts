@@ -10,9 +10,14 @@ export function minutesAndSeconds(seconds: number): string {
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
 }
 
-/** A duration in seconds with `digits` decimals, e.g. "2.4". */
-export function seconds(ms: number, digits = 1): string {
-  return (ms / 1000).toFixed(digits);
+/**
+ * A duration in seconds with `digits` decimals, with the decimal mark of
+ * `lang` ("2,4" in Czech, "2.4" in English); without `lang`, with a point,
+ * as files take it.
+ */
+export function seconds(ms: number, digits = 1, lang?: Lang): string {
+  const value = ms / 1000;
+  return lang ? decimal(lang, digits, "auto").format(value) : value.toFixed(digits);
 }
 
 /** A size on disk, counted in 1024s as the systems show it: in MB below a gigabyte, else in GB to a tenth ("750 MB", "12.5 GB"). */
@@ -26,15 +31,25 @@ export function signed(n: number): string {
   return n > 0 ? `+${n}` : String(n);
 }
 
-/** A level or change in dB (or LUFS) to a tenth, with its sign when `sign`: "+2.5", "-18.3". */
-export function decibels(value: number, sign = true): string {
-  const text = value.toFixed(1);
-  return sign && value > 0 ? `+${text}` : text === "-0.0" ? "0.0" : text;
+/** A level or change in dB (or LUFS) to a tenth, with its sign when `sign`, in `lang`'s decimal mark: "+2,5", "-18.3". */
+export function decibels(value: number, sign: boolean, lang: Lang): string {
+  // Rounded first, so that a level just below zero is "0.0", not "-0.0".
+  const tenths = Math.round(value * 10) / 10 || 0;
+  return decimal(lang, 1, sign ? "exceptZero" : "auto").format(tenths);
+}
+
+/** Writes numbers with `digits` decimals as `lang` does, without grouping. */
+function decimal(lang: Lang, digits: number, signDisplay: "auto" | "exceptZero"): Intl.NumberFormat {
+  return new Intl.NumberFormat(locale(lang), { minimumFractionDigits: digits, maximumFractionDigits: digits, signDisplay, useGrouping: false });
+}
+
+function locale(lang: Lang): string {
+  return lang === "cs" ? "cs-CZ" : "en-GB";
 }
 
 /** A day, as the quizmaster's language writes dates: "26. 10. 2026", "26/10/2026". */
 export function calendarDay(ms: number, lang: Lang): string {
-  return new Date(ms).toLocaleDateString(lang === "cs" ? "cs-CZ" : "en-GB", { timeZone: "UTC" });
+  return new Date(ms).toLocaleDateString(locale(lang), { timeZone: "UTC" });
 }
 
 /** A score padded to three digits for the score boards, e.g. "042". */
