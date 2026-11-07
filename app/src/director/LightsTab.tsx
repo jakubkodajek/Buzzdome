@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import { useApp, useRun } from "../app-context";
 import { LAST_SECONDS_MS } from "../bindings/Constants";
@@ -30,7 +30,7 @@ import { calendarDay } from "../format";
 import { useLatest, useLightsStatus } from "../hooks";
 import type { StringKey, Translate } from "../i18n";
 import { AddIcon, MinusIcon } from "../icons";
-import { errorNotice, outputErrorText, settingsLostNotice, setupErrorText, type Notice } from "../messages";
+import { errorNotice, isAppError, outputErrorText, settingsLostNotice, setupErrorText, type Notice } from "../messages";
 import { NoticeBox, ToneDot } from "../notice";
 import { CUE_LABEL } from "../phase";
 import type { Channel, Cue, Fixture, LibraryFixture, LibraryInfo, LibraryMatches, LibraryMode, LightsDevices, LightsInfo, LightsSetup, Look, LookEffect, OutputChoice, Stage } from "../types";
@@ -45,7 +45,6 @@ import {
   fixtureColor,
   followsLooks,
   formatChannelValues,
-  isIpv4,
   lookLights,
   lookUses,
   outputOfKind,
@@ -112,6 +111,14 @@ const STAGE_KEYS: Record<Stage, StringKey> = {
 
 const stageText = (t: Translate, stage: Stage) => t(STAGE_KEYS[stage], { s: LAST_SECONDS_MS / 1000 });
 
+/** The host the backend refused in the last setup stored, as not an IPv4 address (`SetupError::NotIpv4`); null when none was. */
+const RefusedHost = createContext<string | null>(null);
+
+/** The host `error`, from storing a setup, refuses. */
+function refusedHost(error: unknown): string | null {
+  return isAppError(error) && error.code === "lightsRefused" && error.refused.problem === "notIpv4" ? error.refused.host : null;
+}
+
 /**
  * The venue's stage lights (spec section 12): the DMX output, the fixtures,
  * the looks, which look each moment of the show takes, the messages for
@@ -126,6 +133,7 @@ export function LightsTab() {
   const pending = useRef<{ setup: LightsSetup; timer: number } | null>(null);
   // Whether the changes are kept: all of them, one is waiting, or the last store was refused and why.
   const [stored, setStored] = useState<"kept" | "pending" | Notice>("kept");
+  const [refused, setRefused] = useState<string | null>(null);
   // The setup the lights use: as loaded, or as last kept.
   const kept = useRef<LightsSetup | null>(null);
   // Counts the stores sent, so only the last one's answer is shown.
@@ -151,10 +159,14 @@ export function LightsTab() {
           kept.current = next;
           // A setup kept is the one in use, so a setup refused at start no longer is the news.
           setInfo((i) => i && { ...i, refused: null });
-          if (last()) setStored("kept");
+          if (!last()) return;
+          setStored("kept");
+          setRefused(null);
         },
         (error: unknown) => {
-          if (last()) setStored(errorNotice(t, error));
+          if (!last()) return;
+          setStored(errorNotice(t, error));
+          setRefused(refusedHost(error));
         },
       );
     },
@@ -180,6 +192,7 @@ export function LightsTab() {
     sent.current++;
     if (kept.current) setSetup(kept.current);
     setStored("kept");
+    setRefused(null);
   };
 
   const change = useCallback(
@@ -202,28 +215,30 @@ export function LightsTab() {
 
   if (!info || !setup) return <div className="lights" />;
   return (
-    <div className="lights">
-      {typeof stored === "string" ? (
-        <p className="muted lights-stored" role="status">
-          {t(stored === "kept" ? "lightsStored" : "lightsStoring")}
-        </p>
-      ) : (
-        <NoticeBox notice={{ text: `${stored.text} ${t("lightsNotStored")}`, detail: stored.detail }}>
-          <button onClick={backToKept}>{t("lightsBackToStored")}</button>
-        </NoticeBox>
-      )}
-      <LiveControl setup={setup} change={change} />
-      {info.settingsError && (
-        <NoticeBox notice={settingsLostNotice(t, t("lightsSettingsLost"), info.settingsError)} />
-      )}
-      {info.refused && <NoticeBox notice={{ text: t("lightsRefusedKept", { problem: setupErrorText(t, info.refused) }) }} />}
-      <OutputSection output={setup.output} onChange={(output) => change((s) => ({ ...s, output }))} />
-      <FixturesSection setup={setup} change={change} />
-      <LooksSection setup={setup} change={change} />
-      <WhenSection setup={setup} change={change} />
-      <MessagesSection setup={setup} change={change} />
-      <Preview fixtures={setup.fixtures} />
-    </div>
+    <RefusedHost value={refused}>
+      <div className="lights">
+        {typeof stored === "string" ? (
+          <p className="muted lights-stored" role="status">
+            {t(stored === "kept" ? "lightsStored" : "lightsStoring")}
+          </p>
+        ) : (
+          <NoticeBox notice={{ text: `${stored.text} ${t("lightsNotStored")}`, detail: stored.detail }}>
+            <button onClick={backToKept}>{t("lightsBackToStored")}</button>
+          </NoticeBox>
+        )}
+        <LiveControl setup={setup} change={change} />
+        {info.settingsError && (
+          <NoticeBox notice={settingsLostNotice(t, t("lightsSettingsLost"), info.settingsError)} />
+        )}
+        {info.refused && <NoticeBox notice={{ text: t("lightsRefusedKept", { problem: setupErrorText(t, info.refused) }) }} />}
+        <OutputSection output={setup.output} onChange={(output) => change((s) => ({ ...s, output }))} />
+        <FixturesSection setup={setup} change={change} />
+        <LooksSection setup={setup} change={change} />
+        <WhenSection setup={setup} change={change} />
+        <MessagesSection setup={setup} change={change} />
+        <Preview fixtures={setup.fixtures} />
+      </div>
+    </RefusedHost>
   );
 }
 
@@ -358,9 +373,11 @@ function OutputSection({ output, onChange }: { output: OutputChoice; onChange: (
 
 /**
  * A line of text, applied on Enter or when the field is left; Esc goes back
- * to the value. Empty text is refused unless `empty`, and other text unless
- * it passes `check`: the field is marked while it does not, with `hint`
- * as its tooltip, and goes back to the value when left.
+ * to the value. Empty text is refused unless `empty`, and goes back to the
+ * value when left. Other text is refused unless it passes `check`: it stays
+ * as typed, the field marked and `hint` shown beside it, until it passes
+ * or Esc. `problem` marks the field the same way for a value the backend
+ * refused.
  */
 function TextBox(props: {
   value: string;
@@ -369,47 +386,56 @@ function TextBox(props: {
   empty?: boolean;
   check?: (text: string) => boolean;
   hint?: string;
+  problem?: string | null;
   placeholder?: string;
   maxLength?: number;
 }) {
-  const { value, onChange, label, empty = false, check = () => true, hint, placeholder, maxLength = MAX_LIGHTS_NAME_CHARS * 4 } = props;
+  const { value, onChange, label, empty = false, check = () => true, hint, problem = null, placeholder, maxLength = MAX_LIGHTS_NAME_CHARS * 4 } = props;
   const [text, setText] = useState(value);
   const [shown, setShown] = useState(value);
   if (value !== shown) {
     setShown(value);
     setText(value);
   }
-  const fits = (next: string) => (next === "" ? empty : check(next));
-  const invalid = text.trim() !== "" && !check(text.trim());
+  const failed = text.trim() !== "" && !check(text.trim());
+  const why = failed ? hint : text === value ? problem : null;
   const apply = () => {
     const next = text.trim();
     if (next === value) return;
-    if (fits(next)) onChange(next);
-    else setText(value);
+    if (next === "" && !empty) setText(value);
+    else if (!failed) onChange(next);
   };
   return (
-    <input
-      aria-label={label}
-      aria-invalid={invalid || undefined}
-      className={invalid ? "invalid" : undefined}
-      title={invalid ? hint : undefined}
-      value={text}
-      placeholder={placeholder}
-      maxLength={maxLength}
-      onChange={(e) => setText(e.target.value)}
-      onBlur={apply}
-      onKeyDown={(e) => {
-        if (e.key === "Enter") apply();
-        else if (e.key === "Escape") setText(value);
-      }}
-    />
+    <>
+      <input
+        aria-label={label}
+        aria-invalid={failed || why !== null || undefined}
+        className={failed || why !== null ? "invalid" : undefined}
+        value={text}
+        placeholder={placeholder}
+        maxLength={maxLength}
+        onChange={(e) => setText(e.target.value)}
+        onBlur={apply}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") apply();
+          else if (e.key === "Escape") setText(value);
+        }}
+      />
+      {why && <span className="muted">{why}</span>}
+    </>
   );
 }
 
-/** A host's IPv4 address, the only kind network outputs and OSC take (`isIpv4`). */
+/**
+ * A host's IPv4 address, the only kind network outputs and OSC take. The
+ * backend decides what one is (`ipv4` in crates/lights): a host it refused
+ * is marked with its reason.
+ */
 function HostBox(props: { value: string; onChange: (host: string) => void; label: string; empty?: boolean }) {
   const { t } = useApp();
-  return <TextBox {...props} check={isIpv4} hint={t("lightsHostIpv4")} />;
+  const refused = useContext(RefusedHost);
+  const problem = refused !== null && props.value.trim() === refused ? setupErrorText(t, { problem: "notIpv4", host: refused }) : null;
+  return <TextBox {...props} placeholder="192.168.1.20" problem={problem} />;
 }
 
 /** The fixtures: name, address and channels, each started from a preset. */
@@ -808,7 +834,6 @@ function LookRow(props: { look: Look; fixtures: Fixture[]; onChange: (edit: Part
             value={formatChannelValues(look.channels)}
             empty
             check={(text) => parseChannelValues(text) !== null}
-            hint={t("lightsExtraChannelsHint")}
             placeholder="100=255"
             maxLength={EXTRA_CHANNELS_CHARS}
             onChange={(text) => onChange({ channels: parseChannelValues(text) ?? [] })}

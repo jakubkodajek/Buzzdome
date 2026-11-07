@@ -10,7 +10,6 @@ import {
   FIXTURE_PRESETS,
   formatChannelValues,
   freeAddress,
-  isIpv4,
   lookUses,
   outputOfKind,
   overlapping,
@@ -93,11 +92,6 @@ describe("lights setup", () => {
     setup = { ...setup, stages: { lobby: 1, answering: 2, winner: 1 }, flashes: { correct: { look: 1, ms: 1000 }, wrong: { look: 2, ms: 1000 } } };
     expect(lookUses(setup, 1)).toEqual({ stages: ["lobby", "winner"], cues: ["correct"] });
     expect(lookUses(removeLook(setup, 1), 1)).toEqual({ stages: [], cues: [] });
-  });
-
-  it("takes only IPv4 addresses for hosts, as the backend reads them", () => {
-    for (const host of ["192.168.1.20", "255.255.255.255", "0.0.0.0", " 10.0.0.9 ", "127.0.0.1"]) expect(isIpv4(host), host).toBe(true);
-    for (const host of ["pult.local", "localhost", "::1", "256.1.1.1", "1.2.3", "1.2.3.4.5", "01.2.3.4", "1.2.3.", "", "1.2.3.-4", "1.2.3.4a"]) expect(isIpv4(host), host).toBe(false);
   });
 
   it("keeps a port when the output changes between the two Enttec kinds", () => {

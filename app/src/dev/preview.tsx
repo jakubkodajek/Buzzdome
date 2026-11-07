@@ -898,9 +898,14 @@ mockIPC(
         };
       case "lights_info":
         return { setup: LIGHTS_SETUP, status: { output: { kind: "connected", name: "Art-Net 255.255.255.255" }, messages: null, look: 2, hold: null, blackout: false }, settingsError: null, refused: null };
-      case "lights_store":
+      case "lights_store": {
         called.push({ cmd, ...(payload as object) });
-        return lightsStore === "refused" ? Promise.reject({ code: "lightsRefused", refused: { problem: "pastUniverse", name: "Par vlevo" } }) : null;
+        if (lightsStore === "refused") return Promise.reject({ code: "lightsRefused", refused: { problem: "pastUniverse", name: "Par vlevo" } });
+        // A host with a letter in it stands for any the backend refuses as not IPv4.
+        const { setup } = payload as { setup: LightsSetup };
+        const host = [setup.output.kind === "artNet" || setup.output.kind === "sacn" ? setup.output.host : null, setup.messages.osc?.host].find((h) => h && /[a-z]/i.test(h));
+        return host ? Promise.reject({ code: "lightsRefused", refused: { problem: "notIpv4", host } }) : null;
+      }
       case "lights_universe": {
         // The first fixture in the "Question" blue, the second in red.
         const slots = new Array<number>(512).fill(0);

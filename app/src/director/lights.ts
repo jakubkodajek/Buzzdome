@@ -156,16 +156,6 @@ export function lookUses(setup: LightsSetup, id: number): { stages: Stage[]; cue
   };
 }
 
-/**
- * Whether `host` is an IPv4 address such as 192.168.1.20, which network
- * outputs and OSC take (`ipv4` in crates/lights: Rust's `Ipv4Addr`, four
- * numbers to 255 without leading zeros, spaces around it allowed).
- */
-export function isIpv4(host: string): boolean {
-  const parts = host.trim().split(".");
-  return parts.length === 4 && parts.every((part) => /^(0|[1-9]\d{0,2})$/.test(part) && Number(part) <= 255);
-}
-
 /** Whether `choice` is the same output as `other`, settings and all. */
 export function sameOutput(choice: OutputChoice, other: OutputChoice): boolean {
   return JSON.stringify(choice) === JSON.stringify(other);
