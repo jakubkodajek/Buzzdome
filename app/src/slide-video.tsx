@@ -13,15 +13,16 @@ import { heardAtNow, msSinceHeard } from "./media-player";
 import type { ClockView, GameView, VideoClip, VideoEffect } from "./types";
 import { blurRadius, mosaicColumns } from "./video-effect";
 
-/** One slide's video in the show; give it a new key for each slide. */
-export function ShowVideo({ clip, url, view, clock }: { clip: VideoClip; url: string; view: GameView; clock: ClockView | null }) {
+/** One slide's video in the show; give it a new key for each slide. `onError`: its file does not play. */
+export function ShowVideo(props: { clip: VideoClip; url: string; view: GameView; clock: ClockView | null; onError: () => void }) {
+  const { clip, url, view, clock, onError } = props;
   const video = useRef<HTMLVideoElement>(null);
   const mosaic = useRef<HTMLCanvasElement>(null);
   useSlideVideo(video, url, clip, view);
   useVideoEffect(video, mosaic, clip.effect, view, clock);
   return (
     <>
-      <video ref={video} src={url} preload="auto" playsInline />
+      <video ref={video} src={url} preload="auto" playsInline onError={onError} />
       {clip.effect === "mosaic" && <canvas ref={mosaic} className="video-mosaic" hidden />}
     </>
   );
