@@ -50,7 +50,6 @@ import {
   outputOfKind,
   overlapping,
   parseChannelValues,
-  lookLosingFixtures,
   removeFixture,
   removeLook,
   sameOutput,
@@ -449,14 +448,14 @@ function FixturesSection({ setup, change }: { setup: LightsSetup; change: Change
     const channels = FIXTURE_PRESETS.find((p) => p.id === preset)?.channels ?? [];
     change((s) => addFixture(s, t("lightsNewFixture", { n: s.fixtures.length + 1 }), channels));
   };
-  // Said before asking, in the backend's words for the change it would refuse.
+  // The backend judges the removal before it is offered, against the setup kept, as its store will.
   const remove = (fixture: Fixture) => {
-    const look = lookLosingFixtures(setup, fixture.id);
-    if (look) {
-      caution(t("lightsFixtureNotRemoved", { name: fixture.name, problem: setupErrorText(t, { problem: "lookLosesFixtures", look: look.name }) }));
-      return;
-    }
-    run(confirmAction(t, t("lightsRemoveFixtureConfirm", { name: fixture.name }), t("lightsRemove")).then((yes) => (yes ? change((s) => removeFixture(s, fixture.id)) : undefined)));
+    const offer = () => confirmAction(t, t("lightsRemoveFixtureConfirm", { name: fixture.name }), t("lightsRemove")).then((yes) => (yes ? change((s) => removeFixture(s, fixture.id)) : undefined));
+    const refused = (error: unknown) => {
+      if (!isAppError(error) || error.code !== "lightsRefused") throw error;
+      caution(t("lightsFixtureNotRemoved", { name: fixture.name, problem: setupErrorText(t, error.refused) }));
+    };
+    run(api.lightsCheckChange(removeFixture(setup, fixture.id)).then(offer, refused));
   };
   return (
     <fieldset>

@@ -1,7 +1,6 @@
 // Everything the editor knows about the open quiz. Pure, like `history.ts`.
 
-import { WARNING_PROBLEMS } from "../bindings/Constants";
-import type { EditorDraft, Quiz, SavedDraft, ValidationError } from "../types";
+import type { Checked, EditorDraft, Quiz, SavedDraft, ValidationError } from "../types";
 import { historyReducer, startHistory, type History, type HistoryAction } from "./history";
 
 export interface OpenQuiz {
@@ -18,6 +17,8 @@ export interface OpenQuiz {
   mediaRoot: string;
   /** What keeps the quiz from being played, as the backend last checked. */
   problems: ValidationError[];
+  /** What looks unfinished but plays, as the backend last checked. */
+  warnings: ValidationError[];
   /** What the file has that the quiz cannot keep, so saving leaves it out (`ReadQuiz::dropped`). */
   dropped: ValidationError[];
 }
@@ -42,7 +43,7 @@ export type EditorAction =
   | { type: "unreadable"; error: unknown }
   | ({ type: "saved"; quiz: Quiz } & SavedDraft)
   /** The backend stored `quiz` and checked it. */
-  | { type: "checked"; quiz: Quiz; problems: ValidationError[] }
+  | ({ type: "checked"; quiz: Quiz } & Checked)
   | HistoryAction;
 
 export const LOADING: EditorState = { status: "loading" };
@@ -57,7 +58,7 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
       const { history } = kept;
       // As the backend has it now; what the file holds as the editor knew it.
       const saved = draft.unsaved ? (kept.saved === history.present ? null : kept.saved) : history.present;
-      return { ...kept, status: "open", saved, sourcePath: draft.sourcePath, savesInPlace: draft.savesInPlace, mediaRoot: draft.mediaRoot, problems: draft.problems, dropped: draft.dropped };
+      return { ...kept, status: "open", saved, sourcePath: draft.sourcePath, savesInPlace: draft.savesInPlace, mediaRoot: draft.mediaRoot, problems: draft.problems, warnings: draft.warnings, dropped: draft.dropped };
     }
     return {
       status: "open",
@@ -68,6 +69,7 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
       savesInPlace: draft.savesInPlace,
       mediaRoot: draft.mediaRoot,
       problems: draft.problems,
+      warnings: draft.warnings,
       dropped: draft.dropped,
     };
   }
@@ -75,10 +77,10 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
   switch (action.type) {
     case "saved":
       // The file no longer has what opening left out. Typing on after it starts a new undo step, so one step is the quiz as saved.
-      return { ...state, history: { ...state.history, open: null }, saved: action.quiz, sourcePath: action.path, savesInPlace: action.savesInPlace, dropped: [] };
+      return { ...state, history: historyReducer(state.history, { type: "closeStep" }), saved: action.quiz, sourcePath: action.path, savesInPlace: action.savesInPlace, dropped: [] };
     case "checked":
       // A check of a quiz that has changed since is already out of date.
-      return action.quiz === state.history.present ? { ...state, problems: action.problems } : state;
+      return action.quiz === state.history.present ? { ...state, problems: action.problems, warnings: action.warnings } : state;
     default: {
       const history = historyReducer(state.history, action);
       return history === state.history ? state : { ...state, history };
@@ -108,22 +110,7 @@ export function sameData(a: unknown, b: unknown): boolean {
   return [...new Set([...Object.keys(x), ...Object.keys(y)])].every((key) => sameData(x[key], y[key]));
 }
 
-/** A quiz's problems apart: what to fix before it is played, and warnings of what may be a mistake but plays. */
-export interface SplitProblems {
-  problems: ValidationError[];
-  warnings: ValidationError[];
-}
-
-const WARNINGS: ReadonlySet<string> = new Set(WARNING_PROBLEMS);
-
-/** Splits `all` (`OpenQuiz.problems`) into problems and warnings (`WARNING_PROBLEMS`), each in its order. */
-export function splitProblems(all: ValidationError[]): SplitProblems {
-  const split: SplitProblems = { problems: [], warnings: [] };
-  for (const problem of all) (WARNINGS.has(problem.problem.code) ? split.warnings : split.problems).push(problem);
-  return split;
-}
-
 /** File › Info has something to tell: problems to fix (not warnings only), or what opening the file left out. */
 export function needsInfo(quiz: Pick<OpenQuiz, "problems" | "dropped">): boolean {
-  return splitProblems(quiz.problems).problems.length > 0 || quiz.dropped.length > 0;
+  return quiz.problems.length > 0 || quiz.dropped.length > 0;
 }

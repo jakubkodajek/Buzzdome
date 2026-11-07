@@ -3,7 +3,7 @@ import { useVoiceGain, useVoiceModel, useVoicePreview, useVoiceSample, voiceLine
 import { welcomePreviewView } from "../host/preview";
 import { SlideScreen } from "../host/SlideScreen";
 import { Stage } from "../host/Stage";
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useRef } from "react";
 import { BackIcon, CheckIcon, PlayIcon, StopIcon } from "../icons";
 import { keyHint, KEYS } from "../keyboard";
 import { problemText } from "../messages";
@@ -16,7 +16,7 @@ import type { AllAnswered, Quiz, QuizLanguage, QuizSettings, QuizSounds, ReadAlo
 import { actionButton, tooltip, type Action, type Actions } from "./actions";
 import { AiPage } from "./AiPage";
 import { MediaPicker, NumberBox, Select, Switch } from "./controls";
-import { splitProblems, type OpenQuiz } from "./editor-state";
+import type { OpenQuiz } from "./editor-state";
 import { SoundsSettings } from "./SoundsSettings";
 
 export type BackstagePage = "info" | "settings" | "open" | "import" | "export" | "ai";
@@ -128,7 +128,7 @@ function pageFor(page: BackstagePage, props: BackstageProps, open: OpenQuiz) {
 function InfoPage({ open, unsaved, onTitle, onShowSlide }: BackstageProps & { open: OpenQuiz }) {
   const { t } = useApp();
   const quiz = open.history.present;
-  const { problems, warnings } = splitProblems(open.problems);
+  const { problems, warnings } = open;
   return (
     <>
       <h1>{t("info")}</h1>
@@ -279,7 +279,7 @@ function ReadAloudSettings({ quiz, settings, set }: { quiz: Quiz; settings: Quiz
   const languages = QUIZ_LANGUAGES.map((value): [QuizLanguage, string] => [value, t(LANGUAGE_LABEL[value])]);
   const voices = VOICES.map((value): [number, string] => [value, voiceName(t, value)]);
   const trying = preview.playing || sample.playing;
-  const [preparing, setPreparing] = useState(false);
+  const { preparing } = preview;
   const tryVoice = () => {
     if (trying) {
       preview.stop();
@@ -290,9 +290,8 @@ function ReadAloudSettings({ quiz, settings, set }: { quiz: Quiz; settings: Quiz
     const what = settings.readAloud === "off" ? "questionAndAnswers" : settings.readAloud;
     const line = quiz.slides.map((slide) => voiceLine(slide, settings, what)).find((found) => found !== null);
     if (!line) return sample.play(settings.language, settings.voice);
-    // The clip renders for a few seconds before it plays (or is stopped): that wait is shown.
-    setPreparing(true);
-    run(preview.play(line, gain).finally(() => setPreparing(false)));
+    // The clip renders for a few seconds before it plays (or is stopped): that wait is shown (`preparing`).
+    run(preview.play(line, gain));
   };
   return (
     <>

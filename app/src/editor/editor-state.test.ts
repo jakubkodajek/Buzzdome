@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { EditorDraft, Quiz, ValidationError } from "../types";
-import { editorReducer, isUnsaved, LOADING, needsInfo, sameData, splitProblems, type EditorState, type OpenQuiz } from "./editor-state";
+import { editorReducer, isUnsaved, LOADING, needsInfo, sameData, type EditorState, type OpenQuiz } from "./editor-state";
 
 const quiz: Quiz = { schemaVersion: 1, title: "Quiz", theme: null, slides: [] };
 const draft = (unsaved: boolean, dropped: ValidationError[] = []): EditorDraft => ({
@@ -11,6 +11,7 @@ const draft = (unsaved: boolean, dropped: ValidationError[] = []): EditorDraft =
   unsaved,
   mediaRoot: "/d/",
   problems: [],
+  warnings: [],
   dropped,
 });
 
@@ -52,14 +53,28 @@ describe("editor state", () => {
     expect(isUnsaved(opened(state))).toBe(false);
   });
 
+  it("keeps typing while the quiz is saved out of the step that is saved", () => {
+    let state = editorReducer(LOADING, { type: "loaded", draft: draft(false) });
+    state = editorReducer(state, { type: "edit", edit: { type: "setTitle", title: "Pub" }, merge: "title", at: 0 });
+    const saving = opened(state).history.present;
+    state = editorReducer(state, { type: "closeStep" });
+    state = editorReducer(state, { type: "edit", edit: { type: "setTitle", title: "Pub 2026" }, merge: "title", at: 500 });
+    state = editorReducer(state, { type: "saved", quiz: saving, path: "/q.quiz", savesInPlace: true });
+    expect(isUnsaved(opened(state))).toBe(true);
+    state = editorReducer(state, { type: "undo" });
+    expect(opened(state).history.present).toBe(saving);
+    expect(isUnsaved(opened(state))).toBe(false);
+  });
+
   it("takes the backend's problems only for the quiz as it is now", () => {
     let state = editorReducer(LOADING, { type: "loaded", draft: draft(false) });
     const before = opened(state).history.present;
     state = editorReducer(state, { type: "edit", edit: { type: "setTitle", title: "New" }, at: 0 });
     const problem: ValidationError[] = [{ slideId: null, problem: { code: "duplicateSlideId" } }];
-    expect(editorReducer(state, { type: "checked", quiz: before, problems: problem })).toBe(state);
-    state = editorReducer(state, { type: "checked", quiz: opened(state).history.present, problems: problem });
-    expect(opened(state).problems).toEqual(problem);
+    const warning: ValidationError[] = [{ slideId: null, problem: { code: "noSlides" } }];
+    expect(editorReducer(state, { type: "checked", quiz: before, problems: problem, warnings: warning })).toBe(state);
+    state = editorReducer(state, { type: "checked", quiz: opened(state).history.present, problems: problem, warnings: warning });
+    expect(opened(state)).toMatchObject({ problems: problem, warnings: warning });
   });
 
   it("tells what opening left out until the quiz is saved without it", () => {
@@ -115,20 +130,12 @@ describe("editor state", () => {
   });
 });
 
-describe("splitProblems", () => {
-  const noText: ValidationError = { slideId: "q", problem: { code: "questionTextEmpty" } };
-  const noAnswer: ValidationError = { slideId: "q", problem: { code: "answerEmpty", answer: 1 } };
-  const noSlides: ValidationError = { slideId: null, problem: { code: "noSlides" } };
+describe("needsInfo", () => {
   const noCorrect: ValidationError = { slideId: "q", problem: { code: "noCorrectAnswer" } };
-  const clash: ValidationError = { slideId: null, problem: { code: "unknownCategory" } };
 
-  it("puts the warnings apart from the problems to fix, each in its order", () => {
-    expect(splitProblems([noText, noCorrect, noAnswer, clash, noSlides])).toEqual({ problems: [noCorrect, clash], warnings: [noText, noAnswer, noSlides] });
-    expect(splitProblems([])).toEqual({ problems: [], warnings: [] });
-  });
-
+  // Which are warnings the backend tells apart (`editor::checked`): the editor only reads its two lists.
   it("opens File › Info for problems to fix, not for warnings only", () => {
-    expect(needsInfo({ problems: [noSlides, noText], dropped: [] })).toBe(false);
-    expect(needsInfo({ problems: [noSlides, noCorrect], dropped: [] })).toBe(true);
+    expect(needsInfo({ problems: [], dropped: [] })).toBe(false);
+    expect(needsInfo({ problems: [noCorrect], dropped: [] })).toBe(true);
   });
 });

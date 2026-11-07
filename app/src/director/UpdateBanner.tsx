@@ -14,7 +14,7 @@ import { installQuestion, installStatus, waitsForShow } from "./update";
 export function UpdateBanner({ showRunning }: { showRunning: boolean }) {
   const { t, lang, caution } = useApp();
   const report = useReport();
-  const update = useAvailableUpdate();
+  const update = useAvailableUpdate(showRunning);
   // The download's progress while installing (null before its first report); undefined otherwise.
   const [progress, setProgress] = useState<UpdateProgress | null | undefined>(undefined);
   const installing = progress !== undefined;

@@ -6,10 +6,11 @@
 import { useCallback, useMemo, useState } from "react";
 import { diskSize } from "../format";
 import type { Translate } from "../i18n";
-import { awaitsAnswer, receiverStatusText } from "../messages";
+import { receiverStatusText } from "../messages";
 import { readPreference, writePreference } from "../preferences";
 import type { Preparing } from "../audio/read-aloud";
 import type { GameView, MonitorInfo, ProjectorWindow, ReceiverInfo } from "../types";
+import { receiverReady } from "./hardware-status";
 
 export type CheckPart = "receiver" | "buzzers" | "projector" | "sound" | "voice" | "disk";
 
@@ -91,8 +92,7 @@ function receiverCheck(t: Translate, info: ReceiverInfo | null): CheckItem {
   const fixes: CheckFix[] = ["receiverTab"];
   if (!info.status) return { part: "receiver", state: "warn", text: t("receiverUnavailable"), fixes };
   const text = receiverStatusText(t, info.status, info.platform);
-  const ready = info.status.kind === "connected" && !awaitsAnswer(info.status.protocol);
-  if (ready) return { part: "receiver", state: "ok", text, fixes: [] };
+  if (receiverReady(info)) return { part: "receiver", state: "ok", text, fixes: [] };
   const state = info.status.kind === "error" ? "problem" : "warn";
   return { part: "receiver", state, text: `${text} ${t("launchKeyboardOnly")}`, fixes };
 }

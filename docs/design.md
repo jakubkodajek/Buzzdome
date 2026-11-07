@@ -142,7 +142,7 @@ draws slides without a show.
 | `receiver-remote` | `RemoteKeyAction` | a key of the quizmaster's remote was pressed, with what it does (the Director does it, `commandForRemote`) |
 | `host-window` | bool | the projector window opened or closed (also from its title bar) |
 | `host-problem` | `HostProblem` | the projector met a problem, worded for the Director to show (text, and detail under it) |
-| `close-requested` | `CloseReason` | the quizmaster closed the Director or quit while something would be left behind: a show runs, the editor's quiz has unsaved changes (also a write of them under way or failed, `UnkeptEdits`), or the AI instructions do (`ai_instructions_unsaved`); the Director asks, naming all that hold, then `quit_app` or `close_declined` |
+| `close-requested` | `CloseReason` | the quizmaster closed the Director or quit while something would be left behind: a show runs, the editor's quiz has unsaved changes (also a write of them under way or failed, `UnkeptEdits`); not the AI instructions being typed, which are kept over a restart; the Director asks, naming all that hold, then `quit_app` or `close_declined` |
 | `show-not-saved` | `AppError` or null | the running show's journal refused a write, or works again |
 | `teams-changed` | string list | the prepared team names changed, or a show started or ended |
 | `media-library`, `sound-board` | `MediaLibrary`, `SoundBoard` | the media player's library or pads changed |
@@ -2095,14 +2095,18 @@ change what a replay does.
   held until the lights have the setup, so the last kept is the one used),
   keeps the quizmaster's blackout and held look in `lights-live.json`
   (`lights_hold`, `lights_blackout`), which the lights take again at
-  the next start, so a restart or crash does not light a blacked-out room,
+  the next start, so a restart or crash does not light a blacked-out room
+  (a held look the setup no longer has is let go of when the setup is kept
+  and at start, as look ids are reused),
   and tells the lights thread what the show did: after every show change and
   every tick of the show thread it queues the cues of the change's effects,
   then the stage, slide and buzz, only when they changed. Sending is a
   channel push; the show thread never waits.
 - The Director's Lights tab (`app/src/director/LightsTab.tsx`, changes as
   pure functions in `lights.ts`) keeps a change 400 ms after the last one
-  and polls the universe for its preview four times a second.
+  and polls the universe for its preview four times a second. Before it
+  offers to remove a fixture it asks `lights_check_change`, which judges
+  the change against the setup kept, as `lights_store` will.
 
 ### 7.2 Lights thread
 

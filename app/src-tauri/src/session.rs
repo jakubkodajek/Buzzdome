@@ -172,11 +172,6 @@ impl Session {
             file.set_len(kept)?;
             file.sync_data()?;
         }
-        // Resumed, an ended show is no longer done with.
-        match fs::remove_file(dir.join(ENDED_FILE)) {
-            Err(e) if e.kind() != io::ErrorKind::NotFound => app_log::note(&format!("the end mark of {} stays: {e}", dir.display())),
-            _ => {}
-        }
         let session = Session { dir, journal: file, len: kept, broken: false };
         Ok(Some(Resumed { session, quiz, journal, meta }))
     }
@@ -192,6 +187,17 @@ impl Session {
             game.as_ref().is_some_and(Game::is_over).then_some(ShowFinish::PlayedOut)
         };
         Ok(Some(SessionSummary { meta, command_count: journal.len(), finished, position: game.as_ref().map(Game::position) }))
+    }
+
+    /// The show resumed (`resume_latest`, then its recovery journaled): an
+    /// ended show is no longer done with, so its end mark goes. Only once
+    /// the resume worked, so one that failed leaves the show ended and the
+    /// next start does not ask to give it up.
+    pub fn resumed(&self) {
+        match fs::remove_file(self.dir.join(ENDED_FILE)) {
+            Err(e) if e.kind() != io::ErrorKind::NotFound => app_log::note(&format!("the end mark of {} stays: {e}", self.dir.display())),
+            _ => {}
+        }
     }
 
     /// The quizmaster ended the show (End show): marked on disk, so the
@@ -662,6 +668,8 @@ mod tests {
         resumed.session.end().unwrap();
         assert_eq!(summary().finished, Some(ShowFinish::Ended));
         let mut resumed = Session::resume_latest(&root).unwrap().unwrap();
+        assert_eq!(summary().finished, Some(ShowFinish::Ended), "not resumed until the resume worked");
+        resumed.session.resumed();
         assert_eq!(summary().finished, None, "resumed, it runs again");
         // A quiz of no slides: Next opens the final ranking, whose steps end the show.
         for at_ms in 10..10 + u64::from(quiz_core::game::FINAL_LAST_STEP) {

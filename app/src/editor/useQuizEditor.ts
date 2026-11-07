@@ -114,7 +114,7 @@ export function useQuizEditor(onTestRun: () => void): QuizEditor {
   useEffect(() => {
     if (!draftId || !present || present === written.current) return;
     written.current = present;
-    drafts.write(draftId, present, unsaved, (problems) => dispatch({ type: "checked", quiz: present, problems }));
+    drafts.write(draftId, present, unsaved, (checked) => dispatch({ type: "checked", quiz: present, ...checked }));
   }, [draftId, present, unsaved]);
 
   /**
@@ -146,9 +146,12 @@ export function useQuizEditor(onTestRun: () => void): QuizEditor {
   const saveWith = async (draftApi: DraftApi, saveAs: boolean) => {
     if (!open) return false;
     const quiz = open.history.present;
+    // Typing on while the file is written starts a step of its own, so one step is the quiz as saved.
+    dispatch({ type: "closeStep" });
     const picker = quizPicker(t, quizName(t, quiz));
     const saved = await draftApi.editorSave(open.draftId, quiz, saveAs, picker);
     if (saved === null) return false;
+    drafts.saved(open.draftId, quiz);
     dispatch({ type: "saved", quiz, ...saved });
     readRecentFiles();
     return true;

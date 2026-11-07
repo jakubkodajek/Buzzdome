@@ -38,6 +38,30 @@ struct Live {
     hold: Option<LookId>,
 }
 
+impl Live {
+    /// Lets go of a held look that `setup` lacks, as the lights do
+    /// (`Desk::set_setup`): look ids are reused, so a deleted look's id
+    /// may later name another one. Whether it let go.
+    fn fit(&mut self, setup: &LightsSetup) -> bool {
+        let gone = self.hold.is_some_and(|id| setup.look(id).is_none());
+        if gone {
+            self.hold = None;
+        }
+        gone
+    }
+
+    /// Lets go of a held look `setup` lacks (`fit`) and keeps that in
+    /// `file`; one that cannot be written is noted only, as the next start
+    /// lets go of the look again.
+    fn fit_and_keep(&mut self, setup: &LightsSetup, file: &AppFile) {
+        if self.fit(setup) {
+            if let Err(e) = file.store(&*self) {
+                app_log::note(&format!("a held look that is gone is still kept: {e}"));
+            }
+        }
+    }
+}
+
 pub struct StageLights {
     lights: Lights,
     file: AppFile,
@@ -78,10 +102,11 @@ impl StageLights {
             }
         };
         let lights = Lights::start(setup.clone(), now_ms, lights::engine::Openers::default(), notify);
-        let (live_file, live) = AppFile::load::<Live>(live_path);
+        let (live_file, mut live) = AppFile::load::<Live>(live_path);
         if let Some(lost) = live_file.lost() {
             app_log::note(&format!("lights blackout and hold not read: {} (kept as {:?})", lost.detail, lost.kept_as));
         }
+        live.fit_and_keep(&setup, &live_file);
         lights.send(Control::Hold(live.hold));
         lights.send(Control::Blackout(live.blackout));
         StageLights {
@@ -120,6 +145,12 @@ impl StageLights {
             self.lights.send(Control::Signal(signal));
         }
         *told = moment;
+    }
+
+    /// Refuses `setup` as a change from the setup kept
+    /// (`LightsSetup::check_change`).
+    fn check_change(&self, setup: &LightsSetup) -> CmdResult<()> {
+        setup.check_change(&self.setup.lock().unwrap()).map_err(|refused| AppError::LightsRefused { refused })
     }
 
     fn cue(&self, cue: Cue) {
@@ -184,7 +215,8 @@ pub fn lights_info(state: State<StageLights>) -> LightsInfo {
 }
 
 /// Checks `setup`, also as a change from the one kept
-/// (`LightsSetup::check_change`), keeps it, then gives it to the lights.
+/// (`LightsSetup::check_change`), keeps it, then gives it to the lights;
+/// a held look it lacks is let go of (`Live::fit`).
 /// Off the windows' thread (`off_ui`): a disk that does not answer freezes
 /// no window.
 #[tauri::command]
@@ -193,14 +225,24 @@ pub async fn lights_store(app: AppHandle, setup: LightsSetup) -> CmdResult<()> {
     off_ui(move || {
         let state = app.state::<StageLights>();
         let _storing = state.storing.lock().unwrap();
-        setup.check_change(&state.setup.lock().unwrap()).map_err(|refused| AppError::LightsRefused { refused })?;
+        state.check_change(&setup)?;
         state.file.store(&setup)?;
         *state.setup.lock().unwrap() = setup.clone();
         *state.refused.lock().unwrap() = None;
+        state.live.lock().unwrap().fit_and_keep(&setup, &state.live_file);
         state.lights.send(Control::Setup(setup));
         Ok(())
     })
     .await
+}
+
+/// Whether `lights_store` would refuse `setup` as a change from the setup
+/// kept (`LightsSetup::check_change`), keeping nothing: the Director asks
+/// before it offers to remove a fixture. The setup's other checks are the
+/// store's, so a refused host does not stop a removal.
+#[tauri::command]
+pub fn lights_check_change(state: State<StageLights>, setup: LightsSetup) -> CmdResult<()> {
+    state.check_change(&setup)
 }
 
 /// Lists the interfaces and MIDI outputs; asking the system can take a while.
@@ -250,6 +292,27 @@ mod tests {
         assert_eq!(serde_json::from_str::<Live>(&serde_json::to_string(&live).unwrap()).unwrap(), live);
         assert_eq!(serde_json::from_str::<Live>("{}").unwrap(), Live::default());
         assert_eq!(Live::default(), Live { blackout: false, hold: None });
+    }
+
+    #[test]
+    fn a_held_look_the_setup_lacks_is_let_go_of() {
+        let mut setup = LightsSetup::default();
+        let first = setup.looks[0].id;
+        let mut live = Live { blackout: true, hold: Some(first) };
+        assert!(!live.fit(&setup), "the look is there");
+        assert_eq!(live.hold, Some(first));
+        setup.looks.remove(0);
+        assert!(live.fit(&setup));
+        assert_eq!(live, Live { blackout: true, hold: None });
+        assert!(!live.fit(&setup), "nothing held");
+        // Kept, so a restart does not hold it again.
+        let path = std::env::temp_dir().join(format!("lights-live-fit-{}.json", std::process::id()));
+        let (file, mut kept) = AppFile::load::<Live>(path.clone());
+        kept.hold = Some(first);
+        file.store(&kept).unwrap();
+        kept.fit_and_keep(&setup, &file);
+        assert_eq!(AppFile::load::<Live>(path.clone()).1, Live::default());
+        std::fs::remove_file(path).unwrap();
     }
 
     #[test]

@@ -4,7 +4,7 @@
 
 import type { api } from "../api";
 import { isAppError } from "../messages";
-import type { EditorDraft, Quiz, ValidationError } from "../types";
+import type { Checked, EditorDraft, Quiz } from "../types";
 import { DraftQueue } from "./draft-queue";
 
 /** The backend's draft commands; a test stands in for them. */
@@ -42,7 +42,7 @@ interface Write {
   draft: string;
   quiz: Quiz;
   unsaved: boolean;
-  checked: (problems: ValidationError[]) => void;
+  checked: (checked: Checked) => void;
 }
 
 /**
@@ -152,11 +152,24 @@ export class DraftSession {
    * or a later one works; one for a draft that another has replaced is let
    * go, but not one for the open draft: its change is not in the draft.
    */
-  write(draft: string, quiz: Quiz, unsaved: boolean, checked: (problems: ValidationError[]) => void): void {
+  write(draft: string, quiz: Quiz, unsaved: boolean, checked: (checked: Checked) => void): void {
     this.cancelRetry();
     const write = { draft, quiz, unsaved, checked };
     this.latest = write;
     this.queue.push(write);
+  }
+
+  /**
+   * The draft `draft` was saved with `quiz` (inside the save's `exclusive`,
+   * so no write has run since). A change of that quiz still waiting to be
+   * tried again is in the file now: it is written as saved instead, as a
+   * retry with its old `unsaved` would mark the saved quiz unsaved again. A
+   * later change is not saved and stays as it is.
+   */
+  saved(draft: string, quiz: Quiz): void {
+    const pending = this.latest;
+    if (pending?.draft !== draft || pending.quiz !== quiz || this.status.notWritten === null) return;
+    this.write(draft, quiz, false, pending.checked);
   }
 
   private async store(write: Write): Promise<void> {

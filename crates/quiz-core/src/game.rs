@@ -1075,9 +1075,10 @@ impl Game {
     fn next_step(&self) -> Option<NextStep> {
         if self.next_leaves_slide() {
             let following = self.following()?;
+            // A quiz of no slides goes from its lobby to the final ranking.
             return Some(match self.phase {
-                Phase::Lobby => NextStep::StartQuiz,
                 _ if following == self.quiz.slides.len() => NextStep::FinalRanking,
+                Phase::Lobby => NextStep::StartQuiz,
                 _ => NextStep::NextSlide,
             });
         }

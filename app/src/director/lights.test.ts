@@ -14,7 +14,6 @@ import {
   outputOfKind,
   overlapping,
   parseChannelValues,
-  lookLosingFixtures,
   removeFixture,
   removeLook,
   tickLookFixture,
@@ -63,17 +62,6 @@ describe("lights setup", () => {
     setup = { ...setup, looks: [{ ...setup.looks[0], fixtures: [1, 2] }] };
     expect(removeFixture(setup, 1).looks[0].fixtures).toEqual([2]);
     expect(changeFixture(setup, 2, { address: 100 }).fixtures[1].address).toBe(100);
-  });
-
-  it("finds the look that removing a fixture would leave lighting every fixture", () => {
-    let setup = addLook(addLook(addFixture(addFixture(empty, "A", rgb), "B", rgb), "Only B"), "All");
-    setup = { ...setup, looks: [{ ...setup.looks[0], fixtures: [2] }, setup.looks[1]] };
-    expect(lookLosingFixtures(setup, 2)?.name).toBe("Only B");
-    // Fixture A is in no list, and a look that lists none lights every fixture anyway.
-    expect(lookLosingFixtures(setup, 1)).toBeUndefined();
-    // Another fixture still listed keeps the look as it is.
-    setup = { ...setup, looks: [{ ...setup.looks[0], fixtures: [1, 2] }, setup.looks[1]] };
-    expect(lookLosingFixtures(setup, 2)).toBeUndefined();
   });
 
   it("ticks a look's fixtures as they show, never flipping to every fixture", () => {

@@ -66,12 +66,25 @@ impl UnkeptEdits {
     /// the whole quiz, so an earlier failure is mended; one of a quiz the
     /// file has already loses nothing.
     fn end(&self, draft: &str, unsaved: bool, kept: bool) {
+        self.change(draft, |unkept| {
+            if unsaved {
+                unkept.writing = unkept.writing.saturating_sub(1);
+            }
+            unkept.failed = unsaved && !kept;
+        });
+    }
+
+    /// The draft `draft` was saved whole, so the changes of a write that
+    /// failed are in its file; writes under way still count.
+    fn saved(&self, draft: &str) {
+        self.change(draft, |unkept| unkept.failed = false);
+    }
+
+    /// Changes what `draft` has unkept, forgetting it once nothing is.
+    fn change(&self, draft: &str, change: impl FnOnce(&mut Unkept)) {
         let mut drafts = self.0.lock().unwrap();
         let unkept = drafts.entry(draft.to_owned()).or_default();
-        if unsaved {
-            unkept.writing = unkept.writing.saturating_sub(1);
-        }
-        unkept.failed = unsaved && !kept;
+        change(unkept);
         if *unkept == Unkept::default() {
             drafts.remove(draft);
         }
@@ -114,12 +127,26 @@ pub struct EditorDraft {
     pub unsaved: bool,
     /// Folder of the draft's media, ending with a path separator.
     pub media_root: String,
-    /// What keeps it from being saved or played, then its warnings
-    /// (`Problem::is_warning`), which never do (`checked`).
-    pub problems: Vec<ValidationError>,
+    /// What keeps it from being saved or played, and its warnings (`checked`).
+    #[serde(flatten)]
+    #[ts(flatten)]
+    pub checked: Checked,
     /// What the file has that the quiz cannot keep (`quiz_core::ReadQuiz`),
     /// so saving leaves it out.
     pub dropped: Vec<ValidationError>,
+}
+
+/// What the editor shows of a quiz (`checked`), told apart by the backend
+/// so the editor never decides which problem is a warning.
+#[derive(Debug, PartialEq, Serialize, TS)]
+#[ts(export)]
+#[serde(rename_all = "camelCase")]
+pub struct Checked {
+    /// What keeps it from being saved or played (`quiz_file::problems`).
+    pub problems: Vec<ValidationError>,
+    /// What looks unfinished but plays (`Quiz::warnings`), which keeps it
+    /// from nothing.
+    pub warnings: Vec<ValidationError>,
 }
 
 /// Where `editor_save` saved the draft.
@@ -287,18 +314,16 @@ fn new_draft_folder(dir: &Path) -> CmdResult<(String, PathBuf)> {
 }
 
 /// What the editor shows of the quiz in `root`: what keeps it from being
-/// saved or played (`quiz_file::problems`), then what looks unfinished
+/// saved or played (`quiz_file::problems`), and what looks unfinished
 /// (`Quiz::warnings`), which keeps it from nothing.
-fn checked(quiz: &Quiz, root: &Path) -> Vec<ValidationError> {
-    let mut found = quiz_file::problems(quiz, root);
-    found.extend(quiz.warnings());
-    found
+fn checked(quiz: &Quiz, root: &Path) -> Checked {
+    Checked { problems: quiz_file::problems(quiz, root), warnings: quiz.warnings() }
 }
 
 /// Describes the draft in `root` for the editor.
 fn describe(root: &Path, pointer: Pointer, quiz: Quiz) -> EditorDraft {
     EditorDraft {
-        problems: checked(&quiz, root),
+        checked: checked(&quiz, root),
         id: pointer.folder,
         quiz,
         saves_in_place: pointer.source_path.as_deref().is_some_and(|source| is_quiz_file(Path::new(source))),
@@ -367,11 +392,11 @@ pub async fn editor_open(app: AppHandle, window: Window, recent: Option<String>,
 }
 
 /// Stores the edited quiz in the draft `draft` and returns what keeps it
-/// from being played, then its warnings (`checked`). `unsaved` tells whether it differs from the saved
+/// from being played, and its warnings (`checked`). `unsaved` tells whether it differs from the saved
 /// file; until such a change is written, closing the app asks
 /// (`UnkeptEdits`).
 #[tauri::command]
-pub async fn editor_update(app: AppHandle, draft: String, quiz: Quiz, unsaved: bool) -> CmdResult<Vec<ValidationError>> {
+pub async fn editor_update(app: AppHandle, draft: String, quiz: Quiz, unsaved: bool) -> CmdResult<Checked> {
     let unkept = app.state::<UnkeptEdits>();
     unkept.begin(&draft, unsaved);
     let written = on_draft(app.clone(), draft.clone(), move |_, dir, root, pointer| {
@@ -390,6 +415,7 @@ pub async fn editor_update(app: AppHandle, draft: String, quiz: Quiz, unsaved: b
 /// the quiz file it came from, unless `save_as`, else where the quizmaster
 /// picks (none when they cancel; a plain JSON quiz is never written over).
 /// Gives the file's path and whether Save writes over it from now on.
+/// A write of the draft that failed is mended by it (`UnkeptEdits::saved`).
 /// Refused during a show (`refuse_during_show`).
 #[tauri::command]
 pub async fn editor_save(app: AppHandle, window: Window, draft: String, quiz: Quiz, save_as: bool, picker: Picker) -> CmdResult<Option<SavedDraft>> {
@@ -401,7 +427,7 @@ pub async fn editor_save(app: AppHandle, window: Window, draft: String, quiz: Qu
             None => return Ok(None),
         },
     };
-    on_draft(app, draft, move |app, dir, root, pointer| {
+    let saved = on_draft(app.clone(), draft.clone(), move |app, dir, root, pointer| {
         refuse_during_show(app)?;
         quiz_file::write_quiz_json(&root, &quiz)?;
         quiz_file::save(&quiz, &root, &path)?;
@@ -410,7 +436,9 @@ pub async fn editor_save(app: AppHandle, window: Window, draft: String, quiz: Qu
         app.state::<RecentFiles>().remember(&saved);
         Ok(Some(SavedDraft { saves_in_place: is_quiz_file(&path), path: saved }))
     })
-    .await
+    .await?;
+    app.state::<UnkeptEdits>().saved(&draft);
+    Ok(saved)
 }
 
 /// Whether `path` names a quiz file (not a plain JSON quiz).
@@ -526,6 +554,24 @@ mod tests {
     }
 
     #[test]
+    fn the_editor_is_told_warnings_apart_from_problems() {
+        let root = editor_dir("checked");
+        let empty = Quiz::new("Quiz", Vec::new());
+        assert_eq!(checked(&empty, &root), Checked { problems: Vec::new(), warnings: empty.warnings() });
+        let mut quiz = Quiz::from_json(crate::DEMO_QUIZ).unwrap();
+        let question = quiz.slides.iter_mut().find(|slide| matches!(slide.content, quiz_core::SlideContent::Question(_))).unwrap();
+        question.picture = Some("media/gone.png".into());
+        if let quiz_core::SlideContent::Question(question) = &mut question.content {
+            question.text.clear();
+        }
+        let found = checked(&quiz, &root);
+        assert!(!found.problems.is_empty() && !found.warnings.is_empty(), "{found:?}");
+        assert!(found.problems.iter().all(|found| !found.problem.is_warning()), "{found:?}");
+        assert!(found.warnings.iter().all(|found| found.problem.is_warning()), "{found:?}");
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
     fn a_change_not_kept_yet_counts_as_unsaved_until_a_later_write_works() {
         let unkept = UnkeptEdits::default();
         assert!(!unkept.has("draft-1"));
@@ -559,6 +605,19 @@ mod tests {
         assert!(unkept.has("draft-1"), "the second is still under way");
         unkept.end("draft-1", true, true);
         assert!(!unkept.has("draft-1"));
+        // A failed write, then the quiz is saved: its changes are in the file.
+        unkept.begin("draft-1", true);
+        unkept.end("draft-1", true, false);
+        unkept.saved("draft-1");
+        assert!(!unkept.has("draft-1"), "saved");
+        // A write under way when the save ends still counts.
+        unkept.begin("draft-1", true);
+        unkept.saved("draft-1");
+        assert!(unkept.has("draft-1"), "still under way");
+        unkept.end("draft-1", true, true);
+        assert!(!unkept.has("draft-1"));
+        unkept.saved("draft-2");
+        assert!(!unkept.has("draft-2"), "nothing to forget");
     }
 
     #[test]

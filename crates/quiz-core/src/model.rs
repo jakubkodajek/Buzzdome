@@ -638,7 +638,6 @@ impl Problem {
         matches!(self, Problem::NoSlides | Problem::QuestionTextEmpty | Problem::AnswerEmpty { .. })
     }
 
-
     /// Whether a show refuses the quiz for it. A show reads only the
     /// slides: a category's look and background were copied onto its
     /// slides when it was applied, so a category's problems only keep the

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type MouseEvent } from "react";
+import { useEffect, useRef, useState, type FocusEvent, type MouseEvent } from "react";
 import { useApp } from "../app-context";
 import { SlideThumbnail } from "../host/SlideThumbnail";
 import { AddIcon, ExclamationIcon } from "../icons";
@@ -16,7 +16,7 @@ interface ThumbnailsProps {
   selected: ReadonlySet<string>;
   /** Slide ids with problems to fix. */
   problems: ReadonlySet<string>;
-  /** Slide ids with warnings only (`splitProblems`), badged more mildly. */
+  /** Slide ids with warnings only (`Checked::warnings`), badged more mildly. */
   warnings: ReadonlySet<string>;
   /** A click on a slide, with Ctrl (Cmd) or Shift held or not. */
   onSelect: (index: number, keys: { ctrl: boolean; shift: boolean }) => void;
@@ -32,18 +32,34 @@ interface ThumbnailsProps {
 /**
  * A list's current item (a slide, a category) in sight and its one Tab stop
  * (a roving tab stop); while the list has the focus, the focus goes with it
- * as the arrow keys move it, so the menu key and Enter act on it.
+ * as the arrow keys move it, so the menu key and Enter act on it. An item
+ * deleted with the focus leaves it on the page, so the current item after
+ * it takes the focus then too.
  */
 export function useCurrentItem(current: number) {
   const currentItem = useRef<HTMLLIElement>(null);
+  // The current item as last shown, to act once each time it changes.
+  const shown = useRef<{ element: HTMLLIElement; current: number } | null>(null);
+  // The item that had the focus last, until the focus went to another control.
+  const focusedItem = useRef<HTMLLIElement | null>(null);
   useEffect(() => {
     const element = currentItem.current;
-    if (!element) return;
+    if (!element || (shown.current?.element === element && shown.current.current === current)) return;
+    shown.current = { element, current };
     element.scrollIntoView({ block: "nearest" });
     const focused = document.activeElement;
-    if (focused !== element && focused instanceof HTMLLIElement && element.parentElement?.contains(focused)) element.focus();
-  }, [current]);
-  return (i: number) => ({ ref: i === current ? currentItem : undefined, tabIndex: i === current ? 0 : -1 });
+    const inList = focused instanceof HTMLLIElement && element.parentElement?.contains(focused);
+    const lostWithItem = focused === document.body && focusedItem.current !== null && !focusedItem.current.isConnected;
+    if (focused !== element && (inList || lostWithItem)) element.focus();
+  });
+  return (i: number) => ({
+    ref: i === current ? currentItem : undefined,
+    tabIndex: i === current ? 0 : -1,
+    onFocus: (e: FocusEvent<HTMLLIElement>) => (focusedItem.current = e.currentTarget),
+    onBlur: (e: FocusEvent<HTMLLIElement>) => {
+      if (e.relatedTarget) focusedItem.current = null;
+    },
+  });
 }
 
 /** The slides down the left side: click to select (Ctrl or Shift for several), drag to reorder. */

@@ -29,12 +29,16 @@ unsaved: boolean,
  */
 mediaRoot: string, 
 /**
- * What keeps it from being saved or played, then its warnings
- * (`Problem::is_warning`), which never do (`checked`).
- */
-problems: Array<ValidationError>, 
-/**
  * What the file has that the quiz cannot keep (`quiz_core::ReadQuiz`),
  * so saving leaves it out.
  */
-dropped: Array<ValidationError>, };
+dropped: Array<ValidationError>, 
+/**
+ * What keeps it from being saved or played (`quiz_file::problems`).
+ */
+problems: Array<ValidationError>, 
+/**
+ * What looks unfinished but plays (`Quiz::warnings`), which keeps it
+ * from nothing.
+ */
+warnings: Array<ValidationError>, };
