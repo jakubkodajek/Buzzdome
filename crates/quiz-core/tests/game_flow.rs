@@ -825,6 +825,10 @@ fn next_does_what_its_button_names_on_the_welcome_screen_in_the_final_ranking_an
     assert!(!show.game.controls().next);
     assert_eq!(show.run(at_ms, Command::Next), Err(GameError::NotNow));
 
+    // A quiz of no slides (a warning): its lobby's Next opens the final ranking.
+    let mut show = Show::new(Vec::new());
+    assert_eq!(next_as_named(&mut show, 1_000), NextStep::FinalRanking, "the lobby of a quiz of no slides");
+
     // While a buzz waits to be judged Next is not offered, and refused.
     let mut show = Show::new(vec![question("q1", AnswerMode::FastestFinger)]);
     show.press(0, 1, Button::Big);

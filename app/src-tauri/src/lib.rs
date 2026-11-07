@@ -616,6 +616,7 @@ fn resume_show(root: &Path, at_ms: u64, media_folders: &[PathBuf]) -> CmdResult<
         warnings.extend(recovery_warning(&command, game.slide_index()));
         (game, effects) = apply_and_journal(&game, Some(&mut session), &Stamped { at_ms, command })?;
     }
+    session.resumed();
     Ok(ResumedShow { game, session, media_root: media_root.filter(|root| root.is_dir()), effects, warnings })
 }
 

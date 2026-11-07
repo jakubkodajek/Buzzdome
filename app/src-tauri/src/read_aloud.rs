@@ -386,7 +386,8 @@ fn download(archive: &Path, mut progress: impl FnMut(VoiceDownload), go_on: impl
         let going = go_on();
         stopped.store(!going, Ordering::Relaxed);
         going
-    });
+    })
+    .map_err(|e| failed(e.to_string()))?;
     let mut last = Instant::now();
     let total = MODEL.bytes;
     let sha = voice::model::receive(body, std::io::BufWriter::new(&file), |received| {
@@ -407,10 +408,11 @@ fn download(archive: &Path, mut progress: impl FnMut(VoiceDownload), go_on: impl
 /// venue's network dropped) does not keep the download from stopping:
 /// while no data comes, `go_on` is asked every `every`, and once it says
 /// stop the read fails at once. The thread then ends with its read, at the
-/// latest when the agent's timeout ends it.
-fn unstalled<'a>(mut from: impl Read + Send + 'static, every: Duration, go_on: impl FnMut() -> bool + 'a) -> impl Read + 'a {
+/// latest when the agent's timeout ends it. Fails when the system gives no
+/// thread.
+fn unstalled<'a>(mut from: impl Read + Send + 'static, every: Duration, go_on: impl FnMut() -> bool + 'a) -> std::io::Result<impl Read + 'a> {
     let (chunks, received) = mpsc::sync_channel::<std::io::Result<Vec<u8>>>(4);
-    thread::spawn(move || {
+    thread::Builder::new().name("voice-download".into()).spawn(move || {
         let mut buffer = vec![0u8; 1 << 16];
         loop {
             let read = from.read(&mut buffer).map(|n| buffer[..n].to_vec());
@@ -420,8 +422,8 @@ fn unstalled<'a>(mut from: impl Read + Send + 'static, every: Duration, go_on: i
                 return;
             }
         }
-    });
-    Unstalled { received, pending: std::io::Cursor::new(Vec::new()), every, go_on }
+    })?;
+    Ok(Unstalled { received, pending: std::io::Cursor::new(Vec::new()), every, go_on })
 }
 
 /// The reading end of `unstalled`.
@@ -542,7 +544,8 @@ mod tests {
         let mut body = unstalled(Stalls { first: Some(b"abc".to_vec()), hold }, Duration::from_millis(10), || {
             asked.set(asked.get() + 1);
             asked.get() < 3
-        });
+        })
+        .unwrap();
         let mut got = [0u8; 8];
         assert_eq!(body.read(&mut got).unwrap(), 3);
         assert_eq!(&got[..3], b"abc");
@@ -556,7 +559,7 @@ mod tests {
     #[test]
     fn an_unstalled_read_passes_everything_on_to_the_end() {
         let data: Vec<u8> = (0..200_000u32).map(|i| i as u8).collect();
-        let mut body = unstalled(std::io::Cursor::new(data.clone()), Duration::from_millis(10), || true);
+        let mut body = unstalled(std::io::Cursor::new(data.clone()), Duration::from_millis(10), || true).unwrap();
         let mut got = Vec::new();
         body.read_to_end(&mut got).unwrap();
         assert_eq!(got, data);
