@@ -38,7 +38,10 @@ export interface QuizEditor {
    * nothing was opened.
    */
   openQuiz: (recent?: string) => Promise<EditorDraft | false>;
-  /** Quiz files opened, saved or played lately, newest first. */
+  /**
+   * Quiz files opened, saved or played lately, newest first; not the one
+   * open, which opening again would reload and so lose its undo.
+   */
   recentFiles: string[];
   /** Takes a file off `recentFiles`; the file itself stays where it is. */
   forgetRecentFile: (path: string) => void;
@@ -191,7 +194,7 @@ export function useQuizEditor(onTestRun: () => void): QuizEditor {
         load(draft);
         return draft;
       }),
-    recentFiles,
+    recentFiles: recentFiles.filter((path) => path !== open?.sourcePath),
     forgetRecentFile: (path) => void forgetRecentFile(path).catch(report.current),
     save: () => save(false),
     saveAs: () => save(true),

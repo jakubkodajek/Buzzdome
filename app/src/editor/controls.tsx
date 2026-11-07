@@ -262,8 +262,10 @@ function tabStops(box: HTMLElement): HTMLElement[] {
  * A dialog over the window. Escape, the close button and the footer's
  * Cancel (a `footer` given as a function of it) cancel it; while `dirty`
  * they ask first and a click beside the dialog does nothing, so nothing
- * typed is lost by mistake. The focus stays inside while it is open, and
- * goes back where it was once it closes.
+ * typed is lost by mistake. With `staysOpen`, a click beside it never
+ * closes it, for a dialog whose Cancel leaves more than the dialog. The
+ * focus stays inside while it is open, and goes back where it was once it
+ * closes.
  */
 export function Dialog(props: {
   title: string;
@@ -272,8 +274,9 @@ export function Dialog(props: {
   footer: ReactNode | ((cancel: () => void) => ReactNode);
   className?: string;
   dirty?: boolean;
+  staysOpen?: boolean;
 }) {
-  const { title, onClose, children, footer, className, dirty = false } = props;
+  const { title, onClose, children, footer, className, dirty = false, staysOpen = false } = props;
   const { t } = useApp();
   const box = useRef<HTMLDivElement>(null);
   // Read while rendering, before anything inside takes the focus.
@@ -305,7 +308,7 @@ export function Dialog(props: {
     };
   }, [cancel, opener]);
   return (
-    <div className="dialog-backdrop" onMouseDown={(e) => e.target === e.currentTarget && !dirty && onClose()}>
+    <div className="dialog-backdrop" onMouseDown={(e) => e.target === e.currentTarget && !dirty && !staysOpen && onClose()}>
       <div
         ref={box}
         className={className ? `dialog ${className}` : "dialog"}

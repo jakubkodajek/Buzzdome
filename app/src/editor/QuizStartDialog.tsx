@@ -31,9 +31,10 @@ export function QuizStartDialog(props: StartChoices & { open: OpenQuiz | null; u
     <Dialog
       title={t("quizEditor")}
       className="quiz-start-dialog"
+      staysOpen
       onClose={onCancel}
       footer={
-        <button type="button" onClick={onCancel}>
+        <button type="button" disabled={busy} onClick={onCancel}>
           {t("cancel")}
         </button>
       }
@@ -84,9 +85,10 @@ export function NewQuizDialog({ onNew, onCancel, busy }: { onNew: (title: string
     <Dialog
       title={t("newQuizHeading")}
       className="quiz-start-dialog"
+      staysOpen
       onClose={onCancel}
       footer={
-        <button type="button" onClick={onCancel}>
+        <button type="button" disabled={busy} onClick={onCancel}>
           {t("cancel")}
         </button>
       }
