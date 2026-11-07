@@ -320,6 +320,9 @@ function Studio({ editor, open, ask, onExit }: { editor: QuizEditor; open: OpenQ
         : t("noCategories")
       : `${slide ? t("slide", { n: index + 1, total: slides.length }) : t("noSlideSelected")}${several ? ` · ${t("slidesSelected", { n: selected.length })}` : ""}`;
   const sameCategory = slide?.category !== undefined && selectedSlides.every((s) => s.category === slide.category);
+  // The picture, video or sound tab shows only while one is selected, and goes back to HOME once none is.
+  const ribbonElement = view === "categories" ? categories.element : element;
+  if (tab === "media" && !isMediaElement(ribbonElement)) setTab("home");
 
   return (
     <MediaRootContext value={open?.mediaRoot ?? null}>
@@ -387,7 +390,7 @@ function Studio({ editor, open, ask, onExit }: { editor: QuizEditor; open: OpenQ
                   actions={actions}
                   onGallery={(button) => setGallery({ x: button.left, y: button.bottom })}
                   slide={slide}
-                  element={view === "categories" ? categories.element : element}
+                  element={ribbonElement}
                   properties={properties}
                   timer={timer}
                   mixed={shared.mixed}

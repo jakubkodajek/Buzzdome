@@ -394,8 +394,30 @@ export function Popup(props: { x: number; y: number; onClose: () => void; classN
   );
 }
 
-/** A context menu of actions at a point of the window. */
+/** The keys that move through a menu's items, to where they go from item `at` of `count`. */
+const MENU_KEYS: Record<string, (at: number, count: number) => number> = {
+  ArrowDown: (at, count) => (at + 1) % count,
+  ArrowUp: (at, count) => (at - 1 + count) % count,
+  Home: () => 0,
+  End: (_, count) => count - 1,
+};
+
+/** Moves the focus through the enabled items of the menu `item` is in, as `key` says; whether it was a menu key. */
+function moveInMenu(item: HTMLElement, key: string): boolean {
+  const to = MENU_KEYS[key];
+  const menu = item.parentElement;
+  if (!to || !menu) return false;
+  const items = [...menu.querySelectorAll<HTMLElement>("[role^=menuitem]:not(:disabled)")];
+  if (items.length > 0) items[to(items.indexOf(item), items.length)].focus();
+  return true;
+}
+
+/** A context menu of actions at a point of the window; the arrow keys, Home and End go through its items. */
 export function ContextMenu({ x, y, items, onClose }: { x: number; y: number; items: (Action | "separator")[]; onClose: () => void }) {
+  const first = useRef<HTMLButtonElement>(null);
+  const firstEnabled = items.findIndex((item) => item !== "separator" && !item.disabled);
+  // After the popup took the focus, so Enter runs the first item at once.
+  useEffect(() => first.current?.focus(), []);
   return (
     <Popup x={x} y={y} onClose={onClose} className="context-menu" role="menu">
       {items.map((item, i) =>
@@ -404,10 +426,14 @@ export function ContextMenu({ x, y, items, onClose }: { x: number; y: number; it
         ) : (
           <button
             key={i}
+            ref={i === firstEnabled ? first : undefined}
             type="button"
             role={item.checked === undefined ? "menuitem" : "menuitemcheckbox"}
             aria-checked={item.checked}
             disabled={item.disabled}
+            onKeyDown={(e) => {
+              if (moveInMenu(e.currentTarget, e.key)) e.preventDefault();
+            }}
             onClick={() => {
               onClose();
               item.run();
