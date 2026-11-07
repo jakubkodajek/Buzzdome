@@ -114,6 +114,26 @@ function players(overrides: Partial<PlayerView>[] = []): PlayerView[] {
   return list;
 }
 
+/** A team name as long as a name may be, for the projector's scenes with long names. */
+const LONG_NAME = "Hospodští géniové z Dolní Lhoty nad Vltavou a okolí, z.s.";
+
+/**
+ * A full event: `n` teams, ranked by falling score, the first `answeredBy`
+ * of them having answered, for the projector's scenes with many teams.
+ */
+function crowd(n: number, answeredBy = 0): PlayerView[] {
+  const [first] = players();
+  return Array.from({ length: n }, (_, i) => ({
+    ...first,
+    buzzer: i + 1,
+    name: i < NAMES.length ? NAMES[i] : `Tým ${i + 1}`,
+    score: 900 - i * 17,
+    totalAnswerMs: 30_000 + i * 900,
+    rank: i + 1,
+    answered: i < answeredBy,
+  }));
+}
+
 /** A song for the scenes with media: played on demand, its chorus only. */
 const SONG: SoundClip = {
   file: "media/song.mp3",
@@ -383,6 +403,53 @@ const SCENES: Record<string, GameView | null> = {
   }),
   brokenBackground: view({ phase: { phase: "billboard" }, slideIndex: 0, slide: { ...quiz.slides[0], background: { ...BACKGROUND, file: "media/missing.png" } } }),
   styled: view({ slide: { ...quiz.slides[1], style: STYLE } }),
+  // A full event: 50 buzzers registered, 46 of them still to answer, a ranking of 47 that pages.
+  crowdLobby: view({ phase: { phase: "lobby" }, slide: null, players: crowd(50) }),
+  crowd: view({
+    phase: { phase: "question", step: "running", clock: { limitMs: 20000, elapsedBeforeMs: 0, runningSinceMs: 0, pressesFromMs: 0 } },
+    clock: { limitMs: 20000, remainingMs: 4400, elapsedMs: 15600, running: true, points: 81 },
+    players: crowd(50, 4),
+    enabledCount: 50,
+    answeredCount: 4,
+    controls: { ...NO_CONTROLS, next: true, pauseClock: true, closeQuestion: true, restartQuestion: true },
+  }),
+  crowdLeaderboard: view({ phase: { phase: "endOfRound" }, slideIndex: 5, slide: { ...quiz.slides[5], title: "" } as Quiz["slides"][number], players: crowd(47) }),
+  crowdOverlay: view({ leaderboardVisible: true, players: crowd(47) }),
+  // Names and texts as long as they may be: the buzz bar, the podium, a question and answers that need smaller text.
+  longName: view({
+    phase: { phase: "question", step: "buzzed", buzzer: 1, button: "big", clock: { limitMs: 30000, elapsedBeforeMs: 4300, runningSinceMs: null, pressesFromMs: 0 } },
+    slideIndex: 7,
+    slide: quiz.slides[7],
+    clock: { limitMs: 30000, remainingMs: 25700, elapsedMs: 4300, running: false, points: 129 },
+    players: players([{ name: LONG_NAME, delta: 129 }]),
+    buzzed: 1,
+    buzzes: [{ buzzer: 1, button: "big", state: "answering" }],
+    controls: { ...NO_CONTROLS, judge: true, restartQuestion: true },
+  }),
+  longFinal: view({ phase: { phase: "final", step: 3 }, slideIndex: quiz.slides.length, slide: null, players: players([{ name: LONG_NAME }, { name: "Mozkovna, kterou nikdo nepřekoná" }]) }),
+  longQuestion: view({
+    phase: { phase: "question", step: "closed" },
+    slide: {
+      ...quiz.slides[1],
+      text: "Které město je hlavním městem Moravskoslezského kraje a zároveň třetím největším městem České republiky, hned po Praze a Brně?",
+      answers: ["Opava, historická metropole českého Slezska", "Ostrava", "Frýdek-Místek, dvojměstí na řece Ostravici", "Nový Jičín, město klobouků pod Beskydami a Frenštátu"],
+    } as Quiz["slides"][number],
+    players: players(answered),
+    answeredCount: 4,
+    answerCounts: [1, 2, 1, 0],
+    results: { right: 2, wrong: 2, none: 1 },
+  }),
+  // The answer revealed with the quiz set to keep it off the screen: no marks, no counts that give it away.
+  hiddenAnswer: view({
+    phase: { phase: "question", step: "revealed", winner: null },
+    results: { right: 2, wrong: 2, none: 1 },
+    players: players(answered.map((a, i) => ({ ...a, delta: [84, 80, 0, 0, 0][i] || null }))),
+    answeredCount: 4,
+    answerCounts: [1, 2, 1, 0],
+    settings: { ...DEFAULT_QUIZ_SETTINGS, hideAnswer: true },
+  }),
+  // A question's video whose file is missing: no empty frame where it would be.
+  brokenVideo: view({ slideIndex: 2, slide: { ...quiz.slides[2], video: { ...VIDEO, file: "media/missing.webm" } } }),
   styledBillboard: view({ phase: { phase: "billboard" }, slideIndex: 0, slide: { ...setBodyText(quiz.slides[0], "Zeměpis a historie"), style: STYLE } }),
 };
 
