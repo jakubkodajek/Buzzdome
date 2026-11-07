@@ -94,6 +94,7 @@ const COMMANDS: &[&str] = &[
     "update_install",
     "voice_model",
     "voice_install",
+    "voice_install_cancel",
     "voice_remove",
     "voice_clip",
 ];

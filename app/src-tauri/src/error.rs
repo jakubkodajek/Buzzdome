@@ -225,6 +225,9 @@ pub enum AppError {
     /// voices can be downloaded once the show ends.
     #[error("the voice model download stopped as a show began")]
     VoiceDownloadStopped,
+    /// The quizmaster cancelled the voice model download.
+    #[error("the voice model download was cancelled")]
+    VoiceDownloadCancelled,
     /// The voice model is not downloaded, so nothing can be rendered.
     #[error("the voice model is not downloaded")]
     VoiceMissing,

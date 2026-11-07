@@ -875,6 +875,7 @@ pub fn run() {
             updates::update_install,
             read_aloud::voice_model,
             read_aloud::voice_install,
+            read_aloud::voice_install_cancel,
             read_aloud::voice_remove,
             read_aloud::voice_clip,
         ])

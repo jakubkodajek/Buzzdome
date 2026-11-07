@@ -67,6 +67,8 @@ pub struct Voice {
     /// other is started until the model is installed again or removed, so
     /// a broken one is not loaded again for every question.
     broken: AtomicBool,
+    /// The quizmaster cancelled the download under way, which stops at its next progress report.
+    cancelled: AtomicBool,
 }
 
 /// Whether the voice model is there, for the settings and the check before a show.
@@ -96,7 +98,7 @@ impl Voice {
     }
 
     fn at(root: PathBuf, clips: PathBuf) -> Voice {
-        Voice { root, clips, installing: Mutex::new(()), process: Mutex::new(None), broken: AtomicBool::new(false) }
+        Voice { root, clips, installing: Mutex::new(()), process: Mutex::new(None), broken: AtomicBool::new(false), cancelled: AtomicBool::new(false) }
     }
 
     /// The folder the windows play clips from.
@@ -276,9 +278,14 @@ pub async fn voice_install(app: AppHandle, progress: Channel<VoiceDownload>) -> 
         }
         fs::create_dir_all(&state.root).map_err(|e| AppError::file(FileAction::CreateFolder, &state.root, e))?;
         let archive = state.root.join(format!("{}.download", MODEL.id));
+        state.cancelled.store(false, Ordering::SeqCst);
         let downloaded = download(&archive, |done| {
             let _ = progress.send(done);
-            refuse_during_show(&app).is_ok()
+            !state.cancelled.load(Ordering::SeqCst) && refuse_during_show(&app).is_ok()
+        })
+        .map_err(|e| match e {
+            AppError::VoiceDownloadStopped if state.cancelled.load(Ordering::SeqCst) => AppError::VoiceDownloadCancelled,
+            e => e,
         });
         // A show started after the last report: its journal keeps the disk,
         // and its clips the voice process. None starts while it unpacks.
@@ -293,6 +300,13 @@ pub async fn voice_install(app: AppHandle, progress: Channel<VoiceDownload>) -> 
         Ok(state.model())
     })
     .await
+}
+
+/// Cancels the voice model download under way, if one is: it stops at its
+/// next progress report and fails with `VoiceDownloadCancelled`.
+#[tauri::command]
+pub fn voice_install_cancel(app: AppHandle) {
+    app.state::<Voice>().cancelled.store(true, Ordering::SeqCst);
 }
 
 /// Marks the show state while the voice model is put in place, so that no

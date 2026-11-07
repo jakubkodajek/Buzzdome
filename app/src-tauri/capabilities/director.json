@@ -99,6 +99,7 @@
     "allow-update-install",
     "allow-voice-model",
     "allow-voice-install",
+    "allow-voice-install-cancel",
     "allow-voice-remove",
     "allow-voice-clip"
   ]

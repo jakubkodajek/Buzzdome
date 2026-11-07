@@ -203,6 +203,8 @@ export const api = {
     progress.onmessage = onProgress;
     return invoke<VoiceModel>("voice_install", { progress });
   },
+  /** Cancels the voice model download under way; `voiceInstall` then fails with `voiceDownloadCancelled`. */
+  voiceInstallCancel: () => invoke<void>("voice_install_cancel"),
   /** Removes the voice model and the clips made with it. */
   voiceRemove: () => invoke<VoiceModel>("voice_remove"),
   /** The path of the kept clip that says `line`; with `render`, rendered first when it is not kept (a few seconds). Null when there is nothing to say, or it is not kept and not to be rendered. */

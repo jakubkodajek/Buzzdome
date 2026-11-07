@@ -21,9 +21,9 @@ function whileBusy<T>(call: () => Promise<T>): Promise<T> {
   return call().finally(() => progress.set(undefined));
 }
 
-/** Whether the voices download stopped because a show began (`voice_install`). */
+/** Whether the voices download stopped because a show began or the quizmaster cancelled it (`voice_install`). */
 function downloadStopped(error: unknown): boolean {
-  return isAppError(error) && error.code === "voiceDownloadStopped";
+  return isAppError(error) && (error.code === "voiceDownloadStopped" || error.code === "voiceDownloadCancelled");
 }
 
 /**
@@ -70,6 +70,11 @@ export function VoicesSettings({ showRunning }: { showRunning: boolean }) {
         {model && !model.installed && (
           <button disabled={busy} onClick={install}>
             {t("voicesDownload")} ({diskSize(model.bytes)})
+          </button>
+        )}
+        {done && (
+          <button onClick={() => run(api.voiceInstallCancel())}>
+            {t("voicesCancel")}
           </button>
         )}
         {model?.installed && (

@@ -936,6 +936,7 @@ mockIPC(
       case "voice_install":
         return { installed: true, bytes: 128_774_318, voices: 10 };
       case "voice_clip":
+      case "voice_install_cancel":
         return null;
       case "lights_devices":
         return { outputs: [{ choice: { kind: "enttecPro", port: "COM4" }, label: "COM4 (FTDI)" }], midiPorts: ["loopMIDI Port"] };
