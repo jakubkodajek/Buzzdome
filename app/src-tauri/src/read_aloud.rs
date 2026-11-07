@@ -349,7 +349,7 @@ pub async fn voice_clip(app: AppHandle, line: Line, render: bool) -> CmdResult<O
 
 /// Downloads the model into `archive`, telling `progress` how far it got
 /// every `PROGRESS_EVERY`: the download's SHA-256. `progress` stops it by
-/// answering false, which fails it with `ShowRunning`.
+/// answering false, which fails it with `VoiceDownloadStopped`.
 fn download(archive: &Path, mut progress: impl FnMut(VoiceDownload) -> bool) -> CmdResult<String> {
     let failed = |detail: String| AppError::VoiceDownload { detail };
     let mut response = agent().get(MODEL.url).call().map_err(|e| failed(e.to_string()))?;
@@ -398,7 +398,7 @@ fn voice_error(e: voice::VoiceError) -> AppError {
         voice::VoiceError::Disk(detail) => AppError::VoiceDisk { detail },
         voice::VoiceError::Damaged => AppError::VoiceDamaged,
         // The app stops a download only for a show that began (`voice_install`).
-        voice::VoiceError::Stopped => AppError::ShowRunning,
+        voice::VoiceError::Stopped => AppError::VoiceDownloadStopped,
         voice::VoiceError::Load | voice::VoiceError::Render => AppError::VoiceFailed,
     }
 }

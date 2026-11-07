@@ -221,6 +221,10 @@ pub enum AppError {
     /// the archive does not have the model's files).
     #[error("the downloaded voice model is damaged")]
     VoiceDamaged,
+    /// A show began during the download, which stopped it (BF111): the
+    /// voices can be downloaded once the show ends.
+    #[error("the voice model download stopped as a show began")]
+    VoiceDownloadStopped,
     /// The voice model is not downloaded, so nothing can be rendered.
     #[error("the voice model is not downloaded")]
     VoiceMissing,
