@@ -11,16 +11,13 @@ export interface AutoStepBar {
 }
 
 /**
- * The bar of `view`'s coming step: the whole wait is the quiz's delay for
- * it (`QuizSettings`: after everyone answered, or after the reveal), and
- * never less than what is left, so a bar that comes in during the wait
- * starts part way down.
+ * The bar of `view`'s coming step: it runs over the whole wait the show
+ * gives it (`AutoStepView.totalMs`), never less than what is left, so a bar
+ * that comes in during the wait starts part way down.
  */
 export function autoStepBar(view: GameView): AutoStepBar | null {
   const step = view.autoStep;
   if (!step) return null;
-  const revealed = view.phase.phase === "question" && view.phase.step === "revealed";
-  const delayS = revealed ? view.settings.nextAfterRevealDelayS : view.settings.allAnsweredDelayS;
-  const totalMs = Math.max(delayS * 1000, step.inMs);
+  const totalMs = Math.max(step.totalMs, step.inMs);
   return { key: `${step.action}:${view.stepNo}`, totalMs, elapsedMs: totalMs - step.inMs };
 }

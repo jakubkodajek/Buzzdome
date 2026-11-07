@@ -1710,7 +1710,7 @@ fn once_everyone_answered_the_answer_is_shown_after_the_wait() {
     assert_eq!(show.game.due_command(3_500), None, "one player has yet to answer");
     show.press(4_000, 2, Button::A);
     assert_eq!(step(&show.game), QuestionStep::Closed);
-    assert_eq!(show.game.view(5_000).auto_step, Some(AutoStepView { action: AutoStep::Reveal, in_ms: 2_000 }));
+    assert_eq!(show.game.view(5_000).auto_step, Some(AutoStepView { action: AutoStep::Reveal, in_ms: 2_000, total_ms: 3_000 }));
     assert!(show.game.controls().pause_clock, "the quizmaster can hold it");
     assert_eq!(show.game.due_command(6_999), None);
     assert_eq!(show.game.due_command(7_000), Some(Command::Next));
@@ -2023,7 +2023,7 @@ fn once_the_answer_is_shown_the_show_goes_on_after_the_wait() {
     })));
     assert_eq!(show.game.due_command(60_000), None, "the closed question waits for Next");
     show.run(6_000, Command::Next).unwrap();
-    assert_eq!(show.game.view(7_000).auto_step, Some(AutoStepView { action: AutoStep::NextSlide, in_ms: 4_000 }));
+    assert_eq!(show.game.view(7_000).auto_step, Some(AutoStepView { action: AutoStep::NextSlide, in_ms: 4_000, total_ms: 5_000 }));
     assert!(show.game.controls().pause_clock, "the quizmaster can hold it");
     assert_eq!(show.game.due_command(10_999), None);
     run_due(&mut show, 11_000);

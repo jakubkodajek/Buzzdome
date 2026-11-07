@@ -12,4 +12,9 @@ action: AutoStep,
 /**
  * How long until it does it.
  */
-inMs: number, };
+inMs: number, 
+/**
+ * The whole wait before it, as the quiz's settings give it, so the
+ * Director's bar shows how much of it is left.
+ */
+totalMs: number, };

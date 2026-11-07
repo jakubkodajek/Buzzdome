@@ -1100,14 +1100,7 @@ impl Game {
     /// step first, or hold it (`PauseClock`). Gives the step, the command
     /// that takes it and its time.
     pub(crate) fn pending_step(&self) -> Option<(AutoStep, Command, u64)> {
-        let settings = self.quiz.settings;
-        let (step, wait_ms) = match self.phase {
-            Phase::Question(QuestionStep::Closed) => (settings.all_answered.auto_step()?, settings.all_answered_delay_ms()),
-            Phase::Question(QuestionStep::Revealed { .. }) if settings.next_after_reveal => {
-                (AutoStep::NextSlide, settings.next_after_reveal_delay_ms())
-            }
-            _ => return None,
-        };
+        let (step, wait_ms) = self.auto_step_wait()?;
         let at = self.auto_step_from?.saturating_add(wait_ms);
         let command = match step {
             AutoStep::Reveal => Command::Next,
@@ -1118,6 +1111,19 @@ impl Game {
             },
         };
         Some((step, command, at))
+    }
+
+    /// The step this step of the question leads to by itself, and the
+    /// settings' whole wait for it, counted from `auto_step_from`.
+    pub(crate) fn auto_step_wait(&self) -> Option<(AutoStep, u64)> {
+        let settings = self.quiz.settings;
+        match self.phase {
+            Phase::Question(QuestionStep::Closed) => Some((settings.all_answered.auto_step()?, settings.all_answered_delay_ms())),
+            Phase::Question(QuestionStep::Revealed { .. }) if settings.next_after_reveal => {
+                Some((AutoStep::NextSlide, settings.next_after_reveal_delay_ms()))
+            }
+            _ => None,
+        }
     }
 
     pub(crate) fn question(&self) -> Option<&Question> {
