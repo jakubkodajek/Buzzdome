@@ -34,6 +34,10 @@ describe("commandForKey", () => {
     expect(showKey({ key: "ě", code: "Digit2" })).toBe("2");
     expect(showKey({ key: "é", code: "Digit0" })).toBe("0");
     expect(showKey({ key: "7", code: "Numpad7" })).toBe("7");
+    // NumLock off: the keypad's arrows and Page keys stay the quizmaster's keys.
+    expect(showKey({ key: "ArrowRight", code: "Numpad6" })).toBe("ArrowRight");
+    expect(showKey({ key: "PageUp", code: "Numpad9" })).toBe("PageUp");
+    expect(showKey({ key: "End", code: "Numpad1" })).toBe("End");
     expect(showKey({ key: "y", code: "KeyZ" })).toBe("y");
     expect(commandForKey(showKey({ key: "+", code: "Digit1" }), viewWith({}))).toEqual({ type: "press", buzzer: 1, button: "big" });
   });

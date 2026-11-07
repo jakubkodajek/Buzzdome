@@ -24,13 +24,17 @@ const NEXT_KEYS: readonly string[] = [KEYS.next, "arrowright", "pagedown"];
 const PREVIOUS_KEYS: readonly string[] = ["arrowleft", "pageup"];
 
 /**
- * The key a show key press stands for: a digit by the key's place (the top
- * row or the keypad), since on a Czech layout the top row types ě, š, č...
- * without Shift; any other key as typed.
+ * The key a show key press stands for: a top-row key that types a character
+ * is its digit, since on a Czech layout the top row types ě, š, č... without
+ * Shift; a keypad key is a digit only when it types that digit, because with
+ * NumLock off it is an arrow or Page key; any other key as typed.
  */
 export function showKey(event: Pick<KeyboardEvent, "key" | "code">): string {
-  const digit = /^(?:Digit|Numpad)([0-9])$/.exec(event.code ?? "");
-  return digit ? digit[1] : event.key;
+  const digit = /^(Digit|Numpad)([0-9])$/.exec(event.code ?? "");
+  if (!digit) return event.key;
+  const [, row, number] = digit;
+  const typesDigit = row === "Digit" ? event.key.length === 1 : event.key === number;
+  return typesDigit ? number : event.key;
 }
 
 /** The keys written with a word or sign rather than as typed. */
