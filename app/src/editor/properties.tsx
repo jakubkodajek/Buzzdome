@@ -44,6 +44,7 @@ import {
   setMode,
   setNotes,
   setPicture,
+  setReadAs,
   setScoring,
   setShare,
   setSound,
@@ -280,6 +281,15 @@ export function slideProperties(t: Translate, { slide, context, categories, upda
         "questionField",
         "descQuestionText",
         textArea("questionField", q.text, (text) => update((s) => setHeadline(s, text), "text")),
+        { wide: true },
+      ),
+    /** How the voice says the question (spec SN-10). */
+    readAs: (q: QuestionSlide) =>
+      row(
+        "readAs",
+        "readAsField",
+        "descReadAs",
+        textArea("readAsField", q.readAs ?? "", (text) => question((s) => setReadAs(s, text), "readAs")),
         { wide: true },
       ),
     title: (s: TitledSlide) =>

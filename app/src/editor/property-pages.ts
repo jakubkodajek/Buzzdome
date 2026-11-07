@@ -74,7 +74,7 @@ function propertyPages(slide: Slide, element: ElementId, { slide: rows, style }:
       ...lookPage,
     ];
   }
-  if (element === "question" && slide.type === "question") return [page("text", [{ title: "sectionText", rows: [rows.questionText(slide)] }]), ...lookPage];
+  if (element === "question" && slide.type === "question") return [page("text", [{ title: "sectionText", rows: [rows.questionText(slide), rows.readAs(slide)] }]), ...lookPage];
   if ((element === "title" || element === "text") && slide.type !== "question") return [page("text", [{ title: "sectionText", rows: textRows(slide, rows) }]), ...lookPage];
   if (element === "picture") return [page("media", [{ title: "sectionPictureVideo", rows: [rows.picture] }])];
   if (element === "video") return [page("media", [{ title: "sectionPictureVideo", rows: videoRows(rows) }])];
@@ -96,7 +96,7 @@ function propertyPages(slide: Slide, element: ElementId, { slide: rows, style }:
               rows: [rows.pointsStart(slide), rows.falling(slide), ...(slide.pointsEnd !== null ? [rows.pointsEnd(slide)] : []), rows.penalty(slide)],
             },
           ]),
-          page("text", [{ title: "sectionText", rows: [rows.questionText(slide), rows.notes] }]),
+          page("text", [{ title: "sectionText", rows: [rows.questionText(slide), rows.readAs(slide), rows.notes] }]),
         ]
       : [page("gameplay", [{ title: "sectionSlide", rows: [rows.type] }]), page("text", [{ title: "sectionText", rows: [...textRows(slide, rows), rows.notes] }])];
   const pictureVideo: Section[] = plays(slide.type).pictureAndVideo ? [{ title: "sectionPictureVideo", rows: [rows.picture, ...videoRows(rows)] }] : [];

@@ -386,6 +386,7 @@ mod tests {
             points: 100,
             points_end: None,
             penalty: 0,
+            read_as: String::new(),
         };
         let mut game = Game::new(Quiz::new("Test", vec![Slide::new("q1", SlideContent::Question(question))]));
         game.apply(&Stamped { at_ms: 0, command: Command::Press { buzzer: 1, button: Button::Big } }).unwrap();

@@ -22,6 +22,11 @@ pub const MAX_VOICE: u8 = 9;
 /// The first voice that sounds male: the ones before it sound female
 /// (the quiz file's contract, `docs/quiz-format.md`).
 pub const FIRST_MALE_VOICE: u8 = 5;
+/// How fast the voice reads, in percent of the model's own pace: the
+/// slowest, the default and the fastest.
+pub const MIN_VOICE_SPEED: u8 = 80;
+pub const DEFAULT_VOICE_SPEED: u8 = 100;
+pub const MAX_VOICE_SPEED: u8 = 120;
 /// Most jokers a player can have in a show.
 pub const MAX_JOKERS: u8 = 5;
 
@@ -133,6 +138,12 @@ pub struct QuizSettings {
     #[schemars(with = "bool")]
     #[ts(as = "bool")]
     pub clock_after_reading: bool,
+    /// How fast the voice reads, in percent of its own pace, from
+    /// `MIN_VOICE_SPEED` to `MAX_VOICE_SPEED`.
+    #[serde(with = "voice_speed")]
+    #[schemars(with = "u8", range(min = MIN_VOICE_SPEED, max = MAX_VOICE_SPEED))]
+    #[ts(as = "u8")]
+    pub voice_speed: u8,
 }
 
 impl Default for QuizSettings {
@@ -155,6 +166,7 @@ impl Default for QuizSettings {
             read_aloud: ReadAloud::Off,
             voice: 0,
             clock_after_reading: false,
+            voice_speed: DEFAULT_VOICE_SPEED,
         }
     }
 }
@@ -276,6 +288,20 @@ count_up_to!(after_reveal_delay, super::DEFAULT_AFTER_REVEAL_DELAY_S, super::MAX
 count_up_to!(jokers, 0, super::MAX_JOKERS);
 count_up_to!(voice, 0, super::MAX_VOICE);
 
+/// The voice's speed: one outside the range reads as the nearest end of it.
+mod voice_speed {
+    use super::{DEFAULT_VOICE_SPEED, MAX_VOICE_SPEED, MIN_VOICE_SPEED};
+    use serde::{Deserializer, Serialize, Serializer};
+
+    pub fn serialize<S: Serializer>(speed: &u8, serializer: S) -> Result<S::Ok, S::Error> {
+        speed.serialize(serializer)
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(deserializer: D) -> Result<u8, D::Error> {
+        super::read_count_up_to(deserializer, DEFAULT_VOICE_SPEED, MAX_VOICE_SPEED).map(|speed| speed.max(MIN_VOICE_SPEED))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -317,6 +343,15 @@ mod tests {
     }
 
     #[test]
+    fn a_voice_speed_out_of_range_reads_as_the_nearest_end() {
+        assert_eq!(read("{}").voice_speed, DEFAULT_VOICE_SPEED);
+        assert_eq!(read(r#"{ "voiceSpeed": 90 }"#).voice_speed, 90);
+        assert_eq!(read(r#"{ "voiceSpeed": 10 }"#).voice_speed, MIN_VOICE_SPEED);
+        assert_eq!(read(r#"{ "voiceSpeed": 400 }"#).voice_speed, MAX_VOICE_SPEED);
+        assert_eq!(read(r#"{ "voiceSpeed": "fast" }"#).voice_speed, DEFAULT_VOICE_SPEED);
+    }
+
+    #[test]
     fn a_quiz_keeps_its_settings_and_leaves_default_ones_out() {
         use crate::model::Quiz;
         let mut quiz = Quiz::new("Q", vec![]);
@@ -347,11 +382,12 @@ mod tests {
             read_aloud: ReadAloud::QuestionAndAnswers,
             voice: 4,
             clock_after_reading: true,
+            voice_speed: 110,
         };
         let json = serde_json::to_string(&settings).unwrap();
         assert_eq!(
             json,
-            r#"{"startOnNext":true,"allAnswered":"nextSlide","allAnsweredDelayS":7,"nextAfterReveal":true,"nextAfterRevealDelayS":30,"runClockOut":true,"hideAnswer":true,"changeAnswer":true,"oneBuzz":true,"noAnswerPenalty":true,"hideBuzzPoints":true,"answerChart":true,"jokers":2,"language":"en","readAloud":"questionAndAnswers","voice":4,"clockAfterReading":true}"#
+            r#"{"startOnNext":true,"allAnswered":"nextSlide","allAnsweredDelayS":7,"nextAfterReveal":true,"nextAfterRevealDelayS":30,"runClockOut":true,"hideAnswer":true,"changeAnswer":true,"oneBuzz":true,"noAnswerPenalty":true,"hideBuzzPoints":true,"answerChart":true,"jokers":2,"language":"en","readAloud":"questionAndAnswers","voice":4,"clockAfterReading":true,"voiceSpeed":110}"#
         );
         assert_eq!(read(&json), settings);
     }

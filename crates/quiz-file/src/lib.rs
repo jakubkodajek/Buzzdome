@@ -1342,6 +1342,7 @@ mod tests {
             points: MAX_POINTS * 2,
             points_end: None,
             penalty: 0,
+            read_as: String::new(),
         };
         Quiz::new("Old", vec![Slide::new("q", SlideContent::Question(question))])
     }

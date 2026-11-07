@@ -2,10 +2,24 @@
 import type { QuizLanguage } from "./QuizLanguage";
 
 /**
- * What to say, and how: one clip.
+ * What to say, and how: one clip, a question and its answers.
  */
-export type VoiceLine = { text: string, language: QuizLanguage, 
+export type VoiceLine = { 
+/**
+ * The question's words (`quiz_core::Question::read_as`, or its text).
+ */
+question: string, 
+/**
+ * The answers read after it, each after its letter by its place: an
+ * empty one is passed over and keeps its letter.
+ */
+answers: Array<string>, language: QuizLanguage, 
 /**
  * The model's voice, from 0.
  */
-voice: number, };
+voice: number, 
+/**
+ * How fast it reads, in percent of its own pace
+ * (`quiz_core::QuizSettings::voice_speed`).
+ */
+speed: number, };

@@ -21,6 +21,7 @@ fn question(id: &str, mode: AnswerMode) -> Slide {
             points: 100,
             points_end: Some(50),
             penalty: 20,
+            read_as: String::new(),
         }),
     )
 }

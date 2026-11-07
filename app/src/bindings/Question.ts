@@ -28,4 +28,9 @@ pointsEnd: number | null,
 /**
  * Points taken for a wrong answer (a positive number).
  */
-penalty: number, };
+penalty: number, 
+/**
+ * How the voice says the question when it reads it out (spec SN-10),
+ * such as a name written as it sounds; empty reads `text`.
+ */
+readAs?: string, };

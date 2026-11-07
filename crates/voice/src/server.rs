@@ -90,10 +90,10 @@ mod tests {
 
     impl Render for Fake {
         fn render(&self, line: &Line) -> Result<Clip, VoiceError> {
-            if line.text == "fail" {
+            if line.question == "fail" {
                 Err(VoiceError::Render)
             } else {
-                Ok(Clip { samples: vec![0.5; line.text.len()], rate: 8000 })
+                Ok(Clip { samples: vec![0.5; line.question.len()], rate: 8000 })
             }
         }
     }
@@ -104,7 +104,7 @@ mod tests {
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
         let request = |text: &str, file: &str| {
-            let line = Line { text: text.into(), language: quiz_core::QuizLanguage::Cs, voice: 0 };
+            let line = Line { question: text.into(), answers: vec![], language: quiz_core::QuizLanguage::Cs, voice: 0, speed: 100 };
             serde_json::to_string(&Request { line, out: dir.join(file) }).unwrap()
         };
         let input = [request("ahoj", "a.wav"), "not json".into(), request("fail", "b.wav"), request("svete", "c.wav")].join("\n");

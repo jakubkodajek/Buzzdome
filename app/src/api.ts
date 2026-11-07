@@ -59,6 +59,7 @@ import type {
   Theme,
   UpdateProgress,
   VoiceDownload,
+  VoiceClip,
   VoiceLine,
   VoiceModel,
 } from "./types";
@@ -212,7 +213,7 @@ export const api = {
   /** Removes the voice model and the clips made with it. */
   voiceRemove: () => invoke<VoiceModel>("voice_remove"),
   /** The path of the kept clip that says `line`; with `render`, rendered first when it is not kept (a few seconds). Null when there is nothing to say, or it is not kept and not to be rendered. */
-  voiceClip: (line: VoiceLine, render: boolean) => invoke<string | null>("voice_clip", { line, render }),
+  voiceClip: (line: VoiceLine, render: boolean) => invoke<VoiceClip>("voice_clip", { line, render }),
   // The editor's commands on a draft name it (`EditorDraft.id`): one that
   // another draft has replaced since is refused with `draftChanged`.
   /** The quiz editor's draft left from last time, if any. */

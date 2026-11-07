@@ -276,6 +276,14 @@ function withCorrect(question: QuestionSlide, correct: CorrectAnswer[]): Questio
   return { ...question, correct: correct.length === 0 && question.mode === "everyone" ? [fullyCorrect(0)] : correct };
 }
 
+/** Sets how the voice says the question (`Question::read_as`); left out of the file while empty. */
+export function setReadAs(question: QuestionSlide, readAs: string): QuestionSlide {
+  if (readAs.trim() !== "") return { ...question, readAs };
+  const empty = { ...question };
+  delete empty.readAs;
+  return empty;
+}
+
 type Scoring = Pick<QuestionSlide, "timeLimitS" | "points" | "pointsEnd" | "penalty">;
 
 /** Sets the clock and points, kept to whole numbers in range. */

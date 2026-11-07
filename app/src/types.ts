@@ -147,6 +147,7 @@ export type { UpdateProgress } from "./bindings/UpdateProgress";
 export type { ValidationError } from "./bindings/ValidationError";
 export type { VideoClip } from "./bindings/VideoClip";
 export type { VideoEffect } from "./bindings/VideoEffect";
+export type { VoiceClip } from "./bindings/VoiceClip";
 export type { VoiceDownload } from "./bindings/VoiceDownload";
 export type { VoiceLine } from "./bindings/VoiceLine";
 export type { VoiceModel } from "./bindings/VoiceModel";

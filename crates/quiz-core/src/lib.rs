@@ -31,7 +31,7 @@ pub use media::{
 pub use media_player::{MediaPlayer, NowPlaying, PlayerCommand, MAX_DROPPED_MB, MAX_PLAYER_VOLUME};
 pub use settings::{
     AllAnswered, AutoStep, QuizSettings, DEFAULT_AFTER_REVEAL_DELAY_S, DEFAULT_ALL_ANSWERED_DELAY_S, MAX_AFTER_REVEAL_DELAY_S, MAX_ALL_ANSWERED_DELAY_S,
-    FIRST_MALE_VOICE, MAX_JOKERS, MAX_VOICE, QuizLanguage, ReadAloud,
+    FIRST_MALE_VOICE, MAX_JOKERS, MAX_VOICE, QuizLanguage, ReadAloud, DEFAULT_VOICE_SPEED, MAX_VOICE_SPEED, MIN_VOICE_SPEED,
 };
 pub use model::{
     AnswerLimits, AnswerMode, CorrectAnswer, Plays, Problem, Question, Quiz, QuizJsonError, ReadQuiz, Slide, SlideContent, SlideType, ValidationError,
@@ -102,6 +102,8 @@ mod ui_constants {
             ("MAX_JOKERS", crate::MAX_JOKERS.to_string()),
             ("MAX_VOICE", crate::MAX_VOICE.to_string()),
             ("FIRST_MALE_VOICE", crate::FIRST_MALE_VOICE.to_string()),
+            ("MIN_VOICE_SPEED", crate::MIN_VOICE_SPEED.to_string()),
+            ("MAX_VOICE_SPEED", crate::MAX_VOICE_SPEED.to_string()),
             ("QUIZ_LANGUAGES", format!("{} as const", serde_json::to_string(&crate::QuizLanguage::ALL).unwrap())),
             ("LAST_SECONDS_MS", crate::LAST_SECONDS_MS.to_string()),
             ("DEFAULT_QUIZ_SOUNDS", format!("{} as const", serde_json::to_string(&crate::QuizSounds::default()).unwrap())),

@@ -552,6 +552,7 @@ fn question(
         points: DEFAULT_POINTS,
         points_end: None,
         penalty: 0,
+        read_as: String::new(),
     };
     if test {
         notes.add(ImportIssue::TestQuestion, place);
@@ -1443,6 +1444,7 @@ mod tests {
             points: 100,
             points_end: Some(20),
             penalty: 5,
+            read_as: String::new(),
         };
         let open = Question { text: "Name the song".into(), mode: AnswerMode::FastestFinger, answers: vec![], correct: vec![], ..everyone.clone() };
         let mut asked = Slide::new("q1", SlideContent::Question(everyone));
@@ -1530,6 +1532,7 @@ mod tests {
             points: 10,
             points_end: None,
             penalty: 0,
+            read_as: String::new(),
         }));
         slide.notes = "-2+3+cmd|' /C calc'!A0".into();
         let quiz = Quiz::new("Quiz", vec![slide]);
@@ -1555,6 +1558,7 @@ mod tests {
             points: 10,
             points_end: None,
             penalty: 0,
+            read_as: String::new(),
         }))]);
         let rows = export_table(&quiz, |reference| Some(reference.to_string()));
         let cells: Vec<&str> = (0..4).map(|i| rows[1][Field::Answer(i).index()].as_str()).collect();
