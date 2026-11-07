@@ -28,7 +28,8 @@ You are the **implementer**.
   English in `app/src/i18n.ts`; no typed glyphs as icons.
 - Do not widen scope. Follow-ups go in the report.
 - No new dependency (crate or npm package) without its reason in the report.
-- Never bump the app version, tag or release.
+- Raise the app version only when the task says Jakub consented to it;
+  never merge, tag or release (`AGENTS.md`, Rules).
 
 ## Output
 Handoff report: files changed, commands run with their final output,

@@ -62,8 +62,8 @@ Windows first, with macOS and Linux too. Built with [Tauri 2](https://tauri.app)
 
 Under active development for a first live event in November 2026. The
 303S driver passed its first test on real hardware on Windows 11
-(2026-10-25). What remains is tracked in [`ROADMAP.md`](ROADMAP.md), and
-the feature matrix is [`replica/features.csv`](replica/features.csv).
+(2026-10-25). The feature matrix, with what is built, is
+[`replica/features.csv`](replica/features.csv).
 
 ## Install
 
@@ -215,7 +215,6 @@ and the full design is [`docs/design.md`](docs/design.md).
 | [`docs/hardware-test.md`](docs/hardware-test.md) | checklist and results for the real receiver |
 | [`replica/hardware.md`](replica/hardware.md) | research on the buzzers, receiver and cable |
 | [`replica/recon.md`](replica/recon.md) | screens, flows and scoring rules the app follows |
-| [`ROADMAP.md`](ROADMAP.md) | milestones and progress |
 
 ## Ground rules
 

@@ -1,7 +1,7 @@
 ---
 name: feature
 description: Run the full multi-agent pipeline for one feature - plan, test-first, implement, parallel review (code, security, UX, bug-hunt), independent verification, fix loop, handoff. Use when the user asks to build or change a feature.
-argument-hint: "[feature description or features.json id]"
+argument-hint: "[feature description or spec ID]"
 ---
 
 # Feature pipeline
@@ -14,8 +14,8 @@ Full protocol and the handoff report format: `docs/agent-workflow.md`.
 
 ## 0. Set up
 - Pick a short kebab-case `<task-slug>`. Create `.work/<task-slug>/`.
-- If the task matches an item in `memory/features.json`, use that id; otherwise add
-  a new item with `"passes": false`. Note its spec ID and `ROADMAP.md` line.
+- Note the task's spec ID (`docs/specification.md`) and its `replica/features.csv`
+  row, if it has them.
 - Create a branch: `git switch -c feat/<task-slug>` (cloud sessions use the branch
   they were given).
 
@@ -57,5 +57,5 @@ Stop after 3 rounds and escalate remaining findings to the user.
   section in `docs/hardware-test.md` for Jakub (`buzzdome-hardware` skill).
 - Delegate to **docs-keeper** with the slug and all reports.
 - Summarise for the user: what was built, evidence, remaining PLAUSIBLE/minor findings,
-  and suggested PR title. Open the PR only if the user asked for it. Never merge, bump
-  the version or push a tag.
+  and suggested PR title. Open the PR only if the user asked for it. Merge or raise
+  the version only after Jakub's explicit consent; never push a tag (`AGENTS.md`, Rules).

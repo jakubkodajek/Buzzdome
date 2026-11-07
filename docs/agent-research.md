@@ -123,7 +123,7 @@ Source: Playwright docs, Test agents - https://playwright.dev/docs/test-agents
 | Evidence over claims | `AGENTS.md` (Agent workflow, 3), PR template |
 | Real-browser UX/a11y review | `ux-ui-reviewer`, `.mcp.json` (Playwright MCP) |
 | Adversarial testing with reproductions | `bug-hunter`, `/bug-hunt` |
-| JSON feature list + progress log + git | `memory/features.json`, `memory/progress.md` |
+| JSON feature list + progress log + git | `replica/features.csv`, `memory/progress.md` (a JSON list was tried and dropped, 2026-11-07) |
 | Short always-loaded instructions, details on demand | `AGENTS.md`, `.claude/rules/`, skills |
 | Deterministic guardrails | `.claude/hooks/`, `.claude/settings.json`, CI |
 | One source, many tools | `AGENTS.md`, `scripts/sync_agents.py` |

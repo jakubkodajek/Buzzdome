@@ -14,7 +14,6 @@ on:
       - ".github/agents/**"
       - ".github/workflows/agents.yml"
       - ".mcp.json"
-      - "memory/features.json"
       - "scripts/sync_agents.py"
   workflow_dispatch:
 
@@ -39,7 +38,7 @@ jobs:
 
       - name: JSON files are valid
         run: |
-          for f in .claude/settings.json .mcp.json memory/features.json; do
+          for f in .claude/settings.json .mcp.json; do
             python3 -m json.tool "$f" > /dev/null || { echo "::error::invalid JSON: $f"; exit 1; }
           done
 

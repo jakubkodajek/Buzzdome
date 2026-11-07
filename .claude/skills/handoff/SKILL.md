@@ -1,6 +1,6 @@
 ---
 name: handoff
-description: End-of-session handoff - make the working tree clean, record progress, decisions and lessons in memory/ so the next session (human or agent) can continue without context. Use when the user says they are done, before context runs out, or after finishing a task.
+description: End-of-session handoff - make the working tree clean, record progress and lessons in memory/ (decisions as ADRs) so the next session (human or agent) can continue without context. Use when the user says they are done, before context runs out, or after finishing a task.
 ---
 
 # Session handoff
