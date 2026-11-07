@@ -273,6 +273,8 @@ export function mayTakeVoice(now: Speaker | null, who: Speaker): boolean {
  */
 const speaker = {
   speaking: createStore<Speaker | null>(null),
+  /** Who waits for its clip to render before it speaks (`say`); none once it speaks or is stopped. */
+  preparing: createStore<Speaker | null>(null),
   current: null as Speaking | null,
   turn: 0,
 
@@ -307,13 +309,16 @@ const speaker = {
     if (!mayTakeVoice(this.speaking.get(), who)) return;
     const { mine, ended } = this.begin(who);
     let failure: unknown = null;
+    if (before) this.preparing.set(who);
     try {
       await before;
     } catch (error) {
       // A rejection without a reason is the voice failing all the same.
       failure = error ?? ({ code: "voiceFailed" } satisfies AppError);
     }
+    // Stopped meanwhile (`stop`): a later turn's wait is that turn's own.
     if (this.turn !== mine) return;
+    this.preparing.set(null);
     const started = await say(line, gain, system, ended);
     if (this.turn !== mine) started?.stop();
     else if (started) this.current = started;
@@ -326,6 +331,7 @@ const speaker = {
     this.current?.stop();
     this.current = null;
     this.speaking.set(null);
+    this.preparing.set(null);
   },
 
   /** Stops what `who` reads, and nothing else. */
@@ -462,14 +468,17 @@ export function useVoiceSample(): {
 /** Plays a line once as a show would, rendering its clip first, to try the voice in the settings. */
 export function useVoicePreview(): {
   playing: boolean;
+  /** Its clip renders before it plays; over once it plays or is stopped. */
+  preparing: boolean;
   play: (line: VoiceLine, gain: number) => Promise<void>;
   stop: () => void;
 } {
   useEffect(watchVoices, []);
   const voices = useLatest(useStore(systemVoices));
   const playing = useStore(speaker.speaking) === "preview";
+  const preparing = useStore(speaker.preparing) === "preview";
   const play = useCallback((line: VoiceLine, gain: number) => speaker.say("preview", line, gain, pickSystemVoice(voices.current, line.language), api.voiceClip(line, true)), [voices]);
   const stop = useCallback(() => speaker.stopIf("preview"), []);
   useEffect(() => stop, [stop]);
-  return { playing, play, stop };
+  return { playing, preparing, play, stop };
 }
