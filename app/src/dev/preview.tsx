@@ -219,6 +219,8 @@ const SCENES: Record<string, GameView | null> = {
   lobby: view({
     phase: { phase: "lobby" },
     slide: null,
+    nextSlide: 0,
+    previousSlide: null,
     players: players([{}, {}, { name: "" }, { name: "" }, { name: "" }]).slice(0, 5),
     teams: [
       { name: NAMES[0], buzzer: 1 },
@@ -320,7 +322,27 @@ const SCENES: Record<string, GameView | null> = {
   explanation: view({ phase: { phase: "explanation" }, slideIndex: 4, slide: quiz.slides[4] }),
   leaderboard: view({ phase: { phase: "endOfRound" }, slideIndex: 5, slide: quiz.slides[5] }),
   overlay: view({ leaderboardVisible: true }),
-  final3: view({ phase: { phase: "final", step: 3 }, slideIndex: quiz.slides.length, slide: null }),
+  final3: view({ phase: { phase: "final", step: 3 }, slideIndex: quiz.slides.length, slide: null, nextSlide: null, previousSlide: quiz.slides.length - 1 }),
+  // The final ranking's first step, before the third place shows.
+  final0: view({ phase: { phase: "final", step: 0 }, slideIndex: quiz.slides.length, slide: null, nextSlide: null, previousSlide: quiz.slides.length - 1 }),
+  // The last slide of the quiz, from which Next opens the final ranking.
+  lastSlide: view({
+    phase: { phase: "endOfRound" },
+    slideIndex: quiz.slides.length - 1,
+    slide: quiz.slides[quiz.slides.length - 1],
+    nextSlide: quiz.slides.length,
+    previousSlide: quiz.slides.length - 2,
+  }),
+  // A running question with every extra command in the Director: its sound, reading it out, its video, and the step the show takes by itself.
+  crowded: view({
+    slideIndex: 2,
+    slide: { ...quiz.slides[2], video: VIDEO, sound: SONG },
+    phase: { phase: "question", step: "running", clock: { limitMs: 20000, elapsedBeforeMs: 0, runningSinceMs: 0, pressesFromMs: 0 } },
+    clock: { limitMs: 20000, remainingMs: 12000, elapsedMs: 8000, running: true, points: 81 },
+    controls: { ...NO_CONTROLS, next: true, pauseClock: true, closeQuestion: true, playVideo: true, restartQuestion: true },
+    autoStep: { action: "reveal", inMs: 3000 },
+    settings: { ...DEFAULT_QUIZ_SETTINGS, readAloud: "question" },
+  }),
   // Two winners share first place and two teams third (1, 1, 3, 3): no second place.
   finalShared: view({
     phase: { phase: "final", step: 3 },

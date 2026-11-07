@@ -101,6 +101,15 @@ export function NextIcon({ className }: IconProps) {
   );
 }
 
+/** Next's arrow the other way: back a slide. */
+export function PreviousIcon({ className }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M19 12H6M11 6l-6 6 6 6" />
+    </svg>
+  );
+}
+
 export function PauseIcon({ className }: IconProps) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="currentColor">

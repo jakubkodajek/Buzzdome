@@ -38,6 +38,8 @@
 
   display: grid;
   grid-template-columns: 210px minmax(0, 1fr);
+  /* One row, the window's height: a part taller than that scrolls in its own box. */
+  grid-template-rows: minmax(0, 1fr);
   height: 100%;
   font-size: 13px;
   color: var(--text);
@@ -200,12 +202,32 @@
 
 /* Command panel */
 
+/* The commands scroll when the window is too short for them; the footer
+   (the projector, End show) stays at the bottom. */
 .command-panel {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  padding: 6px 0;
+  min-height: 0;
   background: var(--panel);
+}
+
+.command-list,
+.command-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.command-list {
+  flex: 1;
+  min-height: 0;
+  padding-top: 6px;
+  overflow-y: auto;
+}
+
+.command-footer {
+  padding: 4px 0 6px;
+  border-top: 1px solid var(--panel-hover);
 }
 
 .director .command {
@@ -220,6 +242,14 @@
   background: transparent;
   color: #f2f2f2;
   text-align: left;
+}
+
+/* A small or scaled screen: lower commands, so more of them fit before the list scrolls. */
+@media (max-height: 700px) {
+  .director .command {
+    min-height: 44px;
+    padding-block: 3px;
+  }
 }
 
 .director .command:hover:not(:disabled) {
@@ -238,17 +268,28 @@
   box-shadow: inset 4px 0 0 var(--accent);
 }
 
-/* Who Right and Wrong judge: two lines high always, so the commands below never move. */
+/* Who Right and Wrong judge: two lines high always, so the commands below
+   never move. A long name keeps to its line, so the queue under it shows. */
 .judged {
-  display: -webkit-box;
+  flex: none;
+  display: flex;
+  flex-direction: column;
   height: 2.5em;
   padding: 0 12px;
-  overflow: hidden;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
   line-height: 1.25;
   color: #f2f2f2;
   font-weight: 600;
+}
+
+.judged span {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.judged span + span {
+  font-weight: 400;
+  color: #c8c8c8;
 }
 
 .command-icon {
@@ -395,9 +436,12 @@
   flex: 1;
 }
 
+/* At most a quarter of the window, so the tab under it keeps its room on a small screen. */
 .launch-check ul {
+  max-height: 25vh;
   margin: 0;
   padding: 0;
+  overflow-y: auto;
   list-style: none;
 }
 
@@ -479,13 +523,34 @@
   color: #cfcfcf;
 }
 
+/* One line: each part keeps its words together and the quiz's title gives
+   way first; only a window too narrow even then takes a second line. */
 .status-bar {
   display: flex;
-  gap: 16px;
+  flex-wrap: wrap;
+  gap: 4px 12px;
   align-items: center;
   padding: 4px 10px;
   color: #fff;
   background: var(--accent);
+}
+
+.status-bar > * {
+  flex: none;
+  white-space: nowrap;
+}
+
+.status-bar > .status-title {
+  /* Counted as narrow when the line breaks, so it gives way before the rest wraps; never wider than its text. */
+  flex: 1 1 0;
+  max-width: max-content;
+  min-width: 4em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.status-bar > .spacer {
+  flex: 1;
 }
 
 .status-phase {
@@ -510,6 +575,36 @@
   border-radius: 9px;
   color: #2b1b00;
   background: #ffc94d;
+}
+
+/* The receiver's and the lights' chips open their tab. */
+.director .status-bar button {
+  padding: 0 10px;
+  font-size: inherit;
+  line-height: inherit;
+}
+
+.director .status-bar button.status-chip {
+  color: #fff;
+  background: transparent;
+}
+
+.director .status-bar button.status-warning {
+  border: 1px solid transparent;
+  color: #2b1b00;
+  background: #ffc94d;
+}
+
+.director .status-bar button:hover:not(:disabled) {
+  border-color: #fff;
+}
+
+.director .status-bar button.status-chip:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.director .status-bar button.status-warning:hover {
+  background: #ffd774;
 }
 
 /* Data grids */
@@ -693,6 +788,33 @@
   height: 20px;
   margin: 0 6px;
   background: #6a6a6a;
+}
+
+/* The Questions tab's toolbar keeps one line: what comes next gives way. */
+.questions-tab .toolbar {
+  flex-wrap: nowrap;
+}
+
+.questions-tab .toolbar > * {
+  flex: none;
+}
+
+.questions-tab .toolbar > .spacer {
+  flex: 1;
+}
+
+.questions-tab .toolbar > .next-up {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+@media (max-width: 1279px) {
+  .director .tool-button.narrow-label .tool-label {
+    display: none;
+  }
 }
 
 .preview {

@@ -1,5 +1,20 @@
 import { ask, message } from "@tauri-apps/plugin-dialog";
 import type { Translate } from "./i18n";
+import { createStore } from "./store";
+
+/**
+ * How many of the system's dialogs are open now. They hold the window's
+ * keys but not the backend's events, so what comes in meanwhile (the
+ * quizmaster's remote) waits for them rather than change what they ask
+ * about.
+ */
+export const openDialogs = createStore(0);
+
+/** `dialog`, counted in `openDialogs` while it is open. */
+function counted<T>(dialog: () => Promise<T>): Promise<T> {
+  openDialogs.set(openDialogs.get() + 1);
+  return dialog().finally(() => openDialogs.set(openDialogs.get() - 1));
+}
 
 /**
  * Asks the quizmaster to confirm `message` in the system's own dialog,
@@ -10,7 +25,7 @@ import type { Translate } from "./i18n";
  * themselves: the backend picks files.
  */
 export function confirmAction(t: Translate, message: string, ok?: string): Promise<boolean> {
-  return ask(message, { kind: "warning", okLabel: ok ?? t("yes"), cancelLabel: ok ? t("cancel") : t("no") });
+  return counted(() => ask(message, { kind: "warning", okLabel: ok ?? t("yes"), cancelLabel: ok ? t("cancel") : t("no") }));
 }
 
 /** What the quizmaster chose to do with unsaved changes. */
@@ -24,7 +39,7 @@ export type SaveChoice = "save" | "discard" | "cancel";
 export async function confirmSave(t: Translate, question: string): Promise<SaveChoice> {
   const labels = { yes: t("saveQuiz"), no: t("dontSave"), cancel: t("cancel") };
   // With its own labels the dialog answers with the label pressed.
-  const pressed = await message(question, { kind: "warning", buttons: labels });
+  const pressed = await counted(() => message(question, { kind: "warning", buttons: labels }));
   return saveChoice(pressed, labels);
 }
 

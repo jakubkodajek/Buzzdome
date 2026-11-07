@@ -10,7 +10,7 @@ import { CheckIcon, CrossIcon, QuestionIcon, WarningIcon } from "../icons";
 import { LANGUAGE_LABEL, settingsOf, soundsOf } from "../quiz";
 import { usePreparing, useSystemVoice } from "../audio/read-aloud";
 import type { GameView, Quiz } from "../types";
-import { launchCheck, projectorScreen, type CheckFix, type CheckPart, type CheckState, type Muted, type SoundTry } from "./launch-check";
+import { launchCheck, projectorScreen, type CheckFix, type CheckItem, type CheckPart, type CheckState, type Muted, type SoundTry } from "./launch-check";
 import type { ProjectorSettings } from "./SettingsTab";
 
 /** The Director's tabs a fix opens. */
@@ -26,21 +26,23 @@ interface LaunchCheckProps {
 /**
  * The check before a show (spec SF-2), below the tabs while the show waits
  * before its first slide. Hide folds it into a button that shows it again,
- * until another show starts.
+ * until another show starts, and counts what is still to sort out.
  */
 export function LaunchCheck(props: LaunchCheckProps) {
   const { t } = useApp();
   const [hidden, setHidden] = useState(false);
   useBackendEvent("show-changed", () => setHidden(false));
-  // Hidden, it reads nothing: the panel polls while it is on screen.
+  // Read while hidden too, for the count on its button.
+  const check = useLaunchItems(props.view, props.quiz);
+  const open = check.items.filter((item) => item.state !== "ok").length;
   if (hidden) {
     return (
       <div className="launch-check-hidden">
-        <button onClick={() => setHidden(false)}>{t("launchShow")}</button>
+        <button onClick={() => setHidden(false)}>{open === 0 ? t("launchShow") : t("launchShowOpen", { n: open })}</button>
       </div>
     );
   }
-  return <LaunchCheckPanel {...props} onHide={() => setHidden(true)} />;
+  return <LaunchCheckPanel {...props} check={check} open={open} onHide={() => setHidden(true)} />;
 }
 
 const PART_LABEL: Record<CheckPart, StringKey> = {
@@ -75,9 +77,16 @@ function fixLabel(t: Translate, action: CheckFix): string {
   return typeof label === "string" ? t(label) : t("launchGoTo", { tab: t(label.tab) });
 }
 
-function LaunchCheckPanel({ view, quiz, projector, onTab, onHide }: LaunchCheckProps & { onHide: () => void }) {
+/** The check's parts as they stand, and how far the quizmaster got with the test sound. */
+interface LaunchItems {
+  items: CheckItem[];
+  setSound: (update: (tried: SoundTry) => SoundTry) => void;
+  /** Plays the app's test sound as loud as the show's effects. */
+  playTestSound: () => void;
+}
+
+function useLaunchItems(view: GameView, quiz: Quiz | null): LaunchItems {
   const { t } = useApp();
-  const run = useRun();
   const receiver = useReceiverInfo();
   const projectorWindow = useProjectorWindow();
   const freeDiskBytes = useShowDiskSpace();
@@ -93,7 +102,15 @@ function LaunchCheckPanel({ view, quiz, projector, onTab, onHide }: LaunchCheckP
   const systemVoice = useSystemVoice(language);
   const voice = { preparing, systemVoice: systemVoice && systemVoice.name, language: t(LANGUAGE_LABEL[language]) };
   const items = launchCheck(t, { receiver, view, projector: projectorWindow, muted, sound, freeDiskBytes, voice });
-  const open = items.filter((item) => item.state !== "ok").length;
+  // The app's own sound, so a quiz whose sound for the moment is missing still tests the speakers.
+  return { items, setSound, playTestSound: () => preview.play("correct", defaultChoice("correct")) };
+}
+
+function LaunchCheckPanel(props: LaunchCheckProps & { check: LaunchItems; open: number; onHide: () => void }) {
+  const { projector, onTab, check, open, onHide } = props;
+  const { items, setSound } = check;
+  const { t } = useApp();
+  const run = useRun();
 
   const fix = (action: CheckFix) => {
     switch (action) {
@@ -110,11 +127,10 @@ function LaunchCheckPanel({ view, quiz, projector, onTab, onHide }: LaunchCheckP
         projector.setFullscreen(true);
         return run(api.listMonitors().then((monitors) => api.openHostWindow(projectorScreen(monitors, projector.monitor), true)));
       case "playSound":
-        // The app's own sound, so a quiz whose sound for the moment is missing still tests the speakers.
-        preview.play("correct", defaultChoice("correct"));
+        check.playTestSound();
         return setSound((tried) => (tried === "heard" ? tried : "played"));
       case "soundHeard":
-        return setSound("heard");
+        return setSound(() => "heard");
     }
   };
 

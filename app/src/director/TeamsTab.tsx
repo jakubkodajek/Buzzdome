@@ -195,14 +195,14 @@ function ShowTeams({ view, lost }: { view: GameView; lost: SettingsLost | null }
                         className="joker-toggle"
                         aria-pressed={p.joker.chosen}
                         disabled={!p.joker.canChange}
-                        title={t("jokerPlayFor", { name: playerName(t, p) })}
-                        aria-label={t("jokerPlayFor", { name: playerName(t, p) })}
+                        title={t(p.joker.chosen ? "jokerTakeBackFor" : "jokerPlayFor", { name: playerName(t, p) })}
+                        aria-label={t(p.joker.chosen ? "jokerTakeBackFor" : "jokerPlayFor", { name: playerName(t, p) })}
                         onClick={(e) => {
                           e.stopPropagation();
                           dispatch({ type: "setJoker", buzzer: p.buzzer, on: !p.joker.chosen });
                         }}
                       >
-                        {t("jokerPlay")}
+                        {t(p.joker.chosen ? "jokerPlayed" : "jokerPlay")}
                       </button>
                       <span className="muted"> {t("jokersLeft", { n: p.joker.left })}</span>
                     </td>
