@@ -13,6 +13,7 @@ import type {
   BuzzerSeen,
   Category,
   ClockView,
+  CloseReason,
   Command,
   Cue,
   DeviceInfo,
@@ -274,7 +275,7 @@ export interface BackendEvents {
   /** A problem the projector met, worded for the Director to show. */
   "host-problem": HostProblem;
   /** The Director was asked to close during a show: the quizmaster confirms it (`quitApp`) or not (`closeDeclined`). */
-  "close-requested": null;
+  "close-requested": CloseReason;
   /** The prepared team names changed, or a show started or ended. */
   "teams-changed": string[];
   /** Files came into the media library or left it. */

@@ -46,10 +46,10 @@ export default function App() {
  * screen's boundary, and the fallback can close the app itself.
  */
 function DirectorWindow({ lang, t }: { lang: Lang; t: Translate }) {
-  // Closing this window during a show asks first; the app ends with it.
-  useBackendEvent("close-requested", () => {
+  // Closing this window during a show, or with unsaved changes in the editor, asks first; the app ends with it.
+  useBackendEvent("close-requested", (reason) => {
     // A dialog that does not open leaves the request unanswered, so a close in the next minute goes through.
-    confirmAction(t, t("quitDuringShow"))
+    confirmAction(t, t(reason === "show" ? "quitDuringShow" : "quitUnsavedQuiz"), t("closeApp"))
       .then((quit) => (quit ? api.quitApp() : api.closeDeclined()))
       .catch(logProblem);
   });

@@ -125,6 +125,14 @@ fn read_pointer(dir: &Path) -> CmdResult<Option<Pointer>> {
     Ok(Some(pointer))
 }
 
+/// Whether the editor's draft has changes that are not in its quiz file,
+/// as its pointer last said. Read without the drafts' lock, from the
+/// windows' thread: the pointer is written whole, and a draft that cannot
+/// be read counts as none.
+pub(crate) fn has_unsaved_draft(app: &AppHandle) -> bool {
+    editor_dir(app).ok().and_then(|dir| read_pointer(&dir).ok().flatten()).is_some_and(|pointer| pointer.unsaved)
+}
+
 fn write_pointer(dir: &Path, pointer: &Pointer) -> CmdResult<()> {
     let json = serde_json::to_string_pretty(pointer).expect("a pointer serializes: strings, a flag and problems");
     Ok(quiz_file::write_atomic(&dir.join(POINTER_FILE), json.as_bytes())?)

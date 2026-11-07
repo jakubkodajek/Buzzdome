@@ -7,6 +7,7 @@ export type { AllAnswered } from "./bindings/AllAnswered";
 export type { AnswerMode } from "./bindings/AnswerMode";
 export type { AskedQuestion } from "./bindings/AskedQuestion";
 export type { AppError } from "./bindings/AppError";
+export type { CloseReason } from "./bindings/CloseReason";
 export type { AvailableUpdate } from "./bindings/AvailableUpdate";
 export type { BoardChange } from "./bindings/BoardChange";
 export type { Background } from "./bindings/Background";

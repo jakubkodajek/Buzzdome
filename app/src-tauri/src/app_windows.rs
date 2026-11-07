@@ -286,21 +286,41 @@ fn close_answer(asked: &mut Option<Instant>, now: Instant) -> CloseAnswer {
     }
 }
 
-/// Whether the app may close now. During a show it waits for the Director
-/// to confirm it (`close-requested`, then `quit_app` or `close_declined`),
-/// asking once, unless a recent request went unanswered (`close_answer`).
+/// Why closing the app asks the quizmaster first (`close-requested`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
+#[serde(rename_all = "camelCase")]
+pub enum CloseReason {
+    /// A show is running.
+    Show,
+    /// The quiz in the editor has changes that are not in its file (the
+    /// draft keeps them for the next start).
+    UnsavedQuiz,
+}
+
+/// Whether the app may close now. During a show, or with unsaved changes
+/// in the editor, it waits for the Director to confirm it
+/// (`close-requested`, then `quit_app` or `close_declined`), asking once,
+/// unless a recent request went unanswered (`close_answer`).
 fn may_close(app: &AppHandle) -> bool {
-    if !show_may_run(app) || app.get_webview_window(DIRECTOR_LABEL).is_none() {
+    if app.get_webview_window(DIRECTOR_LABEL).is_none() {
         return true;
     }
+    let reason = if show_may_run(app) {
+        CloseReason::Show
+    } else if crate::editor::has_unsaved_draft(app) {
+        CloseReason::UnsavedQuiz
+    } else {
+        return true;
+    };
     match app.state::<CloseRequest>().answer(Instant::now()) {
         CloseAnswer::Ask => {
-            let _ = app.emit_to(DIRECTOR_LABEL, CLOSE_REQUESTED_EVENT, ());
+            let _ = app.emit_to(DIRECTOR_LABEL, CLOSE_REQUESTED_EVENT, reason);
             false
         }
         CloseAnswer::Wait => false,
         CloseAnswer::Close => {
-            app_log::note("the Director did not answer a request to close during a show: the app closes");
+            app_log::note(&format!("the Director did not answer a request to close ({reason:?}): the app closes"));
             true
         }
     }
