@@ -1,0 +1,41 @@
+# Lets Jakub mention @claude in issues and PR comments. Off until the
+# repository variable ENABLE_CLAUDE is "true"; needs the Claude GitHub App
+# (https://github.com/apps/claude) and the ANTHROPIC_API_KEY (or
+# CLAUDE_CODE_OAUTH_TOKEN) secret. Only the repository owner can trigger it,
+# as the repository is public. Docs: https://code.claude.com/docs/en/github-actions
+name: Claude Code
+
+on:
+  issue_comment:
+    types: [created]
+  pull_request_review_comment:
+    types: [created]
+  issues:
+    types: [opened]
+
+permissions:
+  contents: read
+
+jobs:
+  claude:
+    if: |
+      vars.ENABLE_CLAUDE == 'true' &&
+      github.actor == github.repository_owner &&
+      ((github.event_name == 'issues' && contains(github.event.issue.body, '@claude')) ||
+       (github.event_name != 'issues' && contains(github.event.comment.body, '@claude')))
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      id-token: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude_args: "--max-turns 30"

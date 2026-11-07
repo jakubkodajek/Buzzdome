@@ -26,6 +26,9 @@ manual Build.
 
 ## Checks, in order
 
+`make check` (`Makefile`) runs steps 1 to 5 in CI's order, after the agent-config
+check (`python3 scripts/sync_agents.py --check`), and sets up the voice libraries.
+
 Rust builds link the sherpa-onnx libraries (`crates/voice`). Before the
 first build, run `.github/scripts/sherpa-onnx-libs.sh .` and export
 `SHERPA_ONNX_ARCHIVE_DIR` as the folder it names (`docs/releasing.md`,

@@ -6,7 +6,7 @@ description: Changes Buzzdome's React UI (Director, projector slides, quiz edito
 # Change the UI
 
 The UI in `app/src` is a view. It asks the backend and draws what it
-gets. `CLAUDE.md` lists the conventions; this is the checklist.
+gets. `AGENTS.md` lists the conventions; this is the checklist.
 
 1. **Data.** Backend calls go through `api`, events through
    `BackendEvents` (`app/src/api.ts`); components use the hooks in
@@ -18,7 +18,7 @@ gets. `CLAUDE.md` lists the conventions; this is the checklist.
 3. **Texts.** Every visible text is a key in `app/src/i18n.ts` with Czech
    (default) and English wording, read with `t` from `useApp()`. Backend
    codes are worded in `app/src/messages.ts`. No trademarked names
-   (`CLAUDE.md`, Rules). Czech addresses the quizmaster formally
+   (`AGENTS.md`, Rules). Czech addresses the quizmaster formally
    (vykání) and uses „…“, … and –; English is British (colour) and
    writes 50% and ID. One thing keeps one word:
 
