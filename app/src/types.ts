@@ -101,6 +101,7 @@ export type { Problem } from "./bindings/Problem";
 export type { ProjectorWindow } from "./bindings/ProjectorWindow";
 export type { ProtocolKind } from "./bindings/ProtocolKind";
 export type { Question } from "./bindings/Question";
+export type { QuestionEndView } from "./bindings/QuestionEndView";
 export type { Quiz } from "./bindings/Quiz";
 export type { QuizLanguage } from "./bindings/QuizLanguage";
 export type { QuizSettings } from "./bindings/QuizSettings";

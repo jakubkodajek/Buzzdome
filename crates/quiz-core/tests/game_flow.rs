@@ -834,6 +834,47 @@ fn next_does_what_its_button_names_on_the_welcome_screen_in_the_final_ranking_an
 }
 
 #[test]
+fn a_closed_question_keeps_whether_its_time_ran_out_and_the_points_its_clock_stopped_at() {
+    let end = |show: &Show| show.game.view(60_000).question_end.map(|end| (end.timed_out, end.points));
+    // Ended by Next at 4 s of 10: the points fall from 100 to 50.
+    let mut show = Show::new(vec![question("q1", AnswerMode::Everyone), billboard("after")]);
+    show.press(0, 1, Button::Big);
+    show.run(0, Command::Next).unwrap();
+    assert_eq!(end(&show), None, "ready");
+    show.run(0, Command::Next).unwrap();
+    assert_eq!(end(&show), None, "running: the clock says it");
+    show.run(4_000, Command::Next).unwrap();
+    assert_eq!(end(&show), Some((false, 80)), "closed");
+    show.run(5_000, Command::Next).unwrap();
+    assert_eq!(end(&show), Some((false, 80)), "its answer shown");
+    show.run(6_000, Command::Next).unwrap();
+    assert_eq!(end(&show), None, "the next slide");
+    // Going back shows the answer again, but its clock is gone.
+    show.run(7_000, Command::GoTo { slide: 0 }).unwrap();
+    assert_eq!(end(&show), None, "came back to it");
+
+    // Closed as its time ran out.
+    let mut show = Show::new(vec![question("q1", AnswerMode::Everyone)]);
+    show.press(0, 1, Button::Big);
+    show.run(0, Command::Next).unwrap();
+    show.run(0, Command::Next).unwrap();
+    show.run(10_000, Command::CloseQuestion).unwrap();
+    assert_eq!(end(&show), Some((true, 50)));
+    assert_eq!(Game::replay(show.game.quiz().clone(), &show.journal, RULES_VERSION).question_end(), show.game.question_end(), "a resumed show keeps it");
+
+    // A fastest finger judged right: the points the winner scored.
+    let mut show = Show::new(vec![question("q1", AnswerMode::FastestFinger)]);
+    show.press(0, 1, Button::Big);
+    show.run(0, Command::Next).unwrap();
+    show.run(0, Command::Next).unwrap();
+    show.press(3_000, 1, Button::Big);
+    show.run(5_000, Command::JudgeRight).unwrap();
+    let won = show.game.view(5_000).players.iter().find(|p| p.buzzer == 1).and_then(|p| p.delta);
+    assert_eq!(end(&show).map(|(_, points)| points), won);
+    assert_eq!(end(&show), Some((false, 85)));
+}
+
+#[test]
 fn controls_offer_exactly_the_commands_each_step_takes() {
     let mut show = Show::new(vec![
         Slide::new("intro", SlideContent::Billboard { title: "Round 1".into(), text: String::new() }),
