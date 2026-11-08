@@ -83,6 +83,16 @@ pub struct VoiceModel {
     pub voices: u8,
 }
 
+/// A line's clip, when one is kept, and its words as they are said, which
+/// the system's voice reads when there is no clip.
+#[derive(Debug, Clone, Serialize, TS)]
+#[ts(export)]
+#[serde(rename_all = "camelCase")]
+pub struct VoiceClip {
+    pub path: Option<String>,
+    pub words: String,
+}
+
 /// How far the model's download is.
 #[derive(Debug, Clone, Copy, Serialize, TS)]
 #[ts(export)]
@@ -360,14 +370,15 @@ pub async fn voice_remove(app: AppHandle) -> CmdResult<VoiceModel> {
 }
 
 /// The kept clip of `line`, as a path the windows can play; with `render`,
-/// rendered first when it is not kept (which takes a few seconds). None
+/// rendered first when it is not kept (which takes a few seconds). No path
 /// when there is nothing to say, or it is not kept and not to be rendered.
 #[tauri::command]
-pub async fn voice_clip(app: AppHandle, line: Line, render: bool) -> CmdResult<Option<String>> {
+pub async fn voice_clip(app: AppHandle, line: Line, render: bool) -> CmdResult<VoiceClip> {
     off_ui(move || {
         let exe = || std::env::current_exe().map_err(|_| AppError::VoiceFailed);
-        let clip = app.state::<Voice>().clip(&line.checked(), render, exe)?;
-        Ok(clip.map(|path| path.to_string_lossy().into_owned()))
+        let line = line.checked();
+        let clip = app.state::<Voice>().clip(&line, render, exe)?;
+        Ok(VoiceClip { path: clip.map(|path| path.to_string_lossy().into_owned()), words: line.words() })
     })
     .await
 }
@@ -499,7 +510,7 @@ mod tests {
     }
 
     fn line(text: &str) -> Line {
-        Line { text: text.into(), language: quiz_core::QuizLanguage::Cs, voice: 0 }
+        Line { question: text.into(), answers: vec![], language: quiz_core::QuizLanguage::Cs, voice: 0, speed: quiz_core::DEFAULT_VOICE_SPEED }
     }
 
     #[test]

@@ -1061,6 +1061,7 @@ mockIPC(
       case "voice_install":
         return voicesStall ? new Promise(() => undefined) : { installed: true, bytes: 128_774_318, voices: 10 };
       case "voice_clip":
+        return { path: null, words: (payload as { line: { question: string } }).line.question };
       case "voice_install_cancel":
         return null;
       case "lights_devices":

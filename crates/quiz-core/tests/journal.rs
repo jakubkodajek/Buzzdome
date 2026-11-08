@@ -99,6 +99,7 @@ fn one_question() -> Quiz {
         points: 100,
         points_end: None,
         penalty: 0,
+        read_as: String::new(),
     };
     Quiz::new("Q", vec![Slide::new("q1", SlideContent::Question(question))])
 }

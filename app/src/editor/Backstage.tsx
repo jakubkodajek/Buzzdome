@@ -1,5 +1,5 @@
 import { useApp, useRun } from "../app-context";
-import { useVoiceGain, useVoiceModel, useVoicePreview, useVoiceSample, voiceLine, voiceName, VOICES } from "../audio/read-aloud";
+import { useVoiceGain, useVoiceModel, useVoicePreview, useVoiceSample, voiceLine, voiceName, VOICE_SPEEDS, VOICES } from "../audio/read-aloud";
 import { welcomePreviewView } from "../host/preview";
 import { SlideScreen } from "../host/SlideScreen";
 import { Stage } from "../host/Stage";
@@ -278,6 +278,7 @@ function ReadAloudSettings({ quiz, settings, set }: { quiz: Quiz; settings: Quiz
   const reads = (Object.keys(READ_ALOUD_LABEL) as ReadAloud[]).map((value): [ReadAloud, string] => [value, t(READ_ALOUD_LABEL[value])]);
   const languages = QUIZ_LANGUAGES.map((value): [QuizLanguage, string] => [value, t(LANGUAGE_LABEL[value])]);
   const voices = VOICES.map((value): [number, string] => [value, voiceName(t, value)]);
+  const speeds = VOICE_SPEEDS.map((value): [number, string] => [value, t("percent", { n: value })]);
   const trying = preview.playing || sample.playing;
   const { preparing } = preview;
   const tryVoice = () => {
@@ -336,6 +337,11 @@ function ReadAloudSettings({ quiz, settings, set }: { quiz: Quiz; settings: Quiz
         </div>
       </div>
       {model && !model.installed && <p className="backstage-hint">{t("voiceNotDownloaded")}</p>}
+      <div className="field">
+        <span>{t("voiceSpeed")}</span>
+        <Select label={t("voiceSpeed")} value={settings.voiceSpeed} options={speeds} onChange={(voiceSpeed) => set({ voiceSpeed })} />
+      </div>
+      <p className="backstage-hint">{t("voiceSpeedHint")}</p>
     </>
   );
 }

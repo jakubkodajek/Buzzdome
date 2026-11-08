@@ -27,6 +27,24 @@ Template:
   `memory/features.json` (drafted from `ROADMAP.md`).
 - Blockers / open questions: ADR-0001 is Proposed until Jakub accepts it.
 
+## 2026-11-07 - read-aloud-quality
+- Done: the voice says numbers, dates, ordinals (gender from the next
+  word, case from a preposition), Roman numerals, units, currencies and
+  common abbreviations as words (`crates/voice/src/speech/`); the
+  question, each answer's letter ("Á", "Bé") and each answer render as
+  separate parts, trimmed, levelled and joined with pauses
+  (`crates/voice/src/audio.rs`); 12 denoising steps; quiz setting
+  `voiceSpeed` (80-120 %); question field `readAs` (editor Text page);
+  `voice_clip` returns the spoken words for the system voice.
+  The spreadsheet carries it as a `READ-AS` column. Version 1.1.0.
+- State: make check green; branch `claude/project-thread-s4llq8`, PR #79,
+  merged with main after #78; guardian BF181-BF186 fixed. Checked with the
+  real model and Whisper small as listener (design.md 1.8).
+- Next: merge with Jakub's OK (given for 1.1.0); Jakub pushes the tag and
+  listens on Windows.
+- Blockers / open questions: Czech locative nouns in -e ("ve 2. kole")
+  read as feminine; `readAs` fixes such cases.
+
 ## 2026-11-07 - resume-quiz-edits
 - Done: a resumed show can take its quiz file as saved since the show began
   (Jakub's choice): `Quiz::shape_change`, journaled `Command::TakeQuiz` with the

@@ -23,6 +23,7 @@ import {
   setMode,
   setNotes,
   setPicture,
+  setReadAs,
   setScoring,
   setShare,
   setSlideFill,
@@ -173,6 +174,12 @@ describe("slides", () => {
   it("keeps the clock and points whole and in range", () => {
     const q = setScoring(question(), { timeLimitS: -5, points: 12.6, pointsEnd: 1e9, penalty: Number.NaN });
     expect([q.timeLimitS, q.points, q.pointsEnd, q.penalty]).toEqual([0, 13, 100_000, 0]);
+  });
+
+  it("keeps how the voice says a question, and leaves it out of the file once it is emptied", () => {
+    const q = setReadAs(question(), "Švarceneger");
+    expect(q.readAs).toBe("Švarceneger");
+    expect("readAs" in setReadAs(q, "  ")).toBe(false);
   });
 
   it("shows a picture or a video, not both", () => {

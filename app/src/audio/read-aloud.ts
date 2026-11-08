@@ -7,14 +7,13 @@
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { api } from "../api";
 import { useDispatch, useReport } from "../app-context";
-import { ANSWER_LETTERS } from "../answers";
-import { DEFAULT_QUIZ_SETTINGS, DEFAULT_QUIZ_SOUNDS, FIRST_MALE_VOICE, MAX_VOICE } from "../bindings/Constants";
+import { DEFAULT_QUIZ_SETTINGS, DEFAULT_QUIZ_SOUNDS, FIRST_MALE_VOICE, MAX_VOICE, MAX_VOICE_SPEED, MIN_VOICE_SPEED, VOICE_SPEED_STEP } from "../bindings/Constants";
 import { useLatest, usePlayerVolume } from "../hooks";
 import { fileUrl } from "../media";
 import { settingsOf, soundsOf } from "../quiz";
 import { createStore, useStore } from "../store";
 import type { Translate } from "../i18n";
-import type { AppError, GameView, Question, Quiz, QuizLanguage, QuizSettings, ReadAloud, Slide, VoiceLine, VoiceModel } from "../types";
+import type { AppError, GameView, Quiz, QuizLanguage, QuizSettings, ReadAloud, Slide, VoiceLine, VoiceModel } from "../types";
 import { ClipPlayer, linearGain, playerLevel } from "./clip-player";
 import { playBundled } from "./show-audio";
 
@@ -23,6 +22,12 @@ export const SPEECH_TAGS: Record<QuizLanguage, string> = {
   cs: "cs-CZ",
   en: "en-GB",
 };
+
+/** The reading speeds offered, in percent of the voice's own pace. */
+export const VOICE_SPEEDS: readonly number[] = Array.from(
+  { length: (MAX_VOICE_SPEED - MIN_VOICE_SPEED) / VOICE_SPEED_STEP + 1 },
+  (_, i) => MIN_VOICE_SPEED + i * VOICE_SPEED_STEP,
+);
 
 /** Every voice of the model, by number. */
 export const VOICES: readonly number[] = Array.from({ length: MAX_VOICE + 1 }, (_, voice) => voice);
@@ -43,32 +48,19 @@ export function sampleUrl(language: QuizLanguage, voice: number): string | null 
   return SAMPLES[`./voices/${language}-${voice}.mp3`] ?? null;
 }
 
-/** The words read for `question`: its text, and with the answers each after its letter. */
-export function spokenText(question: Pick<Question, "text" | "answers">, what: ReadAloud): string {
-  if (what === "off") return "";
-  const parts = [question.text];
-  if (what === "questionAndAnswers") {
-    question.answers.forEach((answer, i) => {
-      if (answer.trim() !== "") parts.push(`${ANSWER_LETTERS[i]}: ${answer}`);
-    });
-  }
-  return parts
-    .map(sentence)
-    .filter((part) => part !== "")
-    .join(" ");
-}
-
-/** `text` on one line, ending as a sentence ends, so the voice pauses after it. */
-function sentence(text: string): string {
-  const words = text.replace(/\s+/g, " ").trim();
-  return words === "" || /[.!?…:;]$/.test(words) ? words : `${words}.`;
-}
-
-/** What the voice says for `slide` by the quiz's `settings` (reading as `what`); null for nothing. */
+/**
+ * What the voice says for `slide` by the quiz's `settings` (reading as
+ * `what`): the question as its "read as" text says or as written, and with
+ * the answers. The app says it in words, each answer after its letter
+ * (`voice::Line::parts`). Null for nothing.
+ */
 export function voiceLine(slide: Slide | null | undefined, settings: QuizSettings, what: ReadAloud = settings.readAloud): VoiceLine | null {
-  if (slide?.type !== "question") return null;
-  const text = spokenText(slide, what);
-  return text === "" ? null : { text, language: settings.language, voice: settings.voice };
+  if (slide?.type !== "question" || what === "off") return null;
+  const readAs = slide.readAs?.trim() ?? "";
+  const question = readAs !== "" ? readAs : slide.text.trim();
+  const answers = what === "questionAndAnswers" ? slide.answers.map((answer) => answer.trim()) : [];
+  if (question === "" && answers.every((answer) => answer === "")) return null;
+  return { question, answers, language: settings.language, voice: settings.voice, speed: settings.voiceSpeed };
 }
 
 /** Every line the quiz's questions are read with, each once, in slide order. */
@@ -77,8 +69,9 @@ export function questionLines(quiz: Quiz): VoiceLine[] {
   const seen = new Set<string>();
   return quiz.slides.flatMap((slide) => {
     const line = voiceLine(slide, settings);
-    if (!line || seen.has(line.text)) return [];
-    seen.add(line.text);
+    const key = line && JSON.stringify([line.question, line.answers]);
+    if (!line || !key || seen.has(key)) return [];
+    seen.add(key);
     return [line];
   });
 }
@@ -219,27 +212,30 @@ interface Speaking {
 
 /** Says `line` with its clip at `gain` if one is kept, else with `system`; `onEnd` hears when it ends. */
 async function say(line: VoiceLine, gain: number, system: SpeechSynthesisVoice | null | undefined, onEnd: () => void): Promise<Speaking | null> {
-  const path = await api.voiceClip(line, false).catch(() => null);
+  const clip = await api.voiceClip(line, false).catch(() => null);
+  const path = clip?.path ?? null;
   if (path) {
-    const clip = new ClipPlayer(fileUrl(path), gain);
+    const player = new ClipPlayer(fileUrl(path), gain);
     // Played to its end, or a file that does not play: either way it is over.
-    clip.onEnd = () => {
-      clip.dispose();
+    player.onEnd = () => {
+      player.dispose();
       onEnd();
     };
-    clip.play({ fromMs: 0, toMs: null });
+    player.play({ fromMs: 0, toMs: null });
     return {
       stop: () => {
-        clip.onEnd = null;
-        clip.dispose();
+        player.onEnd = null;
+        player.dispose();
       },
     };
   }
   const synth = speech();
   if (!synth || !system) return null;
-  const utterance = new SpeechSynthesisUtterance(line.text);
+  // The words as the app's voice would say them; the question alone when even they did not come.
+  const utterance = new SpeechSynthesisUtterance(clip?.words ?? line.question);
   utterance.voice = system;
   utterance.lang = system.lang;
+  utterance.rate = line.speed / 100;
   utterance.volume = Math.min(1, Math.max(0, gain));
   utterance.onend = utterance.onerror = onEnd;
   synth.cancel();

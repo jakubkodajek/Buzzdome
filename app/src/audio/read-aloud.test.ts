@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { DEFAULT_QUIZ_SETTINGS } from "../bindings/Constants";
 import { translator } from "../i18n";
 import type { Quiz, QuizSettings, Slide } from "../types";
-import { mayTakeVoice, pickSystemVoice, questionLines, sampleUrl, soundsItself, spokenText, VOICES, voiceLine, voiceName, type SystemVoice } from "./read-aloud";
+import { mayTakeVoice, pickSystemVoice, questionLines, sampleUrl, soundsItself, VOICE_SPEEDS, VOICES, voiceLine, voiceName, type SystemVoice } from "./read-aloud";
 
 const settings: QuizSettings = {
   ...DEFAULT_QUIZ_SETTINGS,
@@ -30,16 +30,20 @@ function question(text: string, answers: string[]): Slide {
   };
 }
 
-describe("spokenText", () => {
-  it("reads the question as a sentence, and the answers after their letters", () => {
-    const q = {
-      text: "Kolik nohou\n má pavouk",
-      answers: ["Šest", "", "Osm!"],
-    };
-    expect(spokenText(q, "question")).toBe("Kolik nohou má pavouk.");
-    expect(spokenText(q, "questionAndAnswers")).toBe("Kolik nohou má pavouk. A: Šest. C: Osm!");
-    expect(spokenText(q, "off")).toBe("");
-    expect(spokenText({ text: "Kdo?", answers: [] }, "questionAndAnswers")).toBe("Kdo?");
+describe("voiceLine", () => {
+  // How the words are said (letters, numbers, pauses) is the app's: `voice::Line::parts`.
+  it("reads the question as its read-as text says, or as written, and the answers when asked", () => {
+    const q = { ...question(" Kolik nohou má pavouk? ", ["Šest", "", "Osm!"]), readAs: "" } as Slide;
+    expect(voiceLine(q, settings)).toEqual({ question: "Kolik nohou má pavouk?", answers: ["Šest", "", "Osm!"], language: "cs", voice: 3, speed: 100 });
+    expect(voiceLine(q, settings, "question")?.answers).toEqual([]);
+    expect(voiceLine(q, settings, "off")).toBeNull();
+    expect(voiceLine({ ...q, readAs: " Kolik noh má pavůk? " } as Slide, settings)?.question).toBe("Kolik noh má pavůk?");
+    expect(voiceLine(q, { ...settings, voiceSpeed: 90 })?.speed).toBe(90);
+    expect(voiceLine(question(" ", [" ", ""]), settings)).toBeNull();
+  });
+
+  it("offers the speeds from slow to fast, the voice's own pace among them", () => {
+    expect(VOICE_SPEEDS).toEqual([80, 90, 100, 110, 120]);
   });
 });
 
@@ -60,12 +64,12 @@ describe("voiceLine and questionLines", () => {
       settings,
     } as unknown as Quiz;
     expect(questionLines(quiz)).toEqual([
-      { text: "Kdo? A: Já.", language: "cs", voice: 3 },
-      { text: "Kde?", language: "cs", voice: 3 },
+      { question: "Kdo?", answers: ["Já"], language: "cs", voice: 3, speed: 100 },
+      { question: "Kde?", answers: [], language: "cs", voice: 3, speed: 100 },
     ]);
     expect(voiceLine(question("  ", []), settings)).toBeNull();
     expect(voiceLine(null, settings)).toBeNull();
-    expect(voiceLine(question("Kdo?", ["Já"]), settings, "question")?.text).toBe("Kdo?");
+    expect(voiceLine(question("Kdo?", ["Já"]), settings, "question")?.question).toBe("Kdo?");
   });
 });
 

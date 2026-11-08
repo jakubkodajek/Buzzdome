@@ -39,7 +39,7 @@ describe("the pages for one slide", () => {
       pages: [
         { gameplay: [{ sectionSlide: ["type"] }, { sectionTiming: ["answerTime"] }, { sectionAnswering: ["everyoneAnswers", "answerCount", "correctAnswer"] }] },
         { scoring: [{ sectionPoints: ["pointsStart", "falling", "penalty"] }] },
-        { text: [{ sectionText: ["questionText", "notes"] }] },
+        { text: [{ sectionText: ["questionText", "readAs", "notes"] }] },
         { media: [{ sectionPictureVideo: ["picture", "video"] }, { sectionSound: ["sound"] }] },
         {
           design: [
@@ -93,7 +93,7 @@ describe("the pages for a part of a slide", () => {
   });
 
   it("are the question's text and its look", () => {
-    expect(outline([question()], "question").pages).toEqual([{ text: [{ sectionText: ["questionText"] }] }, { design: [{ sectionQuestionLook: look("headline") }] }]);
+    expect(outline([question()], "question").pages).toEqual([{ text: [{ sectionText: ["questionText", "readAs"] }] }, { design: [{ sectionQuestionLook: look("headline") }] }]);
   });
 
   it("are a text's rows, with a look only for a text the slide type shows", () => {
@@ -121,6 +121,7 @@ describe("the pages for several slides", () => {
     // Texts and the id are each slide's own, so they and their pages go.
     expect(pages.map((p) => Object.keys(p)[0])).toEqual(["gameplay", "scoring", "media", "design"]);
     expect(rowIds([question(), question({ timeLimitS: 30 })])).not.toContain("questionText");
+    expect(rowIds([question(), question({ timeLimitS: 30 })])).not.toContain("readAs");
   });
 
   it("show the slide's own pages whatever part of the first was selected", () => {

@@ -165,6 +165,7 @@ fn random_question(rng: &mut Rng, n: usize) -> Question {
         points,
         points_end: rng.chance(40).then(|| rng.between(0, 300) as i32),
         penalty: if rng.chance(50) { rng.between(0, 100) as i32 } else { 0 },
+        read_as: String::new(),
     }
 }
 

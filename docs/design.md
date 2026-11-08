@@ -1196,9 +1196,38 @@ and has no rules of its own: what it accepts is what `quiz_file` and
 ### 1.8 Reading questions aloud
 
 Spec SN-10. A quiz's `settings` say what is read (`readAloud`), in which
-language and voice; the words are made in the UI (`audio/read-aloud.ts`,
-`spokenText`: the question as a sentence, then each answer after its
-letter from `answers.ts`).
+language and voice, and how fast (`voiceSpeed`). The UI picks what to
+read (`audio/read-aloud.ts`, `voiceLine`: the question's `readAs` text or
+its text, and the answers); `crates/voice` decides how it is said
+(`Line::parts`):
+
+- **Words.** `speech/` (`mod.rs`, `czech.rs`, `english.rs`) writes the text as it is said in the quiz's
+  language before the model reads it: numbers (Czech thousands grouped by
+  spaces, English by commas), decimals, ranges ("1914–1918"), minus signs,
+  times, Czech dates ("17. 11. 1989"), ordinals ("2. světová válka",
+  "21st"), Roman numerals after a ruler's name or before a noun ("Karel
+  IV.", "XX. století", "Henry VIII", "World War II"), units and
+  currencies after or before a number ("30 km/h", "$5"), a few operators
+  and common abbreviations ("např.", "tzv.", "e.g."). A Czech number
+  agrees with its unit's gender, an ordinal takes its gender from the
+  ending of the word after it and its case from a preposition before it
+  (locative after "v", "na", "po"…, genitive after "do", "od", "z"…), and
+  a saint's "sv." after another word is in the genitive. These are rules
+  of thumb; what they get wrong (a locative noun in -e, an unusual case,
+  a foreign name) the question's `readAs` says instead. Measured on
+  2026-11-07 with the model and Whisper small as the listener: before
+  this, "1945" came back as "de roce 45", "-5 °C" as "pět doce", "Karel
+  IV." as "Karel Ivé" and "B: London" as "London"; after it, the eight
+  test sentences came back as written.
+- **Parts.** The question, each answer's letter and each answer are
+  rendered on their own (Czech letters written as they sound, "Á", "Bé",
+  so that "A" is not the word "a"), the silence the model leaves around
+  each one is cut (`audio.rs`; about 0.35 s before and 0.6 s after a short
+  one), each is brought to the same loudness, and they are joined with
+  pauses of 600 ms after the question, 150 ms after a letter and 450 ms
+  after an answer. The engine takes 12 denoising steps (the model's own
+  default for its best quality; sherpa-onnx's example takes 8) and the
+  quiz's speed, 80 to 120 percent.
 
 - **Model.** `crates/voice` knows the one voice model (`model.rs`:
   Supertonic 3, quantized to 8 bits and packed for sherpa-onnx, 129 MB,
@@ -1237,7 +1266,7 @@ letter from `answers.ts`).
   only, a voice the model has).
 - **Clips.** A clip is a 16-bit mono WAV in `<app local data>/voice-clips/`,
   named by the SHA-256 of what it says and how (render version, model,
-  language, voice, words), so an edited question gets a new clip and an
+  language, voice, speed, the parts' words and pauses), so an edited question gets a new clip and an
   old one is never played for it; the file is written beside its name and
   renamed. The app's asset scope (one for every window) includes the folder.
 - **Show.** Once a show with reading on is loaded, the Director renders

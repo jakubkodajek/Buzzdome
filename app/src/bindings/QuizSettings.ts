@@ -90,4 +90,9 @@ voice: number,
  * reading to end before its clock starts (`Command::ReadingDone`);
  * by default the clock runs while the voice reads.
  */
-clockAfterReading: boolean, };
+clockAfterReading: boolean, 
+/**
+ * How fast the voice reads, in percent of its own pace, from
+ * `MIN_VOICE_SPEED` to `MAX_VOICE_SPEED`.
+ */
+voiceSpeed: number, };

@@ -14,10 +14,22 @@ fn the_model_says_a_czech_question() {
     let root = std::path::PathBuf::from(root);
     assert!(voice::model::installed(&root), "no model under {}", root.display());
     let engine = Engine::load(&root).unwrap();
-    let line = Line { text: "Kolik nohou má pavouk? A: Šest. B: Osm.".into(), language: quiz_core::QuizLanguage::Cs, voice: 3 };
-    let clip = engine.render(&line).unwrap();
-    let seconds = clip.samples.len() as f32 / clip.rate as f32;
-    assert!((1.5..15.0).contains(&seconds), "{seconds} s");
+    let line = Line {
+        question: "Kolik nohou má pavouk?".into(),
+        answers: vec!["Šest".into(), "Osm".into()],
+        language: quiz_core::QuizLanguage::Cs,
+        voice: 3,
+        speed: quiz_core::DEFAULT_VOICE_SPEED,
+    };
+    let seconds = |line: &Line| {
+        let clip = engine.render(line).unwrap();
+        clip.samples.len() as f32 / clip.rate as f32
+    };
+    let normal = seconds(&line);
+    assert!((1.5..15.0).contains(&normal), "{normal} s");
+    let slow = seconds(&Line { speed: quiz_core::MIN_VOICE_SPEED, ..line.clone() });
+    let fast = seconds(&Line { speed: quiz_core::MAX_VOICE_SPEED, ..line });
+    assert!(slow > normal && normal > fast, "{slow} s, {normal} s, {fast} s");
 }
 
 /// Checks and unpacks the real download when `VOICE_ARCHIVE` names it.

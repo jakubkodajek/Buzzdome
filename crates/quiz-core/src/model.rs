@@ -396,6 +396,11 @@ pub struct Question {
     /// Points taken for a wrong answer (a positive number).
     #[serde(default)]
     pub penalty: i32,
+    /// How the voice says the question when it reads it out (spec SN-10),
+    /// such as a name written as it sounds; empty reads `text`.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    #[ts(optional, as = "Option<String>")]
+    pub read_as: String,
 }
 
 /// A right answer of a question and the share of the question's points it
@@ -1034,6 +1039,7 @@ mod tests {
             points,
             points_end,
             penalty: 0,
+            read_as: String::new(),
         }
     }
 
@@ -1669,6 +1675,7 @@ mod tests {
             read_aloud: ReadAloud::QuestionAndAnswers,
             voice: 6,
             clock_after_reading: true,
+            voice_speed: 90,
         };
         quiz.sounds.effects_volume = 40;
         quiz.sounds.music_volume = 60;
