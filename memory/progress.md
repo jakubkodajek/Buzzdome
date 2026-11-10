@@ -58,3 +58,17 @@ Template:
   `editedSlideKept`) fixed; BF180 this line.
 - Next: guardian review of the PR, then Jakub's OK to merge.
 - Blockers / open questions: none.
+
+## 2026-11-10 - simpler-sheet-import
+- Done: spreadsheet columns have full-word headings in English and Czech
+  (`Question`/`Otázka`, `Answer 1`/`Odpověď 1`...) next to the reference's
+  short ones; an import knows any of them whatever their case, accents,
+  spaces and dashes (`text::heading_key`), and notes name a column as the
+  sheet does. Export and the template write the headings in the app's
+  language (`editor_export_sheet` takes `language`), leave the answer time,
+  points and penalty empty at their defaults, and write a `{Q, EA}`/`{Q, FF}`
+  prefix only where the row would read otherwise. Import help, template
+  notes and docs/quiz-format.md say only the question and answers are needed.
+- State: make check green; branch `claude/project-thread-28dmvy`.
+- Next: Jakub's review of the PR, then his OK to merge.
+- Blockers / open questions: none.

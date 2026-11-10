@@ -99,8 +99,8 @@ describe("problemText", () => {
 
 describe("import notes", () => {
   it("word each issue with its parameters and leave the format's own braces", () => {
-    expect(importIssueText(en, { code: "badSetting", column: "VIDEO", setting: "speed", value: "500" })).toBe(
-      "Setting speed=500 in column VIDEO is not valid; the default was kept.",
+    expect(importIssueText(en, { code: "badSetting", column: "Video", setting: "speed", value: "500" })).toBe(
+      "Setting speed=500 in column “Video” is not valid; the default was kept.",
     );
     expect(importIssueText(cs, { code: "linkedFile" })).toContain("označené {L}");
     expect(importIssueText(en, { code: "notEveryone", answers: 5 })).toContain("with 5 answers");

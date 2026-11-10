@@ -239,9 +239,12 @@ export const api = {
    * for the editor to insert; a row's `CAT` names one of the draft's categories.
    */
   editorImportSheet: (draft: string, picker: Picker) => invoke<SheetImport | null>("editor_import_sheet", { draft, picker }),
-  /** Writes the quiz as a CSV file the quizmaster picks, with its media next to it; null when they cancel. */
-  editorExportSheet: (draft: string, quiz: Quiz, separator: ListSeparator, picker: Picker) =>
-    invoke<SheetExport | null>("editor_export_sheet", { draft, quiz, separator, picker }),
+  /**
+   * Writes the quiz as a CSV file the quizmaster picks, with its media next to it and
+   * its column headings in `language`; null when they cancel.
+   */
+  editorExportSheet: (draft: string, quiz: Quiz, separator: ListSeparator, language: Lang, picker: Picker) =>
+    invoke<SheetExport | null>("editor_export_sheet", { draft, quiz, separator, language, picker }),
   /** Discards the draft, also one that cannot be read. */
   editorClose: () => invoke<void>("editor_close"),
   /** Plays the editor's quiz as a show that is not kept for resuming, from the slide `from` if given. */

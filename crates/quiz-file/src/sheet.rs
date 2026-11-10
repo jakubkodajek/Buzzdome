@@ -6,7 +6,7 @@
 
 use crate::{place_file, write_atomic, Context, FileAction, MediaSource, QuizFileError, Result};
 use calamine::{open_workbook_auto, Data, DataRef, Reader, SheetType, SheetVisible, Sheets, XlsxError};
-use quiz_core::{defused, export_table, import_tables, is_safe_reference, Category, ImportIssue, ImportNote, Quiz, Slide, Table};
+use quiz_core::{defused, export_table, import_tables, is_safe_reference, Category, ImportIssue, ImportNote, Quiz, QuizLanguage, Slide, Table};
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::collections::BTreeMap;
@@ -465,12 +465,13 @@ fn separator(text: &str) -> u8 {
 }
 
 /// Writes the quiz's slides to `dest` as a CSV file that Excel opens (UTF-8
-/// with a byte order mark, cells separated by `separator`) and copies the
+/// with a byte order mark, cells separated by `separator`, headings in
+/// `language`) and copies the
 /// media they use, read from the package folder `root`, next to it under
 /// their own names. Media that several slides share are written once; a
 /// file of the same name with other contents already there is kept, and the
 /// copy gets a number added.
-pub fn export_sheet(quiz: &Quiz, root: &Path, dest: &Path, separator: u8) -> Result<SheetExport> {
+pub fn export_sheet(quiz: &Quiz, root: &Path, dest: &Path, separator: u8, language: QuizLanguage) -> Result<SheetExport> {
     let folder = dest.parent().unwrap_or(Path::new(""));
     let mut names = BTreeMap::new();
     let (mut missing, mut refused) = (Vec::new(), Vec::new());
@@ -488,7 +489,7 @@ pub fn export_sheet(quiz: &Quiz, root: &Path, dest: &Path, separator: u8) -> Res
         let name = reference.rsplit('/').next().unwrap_or(reference);
         names.insert(reference, place_file(folder, name, MediaSource::File(&source))?);
     }
-    write_csv(export_table(quiz, |reference| names.get(reference).cloned()), dest, separator)?;
+    write_csv(export_table(quiz, language, |reference| names.get(reference).cloned()), dest, separator)?;
     Ok(SheetExport { media: names.len(), missing, refused })
 }
 
@@ -761,13 +762,13 @@ mod tests {
         second.sound = Some(SoundClip::new("media/gone.mp3"));
         let quiz = Quiz::new("Quiz", vec![first, second]);
 
-        let report = export_sheet(&quiz, &root, &out.join("quiz.csv"), b';').unwrap();
+        let report = export_sheet(&quiz, &root, &out.join("quiz.csv"), b';', QuizLanguage::Cs).unwrap();
         assert_eq!(report, SheetExport { media: 3, missing: vec!["media/gone.mp3".into()], refused: Vec::new() });
         let bytes = fs::read(out.join("quiz.csv")).unwrap();
         assert!(bytes.starts_with(UTF8_BOM));
         let text = String::from_utf8(bytes[UTF8_BOM.len()..].to_vec()).unwrap();
-        assert!(text.starts_with("Q;A1;A2;"), "{text}");
-        assert!(text.contains("{B}Round 2;;;;;;;flag-2.png;;;;;waves-2.mp4;"), "{text}");
+        assert!(text.starts_with("Otázka;Odpověď 1;Odpověď 2;"), "{text}");
+        assert!(text.contains("{B}Round 2;;;;;;;;flag-2.png;;;;waves-2.mp4;"), "{text}");
         assert_eq!(fs::read(out.join("flag-2.png")).unwrap(), b"two");
         assert_eq!(fs::read(out.join("waves.mp4")).unwrap(), b"mine");
 
@@ -799,7 +800,7 @@ mod tests {
         });
         let quiz = Quiz::new("Quiz", slides.collect());
 
-        let report = export_sheet(&quiz, &root, &out.join("quiz.csv"), b';').unwrap();
+        let report = export_sheet(&quiz, &root, &out.join("quiz.csv"), b';', QuizLanguage::Cs).unwrap();
         let mut refused = outside.to_vec();
         refused.sort();
         assert_eq!(report, SheetExport { media: 0, missing: Vec::new(), refused });

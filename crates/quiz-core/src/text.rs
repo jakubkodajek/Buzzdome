@@ -3,6 +3,7 @@
 //! on one system and pasted from another can encode "é" as one character
 //! or as "e" and an accent (macOS file names do), which look the same.
 
+use unicode_normalization::char::is_combining_mark;
 use unicode_normalization::UnicodeNormalization;
 
 /// `text` with its accents encoded as single characters (NFC), the form
@@ -15,6 +16,14 @@ pub(crate) fn composed(text: &str) -> String {
 /// composed and in lower case.
 pub(crate) fn name_key(name: &str) -> String {
     name.trim().to_lowercase().nfc().collect()
+}
+
+/// The key a spreadsheet's column heading is known by: its letters and
+/// digits only, in lower case and without accents, so `Odpověď 1`,
+/// `odpoved1` and `ODPOVĚĎ-1` name one column, as do `BACKGROUND-VIDEO`
+/// and `Background video`.
+pub(crate) fn heading_key(heading: &str) -> String {
+    heading.nfd().filter(|&c| !is_combining_mark(c) && c.is_alphanumeric()).flat_map(char::to_lowercase).collect()
 }
 
 /// The key file names are told apart by on some disk the quiz may be
@@ -46,5 +55,13 @@ mod tests {
         // Two files on Windows, one on macOS.
         assert_eq!(file_key("media/Straße.png"), file_key("media/STRASSE.png"));
         assert_ne!(file_key("media/ kůň.png"), file_key("media/kůň.png"), "spaces are part of a file name");
+    }
+
+    #[test]
+    fn headings_differing_in_case_accents_spaces_or_dashes_have_one_key() {
+        assert_eq!(heading_key(" Odpověď 1 "), "odpoved1");
+        assert_eq!(heading_key("ODPOVE\u{30c}D\u{30c}-1"), "odpoved1");
+        assert_eq!(heading_key("BACKGROUND-VIDEO"), heading_key("Background video"));
+        assert_eq!(heading_key("Čas na odpověď"), "casnaodpoved");
     }
 }
