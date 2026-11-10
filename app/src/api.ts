@@ -42,6 +42,7 @@ import type {
   Press,
   PressEvent,
   Quiz,
+  QuizLanguage,
   RawReport,
   ReceiverInfo,
   Rgb,
@@ -243,7 +244,7 @@ export const api = {
    * Writes the quiz as a CSV file the quizmaster picks, with its media next to it and
    * its column headings in `language`; null when they cancel.
    */
-  editorExportSheet: (draft: string, quiz: Quiz, separator: ListSeparator, language: Lang, picker: Picker) =>
+  editorExportSheet: (draft: string, quiz: Quiz, separator: ListSeparator, language: QuizLanguage, picker: Picker) =>
     invoke<SheetExport | null>("editor_export_sheet", { draft, quiz, separator, language, picker }),
   /** Discards the draft, also one that cannot be read. */
   editorClose: () => invoke<void>("editor_close"),

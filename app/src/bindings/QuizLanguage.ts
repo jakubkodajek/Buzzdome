@@ -3,5 +3,7 @@
 /**
  * The language a quiz is written in, by its ISO 639-1 code: the ones the
  * app's voices read (the voice model has more, which can be added here).
+ * It also names the language of a spreadsheet export's column headings
+ * (`sheet::export_table`).
  */
 export type QuizLanguage = "cs" | "en";

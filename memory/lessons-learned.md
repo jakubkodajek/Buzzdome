@@ -5,6 +5,7 @@ happens twice or a review finding would have been prevented by a rule.
 Loaded into every Claude session: keep it short. Newest first.
 Format: `- YYYY-MM-DD: <rule> (why: <one line>)`
 
+- 2026-11-10: Quote a `replica/features.csv` cell that contains a comma (why: BF184, BF188).
 - 2026-11-07: Show the `make check` (or `buzzdome-verify`) output before calling a task done (why: agents tend to declare success early).
 - 2026-11-07: Commit the `app/src/bindings` files `cargo test --workspace` rewrote in the same commit as the Rust type change (why: CI's check job fails on stale bindings).
 - 2026-11-07: Build the UI (`npm run build`) before the first Rust build, and set `SHERPA_ONNX_ARCHIVE_DIR` from `.github/scripts/sherpa-onnx-libs.sh` (why: Tauri embeds `app/dist`, and the voice crate otherwise downloads unchecked archives or fails behind a proxy).
