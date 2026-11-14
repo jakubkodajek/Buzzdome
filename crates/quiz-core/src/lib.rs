@@ -38,7 +38,7 @@ pub use model::{
     DEFAULT_POINTS, DEFAULT_TIME_LIMIT_S, FULL_SHARE, MAX_ANSWERS, MAX_EVERYONE_ANSWERS, MAX_POINTS, MAX_TIME_LIMIT_S,
     MIN_EVERYONE_ANSWERS, SCHEMA_VERSION,
 };
-pub use sheet::{defused, export_table, import_tables, ImportIssue, ImportNote, ImportedRows, Notes, Place, SheetError, Table};
+pub use sheet::{defused, export_table, import_tables, rows_without_correct, ImportIssue, ImportNote, ImportedRows, Notes, Place, SheetError, Table};
 pub use text::file_key;
 pub use stage::{Stage, LAST_SECONDS_MS};
 pub use sound_board::{BoardChange, BoardError, Pad, PadClick, PadColor, PadSource, SoundBoard};

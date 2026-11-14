@@ -917,6 +917,14 @@ pub fn export_table(quiz: &Quiz, language: QuizLanguage, file_name: impl Fn(&str
     std::iter::once(headings).chain(rows).collect()
 }
 
+/// The sheet rows of the questions with answers but none marked correct,
+/// numbered as `export_table` writes them (the headings are the first row):
+/// a sheet cannot say so, and the import makes the first answer correct.
+pub fn rows_without_correct(quiz: &Quiz) -> Vec<u32> {
+    let unmarked = |slide: &Slide| matches!(&slide.content, SlideContent::Question(q) if !q.answers.is_empty() && q.correct.is_empty());
+    (2..).zip(&quiz.slides).filter(|(_, slide)| unmarked(slide)).map(|(row, _)| row).collect()
+}
+
 /// Whether a spreadsheet program would take `cell` for a formula, which can
 /// run commands when the sheet is opened: it starts with `=`, `@`, a tab, a
 /// carriage return, or `+` or `-` not followed by just a number.
@@ -1532,6 +1540,26 @@ mod tests {
         );
         quiz.categories = vec![Category::new("c1", "Films")];
         quiz
+    }
+
+    #[test]
+    fn questions_a_sheet_would_give_a_correct_answer_are_named_by_their_row() {
+        let mut quiz = full_quiz();
+        assert_eq!(rows_without_correct(&quiz), Vec::<u32>::new());
+        let asked = |answers: Vec<String>| Question {
+            text: "Name one".into(),
+            mode: AnswerMode::FastestFinger,
+            answers,
+            correct: Vec::new(),
+            time_limit_s: 20,
+            points: 10,
+            points_end: None,
+            penalty: 0,
+            read_as: String::new(),
+        };
+        quiz.slides.insert(1, Slide::new("q9", SlideContent::Question(asked(vec!["one".into(), "two".into()]))));
+        quiz.slides.push(Slide::new("q10", SlideContent::Question(asked(Vec::new()))));
+        assert_eq!(rows_without_correct(&quiz), [3], "the headings are row 1; a question without answers needs none");
     }
 
     #[test]

@@ -6,7 +6,7 @@
 
 use crate::{place_file, write_atomic, Context, FileAction, MediaSource, QuizFileError, Result};
 use calamine::{open_workbook_auto, Data, DataRef, Reader, SheetType, SheetVisible, Sheets, XlsxError};
-use quiz_core::{defused, export_table, import_tables, is_safe_reference, Category, ImportIssue, ImportNote, Quiz, QuizLanguage, Slide, Table};
+use quiz_core::{defused, export_table, import_tables, is_safe_reference, rows_without_correct, Category, ImportIssue, ImportNote, Quiz, QuizLanguage, Slide, Table};
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::collections::BTreeMap;
@@ -60,6 +60,9 @@ pub struct SheetExport {
     /// Media the quiz names outside its media folder (an absolute path, a
     /// `..`), never read: their cells stay empty.
     pub refused: Vec<String>,
+    /// The sheet rows of questions with answers but none correct, which an
+    /// import of the sheet would give a correct answer.
+    pub unmarked: Vec<u32>,
 }
 
 /// Makes slides of the `tables` read from the spreadsheet at `path` (see
@@ -422,8 +425,9 @@ fn iso_duration_seconds(iso: &str) -> Option<i64> {
 /// Refused at the first record that does not fit in `room` or spans more
 /// than `MAX_SHEET_COLUMNS` columns.
 fn csv_table(bytes: &[u8], room: Room) -> Result<Table> {
-    let text = decode(bytes);
-    let mut reader = csv::ReaderBuilder::new().has_headers(false).flexible(true).delimiter(separator(&text)).from_reader(text.as_bytes());
+    let decoded = decode(bytes);
+    let (skipped, named, text) = leading_lines(&decoded);
+    let mut reader = csv::ReaderBuilder::new().has_headers(false).flexible(true).delimiter(named.unwrap_or_else(|| separator(text))).from_reader(text.as_bytes());
     let mut rows: Vec<Vec<String>> = Vec::new();
     let mut text_bytes = 0;
     for record in reader.records() {
@@ -435,7 +439,29 @@ fn csv_table(bytes: &[u8], room: Room) -> Result<Table> {
         }
         rows.push(row);
     }
-    Ok(Table { name: String::new(), first_row: 1, rows })
+    Ok(Table { name: String::new(), first_row: skipped + 1, rows })
+}
+
+/// The lines before a CSV file's headings that hold no cell: blank lines,
+/// rows of bare separators (Excel saves `;;;` for empty rows above a
+/// table), and Excel's `sep=;` line, whose separator it returns. Gives how
+/// many lines were skipped, that separator and the rest of `text`, so the
+/// headings are read where an xlsx sheet's are, at the first filled row.
+fn leading_lines(text: &str) -> (u32, Option<u8>, &str) {
+    let (mut skipped, mut named, mut rest) = (0, None, text);
+    while let Some((line, after)) = rest.split_once('\n').or((!rest.is_empty()).then_some((rest, ""))) {
+        let line = line.trim_end_matches('\r');
+        let sep = match line.strip_prefix("sep=").map(str::as_bytes) {
+            Some(&[c @ (b';' | b',' | b'\t')]) if skipped == 0 => Some(c),
+            _ => None,
+        };
+        if sep.is_none() && !line.bytes().all(|c| matches!(c, b';' | b',' | b'\t' | b' ')) {
+            break;
+        }
+        named = named.or(sep);
+        (skipped, rest) = (skipped + 1, after);
+    }
+    (skipped, named, rest)
 }
 
 fn decode(bytes: &[u8]) -> Cow<'_, str> {
@@ -490,7 +516,7 @@ pub fn export_sheet(quiz: &Quiz, root: &Path, dest: &Path, separator: u8, langua
         names.insert(reference, place_file(folder, name, MediaSource::File(&source))?);
     }
     write_csv(export_table(quiz, language, |reference| names.get(reference).cloned()), dest, separator)?;
-    Ok(SheetExport { media: names.len(), missing, refused })
+    Ok(SheetExport { media: names.len(), missing, refused, unmarked: rows_without_correct(quiz) })
 }
 
 /// Writes a show's results to `dest` as a CSV file, the rows as the
@@ -568,6 +594,21 @@ mod tests {
         let utf16: Vec<u8> = [0xff, 0xfe].into_iter().chain("Q\tA1\nŽ\tx\n".encode_utf16().flat_map(u16::to_le_bytes)).collect();
         assert_eq!(csv_table(&utf16, Room::FULL).unwrap().rows[1], ["Ž", "x"]);
         assert_eq!((separator("Q"), separator("\"a;b\",c")), (b',', b','));
+    }
+
+    #[test]
+    fn a_csv_file_reads_its_headings_at_the_first_filled_row_as_a_workbook_does() {
+        let blank_rows = csv_table(b",,,\r\n\r\n;;\r\nQuestion;Answer 1\r\nOne?;[a]\r\n", Room::FULL).unwrap();
+        assert_eq!((blank_rows.first_row, blank_rows.rows.len()), (4, 2));
+        assert_eq!(blank_rows.rows[0], ["Question", "Answer 1"]);
+
+        let excel_line = csv_table(b"sep=;\r\nQuestion;Notes\r\n\"a,b\";c\r\n", Room::FULL).unwrap();
+        assert_eq!((excel_line.first_row, &excel_line.rows[1]), (2, &vec!["a,b".to_string(), "c".to_string()]));
+
+        let imported = import_tables(&[blank_rows], &[], 1).unwrap();
+        assert_eq!(imported.slides.len(), 1);
+        assert!(imported.notes.into_vec().is_empty());
+        assert_eq!(csv_table(b"\r\n;;\r\n", Room::FULL).unwrap().rows, Vec::<Vec<String>>::new());
     }
 
     #[test]
@@ -763,7 +804,7 @@ mod tests {
         let quiz = Quiz::new("Quiz", vec![first, second]);
 
         let report = export_sheet(&quiz, &root, &out.join("quiz.csv"), b';', QuizLanguage::Cs).unwrap();
-        assert_eq!(report, SheetExport { media: 3, missing: vec!["media/gone.mp3".into()], refused: Vec::new() });
+        assert_eq!(report, SheetExport { media: 3, missing: vec!["media/gone.mp3".into()], refused: Vec::new(), unmarked: Vec::new() });
         let bytes = fs::read(out.join("quiz.csv")).unwrap();
         assert!(bytes.starts_with(UTF8_BOM));
         let text = String::from_utf8(bytes[UTF8_BOM.len()..].to_vec()).unwrap();
@@ -803,7 +844,7 @@ mod tests {
         let report = export_sheet(&quiz, &root, &out.join("quiz.csv"), b';', QuizLanguage::Cs).unwrap();
         let mut refused = outside.to_vec();
         refused.sort();
-        assert_eq!(report, SheetExport { media: 0, missing: Vec::new(), refused });
+        assert_eq!(report, SheetExport { media: 0, missing: Vec::new(), refused, unmarked: Vec::new() });
         let written: Vec<_> = fs::read_dir(&out).unwrap().map(|e| e.unwrap().file_name()).collect();
         assert_eq!(written, ["quiz.csv"]);
         fs::remove_dir_all(&dir).unwrap();

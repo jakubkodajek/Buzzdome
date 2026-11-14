@@ -434,10 +434,15 @@ slides and back, `quiz-file` reads and writes the files.
 **Files.** Import reads `.xlsx`, `.xlsm`, `.xls`, `.ods` (every visible
 sheet) and `.csv`, up to 50 MB (unpacked), 10,000 rows over all sheets and
 200 columns. A CSV file is UTF-8 or UTF-16 with a byte order mark,
-else UTF-8, else Windows-1250; its separator is whichever of `;`, tab and
-`,` the headings row uses most. Export writes UTF-8 with a byte order mark
+else UTF-8, else Windows-1250; its separator is the one an Excel `sep=;`
+first line names, else whichever of `;`, tab and `,` the headings row uses
+most. As in a workbook, the headings are the first row with a filled cell:
+blank lines and rows of bare separators above them are skipped. Export writes UTF-8 with a byte order mark
 and CRLF line ends, separated by `;` when the app is in Czech and `,` in
-English, as Excel expects in those locales.
+English, as Excel expects in those locales. A sheet cannot say that a
+question has answers but none correct (a fastest-finger question can), so
+the export names the rows of such questions: imported again, their first
+answer is correct.
 
 **Cell values.** A workbook cell that is no text is read as text in one
 fixed wording, Czech for dates and flags, as the sheet's language is not

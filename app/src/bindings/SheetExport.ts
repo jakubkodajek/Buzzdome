@@ -13,4 +13,9 @@ missing: Array<string>,
  * Media the quiz names outside its media folder (an absolute path, a
  * `..`), never read: their cells stay empty.
  */
-refused: Array<string>, };
+refused: Array<string>, 
+/**
+ * The sheet rows of questions with answers but none correct, which an
+ * import of the sheet would give a correct answer.
+ */
+unmarked: Array<number>, };

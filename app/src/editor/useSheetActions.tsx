@@ -55,15 +55,17 @@ export function useSheetActions(editor: QuizEditor, quiz: Quiz | null, insertImp
           if (!report) return;
           const missing = report.missing.map(mediaFileName).join(", ");
           const refused = report.refused.join(", ");
+          const unmarked = report.unmarked.join(", ");
           const text = [
             t("sheetExported", { n: quiz.slides.length, media: report.media }),
             missing && t("sheetExportMissing", { files: missing }),
             refused && t("sheetExportRefused", { files: refused }),
+            unmarked && t("sheetExportUnmarked", { rows: unmarked }),
           ]
             .filter(Boolean)
             .join(" ");
-          // Done, but some media did not go along: worth a look.
-          (missing || refused ? caution : notify)(text);
+          // Done, but something did not go along as it is: worth a look.
+          (missing || refused || unmarked ? caution : notify)(text);
         }),
     },
     windowOpen: importNotes !== null,
