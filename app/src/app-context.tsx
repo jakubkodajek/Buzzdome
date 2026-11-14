@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { api } from "./api";
 import { translator, useLang, type Lang, type Translate } from "./i18n";
+import { noteSent } from "./late-joins";
 import { errorNotice, type Notice } from "./messages";
 import type { Tone, TonedNotice } from "./notice";
 import { createStepGuard, type StepGuard } from "./step-guard";
@@ -71,7 +72,10 @@ export function useDispatch(): (command: Command) => void {
   return useCallback(
     (command) => {
       const sent = steps.send(command, (seen) => api.dispatch(command, seen));
-      if (sent) run(sent);
+      if (sent) {
+        noteSent(command);
+        run(sent);
+      }
     },
     [run, steps],
   );
