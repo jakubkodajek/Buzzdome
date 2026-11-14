@@ -237,7 +237,7 @@ export const api = {
   editorCategoryName: (categories: readonly Category[], base: string) => invoke<string>("editor_category_name", { categories, base }),
   /**
    * Reads questions from a spreadsheet, copying their media into the draft,
-   * for the editor to insert; a row's `CAT` names one of the draft's categories.
+   * for the editor to insert; a row's Category column names one of the draft's categories.
    */
   editorImportSheet: (draft: string, picker: Picker) => invoke<SheetImport | null>("editor_import_sheet", { draft, picker }),
   /**

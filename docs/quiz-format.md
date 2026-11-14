@@ -292,7 +292,7 @@ stored once in `media/`, however many slides use it.
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `id` | text | 1 to 64 characters, unique among the quiz's categories. |
-| `name` | text | 1 to 40 characters, unique regardless of case, of spaces around it and of how its accents are encoded, as a spreadsheet's `CAT` names it. |
+| `name` | text | 1 to 40 characters, unique regardless of case, of spaces around it and of how its accents are encoded, as a spreadsheet's Category (Kategorie) column names it. |
 | `background` | object or `null` | As a slide's `background`. |
 | `style` | object | As a slide's `style`, read the same way (a value that does not read is left out and listed). Left out when nothing is set. |
 

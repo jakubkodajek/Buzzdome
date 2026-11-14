@@ -54,7 +54,7 @@ pub enum ImportIssue {
     UnknownType { value: String },
     /// Answers on a slide that is no question: left out.
     AnswersLeftOut,
-    /// A category (`CAT`) the quiz does not have: the slide keeps the theme's look.
+    /// A category (the Category column) the quiz does not have: the slide keeps the theme's look.
     UnknownCategory { name: String },
     /// A picture and a video: the picture is left out, as a slide shows one.
     PictureAndVideo,
@@ -429,7 +429,12 @@ impl<'a> Row<'a> {
         let mut row = Row { cells: [""; FIELDS.len()], headings: [""; FIELDS.len()] };
         for ((field, heading), cell) in columns.iter().zip(headings).zip(cells.iter().map(String::as_str).chain(std::iter::repeat(""))) {
             if let Some(field) = field {
-                row.cells[field.index()] = undefused(cell.trim()).trim();
+                // A text cell keeps a leading line break: an untitled
+                // section is written as an empty first line, then its text.
+                row.cells[field.index()] = match field {
+                    Field::Text => undefused(cell.trim_start_matches([' ', '\t']).trim_end()).trim_start_matches([' ', '\t']).trim_end(),
+                    _ => undefused(cell.trim()).trim(),
+                };
                 row.headings[field.index()] = heading.trim();
             }
         }
@@ -1505,6 +1510,7 @@ mod tests {
                 Slide::new("e1", SlideContent::EndOfRound { title: "End of round 1".into() }),
                 Slide::new("t1", SlideContent::Billboard { title: "Just a title".into(), text: String::new() }),
                 winners,
+                Slide::new("u1", SlideContent::Billboard { title: String::new(), text: "Text without a title".into() }),
             ],
         );
         quiz.categories = vec![Category::new("c1", "Films")];

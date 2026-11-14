@@ -976,7 +976,7 @@ const strings = {
     descCategory: "Kategorie, jejíž vzhled snímek převzal. Volba kategorie dá snímku její pozadí, barvy a písma; obrázek, video a zvuk snímku zůstanou. Volba Žádná jen zruší vazbu a vzhled nechá.",
     noCategory: "Žádná",
     propCategoryName: "Název",
-    descCategoryName: "Pod tímto názvem se kategorie nabízí a podle něj ji najde sloupec CAT při importu z tabulky. Dvě kategorie se nesmí jmenovat stejně, velikost písmen se nerozlišuje.",
+    descCategoryName: "Pod tímto názvem se kategorie nabízí a podle něj ji najde sloupec Kategorie při importu z tabulky. Dvě kategorie se nesmí jmenovat stejně, velikost písmen se nerozlišuje.",
     // A slide's look over its theme (QZ-9): pickers of colours, gradients and fonts.
     sectionQuestionLook: "Vzhled otázky",
     sectionTitleLook: "Vzhled nadpisu",
@@ -2501,7 +2501,7 @@ const strings = {
     descCategory: "The category whose look the slide took on. Choosing one gives the slide its background, colours and fonts; the slide's picture, video and sound stay. None only drops the link and keeps the look.",
     noCategory: "None",
     propCategoryName: "Name",
-    descCategoryName: "The name the category is offered under, and the one a CAT column names on a spreadsheet import. Two categories cannot have the same name, regardless of case.",
+    descCategoryName: "The name the category is offered under, and the one a Category column names on a spreadsheet import. Two categories cannot have the same name, regardless of case.",
     // A slide's look over its theme (QZ-9): pickers of colours, gradients and fonts.
     sectionQuestionLook: "Question look",
     sectionTitleLook: "Title look",
