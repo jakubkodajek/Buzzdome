@@ -68,18 +68,21 @@ export function exampleSheet(t: Translate, lang: Lang): ExampleSheet {
 
 type SheetType = keyof (typeof SHEET_WORDS)["cs"]["types"];
 
-/** What each value of the Type column makes, in the order File › Import lists them. */
-const TYPE_HINTS: [SheetType, StringKey][] = [
-  ["question", "sheetTypeQuestion"],
-  ["fastestFinger", "sheetTypeFastestFinger"],
-  ["section", "sheetTypeSection"],
-  ["explanation", "sheetTypeExplanation"],
-  ["endOfRound", "sheetTypeEndOfRound"],
-  ["results", "sheetTypeResults"],
-];
+/**
+ * What each value of the Type column makes, in the order File › Import
+ * lists them; a type Rust adds to `SHEET_WORDS` is a type error here.
+ */
+const TYPE_HINTS: Record<SheetType, StringKey> = {
+  question: "sheetTypeQuestion",
+  fastestFinger: "sheetTypeFastestFinger",
+  section: "sheetTypeSection",
+  explanation: "sheetTypeExplanation",
+  endOfRound: "sheetTypeEndOfRound",
+  results: "sheetTypeResults",
+};
 
 /** Every slide type the Type column can name in `lang` (`SHEET_WORDS`, from Rust), with what it makes. */
 export function sheetTypes(t: Translate, lang: Lang): { type: string; hint: string }[] {
   const { types } = SHEET_WORDS[lang];
-  return TYPE_HINTS.map(([key, hint]) => ({ type: types[key], hint: t(hint) }));
+  return (Object.entries(TYPE_HINTS) as [SheetType, StringKey][]).map(([key, hint]) => ({ type: types[key], hint: t(hint) }));
 }
