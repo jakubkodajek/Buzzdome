@@ -72,3 +72,18 @@ Template:
 - State: make check green; branch `claude/project-thread-28dmvy`.
 - Next: Jakub's review of the PR, then his OK to merge.
 - Blockers / open questions: none.
+
+## 2026-11-14 - sheet-import-new-format-only
+- Done (Jakub's OK of the plan): the import reads only the English and Czech
+  headings; the reference's short headings (`Q`, `A1`...), `{B}`/`{Q, FF}`
+  prefixes, `{L}`, `||` and the "unsupported column" list are gone (their
+  `ImportIssue` codes too). A Type/Typ column (Section, Explanation, End of
+  round, Results, Question, Fastest finger, either language) replaces the
+  prefixes; an unknown type is noted (`unknownType`). Export and template
+  write the basic columns (Type to Points) and the others only when the
+  quiz uses them. File › Import shows a short hint, then a guide with an
+  example sheet whose headings and types come from Rust
+  (`sheet::sheet_words`, `SHEET_WORDS` in Constants.ts).
+- State: make check green; branch `claude/project-thread-28dmvy`, PR #80.
+- Next: guardian review of the new commit, then Jakub's OK to merge.
+- Blockers / open questions: none.

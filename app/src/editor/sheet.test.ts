@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { translator } from "../i18n";
 import type { Quiz } from "../types";
-import { listSeparator, templateQuiz } from "./sheet";
+import { exampleSheet, listSeparator, templateQuiz } from "./sheet";
 
 describe("spreadsheets", () => {
   it("separate CSV cells as Excel in the quizmaster's language expects", () => {
@@ -20,8 +20,22 @@ describe("spreadsheets", () => {
     expect(template.slides.some((slide) => slide.category !== undefined)).toBe(false);
   });
 
-  it("name the quiz's first category on the template's questions", () => {
+  it("keep the template to the basic columns, also for a quiz with categories", () => {
     const quiz: Quiz = { schemaVersion: 5, title: "", theme: null, slides: [], categories: [{ id: "c-1", name: "Films", background: null }] };
-    expect(templateQuiz(translator("en"), quiz).slides.map((slide) => slide.category)).toEqual([undefined, "c-1", "c-1", undefined, undefined]);
+    expect(templateQuiz(translator("en"), quiz).slides.some((slide) => slide.category !== undefined)).toBe(false);
+  });
+
+  it("show an example under the headings and types the import reads, in the quizmaster's language", () => {
+    expect(exampleSheet(translator("cs"), "cs")).toEqual({
+      headings: ["Typ", "Otázka", "Odpověď 1", "Odpověď 2", "Odpověď 3", "Odpověď 4", "Poznámky"],
+      rows: [
+        ["Sekce", "Kolo 1", "", "", "", "", ""],
+        ["", "Hlavní město Francie?", "[Paříž]", "Lyon", "Marseille", "Nice", ""],
+        ["", "Kolik obyvatel má Paříž?", "", "", "", "", "Odpovídá se nahlas"],
+        ["Konec kola", "Konec kola 1", "", "", "", "", ""],
+      ],
+    });
+    const en = exampleSheet(translator("en"), "en");
+    expect([en.headings[0], en.rows[0][0], en.rows[3][0]]).toEqual(["Type", "Section", "End of round"]);
   });
 });

@@ -691,7 +691,7 @@ mod tests {
         fs::create_dir_all(&root).unwrap();
         fs::write(sheets.join("pictures").join("flag.png"), b"png").unwrap();
         fs::write(sheets.join("anthem.mp3"), b"mp3").unwrap();
-        let csv = "Q;P1;SOUND;BACKGROUND\n\
+        let csv = "Otázka;Obrázek;Zvuk;Pozadí\n\
                    Flag?;pictures\\flag.png;anthem.mp3;\n\
                    Again?;pictures/flag.png;C:\\Users\\Ann\\anthem.mp3;stage.jpg\n";
         fs::write(sheets.join("quiz.csv"), csv).unwrap();
@@ -723,7 +723,7 @@ mod tests {
         let full = dir.join("private.png").display().to_string();
         // On Linux this names the same file, so the file not being taken shows it was not read.
         let share = format!("//{}", full.trim_start_matches('/'));
-        let csv = format!("Q;P1\nUp?;../private.png\nFull?;{full}\nShare?;{share}\nNear?;\\\\server\\share\\near.png\nNt?;\\??\\UNC\\server\\near.png\n");
+        let csv = format!("Question;Picture\nUp?;../private.png\nFull?;{full}\nShare?;{share}\nNear?;\\\\server\\share\\near.png\nNt?;\\??\\UNC\\server\\near.png\n");
         fs::write(sheets.join("quiz.csv"), csv).unwrap();
 
         let imported = import_sheet(&sheets.join("quiz.csv"), &read_tables(&sheets.join("quiz.csv")).unwrap(), &[], &root, 1).unwrap();
@@ -767,8 +767,8 @@ mod tests {
         let bytes = fs::read(out.join("quiz.csv")).unwrap();
         assert!(bytes.starts_with(UTF8_BOM));
         let text = String::from_utf8(bytes[UTF8_BOM.len()..].to_vec()).unwrap();
-        assert!(text.starts_with("Otázka;Odpověď 1;Odpověď 2;"), "{text}");
-        assert!(text.contains("{B}Round 2;;;;;;;;flag-2.png;;;;waves-2.mp4;"), "{text}");
+        assert!(text.starts_with("Typ;Otázka;Odpověď 1;"), "{text}");
+        assert!(text.contains("\r\nSekce;Round 2;;;;;;;;;;flag-2.png;waves-2.mp4\r\n"), "{text}");
         assert_eq!(fs::read(out.join("flag-2.png")).unwrap(), b"two");
         assert_eq!(fs::read(out.join("waves.mp4")).unwrap(), b"mine");
 
