@@ -30,8 +30,8 @@ describe("spreadsheets", () => {
       headings: ["Typ", "Otázka", "Odpověď 1", "Odpověď 2", "Odpověď 3", "Odpověď 4", "Poznámky"],
       rows: [
         ["Sekce", "Kolo 1", "", "", "", "", ""],
-        ["", "Hlavní město Francie?", "[Paříž]", "Lyon", "Marseille", "Nice", ""],
-        ["", "Kolik obyvatel má Paříž?", "", "", "", "", "Odpovídá se nahlas"],
+        ["Otázka", "Hlavní město Francie?", "[Paříž]", "Lyon", "Marseille", "Nice", ""],
+        ["Otázka", "Kolik obyvatel má Paříž?", "", "", "", "", "Odpovídá se nahlas"],
         ["Konec kola", "Konec kola 1", "", "", "", "", ""],
       ],
     });

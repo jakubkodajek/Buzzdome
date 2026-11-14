@@ -478,7 +478,6 @@ function SheetGuide() {
         <li>{t("sheetGuideRounds")}</li>
       </ul>
       <h3>{t("sheetTypesHeading", { type: columns.type })}</h3>
-      <p>{t("sheetTypesIntro", { type: columns.type })}</p>
       <div className="sheet-example sheet-types">
         <table aria-label={t("sheetTypesHeading", { type: columns.type })}>
           <thead>

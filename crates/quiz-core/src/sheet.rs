@@ -960,14 +960,15 @@ fn undefused(cell: &str) -> &str {
     }
 }
 
-/// The Type cell of a question: empty where the import reads the row as
-/// this question without one.
-fn question_kind(question: &Question) -> Option<Kind> {
+/// The Type cell of a question: the fastest finger where the answers alone
+/// would not make it one, else a question. Written on every question row,
+/// so a sheet reads the same way the File › Import guide teaches.
+fn question_kind(question: &Question) -> Kind {
     if question.mode != mode_for(question.answers.len().min(MAX_ANSWERS)) {
-        return Some(Kind::FastestFinger);
+        Kind::FastestFinger
+    } else {
+        Kind::Question
     }
-    // A row with no text and no answers would be a billboard, or nothing.
-    (question.text.trim().is_empty() && question.answers.is_empty()).then_some(Kind::Question)
 }
 
 fn export_row(slide: &Slide, categories: &[Category], language: QuizLanguage, file_name: &impl Fn(&str) -> Option<String>) -> Vec<String> {
@@ -979,10 +980,7 @@ fn export_row(slide: &Slide, categories: &[Category], language: QuizLanguage, fi
     };
     match &slide.content {
         SlideContent::Question(question) => {
-            match question_kind(question) {
-                Some(asked) => kind(asked, question.text.clone()),
-                None => set(Field::Text, question.text.clone()),
-            }
+            kind(question_kind(question), question.text.clone());
             for (i, answer) in question.answers.iter().enumerate().take(MAX_ANSWERS) {
                 // The sheet has no share of the points: a partly correct answer is marked as correct.
                 set(Field::Answer(i), answer_cell(answer, question.is_correct(i)));
@@ -1570,7 +1568,7 @@ mod tests {
         let rows = export_table(&quiz, QuizLanguage::En, name);
         assert_eq!(rows[0], FIELDS.map(|column| column.english.to_string()));
         assert_eq!(cell(&rows, 2, Field::Text), "Capital of France?");
-        assert_eq!(cell(&rows, 2, Field::Type), "", "three answers are A-C without a type");
+        assert_eq!(cell(&rows, 2, Field::Type), "Question", "three answers are an A-C question");
         assert_eq!((cell(&rows, 1, Field::Type), cell(&rows, 1, Field::Text)), ("Section", "Round 1\nFilms\nand music"));
         assert_eq!((cell(&rows, 7, Field::Type), cell(&rows, 5, Field::Type)), ("Results", "End of round"));
         assert_eq!(cell(&rows, 2, Field::Answer(1)), "[Paris]");
@@ -1703,13 +1701,14 @@ mod tests {
         let rows = table("Capital?", AnswerMode::Everyone, 4);
         let basic = ["Type", "Question", "Answer 1", "Answer 2", "Answer 3", "Answer 4", "Answer 5", "Answer 6", "Notes", "Answer time", "Points"];
         assert_eq!(rows[0], basic, "only the basic columns");
-        assert_eq!(rows[1][..3], ["", "Capital?", "0"]);
+        assert_eq!(rows[1][..3], ["Question", "Capital?", "0"], "every question row names its type");
         assert_eq!([Field::AnswerTime, Field::PointsStart].map(|field| cell(&rows, 1, field)), ["", ""], "defaults are empty");
-        // A type where the import would read the row otherwise without one.
+        // Every question row names its type: the fastest finger only where
+        // the answers alone would not make one.
         let typed = |rows: Vec<Vec<String>>| (cell(&rows, 1, Field::Type).to_string(), cell(&rows, 1, Field::Text).to_string());
         assert_eq!(typed(table("Who?", AnswerMode::FastestFinger, 2)), ("Fastest finger".into(), "Who?".into()));
         assert_eq!(typed(table("", AnswerMode::FastestFinger, 0)), ("Question".into(), "".into()));
-        assert_eq!(typed(table("Name five", AnswerMode::FastestFinger, 5)), ("".into(), "Name five".into()));
-        assert_eq!(typed(table("{B} is text", AnswerMode::FastestFinger, 0)), ("".into(), "{B} is text".into()));
+        assert_eq!(typed(table("Name five", AnswerMode::FastestFinger, 5)), ("Question".into(), "Name five".into()));
+        assert_eq!(typed(table("{B} is text", AnswerMode::FastestFinger, 0)), ("Question".into(), "{B} is text".into()));
     }
 }

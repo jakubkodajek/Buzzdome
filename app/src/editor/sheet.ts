@@ -59,8 +59,8 @@ export function exampleSheet(t: Translate, lang: Lang): ExampleSheet {
     headings: [columns.type, columns.question, columns.answer1, columns.answer2, columns.answer3, columns.answer4, columns.notes],
     rows: [
       row(types.section, t("templateRound")),
-      row("", t("templateQuestion"), [`[${answers[0]}]`, ...answers.slice(1)]),
-      row("", t("templateOpen"), [], t("sheetExampleAloud")),
+      row(types.question, t("templateQuestion"), [`[${answers[0]}]`, ...answers.slice(1)]),
+      row(types.question, t("templateOpen"), [], t("sheetExampleAloud")),
       row(types.endOfRound, t("templateEnd")),
     ],
   };

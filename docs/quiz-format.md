@@ -470,7 +470,7 @@ File › Import shows an example sheet, its headings and types taken from
 
 | English | Czech | Value |
 | --- | --- | --- |
-| `Type` | `Typ` | The slide type (below); empty for a question. |
+| `Type` | `Typ` | The slide type (below); `Question` for a question, which an empty cell also means. |
 | `Question` | `Otázka` | The text. |
 | `Answer 1`-`Answer 6` | `Odpověď 1`-`Odpověď 6` | Answers. `[Paris]` marks a right one, and every answer in brackets is right; with none marked, the first is right and the answers are shuffled. |
 | `Notes` | `Poznámky` | Notes for the quizmaster. |
@@ -497,8 +497,10 @@ answers is a question, and a row with only media a billboard. A question
 with 2 to 4 answers is everyone answers on the A-D buttons; with none,
 one or more than four, or the type `Fastest finger`, it is fastest finger,
 the big button buzzing and the answer said aloud with none or more than
-four (`Button::buzzes_in`). Export writes a type only where the row would
-read otherwise without one.
+four (`Button::buzzes_in`). Export, the template and the File › Import
+guide write a type on every row, `Question` on every question that is
+not `Fastest finger`, so authors learn one way; an empty type stays
+accepted.
 
 **Media.** A cell names a file, relative to the sheet or as a full path;
 a file not found there is looked for by its name next to the sheet. A file
