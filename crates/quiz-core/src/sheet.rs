@@ -430,7 +430,8 @@ impl<'a> Row<'a> {
         for ((field, heading), cell) in columns.iter().zip(headings).zip(cells.iter().map(String::as_str).chain(std::iter::repeat(""))) {
             if let Some(field) = field {
                 // A text cell keeps a leading line break: an untitled
-                // section is written as an empty first line, then its text.
+                // section is written as an empty first line, then its text
+                // (`import_row` drops it for every other kind of row).
                 row.cells[field.index()] = match field {
                     Field::Text => undefused(cell.trim_start_matches([' ', '\t']).trim_end()).trim_start_matches([' ', '\t']).trim_end(),
                     _ => undefused(cell.trim()).trim(),
@@ -493,7 +494,9 @@ fn import_row(row: &Row, categories: &[Category], place: &Place, shuffler: &mut 
         return None;
     }
     let kind = Kind::of(row, place, notes);
-    let text = row.get(Field::Text).to_string();
+    // Only a section reads a leading line break, as an empty title.
+    let raw = row.get(Field::Text);
+    let text = raw.trim_start().to_string();
     let answers: Vec<(String, bool)> = (0..MAX_ANSWERS).filter_map(|i| answer(row.get(Field::Answer(i)))).collect();
     let content = match kind {
         Some(Kind::Question) => SlideContent::Question(question(text, answers, None, row, place, shuffler, notes)),
@@ -506,7 +509,7 @@ fn import_row(row: &Row, categories: &[Category], place: &Place, shuffler: &mut 
                 notes.add(ImportIssue::AnswersLeftOut, place);
             }
             match other {
-                Kind::Section => billboard(&text),
+                Kind::Section => billboard(raw),
                 Kind::Explanation => SlideContent::Explanation { text },
                 Kind::EndOfRound => SlideContent::EndOfRound { title: text },
                 _ => SlideContent::Final { title: text },
@@ -1225,6 +1228,20 @@ mod tests {
     fn headings_are_read_whatever_their_case_and_spaces() {
         let imported = import(&[&[" question ", "ANSWER-1", "answer2"], &["Yes or no?", "[Yes]", "No"]]);
         assert_eq!(question(slides(&imported)[0]).answers, ["Yes", "No"]);
+    }
+
+    #[test]
+    fn only_a_section_reads_a_leading_line_break_as_an_empty_title() {
+        let imported = import(&[
+            &["Type", "Question", "Answer 1", "Answer 2"],
+            &["Section", "\nText without a title"],
+            &["", "\nCapital of France?", "[Paris]", "Lyon"],
+            &["End of round", "\nEnd of round 1"],
+        ]);
+        let found = slides(&imported);
+        assert_eq!(found[0].content, SlideContent::Billboard { title: String::new(), text: "Text without a title".into() });
+        assert_eq!(question(found[1]).text, "Capital of France?");
+        assert_eq!(found[2].content, SlideContent::EndOfRound { title: "End of round 1".into() });
     }
 
     #[test]
