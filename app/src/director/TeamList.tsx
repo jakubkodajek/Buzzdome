@@ -73,15 +73,13 @@ export function TeamList({ teams, players, picked, onPick }: TeamListProps) {
   const [target, setTarget] = useState<string | null>(null);
   const file = useRef<HTMLInputElement>(null);
 
-  const add = (added: string[]) => added.length > 0 && run(api.addTeams(added));
+  const add = (added: string[], then?: () => void) => added.length > 0 && run(api.addTeams(added).then(then));
   const pair = (buzzer: BuzzerId, name: string) => {
     dispatch({ type: "pairTeam", buzzer, name });
     onPick(null);
   };
-  const addDraft = () => {
-    add(parseTeamNames(draft, false));
-    setDraft("");
-  };
+  // The typed names stay in the field until they are kept, so one refused (too many teams) is not lost.
+  const addDraft = () => add(parseTeamNames(draft, false), () => setDraft(""));
   const importFile = async (chosen: File) => add(parseTeamNames(decodeText(await chosen.arrayBuffer()), /\.csv$/i.test(chosen.name)));
   const carriesBuzzer = (e: DragEvent) => players !== null && e.dataTransfer.types.includes(BUZZER_TYPE);
   const free = players && players.filter((p) => !p.name).sort((a, b) => a.buzzer - b.buzzer);
