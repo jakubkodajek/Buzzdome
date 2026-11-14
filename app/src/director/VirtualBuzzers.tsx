@@ -10,7 +10,8 @@ import { BUZZER_COUNT, buzzerCount, readBuzzerCount, readPickedBuzzerCount, writ
 export function VirtualBuzzers() {
   const { t } = useApp();
   const dispatch = useDispatch();
-  const registered = useGameView()?.players.length ?? 0;
+  // Enough on-screen buzzers to reach the highest registered buzzer number.
+  const registered = Math.max(0, ...(useGameView()?.players.map((p) => p.buzzer) ?? []));
   // The count the quizmaster picked (here or last time); none yet, the registered players' (the view may come after this opens).
   const [picked, setPicked] = useState<number | null>(readPickedBuzzerCount);
   const count = picked ?? readBuzzerCount(registered);

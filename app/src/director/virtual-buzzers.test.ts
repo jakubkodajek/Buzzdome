@@ -19,9 +19,10 @@ describe("buzzerCount", () => {
 });
 
 describe("readBuzzerCount", () => {
-  it("starts with a buzzer for each registered player, the usual six with none, until a count is picked", () => {
+  it("reaches the highest registered buzzer, at least the usual six, until a count is picked", () => {
     localStorage.clear();
     expect(readBuzzerCount(0)).toBe(6);
+    expect(readBuzzerCount(2)).toBe(6);
     expect(readBuzzerCount(20)).toBe(20);
     expect(readBuzzerCount(500)).toBe(100);
     writeBuzzerCount(8);

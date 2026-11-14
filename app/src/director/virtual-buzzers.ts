@@ -19,10 +19,12 @@ export function readPickedBuzzerCount(): number | null {
 
 /**
  * The count picked last time on this computer; until one is picked, one
- * on-screen buzzer for each registered player (the usual six with none).
+ * enough to reach `registered`, the highest registered buzzer number, and
+ * at least the usual six.
  */
 export function readBuzzerCount(registered: number = 0): number {
-  return buzzerCount(readPreference(COUNT_KEY), registered > 0 ? buzzerCount(String(registered)) : BUZZER_COUNT.initial);
+  // Never fewer than the usual six: a buzzer registered on screen must leave the next ones to press.
+  return buzzerCount(readPreference(COUNT_KEY), buzzerCount(String(Math.max(registered, BUZZER_COUNT.initial))));
 }
 
 export function writeBuzzerCount(count: number): void {

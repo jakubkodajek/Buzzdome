@@ -5,7 +5,7 @@ import { MAX_NAME_CHARS } from "../bindings/Constants";
 import { confirmAction } from "../confirm";
 import { CrossIcon, TrashIcon } from "../icons";
 import type { BuzzerId, PlayerView, TeamView } from "../types";
-import { parseTeamNames } from "./team-names";
+import { MAX_TEAM_FILE_KB, parseTeamNames } from "./team-names";
 
 /** What a dragged buzzer number carries. */
 const BUZZER_TYPE = "application/x-quiz-buzzer";
@@ -65,7 +65,7 @@ interface TeamListProps {
  * then has the team's name (`pairTeam`).
  */
 export function TeamList({ teams, players, picked, onPick }: TeamListProps) {
-  const { t } = useApp();
+  const { t, caution } = useApp();
   const dispatch = useDispatch();
   const run = useRun();
   const [draft, setDraft] = useState("");
@@ -79,8 +79,17 @@ export function TeamList({ teams, players, picked, onPick }: TeamListProps) {
     onPick(null);
   };
   // The typed names stay in the field until they are kept, so one refused (too many teams) is not lost.
-  const addDraft = () => add(parseTeamNames(draft), () => setDraft(""));
-  const importFile = async (chosen: File) => api.addTeamFile(new Uint8Array(await chosen.arrayBuffer()), /\.csv$/i.test(chosen.name));
+  const addDraft = () => {
+    const names = parseTeamNames(draft);
+    // Cleared once they are kept, unless more was typed meanwhile; blank text is cleared at once.
+    if (names.length === 0) setDraft("");
+    else add(names, () => setDraft((now) => (now === draft ? "" : now)));
+  };
+  // A file of names is small: a big one is the wrong file, refused before it is read and sent.
+  const importFile = async (chosen: File) =>
+    chosen.size > MAX_TEAM_FILE_KB * 1024
+      ? caution(t("teamFileTooLarge", { name: chosen.name, kb: MAX_TEAM_FILE_KB }))
+      : api.addTeamFile(new Uint8Array(await chosen.arrayBuffer()), /\.csv$/i.test(chosen.name));
   const carriesBuzzer = (e: DragEvent) => players !== null && e.dataTransfer.types.includes(BUZZER_TYPE);
   const free = players && players.filter((p) => !p.name).sort((a, b) => a.buzzer - b.buzzer);
 

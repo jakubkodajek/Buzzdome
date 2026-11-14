@@ -382,15 +382,16 @@ export function Leaderboard({ players }: { players: PlayerView[] }) {
       <div key={page} className="leaderboard-columns">
         {columns.map((column, c) => (
           <ol key={c}>
-            {column.map((p) => (
-              <li key={p.buzzer} className={p.rank !== null && p.rank <= 3 ? `top top-${p.rank}` : ""}>
-                <span className="rank">{p.rank}</span>
-                <span className={playerName(t, p).length > LEADERBOARD_LONG_NAME ? "name long" : "name"} title={playerName(t, p)}>
-                  {playerName(t, p)}
-                </span>
-                <span className="score">{scoreDigits(p.score)}</span>
-              </li>
-            ))}
+            {column.map((p) => {
+              const name = playerName(t, p);
+              return (
+                <li key={p.buzzer} className={p.rank !== null && p.rank <= 3 ? `top top-${p.rank}` : ""}>
+                  <span className="rank">{p.rank}</span>
+                  <span className={name.length > LEADERBOARD_LONG_NAME ? "name long" : "name"}>{name}</span>
+                  <span className="score">{scoreDigits(p.score)}</span>
+                </li>
+              );
+            })}
           </ol>
         ))}
       </div>
