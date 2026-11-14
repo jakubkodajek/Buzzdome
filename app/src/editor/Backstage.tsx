@@ -7,7 +7,7 @@ import { useEffect, useId, useRef } from "react";
 import { BackIcon, CheckIcon, PlayIcon, StopIcon } from "../icons";
 import { keyHint, KEYS } from "../keyboard";
 import { problemText } from "../messages";
-import { MAX_AFTER_REVEAL_DELAY_S, MAX_ALL_ANSWERED_DELAY_S, MAX_JOKERS, QUIZ_LANGUAGES, SHEET_WORDS } from "../bindings/Constants";
+import { DEFAULT_POINTS, DEFAULT_TIME_LIMIT_S, MAX_AFTER_REVEAL_DELAY_S, MAX_ALL_ANSWERED_DELAY_S, MAX_JOKERS, QUIZ_LANGUAGES, SHEET_WORDS } from "../bindings/Constants";
 import type { StringKey } from "../i18n";
 import type { MediaKind } from "../media";
 import { LANGUAGE_LABEL, NO_CONTEXT, questionCount, settingsOf, soundsOf, welcomeOf } from "../quiz";
@@ -457,7 +457,8 @@ function SheetGuide() {
           <thead>
             <tr>
               {example.headings.map((heading) => (
-                <th key={heading}>{heading}</th>
+                // "Answer 1" stays on one line when a long heading wraps.
+                <th key={heading}>{heading.replace(/ (\d+)$/, "\u00a0$1")}</th>
               ))}
             </tr>
           </thead>
@@ -475,6 +476,9 @@ function SheetGuide() {
       <ul>
         <li>{t("sheetGuideCorrect")}</li>
         <li>{t("sheetGuideButtons")}</li>
+        <li>{t("sheetGuideTime", { column: columns.answerTime, seconds: DEFAULT_TIME_LIMIT_S })}</li>
+        <li>{t("sheetGuidePoints", { column: columns.points, points: DEFAULT_POINTS })}</li>
+        <li>{t("sheetGuideNotes", { column: columns.notes })}</li>
         <li>{t("sheetGuideRounds")}</li>
       </ul>
       <h3>{t("sheetTypesHeading", { type: columns.type })}</h3>

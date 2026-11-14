@@ -110,3 +110,14 @@ Template:
   section 8a (full-room rehearsal). Running E2E from a copy of the binary
   needs it under a `target/debug/` folder with a `.cargo-lock` file beside it
   and the `themes/` folder, or Tauri looks for resources in /usr/lib.
+
+## 2026-11-14 - sheet-template-time-points (1.2.1)
+
+- Done: the import template's first question has a 30 s answer time and
+  its notes say the time is in seconds (empty = 20 s, 0 = no clock); the
+  second has 20 points and its notes say points are what a team gets for a
+  correct answer (empty = 10). File › Import's example shows both columns
+  and two bullets explain them, with the defaults read from `Constants.ts`.
+  Version raised to 1.2.1 (Jakub's OK).
+- State: make check green; branch `claude/project-thread-28dmvy`.
+- Next: guardian review, CI, merge, Jakub pushes tag `v1.2.1`.

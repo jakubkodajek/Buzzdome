@@ -392,7 +392,7 @@ checksum = "72f5acc6cb2ba439de613abc23857ec3d78374d8ed5ac84e9d11336e87da8649"
 
 [[package]]
 name = "buzzdome"
-version = "1.2.0"
+version = "1.2.1"
 dependencies = [
  "buzzers",
  "fontdb",
@@ -420,7 +420,7 @@ dependencies = [
 
 [[package]]
 name = "buzzers"
-version = "1.2.0"
+version = "1.2.1"
 dependencies = [
  "hidapi",
  "quiz-core",
@@ -2511,7 +2511,7 @@ dependencies = [
 
 [[package]]
 name = "lights"
-version = "1.2.0"
+version = "1.2.1"
 dependencies = [
  "midir",
  "quiz-core",
@@ -3366,7 +3366,7 @@ dependencies = [
 
 [[package]]
 name = "quiz-ai"
-version = "1.2.0"
+version = "1.2.1"
 dependencies = [
  "base64 0.22.1",
  "dirs",
@@ -3383,7 +3383,7 @@ dependencies = [
 
 [[package]]
 name = "quiz-core"
-version = "1.2.0"
+version = "1.2.1"
 dependencies = [
  "schemars 1.2.2",
  "serde",
@@ -3395,7 +3395,7 @@ dependencies = [
 
 [[package]]
 name = "quiz-file"
-version = "1.2.0"
+version = "1.2.1"
 dependencies = [
  "calamine",
  "csv",
@@ -4105,7 +4105,7 @@ checksum = "f8fadd59c855ef2080decdef8ff161eb6661b86933c9d82e5ba29dc602a55aba"
 
 [[package]]
 name = "show-sim"
-version = "1.2.0"
+version = "1.2.1"
 dependencies = [
  "quiz-core",
  "serde_json",
@@ -5324,7 +5324,7 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 
 [[package]]
 name = "voice"
-version = "1.2.0"
+version = "1.2.1"
 dependencies = [
  "bzip2 0.6.1",
  "quiz-core",
