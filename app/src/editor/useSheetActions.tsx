@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { useApp } from "../app-context";
 import { mediaFileName } from "../media";
+import { placesText } from "../messages";
 import { quizName } from "../quiz";
 import type { ImportNote, Quiz, Slide } from "../types";
 import type { Action } from "./actions";
@@ -55,7 +56,7 @@ export function useSheetActions(editor: QuizEditor, quiz: Quiz | null, insertImp
           if (!report) return;
           const missing = report.missing.map(mediaFileName).join(", ");
           const refused = report.refused.join(", ");
-          const unmarked = report.unmarked.join(", ");
+          const unmarked = report.unmarked.length > 0 && placesText(t, report.unmarked.map((row) => ({ sheet: "", row })));
           const text = [
             t("sheetExported", { n: quiz.slides.length, media: report.media }),
             missing && t("sheetExportMissing", { files: missing }),

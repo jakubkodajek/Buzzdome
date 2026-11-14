@@ -445,21 +445,24 @@ fn csv_table(bytes: &[u8], room: Room) -> Result<Table> {
 /// The lines before a CSV file's headings that hold no cell: blank lines,
 /// rows of bare separators (Excel saves `;;;` for empty rows above a
 /// table), and Excel's `sep=;` line, whose separator it returns. Gives how
-/// many lines were skipped, that separator and the rest of `text`, so the
+/// many rows Excel shows were skipped, that separator and the rest of `text`, so the
 /// headings are read where an xlsx sheet's are, at the first filled row.
+/// The `sep=` line is not counted: Excel hides it.
 fn leading_lines(text: &str) -> (u32, Option<u8>, &str) {
     let (mut skipped, mut named, mut rest) = (0, None, text);
     while let Some((line, after)) = rest.split_once('\n').or((!rest.is_empty()).then_some((rest, ""))) {
         let line = line.trim_end_matches('\r');
         let sep = match line.strip_prefix("sep=").map(str::as_bytes) {
-            Some(&[c @ (b';' | b',' | b'\t')]) if skipped == 0 => Some(c),
+            Some(&[c @ (b';' | b',' | b'\t')]) if rest.len() == text.len() => Some(c),
             _ => None,
         };
         if sep.is_none() && !line.bytes().all(|c| matches!(c, b';' | b',' | b'\t' | b' ')) {
             break;
         }
+        // Excel hides a `sep=` line, so the rows are numbered without it.
         named = named.or(sep);
-        (skipped, rest) = (skipped + 1, after);
+        skipped += u32::from(sep.is_none());
+        rest = after;
     }
     (skipped, named, rest)
 }
@@ -603,7 +606,7 @@ mod tests {
         assert_eq!(blank_rows.rows[0], ["Question", "Answer 1"]);
 
         let excel_line = csv_table(b"sep=;\r\nQuestion;Notes\r\n\"a,b\";c\r\n", Room::FULL).unwrap();
-        assert_eq!((excel_line.first_row, &excel_line.rows[1]), (2, &vec!["a,b".to_string(), "c".to_string()]));
+        assert_eq!((excel_line.first_row, &excel_line.rows[1]), (1, &vec!["a,b".to_string(), "c".to_string()]));
 
         let imported = import_tables(&[blank_rows], &[], 1).unwrap();
         assert_eq!(imported.slides.len(), 1);

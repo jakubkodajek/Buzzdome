@@ -939,7 +939,7 @@ mockIPC(
         return draft === "busy" ? new Promise(() => undefined) : SHEET_IMPORT;
       case "editor_export_sheet":
         called.push({ cmd, ...(payload as object) });
-        return { media: 2, missing: ["media/gone.mp3"], refused: [] };
+        return { media: 2, missing: ["media/gone.mp3"], refused: [], unmarked: [5] };
       case "ai_page":
         return {
           folder: "C:\\Users\\Eva\\Documents\\Buzzdome",
