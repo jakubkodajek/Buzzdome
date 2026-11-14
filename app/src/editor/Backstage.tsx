@@ -17,7 +17,7 @@ import { actionButton, tooltip, type Action, type Actions } from "./actions";
 import { AiPage } from "./AiPage";
 import { MediaPicker, NumberBox, Select, Switch } from "./controls";
 import type { OpenQuiz } from "./editor-state";
-import { exampleSheet } from "./sheet";
+import { exampleSheet, sheetTypes } from "./sheet";
 import { SoundsSettings } from "./SoundsSettings";
 
 export type BackstagePage = "info" | "settings" | "open" | "import" | "export" | "ai";
@@ -446,7 +446,7 @@ function ImportPage({ actions }: BackstageProps) {
 /** How to write a sheet the import reads, with an example (spec QZ-8). */
 function SheetGuide() {
   const { t, lang } = useApp();
-  const { columns, types } = SHEET_WORDS[lang];
+  const { columns } = SHEET_WORDS[lang];
   const example = exampleSheet(t, lang);
   return (
     <section className="sheet-guide">
@@ -475,9 +475,28 @@ function SheetGuide() {
       <ul>
         <li>{t("sheetGuideCorrect")}</li>
         <li>{t("sheetGuideButtons")}</li>
-        <li>{t("sheetGuideType", { type: columns.type, ...types })}</li>
         <li>{t("sheetGuideRounds")}</li>
       </ul>
+      <h3>{t("sheetTypesHeading", { type: columns.type })}</h3>
+      <p>{t("sheetTypesIntro", { type: columns.type })}</p>
+      <div className="sheet-example sheet-types">
+        <table aria-label={t("sheetTypesHeading", { type: columns.type })}>
+          <thead>
+            <tr>
+              <th>{columns.type}</th>
+              <th>{t("sheetTypeMakes")}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {sheetTypes(t, lang).map(({ type, hint }) => (
+              <tr key={type}>
+                <td>{type}</td>
+                <td>{hint}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </section>
   );
 }

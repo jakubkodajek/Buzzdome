@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { translator } from "../i18n";
 import type { Quiz } from "../types";
-import { exampleSheet, listSeparator, templateQuiz } from "./sheet";
+import { exampleSheet, listSeparator, sheetTypes, templateQuiz } from "./sheet";
 
 describe("spreadsheets", () => {
   it("separate CSV cells as Excel in the quizmaster's language expects", () => {
@@ -37,5 +37,12 @@ describe("spreadsheets", () => {
     });
     const en = exampleSheet(translator("en"), "en");
     expect([en.headings[0], en.rows[0][0], en.rows[3][0]]).toEqual(["Type", "Section", "End of round"]);
+  });
+
+  it("list every type the Type column can name, in the quizmaster's language", () => {
+    expect(sheetTypes(translator("cs"), "cs").map(({ type }) => type)).toEqual(["Otázka", "Rychlá odpověď", "Sekce", "Vysvětlení", "Konec kola", "Výsledky"]);
+    const en = sheetTypes(translator("en"), "en");
+    expect(en.map(({ type }) => type)).toEqual(["Question", "Fastest finger", "Section", "Explanation", "End of round", "Results"]);
+    expect(en.every(({ hint }) => hint.length > 0)).toBe(true);
   });
 });

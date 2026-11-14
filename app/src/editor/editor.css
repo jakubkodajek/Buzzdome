@@ -2370,6 +2370,18 @@
   margin-top: 4px;
 }
 
+.sheet-guide h3 {
+  margin: 22px 0 6px;
+  font-size: 15px;
+  font-weight: 500;
+}
+
+/* The types table's descriptions wrap; the type names stay on one line. */
+.sheet-types td + td {
+  white-space: normal;
+  min-width: 280px;
+}
+
 /* A table as wide as its cells, which scrolls in its own box on a narrow window. */
 .sheet-example {
   overflow-x: auto;
