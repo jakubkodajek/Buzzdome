@@ -1791,6 +1791,14 @@ button, so they do not buzz where A to D do; the on-screen buzzers have
 every button. Only the buzzers vote at Jakub's events, and the keys are a
 stand-in when one fails (Jakub, 2026-10-21).
 
+A key or an on-screen buzzer reaches the show at once, while the
+receiver holds a fastest-finger buzz for its timer window
+(`ReceiverConfig::timer_window`, 100 ms) to order it against the presses
+made with it. So in a round where a team on a key and teams on buzzers buzz
+within that window, the key can win though it was pressed up to 100 ms
+later. The keys stand in for one broken buzzer, so this is accepted rather
+than making every key wait (audit 2026-11-14, CR-HW-2).
+
 While learn mode is active, presses are shown in the Receiver tab but not
 sent to the game. So that it can never mute the buzzers in a show, learn
 mode cannot start while a show runs (`showRunning`), ends when a show
