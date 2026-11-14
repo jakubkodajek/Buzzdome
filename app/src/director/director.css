@@ -549,6 +549,15 @@
   text-overflow: ellipsis;
 }
 
+/* The phase may carry a long team name ("answering: ..."): it shortens, so the bar keeps one line. */
+.status-bar > .status-phase {
+  flex: 1 1 0;
+  max-width: max-content;
+  min-width: 3em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .status-bar > .spacer {
   flex: 1;
 }
@@ -2202,5 +2211,26 @@
   .results-question,
   .results-body tr {
     break-inside: avoid;
+  }
+}
+
+/* A narrow window: the names of teams and buzzers go under the table, so the names in the table keep their width. */
+@media (max-width: 1199px) {
+  .teams-body {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) auto;
+  }
+
+  .teams-body > .table-wrap {
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .teams-body > .team-panel {
+    max-height: 30vh;
+  }
+
+  .director .teams-tab .grid td:first-child {
+    min-width: 240px;
   }
 }

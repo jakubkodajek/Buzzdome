@@ -1,21 +1,25 @@
 import { useState } from "react";
 import { BUTTONS, buttonName } from "../answers";
 import { useApp, useDispatch } from "../app-context";
+import { useGameView } from "../hooks";
 import { BigButtonIcon } from "../icons";
 import { keyboardHelp } from "../keyboard";
-import { BUZZER_COUNT, buzzerCount, readBuzzerCount, writeBuzzerCount } from "./virtual-buzzers";
+import { BUZZER_COUNT, buzzerCount, readBuzzerCount, readPickedBuzzerCount, writeBuzzerCount } from "./virtual-buzzers";
 
 /** On-screen buzzers for testing a quiz without hardware; their number is kept on this computer. */
 export function VirtualBuzzers() {
   const { t } = useApp();
   const dispatch = useDispatch();
-  const [count, setCountState] = useState(readBuzzerCount);
+  const registered = useGameView()?.players.length ?? 0;
+  // The count the quizmaster picked (here or last time); none yet, the registered players' (the view may come after this opens).
+  const [picked, setPicked] = useState<number | null>(readPickedBuzzerCount);
+  const count = picked ?? readBuzzerCount(registered);
   // The field as typed: cleared to type another number, it changes nothing until it has one.
-  const [typed, setTyped] = useState(String(count));
+  const [typed, setTyped] = useState<string | null>(null);
   const setCount = (text: string) => {
     setTyped(text);
     const next = buzzerCount(text, count);
-    setCountState(next);
+    setPicked(next);
     writeBuzzerCount(next);
   };
 
@@ -28,10 +32,10 @@ export function VirtualBuzzers() {
             type="number"
             min={BUZZER_COUNT.min}
             max={BUZZER_COUNT.max}
-            value={typed}
+            value={typed ?? String(count)}
             className="narrow"
             onChange={(e) => setCount(e.target.value)}
-            onBlur={() => setTyped(String(count))}
+            onBlur={() => setTyped(null)}
           />
         </label>
         <span className="muted">{keyboardHelp(t)}</span>

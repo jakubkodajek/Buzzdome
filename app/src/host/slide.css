@@ -704,13 +704,26 @@
 
 .buzz-turn.answering {
   flex-shrink: 0;
-  max-width: 50%;
+  max-width: 45%;
   font-size: 64px;
   font-weight: 900;
   color: var(--theme-tile-text);
   background: var(--theme-tile);
   border-color: var(--theme-accent);
   box-shadow: 0 0 28px var(--theme-accent-glow);
+}
+
+/* Many buzzes: the names that get a place share the bar, each keeping a readable part of its name. */
+.buzz-turn:not(.answering):not(.right):not(.more) {
+  min-width: 260px;
+  padding: 0 20px;
+  font-size: 40px;
+}
+
+.buzz-turn.more {
+  flex-shrink: 0;
+  justify-content: center;
+  opacity: 0.8;
 }
 
 .buzz-turn.wrong {
@@ -866,7 +879,18 @@
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
-  text-align: center;
+  text-align: left;
+}
+
+/* A long name keeps its whole text: smaller, on two lines within the row. */
+.leaderboard li .name.long {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  font-size: 28px;
+  line-height: 1.08;
 }
 
 .leaderboard li .score {
