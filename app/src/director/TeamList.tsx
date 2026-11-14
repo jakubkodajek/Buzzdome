@@ -1,11 +1,11 @@
 import { useRef, useState, type DragEvent } from "react";
 import { api } from "../api";
 import { useApp, useDispatch, useRun } from "../app-context";
-import { MAX_NAME_CHARS } from "../bindings/Constants";
+import { MAX_NAME_CHARS, MAX_TEAM_FILE_KB } from "../bindings/Constants";
 import { confirmAction } from "../confirm";
 import { CrossIcon, TrashIcon } from "../icons";
 import type { BuzzerId, PlayerView, TeamView } from "../types";
-import { MAX_TEAM_FILE_KB, parseTeamNames } from "./team-names";
+import { parseTeamNames } from "./team-names";
 
 /** What a dragged buzzer number carries. */
 const BUZZER_TYPE = "application/x-quiz-buzzer";
@@ -88,7 +88,7 @@ export function TeamList({ teams, players, picked, onPick }: TeamListProps) {
   // A file of names is small: a big one is the wrong file, refused before it is read and sent.
   const importFile = async (chosen: File) =>
     chosen.size > MAX_TEAM_FILE_KB * 1024
-      ? caution(t("teamFileTooLarge", { name: chosen.name, kb: MAX_TEAM_FILE_KB }))
+      ? caution(t("errTeamFileTooLarge", { maxKb: MAX_TEAM_FILE_KB }))
       : api.addTeamFile(new Uint8Array(await chosen.arrayBuffer()), /\.csv$/i.test(chosen.name));
   const carriesBuzzer = (e: DragEvent) => players !== null && e.dataTransfer.types.includes(BUZZER_TYPE);
   const free = players && players.filter((p) => !p.name).sort((a, b) => a.buzzer - b.buzzer);

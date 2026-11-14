@@ -61,15 +61,16 @@ export interface QueueStrip<T> {
 }
 
 /**
- * The buzzes the queue names while many came: the one answering (or the
- * last one judged) first, then the wrong ones before it and the ones
+ * The buzzes the queue names while many came: the one answering (or, when
+ * none is lit, the last one judged wrong, else the first) first, then the wrong ones before it and the ones
  * waiting after it, the wrong ones first, `MAX_QUEUE_TURNS` in all. The rest
  * are counted, so the strip keeps to the screen.
  */
 export function queueStrip<T extends QueueTurn>(turns: readonly T[]): QueueStrip<T> {
   if (turns.length <= MAX_QUEUE_TURNS) return { shown: [...turns], more: 0 };
   const lit = turns.findIndex((turn) => turn.state === "answering" || turn.state === "right");
-  const pivot = lit >= 0 ? lit : turns.length - 1;
+  const lastWrong = turns.map((turn) => turn.state).lastIndexOf("wrong");
+  const pivot = lit >= 0 ? lit : lastWrong >= 0 ? lastWrong : 0;
   const chosen = new Set([pivot]);
   const before = Array.from({ length: pivot }, (_, i) => pivot - 1 - i);
   const after = Array.from({ length: turns.length - pivot - 1 }, (_, i) => pivot + 1 + i);

@@ -64,6 +64,10 @@ pub const PRESS_GRACE_MS: u64 = 250;
 /// The most team names a show can have prepared.
 pub const MAX_TEAMS: usize = 200;
 
+/// The largest file of team names read: `MAX_TEAMS` names fit in a few
+/// kilobytes, so a bigger file is the wrong one.
+pub const MAX_TEAM_FILE_KB: u64 = 1024;
+
 /// Player and team names are cut to this many characters, so they fit the
 /// projector's lists.
 pub const MAX_NAME_CHARS: usize = 60;

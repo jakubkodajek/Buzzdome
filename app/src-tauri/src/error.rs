@@ -155,6 +155,9 @@ pub enum AppError {
     #[error("the spreadsheet is larger than {max_mb} MB, holds more than {max_text_mb} MB of text or has more than {max_rows} rows or {max_columns} columns")]
     #[serde(rename_all = "camelCase")]
     SpreadsheetTooLarge { max_mb: u64, max_text_mb: usize, max_rows: usize, max_columns: usize },
+    #[error("a file of team names is larger than {max_kb} KB")]
+    #[serde(rename_all = "camelCase")]
+    TeamFileTooLarge { max_kb: u64 },
     /// The sheet reader process (`sheet_reader.rs`) needed more memory than
     /// it may have: a file small enough whose cells the parser spreads out.
     #[error("reading the spreadsheet needs more than {max_mb} MB of memory")]
@@ -417,6 +420,7 @@ impl From<QuizFileError> for AppError {
                     max_columns: quiz_file::MAX_SHEET_COLUMNS,
                 }
             }
+            QuizFileError::TeamFileTooLarge => AppError::TeamFileTooLarge { max_kb: quiz_core::MAX_TEAM_FILE_KB },
             QuizFileError::Sheet(SheetError::NoQuestionColumn) => AppError::NoQuestionColumn,
         }
     }

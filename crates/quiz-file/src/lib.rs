@@ -103,6 +103,8 @@ pub enum QuizFileError {
         sheet::MAX_SHEET_COLUMNS
     )]
     SpreadsheetTooLarge,
+    #[error("a file of team names is at most {} KB", quiz_core::MAX_TEAM_FILE_KB)]
+    TeamFileTooLarge,
     #[error("{0}")]
     Sheet(#[from] SheetError),
 }

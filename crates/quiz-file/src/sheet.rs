@@ -192,8 +192,8 @@ pub fn read_tables(path: &Path) -> Result<Vec<Table>> {
 /// Windows-1250), blank ones left out. The core cleans them up
 /// (`Command::SetTeams`).
 pub fn team_names(bytes: &[u8], csv: bool) -> Result<Vec<String>> {
-    if bytes.len() as u64 > MAX_SHEET_BYTES {
-        return Err(QuizFileError::SpreadsheetTooLarge);
+    if bytes.len() as u64 > quiz_core::MAX_TEAM_FILE_KB << 10 {
+        return Err(QuizFileError::TeamFileTooLarge);
     }
     let names: Vec<String> = if csv {
         csv_table(bytes, Room::FULL)?.rows.into_iter().filter_map(|row| row.into_iter().next()).collect()
@@ -597,6 +597,16 @@ mod tests {
         assert_eq!(team_names(&utf16, false).unwrap(), ["Žluťáci", "Sokoli"]);
         // "Žluťák" in Windows-1250.
         assert_eq!(team_names(&[0x8e, 0x6c, 0x75, 0x9d, 0xe1, 0x6b], true).unwrap(), ["Žluťák"]);
+    }
+
+    #[test]
+    fn a_file_of_team_names_larger_than_the_window_allows_is_refused() {
+        let limit = (quiz_core::MAX_TEAM_FILE_KB << 10) as usize;
+        let mut names = "Sokoli\n".repeat(limit / 7);
+        names.push_str(&"x".repeat(limit - names.len()));
+        assert_eq!(team_names(names.as_bytes(), false).map(|teams| teams.len()).ok(), Some(limit / 7 + 1));
+        names.push('x');
+        assert!(matches!(team_names(names.as_bytes(), false), Err(QuizFileError::TeamFileTooLarge)));
     }
 
     #[test]

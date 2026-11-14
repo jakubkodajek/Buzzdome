@@ -51,4 +51,9 @@ describe("queueStrip", () => {
     expect(queueStrip(turns(["wrong", "wrong", "wrong", "wrong", "wrong"])).shown.map((turn) => turn.buzzer)).toEqual([3, 4, 5]);
     expect(queueStrip(turns(["answering", "waiting", "waiting", "waiting", "waiting"])).shown.map((turn) => turn.buzzer)).toEqual([1, 2, 3]);
   });
+
+  it("keeps the next team in turn when none is lit and some still wait", () => {
+    expect(queueStrip(turns(["wrong", "wrong", "wrong", "waiting", "waiting"])).shown.map((turn) => turn.buzzer)).toEqual([2, 3, 4]);
+    expect(queueStrip(turns(["waiting", "waiting", "waiting", "waiting"])).shown.map((turn) => turn.buzzer)).toEqual([1, 2, 3]);
+  });
 });
