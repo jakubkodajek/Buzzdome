@@ -457,7 +457,8 @@ function SheetGuide() {
           <thead>
             <tr>
               {example.headings.map((heading) => (
-                <th key={heading}>{heading}</th>
+                // "Answer 1" stays on one line when a long heading wraps.
+                <th key={heading}>{heading.replace(/ (\d+)$/, "\u00a0$1")}</th>
               ))}
             </tr>
           </thead>
