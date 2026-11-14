@@ -44,3 +44,44 @@ export function chunks<T>(items: readonly T[], size: number): T[][] {
 export function leaderboardPages<T>(ranked: readonly T[]): T[][][] {
   return chunks(ranked, LEADERBOARD_ROWS * LEADERBOARD_COLUMNS).map((page) => chunks(page, LEADERBOARD_ROWS));
 }
+
+/** How many buzzes the projector's queue names at most; the rest are counted. */
+export const MAX_QUEUE_TURNS = 3;
+
+/** A buzz of the queue, as far as the strip needs to know. */
+interface QueueTurn {
+  state: "answering" | "wrong" | "right" | "waiting";
+}
+
+export interface QueueStrip<T> {
+  /** The buzzes that get a place, in the order they came. */
+  shown: T[];
+  /** How many more there are than places. */
+  more: number;
+}
+
+/**
+ * The buzzes the queue names while many came: the one answering (or, when
+ * none is lit, the last one judged wrong, else the first) first, then the wrong ones before it and the ones
+ * waiting after it, the wrong ones first, `MAX_QUEUE_TURNS` in all. The rest
+ * are counted, so the strip keeps to the screen.
+ */
+export function queueStrip<T extends QueueTurn>(turns: readonly T[]): QueueStrip<T> {
+  if (turns.length <= MAX_QUEUE_TURNS) return { shown: [...turns], more: 0 };
+  const lit = turns.findIndex((turn) => turn.state === "answering" || turn.state === "right");
+  const lastWrong = turns.map((turn) => turn.state).lastIndexOf("wrong");
+  const pivot = lit >= 0 ? lit : lastWrong >= 0 ? lastWrong : 0;
+  const chosen = new Set([pivot]);
+  const before = Array.from({ length: pivot }, (_, i) => pivot - 1 - i);
+  const after = Array.from({ length: turns.length - pivot - 1 }, (_, i) => pivot + 1 + i);
+  // The closest wrong ones and the next waiting, evenly, then whatever still has room.
+  const order = [before[0], after[0], before[1], after[1], ...before.slice(2), ...after.slice(2)];
+  for (const i of order) {
+    if (chosen.size >= MAX_QUEUE_TURNS) break;
+    if (i !== undefined) chosen.add(i);
+  }
+  return { shown: turns.filter((_, i) => chosen.has(i)), more: turns.length - chosen.size };
+}
+
+/** Names longer than this many characters are drawn smaller, on two lines, in the leaderboard. */
+export const LEADERBOARD_LONG_NAME = 22;

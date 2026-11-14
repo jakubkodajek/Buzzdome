@@ -835,7 +835,7 @@ packages users will install are read the same way.
   receiver settings use too), so they can be typed before a show and
   outlive it: ending a show, opening another quiz or a test run keeps them.
   A show starts with them as its first journaled `SetTeams`. The Director
-  changes them with `add_teams` and `remove_team`, which work on the list
+  changes them with `add_teams` (and `add_team_file`) and `remove_team`, which work on the list
   the shell holds, so two quick edits cannot undo each other; in a show
   the change is journaled first and then saved. A `SetTeams` sent through
   `dispatch` (a window or a plugin) takes the same way, so the saved names
@@ -859,8 +859,10 @@ packages users will install are read the same way.
   other player; renaming a player in the table pairs or unpairs the same way.
 - **Director.** `TeamList.tsx` sits beside the players table: buzzers
   without a team, the team names with their buzzers, and adding, pasting or
-  loading names (`team-names.ts`: lines, or a CSV file's first column, in
-  UTF-8 or Windows-1250). A buzzer number (`BuzzerChip`) is dragged onto a
+  loading names (typed or pasted: `team-names.ts`, one per line; a file:
+  `add_team_file`, read by `quiz_file::team_names` as the spreadsheet
+  import reads a CSV file, so lines or a CSV file's first column, quoted
+  cells whole, in UTF-8, UTF-16 with a byte-order mark or Windows-1250). A buzzer number (`BuzzerChip`) is dragged onto a
   name with HTML drag and drop, or clicked and then the name clicked, which
   also works on a touch screen.
 - **Projector.** The registration grid shows a paired team's name under its
@@ -1791,6 +1793,14 @@ button, so they do not buzz where A to D do; the on-screen buzzers have
 every button. Only the buzzers vote at Jakub's events, and the keys are a
 stand-in when one fails (Jakub, 2026-10-21).
 
+A key or an on-screen buzzer reaches the show at once, while the
+receiver holds a fastest-finger buzz for its timer window
+(`ReceiverConfig::timer_window`, 100 ms) to order it against the presses
+made with it. So in a round where a team on a key and teams on buzzers buzz
+within that window, the key can win though it was pressed up to 100 ms
+later. The keys stand in for one broken buzzer, so this is accepted rather
+than making every key wait (audit 2026-11-14, CR-HW-2).
+
 While learn mode is active, presses are shown in the Receiver tab but not
 sent to the game. So that it can never mute the buzzers in a show, learn
 mode cannot start while a show runs (`showRunning`), ends when a show
@@ -2120,7 +2130,7 @@ them.
 | Properties panel and several selected slides: search, More options, drag a name, Reset, Copy and Paste, Mixed values, dark panel, alphabetical list; Ctrl and Shift click, Ctrl+A, delete, move | `npm test` (`property-rows`, `selection`) and 38 checks in headless Chromium against the preview | pass |
 | Quiz files: save, open, reuse, unsafe entries, size limit, missing media | `cargo test -p quiz-file` | pass |
 | Themes: `theme.json` rules, inheritance, built-in packages complete with their files and font licences; gallery, fonts, a broken theme background warns once | `cargo test` (`quiz_core::theme`, shell `themes`), `npm test`, headless Chromium against the preview | pass |
-| Teams: names, pairing, replay, names kept between shows; drag, click, paste and CSV import (Windows-1250), preparing names before a show | `cargo test` (`game_flow`, shell `teams`, `app_file`), `npm test` (`team-names`), headless Chromium against the preview | pass |
+| Teams: names, pairing, replay, names kept between shows; drag, click, paste and CSV import (Windows-1250), preparing names before a show | `cargo test` (`game_flow`, shell `teams`, `app_file`, `quiz-file` `team_names`), `npm test` (`team-names`), headless Chromium against the preview | pass |
 | Media player and sound board: library list and order, board rules (filling, placing, swapping, resizing, mending a stored board), playing, pausing, pad clicks, ends; Director tab (search, pads lit and counting down, menus, drag and drop, layout) and the projector's picture and video | `cargo test` (`quiz_core::sound_board`, `media_player`, shell `media_player`, `quiz-file` imports), `npm test` (`media-player`), headless Chromium against the preview with generated sounds | pass |
 | Spreadsheets: columns, prefixes, settings, notes, shuffling, rounds per sheet, CSV encodings and separators, workbooks, media found and copied, export and re-import; File › Import and Export, notes dialog, one undo step, sample sheet | `cargo test` (`quiz_core::sheet`, `quiz-file` sheet), `npm test` (`sheet`, `slides`, `messages`), headless Chromium against the preview | pass |
 | Results: what each question gave whom, joker, penalty for no answer, a question asked again, rounds, hand adjustments, reset; Results tab, CSV export and the print style | `cargo test` (`game_flow`, `quiz-file` sheet; show-sim checks that marks and adjustments add up to every score after every command), `npm test` (`results`), E2E (Results tab, CSV export through the picker), the print style in headless Chromium against the preview | pass; the print dialog itself on Windows and macOS **not tested** |

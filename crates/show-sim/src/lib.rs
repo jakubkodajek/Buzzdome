@@ -169,6 +169,35 @@ fn random_question(rng: &mut Rng, n: usize) -> Question {
     }
 }
 
+/// `quiz` as its writer may have saved it while a show of it ran: texts,
+/// points, clocks and right answers changed, the slides kept; now and then
+/// with a slide more or less, which a show refuses (`Quiz::shape_change`).
+pub fn edited_quiz(quiz: &Quiz, rng: &mut Rng) -> Quiz {
+    let mut edited = quiz.clone();
+    if rng.chance(10) {
+        if rng.chance(50) || edited.slides.len() < 2 {
+            edited.slides.push(Slide::new(format!("added-{}", edited.slides.len()), SlideContent::Explanation { text: "Přidáno".into() }));
+        } else {
+            edited.slides.pop();
+        }
+        return edited;
+    }
+    for (n, slide) in edited.slides.iter_mut().enumerate() {
+        let SlideContent::Question(question) = &mut slide.content else { continue };
+        if !rng.chance(40) {
+            continue;
+        }
+        let fresh = random_question(rng, n);
+        question.text = format!("{} (upraveno)", question.text);
+        (question.time_limit_s, question.points, question.points_end, question.penalty) = (fresh.time_limit_s, fresh.points, fresh.points_end, fresh.penalty);
+        if !question.answers.is_empty() && rng.chance(50) {
+            let answer = rng.index(question.answers.len());
+            question.correct = vec![CorrectAnswer { answer, share: FULL_SHARE }];
+        }
+    }
+    edited
+}
+
 /// The step commands the Director's buttons give.
 fn step_commands(game: &Game, rng: &mut Rng) -> Vec<Command> {
     let slides = game.quiz().slides.len();
@@ -246,6 +275,9 @@ impl Default for Plan {
 #[derive(Debug, Clone)]
 pub struct Show {
     pub game: Game,
+    /// The quiz the show began with, which its journal replays from: the
+    /// game's own may since be one saved later (`Command::TakeQuiz`).
+    pub begun: Quiz,
     pub journal: Vec<Stamped>,
     /// The show clock, in milliseconds; it never goes back within a run. A
     /// press may be stamped a little before it (`received_at`), so the
@@ -282,7 +314,8 @@ impl Show {
     /// before an update goes on after it (`Game::replay`).
     pub fn under(quiz: Quiz, buzzers: u16, rules_version: u32) -> Show {
         Show {
-            game: Game::replay(quiz, &[], rules_version),
+            game: Game::replay(quiz.clone(), &[], rules_version),
+            begun: quiz,
             journal: Vec::new(),
             now: 1_000,
             buzzers,
@@ -330,7 +363,7 @@ impl Show {
     /// journal, with a question that was in play restarted and a step
     /// coming by itself held (journaled too).
     pub fn crash_and_resume(&mut self) {
-        let replayed = Game::replay(self.game.quiz().clone(), &self.journal, self.game.rules_version());
+        let replayed = Game::replay(self.begun.clone(), &self.journal, self.game.rules_version());
         assert_eq!(replayed, self.game, "the journal does not rebuild the show the windows saw");
         // A resumed show lights every buzzer as the show has it.
         self.shown = self.game.lights().into_iter().collect();
@@ -350,7 +383,7 @@ impl Show {
 
     /// Asserts that the whole journal rebuilds the current game.
     pub fn assert_replays(&self) {
-        let replayed = Game::replay(self.game.quiz().clone(), &self.journal, self.game.rules_version());
+        let replayed = Game::replay(self.begun.clone(), &self.journal, self.game.rules_version());
         assert_eq!(replayed, self.game, "replaying the journal gave another show");
     }
 
@@ -585,11 +618,13 @@ impl Show {
                     }
                 }
             }
-            _ => match rng.between(0, 2) {
+            _ => match rng.between(0, 3) {
                 0 => Command::ShowLeaderboard { visible: rng.chance(50) },
                 1 => Command::PlayVideo,
                 // A reading that ended late, for any slide.
-                _ => Command::ReadingDone { slide: rng.index(game.quiz().slides.len() + 1) },
+                2 => Command::ReadingDone { slide: rng.index(game.quiz().slides.len() + 1) },
+                // The quiz as saved since the show began, which a resumed show takes (`resume_show`).
+                _ => Command::TakeQuiz { quiz: Box::new(edited_quiz(game.quiz(), rng)) },
             },
         }
     }

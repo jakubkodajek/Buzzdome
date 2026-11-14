@@ -946,12 +946,23 @@ async fn dispatch(app: AppHandle, window: Window, command: Command, seen: Option
     .await
 }
 
+/// What became of a press fed into the show (`play_press`).
+#[derive(Debug, Clone, Copy, Default)]
+pub(crate) struct Played {
+    /// The show took it. Why one failed is the Director's to show (`save_problem`).
+    pub used: bool,
+    /// It added a team once the slides began (`Game::joins_late`).
+    pub joined_late: bool,
+}
+
 /// Feeds a press made at `at_ms`, on a buzzer, a key or an on-screen
-/// buzzer, into the running show, if any. Returns whether the show took it.
-/// Why one failed is the Director's to show (`save_problem`).
-pub(crate) fn play_press(app: &AppHandle, press: Press, at_ms: u64) -> bool {
+/// buzzer, into the running show, if any.
+pub(crate) fn play_press(app: &AppHandle, press: Press, at_ms: u64) -> Played {
+    let mut inner = lock_show(app);
+    let late = inner.game.as_ref().is_some_and(|game| game.joins_late(press.buzzer));
     let command = Command::Press { buzzer: press.buzzer, button: press.button };
-    matches!(execute_at(app, &mut lock_show(app), command, at_ms), Ok(true))
+    let used = matches!(execute_at(app, &mut inner, command, at_ms), Ok(true));
+    Played { used, joined_late: late && used }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -1052,6 +1063,7 @@ pub fn run() {
             teams::prepared_teams,
             teams::teams_lost,
             teams::add_teams,
+            teams::add_team_file,
             teams::remove_team,
             media_player::media_library,
             media_player::media_add,

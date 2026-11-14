@@ -161,6 +161,8 @@ function DirectorLayout({ testRun, onEditor }: { testRun: boolean; onEditor: (as
   // The remote waits while a system dialog asks about the show as it was (`openDialogs`).
   const asking = useStore(openDialogs) > 0;
   useRemote(asking ? null : view, asking ? ignore : projectorKey);
+  // A buzzer that joined once the slides began may be a spare one pressed by mistake (`Game::joins_late`).
+  useBackendEvent("receiver-press", ({ press, joinedLate }) => joinedLate && caution(t("lateJoin", { buzzer: press.buzzer })));
   useBackendEvent("receiver-remote", ({ action }) => {
     if (!view || action === "nothing") return;
     if (openDialogs.get() > 0) caution(t("remoteWhileAsking"));

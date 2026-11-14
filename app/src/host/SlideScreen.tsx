@@ -13,7 +13,7 @@ import { styleOf, textStyleCss, type StyledText } from "../theme/slide-style";
 import type { AnswerResults, BuzzView, ClockView, GameView, PlayerView, QuestionSlide, Slide } from "../types";
 import { podiumBlocks } from "./podium";
 import { chartShares } from "./answer-chart";
-import { LEADERBOARD_PAGE_MS, leaderboardPages, waitingStrip } from "./crowd";
+import { LEADERBOARD_LONG_NAME, LEADERBOARD_PAGE_MS, leaderboardPages, queueStrip, waitingStrip } from "./crowd";
 import { useFitText } from "./fit-text";
 import { Timer } from "./Timer";
 import { WelcomeScreen } from "./WelcomeScreen";
@@ -216,6 +216,7 @@ function QuestionScreen(props: {
   const buzzBar = question.mode === "fastestFinger" && step !== "ready";
   // Several buzzes in the question: the bar shows them all in the order they came (rules version 8 queues them).
   const turns = question.mode === "fastestFinger" && (step === "running" || step === "buzzed" || barPlayer) ? view.buzzes : [];
+  const queued = queueStrip(turns);
   const queue = turns.length > 1 || (turns.length === 1 && !barPlayer);
 
   return (
@@ -272,9 +273,10 @@ function QuestionScreen(props: {
       {queue && (
         <div className="buzz-bar buzz-queue">
           <ol className="buzz-turns">
-            {turns.map((turn) => (
+            {queued.shown.map((turn) => (
               <BuzzTurn key={turn.buzzer} turn={turn} view={view} />
             ))}
+            {queued.more > 0 && <li className="buzz-turn more">{t("respondersMore", { n: queued.more })}</li>}
           </ol>
           {barPlayer?.joker.on && <span className="buzz-joker">{t("jokerTimes")}</span>}
           {buzzPoints !== 0 && !(show && view.settings.hideBuzzPoints) && (
@@ -380,13 +382,16 @@ export function Leaderboard({ players }: { players: PlayerView[] }) {
       <div key={page} className="leaderboard-columns">
         {columns.map((column, c) => (
           <ol key={c}>
-            {column.map((p) => (
-              <li key={p.buzzer} className={p.rank !== null && p.rank <= 3 ? `top top-${p.rank}` : ""}>
-                <span className="rank">{p.rank}</span>
-                <span className="name">{playerName(t, p)}</span>
-                <span className="score">{scoreDigits(p.score)}</span>
-              </li>
-            ))}
+            {column.map((p) => {
+              const name = playerName(t, p);
+              return (
+                <li key={p.buzzer} className={p.rank !== null && p.rank <= 3 ? `top top-${p.rank}` : ""}>
+                  <span className="rank">{p.rank}</span>
+                  <span className={name.length > LEADERBOARD_LONG_NAME ? "name long" : "name"}>{name}</span>
+                  <span className="score">{scoreDigits(p.score)}</span>
+                </li>
+              );
+            })}
           </ol>
         ))}
       </div>

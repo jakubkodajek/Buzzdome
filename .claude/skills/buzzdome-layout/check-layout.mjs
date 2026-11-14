@@ -174,7 +174,7 @@ async function eachTab(page, selector, visit) {
 for (const size of SIZES) {
   for (const lang of LANGS) {
     if (!only || only === "director") {
-      for (const scene of ["none", "lobby", "running"]) {
+      for (const scene of ["none", "lobby", "running", "longCrowdRunning", "longCrowdQueue"]) {
         for (const dark of [false, true]) {
           const { page, visit, errors, close } = await check(`director scene=${scene}${dark ? " dark" : ""}`, `/preview.html?window=director&scene=${scene}`, size, lang);
           if (dark) await page.evaluate(() => document.querySelector(".director")?.classList.add("dark"));

@@ -40,6 +40,7 @@
     "allow-prepared-teams",
     "allow-teams-lost",
     "allow-add-teams",
+    "allow-add-team-file",
     "allow-remove-team",
     "allow-media-library",
     "allow-media-add",

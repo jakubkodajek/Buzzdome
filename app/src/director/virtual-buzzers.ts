@@ -11,9 +11,20 @@ export function buzzerCount(text: string | null, fallback: number = BUZZER_COUNT
   return Number.isFinite(n) ? Math.max(BUZZER_COUNT.min, Math.min(BUZZER_COUNT.max, n)) : fallback;
 }
 
-/** The count picked last time on this computer. */
-export function readBuzzerCount(): number {
-  return buzzerCount(readPreference(COUNT_KEY));
+/** The count picked last time on this computer, null when none was. */
+export function readPickedBuzzerCount(): number | null {
+  const text = readPreference(COUNT_KEY);
+  return text === null ? null : buzzerCount(text);
+}
+
+/**
+ * The count picked last time on this computer; until one is picked, one
+ * enough to reach `registered`, the highest registered buzzer number, and
+ * at least the usual six.
+ */
+export function readBuzzerCount(registered: number = 0): number {
+  // Never fewer than the usual six: a buzzer registered on screen must leave the next ones to press.
+  return buzzerCount(readPreference(COUNT_KEY), buzzerCount(String(Math.max(registered, BUZZER_COUNT.initial))));
 }
 
 export function writeBuzzerCount(count: number): void {

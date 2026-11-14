@@ -6,7 +6,7 @@
 //! `SOAK_FIRST` the first seed, `SOAK_SEED` replays one that failed.
 
 use super::*;
-use show_sim::{random_quiz, random_rules_version, Rng, Show, MAX_BUZZERS};
+use show_sim::{edited_quiz, random_quiz, random_rules_version, Rng, Show, MAX_BUZZERS};
 use std::io::Write;
 
 /// What a crash leaves at the end of the journal.
@@ -61,6 +61,10 @@ fn drill(seed: u64, root: &Path) {
     let rules_version = random_rules_version(&mut rng);
     let mut sim = Show::under(quiz.clone(), buzzers, rules_version);
     let mut app = new_show(root, &quiz, sim.now, rules_version);
+    // Where a quiz saved since the show began unpacked, once a resume took it (`take_edited`).
+    let edited_root = root.with_extension("edited");
+    let _ = fs::remove_dir_all(&edited_root);
+    let mut media: Option<PathBuf> = None;
     for _ in 0..250 {
         sim.random_wait(&mut rng);
         let command = sim.random_command(&mut rng);
@@ -80,9 +84,25 @@ fn drill(seed: u64, root: &Path) {
             // Only what the recovery the show needs did is told: nothing is missing, the rules are the show's own.
             let told: Vec<AppError> = sim.game.recovery_command().and_then(|command| recovery_warning(&command, sim.game.slide_index())).into_iter().collect();
             sim.crash_and_resume();
-            let resumed = resume_show(root, sim.now, &[], None).unwrap_or_else(|e| panic!("resume after a {tail:?} crash failed: {e:?}"));
+            // Now and then the quizmaster resumes with the quiz as saved since the show began.
+            let edited = rng.chance(30).then(|| Package { quiz: edited_quiz(sim.game.quiz(), &mut rng), root: edited_root.clone() });
+            let mut edit_told = Vec::new();
+            if let Some(package) = &edited {
+                fs::create_dir_all(&package.root).unwrap();
+                let kept_out = sim.game.scored_slide().filter(|&slide| package.quiz.slides.get(slide) != sim.game.quiz().slides.get(slide));
+                match sim.apply(Command::TakeQuiz { quiz: Box::new(package.quiz.clone()) }).result {
+                    Ok(_) => {
+                        media = Some(package.root.clone());
+                        edit_told.extend(kept_out.map(|slide| AppError::EditedSlideKept { slide }));
+                    }
+                    Err(quiz_core::GameError::OtherShape(change)) => edit_told.push(AppError::EditsNotTaken { change: Some(change) }),
+                    Err(e) => panic!("an edited quiz was refused for another reason: {e:?}"),
+                }
+            }
+            let resumed = resume_show(root, sim.now, std::slice::from_ref(&edited_root), edited).unwrap_or_else(|e| panic!("resume after a {tail:?} crash failed: {e:?}"));
             assert_eq!(resumed.game, sim.game, "after a {tail:?} crash the show resumed differently");
-            assert_eq!(resumed.warnings, told);
+            let media_told = resume_warnings(sim.game.quiz(), media.as_deref(), None, false);
+            assert_eq!(resumed.warnings, [media_told, told, edit_told].concat());
             app = Inner { game: Some(resumed.game), session: Some(resumed.session), ..Inner::new() };
         } else if rng.chance(1) {
             // The quizmaster ends the show and starts another; only the latest resumes.
@@ -90,6 +110,7 @@ fn drill(seed: u64, root: &Path) {
             let rules_version = random_rules_version(&mut rng);
             sim = Show::under(quiz.clone(), buzzers, rules_version);
             sim.now = 1_000 + seed;
+            media = None;
             app = new_show(root, &quiz, sim.now, rules_version);
         }
     }
@@ -97,6 +118,7 @@ fn drill(seed: u64, root: &Path) {
     let on_disk = Session::resume_latest(root).unwrap().unwrap();
     assert_eq!(Game::replay(on_disk.quiz, &on_disk.journal, on_disk.meta.rules_version), sim.game);
     fs::remove_dir_all(root).unwrap();
+    let _ = fs::remove_dir_all(&edited_root);
 }
 
 #[test]

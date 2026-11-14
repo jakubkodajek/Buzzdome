@@ -64,6 +64,10 @@ pub const PRESS_GRACE_MS: u64 = 250;
 /// The most team names a show can have prepared.
 pub const MAX_TEAMS: usize = 200;
 
+/// The largest file of team names read: `MAX_TEAMS` names fit in a few
+/// kilobytes, so a bigger file is the wrong one.
+pub const MAX_TEAM_FILE_KB: u64 = 1024;
+
 /// Player and team names are cut to this many characters, so they fit the
 /// projector's lists.
 pub const MAX_NAME_CHARS: usize = 60;
@@ -908,6 +912,15 @@ impl Game {
     /// The show is on its welcome screen or in the lobby, before the first slide.
     pub fn before_slides(&self) -> bool {
         matches!(self.phase, Phase::Welcome | Phase::Lobby)
+    }
+
+    /// Whether a press of `buzzer` now adds a team once the slides began
+    /// (`Game::press` registers any buzzer it does not know): a team that
+    /// came late, or a spare buzzer pressed by mistake, which the
+    /// quizmaster is told of, as a team that never answers keeps a question
+    /// from ending once everyone answered.
+    pub fn joins_late(&self, buzzer: BuzzerId) -> bool {
+        !self.before_slides() && !self.players.contains_key(&buzzer)
     }
 
     /// The next `Next` leaves the current slide (rather than moving on

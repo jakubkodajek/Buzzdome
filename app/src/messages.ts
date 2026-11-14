@@ -85,6 +85,7 @@ const ERROR_KEYS: Record<Exclude<AppError["code"], WordedApart>, StringKey> = {
   notASpreadsheet: "errNotASpreadsheet",
   droppedFileTooLarge: "mediaDropTooLarge",
   spreadsheetTooLarge: "errSpreadsheetTooLarge",
+  teamFileTooLarge: "errTeamFileTooLarge",
   spreadsheetTooComplex: "errSpreadsheetTooComplex",
   spreadsheetReaderFailed: "errSpreadsheetReaderFailed",
   noQuestionColumn: "errNoQuestionColumn",

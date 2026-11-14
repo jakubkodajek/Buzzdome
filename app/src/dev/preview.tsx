@@ -141,6 +141,33 @@ function crowd(n: number, answeredBy = 0): PlayerView[] {
   }));
 }
 
+/** Twenty team names as long as Czech clubs, schools and pubs write them, for the scenes of a December show. */
+const LONG_TEAMS = [
+  "Hospodští géniové z Dolní Lhoty nad Vltavou a okolí, z.s.",
+  "Sdružení přátel kvízů a dobrého piva Říčany",
+  "Žluťoučcí koníčci z Příbramě",
+  "Čtvrtek večer u Šárky, Břetislava a ostatních",
+  "Kulturní spolek Třebíč – mladší dorost",
+  "Ředitelství pro nepřetržitou zábavu Šumperk",
+  "Šestnáctá základní škola, 9.B, třída profesora Čermáka",
+  "Dobrovolní hasiči Horní Dolní Újezd nad Lesy",
+  "Zlatá Čeština — Špičkoví Přemýšlivci Žďár nad Sázavou",
+  "Úplně všichni dohromady a ještě trochu víc, spolek",
+  "Ústav pro studium záhad a hádanek, Ostrava-Poruba",
+  "Čeští Ježci",
+  "Fanklub Václava Žižky z Trocnova",
+  "Přátelé Černého Pivovaru, pobočka Hřensko",
+  "Ďábelská Šestka",
+  "Rodina Nováků-Dvořáků z Úpice",
+  "Řezníci a pekaři, spol. s r.o. v likvidaci",
+  "Dívčí válka — Nová generace (ž. 18+)",
+  "Ostravští ježibaby a čarodějové",
+  "Tým Číslo Dvacet",
+];
+
+/** A December show: 20 teams with those names, the first `answeredBy` of them having answered. */
+const longCrowd = (answeredBy = 0): PlayerView[] => crowd(20, answeredBy).map((p, i) => ({ ...p, name: LONG_TEAMS[i] }));
+
 /** A song for the scenes with media: played on demand, its chorus only. */
 const SONG: SoundClip = {
   file: "media/song.mp3",
@@ -452,6 +479,36 @@ const SCENES: Record<string, GameView | null> = {
     controls: { ...NO_CONTROLS, judge: true, restartQuestion: true },
   }),
   longFinal: view({ phase: { phase: "final", step: 3 }, slideIndex: quiz.slides.length, slide: null, players: players([{ name: LONG_NAME }, { name: "Mozkovna, kterou nikdo nepřekoná" }]) }, { finalStep: { place: null } }),
+  // A December show: 20 teams with long names (the lobby, a question running, a long buzz queue, answers in, the ranking, the final).
+  longCrowdLobby: view({ phase: { phase: "lobby" }, slide: null, players: longCrowd() }, "startQuiz"),
+  longCrowdRunning: view({
+    phase: { phase: "question", step: "running", clock: { limitMs: 20000, elapsedBeforeMs: 0, runningSinceMs: 0, pressesFromMs: 0 } },
+    clock: { limitMs: 20000, remainingMs: 4400, elapsedMs: 15600, running: true, points: 81 },
+    players: longCrowd(8),
+    enabledCount: 20,
+    answeredCount: 8,
+    controls: { ...NO_CONTROLS, next: true, pauseClock: true, closeQuestion: true, restartQuestion: true },
+  }, "endQuestion"),
+  longCrowdQueue: view({
+    phase: { phase: "question", step: "buzzed", buzzer: 4, button: "big", clock: { limitMs: 30000, elapsedBeforeMs: 4300, runningSinceMs: null, pressesFromMs: 0 } },
+    slideIndex: 7,
+    slide: quiz.slides[7],
+    clock: { limitMs: 30000, remainingMs: 25700, elapsedMs: 4300, running: false, points: 129 },
+    players: longCrowd().map((p, i) => (i === 1 ? { ...p, lockedOut: true, delta: -20 } : p)),
+    buzzed: 4,
+    buzzes: Array.from({ length: 20 }, (_, i) => ({ buzzer: i + 2, button: "big" as const, state: i === 0 ? ("wrong" as const) : i === 1 ? ("answering" as const) : ("waiting" as const) })),
+    controls: { ...NO_CONTROLS, judge: true, restartQuestion: true },
+  }),
+  longCrowdRevealed: view({
+    phase: { phase: "question", step: "revealed", winner: null },
+    players: longCrowd(20).map((p, i) => ({ ...p, answer: (["a", "b", "c", "d"] as const)[i % 4], answerCorrect: i % 4 === 1, answerMs: 2000 + i * 300, delta: i % 4 === 1 ? 80 : -10 })),
+    answeredCount: 20,
+    answerCounts: [5, 8, 4, 3],
+    results: { right: 8, wrong: 12, none: 0 },
+  }, "nextSlide"),
+  longCrowdLeaderboard: view({ phase: { phase: "endOfRound" }, slideIndex: 5, slide: quiz.slides[5], players: longCrowd() }, "nextSlide"),
+  longCrowdOverlay: view({ leaderboardVisible: true, players: longCrowd() }, "startQuestion"),
+  longCrowdFinal: view({ phase: { phase: "final", step: 3 }, slideIndex: quiz.slides.length, slide: null, players: longCrowd() }, { finalStep: { place: null } }),
   longQuestion: view({
     phase: { phase: "question", step: "closed" },
     slide: {
@@ -765,6 +822,7 @@ mockIPC(
         dispatched.push((payload as { command: unknown }).command);
         return null;
       case "add_teams":
+      case "add_team_file":
       case "remove_team":
       case "media_remove":
         called.push({ cmd, ...(payload as object) });

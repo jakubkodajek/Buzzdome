@@ -23,8 +23,8 @@ preview.
    points at another dev server). It needs Playwright: the cloud container
    has it; elsewhere `npm i -g playwright && npx playwright install chromium`.
    A full run takes about five minutes.
-3. It opens each Director tab with no show, in the lobby and while a
-   question runs, light and dark, in Czech and English; each ribbon tab and
+3. It opens each Director tab with no show, in the lobby, while a
+   question runs (also with 20 long team names, and a long buzz queue), light and dark, in Czech and English; each ribbon tab and
    properties page of the editor; and every projector scene of
    `app/src/dev/preview.tsx` (new scenes are picked up). Each at
    1024x640, 1366x768 and 1920x1080. It exits 1 and prints one line per

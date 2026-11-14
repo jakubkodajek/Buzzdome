@@ -186,6 +186,23 @@ pub fn read_tables(path: &Path) -> Result<Vec<Table>> {
     read_tables_within(path, MAX_SHEET_BYTES, Room::FULL)
 }
 
+/// Team names from the bytes of a text or CSV file (specification SF-5):
+/// each line of a text file, or the first column of a CSV file (`csv`),
+/// decoded as a spreadsheet's CSV is (`decode`: a byte-order mark, UTF-8 or
+/// Windows-1250), blank ones left out. The core cleans them up
+/// (`Command::SetTeams`).
+pub fn team_names(bytes: &[u8], csv: bool) -> Result<Vec<String>> {
+    if bytes.len() as u64 > quiz_core::MAX_TEAM_FILE_KB << 10 {
+        return Err(QuizFileError::TeamFileTooLarge);
+    }
+    let names: Vec<String> = if csv {
+        csv_table(bytes, Room::FULL)?.rows.into_iter().filter_map(|row| row.into_iter().next()).collect()
+    } else {
+        decode(bytes).split(['\r', '\n']).map(str::to_owned).collect()
+    };
+    Ok(names.into_iter().map(|name| name.trim().to_owned()).filter(|name| !name.is_empty()).collect())
+}
+
 /// How much of a spreadsheet is still read: rows and bytes of text.
 #[derive(Debug, Clone, Copy)]
 struct Room {
@@ -557,6 +574,39 @@ mod tests {
     /// A room of `rows` rows and all the text.
     fn room(rows: usize) -> Room {
         Room { rows, ..Room::FULL }
+    }
+
+    #[test]
+    fn team_names_are_the_lines_of_a_text_file() {
+        let names = team_names("\u{FEFF}Sokoli\r\n\r\n  Pivní rytíři \nKvízoví mágové, s.r.o.\rStůl 4\n".as_bytes(), false).unwrap();
+        assert_eq!(names, ["Sokoli", "Pivní rytíři", "Kvízoví mágové, s.r.o.", "Stůl 4"]);
+    }
+
+    #[test]
+    fn team_names_are_the_first_column_of_a_csv_file_whichever_separator_it_uses() {
+        assert_eq!(team_names("Sokoli;Stůl 1\nRytíři;Stůl 2".as_bytes(), true).unwrap(), ["Sokoli", "Rytíři"]);
+        assert_eq!(team_names("Sokoli,1\nRytíři,2\n".as_bytes(), true).unwrap(), ["Sokoli", "Rytíři"]);
+        let quoted = team_names("\"Pivo, víno a my\";3\n\"Řekli \"\"ano\"\"\";4\n;5\n\"Dva\nřádky\";6".as_bytes(), true).unwrap();
+        assert_eq!(quoted, ["Pivo, víno a my", "Řekli \"ano\"", "Dva\nřádky"]);
+    }
+
+    #[test]
+    fn team_names_are_read_from_utf16_and_windows_1250_files() {
+        // Excel's "Unicode text": UTF-16 little endian with a byte-order mark.
+        let utf16: Vec<u8> = [0xFF, 0xFE].into_iter().chain("Žluťáci\r\nSokoli".encode_utf16().flat_map(u16::to_le_bytes)).collect();
+        assert_eq!(team_names(&utf16, false).unwrap(), ["Žluťáci", "Sokoli"]);
+        // "Žluťák" in Windows-1250.
+        assert_eq!(team_names(&[0x8e, 0x6c, 0x75, 0x9d, 0xe1, 0x6b], true).unwrap(), ["Žluťák"]);
+    }
+
+    #[test]
+    fn a_file_of_team_names_larger_than_the_window_allows_is_refused() {
+        let limit = (quiz_core::MAX_TEAM_FILE_KB << 10) as usize;
+        let mut names = "Sokoli\n".repeat(limit / 7);
+        names.push_str(&"x".repeat(limit - names.len()));
+        assert_eq!(team_names(names.as_bytes(), false).map(|teams| teams.len()).ok(), Some(limit / 7 + 1));
+        names.push('x');
+        assert!(matches!(team_names(names.as_bytes(), false), Err(QuizFileError::TeamFileTooLarge)));
     }
 
     #[test]

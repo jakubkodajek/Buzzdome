@@ -476,6 +476,43 @@ note the step and attach `buzzdome.log`, where each window notes what the
 policy blocked ("the content security policy blocked …", at most five a
 minute).
 
+## 8a. Full-room rehearsal (20 teams)
+
+What a simulation cannot show: the radio and the event laptop with every
+buzzer of a real evening. The app side was played with 24 simulated buzzers
+pressing within the same millisecond, a 30-question show and a crash
+(`app/e2e/scale.e2e.ts`); this checks the hardware under the same load. Use
+the event laptop on battery as at the venue, with the projector, and as
+many buzzers as the show will have (20 or more), each with its own ID.
+
+1. All buzzers on one table, the rest of the bundle out of reach (a 303S
+   buzzer has no power switch: a spare one pressed joins as a team). Start
+   a show and have everyone press at once in the lobby. Expected: every
+   buzzer is a team within about a second; none missing, none twice.
+2. Press a spare buzzer once the first slide shows. Expected: the Director
+   says which buzzer joined; switch it off in the Teams tab.
+3. An everyone-answers question: all press an answer together on a count
+   of three. Expected: the answered count reaches every team and the
+   question closes by itself; at the reveal every buzzer shows right or
+   wrong. Note how long (a slow-motion video helps) from Next to the last
+   buzzer lit ready, and from the reveal to the last buzzer lit right or
+   wrong.
+4. A fastest-finger question: all press together. Expected: the queue on
+   the projector and in the Responses tab lists every team, the first lit
+   white, the others yellow; judge three wrong in a row and each next team
+   takes the turn at once.
+5. Fifteen minutes of questions in a row at show pace (Next pressed as soon
+   as a step shows). Expected: no press lost, no buzzer left in an old
+   colour, the projector never behind the Director by more than a moment.
+6. Mid-question, end the app with Task Manager (End task), start it again
+   and resume. Expected: names and scores as before, the question started
+   again, all buzzers lit as the resumed step.
+7. Walk to the far end of the hall with three buzzers and repeat step 3.
+   Expected: their answers count as the others'.
+
+Note any press that did not count (which buzzer, which step) and the two
+timings of step 3.
+
 ## 9. Send back
 
 Attach to the project thread:
@@ -487,7 +524,8 @@ Attach to the project thread:
   receiver did when its power or RJ45 plug went, and the battery lines
   of section 3, step 10;
 - the exported log files from sections 4 and 5;
-- the result of the release smoke check (section 8);
+- the result of the release smoke check (section 8) and of the full-room
+  rehearsal (section 8a);
 - what failed, with the exact message.
 
 For the Enjoy 303S that settles the open points of its protocol

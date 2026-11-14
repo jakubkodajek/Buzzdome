@@ -34,6 +34,7 @@ const COMMANDS: &[&str] = &[
     "prepared_teams",
     "teams_lost",
     "add_teams",
+    "add_team_file",
     "remove_team",
     "media_library",
     "media_add",

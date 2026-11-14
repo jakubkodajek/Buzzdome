@@ -169,6 +169,7 @@ function ShowTeams({ view, lost }: { view: GameView; lost: SettingsLost | null }
                       className="cell-input"
                       key={p.name}
                       defaultValue={p.name}
+                      title={p.name}
                       maxLength={MAX_NAME_CHARS}
                       placeholder={t("buzzer", { n: p.buzzer })}
                       onClick={(e) => e.stopPropagation()}

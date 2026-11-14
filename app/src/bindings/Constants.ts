@@ -19,6 +19,7 @@ export const NEW_VIDEO_INTRO_PAUSE_MS = 1000;
 export const MAX_REPLAY_DELAY_MS = 60000;
 export const DEFAULT_THEME_ID = "builtin.classic";
 export const MAX_TEAMS = 200;
+export const MAX_TEAM_FILE_KB = 1024;
 export const MAX_NAME_CHARS = 60;
 export const MIN_BOARD_ROWS = 3;
 export const MAX_BOARD_ROWS = 8;

@@ -21,7 +21,7 @@ pub mod welcome;
 pub use category::{category_named, fresh_category_name, Category, MAX_CATEGORY_NAME_CHARS};
 pub use game::{
     team_names, Asked, Buzz, BuzzerId, BuzzerMode, Button, Clock, Command, Controls, Cue, Effect, Game, GameError, Light, Mark, NextStep, Phase, QuestionEnd, QuestionStep,
-    Response, ShowPosition, Stamped, MAX_NAME_CHARS, MAX_TEAMS, PRESS_GRACE_MS, REPLAYS_AS_PLAYED_FROM, RULES_VERSION,
+    Response, ShowPosition, Stamped, MAX_NAME_CHARS, MAX_TEAMS, MAX_TEAM_FILE_KB, PRESS_GRACE_MS, REPLAYS_AS_PLAYED_FROM, RULES_VERSION,
 };
 pub use media::{
     is_safe_reference, portable_name, portable_reference, Background, MediaIssue, MediaKind, Playback, Replay, SoundClip, SoundStart, Span,
@@ -82,6 +82,7 @@ mod ui_constants {
             ("MAX_REPLAY_DELAY_MS", crate::MAX_REPLAY_DELAY_MS.to_string()),
             ("DEFAULT_THEME_ID", serde_json::to_string(crate::DEFAULT_THEME_ID).unwrap()),
             ("MAX_TEAMS", crate::MAX_TEAMS.to_string()),
+            ("MAX_TEAM_FILE_KB", crate::MAX_TEAM_FILE_KB.to_string()),
             ("MAX_NAME_CHARS", crate::MAX_NAME_CHARS.to_string()),
             ("MIN_BOARD_ROWS", crate::sound_board::MIN_ROWS.to_string()),
             ("MAX_BOARD_ROWS", crate::sound_board::MAX_ROWS.to_string()),
