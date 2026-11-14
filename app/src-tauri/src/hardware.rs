@@ -119,6 +119,10 @@ struct PressEvent {
     /// False when the press did not play: it was only recorded (learn
     /// mode), no show is running, or it changed nothing (`Game::ignores`).
     used: bool,
+    /// The press added its buzzer as a team once the slides began
+    /// (`Game::joins_late`): the Director tells the quizmaster, as it may
+    /// be a spare buzzer pressed by mistake.
+    joined_late: bool,
 }
 
 pub struct Hardware {
@@ -377,8 +381,8 @@ pub fn handle_event(app: &AppHandle, event: ReceiverEvent) {
         ReceiverEvent::Press { press, at_ms } => {
             // While learning, presses only teach; they must not play.
             let learning = hw.learn.lock().unwrap().is_some();
-            let used = !learning && crate::play_press(app, press, at_ms);
-            let _ = app.emit("receiver-press", PressEvent { press, used });
+            let played = if learning { crate::Played::default() } else { crate::play_press(app, press, at_ms) };
+            let _ = app.emit("receiver-press", PressEvent { press, used: played.used, joined_late: played.joined_late });
         }
         // The Director carries it out, as the same action's key on the keyboard.
         ReceiverEvent::Remote { key, .. } => {

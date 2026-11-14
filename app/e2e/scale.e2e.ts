@@ -233,10 +233,16 @@ describe(`a show of ${QUESTIONS} questions with ${TEAMS} teams on the receiver`,
       // All teams register with one press each, at the same moment.
       await fake.pressTogether(shuffled(BUZZERS).map((buzzer) => ({ buzzer, button: "big" as Button, timer: 0 })));
       const lobby = await app.waitView(`${TEAMS} teams`, (v) => v.players.length === TEAMS, STEP_MS);
+      const lateJoinShown = async () => {
+        const body = await app.bodyText();
+        return BUZZERS.some((buzzer) => body.includes(t("lateJoin", { buzzer })));
+      };
       expect(lobby.players.map((p) => p.buzzer).sort((a, b) => a - b)).toEqual(BUZZERS);
 
       await app.step("next");
       await app.waitView("the first slide", (v) => v.slideIndex === 0, STEP_MS);
+      // Teams that registered in the lobby did not join late.
+      expect(await lateJoinShown()).toBe(false);
       for (let q = 0; q < QUESTIONS; q++) {
         await toQuestion(q);
         if (fastest(q)) await everyoneBuzzes(q);
@@ -257,6 +263,8 @@ describe(`a show of ${QUESTIONS} questions with ${TEAMS} teams on the receiver`,
           );
           expectScores(resumed);
           await waitFor("the receiver back", connected, 15_000);
+          // A resumed show's teams are no new ones.
+          expect(await lateJoinShown()).toBe(false);
         }
       }
 
@@ -273,7 +281,7 @@ describe(`a show of ${QUESTIONS} questions with ${TEAMS} teams on the receiver`,
       // A spare buzzer pressed by mistake joins as a team: the Director says so at once.
       await fake.pressTogether([{ buzzer: 40, button: "big", timer: 0 }]);
       await app.waitView("the spare buzzer joined", (v) => v.players.length === TEAMS + 1, STEP_MS);
-      await app.seeText(t("lateJoin", { buzzers: "40" }));
+      await app.seeText(t("lateJoin", { buzzer: 40 }));
       expect(fake.errors).toEqual([]);
       await app.assertHealthy();
     },

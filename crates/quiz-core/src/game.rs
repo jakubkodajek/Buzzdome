@@ -910,6 +910,15 @@ impl Game {
         matches!(self.phase, Phase::Welcome | Phase::Lobby)
     }
 
+    /// Whether a press of `buzzer` now adds a team once the slides began
+    /// (`Game::press` registers any buzzer it does not know): a team that
+    /// came late, or a spare buzzer pressed by mistake, which the
+    /// quizmaster is told of, as a team that never answers keeps a question
+    /// from ending once everyone answered.
+    pub fn joins_late(&self, buzzer: BuzzerId) -> bool {
+        !self.before_slides() && !self.players.contains_key(&buzzer)
+    }
+
     /// The next `Next` leaves the current slide (rather than moving on
     /// within it); from the welcome screen it goes on to the lobby.
     fn next_leaves_slide(&self) -> bool {

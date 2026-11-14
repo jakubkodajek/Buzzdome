@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useState, type ReactNode } from "react";
 import { api } from "../api";
 import { AppProvider, useApp, useDispatch, useRun, useStepShown } from "../app-context";
 import { otherSoundPlays, useShowSounds } from "../audio/show-sounds";
@@ -40,7 +40,6 @@ import {
   VideoIcon,
 } from "../icons";
 import { commandForAction, commandForRemote, keyHint, KEYS, projectorKeyActs, useRemote, useShortcuts } from "../keyboard";
-import { forgetSent, lateJoins } from "../late-joins";
 import { MediaRootContext } from "../media";
 import { beforeSlides, currentSlide, judgedLabel, nextLabel, phaseLabel } from "../phase";
 import { slideContext } from "../quiz";
@@ -137,21 +136,6 @@ function DirectorScreens() {
 }
 
 /**
- * Tells the quizmaster when a buzzer joins once the slides began, as a
- * spare buzzer pressed by mistake would (`lateJoins`).
- */
-function useLateJoinCaution(view: GameView | null) {
-  const { t, caution } = useApp();
-  const before = useRef<GameView | null>(null);
-  useEffect(() => {
-    const joined = lateJoins(before.current, view);
-    if (joined.length > 0) caution(t("lateJoin", { buzzers: joined.join(", ") }));
-    if (!view || (before.current && view.stepNo < before.current.stepNo)) forgetSent();
-    before.current = view;
-  }, [view, t, caution]);
-}
-
-/**
  * The show controls. In a test run the show ends back in the editor;
  * `onEditor` opens it.
  */
@@ -166,7 +150,6 @@ function DirectorLayout({ testRun, onEditor }: { testRun: boolean; onEditor: (as
   const launch = useLaunchCheckSetting();
   const [tab, setTab] = useState<Tab>("questions");
   useStepShown(view);
-  useLateJoinCaution(view);
   // M and the remote's projector key: during a show they only open the projector, and say how to close it.
   const showRuns = view !== null;
   const { isOpen, toggle } = projector;
@@ -178,6 +161,8 @@ function DirectorLayout({ testRun, onEditor }: { testRun: boolean; onEditor: (as
   // The remote waits while a system dialog asks about the show as it was (`openDialogs`).
   const asking = useStore(openDialogs) > 0;
   useRemote(asking ? null : view, asking ? ignore : projectorKey);
+  // A buzzer that joined once the slides began may be a spare one pressed by mistake (`Game::joins_late`).
+  useBackendEvent("receiver-press", ({ press, joinedLate }) => joinedLate && caution(t("lateJoin", { buzzer: press.buzzer })));
   useBackendEvent("receiver-remote", ({ action }) => {
     if (!view || action === "nothing") return;
     if (openDialogs.get() > 0) caution(t("remoteWhileAsking"));

@@ -6,4 +6,10 @@ export type PressEvent = { press: Press,
  * False when the press did not play: it was only recorded (learn
  * mode), no show is running, or it changed nothing (`Game::ignores`).
  */
-used: boolean, };
+used: boolean, 
+/**
+ * The press added its buzzer as a team once the slides began
+ * (`Game::joins_late`): the Director tells the quizmaster, as it may
+ * be a spare buzzer pressed by mistake.
+ */
+joinedLate: boolean, };

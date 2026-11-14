@@ -90,6 +90,19 @@ fn lobby_registers_buzzers_on_any_press() {
 }
 
 #[test]
+fn a_buzzer_joins_late_once_the_slides_began_and_only_while_unknown() {
+    let mut show = Show::new(vec![question("q1", AnswerMode::Everyone)]);
+    assert!(!show.game.joins_late(3), "registering in the lobby is not late");
+    show.press(0, 3, Button::Big);
+    show.run(1_000, Command::Next).unwrap();
+    assert!(show.game.joins_late(40), "an unknown buzzer once the slides began");
+    assert!(!show.game.joins_late(3), "a team already playing");
+    show.press(1_500, 40, Button::A);
+    assert!(!show.game.joins_late(40), "joined now, so known");
+    assert_eq!(show.game.players().map(|p| p.buzzer).collect::<Vec<_>>(), [3, 40]);
+}
+
+#[test]
 fn the_position_counts_a_question_among_the_questions_and_another_slide_among_the_slides() {
     let mut show = Show::new(vec![
         billboard("intro"),
