@@ -4,7 +4,7 @@ import type { SlideStyle } from "./SlideStyle";
 
 export type Category = { id: string, 
 /**
- * Unique in the quiz regardless of case, as a spreadsheet's `CAT` names it.
+ * Unique in the quiz regardless of case, as a spreadsheet's Category column names it.
  */
 name: string, 
 /**

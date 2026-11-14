@@ -1,6 +1,6 @@
-//! Questions as a table (spec QZ-8): a row per slide, in the columns of the
-//! reference app's Excel template, read into slides on import and written
-//! from them on export. Pure: `quiz-file` reads and writes the files and
+//! Questions as a table (spec QZ-8): a row per slide, in columns headed in
+//! English or Czech, read into slides on import and written from them on
+//! export. Pure: `quiz-file` reads and writes the files and
 //! finds the media files the cells name, so here a slide's media are the
 //! file names as the cells give them.
 
@@ -9,6 +9,8 @@ use crate::media::{
     MAX_VIDEO_SPEED, MIN_GAIN_DB, MIN_VIDEO_SPEED, NEW_VIDEO_INTRO_PAUSE_MS,
 };
 use crate::category::{category_named, Category};
+use crate::settings::QuizLanguage;
+use crate::text::heading_key;
 use crate::model::{AnswerMode, CorrectAnswer, Question, Quiz, Slide, SlideContent, DEFAULT_POINTS, DEFAULT_TIME_LIMIT_S, MAX_ANSWERS, MAX_POINTS, MAX_TIME_LIMIT_S};
 use serde::{Deserialize, Serialize};
 use std::ops::RangeInclusive;
@@ -41,32 +43,18 @@ pub struct Place {
 #[ts(export)]
 #[serde(tag = "code", rename_all = "camelCase")]
 pub enum ImportIssue {
-    /// A sheet with values but no `Q` column, such as one of instructions: skipped.
+    /// A sheet with values but no question column, such as one of instructions: skipped.
     NoQuestionColumn,
     /// A heading this app does not know, or a column without one (named by
     /// its letter): its values are left out.
     UnknownColumn { column: String },
-    /// A column of the reference app this one has no place for: its values are left out.
-    UnsupportedColumn { column: String },
     /// A second column with the same heading: left out.
     DuplicateColumn { column: String },
-    /// Text after `||` (a second language): left out.
-    SecondLanguage,
-    /// A file marked `{L}` to be linked: copied into the quiz like any
-    /// other, as a quiz file always carries its media.
-    LinkedFile,
-    /// A slide type this app does not have: imported as a billboard with the text.
-    SlideTypeNotSupported { prefix: String },
-    /// A test question (`{T}`): imported as a question that gives no points.
-    TestQuestion,
-    /// A qualifier in a `Q` prefix this app does not have: left out.
-    QualifierNotSupported { qualifier: String },
-    /// Everyone answers (`EA`) with an answer count the A-D buttons cannot
-    /// offer: imported as a fastest finger question.
-    NotEveryone { answers: usize },
+    /// A type this app does not know: the row is read as if it had none.
+    UnknownType { value: String },
     /// Answers on a slide that is no question: left out.
     AnswersLeftOut,
-    /// A category (`CAT`) the quiz does not have: the slide keeps the theme's look.
+    /// A category (the Category column) the quiz does not have: the slide keeps the theme's look.
     UnknownCategory { name: String },
     /// A picture and a video: the picture is left out, as a slide shows one.
     PictureAndVideo,
@@ -132,12 +120,13 @@ pub struct ImportedRows {
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum SheetError {
-    #[error("no sheet has a Q column")]
+    #[error("no sheet has a question column")]
     NoQuestionColumn,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Field {
+    Type,
     Text,
     Answer(usize),
     Picture,
@@ -154,81 +143,154 @@ enum Field {
     ReadAs,
 }
 
-/// The columns this app reads and writes, in the order an export writes
-/// them, under the reference template's headings.
-const FIELDS: [(&str, Field); 19] = [
-    ("Q", Field::Text),
-    ("A1", Field::Answer(0)),
-    ("A2", Field::Answer(1)),
-    ("A3", Field::Answer(2)),
-    ("A4", Field::Answer(3)),
-    ("A5", Field::Answer(4)),
-    ("A6", Field::Answer(5)),
-    ("P1", Field::Picture),
-    ("NOTES", Field::Notes),
-    ("SOUND", Field::Sound),
-    ("VIDEO", Field::Video),
-    ("BACKGROUND", Field::Background),
-    ("BACKGROUND-VIDEO", Field::BackgroundVideo),
-    ("ANSWER-TIME", Field::AnswerTime),
-    ("POINTS-START", Field::PointsStart),
-    ("POINTS-END", Field::PointsEnd),
-    ("PENALTY-POINTS-START", Field::Penalty),
-    ("CAT", Field::Category),
-    // This app's own: how the voice says a question.
-    ("READ-AS", Field::ReadAs),
+/// A column this app reads and writes, with its heading in English and in
+/// Czech: an export writes it in the quizmaster's language, an import
+/// knows a column by either, whatever their case, accents, spaces and
+/// dashes (`heading_key`). A column that is not `basic` is exported only
+/// when a slide has a value in it, so a sheet shows what its quiz uses.
+struct Column {
+    field: Field,
+    english: &'static str,
+    czech: &'static str,
+    basic: bool,
+}
+
+const fn basic(field: Field, english: &'static str, czech: &'static str) -> Column {
+    Column { field, english, czech, basic: true }
+}
+
+const fn extra(field: Field, english: &'static str, czech: &'static str) -> Column {
+    Column { field, english, czech, basic: false }
+}
+
+/// The columns, in the order an export writes them.
+const FIELDS: [Column; 20] = [
+    basic(Field::Type, "Type", "Typ"),
+    basic(Field::Text, "Question", "Otázka"),
+    basic(Field::Answer(0), "Answer 1", "Odpověď 1"),
+    basic(Field::Answer(1), "Answer 2", "Odpověď 2"),
+    basic(Field::Answer(2), "Answer 3", "Odpověď 3"),
+    basic(Field::Answer(3), "Answer 4", "Odpověď 4"),
+    basic(Field::Answer(4), "Answer 5", "Odpověď 5"),
+    basic(Field::Answer(5), "Answer 6", "Odpověď 6"),
+    basic(Field::Notes, "Notes", "Poznámky"),
+    basic(Field::AnswerTime, "Answer time", "Čas na odpověď"),
+    basic(Field::PointsStart, "Points", "Body"),
+    extra(Field::PointsEnd, "Points at end", "Body na konci"),
+    extra(Field::Penalty, "Penalty", "Srážka za chybu"),
+    extra(Field::Picture, "Picture", "Obrázek"),
+    extra(Field::Sound, "Sound", "Zvuk"),
+    extra(Field::Video, "Video", "Video"),
+    extra(Field::Background, "Background", "Pozadí"),
+    extra(Field::BackgroundVideo, "Background video", "Video na pozadí"),
+    extra(Field::Category, "Category", "Kategorie"),
+    // How the voice says a question.
+    extra(Field::ReadAs, "Read as", "Jak přečíst"),
 ];
 
-/// Columns of the reference template this app has no place for.
-const UNSUPPORTED: [&str; 20] = [
-    "P2",
-    "P3",
-    "P4",
-    "P5",
-    "P6",
-    "A7",
-    "A8",
-    "PENALTY-POINTS-END",
-    "NO-ANSWER-POINTS",
-    "BONUS-POINTS-1",
-    "BONUS-POINTS-2",
-    "BONUS-POINTS-3",
-    "STYLE",
-    "TRANSITION",
-    "SHUFFLEMODE",
-    "EVALUATION-MODE",
-    "NEAREST-WINS-WINNERS",
-    "TEXT-EVALUATION",
-    "TOLERANCE",
-    "END-OF-ROUND-ACTION",
-];
-
-impl Field {
-    fn index(self) -> usize {
-        FIELDS.iter().position(|&(_, field)| field == self).expect("every field has a column")
+impl Column {
+    fn heading(&self, language: QuizLanguage) -> &'static str {
+        in_language(language, self.english, self.czech)
     }
 
-    fn heading(self) -> String {
-        FIELDS[self.index()].0.to_string()
+    fn is_named(&self, key: &str) -> bool {
+        [self.english, self.czech].iter().any(|name| heading_key(name) == key)
     }
 }
 
-// Slide types of the `Q` prefix (`{B}Round 1`). X and F are this app's
-// own, for its explanation and final slides.
-const QUESTION: &str = "Q";
-const TEST: &str = "T";
-const BILLBOARD: &str = "B";
-const END_OF_ROUND: &str = "E";
-const EXPLANATION: &str = "X";
-const FINAL: &str = "F";
-/// The reference app's other slide types, which this one does not have.
-const OTHER_TYPES: [&str; 9] = ["W", "A", "D", "L", "M", "J", "TL", "TF", "SR"];
-// Question qualifiers (`{Q, EA}`).
-const EVERYONE: &str = "EA";
-const FASTEST_FINGER: &str = "FF";
+fn in_language(language: QuizLanguage, english: &'static str, czech: &'static str) -> &'static str {
+    match language {
+        QuizLanguage::Cs => czech,
+        QuizLanguage::En => english,
+    }
+}
 
-/// Marks a media file to be linked rather than copied into the quiz.
-const LINKED: &str = "{L}";
+impl Field {
+    fn index(self) -> usize {
+        FIELDS.iter().position(|column| column.field == self).expect("every field has a column")
+    }
+
+    /// The field's name for the UI (`sheet_words`).
+    fn key(self) -> String {
+        match self {
+            Field::Type => "type".into(),
+            Field::Text => "question".into(),
+            Field::Answer(i) => format!("answer{}", i + 1),
+            Field::Picture => "picture".into(),
+            Field::Notes => "notes".into(),
+            Field::Sound => "sound".into(),
+            Field::Video => "video".into(),
+            Field::Background => "background".into(),
+            Field::BackgroundVideo => "backgroundVideo".into(),
+            Field::AnswerTime => "answerTime".into(),
+            Field::PointsStart => "points".into(),
+            Field::PointsEnd => "pointsEnd".into(),
+            Field::Penalty => "penalty".into(),
+            Field::Category => "category".into(),
+            Field::ReadAs => "readAs".into(),
+        }
+    }
+}
+
+/// The headings and types in each language, by name, for the UI to show
+/// in its example of a sheet (`SHEET_WORDS` in Constants.ts), so it shows
+/// the words the import reads.
+pub fn sheet_words() -> serde_json::Value {
+    let words = |language: QuizLanguage| {
+        let columns: serde_json::Map<String, serde_json::Value> = FIELDS.iter().map(|column| (column.field.key(), column.heading(language).into())).collect();
+        let types: serde_json::Map<String, serde_json::Value> = KINDS.iter().map(|&(kind, key, ..)| (key.to_string(), kind.name(language).into())).collect();
+        serde_json::json!({ "columns": columns, "types": types })
+    };
+    serde_json::json!({ "cs": words(QuizLanguage::Cs), "en": words(QuizLanguage::En) })
+}
+
+/// What the Type column makes of a row; an empty cell is a question, or a
+/// billboard for a row with only media.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Kind {
+    Question,
+    /// A question answered by the fastest finger also with two to four
+    /// answers, which would otherwise be everyone's (`mode_for`).
+    FastestFinger,
+    /// A billboard: the first line is its title, the rest its text.
+    Section,
+    Explanation,
+    EndOfRound,
+    Results,
+}
+
+/// The types, by their name for the UI (`sheet_words`), in English and in
+/// Czech, known as headings are (`heading_key`).
+const KINDS: [(Kind, &str, &str, &str); 6] = [
+    (Kind::Question, "question", "Question", "Otázka"),
+    (Kind::FastestFinger, "fastestFinger", "Fastest finger", "Rychlá odpověď"),
+    (Kind::Section, "section", "Section", "Sekce"),
+    (Kind::Explanation, "explanation", "Explanation", "Vysvětlení"),
+    (Kind::EndOfRound, "endOfRound", "End of round", "Konec kola"),
+    (Kind::Results, "results", "Results", "Výsledky"),
+];
+
+impl Kind {
+    fn name(self, language: QuizLanguage) -> &'static str {
+        let &(_, _, english, czech) = KINDS.iter().find(|(kind, ..)| *kind == self).expect("every type has a name");
+        in_language(language, english, czech)
+    }
+
+    /// The type a Type cell names; none for an empty cell, and for one this
+    /// app does not know, with a note.
+    fn of(row: &Row, place: &Place, notes: &mut Notes) -> Option<Kind> {
+        let cell = row.get(Field::Type);
+        let key = heading_key(cell);
+        if key.is_empty() {
+            return None;
+        }
+        let found = KINDS.iter().find(|(_, _, english, czech)| heading_key(english) == key || heading_key(czech) == key).map(|&(kind, ..)| kind);
+        if found.is_none() {
+            notes.add(ImportIssue::UnknownType { value: cell.to_string() }, place);
+        }
+        found
+    }
+}
 
 // Media settings, in braces after the file name: `intro.mp4{loop=false}`.
 const START_AT: &str = "start-at";
@@ -275,7 +337,7 @@ fn sheet_video(file: impl Into<String>) -> VideoClip {
 /// Reads the slides of `tables`, in order. With more than one sheet of
 /// questions, each sheet is a round that a billboard with its name opens.
 /// Answers whose correct one is not marked are shuffled with `seed`. A row
-/// that names one of `categories` (`CAT`) gets its id; the editor gives the
+/// that names one of `categories` (Category) gets its id; the editor gives the
 /// slide its look. Slides get the ids `import-1`, `import-2`... for the
 /// editor to replace.
 pub fn import_tables(tables: &[Table], categories: &[Category], seed: u64) -> Result<ImportedRows, SheetError> {
@@ -301,7 +363,7 @@ pub fn import_tables(tables: &[Table], categories: &[Category], seed: u64) -> Re
     Ok(ImportedRows { slides, notes })
 }
 
-/// The slides of one sheet; none when it has no `Q` column. An empty sheet
+/// The slides of one sheet; none when it has no question column. An empty sheet
 /// is skipped without a note: workbooks often have some.
 fn import_table(table: &Table, categories: &[Category], shuffler: &mut Shuffler, notes: &mut Notes) -> Option<Vec<(Place, Slide)>> {
     let has_value = |row: &Vec<String>, column: usize| row.get(column).is_some_and(|cell| !cell.trim().is_empty());
@@ -310,14 +372,13 @@ fn import_table(table: &Table, categories: &[Category], shuffler: &mut Shuffler,
     let mut columns: Vec<Option<Field>> = Vec::new();
     let mut left_out = Vec::new();
     for (column, heading) in headings.iter().enumerate() {
-        let name = heading.trim().to_ascii_uppercase();
-        let field = FIELDS.iter().find(|(known, _)| *known == name).map(|&(_, field)| field);
+        let (name, key) = (heading.trim().to_string(), heading_key(heading));
+        let field = FIELDS.iter().find(|known| !key.is_empty() && known.is_named(&key)).map(|known| known.field);
         columns.push(field.filter(|field| !columns.contains(&Some(*field))));
         let issue = match field {
             Some(_) if columns[column].is_none() => ImportIssue::DuplicateColumn { column: name },
             Some(_) => continue,
-            None if name.is_empty() => ImportIssue::UnknownColumn { column: column_letters(column) },
-            None if UNSUPPORTED.contains(&name.as_str()) => ImportIssue::UnsupportedColumn { column: name },
+            None if key.is_empty() => ImportIssue::UnknownColumn { column: column_letters(column) },
             None => ImportIssue::UnknownColumn { column: name },
         };
         left_out.push((column, issue));
@@ -338,7 +399,7 @@ fn import_table(table: &Table, categories: &[Category], shuffler: &mut Shuffler,
     }
     let slides = data.iter().zip(table.first_row + 1..).filter_map(|(cells, row)| {
         let place = Place { sheet: table.name.clone(), row };
-        let slide = import_row(&Row::new(&columns, cells), categories, &place, shuffler, notes)?;
+        let slide = import_row(&Row::new(&columns, headings, cells), categories, &place, shuffler, notes)?;
         Some((place, slide))
     });
     Some(slides.collect())
@@ -356,72 +417,38 @@ fn column_letters(column: usize) -> String {
 }
 
 /// A row's cells by field, trimmed and without the `'` an export put before
-/// what looks like a formula; empty where the sheet has none.
-struct Row<'a>([&'a str; FIELDS.len()]);
+/// what looks like a formula; empty where the sheet has none. With them,
+/// the headings of their columns as the sheet writes them, which notes name.
+struct Row<'a> {
+    cells: [&'a str; FIELDS.len()],
+    headings: [&'a str; FIELDS.len()],
+}
 
 impl<'a> Row<'a> {
-    fn new(columns: &[Option<Field>], cells: &'a [String]) -> Row<'a> {
-        let mut row = [""; FIELDS.len()];
-        for (field, cell) in columns.iter().zip(cells) {
+    fn new(columns: &[Option<Field>], headings: &'a [String], cells: &'a [String]) -> Row<'a> {
+        let mut row = Row { cells: [""; FIELDS.len()], headings: [""; FIELDS.len()] };
+        for ((field, heading), cell) in columns.iter().zip(headings).zip(cells.iter().map(String::as_str).chain(std::iter::repeat(""))) {
             if let Some(field) = field {
-                row[field.index()] = undefused(cell.trim()).trim();
+                // A text cell keeps a leading line break: an untitled
+                // section is written as an empty first line, then its text
+                // (`import_row` drops it for every other kind of row).
+                row.cells[field.index()] = match field {
+                    Field::Text => undefused(cell.trim_start_matches([' ', '\t']).trim_end()).trim_start_matches([' ', '\t']).trim_end(),
+                    _ => undefused(cell.trim()).trim(),
+                };
+                row.headings[field.index()] = heading.trim();
             }
         }
-        Row(row)
+        row
     }
 
     fn get(&self, field: Field) -> &'a str {
-        self.0[field.index()]
+        self.cells[field.index()]
     }
-}
 
-/// What a row's `Q` prefix makes of it.
-enum Kind {
-    /// No prefix: a question, or a billboard for a row with only media.
-    Plain,
-    Question { mode: Option<AnswerMode>, test: bool },
-    Billboard,
-    EndOfRound,
-    Explanation,
-    Final,
-    /// A slide type of the reference app's, as written (`{W}`).
-    Other(String),
-}
-
-/// The slide type a `Q` cell's prefix gives, and the text after it. A
-/// prefix with an unknown type is no prefix but part of the text.
-fn prefix<'a>(cell: &'a str, place: &Place, notes: &mut Notes) -> (Kind, &'a str) {
-    let Some((inner, text)) = cell.strip_prefix('{').and_then(|rest| rest.split_once('}')) else { return (Kind::Plain, cell) };
-    let mut tokens = inner.split(',').map(|token| token.trim().to_ascii_uppercase());
-    let first = tokens.next().unwrap_or_default();
-    let mut kind = match first.as_str() {
-        QUESTION | TEST => Kind::Question { mode: None, test: first == TEST },
-        BILLBOARD => Kind::Billboard,
-        END_OF_ROUND => Kind::EndOfRound,
-        EXPLANATION => Kind::Explanation,
-        FINAL => Kind::Final,
-        other if OTHER_TYPES.contains(&other) => Kind::Other(format!("{{{other}}}")),
-        _ => return (Kind::Plain, cell),
-    };
-    for qualifier in tokens {
-        match (&mut kind, qualifier.as_str()) {
-            (Kind::Question { mode, .. }, EVERYONE) => *mode = Some(AnswerMode::Everyone),
-            (Kind::Question { mode, .. }, FASTEST_FINGER) => *mode = Some(AnswerMode::FastestFinger),
-            _ => notes.add(ImportIssue::QualifierNotSupported { qualifier }, place),
-        }
-    }
-    // Spaces after the prefix go, a line break stays: it starts a billboard's text.
-    (kind, text.trim_start_matches([' ', '\t']))
-}
-
-/// The text before `||`; what follows is a second language this app does not have.
-fn first_language<'a>(cell: &'a str, place: &Place, notes: &mut Notes) -> &'a str {
-    match cell.split_once("||") {
-        Some((first, _)) => {
-            notes.add(ImportIssue::SecondLanguage, place);
-            first.trim()
-        }
-        None => cell,
+    /// The heading of `field`'s column, to name it in a note.
+    fn heading(&self, field: Field) -> String {
+        self.headings[field.index()].to_string()
     }
 }
 
@@ -451,49 +478,43 @@ fn answer_cell(text: &str, correct: bool) -> String {
 }
 
 /// An answer cell's text and whether brackets mark it correct; none when empty.
-fn answer(cell: &str, place: &Place, notes: &mut Notes) -> Option<(String, bool)> {
+fn answer(cell: &str) -> Option<(String, bool)> {
     if cell.is_empty() {
         return None;
     }
-    let text = first_language(cell, place, notes);
-    if let Some(text) = text.strip_prefix('\'').filter(|rest| reads_as_correct(rest)) {
+    if let Some(text) = cell.strip_prefix('\'').filter(|rest| reads_as_correct(rest)) {
         return Some((text.to_string(), false));
     }
-    // `[Paris||Parijs]` marks the answer as `[Paris]||[Parijs]` does.
-    let correct = bracketed(cell) || bracketed(text);
-    let text = if correct { text.strip_prefix('[').unwrap_or(text) } else { text };
-    let text = if correct { text.strip_suffix(']').unwrap_or(text) } else { text };
-    Some((text.trim().to_string(), correct))
+    let text = if bracketed(cell) { &cell[1..cell.len() - 1] } else { cell };
+    Some((text.trim().to_string(), bracketed(cell)))
 }
 
 fn import_row(row: &Row, categories: &[Category], place: &Place, shuffler: &mut Shuffler, notes: &mut Notes) -> Option<Slide> {
-    if row.0.iter().all(|cell| cell.is_empty()) {
+    if row.cells.iter().all(|cell| cell.is_empty()) {
         return None;
     }
-    let (kind, text) = prefix(row.get(Field::Text), place, notes);
-    let text = first_language(text, place, notes).to_string();
-    let answers: Vec<(String, bool)> = (0..MAX_ANSWERS).filter_map(|i| answer(row.get(Field::Answer(i)), place, notes)).collect();
-    let is_question = match kind {
-        Kind::Question { .. } => true,
-        Kind::Plain => !text.is_empty() || !answers.is_empty(),
-        _ => false,
-    };
-    if !is_question && !answers.is_empty() {
-        notes.add(ImportIssue::AnswersLeftOut, place);
-    }
+    let kind = Kind::of(row, place, notes);
+    // Only a section reads a leading line break, as an empty title.
+    let raw = row.get(Field::Text);
+    let text = raw.trim_start().to_string();
+    let answers: Vec<(String, bool)> = (0..MAX_ANSWERS).filter_map(|i| answer(row.get(Field::Answer(i)))).collect();
     let content = match kind {
-        Kind::Question { mode, test } => SlideContent::Question(question(text, answers, mode, test, row, place, shuffler, notes)),
-        Kind::Plain if is_question => SlideContent::Question(question(text, answers, None, false, row, place, shuffler, notes)),
+        Some(Kind::Question) => SlideContent::Question(question(text, answers, None, row, place, shuffler, notes)),
+        Some(Kind::FastestFinger) => SlideContent::Question(question(text, answers, Some(AnswerMode::FastestFinger), row, place, shuffler, notes)),
+        None if !text.is_empty() || !answers.is_empty() => SlideContent::Question(question(text, answers, None, row, place, shuffler, notes)),
         // A row with only media, such as a video for a full-screen video slide.
-        Kind::Plain => SlideContent::Billboard { title: text, text: String::new() },
-        Kind::Billboard => billboard(&text),
-        Kind::Other(prefix) => {
-            notes.add(ImportIssue::SlideTypeNotSupported { prefix }, place);
-            billboard(&text)
+        None => SlideContent::Billboard { title: text, text: String::new() },
+        Some(other) => {
+            if !answers.is_empty() {
+                notes.add(ImportIssue::AnswersLeftOut, place);
+            }
+            match other {
+                Kind::Section => billboard(raw),
+                Kind::Explanation => SlideContent::Explanation { text },
+                Kind::EndOfRound => SlideContent::EndOfRound { title: text },
+                _ => SlideContent::Final { title: text },
+            }
         }
-        Kind::EndOfRound => SlideContent::EndOfRound { title: text },
-        Kind::Explanation => SlideContent::Explanation { text },
-        Kind::Final => SlideContent::Final { title: text },
     };
     let mut slide = Slide::new("", content);
     slide.notes = row.get(Field::Notes).to_string();
@@ -505,7 +526,7 @@ fn import_row(row: &Row, categories: &[Category], place: &Place, shuffler: &mut 
         }
     }
     import_media(row, &mut slide, place, notes);
-    fit(&mut slide, place, notes);
+    fit(&mut slide, row, place, notes);
     Some(slide)
 }
 
@@ -515,12 +536,12 @@ fn billboard(text: &str) -> SlideContent {
     SlideContent::Billboard { title: title.trim_end().to_string(), text: rest.to_string() }
 }
 
-#[allow(clippy::too_many_arguments)]
+/// A question; `asked` is the fastest finger when the Type column says so,
+/// else the answers decide (`mode_for`).
 fn question(
     text: String,
     answers: Vec<(String, bool)>,
     asked: Option<AnswerMode>,
-    test: bool,
     row: &Row,
     place: &Place,
     shuffler: &mut Shuffler,
@@ -535,17 +556,7 @@ fn question(
         correct = order.iter().position(|&i| i == 0).into_iter().collect();
         texts = order.iter().map(|&i| texts[i].clone()).collect();
     }
-    let everyone = AnswerMode::Everyone.answer_limits();
-    let fits = (everyone.fewest..=everyone.most).contains(&texts.len());
-    let mode = match asked {
-        Some(AnswerMode::Everyone) if !fits => {
-            notes.add(ImportIssue::NotEveryone { answers: texts.len() }, place);
-            AnswerMode::FastestFinger
-        }
-        Some(mode) => mode,
-        None if fits => AnswerMode::Everyone,
-        None => AnswerMode::FastestFinger,
-    };
+    let mode = asked.unwrap_or_else(|| mode_for(texts.len()));
     let mut question = Question {
         text,
         mode,
@@ -557,16 +568,11 @@ fn question(
         penalty: 0,
         read_as: row.get(Field::ReadAs).to_string(),
     };
-    if test {
-        notes.add(ImportIssue::TestQuestion, place);
-        question.points = 0;
-        return question;
-    }
     let mut number = |field: Field, range: RangeInclusive<i64>| {
         let cell = row.get(field);
         let value = integer(cell).filter(|n| range.contains(n));
         if value.is_none() && !cell.is_empty() {
-            notes.add(ImportIssue::BadValue { column: field.heading(), value: cell.to_string() }, place);
+            notes.add(ImportIssue::BadValue { column: row.heading(field), value: cell.to_string() }, place);
         }
         value
     };
@@ -586,18 +592,23 @@ fn question(
     question
 }
 
-/// A media cell: `{L}` (linked), the file, and settings in braces.
+/// How a question without the fastest finger in its Type column is
+/// answered: by everyone on the A-D buttons when it has two to four
+/// answers, else by the fastest finger, aloud when it has none or more
+/// than four (`Button::buzzes_in`).
+fn mode_for(answers: usize) -> AnswerMode {
+    let everyone = AnswerMode::Everyone.answer_limits();
+    if (everyone.fewest..=everyone.most).contains(&answers) { AnswerMode::Everyone } else { AnswerMode::FastestFinger }
+}
+
+/// A media cell: the file, and settings in braces.
 struct MediaCell<'a> {
     file: &'a str,
     settings: Vec<(String, &'a str)>,
 }
 
-fn media_cell<'a>(field: Field, cell: &'a str, kinds: &[MediaKind], place: &Place, notes: &mut Notes) -> Option<MediaCell<'a>> {
-    let mut file = cell;
-    if file.get(..LINKED.len()).is_some_and(|start| start.eq_ignore_ascii_case(LINKED)) {
-        notes.add(ImportIssue::LinkedFile, place);
-        file = file[LINKED.len()..].trim_start();
-    }
+fn media_cell<'a>(row: &Row<'a>, field: Field, kinds: &[MediaKind], place: &Place, notes: &mut Notes) -> Option<MediaCell<'a>> {
+    let mut file = row.get(field);
     let mut settings = Vec::new();
     if let Some((name, braced)) = file.strip_suffix('}').and_then(|body| body.rsplit_once('{')) {
         file = name.trim_end();
@@ -606,15 +617,11 @@ fn media_cell<'a>(field: Field, cell: &'a str, kinds: &[MediaKind], place: &Plac
             settings.push((key.trim().to_ascii_lowercase(), value.trim()));
         }
     }
-    // Brackets mark the correct answer's picture in the reference; here P1 is the slide's picture.
-    if field == Field::Picture {
-        file = file.strip_prefix('[').and_then(|inner| inner.strip_suffix(']')).unwrap_or(file);
-    }
     if file.is_empty() {
         return None;
     }
     if !MediaKind::of(file).is_some_and(|kind| kinds.contains(&kind)) {
-        notes.add(ImportIssue::WrongMediaType { column: field.heading(), file: file.to_string() }, place);
+        notes.add(ImportIssue::WrongMediaType { column: row.heading(field), file: file.to_string() }, place);
         return None;
     }
     Some(MediaCell { file, settings })
@@ -622,7 +629,7 @@ fn media_cell<'a>(field: Field, cell: &'a str, kinds: &[MediaKind], place: &Plac
 
 fn import_media(row: &Row, slide: &mut Slide, place: &Place, notes: &mut Notes) {
     use MediaKind::{Audio, Image, Video};
-    let mut cell = |field: Field, kinds: &[MediaKind]| media_cell(field, row.get(field), kinds, place, notes);
+    let mut cell = |field: Field, kinds: &[MediaKind]| media_cell(row, field, kinds, place, notes);
     let picture = cell(Field::Picture, &[Image]);
     let sound = cell(Field::Sound, &[Audio]);
     let video = cell(Field::Video, &[Video]);
@@ -635,24 +642,24 @@ fn import_media(row: &Row, slide: &mut Slide, place: &Place, notes: &mut Notes) 
     }
 
     if let Some(cell) = picture {
-        apply_settings(&mut (), &cell, set_nothing, Field::Picture, place, notes);
+        apply_settings(&mut (), &cell, set_nothing, row.heading(Field::Picture), place, notes);
         slide.picture = Some(cell.file.to_string());
     }
     if let Some(cell) = sound {
         let mut sound = SoundClip::new(cell.file);
-        apply_settings(&mut sound, &cell, set_sound, Field::Sound, place, notes);
-        keep_parts(&mut sound.part, &mut sound.replay, Field::Sound, place, notes);
+        apply_settings(&mut sound, &cell, set_sound, row.heading(Field::Sound), place, notes);
+        keep_parts(&mut sound.part, &mut sound.replay, row.heading(Field::Sound), place, notes);
         slide.sound = Some(sound);
     }
     if let Some(cell) = video {
         let mut video = sheet_video(cell.file);
-        apply_settings(&mut video, &cell, set_video, Field::Video, place, notes);
-        keep_parts(&mut video.part, &mut video.replay, Field::Video, place, notes);
+        apply_settings(&mut video, &cell, set_video, row.heading(Field::Video), place, notes);
+        keep_parts(&mut video.part, &mut video.replay, row.heading(Field::Video), place, notes);
         slide.video = Some(video);
     }
     if let Some((field, cell)) = background {
         let mut background = Background::new(cell.file);
-        apply_settings(&mut background, &cell, set_background, field, place, notes);
+        apply_settings(&mut background, &cell, set_background, row.heading(field), place, notes);
         slide.background = Some(background);
     }
 }
@@ -684,9 +691,9 @@ impl Setting {
     }
 }
 
-fn apply_settings<T>(target: &mut T, cell: &MediaCell, set: fn(&mut T, &str, &str) -> Setting, field: Field, place: &Place, notes: &mut Notes) {
+fn apply_settings<T>(target: &mut T, cell: &MediaCell, set: fn(&mut T, &str, &str) -> Setting, heading: String, place: &Place, notes: &mut Notes) {
     for (key, value) in &cell.settings {
-        let (column, setting) = (field.heading(), key.clone());
+        let (column, setting) = (heading.clone(), key.clone());
         let issue = match set(target, key, value) {
             Setting::Set => continue,
             Setting::Bad => ImportIssue::BadSetting { column, setting, value: value.to_string() },
@@ -698,12 +705,12 @@ fn apply_settings<T>(target: &mut T, cell: &MediaCell, set: fn(&mut T, &str, &st
 }
 
 /// Undoes a stop before the start: the whole file plays from the start.
-fn keep_parts(part: &mut Span, replay: &mut Option<Replay>, field: Field, place: &Place, notes: &mut Notes) {
+fn keep_parts(part: &mut Span, replay: &mut Option<Replay>, heading: String, place: &Place, notes: &mut Notes) {
     let parts = [(Some(part), STOP_AT), (replay.as_mut().map(|replay| &mut replay.part), REPLAY_STOP_AT)];
     for (part, setting) in parts {
         let Some(part) = part.filter(|part| part.is_empty()) else { continue };
         let value = part.to_ms.map(clock).unwrap_or_default();
-        notes.add(ImportIssue::BadSetting { column: field.heading(), setting: setting.to_string(), value }, place);
+        notes.add(ImportIssue::BadSetting { column: heading.clone(), setting: setting.to_string(), value }, place);
         part.to_ms = None;
     }
 }
@@ -776,7 +783,7 @@ fn set_background(background: &mut Background, key: &str, value: &str) -> Settin
 }
 
 /// Drops what a slide of its type or its media cannot have, with a note.
-fn fit(slide: &mut Slide, place: &Place, notes: &mut Notes) {
+fn fit(slide: &mut Slide, row: &Row, place: &Place, notes: &mut Notes) {
     if slide.picture.is_some() && slide.video.is_some() {
         notes.add(ImportIssue::PictureAndVideo, place);
         slide.picture = None;
@@ -790,7 +797,7 @@ fn fit(slide: &mut Slide, place: &Place, notes: &mut Notes) {
         return;
     }
     let mut not_used = |field: Field, setting: &str| {
-        notes.add(ImportIssue::SettingNotUsed { column: field.heading(), setting: setting.to_string() }, place);
+        notes.add(ImportIssue::SettingNotUsed { column: row.heading(field), setting: setting.to_string() }, place);
     };
     // Only a question has a clock and a reveal (`SlideType::plays`).
     if let Some(sound) = &mut slide.sound {
@@ -898,13 +905,24 @@ fn seconds(ms: u32) -> String {
     }
 }
 
-/// The quiz's slides as a table: the headings, then a row per slide.
+/// The quiz's slides as a table: the headings in `language`, then a row
+/// per slide, in the basic columns and the others a slide has a value in.
 /// `file_name` gives the name a media reference has next to the table;
 /// none leaves the file out.
-pub fn export_table(quiz: &Quiz, file_name: impl Fn(&str) -> Option<String>) -> Vec<Vec<String>> {
-    let headings = FIELDS.iter().map(|(heading, _)| heading.to_string()).collect();
-    let rows = quiz.slides.iter().map(|slide| export_row(slide, &quiz.categories, &file_name).into_iter().map(defused).collect());
+pub fn export_table(quiz: &Quiz, language: QuizLanguage, file_name: impl Fn(&str) -> Option<String>) -> Vec<Vec<String>> {
+    let rows: Vec<Vec<String>> = quiz.slides.iter().map(|slide| export_row(slide, &quiz.categories, language, &file_name)).collect();
+    let kept: Vec<usize> = (0..FIELDS.len()).filter(|&i| FIELDS[i].basic || rows.iter().any(|row| !row[i].is_empty())).collect();
+    let headings = kept.iter().map(|&i| FIELDS[i].heading(language).to_string()).collect();
+    let rows = rows.into_iter().map(|row| kept.iter().map(|&i| defused(row[i].clone())).collect());
     std::iter::once(headings).chain(rows).collect()
+}
+
+/// The sheet rows of the questions with answers but none marked correct,
+/// numbered as `export_table` writes them (the headings are the first row):
+/// a sheet cannot say so, and the import makes the first answer correct.
+pub fn rows_without_correct(quiz: &Quiz) -> Vec<u32> {
+    let unmarked = |slide: &Slide| matches!(&slide.content, SlideContent::Question(q) if !q.answers.is_empty() && q.correct.is_empty());
+    (2..).zip(&quiz.slides).filter(|(_, slide)| unmarked(slide)).map(|(row, _)| row).collect()
 }
 
 /// Whether a spreadsheet program would take `cell` for a formula, which can
@@ -942,32 +960,44 @@ fn undefused(cell: &str) -> &str {
     }
 }
 
-fn export_row(slide: &Slide, categories: &[Category], file_name: &impl Fn(&str) -> Option<String>) -> Vec<String> {
+/// The Type cell of a question: the fastest finger where the answers alone
+/// would not make it one, else a question. Written on every question row,
+/// so a sheet reads the same way the File › Import guide teaches.
+fn question_kind(question: &Question) -> Kind {
+    if question.mode != mode_for(question.answers.len().min(MAX_ANSWERS)) {
+        Kind::FastestFinger
+    } else {
+        Kind::Question
+    }
+}
+
+fn export_row(slide: &Slide, categories: &[Category], language: QuizLanguage, file_name: &impl Fn(&str) -> Option<String>) -> Vec<String> {
     let mut row = vec![String::new(); FIELDS.len()];
     let mut set = |field: Field, value: String| row[field.index()] = value;
-    let prefixed = |kind: &str, text: &str| format!("{{{kind}}}{text}");
+    let mut kind = |kind: Kind, text: String| {
+        set(Field::Type, kind.name(language).to_string());
+        set(Field::Text, text);
+    };
     match &slide.content {
         SlideContent::Question(question) => {
-            let mode = match question.mode {
-                AnswerMode::Everyone => EVERYONE,
-                AnswerMode::FastestFinger => FASTEST_FINGER,
-            };
-            set(Field::Text, format!("{{{QUESTION}, {mode}}}{}", question.text));
+            kind(question_kind(question), question.text.clone());
             for (i, answer) in question.answers.iter().enumerate().take(MAX_ANSWERS) {
                 // The sheet has no share of the points: a partly correct answer is marked as correct.
                 set(Field::Answer(i), answer_cell(answer, question.is_correct(i)));
             }
-            set(Field::AnswerTime, question.time_limit_s.to_string());
-            set(Field::PointsStart, question.points.to_string());
+            // An empty cell is the default, which keeps the sheet short to read.
+            let unless = |value: i64, default: i64| if value == default { String::new() } else { value.to_string() };
+            set(Field::AnswerTime, unless(question.time_limit_s.into(), DEFAULT_TIME_LIMIT_S.into()));
+            set(Field::PointsStart, unless(question.points.into(), DEFAULT_POINTS.into()));
             set(Field::PointsEnd, question.points_end.map(|end| end.to_string()).unwrap_or_default());
-            set(Field::Penalty, question.penalty.to_string());
+            set(Field::Penalty, unless(question.penalty.into(), 0));
             set(Field::ReadAs, question.read_as.clone());
         }
-        SlideContent::Billboard { title, text } if text.is_empty() => set(Field::Text, prefixed(BILLBOARD, title)),
-        SlideContent::Billboard { title, text } => set(Field::Text, prefixed(BILLBOARD, &format!("{title}\n{text}"))),
-        SlideContent::EndOfRound { title } => set(Field::Text, prefixed(END_OF_ROUND, title)),
-        SlideContent::Explanation { text } => set(Field::Text, prefixed(EXPLANATION, text)),
-        SlideContent::Final { title } => set(Field::Text, prefixed(FINAL, title)),
+        SlideContent::Billboard { title, text } if text.is_empty() => kind(Kind::Section, title.clone()),
+        SlideContent::Billboard { title, text } => kind(Kind::Section, format!("{title}\n{text}")),
+        SlideContent::EndOfRound { title } => kind(Kind::EndOfRound, title.clone()),
+        SlideContent::Explanation { text } => kind(Kind::Explanation, text.clone()),
+        SlideContent::Final { title } => kind(Kind::Results, title.clone()),
     }
     set(Field::Notes, slide.notes.clone());
     if let Some(category) = categories.iter().find(|category| slide.category.as_ref() == Some(&category.id)) {
@@ -1143,14 +1173,20 @@ mod tests {
         question.correct.iter().map(|c| c.answer).collect()
     }
 
+    /// The cell of an exported table's row in `field`'s column; empty when the export left the column out.
+    fn cell(rows: &[Vec<String>], row: usize, field: Field) -> &str {
+        let column = &FIELDS[field.index()];
+        rows[0].iter().position(|heading| heading == column.english || heading == column.czech).map_or("", |i| rows[row][i].as_str())
+    }
+
     fn at(row: u32) -> Place {
         Place { sheet: String::new(), row }
     }
 
     #[test]
-    fn a_row_of_the_reference_template_becomes_a_question() {
+    fn a_row_becomes_a_question() {
         let imported = import(&[
-            &["Q", "A1", "A2", "A3", "A4", "NOTES", "P1", "SOUND"],
+            &["Question", "Answer 1", "Answer 2", "Answer 3", "Answer 4", "Notes", "Picture", "Sound"],
             &["Capital of France?", "Paris", "Lyon", "Nice", "Lille", "Easy one", "france.png", "anthem.mp3"],
             &[],
             &["Name the song", "", "", "", "", "", "", "song.mp3"],
@@ -1161,7 +1197,7 @@ mod tests {
         let capital = question(found[0]);
         assert_eq!(capital.mode, AnswerMode::Everyone);
         assert_eq!(capital.answers.len(), 4);
-        // A1 is correct and the answers are shuffled; the correct one follows Paris.
+        // The first is correct and the answers are shuffled; the correct one follows Paris.
         assert_eq!(correct(capital).iter().map(|&i| capital.answers[i].as_str()).collect::<Vec<_>>(), ["Paris"]);
         assert_eq!((found[0].notes.as_str(), found[0].picture.as_deref()), ("Easy one", Some("france.png")));
         assert_eq!(found[0].sound, Some(SoundClip::new("anthem.mp3")));
@@ -1175,7 +1211,7 @@ mod tests {
         assert_eq!(correct(question(found[2])), [1]);
         assert_eq!(imported.slides.iter().map(|(place, _)| place.row).collect::<Vec<_>>(), [2, 4, 5]);
         // Every answer in brackets is correct, in its place.
-        let several = slides(&import(&[&["Q", "A1", "A2", "A3"], &["Which are fruits?", "[Apple]", "Leek", "[Pear]"]]))[0].clone();
+        let several = slides(&import(&[&["Question", "Answer 1", "Answer 2", "Answer 3"], &["Which are fruits?", "[Apple]", "Leek", "[Pear]"]]))[0].clone();
         assert_eq!((question(&several).answers.as_slice(), correct(question(&several))), (&["Apple".to_string(), "Leek".into(), "Pear".into()][..], vec![0, 2]));
         assert_eq!(found.iter().map(|slide| slide.id.as_str()).collect::<Vec<_>>(), ["import-1", "import-2", "import-3"]);
         assert!(imported.notes.0.is_empty());
@@ -1183,7 +1219,7 @@ mod tests {
 
     #[test]
     fn shuffled_answers_keep_the_correct_one_with_its_text() {
-        let rows: &[&[&str]] = &[&["Q", "A1", "A2", "A3", "A4"], &["?", "right", "w1", "w2", "w3"]];
+        let rows: &[&[&str]] = &[&["Question", "Answer 1", "Answer 2", "Answer 3", "Answer 4"], &["?", "right", "w1", "w2", "w3"]];
         let mut orders = std::collections::HashSet::new();
         for seed in 0..200 {
             let imported = import_tables(&[table("", rows)], &[], seed).unwrap();
@@ -1196,51 +1232,59 @@ mod tests {
 
     #[test]
     fn headings_are_read_whatever_their_case_and_spaces() {
-        let imported = import(&[&[" q ", "a1", "A2"], &["Yes or no?", "[Yes]", "No"]]);
+        let imported = import(&[&[" question ", "ANSWER-1", "answer2"], &["Yes or no?", "[Yes]", "No"]]);
         assert_eq!(question(slides(&imported)[0]).answers, ["Yes", "No"]);
     }
 
     #[test]
-    fn a_prefix_gives_the_slide_type() {
+    fn only_a_section_reads_a_leading_line_break_as_an_empty_title() {
         let imported = import(&[
-            &["Q", "A1", "A2", "A3", "A4", "A5"],
-            &["{B}Round 1\nTen questions about films"],
-            &["{Q, FF}Who directed Alien?", "Ridley Scott"],
-            &["{Q, EA, CM}Pick five", "a", "b", "c", "d", "e"],
-            &["{T}Warm-up", "[x]", "y"],
-            &["{W}How much do you bet?", "20%", "50%"],
-            &["{E}End of round 1"],
-            &["{X}Ridley Scott also directed Gladiator."],
-            &["{F}And the winner is"],
-            &["{Hint} is part of the text", "[a]", "b"],
+            &["Type", "Question", "Answer 1", "Answer 2"],
+            &["Section", "\nText without a title"],
+            &["", "\nCapital of France?", "[Paris]", "Lyon"],
+            &["End of round", "\nEnd of round 1"],
+        ]);
+        let found = slides(&imported);
+        assert_eq!(found[0].content, SlideContent::Billboard { title: String::new(), text: "Text without a title".into() });
+        assert_eq!(question(found[1]).text, "Capital of France?");
+        assert_eq!(found[2].content, SlideContent::EndOfRound { title: "End of round 1".into() });
+    }
+
+    #[test]
+    fn the_type_column_gives_the_slide_type_in_either_language() {
+        let imported = import(&[
+            &["Type", "Question", "Answer 1", "Answer 2", "Answer 3", "Answer 4", "Answer 5"],
+            &["Section", "Round 1\nTen questions about films"],
+            &["sekce", "Kolo 2"],
+            &["Fastest finger", "Who directed Alien?", "[Ridley Scott]", "James Cameron"],
+            &["RYCHLA ODPOVED", "Name a director"],
+            &["", "Pick five", "a", "b", "c", "d", "e"],
+            &["Question", ""],
+            &["End of round", "End of round 1", "stray"],
+            &["Vysvětlení", "Ridley Scott also directed Gladiator."],
+            &["Výsledky", "And the winner is"],
+            &["Bonus", "{B}Old prefixes are text", "[a]", "b"],
         ]);
         let found = slides(&imported);
         let contents: Vec<&SlideContent> = found.iter().map(|slide| &slide.content).collect();
         assert_eq!(contents[0], &SlideContent::Billboard { title: "Round 1".into(), text: "Ten questions about films".into() });
-        let ff = question(found[1]);
-        assert_eq!((ff.mode, ff.answers.as_slice(), correct(ff)), (AnswerMode::FastestFinger, &["Ridley Scott".to_string()][..], vec![0]));
-        assert_eq!(question(found[2]).mode, AnswerMode::FastestFinger, "five answers do not fit A-D");
-        assert_eq!(question(found[3]).points, 0);
-        assert_eq!(contents[4], &SlideContent::Billboard { title: "How much do you bet?".into(), text: String::new() });
-        assert_eq!(contents[5], &SlideContent::EndOfRound { title: "End of round 1".into() });
-        assert_eq!(contents[6], &SlideContent::Explanation { text: "Ridley Scott also directed Gladiator.".into() });
-        assert_eq!(contents[7], &SlideContent::Final { title: "And the winner is".into() });
-        assert_eq!(question(found[8]).text, "{Hint} is part of the text");
-        assert_eq!(
-            issues(&imported),
-            [
-                &ImportIssue::QualifierNotSupported { qualifier: "CM".into() },
-                &ImportIssue::NotEveryone { answers: 5 },
-                &ImportIssue::TestQuestion,
-                &ImportIssue::AnswersLeftOut,
-                &ImportIssue::SlideTypeNotSupported { prefix: "{W}".into() },
-            ]
-        );
+        assert_eq!(contents[1], &SlideContent::Billboard { title: "Kolo 2".into(), text: String::new() });
+        let ff = question(found[2]);
+        assert_eq!((ff.mode, ff.answers.len(), correct(ff)), (AnswerMode::FastestFinger, 2, vec![0]));
+        assert_eq!(question(found[3]).mode, AnswerMode::FastestFinger);
+        assert_eq!(question(found[4]).mode, AnswerMode::FastestFinger, "five answers do not fit A-D");
+        assert_eq!(question(found[5]).text, "", "a question with no text yet");
+        assert_eq!(contents[6], &SlideContent::EndOfRound { title: "End of round 1".into() });
+        assert_eq!(contents[7], &SlideContent::Explanation { text: "Ridley Scott also directed Gladiator.".into() });
+        assert_eq!(contents[8], &SlideContent::Final { title: "And the winner is".into() });
+        let unknown = question(found[9]);
+        assert_eq!((unknown.text.as_str(), unknown.mode), ("{B}Old prefixes are text", AnswerMode::Everyone));
+        assert_eq!(issues(&imported), [&ImportIssue::AnswersLeftOut, &ImportIssue::UnknownType { value: "Bonus".into() }]);
     }
 
     #[test]
     fn a_row_with_only_a_video_is_a_full_screen_video_slide() {
-        let imported = import(&[&["Q", "VIDEO"], &["", "intro.mp4"]]);
+        let imported = import(&[&["Question", "Video"], &["", "intro.mp4"]]);
         let slide = slides(&imported)[0];
         assert_eq!(slide.content, SlideContent::Billboard { title: String::new(), text: String::new() });
         assert_eq!(slide.video, Some(sheet_video("intro.mp4")));
@@ -1248,18 +1292,18 @@ mod tests {
     }
 
     #[test]
-    fn a_second_language_is_left_out() {
-        let imported = import(&[&["Q", "A1", "A2"], &["Capital?||Hoofdstad?", "[Paris||Parijs]", "Lyon || Lyon"]]);
-        let question = question(slides(&imported)[0]);
-        assert_eq!((question.text.as_str(), question.answers.as_slice()), ("Capital?", &["Paris".to_string(), "Lyon".to_string()][..]));
-        assert_eq!(correct(question), [0]);
-        assert_eq!(imported.notes.0, [ImportNote { issue: ImportIssue::SecondLanguage, places: vec![at(2)] }]);
+    fn the_old_short_headings_are_not_read() {
+        let old: &[&[&str]] = &[&["Q", "A1", "A2", "NOTES"], &["{Q, FF}Capital?", "[Paris]", "Lyon", "Easy"]];
+        assert_eq!(import_tables(&[table("", old)], &[], 1), Err(SheetError::NoQuestionColumn));
+        let mixed = import(&[&["Question", "A1", "Answer 2"], &["Capital?", "[Paris]", "Lyon"]]);
+        assert_eq!(question(slides(&mixed)[0]).answers, ["Lyon"]);
+        assert_eq!(issues(&mixed), [&ImportIssue::UnknownColumn { column: "A1".into() }]);
     }
 
     #[test]
     fn scoring_columns_set_the_question_and_bad_values_keep_the_default() {
         let imported = import(&[
-            &["Q", "ANSWER-TIME", "POINTS-START", "POINTS-END", "PENALTY-POINTS-START"],
+            &["Question", "Answer time", "Points", "Points at end", "Penalty"],
             &["A", "30", "100", "50.0", "-5"],
             &["B", "soon", "1000000", "", "5"],
         ]);
@@ -1271,8 +1315,8 @@ mod tests {
         assert_eq!(
             issues(&imported),
             [
-                &ImportIssue::BadValue { column: "ANSWER-TIME".into(), value: "soon".into() },
-                &ImportIssue::BadValue { column: "POINTS-START".into(), value: "1000000".into() },
+                &ImportIssue::BadValue { column: "Answer time".into(), value: "soon".into() },
+                &ImportIssue::BadValue { column: "Points".into(), value: "1000000".into() },
             ]
         );
     }
@@ -1280,10 +1324,10 @@ mod tests {
     #[test]
     fn media_settings_in_braces_set_the_options() {
         let imported = import(&[
-            &["Q", "VIDEO", "BACKGROUND-VIDEO", "SOUND"],
+            &["Question", "Video", "Background video", "Sound"],
             &[
                 "Watch",
-                "{L} clips/intro.mp4{loop=false; start-at=00:00:05;stop-at=0:20;silent=true;volume=40;speed=50;effect=Mosaic;intro-pause=2,5}",
+                "clips/intro.mp4{loop=false; start-at=00:00:05;stop-at=0:20;silent=true;volume=40;speed=50;effect=Mosaic;intro-pause=2,5}",
                 "waves.webm{sync-with-quiz=true;loop=false}",
                 "hint.mp3{plays=with-clock;gain=-4.5;replay=true;replay-start-at=75;replay-delay=1.5}",
             ],
@@ -1297,13 +1341,13 @@ mod tests {
         let sound = slide.sound.as_ref().unwrap();
         assert_eq!((sound.start, sound.gain_db), (SoundStart::WithClock, -4.5));
         assert_eq!(sound.replay, Some(Replay { part: Span { from_ms: 75_000, to_ms: None }, delay_ms: 1_500 }));
-        assert_eq!(issues(&imported), [&ImportIssue::LinkedFile]);
+        assert!(imported.notes.0.is_empty(), "{:?}", imported.notes);
     }
 
     #[test]
     fn settings_that_do_not_apply_or_are_wrong_are_noted() {
         let imported = import(&[
-            &["Q", "VIDEO", "BACKGROUND-VIDEO", "SOUND"],
+            &["Question", "Video", "Background video", "Sound"],
             &["", "a.mp4{speed=500;sync-with-quiz=true;colour=red;effect=Blur;stop-at=1:00;start-at=2:00}", "b.mp4{intro-pause=2}", "c.mp3{plays=with-clock}"],
         ]);
         let slide = slides(&imported)[0];
@@ -1314,14 +1358,14 @@ mod tests {
         assert_eq!(
             issues(&imported),
             [
-                &ImportIssue::BadSetting { column: column("VIDEO"), setting: "speed".into(), value: "500".into() },
-                &ImportIssue::SettingNotUsed { column: column("VIDEO"), setting: "sync-with-quiz".into() },
-                &ImportIssue::UnknownSetting { column: column("VIDEO"), setting: "colour".into() },
-                &ImportIssue::BadSetting { column: column("VIDEO"), setting: "stop-at".into(), value: "00:01:00".into() },
-                &ImportIssue::SettingNotUsed { column: column("BACKGROUND-VIDEO"), setting: "intro-pause".into() },
+                &ImportIssue::BadSetting { column: column("Video"), setting: "speed".into(), value: "500".into() },
+                &ImportIssue::SettingNotUsed { column: column("Video"), setting: "sync-with-quiz".into() },
+                &ImportIssue::UnknownSetting { column: column("Video"), setting: "colour".into() },
+                &ImportIssue::BadSetting { column: column("Video"), setting: "stop-at".into(), value: "00:01:00".into() },
+                &ImportIssue::SettingNotUsed { column: column("Background video"), setting: "intro-pause".into() },
                 // A billboard has no clock and no answer time.
-                &ImportIssue::SettingNotUsed { column: column("SOUND"), setting: "plays".into() },
-                &ImportIssue::SettingNotUsed { column: column("VIDEO"), setting: "effect".into() },
+                &ImportIssue::SettingNotUsed { column: column("Sound"), setting: "plays".into() },
+                &ImportIssue::SettingNotUsed { column: column("Video"), setting: "effect".into() },
             ]
         );
     }
@@ -1329,9 +1373,9 @@ mod tests {
     #[test]
     fn media_a_slide_cannot_have_are_left_out() {
         let imported = import(&[
-            &["Q", "P1", "VIDEO", "BACKGROUND", "BACKGROUND-VIDEO", "SOUND"],
-            &["Both", "[a.png]", "b.mp4", "c.jpg", "d.mp4", "e.wmv"],
-            &["{F}Winners", "a.png", "", "c.jpg", "", "fanfare.mp3"],
+            &["Type", "Question", "Picture", "Video", "Background", "Background video", "Sound"],
+            &["", "Both", "a.png", "b.mp4", "c.jpg", "d.mp4", "e.wmv"],
+            &["Results", "Winners", "a.png", "", "c.jpg", "", "fanfare.mp3"],
         ]);
         let found = slides(&imported);
         assert_eq!((found[0].picture.as_deref(), found[0].background.as_ref().map(|b| b.file.as_str())), (None, Some("d.mp4")));
@@ -1341,7 +1385,7 @@ mod tests {
         assert_eq!(
             issues(&imported),
             [
-                &ImportIssue::WrongMediaType { column: "SOUND".into(), file: "e.wmv".into() },
+                &ImportIssue::WrongMediaType { column: "Sound".into(), file: "e.wmv".into() },
                 &ImportIssue::TwoBackgrounds,
                 &ImportIssue::PictureAndVideo,
                 &ImportIssue::MediaOnRanking,
@@ -1352,7 +1396,7 @@ mod tests {
     #[test]
     fn columns_without_a_place_here_are_noted_once_if_they_hold_values() {
         let imported = import(&[
-            &["Q", "P2", "STYLE", "COLOUR", "", "Q", "BONUS-POINTS-1"],
+            &["Question", "P2", "STYLE", "COLOUR", "", "Question", "BONUS-POINTS-1"],
             &["One", "b.png", "", "red", "x", "dup"],
             &["Two", "c.png", "", "", "", "", "", "beyond"],
         ]);
@@ -1361,10 +1405,10 @@ mod tests {
         assert_eq!(
             imported.notes.0,
             [
-                ImportNote { issue: ImportIssue::UnsupportedColumn { column: "P2".into() }, places: vec![headings.clone()] },
+                ImportNote { issue: ImportIssue::UnknownColumn { column: "P2".into() }, places: vec![headings.clone()] },
                 ImportNote { issue: ImportIssue::UnknownColumn { column: "COLOUR".into() }, places: vec![headings.clone()] },
                 ImportNote { issue: ImportIssue::UnknownColumn { column: "E".into() }, places: vec![headings.clone()] },
-                ImportNote { issue: ImportIssue::DuplicateColumn { column: "Q".into() }, places: vec![headings.clone()] },
+                ImportNote { issue: ImportIssue::DuplicateColumn { column: "Question".into() }, places: vec![headings.clone()] },
                 ImportNote { issue: ImportIssue::UnknownColumn { column: "H".into() }, places: vec![headings] },
             ]
         );
@@ -1373,7 +1417,7 @@ mod tests {
     #[test]
     fn a_row_takes_the_category_it_names_regardless_of_case_and_a_note_for_one_the_quiz_lacks() {
         let categories = [Category::new("c1", "Music"), Category::new("c2", "Film")];
-        let rows: &[&[&str]] = &[&["Q", "CAT"], &["One", " music "], &["Two", "Sport"], &["Three", ""]];
+        let rows: &[&[&str]] = &[&["Question", "Category"], &["One", " music "], &["Two", "Sport"], &["Three", ""]];
         let imported = import_tables(&[table("", rows)], &categories, 7).unwrap();
         let found: Vec<Option<&str>> = slides(&imported).iter().map(|slide| slide.category.as_deref()).collect();
         assert_eq!(found, [Some("c1"), None, None]);
@@ -1382,13 +1426,13 @@ mod tests {
 
     #[test]
     fn notes_list_each_issue_once_with_its_rows() {
-        let imported = import(&[&["Q", "A1", "A2"], &["{W}a"], &["{W}b"], &["{D}c", "x"]]);
+        let imported = import(&[&["Type", "Question", "Answer 1"], &["Bonus", "a"], &["Bonus", "b"], &["Joker", "c"], &["Section", "d", "x"]]);
         assert_eq!(
             imported.notes.0,
             [
-                ImportNote { issue: ImportIssue::SlideTypeNotSupported { prefix: "{W}".into() }, places: vec![at(2), at(3)] },
-                ImportNote { issue: ImportIssue::AnswersLeftOut, places: vec![at(4)] },
-                ImportNote { issue: ImportIssue::SlideTypeNotSupported { prefix: "{D}".into() }, places: vec![at(4)] },
+                ImportNote { issue: ImportIssue::UnknownType { value: "Bonus".into() }, places: vec![at(2), at(3)] },
+                ImportNote { issue: ImportIssue::UnknownType { value: "Joker".into() }, places: vec![at(4)] },
+                ImportNote { issue: ImportIssue::AnswersLeftOut, places: vec![at(5)] },
             ]
         );
     }
@@ -1397,9 +1441,9 @@ mod tests {
     fn several_sheets_become_rounds_opened_by_their_names() {
         let tables = [
             table("Instructions", &[&["Fill in the questions below"]]),
-            table("Round 1", &[&["Q", "A1", "A2"], &["One", "[a]", "b"]]),
+            table("Round 1", &[&["Question", "Answer 1", "Answer 2"], &["One", "[a]", "b"]]),
             table("Sheet3", &[]),
-            table("Round 2", &[&["Q"], &["Two"], &["Three"]]),
+            table("Round 2", &[&["Question"], &["Two"], &["Three"]]),
         ];
         let imported = import_tables(&tables, &[], 1).unwrap();
         let titles: Vec<String> = imported
@@ -1420,7 +1464,7 @@ mod tests {
     }
 
     #[test]
-    fn a_sheet_without_a_q_column_is_refused() {
+    fn a_sheet_without_a_question_column_is_refused() {
         assert_eq!(import_tables(&[table("", &[&["Title", "Artist"], &["Song", "Band"]])], &[], 1), Err(SheetError::NoQuestionColumn));
         assert_eq!(import_tables(&[], &[], 1), Err(SheetError::NoQuestionColumn));
     }
@@ -1489,6 +1533,7 @@ mod tests {
                 Slide::new("e1", SlideContent::EndOfRound { title: "End of round 1".into() }),
                 Slide::new("t1", SlideContent::Billboard { title: "Just a title".into(), text: String::new() }),
                 winners,
+                Slide::new("u1", SlideContent::Billboard { title: String::new(), text: "Text without a title".into() }),
             ],
         );
         quiz.categories = vec![Category::new("c1", "Films")];
@@ -1496,19 +1541,42 @@ mod tests {
     }
 
     #[test]
+    fn questions_a_sheet_would_give_a_correct_answer_are_named_by_their_row() {
+        let mut quiz = full_quiz();
+        assert_eq!(rows_without_correct(&quiz), Vec::<u32>::new());
+        let asked = |answers: Vec<String>| Question {
+            text: "Name one".into(),
+            mode: AnswerMode::FastestFinger,
+            answers,
+            correct: Vec::new(),
+            time_limit_s: 20,
+            points: 10,
+            points_end: None,
+            penalty: 0,
+            read_as: String::new(),
+        };
+        quiz.slides.insert(1, Slide::new("q9", SlideContent::Question(asked(vec!["one".into(), "two".into()]))));
+        quiz.slides.push(Slide::new("q10", SlideContent::Question(asked(Vec::new()))));
+        assert_eq!(rows_without_correct(&quiz), [3], "the headings are row 1; a question without answers needs none");
+    }
+
+    #[test]
     fn an_exported_quiz_imports_as_it_was() {
         let quiz = full_quiz();
         assert!(quiz.validate().is_ok());
         let name = |reference: &str| reference.rsplit('/').next().map(str::to_string);
-        let rows = export_table(&quiz, name);
-        assert_eq!(rows[0], FIELDS.map(|(heading, _)| heading.to_string()));
-        assert_eq!(rows[2][Field::Text.index()], "{Q, EA}Capital of France?");
-        assert_eq!(rows[2][Field::Answer(1).index()], "[Paris]");
-        assert_eq!(rows[2][Field::BackgroundVideo.index()], "waves.mp4{loop=false;sync-with-quiz=true}");
-        assert_eq!(rows[1][Field::Background.index()], "stage.jpg");
-        assert_eq!((rows[1][Field::Category.index()].as_str(), rows[2][Field::Category.index()].as_str()), ("Films", ""));
+        let rows = export_table(&quiz, QuizLanguage::En, name);
+        assert_eq!(rows[0], FIELDS.map(|column| column.english.to_string()));
+        assert_eq!(cell(&rows, 2, Field::Text), "Capital of France?");
+        assert_eq!(cell(&rows, 2, Field::Type), "Question", "three answers are an A-C question");
+        assert_eq!((cell(&rows, 1, Field::Type), cell(&rows, 1, Field::Text)), ("Section", "Round 1\nFilms\nand music"));
+        assert_eq!((cell(&rows, 7, Field::Type), cell(&rows, 5, Field::Type)), ("Results", "End of round"));
+        assert_eq!(cell(&rows, 2, Field::Answer(1)), "[Paris]");
+        assert_eq!(cell(&rows, 2, Field::BackgroundVideo), "waves.mp4{loop=false;sync-with-quiz=true}");
+        assert_eq!(cell(&rows, 1, Field::Background), "stage.jpg");
+        assert_eq!((cell(&rows, 1, Field::Category), cell(&rows, 2, Field::Category)), ("Films", ""));
         assert_eq!(
-            rows[4][Field::Video.index()],
+            cell(&rows, 4, Field::Video),
             "clip.webm{replay=true;silent=true;speed=125;effect=Blur;intro-pause=0;autoplay=false}",
             "only settings that differ from the defaults"
         );
@@ -1540,11 +1608,11 @@ mod tests {
         }));
         slide.notes = "-2+3+cmd|' /C calc'!A0".into();
         let quiz = Quiz::new("Quiz", vec![slide]);
-        let rows = export_table(&quiz, |reference| Some(reference.to_string()));
-        let cells: Vec<&str> = (0..6).map(|i| rows[1][Field::Answer(i).index()].as_str()).collect();
+        let rows = export_table(&quiz, QuizLanguage::En, |reference| Some(reference.to_string()));
+        let cells: Vec<&str> = (0..6).map(|i| cell(&rows, 1, Field::Answer(i))).collect();
         assert_eq!(cells, ["'=HYPERLINK(\"x\")", "'+420 777", "[-5]", "'@home", "'kept", "''=x"]);
-        assert_eq!(rows[1][Field::Notes.index()], "'-2+3+cmd|' /C calc'!A0");
-        assert_eq!(rows[1][Field::Text.index()], "{Q, FF}=1+1", "the prefix comes first");
+        assert_eq!(cell(&rows, 1, Field::Notes), "'-2+3+cmd|' /C calc'!A0");
+        assert_eq!(cell(&rows, 1, Field::Text), "'=1+1", "six answers are answered aloud without a prefix");
 
         let imported = import_tables(&[Table { name: String::new(), first_row: 1, rows }], &[], 3).unwrap();
         let back = &imported.slides[0].1;
@@ -1564,8 +1632,8 @@ mod tests {
             penalty: 0,
             read_as: String::new(),
         }))]);
-        let rows = export_table(&quiz, |reference| Some(reference.to_string()));
-        let cells: Vec<&str> = (0..4).map(|i| rows[1][Field::Answer(i).index()].as_str()).collect();
+        let rows = export_table(&quiz, QuizLanguage::En, |reference| Some(reference.to_string()));
+        let cells: Vec<&str> = (0..4).map(|i| cell(&rows, 1, Field::Answer(i))).collect();
         assert_eq!(cells, ["[[Paris]]", "'[sic]", "''[sic]", "'[=x]"]);
 
         let imported = import_tables(&[Table { name: String::new(), first_row: 1, rows }], &[], 3).unwrap();
@@ -1574,8 +1642,73 @@ mod tests {
 
     #[test]
     fn media_left_out_of_an_export_leave_their_cells_empty() {
-        let rows = export_table(&full_quiz(), |reference| (!reference.ends_with(".mp3")).then(|| reference.to_string()));
-        assert_eq!(rows[2][Field::Sound.index()], "");
-        assert_eq!(rows[2][Field::Picture.index()], "media/france.png");
+        let rows = export_table(&full_quiz(), QuizLanguage::En, |reference| (!reference.ends_with(".mp3")).then(|| reference.to_string()));
+        assert_eq!(cell(&rows, 2, Field::Sound), "");
+        assert_eq!(cell(&rows, 2, Field::Picture), "media/france.png");
+    }
+
+    #[test]
+    fn czech_and_english_headings_name_the_same_columns() {
+        let rows: [&[&str]; 3] = [
+            &["Otázka", "Odpověď 1", "Odpověď 2", "Poznámky", "Čas na odpověď", "Body", "Srážka za chybu", "Video na pozadí"],
+            &["otazka", "ODPOVED-1", "odpověď2", "poznamky", "cas na odpoved", "BODY", "srazka za chybu", "video na pozadi"],
+            &["Question", "Answer 1", "Answer 2", "Notes", "Answer time", "Points", "Penalty", "Background video"],
+        ];
+        for headings in rows {
+            let imported = import(&[headings, &["Capital?", "[Paris]", "Lyon", "Easy", "30", "50", "5", "waves.mp4"]]);
+            assert!(imported.notes.0.is_empty(), "{headings:?}: {:?}", imported.notes);
+            let slide = slides(&imported)[0];
+            let asked = question(slide);
+            assert_eq!((asked.text.as_str(), asked.answers.as_slice(), correct(asked)), ("Capital?", &["Paris".to_string(), "Lyon".into()][..], vec![0]));
+            assert_eq!((asked.time_limit_s, asked.points, asked.penalty, slide.notes.as_str()), (30, 50, 5, "Easy"));
+            assert_eq!(slide.background, Some(Background::new("waves.mp4")));
+        }
+        // A note names the column as the sheet does.
+        let imported = import(&[&["Otázka", "Čas na odpověď", "Kategorie"], &["Capital?", "brzy"]]);
+        assert_eq!(issues(&imported), [&ImportIssue::BadValue { column: "Čas na odpověď".into(), value: "brzy".into() }]);
+    }
+
+    #[test]
+    fn a_sheet_of_just_questions_and_answers_takes_the_defaults() {
+        let imported = import(&[
+            &["Otázka", "Odpověď 1", "Odpověď 2", "Odpověď 3", "Odpověď 4", "Odpověď 5"],
+            &["Capital of France?", "[Paris]", "Lyon", "Nice", "Lille"],
+            &["Which is a fruit?", "Apple", "Leek"],
+            &["Name a French river", "Seine", "Loire", "Rhône", "Garonne", "Dordogne"],
+            &["How many people live in Paris?"],
+        ]);
+        assert!(imported.notes.0.is_empty(), "{:?}", imported.notes);
+        let modes: Vec<(AnswerMode, usize)> = slides(&imported).iter().map(|slide| (question(slide).mode, question(slide).answers.len())).collect();
+        // Up to four answers are the A-D buttons; more, or none, are answered aloud.
+        assert_eq!(
+            modes,
+            [(AnswerMode::Everyone, 4), (AnswerMode::Everyone, 2), (AnswerMode::FastestFinger, 5), (AnswerMode::FastestFinger, 0)]
+        );
+        let first = question(slides(&imported)[0]);
+        assert_eq!((first.time_limit_s, first.points, first.points_end, first.penalty), (DEFAULT_TIME_LIMIT_S, DEFAULT_POINTS, None, 0));
+    }
+
+    #[test]
+    fn an_export_has_headings_in_the_quizmasters_language_and_only_the_columns_its_quiz_uses() {
+        let rows = export_table(&full_quiz(), QuizLanguage::Cs, |reference| Some(reference.to_string()));
+        assert_eq!(rows[0], FIELDS.map(|column| column.czech.to_string()), "the full quiz uses every column");
+        assert_eq!((cell(&rows, 1, Field::Type), cell(&rows, 3, Field::Type)), ("Sekce", "Vysvětlení"));
+        let table = |text: &str, mode: AnswerMode, answers: usize| {
+            let answers = (0..answers).map(|i| i.to_string()).collect();
+            let question = Question { text: text.into(), mode, answers, correct: vec![], time_limit_s: DEFAULT_TIME_LIMIT_S, points: DEFAULT_POINTS, points_end: None, penalty: 0, read_as: String::new() };
+            export_table(&Quiz::new("Quiz", vec![Slide::new("q", SlideContent::Question(question))]), QuizLanguage::En, |_| None)
+        };
+        let rows = table("Capital?", AnswerMode::Everyone, 4);
+        let basic = ["Type", "Question", "Answer 1", "Answer 2", "Answer 3", "Answer 4", "Answer 5", "Answer 6", "Notes", "Answer time", "Points"];
+        assert_eq!(rows[0], basic, "only the basic columns");
+        assert_eq!(rows[1][..3], ["Question", "Capital?", "0"], "every question row names its type");
+        assert_eq!([Field::AnswerTime, Field::PointsStart].map(|field| cell(&rows, 1, field)), ["", ""], "defaults are empty");
+        // Every question row names its type: the fastest finger only where
+        // the answers alone would not make one.
+        let typed = |rows: Vec<Vec<String>>| (cell(&rows, 1, Field::Type).to_string(), cell(&rows, 1, Field::Text).to_string());
+        assert_eq!(typed(table("Who?", AnswerMode::FastestFinger, 2)), ("Fastest finger".into(), "Who?".into()));
+        assert_eq!(typed(table("", AnswerMode::FastestFinger, 0)), ("Question".into(), "".into()));
+        assert_eq!(typed(table("Name five", AnswerMode::FastestFinger, 5)), ("Question".into(), "Name five".into()));
+        assert_eq!(typed(table("{B} is text", AnswerMode::FastestFinger, 0)), ("Question".into(), "{B} is text".into()));
     }
 }

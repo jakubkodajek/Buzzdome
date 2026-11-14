@@ -58,3 +58,32 @@ Template:
   `editedSlideKept`) fixed; BF180 this line.
 - Next: guardian review of the PR, then Jakub's OK to merge.
 - Blockers / open questions: none.
+
+## 2026-11-10 - simpler-sheet-import
+- Done: spreadsheet columns have full-word headings in English and Czech
+  (`Question`/`Otázka`, `Answer 1`/`Odpověď 1`...) next to the reference's
+  short ones; an import knows any of them whatever their case, accents,
+  spaces and dashes (`text::heading_key`), and notes name a column as the
+  sheet does. Export and the template write the headings in the app's
+  language (`editor_export_sheet` takes `language`), leave the answer time,
+  points and penalty empty at their defaults, and write a `{Q, EA}`/`{Q, FF}`
+  prefix only where the row would read otherwise. Import help, template
+  notes and docs/quiz-format.md say only the question and answers are needed.
+- State: make check green; branch `claude/project-thread-28dmvy`.
+- Next: Jakub's review of the PR, then his OK to merge.
+- Blockers / open questions: none.
+
+## 2026-11-14 - sheet-import-new-format-only
+- Done (Jakub's OK of the plan): the import reads only the English and Czech
+  headings; the reference's short headings (`Q`, `A1`...), `{B}`/`{Q, FF}`
+  prefixes, `{L}`, `||` and the "unsupported column" list are gone (their
+  `ImportIssue` codes too). A Type/Typ column (Section, Explanation, End of
+  round, Results, Question, Fastest finger, either language) replaces the
+  prefixes; an unknown type is noted (`unknownType`). Export and template
+  write the basic columns (Type to Points) and the others only when the
+  quiz uses them. File › Import shows a short hint, then a guide with an
+  example sheet whose headings and types come from Rust
+  (`sheet::sheet_words`, `SHEET_WORDS` in Constants.ts).
+- State: make check green; branch `claude/project-thread-28dmvy`, PR #80.
+- Next: guardian review of the new commit, then Jakub's OK to merge.
+- Blockers / open questions: none.

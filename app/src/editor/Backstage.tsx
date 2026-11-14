@@ -7,7 +7,7 @@ import { useEffect, useId, useRef } from "react";
 import { BackIcon, CheckIcon, PlayIcon, StopIcon } from "../icons";
 import { keyHint, KEYS } from "../keyboard";
 import { problemText } from "../messages";
-import { MAX_AFTER_REVEAL_DELAY_S, MAX_ALL_ANSWERED_DELAY_S, MAX_JOKERS, QUIZ_LANGUAGES } from "../bindings/Constants";
+import { MAX_AFTER_REVEAL_DELAY_S, MAX_ALL_ANSWERED_DELAY_S, MAX_JOKERS, QUIZ_LANGUAGES, SHEET_WORDS } from "../bindings/Constants";
 import type { StringKey } from "../i18n";
 import type { MediaKind } from "../media";
 import { LANGUAGE_LABEL, NO_CONTEXT, questionCount, settingsOf, soundsOf, welcomeOf } from "../quiz";
@@ -17,6 +17,7 @@ import { actionButton, tooltip, type Action, type Actions } from "./actions";
 import { AiPage } from "./AiPage";
 import { MediaPicker, NumberBox, Select, Switch } from "./controls";
 import type { OpenQuiz } from "./editor-state";
+import { exampleSheet, sheetTypes } from "./sheet";
 import { SoundsSettings } from "./SoundsSettings";
 
 export type BackstagePage = "info" | "settings" | "open" | "import" | "export" | "ai";
@@ -437,7 +438,66 @@ function ImportPage({ actions }: BackstageProps) {
         </button>
         <p>{t("saveSheetTemplateHint")}</p>
       </div>
+      <SheetGuide />
     </>
+  );
+}
+
+/** How to write a sheet the import reads, with an example (spec QZ-8). */
+function SheetGuide() {
+  const { t, lang } = useApp();
+  const { columns } = SHEET_WORDS[lang];
+  const example = exampleSheet(t, lang);
+  return (
+    <section className="sheet-guide">
+      <h2>{t("sheetGuideHeading")}</h2>
+      <p>{t("sheetGuideIntro", { question: columns.question })}</p>
+      <div className="sheet-example">
+        <table aria-label={t("sheetExample")}>
+          <thead>
+            <tr>
+              {example.headings.map((heading) => (
+                <th key={heading}>{heading}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {example.rows.map((row, r) => (
+              <tr key={r}>
+                {row.map((cell, c) => (
+                  <td key={c}>{cell}</td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <ul>
+        <li>{t("sheetGuideCorrect")}</li>
+        <li>{t("sheetGuideButtons")}</li>
+        <li>{t("sheetGuideRounds")}</li>
+      </ul>
+      <h3>{t("sheetTypesHeading", { type: columns.type })}</h3>
+      <p>{t("sheetTypesCase")}</p>
+      <div className="sheet-example sheet-types">
+        <table aria-label={t("sheetTypesHeading", { type: columns.type })}>
+          <thead>
+            <tr>
+              <th>{columns.type}</th>
+              <th>{t("sheetTypeMakes")}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {sheetTypes(t, lang).map(({ type, hint }) => (
+              <tr key={type}>
+                <td>{type}</td>
+                <td>{hint}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
   );
 }
 

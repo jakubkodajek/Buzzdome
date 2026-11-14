@@ -1,7 +1,7 @@
 //! Categories (spec QZ-10): named looks a quiz keeps, each a background
 //! and a style over the theme. Applying a category copies its look onto
 //! slides (the editor's `formatLike`), which remember it by id, so it can be
-//! applied to them again and a spreadsheet row can name it (`CAT`).
+//! applied to them again and a spreadsheet row can name it (the Category column).
 
 use crate::media::{check_reference, Background, BACKGROUND_KINDS};
 use crate::model::Problem;
@@ -22,7 +22,7 @@ pub const MAX_CATEGORY_ID_CHARS: usize = 64;
 #[serde(rename_all = "camelCase")]
 pub struct Category {
     pub id: String,
-    /// Unique in the quiz regardless of case, as a spreadsheet's `CAT` names it.
+    /// Unique in the quiz regardless of case, as a spreadsheet's Category column names it.
     pub name: String,
     /// Picture or video behind the slides.
     #[serde(default, with = "crate::media::background_any_version")]

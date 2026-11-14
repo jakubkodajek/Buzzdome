@@ -642,7 +642,7 @@ table view toggle. It edits a quiz; it never touches a running show.
   background and a style that applying copies onto slides (`formatLike` in
   `slides.ts`), so drawing a slide never looks one up and the rule of what
   a category gives lives in one place; the core only checks categories and
-  resolves a spreadsheet's `CAT` name to an id. The Categories view
+  resolves a spreadsheet's Category (Kategorie) name to an id. The Categories view
   (`useCategories.tsx`, `CategoryView.tsx`) edits a category as its sample
   slide (`sampleSlide` in `categories.ts`): the panel's background and look
   rows run on that slide and `withLook` takes its background and style

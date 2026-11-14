@@ -163,7 +163,7 @@ pub enum AppError {
     /// The sheet reader process (`sheet_reader.rs`) stopped, overran or could not start.
     #[error("the spreadsheet reader failed")]
     SpreadsheetReaderFailed,
-    #[error("no sheet has a Q column")]
+    #[error("no sheet has a question column")]
     NoQuestionColumn,
 
     // AI assistants.

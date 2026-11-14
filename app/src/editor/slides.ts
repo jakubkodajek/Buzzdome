@@ -437,7 +437,7 @@ export function formatLike(slide: Slide, category: Category): Slide {
 
 /**
  * An imported slide with the look of the category its row named (see
- * `formatLike`); a background of its row's own (`BACKGROUND-VIDEO`) stays.
+ * `formatLike`); a background of its row's own (the Background video column) stays.
  */
 export function formatImported(slide: Slide, categories: readonly Category[]): Slide {
   const category = categories.find((c) => c.id === slide.category);

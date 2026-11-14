@@ -18,7 +18,7 @@ use crate::dialogs::{self, Picker};
 use crate::error::{AppError, CmdResult};
 use crate::recent_files::RecentFiles;
 use crate::{app_local_data, app_log, folder_prefix, lock_show, media_player, off_ui, roaming_leftover, DiskWork};
-use quiz_core::{Category, MediaKind, Quiz, ValidationError};
+use quiz_core::{Category, MediaKind, Quiz, QuizLanguage, ValidationError};
 use quiz_file::{FileAction, SheetExport, SheetImport};
 use serde::de::{Error as _, Unexpected};
 use serde::{Deserialize, Deserializer, Serialize};
@@ -513,7 +513,8 @@ impl ListSeparator {
 }
 
 /// Writes the quiz of the draft `draft` as a CSV file the quizmaster picks
-/// (none when they cancel), with its media next to it (spec QZ-8).
+/// (none when they cancel), with its media next to it and its column
+/// headings in `language`, the quizmaster's (spec QZ-8).
 #[tauri::command]
 pub async fn editor_export_sheet(
     app: AppHandle,
@@ -521,10 +522,11 @@ pub async fn editor_export_sheet(
     draft: String,
     quiz: Quiz,
     separator: ListSeparator,
+    language: QuizLanguage,
     picker: Picker,
 ) -> CmdResult<Option<SheetExport>> {
     let Some(path) = dialogs::pick_save(window, picker, quiz_file::CSV_EXTENSION, None).await? else { return Ok(None) };
-    on_draft(app, draft, move |_, _, root, _| Ok(Some(quiz_file::export_sheet(&quiz, &root, &path, separator.byte())?))).await
+    on_draft(app, draft, move |_, _, root, _| Ok(Some(quiz_file::export_sheet(&quiz, &root, &path, separator.byte(), language)?))).await
 }
 
 /// Discards the draft, also one that cannot be read: the quizmaster chose to.

@@ -292,7 +292,7 @@ stored once in `media/`, however many slides use it.
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `id` | text | 1 to 64 characters, unique among the quiz's categories. |
-| `name` | text | 1 to 40 characters, unique regardless of case, of spaces around it and of how its accents are encoded, as a spreadsheet's `CAT` names it. |
+| `name` | text | 1 to 40 characters, unique regardless of case, of spaces around it and of how its accents are encoded, as a spreadsheet's Category (Kategorie) column names it. |
 | `background` | object or `null` | As a slide's `background`. |
 | `style` | object | As a slide's `style`, read the same way (a value that does not read is left out and listed). Left out when nothing is set. |
 
@@ -424,17 +424,25 @@ lists the problem (`welcomeMedia`).
 ## Spreadsheets
 
 Questions can also be written in a spreadsheet and imported into a quiz
-(spec QZ-8), in the columns of the reference app's Excel template; an
-export writes a quiz back in them. `quiz_core::sheet` turns rows into
+(spec QZ-8), with a column per field under a heading in English or
+Czech; an export writes a quiz back under the headings of the app's
+language. The short headings of the reference app's template (`Q`, `A1`...)
+and its `{B}`-style prefixes are not read: such a sheet has no question
+column and is refused. `quiz_core::sheet` turns rows into
 slides and back, `quiz-file` reads and writes the files.
 
 **Files.** Import reads `.xlsx`, `.xlsm`, `.xls`, `.ods` (every visible
 sheet) and `.csv`, up to 50 MB (unpacked), 10,000 rows over all sheets and
 200 columns. A CSV file is UTF-8 or UTF-16 with a byte order mark,
-else UTF-8, else Windows-1250; its separator is whichever of `;`, tab and
-`,` the headings row uses most. Export writes UTF-8 with a byte order mark
+else UTF-8, else Windows-1250; its separator is the one an Excel `sep=;`
+first line names, else whichever of `;`, tab and `,` the headings row uses
+most. As in a workbook, the headings are the first row with a filled cell:
+blank lines and rows of bare separators above them are skipped. Export writes UTF-8 with a byte order mark
 and CRLF line ends, separated by `;` when the app is in Czech and `,` in
-English, as Excel expects in those locales.
+English, as Excel expects in those locales. A sheet cannot say that a
+question has answers but none correct (a fastest-finger question can), so
+the export names the rows of such questions: imported again, their first
+answer is correct.
 
 **Cell values.** A workbook cell that is no text is read as text in one
 fixed wording, Czech for dates and flags, as the sheet's language is not
@@ -448,32 +456,51 @@ format is not read, so a typed `1.2` that Excel made a date comes in as
 `1.2.2026`; type such answers with a leading `'`. An error, and a formula
 with no value saved, are empty.
 
-**Sheets and rows.** The headings (any case) are in a sheet's first row
-with values, a CSV file's first line. A sheet without a `Q` column is
-skipped; with more than one sheet of questions, each is a round that a
-billboard with the sheet's name opens. Each row with a value is a slide.
+**Sheets and rows.** The headings are in a sheet's first row with values,
+a CSV file's first line. A heading is known whatever its case, accents,
+spaces and dashes (`Odpověď 1`, `odpoved1` and `ODPOVĚĎ-1` are one
+heading, as are `Background video` and `BACKGROUND-VIDEO`), in either
+language. A sheet without a question column is skipped; with more than
+one sheet of questions, each is a round that a billboard with the sheet's
+name opens. Each row with a value is a slide. Only the question column is
+needed; a column left out or a cell left empty takes the default, so a
+sheet of questions and answers is a quiz to finish in the editor.
+File › Import shows an example sheet, its headings and types taken from
+`sheet::sheet_words` (`SHEET_WORDS` in `Constants.ts`).
 
-| Column | Value |
-| --- | --- |
-| `Q` | The text, after an optional prefix that gives the slide type (below). |
-| `A1`-`A6` | Answers. `[Paris]` marks a right one, and every answer in brackets is right; with none marked, `A1` is right and the answers are shuffled. |
-| `P1` | The slide's picture. |
-| `NOTES` | Notes for the quizmaster. |
-| `SOUND`, `VIDEO` | The slide's sound and video. |
-| `BACKGROUND`, `BACKGROUND-VIDEO` | The slide's background (a picture or video; a video in the second). |
-| `ANSWER-TIME` | Seconds, 0 to 3600. |
-| `POINTS-START`, `POINTS-END` | Points, falling from the start to the end value when both are given. |
-| `PENALTY-POINTS-START` | Points taken for a wrong answer (either sign). |
-| `CAT` | The name of one of the quiz's categories, in any case: the slide takes on its look, but keeps a `BACKGROUND` or `BACKGROUND-VIDEO` of its own. A name the quiz has no category of is listed in the notes, so categories are made in the quiz before importing. Export writes the name of the slide's category. |
-| `READ-AS` | This app's own. How the voice says a question when it reads it out (`readAs`). |
+| English | Czech | Value |
+| --- | --- | --- |
+| `Type` | `Typ` | The slide type (below); `Question` for a question, which an empty cell also means. |
+| `Question` | `Otázka` | The text. |
+| `Answer 1`-`Answer 6` | `Odpověď 1`-`Odpověď 6` | Answers. `[Paris]` marks a right one, and every answer in brackets is right; with none marked, the first is right and the answers are shuffled. |
+| `Notes` | `Poznámky` | Notes for the quizmaster. |
+| `Answer time` | `Čas na odpověď` | Seconds, 0 to 3600; 20 when empty. |
+| `Points`, `Points at end` | `Body`, `Body na konci` | Points (10 when empty), falling from the start to the end value when both are given. |
+| `Penalty` | `Srážka za chybu` | Points taken for a wrong answer (either sign); none when empty. |
+| `Picture` | `Obrázek` | The slide's picture. |
+| `Sound`, `Video` | `Zvuk`, `Video` | The slide's sound and video. |
+| `Background`, `Background video` | `Pozadí`, `Video na pozadí` | The slide's background (a picture or video; a video in the second). |
+| `Category` | `Kategorie` | The name of one of the quiz's categories, in any case: the slide takes on its look, but keeps a background of its own. A name the quiz has no category of is listed in the notes, so categories are made in the quiz before importing. Export writes the name of the slide's category. |
+| `Read as` | `Jak přečíst` | How the voice says a question when it reads it out (`readAs`). |
 
-**Prefixes.** `{Q}` question, `{T}` test question (imported with no
-points), `{B}` billboard (the first line is its title, the rest its text),
-`{E}` end of round, and this app's own `{X}` explanation and `{F}` final
-results. A question takes the qualifier `EA` (everyone answers, 2 to 4
-answers) or `FF` (fastest finger, up to 6): `{Q, FF}`. Without a prefix, a
-row with text or answers is a question (everyone answers when it has 2 to
-4 answers) and a row with only media a billboard.
+The columns from `Type` to `Points` are the basic ones: an export and the
+template always write them, the others only when a slide has a value in
+them.
+
+**Types.** Known in either language as headings are: `Section`/`Sekce`
+a billboard (the first line of the text is its title, the rest its
+text), `Explanation`/`Vysvětlení`, `End of round`/`Konec kola`,
+`Results`/`Výsledky` (the final results), `Question`/`Otázka` and
+`Fastest finger`/`Rychlá odpověď`. An unknown type is listed in the notes
+and the row read as if it had none. A row with no type and with text or
+answers is a question, and a row with only media a billboard. A question
+with 2 to 4 answers is everyone answers on the A-D buttons; with none,
+one or more than four, or the type `Fastest finger`, it is fastest finger,
+the big button buzzing and the answer said aloud with none or more than
+four (`Button::buzzes_in`). Export, the template and the File › Import
+guide write a type on every row, `Question` on every question that is
+not `Fastest finger`, so authors learn one way; an empty type stays
+accepted.
 
 **Media.** A cell names a file, relative to the sheet or as a full path;
 a file not found there is looked for by its name next to the sheet. A file
@@ -481,9 +508,7 @@ taken from outside the sheet's folder (a full path, or one with `..`) is
 listed in the import's notes. A network or device path
 (`\\server\share\…`, `\\?\…`, `\\.\…`, `\??\…`) is never read, as
 Windows would contact the server just to look; only its name is looked for
-next to the sheet. The file is copied into the quiz (`{L}`, the
-reference's mark for a linked file, is read and the file copied all the
-same). Settings follow in braces,
+next to the sheet. The file is copied into the quiz. Settings follow in braces,
 separated by `;`: `intro.mp4{start-at=00:00:05;loop=false}`. Times are
 `hh:mm:ss`, `mm:ss` or seconds, with a fraction; flags are `true`/`false`,
 `yes`/`no` or `1`/`0`.
@@ -498,12 +523,13 @@ separated by `;`: `intro.mp4{start-at=00:00:05;loop=false}`. Times are
 | `effect` | video | `blur`, `mosaic` or `none`. |
 | `intro-pause` | video | Seconds before it starts (1 by default, as in the editor). |
 | `sync-with-quiz` | background video | Flag: holds with the show. |
-| `autoplay` | video | This app's own. Flag: starts by itself or waits for Play video. |
-| `plays` | sound | This app's own. `on-slide`, `with-clock` (questions) or `on-demand`. |
-| `gain` | sound | This app's own. Loudness gain in dB. |
-| `replay`, `replay-start-at`, `replay-stop-at`, `replay-delay` | sound, video on a question | This app's own. The part played again after the reveal, and the seconds before it. |
+| `autoplay` | video | Flag: starts by itself or waits for Play video. |
+| `plays` | sound | `on-slide`, `with-clock` (questions) or `on-demand`. |
+| `gain` | sound | Loudness gain in dB. |
+| `replay`, `replay-start-at`, `replay-stop-at`, `replay-delay` | sound, video on a question | The part played again after the reveal, and the seconds before it. |
 
-Export writes only the settings that differ from these defaults, every
+Export leaves the answer time, points and penalty empty where they are
+the defaults, writes only the settings that differ from these defaults, every
 media file next to the CSV file under its own name (numbered when another
 file has it), and the right answers in brackets, so an exported quiz
 imports as it was, except that every right answer comes back with all of
@@ -513,12 +539,10 @@ number) gets a leading `'`, so it opens as text; the import takes it off.
 So does a wrong answer that is itself in brackets (after any `'`s it
 starts with), so it does not come back as a right one.
 
-**What is left out.** The reference's other columns (`P2`-`P6`,
-`A7`, `A8`, the bonus and evaluation columns, `STYLE`, `TRANSITION`...),
-its other slide types (imported as billboards with their text), a second
-language after `||`, a picture next to a video, media a slide cannot have
-and files that are not there are left out, and the import lists each with
-the rows it came up in.
+**What is left out.** Columns the app does not know, a second column
+with the same heading, answers on a slide that is no question, a picture
+next to a video, media a slide cannot have and files that are not there
+are left out, and the import lists each with the rows it came up in.
 
 ## Playback notes
 

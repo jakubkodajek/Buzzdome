@@ -231,7 +231,7 @@ export function useQuizEditor(onTestRun: () => void): QuizEditor {
       attempt("export", async (draftApi) => {
         if (!open) return false;
         const picker = { filter: t("csvFile"), fileName: name };
-        return (await draftApi.editorExportSheet(open.draftId, quiz, listSeparator(lang), picker)) ?? false;
+        return (await draftApi.editorExportSheet(open.draftId, quiz, listSeparator(lang), lang, picker)) ?? false;
       }),
     testRun: (from) =>
       attempt("testRun", async (draftApi) => {
