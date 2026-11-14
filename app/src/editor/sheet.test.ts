@@ -20,6 +20,15 @@ describe("spreadsheets", () => {
     expect(template.slides.some((slide) => slide.category !== undefined)).toBe(false);
   });
 
+  it("show a filled answer time and points in the template, each explained in its question's notes", () => {
+    const quiz: Quiz = { schemaVersion: 4, title: "", theme: null, slides: [] };
+    const [, timed, scored] = templateQuiz(translator("cs"), quiz).slides;
+    expect(timed).toMatchObject({ timeLimitS: 30, points: 10 });
+    expect(timed.notes).toContain("Čas na odpověď je v sekundách: tady 30 s. Prázdná buňka znamená 20 s");
+    expect(scored).toMatchObject({ timeLimitS: 20, points: 20 });
+    expect(scored.notes).toContain("Body jsou to, co tým dostane za správnou odpověď: tady 20. Prázdná buňka znamená 10.");
+  });
+
   it("keep the template to the basic columns, also for a quiz with categories", () => {
     const quiz: Quiz = { schemaVersion: 5, title: "", theme: null, slides: [], categories: [{ id: "c-1", name: "Films", background: null }] };
     expect(templateQuiz(translator("en"), quiz).slides.some((slide) => slide.category !== undefined)).toBe(false);
@@ -27,12 +36,12 @@ describe("spreadsheets", () => {
 
   it("show an example under the headings and types the import reads, in the quizmaster's language", () => {
     expect(exampleSheet(translator("cs"), "cs")).toEqual({
-      headings: ["Typ", "Otázka", "Odpověď 1", "Odpověď 2", "Odpověď 3", "Odpověď 4", "Poznámky"],
+      headings: ["Typ", "Otázka", "Odpověď 1", "Odpověď 2", "Odpověď 3", "Odpověď 4", "Čas na odpověď", "Body"],
       rows: [
-        ["Sekce", "Kolo 1", "", "", "", "", ""],
-        ["Otázka", "Hlavní město Francie?", "[Paříž]", "Lyon", "Marseille", "Nice", ""],
-        ["Otázka", "Kolik obyvatel má Paříž?", "", "", "", "", "Odpovídá se nahlas"],
-        ["Konec kola", "Konec kola 1", "", "", "", "", ""],
+        ["Sekce", "Kolo 1", "", "", "", "", "", ""],
+        ["Otázka", "Hlavní město Francie?", "[Paříž]", "Lyon", "Marseille", "Nice", "30", ""],
+        ["Otázka", "Kolik obyvatel má Paříž?", "", "", "", "", "", "20"],
+        ["Konec kola", "Konec kola 1", "", "", "", "", "", ""],
       ],
     });
     const en = exampleSheet(translator("en"), "en");
