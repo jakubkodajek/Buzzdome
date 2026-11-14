@@ -822,6 +822,7 @@ mockIPC(
         dispatched.push((payload as { command: unknown }).command);
         return null;
       case "add_teams":
+      case "add_team_file":
       case "remove_team":
       case "media_remove":
         called.push({ cmd, ...(payload as object) });

@@ -132,6 +132,8 @@ export const api = {
   preparedTeams: () => invoke<string[]>("prepared_teams"),
   teamsLost: () => invoke<SettingsLost | null>("teams_lost"),
   addTeams: (names: string[]) => invoke<void>("add_teams", { names }),
+  /** The names in a text or CSV file's bytes (`csv`: its first column). */
+  addTeamFile: (bytes: Uint8Array, csv: boolean) => invoke<void>("add_team_file", { bytes: Array.from(bytes), csv }),
   removeTeam: (name: string) => invoke<void>("remove_team", { name }),
   /** The media player's library of files, kept on this computer. */
   mediaLibrary: () => invoke<MediaLibrary>("media_library"),

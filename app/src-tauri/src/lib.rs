@@ -1052,6 +1052,7 @@ pub fn run() {
             teams::prepared_teams,
             teams::teams_lost,
             teams::add_teams,
+            teams::add_team_file,
             teams::remove_team,
             media_player::media_library,
             media_player::media_add,

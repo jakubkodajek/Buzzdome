@@ -117,6 +117,14 @@ pub async fn add_teams(app: AppHandle, names: Vec<String>) -> CmdResult<()> {
     .await
 }
 
+/// Adds the team names of a text or CSV file the quizmaster picked, its
+/// bytes as the window read them (`quiz_file::team_names`).
+#[tauri::command]
+pub async fn add_team_file(app: AppHandle, bytes: Vec<u8>, csv: bool) -> CmdResult<()> {
+    let names = quiz_file::team_names(&bytes, csv)?;
+    add_teams(app, names).await
+}
+
 /// Removes a prepared team name. A buzzer paired with it keeps its player's name.
 #[tauri::command]
 pub async fn remove_team(app: AppHandle, name: String) -> CmdResult<()> {

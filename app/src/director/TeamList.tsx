@@ -5,7 +5,7 @@ import { MAX_NAME_CHARS } from "../bindings/Constants";
 import { confirmAction } from "../confirm";
 import { CrossIcon, TrashIcon } from "../icons";
 import type { BuzzerId, PlayerView, TeamView } from "../types";
-import { decodeText, parseTeamNames } from "./team-names";
+import { parseTeamNames } from "./team-names";
 
 /** What a dragged buzzer number carries. */
 const BUZZER_TYPE = "application/x-quiz-buzzer";
@@ -79,8 +79,8 @@ export function TeamList({ teams, players, picked, onPick }: TeamListProps) {
     onPick(null);
   };
   // The typed names stay in the field until they are kept, so one refused (too many teams) is not lost.
-  const addDraft = () => add(parseTeamNames(draft, false), () => setDraft(""));
-  const importFile = async (chosen: File) => add(parseTeamNames(decodeText(await chosen.arrayBuffer()), /\.csv$/i.test(chosen.name)));
+  const addDraft = () => add(parseTeamNames(draft), () => setDraft(""));
+  const importFile = async (chosen: File) => api.addTeamFile(new Uint8Array(await chosen.arrayBuffer()), /\.csv$/i.test(chosen.name));
   const carriesBuzzer = (e: DragEvent) => players !== null && e.dataTransfer.types.includes(BUZZER_TYPE);
   const free = players && players.filter((p) => !p.name).sort((a, b) => a.buzzer - b.buzzer);
 
@@ -165,7 +165,7 @@ export function TeamList({ teams, players, picked, onPick }: TeamListProps) {
             const text = e.clipboardData.getData("text");
             if (!/[\r\n]/.test(text)) return;
             e.preventDefault();
-            add(parseTeamNames(text, false));
+            add(parseTeamNames(text));
           }}
         />
         <button onClick={addDraft}>{t("addTeam")}</button>
