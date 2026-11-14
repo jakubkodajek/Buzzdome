@@ -87,3 +87,26 @@ Template:
 - State: make check green; branch `claude/project-thread-28dmvy`, PR #80.
 - Next: guardian review of the new commit, then Jakub's OK to merge.
 - Blockers / open questions: none.
+
+## 2026-11-14 - audit-2026-11-14 (20-team readiness)
+- Done (Jakub asked for a full audit and a 20-player test): six review
+  agents (show, hardware, editor/import, security, every screen and button,
+  bug hunt) and a verifier: nothing critical or major; findings and repros
+  in `.work/audit-2026-11-14/` (this container only). Fixed: a buzzer of the
+  receiver that joins once the slides began is named in the Director
+  (`Game::joins_late`, `PressEvent.joinedLate`; Jakub chose "add and warn"),
+  projector ranking and buzz queue and the Teams tab fit 20 long names
+  (`longCrowd*` preview scenes, checked by buzzdome-layout), team files are
+  read in Rust (`add_team_file`, `quiz_file::team_names`: UTF-16, quoted
+  cells), on-screen buzzers reach the highest registered buzzer, vite/zod
+  advisories, show-sim gives `TakeQuiz` and the crash drill resumes with
+  edits. New E2E `app/e2e/scale.e2e.ts`: 24 teams on the fake receiver, 30
+  questions, every round's presses in one write, a crash and resume
+  (`SCALE_SEED` replays). Sheet-import findings went into PR #80.
+- State: make check green; branch `claude/project-thread-0oi7d3`, stacked on
+  PR #80.
+- Next: merge #80, rebase, CI, merge, raise the version, Jakub tags.
+- Blockers / open questions: hardware-only checks are `docs/hardware-test.md`
+  section 8a (full-room rehearsal). Running E2E from a copy of the binary
+  needs it under a `target/debug/` folder with a `.cargo-lock` file beside it
+  and the `themes/` folder, or Tauri looks for resources in /usr/lib.
