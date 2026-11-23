@@ -291,11 +291,13 @@ pub async fn voice_install(app: AppHandle, progress: Channel<VoiceDownload>) -> 
         let archive = state.root.join(format!("{}.download", MODEL.id));
         state.cancelled.store(false, Ordering::SeqCst);
         let downloaded = download(
+            &MODEL,
             &archive,
             |done| {
                 let _ = progress.send(done);
             },
             || !state.cancelled.load(Ordering::SeqCst) && refuse_during_show(&app).is_ok(),
+            voice_error,
         )
         .map_err(|e| stopped_why(e, state.cancelled.load(Ordering::SeqCst)));
         // A show started after the last report: its journal keeps the disk,
@@ -333,11 +335,11 @@ pub fn voice_install_cancel(app: AppHandle) {
 /// Marks the show state while the voice model is put in place, so that no
 /// show begins meanwhile (`Inner::voice_unpacking`); the mark goes when
 /// this does, however unpacking ends.
-struct Unpacking<'a>(&'a AppHandle);
+pub(crate) struct Unpacking<'a>(&'a AppHandle);
 
 impl<'a> Unpacking<'a> {
     /// Marks it, unless a show runs.
-    fn begin(app: &'a AppHandle) -> CmdResult<Unpacking<'a>> {
+    pub(crate) fn begin(app: &'a AppHandle) -> CmdResult<Unpacking<'a>> {
         let mut inner = crate::lock_show(app);
         crate::refuse_show(&inner)?;
         inner.voice_unpacking = true;
@@ -383,25 +385,26 @@ pub async fn voice_clip(app: AppHandle, line: Line, render: bool) -> CmdResult<V
     .await
 }
 
-/// Downloads the model into `archive`, telling `progress` how far it got
-/// every `PROGRESS_EVERY`: the download's SHA-256. `go_on` is asked as
-/// often, also while no data comes, and stops it by answering false, which
-/// fails it with `VoiceDownloadStopped`.
-fn download(archive: &Path, mut progress: impl FnMut(VoiceDownload), go_on: impl Fn() -> bool) -> CmdResult<String> {
-    let failed = |detail: String| AppError::VoiceDownload { detail };
-    let response = agent().get(MODEL.url).call().map_err(|e| failed(e.to_string()))?;
+/// Downloads the model `source` into `archive`, telling `progress` how far
+/// it got every `PROGRESS_EVERY`: the download's SHA-256. `go_on` is asked
+/// as often, also while no data comes, and stops it by answering false,
+/// which fails it with what `error` makes of `VoiceError::Stopped`
+/// (`VoiceDownloadStopped` for the voice).
+pub(crate) fn download(source: &voice::model::ModelSource, archive: &Path, mut progress: impl FnMut(VoiceDownload), go_on: impl Fn() -> bool, error: fn(voice::VoiceError) -> AppError) -> CmdResult<String> {
+    let failed = |detail: String| error(voice::VoiceError::Download(detail));
+    let response = agent().get(source.url).call().map_err(|e| failed(e.to_string()))?;
     let file = fs::File::create(archive).map_err(|e| AppError::file(FileAction::Write, archive, e))?;
-    let body = response.into_body().into_with_config().limit(MODEL.bytes + 1).reader();
+    let body = response.into_body().into_with_config().limit(source.bytes + 1).reader();
     let stopped = AtomicBool::new(false);
-    let body = unstalled(body.take(MODEL.bytes + 1), PROGRESS_EVERY, || {
+    let body = unstalled(body.take(source.bytes + 1), PROGRESS_EVERY, || {
         let going = go_on();
         stopped.store(!going, Ordering::Relaxed);
         going
     })
     .map_err(|e| failed(e.to_string()))?;
     let mut last = Instant::now();
-    let total = MODEL.bytes;
-    let sha = voice::MODEL.receive(body, std::io::BufWriter::new(&file), |received| {
+    let total = source.bytes;
+    let sha = source.receive(body, std::io::BufWriter::new(&file), |received| {
         if last.elapsed() < PROGRESS_EVERY && received != total {
             return true;
         }
@@ -410,7 +413,7 @@ fn download(archive: &Path, mut progress: impl FnMut(VoiceDownload), go_on: impl
         go_on()
     })
     // A read given up as `go_on` said stop is a stop, not a network failure.
-    .map_err(|e| if stopped.load(Ordering::Relaxed) { AppError::VoiceDownloadStopped } else { voice_error(e) })?;
+    .map_err(|e| error(if stopped.load(Ordering::Relaxed) { voice::VoiceError::Stopped } else { e }))?;
     file.sync_all().map_err(|e| AppError::file(FileAction::Write, archive, e))?;
     Ok(sha)
 }

@@ -15,6 +15,7 @@ mod error;
 mod fixture_library;
 mod fonts;
 mod hardware;
+pub mod listen;
 mod local_model;
 mod media_player;
 mod pump;
@@ -441,6 +442,7 @@ fn lock_for_new_show(app: &AppHandle) -> CmdResult<MutexGuard<'_, Inner>> {
     inner.may_start_show()?;
     hardware::end_learning(app);
     local_model::cancel_for_show(app);
+    listen::cancel_for_show(app);
     Ok(inner)
 }
 
@@ -1028,6 +1030,7 @@ pub fn run() {
             app.manage(library);
             app.manage(app_icon::AppIcon::load(app_data(app.handle(), app_icon::ICON_FILE)?));
             app.manage(local_model::LocalModelState::default());
+            app.manage(listen::Listening::new(app.handle())?);
             app.manage(ai::SavedAiSettings::load(app_data(app.handle(), quiz_ai::settings::SETTINGS_FILE)?));
             app.manage(recent_files::RecentFiles::load(app_local_data(app.handle(), recent_files::RECENT_FILES)?));
             for window in app.webview_windows().values() {
@@ -1105,6 +1108,12 @@ pub fn run() {
             editor::editor_add_dropped_media,
             local_model::editor_ask_local_model,
             local_model::editor_ask_local_model_cancel,
+            listen::listener_model,
+            listen::listener_install,
+            listen::listener_install_cancel,
+            listen::listener_remove,
+            listen::editor_transcribe,
+            listen::editor_transcribe_cancel,
             hardware::receiver_info,
             hardware::receiver_devices,
             hardware::receiver_select,

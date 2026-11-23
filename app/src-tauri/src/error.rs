@@ -198,6 +198,9 @@ pub enum AppError {
     /// The request did not fit the model's context, even with its texts shortened.
     #[error("the request does not fit the context of model {model}")]
     LocalModelContextFull { model: String },
+    /// A reasoning model reasoned up to its length limit and wrote no answer.
+    #[error("the model reasoned until its limit and wrote no questions")]
+    LocalModelThoughtTooLong,
     #[error("the model took too long")]
     LocalModelTimedOut,
     /// The connection broke while the model wrote.
@@ -311,6 +314,32 @@ pub enum AppError {
     /// The model or a clip could not be written to the disk (full, refused).
     #[error("the voice model cannot be saved: {detail}")]
     VoiceDisk { detail: String },
+
+    // Writing down what a recording says, for the AI panel (`listen`).
+    /// The speech recognition model could not be downloaded.
+    #[error("the speech recognition model cannot be downloaded: {detail}")]
+    ListenerDownload { detail: String },
+    /// The download is not the model it should be.
+    #[error("the downloaded speech recognition model is damaged")]
+    ListenerDamaged,
+    /// A show began during the download, which stopped it.
+    #[error("the speech recognition model download stopped as a show began")]
+    ListenerDownloadStopped,
+    /// The quizmaster cancelled the download.
+    #[error("the speech recognition model download was cancelled")]
+    ListenerDownloadCancelled,
+    /// The model is not downloaded, so no recording can be written down.
+    #[error("the speech recognition model is not downloaded")]
+    ListenerMissing,
+    /// The model could not be written to the disk (full, refused).
+    #[error("the speech recognition model cannot be saved: {detail}")]
+    ListenerDisk { detail: String },
+    /// The listening process did not start, load the model or finish in time.
+    #[error("the recording {name} could not be written down")]
+    ListenerFailed { name: String },
+    /// The quizmaster cancelled writing a recording down.
+    #[error("writing the recording down was cancelled")]
+    ListenerCancelled,
 
     // Updates of the app.
     /// No newer version was found to install.

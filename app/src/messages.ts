@@ -98,6 +98,7 @@ const ERROR_KEYS: Record<Exclude<AppError["code"], WordedApart>, StringKey> = {
   localModelMissing: "errLocalModelMissing",
   localModelRefused: "errLocalModelRefused",
   localModelContextFull: "errLocalModelContextFull",
+  localModelThoughtTooLong: "errLocalModelThoughtTooLong",
   localModelTimedOut: "errLocalModelTimedOut",
   localModelInterrupted: "errLocalModelInterrupted",
   localModelFailed: "errLocalModelFailed",
@@ -138,6 +139,14 @@ const ERROR_KEYS: Record<Exclude<AppError["code"], WordedApart>, StringKey> = {
   voiceMissing: "errVoiceMissing",
   voiceFailed: "errVoiceFailed",
   voiceDisk: "errVoiceDisk",
+  listenerDownload: "errListenerDownload",
+  listenerDamaged: "errListenerDamaged",
+  listenerDownloadStopped: "errListenerDownloadStopped",
+  listenerDownloadCancelled: "errListenerDownloadCancelled",
+  listenerMissing: "errListenerMissing",
+  listenerDisk: "errListenerDisk",
+  listenerFailed: "errListenerFailed",
+  listenerCancelled: "errListenerCancelled",
 };
 
 const FILE_ACTION_KEYS: Record<FileAction, StringKey> = {

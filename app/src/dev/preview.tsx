@@ -76,6 +76,8 @@ const saving = params.get("saving");
 const draft = params.get("draft");
 /** The AI assistant's model: `none` is not chosen yet; `offline`: its server does not answer; `slow`: asking it never ends; `fail`: its answer is not questions; `webpartly`: some web pages could not be read. */
 const aiModel = params.get("ai");
+/** Whether the speech recognition model is downloaded in the preview (`listener=missing` for not). */
+let listenerInstalled = params.get("listener") !== "missing";
 /** `problems=warnings`: the editor's quiz has warnings only (it plays); `both`: a problem to fix too. */
 const quizChecks = params.get("problems");
 /** `recent=gone`: the recent quiz files are no longer where they were, as after they were deleted. */
@@ -1071,6 +1073,25 @@ mockIPC(
       }
       case "editor_ask_local_model_cancel":
         return null;
+      case "listener_model":
+        return { installed: listenerInstalled, bytes: 563_790_207, rate: 16000, maxSeconds: 900 };
+      case "listener_install": {
+        // A download that reports twice and ends.
+        const progress = (payload as { progress?: { onmessage?: (step: unknown) => void } }).progress;
+        [120, 400].forEach((mb, i) => setTimeout(() => progress?.onmessage?.({ received: mb * 2 ** 20, total: 563_790_207 }), i * 300));
+        return new Promise((resolve) =>
+          setTimeout(() => {
+            listenerInstalled = true;
+            resolve({ installed: true, bytes: 563_790_207, rate: 16000, maxSeconds: 900 });
+          }, 900),
+        );
+      }
+      case "listener_install_cancel":
+      case "editor_transcribe_cancel":
+        return null;
+      case "editor_transcribe":
+        called.push({ cmd });
+        return new Promise((resolve) => setTimeout(() => resolve("Vítejte v pekárně Novák, pečeme od roku 1921."), 500));
       case "receiver_info":
         return {
           status: { kind: "error", problem: "cannotOpen", detail: "access denied" },

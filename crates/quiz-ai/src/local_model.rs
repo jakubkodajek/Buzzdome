@@ -135,8 +135,16 @@ impl LocalModel {
 pub enum AttachmentContent {
     /// A picture, as a data URL the panel made smaller.
     Picture { image: String },
-    /// A video, as frames taken from it.
-    Video { frames: Vec<String> },
+    /// A video, as frames taken from it, and what is said in it, written
+    /// down on this computer (empty when nothing was, or no one speaks).
+    Video {
+        frames: Vec<String>,
+        #[serde(default)]
+        words: String,
+    },
+    /// A sound recording, as what is said in it, written down on this
+    /// computer: the models of a local server read no sound.
+    Recording { words: String },
     /// A text file's text.
     Text { text: String },
 }
@@ -272,18 +280,20 @@ pub fn reply_schema() -> Value {
 /// Most searches a request leads to.
 pub const MAX_SEARCHES: usize = 3;
 
-/// What to look up on the internet for a request: searches and the web
-/// addresses it names.
+/// What to look up on the internet for a request: its searches. The web
+/// addresses the request names are taken from it as written
+/// (`web_page::addresses_in`), never from the model, which guesses them.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ResearchPlan {
     pub queries: Vec<String>,
-    pub sites: Vec<String>,
 }
 
-impl ResearchPlan {
-    pub fn is_empty(&self) -> bool {
-        self.queries.is_empty() && self.sites.is_empty()
-    }
+/// The search made when the model gives no plan (it reasoned past its
+/// length limit, say): the request itself, on one line, which a search
+/// engine reads well enough [no source - tried by hand on DuckDuckGo].
+pub fn plain_search(prompt: &str) -> Option<String> {
+    let query: String = one_line(prompt).chars().take(150).collect();
+    (!query.is_empty()).then_some(query)
 }
 
 /// The request that asks `model` what to look up for `asked`: only the
@@ -303,9 +313,8 @@ pub fn research_plan_request(model: &LocalModel, asked: &QuestionRequest) -> Val
                  internet (a company, an organisation, a person, a place or an event it names, or recent facts), give at most \
                  3 short web search queries in the request's language in \"queries\". Every query names the subject in full, \
                  as the request does (a company's whole name and its town), and adds what to find out (what it does, its \
-                 history, its products), so that it finds that subject and nothing else of the same name. Give the web \
-                 addresses the request names in \"sites\". When the files and general knowledge are enough, give two empty \
-                 lists. Reply with JSON only." },
+                 history, its products), so that it finds that subject and nothing else of the same name. When the files and \
+                 general knowledge are enough, give an empty list. Reply with JSON only, at once." },
             { "role": "user", "content": task }
         ],
         "response_format": {
@@ -313,10 +322,9 @@ pub fn research_plan_request(model: &LocalModel, asked: &QuestionRequest) -> Val
             "json_schema": { "name": "research", "schema": {
                 "type": "object",
                 "properties": {
-                    "queries": { "type": "array", "items": { "type": "string" }, "maxItems": MAX_SEARCHES },
-                    "sites": { "type": "array", "items": { "type": "string" }, "maxItems": MAX_SEARCHES }
+                    "queries": { "type": "array", "items": { "type": "string" }, "maxItems": MAX_SEARCHES }
                 },
-                "required": ["queries", "sites"]
+                "required": ["queries"]
             } }
         },
         "temperature": 0.1,
@@ -344,7 +352,7 @@ pub fn research_plan(content: &str) -> ResearchPlan {
         }
         items
     };
-    ResearchPlan { queries: list("queries"), sites: list("sites") }
+    ResearchPlan { queries: list("queries") }
 }
 
 fn one_line(text: &str) -> String {
@@ -374,7 +382,7 @@ pub fn request(model: &LocalModel, asked: &QuestionRequest, research: Option<&st
                 parts.push(text_part(format!("Attachment {number}: picture \"{name}\".")));
                 parts.push(image_part(image)?);
             }
-            AttachmentContent::Video { frames } => {
+            AttachmentContent::Video { frames, words } => {
                 parts.push(text_part(if frames.is_empty() {
                     format!("Attachment {number}: video \"{name}\"; its frames could not be read, so go by its name.")
                 } else {
@@ -383,10 +391,21 @@ pub fn request(model: &LocalModel, asked: &QuestionRequest, research: Option<&st
                 for frame in frames.iter().take(VIDEO_FRAMES) {
                     parts.push(image_part(frame)?);
                 }
+                let taken = take_text(words, &mut text_left);
+                if !taken.is_empty() {
+                    parts.push(text_part(format!("What is said in video \"{name}\" (written down from its sound):\n{taken}")));
+                }
+            }
+            AttachmentContent::Recording { words } => {
+                let taken = take_text(words, &mut text_left);
+                parts.push(text_part(if taken.is_empty() {
+                    format!("Attachment {number}: sound recording \"{name}\"; no speech was heard in it (music or sounds), so go by its name.")
+                } else {
+                    format!("Attachment {number}: sound recording \"{name}\"; what is said in it, written down from its sound:\n{taken}")
+                }));
             }
             AttachmentContent::Text { text } => {
-                let taken: String = text.chars().take(text_left).collect();
-                text_left -= taken.chars().count();
+                let taken = take_text(text, &mut text_left);
                 parts.push(text_part(format!("Attachment {number}: text \"{name}\":\n{taken}")));
             }
 
@@ -419,9 +438,16 @@ pub fn request(model: &LocalModel, asked: &QuestionRequest, research: Option<&st
 fn images(content: &AttachmentContent) -> &[String] {
     match content {
         AttachmentContent::Picture { image } => std::slice::from_ref(image),
-        AttachmentContent::Video { frames } => &frames[..frames.len().min(VIDEO_FRAMES)],
-        AttachmentContent::Text { .. } => &[],
+        AttachmentContent::Video { frames, .. } => &frames[..frames.len().min(VIDEO_FRAMES)],
+        AttachmentContent::Recording { .. } | AttachmentContent::Text { .. } => &[],
     }
+}
+
+/// `text`, trimmed, at most what is `left` of the request's text, which it takes.
+fn take_text(text: &str, left: &mut usize) -> String {
+    let taken: String = text.trim().chars().take(*left).collect();
+    *left -= taken.chars().count();
+    taken
 }
 
 fn text_part(text: String) -> Value {
@@ -571,8 +597,11 @@ pub fn questions_begun(content: &str, from: usize) -> usize {
 /// A line of a streamed reply (server-sent events).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum StreamLine {
-    /// More of the model's text, and whether it stopped there at its length limit.
-    Text { text: String, cut_off: bool },
+    /// More of the model's text, how many characters it reasoned before
+    /// it (a reasoning model's `reasoning` or `reasoning_content`, which
+    /// Ollama, llama.cpp and LM Studio send apart from the text), and
+    /// whether it stopped there at its length limit.
+    Text { text: String, thought: usize, cut_off: bool },
     /// The end of the reply.
     Done,
     /// A line with nothing for the reply: a comment, a blank, a keep-alive.
@@ -600,7 +629,8 @@ pub fn stream_line(line: &str) -> StreamLine {
     }
     let Some(choice) = chunk.get("choices").and_then(|choices| choices.get(0)) else { return StreamLine::Nothing };
     let text = choice.pointer("/delta/content").and_then(Value::as_str).unwrap_or_default().to_string();
-    StreamLine::Text { text, cut_off: choice.get("finish_reason").and_then(Value::as_str) == Some("length") }
+    let thought = ["/delta/reasoning", "/delta/reasoning_content"].iter().filter_map(|at| choice.pointer(at).and_then(Value::as_str)).map(|t| t.chars().count()).sum();
+    StreamLine::Text { text, thought, cut_off: choice.get("finish_reason").and_then(Value::as_str) == Some("length") }
 }
 
 /// The message in a server's error reply, in OpenAI's form
@@ -788,7 +818,8 @@ mod tests {
     fn a_request_carries_the_schema_the_files_and_the_language() {
         let files = vec![
             attachment("Praha.jpg", AttachmentContent::Picture { image: PICTURE.into() }),
-            attachment("klip.mp4", AttachmentContent::Video { frames: vec![PICTURE.into(); VIDEO_FRAMES + 2] }),
+            attachment("klip.mp4", AttachmentContent::Video { frames: vec![PICTURE.into(); VIDEO_FRAMES + 2], words: "Vítejte v Praze.".into() }),
+            attachment("rozhovor.mp3", AttachmentContent::Recording { words: "Karlův most stojí od roku 1357.".into() }),
             attachment("poznámky.txt", AttachmentContent::Text { text: "Vltava teče Prahou.".into() }),
         ];
         let model = LocalModel::new(DEFAULT_URL, "gemma3");
@@ -804,7 +835,12 @@ mod tests {
         assert_eq!(texts[0], "Kvíz o Praze");
         assert!(texts[1].starts_with("Attachment 1: picture \"Praha.jpg\""));
         assert!(texts[2].starts_with("Attachment 2: video \"klip.mp4\""));
-        assert!(texts[3].starts_with("Attachment 3: text \"poznámky.txt\":\nVltava"));
+        assert!(texts[3].starts_with("What is said in video \"klip.mp4\"") && texts[3].ends_with("Vítejte v Praze."));
+        assert!(texts[4].starts_with("Attachment 3: sound recording \"rozhovor.mp3\"") && texts[4].ends_with("od roku 1357."));
+        assert!(texts[5].starts_with("Attachment 4: text \"poznámky.txt\":\nVltava"));
+        // A recording with no speech is said so, so the model goes by its name.
+        let music = request(&model, &asked("x", vec![attachment("song.mp3", AttachmentContent::Recording { words: " ".into() })]), None, MAX_TEXT_CHARS).unwrap();
+        assert!(music["messages"][1]["content"][1]["text"].as_str().unwrap().contains("no speech was heard"));
     }
 
     #[test]
@@ -813,7 +849,7 @@ mod tests {
         assert_eq!(request(&model, &asked("  ", vec![]), None, MAX_TEXT_CHARS), Err(RequestError::Empty));
         let picture = || attachment("a.png", AttachmentContent::Picture { image: PICTURE.into() });
         assert_eq!(request(&model, &asked("x", vec![picture(); MAX_ATTACHMENTS + 1]), None, MAX_TEXT_CHARS), Err(RequestError::TooManyFiles { max: MAX_ATTACHMENTS }));
-        let videos = vec![attachment("v.mp4", AttachmentContent::Video { frames: vec![PICTURE.into(); VIDEO_FRAMES] }); MAX_IMAGES / VIDEO_FRAMES + 1];
+        let videos = vec![attachment("v.mp4", AttachmentContent::Video { frames: vec![PICTURE.into(); VIDEO_FRAMES], words: String::new() }); MAX_IMAGES / VIDEO_FRAMES + 1];
         assert_eq!(request(&model, &asked("x", videos), None, MAX_TEXT_CHARS), Err(RequestError::TooManyPictures { max: MAX_IMAGES }));
         let not_a_picture = attachment("a.png", AttachmentContent::Picture { image: "file:///etc/passwd".into() });
         assert_eq!(request(&model, &asked("x", vec![not_a_picture]), None, MAX_TEXT_CHARS), Err(RequestError::NotAPicture));
@@ -904,8 +940,10 @@ mod tests {
         let task = plan_body["messages"][1]["content"].as_str().unwrap();
         assert!(task.contains("Pekárna Novák") && task.contains("logo.png") && !task.contains("base64"));
         let plan = research_plan(r#"<think>{maybe}</think>{"queries":["Pekárna Novák Brno"," pekárna  novák brno ","","Novák historie","a","b"],"sites":["pekarna-novak.cz"]}"#);
-        assert_eq!(plan, ResearchPlan { queries: vec!["Pekárna Novák Brno".into(), "Novák historie".into(), "a".into()], sites: vec!["pekarna-novak.cz".into()] });
-        assert!(research_plan("Nevím.").is_empty());
+        assert_eq!(plan, ResearchPlan { queries: vec!["Pekárna Novák Brno".into(), "Novák historie".into(), "a".into()] });
+        assert_eq!(plain_search(" Kvíz o firmě\n Bakchus  "), Some("Kvíz o firmě Bakchus".into()));
+        assert_eq!(plain_search("  "), None);
+        assert!(research_plan("Nevím.").queries.is_empty());
         let body = request(&model, &asked("Kvíz o firmě", vec![]), Some("Page https://pekarna.cz/ — Úvod\nPečeme od 1921."), MAX_TEXT_CHARS).unwrap();
         let parts = body["messages"][1]["content"].as_array().unwrap();
         assert!(parts.last().unwrap()["text"].as_str().unwrap().ends_with("Pečeme od 1921."));
@@ -993,8 +1031,10 @@ mod tests {
 
     #[test]
     fn streamed_lines_give_the_text_and_its_end() {
-        assert_eq!(stream_line(r#"data: {"choices":[{"delta":{"content":"{\"q"},"finish_reason":null}]}"#), StreamLine::Text { text: "{\"q".into(), cut_off: false });
-        assert_eq!(stream_line(r#"data: {"choices":[{"delta":{},"finish_reason":"length"}]}"#), StreamLine::Text { text: String::new(), cut_off: true });
+        assert_eq!(stream_line(r#"data: {"choices":[{"delta":{"content":"{\"q"},"finish_reason":null}]}"#), StreamLine::Text { text: "{\"q".into(), thought: 0, cut_off: false });
+        assert_eq!(stream_line(r#"data: {"choices":[{"delta":{"content":"","reasoning":"Hmm, Praha"},"finish_reason":null}]}"#), StreamLine::Text { text: String::new(), thought: 10, cut_off: false });
+        assert_eq!(stream_line(r#"data: {"choices":[{"delta":{"reasoning_content":"ok"},"finish_reason":null}]}"#), StreamLine::Text { text: String::new(), thought: 2, cut_off: false });
+        assert_eq!(stream_line(r#"data: {"choices":[{"delta":{},"finish_reason":"length"}]}"#), StreamLine::Text { text: String::new(), thought: 0, cut_off: true });
         assert_eq!(stream_line("data: [DONE]"), StreamLine::Done);
         assert_eq!(stream_line(": keep-alive"), StreamLine::Nothing);
         assert_eq!(stream_line(""), StreamLine::Nothing);

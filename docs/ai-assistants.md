@@ -195,8 +195,11 @@ OpenAI's "Sign in with ChatGPT" is for its partners only (The New Stack,
 https://thenewstack.io/sign-in-with-chatgpt/). Those subscriptions reach
 Buzzdome through their own apps and the MCP server above.
 
-In the panel, the quizmaster adds pictures, videos and text files
-(`.txt`, `.md`, `.csv`; at most 12), types what they want ("10 questions
+Which model to use is the quizmaster's choice; the app and these docs
+name none.
+
+In the panel, the quizmaster adds pictures, videos, sound recordings and
+text files (`.txt`, `.md`, `.csv`; at most 12), types what they want ("10 questions
 about the trip photos, in two rounds") and presses Make questions:
 
 1. Pictures and videos are copied into the draft (`editor_add_dropped_media`),
@@ -255,15 +258,74 @@ Ollama takes pictures but no video (Ollama, "Ollama's new engine for
 multimodal models", https://registry.ollama.ai/blog/multimodal-models), hence
 the frames.
 
+A request that does not fit the model's context (Ollama, llama.cpp, LM
+Studio and vLLM each say so in their own words, `context_full`) is asked
+once more with its texts and what was found on the internet cut to 4,000
+characters (`SMALL_TEXT_CHARS`); if that does not fit either, the panel
+says to raise the context length. A reasoning model's reasoning, which
+Ollama, llama.cpp and LM Studio stream apart from the answer
+(`reasoning`, `reasoning_content`), shows as "the model is thinking"; one
+that reasons up to its limit without answering is told apart from a cut-off
+reply. The instructions keep questions off counting things in a picture
+(small models miscount: 2 of 12 answers wrong in our test with a 4B model,
+both counts) and off registration and phone numbers.
+
+### Sound
+
+The local servers' models read no sound, so the app writes down what is
+said in a sound recording, and in a video's sound track, before it asks:
+offline, with Whisper large-v3-turbo (Radford et al., "Robust Speech
+Recognition via Large-Scale Weak Supervision",
+https://arxiv.org/abs/2212.04356) as k2-fsa exported it for sherpa-onnx
+(`voice::LISTENER`, release `asr-models`, 564 MB, checked by its SHA-256 as
+the reading voice is). The panel offers the download the first time a
+recording or video is added; it lives in the app's local data
+(`listener/`). The window decodes the sound (Web Audio `decodeAudioData`)
+to 16 kHz mono, at most 15 minutes, and sends it as raw samples to
+`editor_transcribe`, which writes it down in a process of its own
+(`buzzdome --listen <folder> <language>`, `app/src-tauri/src/listen.rs`)
+in pieces of at most 28 s cut at the quietest moment (Whisper hears 30 s
+at once). The words go to the model as text with the attachment; music
+without speech is said to be such. In a 4-core container, 5.2 s of Czech
+speech took 2.0 s, the model loaded in 1.8 s, and the sentence came back
+word for word (`crates/voice/tests/listen.rs`, with `LISTENER_MODEL_ROOT`
+and `VOICE_MODEL_ROOT`: the reading voice says it, the listener writes it).
+
+### The internet
+
+With "Look up on the internet" ticked (the default), the request may name
+a company, a person or an event, and the app looks it up before the model
+writes. No address is needed:
+
+1. The model is asked, in a short request with the prompt and the files'
+   names only, for at most 3 web searches (`research_plan_request`), each
+   with the subject's whole name and town. A model that gives none (it
+   reasoned past its limit, say) has the prompt itself searched.
+2. Addresses written in the prompt are read, with two of their pages that
+   say most about a company (about us, history, products, contact;
+   `links_to_follow`). The model's guesses at an address are not used: a
+   guessed domain led to another company of the same name.
+3. Each search goes to DuckDuckGo's HTML page, which needs no key (Open
+   WebUI's web search uses it the same way), and its two best results are
+   read, at most 6 pages in all. Legal pages (privacy, cookies, terms) are
+   passed over, and a page is read once however its address is written.
+4. The search results and the pages' text, without menus repeated from
+   page to page, go to the model after the files, at most 14,000
+   characters, each page its share.
+
+The panel shows each step and lists the pages read with the questions; a
+search or page that failed is said so. With it unticked, nothing leaves
+the computer.
+
 ### Checking it with a real model
 
 The tests use a fake server on this computer
 (`app/src-tauri/src/local_model.rs`). With Ollama running and a model that
-reads pictures pulled (`ollama pull qwen3-vl:8b`, or `gemma3:4b` on a
-smaller computer), one test asks the real model too:
+reads pictures pulled (`ollama pull <model>`; which one is the user's
+choice), one test asks the real model too:
 
 ```sh
-BUZZDOME_LIVE_MODEL=qwen3-vl:8b cargo test -p buzzdome live_model -- --nocapture
+BUZZDOME_LIVE_MODEL=<model> cargo test -p buzzdome live_model -- --nocapture
 ```
 
 `BUZZDOME_LIVE_URL` gives another server (`http://localhost:1234/v1` for LM

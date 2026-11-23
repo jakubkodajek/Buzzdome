@@ -46,6 +46,21 @@ pub const MODEL_FILES: [&str; 7] = [
     "voice.bin",
 ];
 
+/// The speech recognition model the AI panel writes down recordings
+/// with: Whisper large-v3-turbo (OpenAI, MIT licence, 99 languages),
+/// exported for sherpa-onnx and quantized to 8 bits by its authors; about
+/// 564 MB to download, 1 GB unpacked.
+pub const LISTENER: ModelSource = ModelSource {
+    id: "sherpa-onnx-whisper-turbo",
+    url: "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-whisper-turbo.tar.bz2",
+    sha256: "b11acbbcd660b44a8e0df33724feb5aaa709cf65668f2823d59f656312544f22",
+    bytes: 563_790_207,
+    files: &LISTENER_FILES,
+};
+
+/// The files the listener loads: encoder, decoder, tokens.
+pub const LISTENER_FILES: [&str; 3] = ["turbo-encoder.int8.onnx", "turbo-decoder.int8.onnx", "turbo-tokens.txt"];
+
 /// Written last when a model is unpacked: a folder without it is not used.
 const INSTALLED_MARK: &str = "installed";
 

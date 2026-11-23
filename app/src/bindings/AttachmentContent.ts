@@ -3,4 +3,4 @@
 /**
  * What a file the quizmaster gave is to the model.
  */
-export type AttachmentContent = { "kind": "picture", image: string, } | { "kind": "video", frames: Array<string>, } | { "kind": "text", text: string, };
+export type AttachmentContent = { "kind": "picture", image: string, } | { "kind": "video", frames: Array<string>, words: string, } | { "kind": "recording", words: string, } | { "kind": "text", text: string, };

@@ -4,11 +4,13 @@
 // file's own data, so nothing is read from the disk but what the
 // quizmaster gave. A video plays from a `blob:` URL of its data, which the
 // content policy allows for media (tauri.conf.json); pictures need none.
+// A recording's and a video's sound is decoded here too, and the backend
+// writes down what is said in it (`listen.rs`), as the model hears no sound.
 
 import { mediaKindOf } from "../media";
 import type { Attachment, LocalModelInfo } from "../types";
 
-export type AiFileKind = "picture" | "video" | "text";
+export type AiFileKind = "picture" | "video" | "recording" | "text";
 
 /** Text files the panel reads as they are. */
 const TEXT_EXTENSIONS = ["txt", "md", "csv"];
@@ -21,6 +23,13 @@ export interface AiFile {
   kind: AiFileKind;
   /** The picture or video copied into the draft for the slides, once it is. */
   copied: { draft: string; reference: string } | null;
+  /** What is said in its sound, once written down, in that language. */
+  heard: { language: string; words: string } | null;
+}
+
+/** Whether the panel writes down what is said in a file of `kind`. */
+export function hasSound(kind: AiFileKind): boolean {
+  return kind === "recording" || kind === "video";
 }
 
 /** What the panel does with a file of `name`; null for one it cannot read. */
@@ -32,6 +41,8 @@ export function aiFileKind(name: string): AiFileKind | null {
       return "picture";
     case "video":
       return "video";
+    case "audio":
+      return "recording";
     default:
       return null;
   }
@@ -59,7 +70,7 @@ export function addFiles(current: readonly AiFile[], files: readonly File[], max
       tooMany = true;
       continue;
     }
-    next.push({ id: nextId++, file, kind, copied: null });
+    next.push({ id: nextId++, file, kind, copied: null, heard: null });
   }
   return { files: next, unsupported, tooMany };
 }
@@ -190,16 +201,63 @@ async function framesFor(file: File, info: LocalModelInfo): Promise<string[]> {
 }
 
 /**
+ * The sound of `file` as `rate` samples a second, one channel, at most
+ * `maxSeconds`; null when this window cannot decode it (a video without
+ * sound, a codec the system lacks).
+ */
+export async function soundOf(file: File, rate: number, maxSeconds: number): Promise<Float32Array | null> {
+  let decoded: AudioBuffer;
+  try {
+    const data = await file.arrayBuffer();
+    // Decoding resamples to the context's rate; a system whose audio takes no such rate decodes at its own.
+    decoded = await audioContext(rate).decodeAudioData(data);
+  } catch {
+    return null;
+  }
+  const mono = new Float32Array(decoded.length);
+  for (let channel = 0; channel < decoded.numberOfChannels; channel++) {
+    const samples = decoded.getChannelData(channel);
+    for (let i = 0; i < samples.length; i++) mono[i] += samples[i] / decoded.numberOfChannels;
+  }
+  const resampled = decoded.sampleRate === rate ? mono : resample(mono, decoded.sampleRate, rate);
+  return resampled.subarray(0, Math.min(resampled.length, rate * maxSeconds));
+}
+
+function audioContext(rate: number): OfflineAudioContext {
+  try {
+    return new OfflineAudioContext(1, 1, rate);
+  } catch {
+    return new OfflineAudioContext(1, 1, 44_100);
+  }
+}
+
+/** `samples` at `from` a second as `to` a second, by straight lines between them: enough for speech. */
+export function resample(samples: Float32Array, from: number, to: number): Float32Array {
+  const out = new Float32Array(Math.floor((samples.length * to) / from));
+  const step = from / to;
+  for (let i = 0; i < out.length; i++) {
+    const at = i * step;
+    const before = Math.floor(at);
+    const after = Math.min(before + 1, samples.length - 1);
+    out[i] = samples[before] + (samples[after] - samples[before]) * (at - before);
+  }
+  return out;
+}
+
+/**
  * `file` as the model gets it, with `reference`, the draft's copy of a
  * picture or video. `textLeft` is how much text the request still takes.
  */
 export async function attachmentFor(file: AiFile, info: LocalModelInfo, reference: string | null, textLeft: number): Promise<Attachment> {
   const name = file.file.name;
+  const words = file.heard?.words ?? "";
   switch (file.kind) {
     case "picture":
       return { name, media: reference, content: { kind: "picture", image: await pictureFor(file.file, info) } };
     case "video":
-      return { name, media: reference, content: { kind: "video", frames: await framesFor(file.file, info) } };
+      return { name, media: reference, content: { kind: "video", frames: await framesFor(file.file, info), words } };
+    case "recording":
+      return { name, media: null, content: { kind: "recording", words } };
     case "text": {
       // Read only up to what is sent (at most four bytes a character); a huge log file is not read in full.
       const bytes = new Uint8Array(await file.file.slice(0, Math.max(0, textLeft) * 4).arrayBuffer());

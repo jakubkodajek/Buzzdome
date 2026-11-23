@@ -1,14 +1,23 @@
 import { describe, expect, it } from "vitest";
-import { addFiles, aiFileKind, decodedText, fitWithin, frameTimes } from "./ai-files";
+import { addFiles, aiFileKind, decodedText, fitWithin, frameTimes, hasSound, resample } from "./ai-files";
 
 const file = (name: string, size = 10, lastModified = 1) => new File([new Uint8Array(size)], name, { lastModified });
 
 describe("the AI panel's files", () => {
-  it("takes pictures, videos and text files by their names", () => {
+  it("takes pictures, videos, sound recordings and text files by their names", () => {
     expect(["a.JPG", "b.png", "c.webp"].map(aiFileKind)).toEqual(["picture", "picture", "picture"]);
     expect(["d.mp4", "e.webm"].map(aiFileKind)).toEqual(["video", "video"]);
     expect(["f.txt", "g.MD", "h.csv"].map(aiFileKind)).toEqual(["text", "text", "text"]);
-    expect(["i.pdf", "j.mp3", "k", "l.docx"].map(aiFileKind)).toEqual([null, null, null, null]);
+    expect(["m.mp3", "n.WAV", "o.m4a"].map(aiFileKind)).toEqual(["recording", "recording", "recording"]);
+    expect(["i.pdf", "j.exe", "k", "l.docx"].map(aiFileKind)).toEqual([null, null, null, null]);
+  });
+
+  it("writes down the sound of recordings and videos, resampled to the rate the listener hears", () => {
+    expect((["recording", "video", "picture", "text"] as const).map(hasSound)).toEqual([true, true, false, false]);
+    const halved = resample(new Float32Array([0, 1, 2, 3, 4, 5, 6, 7]), 32_000, 16_000);
+    expect([...halved]).toEqual([0, 2, 4, 6]);
+    const doubled = resample(new Float32Array([0, 2, 4]), 8_000, 16_000);
+    expect([...doubled]).toEqual([0, 1, 2, 3, 4, 4]);
   });
 
   it("adds each file once, up to the most a request takes, and names the ones it cannot read", () => {

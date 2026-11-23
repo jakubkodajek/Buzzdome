@@ -65,6 +65,7 @@ import type {
   Theme,
   UpdateProgress,
   VoiceDownload,
+  ListenerModel,
   VoiceClip,
   VoiceLine,
   VoiceModel,
@@ -227,6 +228,22 @@ export const api = {
   voiceInstallCancel: () => invoke<void>("voice_install_cancel"),
   /** Removes the voice model and the clips made with it. */
   voiceRemove: () => invoke<VoiceModel>("voice_remove"),
+  /** Whether the speech recognition model the AI panel writes recordings down with is downloaded. */
+  listenerModel: () => invoke<ListenerModel>("listener_model"),
+  listenerInstall: (onProgress: (progress: VoiceDownload) => void) => {
+    const progress = new Channel<VoiceDownload>();
+    progress.onmessage = onProgress;
+    return invoke<ListenerModel>("listener_install", { progress });
+  },
+  /** Cancels the download under way; `listenerInstall` then fails with `listenerDownloadCancelled`. */
+  listenerInstallCancel: () => invoke<void>("listener_install_cancel"),
+  listenerRemove: () => invoke<ListenerModel>("listener_remove"),
+  /** What the recording `samples` (mono, `ListenerModel.rate` a second) say, in `language`; `name` names it in a failure. Fails with `listenerCancelled` after `editorTranscribeCancel`. */
+  editorTranscribe: (name: string, language: QuizLanguage, samples: Float32Array) =>
+    invoke<string>("editor_transcribe", new Uint8Array(samples.buffer, samples.byteOffset, samples.byteLength), {
+      headers: { name: encodeURIComponent(name), language },
+    }),
+  editorTranscribeCancel: () => invoke<void>("editor_transcribe_cancel"),
   /** The path of the kept clip that says `line`; with `render`, rendered first when it is not kept (a few seconds). Null when there is nothing to say, or it is not kept and not to be rendered. */
   voiceClip: (line: VoiceLine, render: boolean) => invoke<VoiceClip>("voice_clip", { line, render }),
   // The editor's commands on a draft name it (`EditorDraft.id`): one that

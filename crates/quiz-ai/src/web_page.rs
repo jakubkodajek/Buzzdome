@@ -344,6 +344,16 @@ const TELLING: [&str; 24] = [
     "products", "nabidka", "tym", "team", "reference", "kariera", "careers", "kontakt", "contact", "aktuality",
 ];
 
+/// Words in the address of a page that says nothing about a company: its
+/// legal pages, cookies, sign-in, cart.
+const NOT_TELLING: [&str; 14] = ["gdpr", "privacy", "soukromi", "ochrana-osobnich", "osobni-udaje", "cookie", "obchodni-podminky", "terms", "login", "prihlaseni", "kosik", "cart", "registrace", "podminky"];
+
+/// Whether the page at `url` is one of those (`NOT_TELLING`), so that it is not read.
+pub fn says_nothing(url: &str) -> bool {
+    let lower = url.to_ascii_lowercase();
+    NOT_TELLING.iter().any(|word| lower.contains(word))
+}
+
 /// File types a link to which is no page.
 const NOT_PAGES: [&str; 16] = ["pdf", "jpg", "jpeg", "png", "gif", "webp", "svg", "zip", "doc", "docx", "xls", "xlsx", "mp4", "mp3", "css", "js"];
 
@@ -362,7 +372,7 @@ pub fn links_to_follow(base: &Url, links: &[String], max: usize) -> Vec<Url> {
         if !matches!(url.scheme(), "http" | "https") || !same_site || NOT_PAGES.contains(&extension.as_str()) || path == base.path().trim_end_matches('/') || path.is_empty() {
             continue;
         }
-        if found.iter().any(|(_, had)| had.path().trim_end_matches('/') == path) {
+        if found.iter().any(|(_, had)| had.path().trim_end_matches('/') == path) || says_nothing(url.as_str()) {
             continue;
         }
         let lower = url.path().to_ascii_lowercase();
@@ -495,6 +505,14 @@ mod tests {
         let small = research_text(&results, &long, 3_000);
         assert!(small.chars().count() <= 3_000);
         assert!(small.contains("Page https://a.cz/4") && small.contains("Pekárna A"));
+    }
+
+    #[test]
+    fn legal_pages_are_not_read() {
+        assert!(says_nothing("https://bakchus.cz/ochrana-osobnich-udaju") && says_nothing("https://a.cz/en/privacy-policy") && says_nothing("https://a.cz/cookies"));
+        assert!(!says_nothing("https://a.cz/o-nas") && !says_nothing("https://a.cz/nase-nabidka"));
+        let base = Url::parse("https://a.cz/").unwrap();
+        assert_eq!(links_to_follow(&base, &["/gdpr".to_string(), "/o-nas".to_string()], 3), [Url::parse("https://a.cz/o-nas").unwrap()]);
     }
 
     #[test]

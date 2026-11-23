@@ -60,6 +60,8 @@ pub enum LocalModelProgress {
     Searching { query: String },
     /// The app reads the page at `url`.
     Reading { url: String },
+    /// The model reasons before it answers (a reasoning model): characters so far.
+    Thinking { characters: usize },
     /// The model writes the questions: characters so far, questions begun.
     Writing { characters: usize, questions: usize },
 }
@@ -266,25 +268,36 @@ fn request_error(error: RequestError) -> AppError {
 }
 
 /// Looks up on the internet what `asked` needs: the model says what to
-/// search for (`local_model::research_plan`), and the sites named in the
-/// request or by the model are read with a few of their pages that say
-/// most about the company (`web_page::links_to_follow`), then the
-/// searches' best results, at most `web_page::MAX_PAGES` pages in all. A
-/// search or page that fails is passed over, and said so.
+/// search for (`local_model::research_plan`), and the sites the request
+/// names are read with a few of their pages that say most about the
+/// company (`web_page::links_to_follow`), then the searches' best results,
+/// at most `web_page::MAX_PAGES` pages in all, none of them a legal page
+/// (`web_page::says_nothing`). A model that gives no plan (it reasoned past
+/// its limit, say) has the request itself searched. A search or page that
+/// fails is passed over, and said so.
 fn research(model: &LocalModel, asked: &QuestionRequest, stop: &AtomicBool, tell: &impl Fn(LocalModelProgress)) -> CmdResult<Research> {
     tell(LocalModelProgress::Planning);
-    let (reply, _) = ask(model, local_model::research_plan_request(model, asked), stop, |_| {})?;
-    let plan = local_model::research_plan(&reply);
-    let mut sites = web_page::addresses_in(&asked.prompt);
-    for site in plan.sites.iter().filter_map(|site| web_page::web_address(site)) {
-        if !sites.contains(&site) {
-            sites.push(site);
+    let thinking = |step: LocalModelProgress| {
+        if matches!(step, LocalModelProgress::Thinking { .. }) {
+            tell(step);
         }
-    }
+    };
+    let queries = match ask(model, local_model::research_plan_request(model, asked), stop, thinking) {
+        Ok((reply, _)) => local_model::research_plan(&reply).queries,
+        Err(AppError::LocalModelCancelled) => return Err(AppError::LocalModelCancelled),
+        Err(e) => {
+            crate::app_log::note(&format!("local model: no research plan ({e}); the request is searched as it is"));
+            local_model::plain_search(&asked.prompt).into_iter().collect()
+        }
+    };
+    let sites = web_page::addresses_in(&asked.prompt);
+    let plan = local_model::ResearchPlan { queries };
     if plan.queries.is_empty() && sites.is_empty() {
         return Ok(Research::default());
     }
-    let (mut pages, mut results, mut failed): (Vec<(String, web_page::Page)>, Vec<(String, Vec<web_page::SearchResult>)>, bool) = (Vec::new(), Vec::new(), false);
+    let mut pages: Vec<(String, web_page::Page)> = Vec::new();
+    let mut results: Vec<(String, Vec<web_page::SearchResult>)> = Vec::new();
+    let mut failed = false;
     // The page at `url` added to `pages`, unless there are enough or it is
     // there already; the address it was read at, or Err when it could not be.
     // Every page asked for and read at, so that one is read once however its address is written.
@@ -293,7 +306,7 @@ fn research(model: &LocalModel, asked: &QuestionRequest, stop: &AtomicBool, tell
         if stop.load(Ordering::SeqCst) {
             return Err(AppError::LocalModelCancelled);
         }
-        if pages.len() >= web_page::MAX_PAGES || !tried.insert(web_page::page_key(url)) {
+        if pages.len() >= web_page::MAX_PAGES || web_page::says_nothing(url) || !tried.insert(web_page::page_key(url)) {
             return Ok(Ok(None));
         }
         tell(LocalModelProgress::Reading { url: url.to_string() });
@@ -424,8 +437,9 @@ fn ask(model: &LocalModel, body: Value, cancelled: &AtomicBool, progress: impl F
 /// the whole reply at once is read too.
 fn read_stream(mut reader: impl BufRead, cancelled: &AtomicBool, progress: impl Fn(LocalModelProgress)) -> CmdResult<(String, bool)> {
     let (mut content, mut cut_off) = (String::new(), false);
-    // Characters written and questions begun, now and when last told.
+    // Characters written and questions begun, now and when last told; characters reasoned, now and when told.
     let (mut now, mut told) = ((0, 0), (0, 0));
+    let (mut thought, mut told_thought) = (0, 0);
     let mut line = String::new();
     loop {
         line.clear();
@@ -437,7 +451,12 @@ fn read_stream(mut reader: impl BufRead, cancelled: &AtomicBool, progress: impl 
             break;
         }
         match local_model::stream_line(&line) {
-            StreamLine::Text { text, cut_off: at_limit } => {
+            StreamLine::Text { text, thought: more, cut_off: at_limit } => {
+                thought += more;
+                if content.is_empty() && thought >= told_thought + 200 {
+                    progress(LocalModelProgress::Thinking { characters: thought });
+                    told_thought = thought;
+                }
                 let had = content.len();
                 content.push_str(&text);
                 cut_off |= at_limit;
@@ -447,9 +466,9 @@ fn read_stream(mut reader: impl BufRead, cancelled: &AtomicBool, progress: impl 
                     progress(LocalModelProgress::Writing { characters: now.0, questions: now.1 });
                     told = now;
                 }
-                if now.0 > MAX_REPLY_CHARS {
+                if now.0 + thought > MAX_REPLY_CHARS {
                     // A model that does not stop: what it wrote is read as cut off.
-                    return Ok((content, true));
+                    return if content.trim().is_empty() { Err(AppError::LocalModelThoughtTooLong) } else { Ok((content, true)) };
                 }
             }
             StreamLine::Failed { detail } => return Err(AppError::LocalModelFailed { detail }),
@@ -464,6 +483,9 @@ fn read_stream(mut reader: impl BufRead, cancelled: &AtomicBool, progress: impl 
                 return Ok((text.to_string(), choice.get("finish_reason").and_then(Value::as_str) == Some("length")));
             }
         }
+    }
+    if cut_off && content.trim().is_empty() && thought > 0 {
+        return Err(AppError::LocalModelThoughtTooLong);
     }
     Ok((content, cut_off))
 }
@@ -687,6 +709,20 @@ mod tests {
         assert_eq!(seen[1], "GET /firma HTTP/1.1");
         assert_eq!(seen[2], "GET /o-nas HTTP/1.1");
         assert!(seen[3].contains("Založil ji Jan Novák"));
+    }
+
+    #[test]
+    fn a_model_that_only_reasons_is_shown_thinking_and_said_so_at_its_limit() {
+        let chunk = |delta: serde_json::Value, finish: Option<&str>| format!("data: {}\n\n", serde_json::json!({ "choices": [{ "delta": delta, "finish_reason": finish }] }));
+        let thought = "Hmm. ".repeat(60);
+        let stream = format!("{}{}data: [DONE]\n\n", chunk(serde_json::json!({ "reasoning": thought }), None), chunk(serde_json::json!({ "content": "" }), Some("length")));
+        let steps = Mutex::new(Vec::new());
+        let read = read_stream(std::io::Cursor::new(stream), &AtomicBool::new(false), |step| steps.lock().unwrap().push(step));
+        assert_eq!(read, Err(AppError::LocalModelThoughtTooLong));
+        assert_eq!(steps.lock().unwrap()[0], LocalModelProgress::Thinking { characters: 300 });
+        // Reasoning, then the answer: the answer is read.
+        let stream = format!("{}{}data: [DONE]\n\n", chunk(serde_json::json!({ "reasoning_content": "ok" }), None), chunk(serde_json::json!({ "content": "{}" }), Some("stop")));
+        assert_eq!(read_stream(std::io::Cursor::new(stream), &AtomicBool::new(false), |_| {}), Ok(("{}".to_string(), false)));
     }
 
     #[test]

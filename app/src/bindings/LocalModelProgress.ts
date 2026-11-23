@@ -3,4 +3,4 @@
 /**
  * What the panel shows while a request is under way.
  */
-export type LocalModelProgress = { "step": "planning" } | { "step": "searching", query: string, } | { "step": "reading", url: string, } | { "step": "writing", characters: number, questions: number, };
+export type LocalModelProgress = { "step": "planning" } | { "step": "searching", query: string, } | { "step": "reading", url: string, } | { "step": "thinking", characters: number, } | { "step": "writing", characters: number, questions: number, };

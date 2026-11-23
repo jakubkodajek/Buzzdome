@@ -11,17 +11,18 @@ import { useEffect, useState, type DragEvent } from "react";
 import { api } from "../api";
 import { useApp } from "../app-context";
 import { carriesFiles } from "../director/media-parts";
-import { CrossIcon, PictureIcon, SparkleIcon, TextIcon, VideoIcon } from "../icons";
+import { CrossIcon, PictureIcon, SoundIcon, SparkleIcon, TextIcon, VideoIcon } from "../icons";
+import { diskSize } from "../format";
 import { errorNotice, isAppError, type Notice } from "../messages";
 import { NoticeBox } from "../notice";
 import type { Translate } from "../i18n";
 import { createStore, useStore } from "../store";
-import type { Attachment, LocalModelInfo, LocalModelProgress, QuizLanguage, Slide, Source } from "../types";
+import type { Attachment, ListenerModel, LocalModelInfo, LocalModelProgress, QuizLanguage, Slide, Source, VoiceDownload } from "../types";
 import { MAX_DROPPED_MB } from "../bindings/Constants";
-import { addFiles, aiFileKind, attachmentFor, thumbnailOf, type AiFile } from "./ai-files";
+import { addFiles, aiFileKind, attachmentFor, hasSound, soundOf, thumbnailOf, type AiFile } from "./ai-files";
 
-/** Where a request is: the files prepared, then as the backend tells (`LocalModelProgress`). */
-type Job = { step: "preparing" } | { step: "waiting" } | LocalModelProgress;
+/** Where a request is: the files prepared, the speech in one written down, then as the backend tells (`LocalModelProgress`). */
+type Job = { step: "preparing" } | { step: "listening"; name: string } | { step: "waiting" } | LocalModelProgress;
 
 interface PanelState {
   files: AiFile[];
@@ -33,9 +34,11 @@ interface PanelState {
   failed: Notice | null;
   /** The web pages the last questions were written from. */
   sources: Source[];
+  /** The speech recognition model's download under way: how far, or null before the first report. */
+  listenerDownload: VoiceDownload | null | undefined;
 }
 
-const panelState = createStore<PanelState>({ files: [], prompt: "", internet: true, job: null, failed: null, sources: [] });
+const panelState = createStore<PanelState>({ files: [], prompt: "", internet: true, job: null, failed: null, sources: [], listenerDownload: undefined });
 const change = (next: Partial<PanelState>) => panelState.set({ ...panelState.get(), ...next });
 
 /**
@@ -59,14 +62,27 @@ export interface AiPanelProps {
 
 export function AiPanel({ draftId, language, emptyQuiz, onInsert, onChooseModel, onClose }: AiPanelProps) {
   const { t, notify, caution } = useApp();
-  const { files, prompt, internet, job, failed, sources } = useStore(panelState);
+  const { files, prompt, internet, job, failed, sources, listenerDownload } = useStore(panelState);
   const [info, setInfo] = useState<LocalModelInfo | null>(null);
+  const [listener, setListener] = useState<ListenerModel | null>(null);
   const [dropping, setDropping] = useState(false);
   const [picked, setPicked] = useState<HTMLInputElement | null>(null);
   useEffect(() => {
     // Read again each time the panel opens: the model may have been chosen meanwhile.
     api.aiLocalModel().then(setInfo, (error: unknown) => change({ failed: errorNotice(t, error) }));
+    api.listenerModel().then(setListener, () => setListener(null));
   }, [t]);
+  const downloading = listenerDownload !== undefined;
+  const installListener = async () => {
+    change({ listenerDownload: null, failed: null });
+    try {
+      setListener(await api.listenerInstall((got) => change({ listenerDownload: got })));
+    } catch (error) {
+      if (!(isAppError(error) && error.code === "listenerDownloadCancelled")) change({ failed: errorNotice(t, error) });
+    } finally {
+      change({ listenerDownload: undefined });
+    }
+  };
 
   const add = (given: File[]) => {
     if (!info || given.length === 0) return;
@@ -98,20 +114,38 @@ export function AiPanel({ draftId, language, emptyQuiz, onInsert, onChooseModel,
     const draft = draftId;
     const run = ++latestRun;
     const current = () => run === latestRun;
+    if (!listener?.installed && panelState.get().files.some((file) => file.kind === "recording")) {
+      caution(t("aiPanelListenerRequired"));
+      return;
+    }
     change({ job: { step: "preparing" }, failed: null, sources: [] });
     try {
       const attachments: Attachment[] = [];
       let textLeft = info.maxTextChars;
-      for (const file of panelState.get().files) {
+      for (const listed of panelState.get().files) {
+        let file = listed;
+        // What is said in it, written down once per language while it stays in the panel.
+        if (listener?.installed && hasSound(file.kind) && file.heard?.language !== language) {
+          change({ job: { step: "listening", name: file.file.name } });
+          const sound = await soundOf(file.file, listener.rate, listener.maxSeconds);
+          if (!current()) return;
+          if (!sound && file.kind === "recording") caution(t("aiPanelNoSound", { name: file.file.name }));
+          const words = sound ? await api.editorTranscribe(file.file.name, language, sound) : "";
+          if (!current()) return;
+          file = { ...file, heard: { language, words } };
+          const heard = file.heard;
+          change({ files: panelState.get().files.map((f) => (f.id === file.id ? { ...f, heard } : f)), job: { step: "preparing" } });
+        }
         let reference: string | null = null;
-        if (file.kind !== "text") {
+        if (file.kind === "picture" || file.kind === "video") {
           // The slides show the draft's own copy; copied once per draft.
           reference = file.copied?.draft === draft ? file.copied.reference : await api.editorAddDroppedMedia(draft, file.file);
           const copied = { draft, reference };
           change({ files: panelState.get().files.map((f) => (f.id === file.id ? { ...f, copied } : f)) });
         }
         const attachment = await attachmentFor(file, info, reference, textLeft);
-        if (attachment.content.kind === "text") textLeft -= attachment.content.text.length;
+        const content = attachment.content;
+        textLeft -= content.kind === "text" ? content.text.length : content.kind === "recording" || content.kind === "video" ? content.words.length : 0;
         attachments.push(attachment);
         if (!current()) return;
       }
@@ -134,10 +168,11 @@ export function AiPanel({ draftId, language, emptyQuiz, onInsert, onChooseModel,
   const cancel = () => {
     // The panel is free again at once; files being prepared stop at the
     // next, and a request under way ends in the backend too.
-    const waited = job?.step !== "preparing";
+    const step = job?.step;
     latestRun++;
     change({ job: null });
-    if (waited) void api.editorAskLocalModelCancel();
+    if (step === "listening") void api.editorTranscribeCancel();
+    else if (step !== "preparing") void api.editorAskLocalModelCancel();
   };
 
   const chosen = info?.chosen ?? null;
@@ -184,7 +219,7 @@ export function AiPanel({ draftId, language, emptyQuiz, onInsert, onChooseModel,
                 type="file"
                 multiple
                 hidden
-                accept="image/*,video/mp4,video/webm,.txt,.md,.csv,text/plain,text/markdown,text/csv"
+                accept="image/*,video/mp4,video/webm,audio/*,.txt,.md,.csv,text/plain,text/markdown,text/csv"
                 onChange={(e) => {
                   const chosenFiles = [...(e.target.files ?? [])];
                   e.target.value = "";
@@ -200,6 +235,23 @@ export function AiPanel({ draftId, language, emptyQuiz, onInsert, onChooseModel,
                   <FileRow key={file.id} file={file} disabled={job !== null} label={t("aiPanelRemoveFile", { name: file.file.name })} onRemove={() => change({ files: panelState.get().files.filter((f) => f.id !== file.id) })} />
                 ))}
               </ul>
+            )}
+            {listener && !listener.installed && files.some((file) => hasSound(file.kind)) && (
+              <div className="ai-listener">
+                <p>{t("aiPanelListenerNeeded", { size: diskSize(listener.bytes) })}</p>
+                {downloading ? (
+                  <div className="ai-listener-progress">
+                    <span role="status">{t("aiPanelListenerDownloading", { done: diskSize(listenerDownload?.received ?? 0), total: diskSize(listener.bytes) })}</span>
+                    <button type="button" className="browse" onClick={() => void api.listenerInstallCancel()}>
+                      {t("aiPanelListenerCancel")}
+                    </button>
+                  </div>
+                ) : (
+                  <button type="button" className="browse" disabled={job !== null} onClick={() => void installListener()}>
+                    {t("aiPanelListenerDownload")}
+                  </button>
+                )}
+              </div>
             )}
             <label className="ai-prompt">
               <span>{t("aiPanelPrompt")}</span>
@@ -282,6 +334,8 @@ function jobStatus(t: Translate, job: Job): string {
   switch (job.step) {
     case "preparing":
       return t("aiPanelPreparing");
+    case "listening":
+      return t("aiPanelListening", { name: job.name });
     case "waiting":
       return t("aiPanelWaiting");
     case "planning":
@@ -290,6 +344,8 @@ function jobStatus(t: Translate, job: Job): string {
       return t("aiPanelSearching", { query: job.query });
     case "reading":
       return t("aiPanelReading", { page: hostOf(job.url) + new URL(job.url, "https://x").pathname.replace(/\/$/, "") });
+    case "thinking":
+      return t("aiPanelThinking", { n: job.characters });
     case "writing":
       return t("aiPanelWriting", { n: job.questions });
   }
@@ -318,7 +374,7 @@ function FileRow({ file, disabled, label, onRemove }: { file: AiFile; disabled: 
   return (
     <li className="ai-file">
       <span className="ai-file-thumb" aria-hidden="true">
-        {preview ? <img src={preview} alt="" /> : file.kind === "video" ? <VideoIcon /> : file.kind === "text" ? <TextIcon /> : <PictureIcon />}
+        {preview ? <img src={preview} alt="" /> : file.kind === "video" ? <VideoIcon /> : file.kind === "recording" ? <SoundIcon /> : file.kind === "text" ? <TextIcon /> : <PictureIcon />}
       </span>
       <span className="ai-file-name" title={file.file.name}>
         {file.file.name}
