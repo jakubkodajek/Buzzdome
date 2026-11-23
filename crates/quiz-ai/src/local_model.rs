@@ -13,6 +13,7 @@ use quiz_core::{QuizLanguage, Table, MAX_EVERYONE_ANSWERS};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use ts_rs::TS;
+use std::collections::HashSet;
 
 /// Where Ollama, the most common such server, listens.
 pub const DEFAULT_URL: &str = "http://localhost:11434/v1";
@@ -230,7 +231,8 @@ fn instructions(language: QuizLanguage) -> String {
          (not numbered per question); empty otherwise.\n\
          - \"wrong\": 1 to 3 wrong but believable answers of the same kind as the right one (all colours when it \
          is a colour, all numbers when it is a number). None repeats the right answer or another wrong one, none \
-         is a question.\n\
+         is a question. Each is false for this question by the attachments and what was found: never another \
+         true answer (another product it also makes, another of its addresses).\n\
          Rules:\n\
          - Write everything in {language}, with correct spelling.\n\
          - Keep every answer under 40 characters.\n\
@@ -240,6 +242,7 @@ fn instructions(language: QuizLanguage) -> String {
          - Do not ask how many things a picture shows: counting in a picture is often wrong.\n\
          - A wrong answer differs clearly from the right one (not the same street with another number).\n\
          - Questions of a round come together.\n\
+         - The questions agree with each other: one never says what another says is wrong.\n\
          - Unless the request says how many, write 10 questions."
     )
 }
@@ -755,7 +758,7 @@ pub fn draft_table(questions: &[DraftQuestion], media: &[Option<(String, bool)>]
     };
     let mut rows = vec![HEADINGS.iter().map(|heading| heading.to_string()).collect::<Vec<_>>()];
     let mut round: Option<&str> = None;
-    let rounds = questions.iter().any(|q| !q.round.trim().is_empty());
+    let rounds = has_rounds(questions);
     for question in questions {
         let name = question.round.trim();
         if rounds && round != Some(name) {
@@ -792,6 +795,16 @@ pub fn draft_table(questions: &[DraftQuestion], media: &[Option<(String, bool)>]
 /// `'` before what a sheet would read as a formula (`quiz_core::defused`).
 fn cell(text: &str) -> String {
     quiz_core::defused(text.split_whitespace().collect::<Vec<_>>().join(" "))
+}
+
+/// Whether the model's `questions` make rounds: some name a round, and
+/// rounds hold two questions on average, about. A model sometimes names a
+/// round for nearly every question when it was asked for none ("První
+/// kolo" … "Sedmé kolo" for 8 questions); such names are no rounds
+/// [no source - our rule from a test with a 4B model].
+fn has_rounds(questions: &[DraftQuestion]) -> bool {
+    let names: HashSet<&str> = questions.iter().map(|q| q.round.trim()).filter(|name| !name.is_empty()).collect();
+    !names.is_empty() && names.len() * 2 <= questions.len() + 1
 }
 
 /// An answer's cell. Brackets around a cell mark an answer correct in a
@@ -1056,6 +1069,18 @@ mod tests {
         // Without rounds, a whole quiz still ends with the results.
         let plain = import_tables(&[draft_table(&questions[..1].iter().map(|q| DraftQuestion { round: String::new(), ..q.clone() }).collect::<Vec<_>>(), &[], true)], &[], 1).unwrap();
         assert!(matches!(plain.slides.last().unwrap().1.content, SlideContent::Final { .. }));
+    }
+
+    #[test]
+    fn a_round_for_nearly_every_question_is_no_round() {
+        let names = ["Úvodní kolo", "První kolo", "Druhé kolo", "Třetí kolo", "Čtvrté kolo", "Páté kolo", "Šesté kolo", "Sedmé kolo"];
+        let mut questions: Vec<DraftQuestion> = names.iter().map(|name| question(name, "Q?", &["a", "b"], 0)).collect();
+        questions[1].round = "Úvodní kolo".into();
+        let imported = import_tables(&[draft_table(&questions, &[], false)], &[], 1).unwrap();
+        assert!(imported.slides.iter().all(|(_, slide)| matches!(slide.content, SlideContent::Question(_))));
+        // Two rounds of two are rounds.
+        let four: Vec<DraftQuestion> = ["Logo", "Logo", "Text", "Text"].iter().map(|name| question(name, "Q?", &["a", "b"], 0)).collect();
+        assert!(has_rounds(&four));
     }
 
     #[test]

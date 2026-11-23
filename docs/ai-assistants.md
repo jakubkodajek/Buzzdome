@@ -250,7 +250,9 @@ or follows a reasoning model's `<think>` block, and a field written oddly
 (right) answer is empty, or that has fewer than two answers, is left out;
 an answer given twice or that is itself a question is dropped, and a
 numbering a model adds to each question's round ("Geography (2/3)") is
-taken off, so the round stays one.
+taken off, so the round stays one. Round names that make rounds of about one question each
+(8 questions in 7 rounds, which a 4B model wrote when asked for none) are
+dropped (`has_rounds`).
 An error the server sends midway (a model out of memory) is shown as such,
 and a model that does not stop is stopped after 400,000 characters. The
 address must be `http` or `https` with no user name or password, and
@@ -274,7 +276,11 @@ default 4k tokens, the request, the reasoning and the reply share the
 context. If the second request fails too, the panel says so (raise the
 context length). The research plan is always asked for with
 `reasoning_effort: "none"`: it is a few search queries, and a reasoning
-model otherwise spent 97 to 157 s on it in our test. A server that
+model otherwise spent 97 to 157 s on it in our test. Not every model
+can stop reasoning: in our test on 2026-11-23 a vision model of 8B
+parameters in Ollama 4k context reasoned with "none" too (and with the
+native API's `think: false`), until its limit at every step; such a model
+needs a longer context. A server that
 refuses that field, or the JSON Schema, is asked again without them. A
 reasoning model's reasoning, which Ollama, llama.cpp and LM Studio stream
 apart from the answer (`reasoning`, `reasoning_content`), shows as "the
