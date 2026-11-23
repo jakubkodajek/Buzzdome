@@ -229,6 +229,9 @@ describe("slides", () => {
     expect(headlineField(asEnd)).toBe("title");
     expect(asEnd.type === "endOfRound" && asEnd.title).toBe("x".repeat(TEXT_LIMITS.title));
     expect(headlineField(convertSlide(asEnd, "explanation"))).toBe("text");
+    // An emoji is one character, as quiz-core counts it, and is never cut in half.
+    const emoji = convertSlide(setHeadline(newSlide("question", "q"), "🎉".repeat(TEXT_LIMITS.title + 1)), "endOfRound");
+    expect(emoji.type === "endOfRound" && emoji.title).toBe("🎉".repeat(TEXT_LIMITS.title));
   });
 
   it("gives only questions a replay part, since only they reveal an answer", () => {

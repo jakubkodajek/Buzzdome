@@ -5,7 +5,7 @@ import { ANSWER_LETTERS } from "../answers";
 import { TEXT_LIMITS } from "../bindings/Constants";
 import { useApp } from "../app-context";
 import { confirmAction } from "../confirm";
-import { parseTrackTime, trackTime } from "../format";
+import { charCount, parseTrackTime, trackTime } from "../format";
 import { useLatest } from "../hooks";
 import { CheckIcon, ChevronRightIcon, CrossIcon, MoreIcon } from "../icons";
 import { mediaFileName } from "../media";
@@ -29,10 +29,11 @@ const COUNT_FROM = 0.8;
 export function TextCount({ field, text }: { field: TextField; text: string }) {
   const { t } = useApp();
   const max = TEXT_LIMITS[field];
-  if (text.length < max * COUNT_FROM) return null;
+  const n = charCount(text);
+  if (n < max * COUNT_FROM) return null;
   return (
-    <span className={text.length > max ? "text-count over" : "text-count"} aria-live="polite">
-      {t("textCount", { n: text.length, max })}
+    <span className={n > max ? "text-count over" : "text-count"} aria-live="polite">
+      {t("textCount", { n, max })}
     </span>
   );
 }

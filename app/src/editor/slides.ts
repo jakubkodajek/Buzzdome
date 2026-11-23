@@ -3,6 +3,7 @@
 // crates/quiz-core/src/model.rs).
 
 import { WHOLE_FILE } from "../audio/clip-player";
+import { firstChars } from "../format";
 import {
   ANSWER_LIMITS,
   DEFAULT_POINTS,
@@ -138,7 +139,7 @@ export function convertSlide(slide: Slide, type: SlideType): Slide {
   const video = slide.video && !clockAndReveal ? { ...slide.video, replay: null, effect: null } : slide.video;
   const media = pictureAndVideo ? { picture: slide.picture, video } : { picture: null, video: null };
   const blank: Slide = { ...newSlide(type, id), notes, ...media, sound, background, category };
-  const converted = setHeadline(blank, slideTitle(slide).slice(0, TEXT_LIMITS[headlineField(blank)]));
+  const converted = setHeadline(blank, firstChars(slideTitle(slide), TEXT_LIMITS[headlineField(blank)]));
   return withStyle(converted, { fill: slide.style?.fill, timer: slide.style?.timer, [headlinePart(type)]: slide.style?.[headlinePart(slide.type)] });
 }
 
