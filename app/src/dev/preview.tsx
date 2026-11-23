@@ -467,6 +467,8 @@ const SCENES: Record<string, GameView | null> = {
   }, "endQuestion"),
   crowdLeaderboard: view({ phase: { phase: "endOfRound" }, slideIndex: 5, slide: { ...quiz.slides[5], title: "" } as Quiz["slides"][number], players: crowd(47) }, "nextSlide"),
   crowdOverlay: view({ leaderboardVisible: true, players: crowd(47) }, "startQuestion"),
+  // An end of round title as long as it may be (TEXT_LIMITS.title) over a full leaderboard.
+  longTitleLeaderboard: view({ phase: { phase: "endOfRound" }, slideIndex: 5, slide: { ...quiz.slides[5], title: "Které z následujících měst neleží na řece a přitom má historické centrum zapsané" } as Quiz["slides"][number], players: crowd(47) }, "nextSlide"),
   // Names and texts as long as they may be: the buzz bar, the podium, a question and answers that need smaller text.
   longName: view({
     phase: { phase: "question", step: "buzzed", buzzer: 1, button: "big", clock: { limitMs: 30000, elapsedBeforeMs: 4300, runningSinceMs: null, pressesFromMs: 0 } },
@@ -1005,9 +1007,9 @@ mockIPC(
           defaultInstructions: "When I give you only a topic, make the whole quiz without asking me anything.\n\n- 3 rounds of 6 questions.",
           maxInstructionsChars: 4000,
           assistants: [
-            { assistant: "claudeDesktop", name: "Claude Desktop", state: "connected", configFiles: ["C:\\Users\\Eva\\AppData\\Roaming\\Claude\\claude_desktop_config.json"] },
-            { assistant: "antigravity", name: "Antigravity", state: "outdated", configFiles: ["C:\\Users\\Eva\\.gemini\\config\\mcp_config.json"] },
-            { assistant: "codex", name: "Codex", state: "notConnected", configFiles: ["C:\\Users\\Eva\\.codex\\config.toml"] },
+            { assistant: "claudeDesktop", name: "Claude Desktop", maker: "Claude / Anthropic", state: "connected", configFiles: ["C:\\Users\\Eva\\AppData\\Roaming\\Claude\\claude_desktop_config.json"] },
+            { assistant: "antigravity", name: "Antigravity", maker: "Gemini / Google", state: "outdated", configFiles: ["C:\\Users\\Eva\\.gemini\\config\\mcp_config.json"] },
+            { assistant: "codex", name: "Codex", maker: "ChatGPT / OpenAI", state: "notConnected", configFiles: ["C:\\Users\\Eva\\.codex\\config.toml"] },
           ],
           settingsError: null,
           platform: "windows",

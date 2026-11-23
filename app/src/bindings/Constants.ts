@@ -34,6 +34,7 @@ export const MAX_FONT_NAME_CHARS = 64;
 export const MAX_TRANSPARENCY = 100;
 export const MAX_CATEGORY_NAME_CHARS = 40;
 export const FULL_SHARE = 100;
+export const TEXT_LIMITS = {"quizTitle":80,"question":250,"answer":80,"readAs":500,"title":80,"text":400,"notes":2000,"welcomeHeading":80,"welcomeFooter":120} as const;
 export const DEFAULT_QUIZ_SETTINGS = {"startOnNext":false,"allAnswered":"wait","allAnsweredDelayS":3,"nextAfterReveal":false,"nextAfterRevealDelayS":5,"runClockOut":false,"hideAnswer":false,"changeAnswer":false,"oneBuzz":false,"noAnswerPenalty":false,"hideBuzzPoints":false,"answerChart":false,"jokers":0,"language":"cs","readAloud":"off","voice":0,"clockAfterReading":false,"voiceSpeed":100} as const;
 export const MAX_ALL_ANSWERED_DELAY_S = 10;
 export const MAX_AFTER_REVEAL_DELAY_S = 60;

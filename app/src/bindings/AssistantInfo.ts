@@ -5,7 +5,11 @@ import type { ConnectionState } from "./ConnectionState";
 /**
  * An AI app the page connects.
  */
-export type AssistantInfo = { assistant: Assistant, name: string, state: ConnectionState, 
+export type AssistantInfo = { assistant: Assistant, name: string, 
+/**
+ * The AI model the app runs and its company (`Assistant::maker`).
+ */
+maker: string, state: ConnectionState, 
 /**
  * The configuration files connecting writes; none when the app is not
  * installed (Claude Desktop, known by its folder).

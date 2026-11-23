@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { useApp } from "../app-context";
+import { TEXT_LIMITS } from "../bindings/Constants";
 import { EditIcon, FolderIcon, AddIcon } from "../icons";
 import { quizName } from "../quiz";
 import { RecentFileList } from "../recent-files";
@@ -110,7 +111,7 @@ function NewQuizForm({ onNew, busy, autoFocus }: { onNew: (title: string) => voi
     <form className="new-quiz-form" onSubmit={submit}>
       <label className="field">
         <span>{t("quizTitle")}</span>
-        <input value={title} placeholder={t("untitledQuiz")} data-autofocus={autoFocus || undefined} onChange={(e) => setTitle(e.target.value)} />
+        <input value={title} placeholder={t("untitledQuiz")} maxLength={TEXT_LIMITS.quizTitle} data-autofocus={autoFocus || undefined} onChange={(e) => setTitle(e.target.value)} />
       </label>
       <button type="submit" className="primary" disabled={busy}>
         <AddIcon />

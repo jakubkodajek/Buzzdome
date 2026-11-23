@@ -139,3 +139,21 @@ Template:
 - Next: Jakub's colleague confirms on the laptop (a screenshot if it still
   differs); the UI font is Segoe UI on Windows and the system font on
   macOS, so Windows and a Mac never look exactly alike.
+
+## 2026-11-23 - text-limits (QZ-13)
+
+- Done (Jakub's screenshot: a pasted question ran off the slide): each
+  quiz text has a longest length (`quiz_core::text_limits`, `TextField`,
+  `TEXT_LIMITS` in Constants.ts): question 250, answer 80, slide title 80,
+  information/explanation text 400, quiz title and welcome heading 80,
+  welcome footer 120, read-as 500, notes 2000. Measured in the preview: at
+  these lengths six answers with a picture still fit at the fit-text floor.
+  `TextTooLong` / `AnswerTooLong` keep a quiz from being saved and the AI
+  tools from packing it, never from playing; the JSON Schema has
+  `maxLength`; editor fields take no more and the properties panel counts
+  characters from 80 %. Information and explanation slides now use
+  `useFitText` too. File › AI assistants shows each app's model and company
+  (`Assistant::maker`).
+- State: make check green; branch `claude/project-thread-dv8265`.
+- Next: guardian review, Jakub's OK to merge.
+- Blockers / open questions: none.

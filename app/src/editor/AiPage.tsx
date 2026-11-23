@@ -137,7 +137,9 @@ export function AiPage() {
           const installed = info.configFiles.length > 0;
           return (
             <div key={info.assistant} className="ai-app">
-              <strong>{info.name}</strong>
+              <strong>
+                {info.name} <span className="ai-app-maker">({info.maker})</span>
+              </strong>
               <span className={info.state === "connected" ? "chip" : info.state === "outdated" ? "chip warn" : "chip off"}>
                 {installed ? t(STATE_KEYS[info.state]) : t("aiNotInstalled")}
               </span>

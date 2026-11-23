@@ -139,6 +139,7 @@ export type { WelcomeFile } from "./bindings/WelcomeFile";
 export type { SoundStart } from "./bindings/SoundStart";
 export type { Span } from "./bindings/Span";
 export type { TextAlign } from "./bindings/TextAlign";
+export type { TextField } from "./bindings/TextField";
 export type { TextSize } from "./bindings/TextSize";
 export type { TextStyle } from "./bindings/TextStyle";
 export type { Theme } from "./bindings/Theme";

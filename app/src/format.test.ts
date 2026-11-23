@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { calendarDay, dayAndTime, decibels, fileName, minutesAndSeconds, parseTrackTime, scoreDigits, seconds, signed, timeOfDay, trackTime } from "./format";
+import { calendarDay, charCount, firstChars, dayAndTime, decibels, fileName, minutesAndSeconds, parseTrackTime, scoreDigits, seconds, signed, timeOfDay, trackTime } from "./format";
 
 describe("format", () => {
   it("writes a day as each language does", () => {
@@ -55,5 +55,14 @@ describe("format", () => {
 
   it("takes a file's name from its path on any system", () => {
     expect([fileName("C:\\Kvizy\\pub.quiz"), fileName("/home/q/pub.quiz"), fileName("\\\\server\\q/pub.quiz"), fileName("pub.quiz")]).toEqual(Array(4).fill("pub.quiz"));
+  });
+});
+
+describe("charCount and firstChars", () => {
+  it("count and cut characters as quiz-core does, never half an emoji", () => {
+    expect(charCount("Žluťoučký")).toBe(9);
+    expect(charCount("🎉🎉")).toBe(2);
+    expect(firstChars("🎉🎉🎉", 2)).toBe("🎉🎉");
+    expect(firstChars("abc", 5)).toBe("abc");
   });
 });

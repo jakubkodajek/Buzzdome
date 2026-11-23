@@ -2,12 +2,14 @@
 
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 import { ANSWER_LETTERS } from "../answers";
+import { TEXT_LIMITS } from "../bindings/Constants";
 import { useApp } from "../app-context";
 import { confirmAction } from "../confirm";
-import { parseTrackTime, trackTime } from "../format";
+import { charCount, parseTrackTime, trackTime } from "../format";
 import { useLatest } from "../hooks";
 import { CheckIcon, ChevronRightIcon, CrossIcon, MoreIcon } from "../icons";
 import { mediaFileName } from "../media";
+import type { TextField } from "../types";
 import { shortcutLabel, type Action } from "./actions";
 
 /**
@@ -15,6 +17,26 @@ import { shortcutLabel, type Action } from "./actions";
  * values for: it shows no value (Mixed), and setting one sets it on all.
  */
 export const MixedContext = createContext(false);
+
+/** The share of a field's longest length from which `TextCount` shows how much of it is used. */
+const COUNT_FROM = 0.8;
+
+/**
+ * How many characters `text` has of the most its `field` takes (spec
+ * QZ-13), shown once it nears them, in red past them (a file written
+ * before the limits). The field's input takes no more (`maxLength`).
+ */
+export function TextCount({ field, text }: { field: TextField; text: string }) {
+  const { t } = useApp();
+  const max = TEXT_LIMITS[field];
+  const n = charCount(text);
+  if (n < max * COUNT_FROM) return null;
+  return (
+    <span className={n > max ? "text-count over" : "text-count"} aria-live="polite">
+      {t("textCount", { n, max })}
+    </span>
+  );
+}
 
 export function Switch({ checked, onChange, disabled = false, label, id }: { checked: boolean; onChange: (on: boolean) => void; disabled?: boolean; label: string; id?: string }) {
   const { t } = useApp();

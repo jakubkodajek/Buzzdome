@@ -29,7 +29,7 @@ pub struct Welcome {
     pub on: bool,
     /// The text on top, by the logo; the quiz's title when empty.
     #[serde(with = "crate::style::lenient_or_default")]
-    #[schemars(with = "String")]
+    #[schemars(with = "String", length(max = crate::text_limits::MAX_WELCOME_HEADING_CHARS))]
     #[ts(as = "String")]
     pub heading: String,
     /// A picture by the heading, `media/<name>`.
@@ -45,7 +45,7 @@ pub struct Welcome {
     pub intro: Option<String>,
     /// A text on a strip at the bottom; no strip when empty.
     #[serde(with = "crate::style::lenient_or_default")]
-    #[schemars(with = "String")]
+    #[schemars(with = "String", length(max = crate::text_limits::MAX_WELCOME_FOOTER_CHARS))]
     #[ts(as = "String")]
     pub footer: String,
 }
