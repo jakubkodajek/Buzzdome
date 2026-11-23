@@ -299,6 +299,10 @@ pub fn plain_search(prompt: &str) -> Option<String> {
 /// The request that asks `model` what to look up for `asked`: only the
 /// request and the files' names go, so it is quick.
 pub fn research_plan_request(model: &LocalModel, asked: &QuestionRequest) -> Value {
+    thinking_off(plan_request(model, asked))
+}
+
+fn plan_request(model: &LocalModel, asked: &QuestionRequest) -> Value {
     let files: Vec<String> = asked.attachments.iter().map(|a| a.name.replace(['\n', '\r'], " ")).collect();
     let task = format!(
         "The quizmaster's request:\n{}\n\nFiles given: {}.",
@@ -644,9 +648,6 @@ pub fn error_detail(body: &str) -> String {
     detail.trim().chars().take(300).collect()
 }
 
-/// Whether a server refused a request for its `response_format`, which
-/// some servers do not take: the request is then sent without it, and the
-/// instructions alone ask for the JSON.
 /// Whether a server's refusal `detail` says the request did not fit the
 /// model's context, as Ollama ("the prompt is longer than the context
 /// length"), llama.cpp ("exceeds the available context size"), LM Studio
@@ -656,15 +657,43 @@ pub fn context_full(detail: &str) -> bool {
     detail.contains("context") && ["length", "size", "overflow", "window", "n_ctx"].iter().any(|word| detail.contains(word))
 }
 
-pub fn refuses_format(detail: &str) -> bool {
+/// Fields of a request that not every OpenAI-compatible server takes: the
+/// reply's JSON Schema, and `reasoning_effort` (`thinking_off`).
+const EXTRAS: [&str; 2] = ["response_format", "reasoning_effort"];
+
+/// Whether a server refused a request for one of its `EXTRAS`, which some
+/// servers do not take: the request is then sent without them, and the
+/// instructions alone ask for the JSON.
+pub fn refuses_extras(detail: &str) -> bool {
     let detail = detail.to_lowercase();
-    ["response_format", "json_schema", "structured output", "grammar"].iter().any(|word| detail.contains(word))
+    ["response_format", "json_schema", "structured output", "grammar", "reasoning_effort"].iter().any(|word| detail.contains(word))
 }
 
-/// `body` without its `response_format`.
-pub fn without_format(mut body: Value) -> Value {
+/// Whether `body` has any of the `EXTRAS`.
+pub fn has_extras(body: &Value) -> bool {
+    EXTRAS.iter().any(|field| body.get(field).is_some())
+}
+
+/// `body` without its `EXTRAS`.
+pub fn without_extras(mut body: Value) -> Value {
     if let Some(object) = body.as_object_mut() {
-        object.remove("response_format");
+        for field in EXTRAS {
+            object.remove(field);
+        }
+    }
+    body
+}
+
+/// `body` asking a reasoning model not to reason first. Ollama's
+/// OpenAI-compatible API takes `reasoning_effort` and turns a model's
+/// thinking off for "none" where the model can (Ollama docs, OpenAI
+/// compatibility, https://docs.ollama.com/api/openai-compatibility); other
+/// servers and models without reasoning keep their default. A reasoning
+/// model's thoughts otherwise take up the context Ollama gives a model by
+/// default, 4096 tokens, before it writes a word.
+pub fn thinking_off(mut body: Value) -> Value {
+    if let Some(object) = body.as_object_mut() {
+        object.insert("reasoning_effort".into(), json!("none"));
     }
     body
 }
@@ -1057,11 +1086,14 @@ mod tests {
         assert_eq!(error_detail(r#"{"error":{"message":"model 'x' not found","type":"invalid_request_error"}}"#), "model 'x' not found");
         assert_eq!(error_detail(r#"{"error":"json_schema is not supported"}"#), "json_schema is not supported");
         assert_eq!(error_detail("Bad Gateway\nmore"), "Bad Gateway");
-        assert!(refuses_format("'response_format.type' must be 'json_schema' or 'text'"));
-        assert!(!refuses_format("model 'x' not found"));
+        assert!(refuses_extras("'response_format.type' must be 'json_schema' or 'text'"));
+        assert!(refuses_extras("Unrecognized request argument supplied: reasoning_effort"));
+        assert!(!refuses_extras("model 'x' not found"));
         let model = LocalModel::new(DEFAULT_URL, "m");
         let body = request(&model, &asked("x", vec![]), None, MAX_TEXT_CHARS).unwrap();
-        assert!(without_format(body.clone()).get("response_format").is_none());
+        assert!(without_extras(body.clone()).get("response_format").is_none());
+        let plain = without_extras(thinking_off(body.clone()));
+        assert!(!has_extras(&plain) && has_extras(&body) && has_extras(&thinking_off(plain.clone())));
         assert_eq!(streamed(body)["stream"], true);
     }
 

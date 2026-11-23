@@ -171,21 +171,27 @@ pub fn research<E: From<Halt>>(
 }
 
 /// Asks `model` for the questions `asked` for, with what was `found` on the
-/// internet, through `ask`. A request that does not fit the model's
-/// context (`context_full`) is asked again with its texts shortened
-/// (`local_model::SMALL_TEXT_CHARS`): a model in Ollama has 4096 tokens
-/// unless the quizmaster gives it more. If that does not fit either, its
-/// failure is given back.
+/// internet, through `ask`. Asked once more, with the texts shortened
+/// (`local_model::SMALL_TEXT_CHARS`) and the model asked not to reason
+/// first (`local_model::thinking_off`), when the request does not fit
+/// (`too_much`: it overflows the model's context, or the model reasoned to
+/// its limit) or the reply was cut off while the texts could be shorter:
+/// a model in Ollama has 4096 tokens unless the quizmaster gives it more,
+/// for the request, the model's reasoning and its reply together. If that
+/// fails too, its failure is given back.
 pub fn write_questions<E: From<RequestError>>(
     model: &LocalModel,
     asked: &QuestionRequest,
     found: &Research,
     mut ask: impl FnMut(Value) -> Result<(String, bool), E>,
-    context_full: impl Fn(&E) -> bool,
+    too_much: impl Fn(&E) -> bool,
 ) -> Result<(String, bool), E> {
     let body = local_model::request(model, asked, found.text(local_model::MAX_TEXT_CHARS).as_deref(), local_model::MAX_TEXT_CHARS)?;
+    let shorter = local_model::request(model, asked, found.text(local_model::SMALL_TEXT_CHARS).as_deref(), local_model::SMALL_TEXT_CHARS)?;
+    let shortened = shorter != body;
     match ask(body) {
-        Err(e) if context_full(&e) => ask(local_model::request(model, asked, found.text(local_model::SMALL_TEXT_CHARS).as_deref(), local_model::SMALL_TEXT_CHARS)?),
+        Err(e) if too_much(&e) => ask(local_model::thinking_off(shorter)),
+        Ok((_, true)) if shortened => ask(local_model::thinking_off(shorter)),
         done => done,
     }
 }
@@ -397,13 +403,47 @@ mod tests {
                 answers.next().unwrap()
             }
         };
-        let full = |e: &Failure| *e == Failure::ContextFull;
+        let full = |e: &Failure| matches!(e, Failure::ContextFull | Failure::Halt(Halt::ThoughtTooLong));
         assert!(write_questions(&model(), &asked, &Research::default(), ask(vec![Err(Failure::ContextFull), Ok(("{}".into(), false))]), full).is_ok());
         let sizes = sent.take();
         assert!(sizes[0] > local_model::MAX_TEXT_CHARS && sizes[1] < local_model::MAX_TEXT_CHARS, "{sizes:?}");
         assert_eq!(write_questions(&model(), &asked, &Research::default(), ask(vec![Err(Failure::ContextFull), Err(Failure::ContextFull)]), full), Err(Failure::ContextFull));
         assert_eq!(sent.take().len(), 2, "asked twice, not more");
         assert_eq!(write_questions(&model(), &asked, &Research::default(), ask(vec![Err(Failure::Refused)]), full), Err(Failure::Refused));
+    }
+
+    #[test]
+    fn a_reply_cut_off_by_long_texts_or_long_reasoning_is_asked_for_again_shorter_and_without_reasoning() {
+        let text = Attachment { name: "a.txt".into(), media: None, content: AttachmentContent::Text { text: "slovo ".repeat(5_000) } };
+        let long = QuestionRequest { attachments: vec![text], ..asked("Kvíz", false) };
+        let sent = RefCell::new(Vec::new());
+        let ask = |answers: Vec<Result<(String, bool), Failure>>| {
+            let mut answers = answers.into_iter();
+            let sent = &sent;
+            move |body: Value| {
+                sent.borrow_mut().push(body);
+                answers.next().unwrap()
+            }
+        };
+        let full = |e: &Failure| matches!(e, Failure::ContextFull | Failure::Halt(Halt::ThoughtTooLong));
+        let cut = || Ok(("{\"questions\": [".to_string(), true));
+        let whole = || Ok(("{}".to_string(), false));
+        assert_eq!(write_questions(&model(), &long, &Research::default(), ask(vec![cut(), whole()]), full), whole());
+        let bodies = sent.take();
+        assert!(bodies[1].to_string().len() < bodies[0].to_string().len());
+        assert_eq!((bodies[0].get("reasoning_effort"), &bodies[1]["reasoning_effort"]), (None, &serde_json::json!("none")));
+        // A short request cut off is not shortened: it is what the model wrote.
+        assert_eq!(write_questions(&model(), &asked("Kvíz", false), &Research::default(), ask(vec![cut()]), full), cut());
+        assert_eq!(sent.take().len(), 1);
+        // A model that reasons to its limit is asked once more not to.
+        let thought = || Err(Failure::Halt(Halt::ThoughtTooLong));
+        assert_eq!(write_questions(&model(), &asked("Kvíz", false), &Research::default(), ask(vec![thought(), whole()]), full), whole());
+        assert_eq!(sent.take()[1]["reasoning_effort"], "none");
+    }
+
+    #[test]
+    fn the_research_plan_asks_a_model_not_to_reason() {
+        assert_eq!(local_model::research_plan_request(&model(), &asked("Kvíz o firmě", true))["reasoning_effort"], "none");
     }
 
     #[test]

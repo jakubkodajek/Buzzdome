@@ -235,7 +235,7 @@ fn find_and_write(model: &LocalModel, asked: &QuestionRequest, stop: &AtomicBool
     } else {
         Research::default()
     };
-    let (content, cut_off) = asking::write_questions(model, asked, &found, |body| ask(model, body, stop, &tell), |e| matches!(e, AppError::LocalModelContextFull { .. }))?;
+    let (content, cut_off) = asking::write_questions(model, asked, &found, |body| ask(model, body, stop, &tell), |e| matches!(e, AppError::LocalModelContextFull { .. } | AppError::LocalModelThoughtTooLong))?;
     Ok((content, cut_off, found))
 }
 
@@ -329,7 +329,8 @@ fn cancellably<T: Send + 'static>(cancelled: Arc<AtomicBool>, job: impl FnOnce(&
 
 /// Sends `body` to `model`'s server as a streamed request and gives back
 /// the model's text and whether it stopped at its length limit. A server
-/// that refuses the response format is asked again without it.
+/// that refuses the response format or `reasoning_effort` is asked again
+/// without them (`local_model::without_extras`).
 fn ask(model: &LocalModel, body: Value, cancelled: &AtomicBool, progress: impl Fn(LocalModelProgress)) -> CmdResult<(String, bool)> {
     let address = model.chat_url();
     let agent = agent(&address, FIRST_WORD_TIMEOUT);
@@ -337,10 +338,10 @@ fn ask(model: &LocalModel, body: Value, cancelled: &AtomicBool, progress: impl F
     let mut response = send(&body)?;
     if !response.status().is_success() {
         let detail = local_model::error_detail(&read_body(&mut response, &model.url)?);
-        if !local_model::refuses_format(&detail) || body.get("response_format").is_none() {
+        if !local_model::refuses_extras(&detail) || !local_model::has_extras(&body) {
             return Err(refused(response.status().as_u16(), detail, &model.model));
         }
-        response = send(&local_model::without_format(body))?;
+        response = send(&local_model::without_extras(body))?;
         if !response.status().is_success() {
             let detail = local_model::error_detail(&read_body(&mut response, &model.url)?);
             return Err(refused(response.status().as_u16(), detail, &model.model));

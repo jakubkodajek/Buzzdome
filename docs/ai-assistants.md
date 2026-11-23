@@ -260,15 +260,26 @@ Ollama takes pictures but no video (Ollama, "Ollama's new engine for
 multimodal models", https://registry.ollama.ai/blog/multimodal-models), hence
 the frames.
 
-A request that does not fit the model's context (Ollama, llama.cpp, LM
-Studio and vLLM each say so in their own words, `context_full`) is asked
-once more with its texts and what was found on the internet cut to 4,000
-characters (`SMALL_TEXT_CHARS`); if that does not fit either, the panel
-says to raise the context length. A reasoning model's reasoning, which
-Ollama, llama.cpp and LM Studio stream apart from the answer
-(`reasoning`, `reasoning_content`), shows as "the model is thinking"; one
-that reasons up to its limit without answering is told apart from a cut-off
-reply. The instructions keep questions off counting things in a picture
+A request that does not fit (`asking::write_questions`) is asked once
+more with its texts and what was found on the internet cut to 4,000
+characters (`SMALL_TEXT_CHARS`) and with `reasoning_effort: "none"`,
+which Ollama turns into thinking off for a model that can turn it off
+(Ollama, "OpenAI compatibility",
+https://docs.ollama.com/api/openai-compatibility). It does not fit when
+the server says it overflows the model's context (Ollama, llama.cpp, LM
+Studio and vLLM each say so in their own words, `context_full`), when a
+reasoning model reasons up to its limit without answering, or when the
+reply is cut off while the texts were longer than that: in Ollama's
+default 4k tokens, the request, the reasoning and the reply share the
+context. If the second request fails too, the panel says so (raise the
+context length). The research plan is always asked for with
+`reasoning_effort: "none"`: it is a few search queries, and a reasoning
+model otherwise spent 97 to 157 s on it in our test. A server that
+refuses that field, or the JSON Schema, is asked again without them. A
+reasoning model's reasoning, which Ollama, llama.cpp and LM Studio stream
+apart from the answer (`reasoning`, `reasoning_content`), shows as "the
+model is thinking"; one that reasons up to its limit without answering is
+told apart from a cut-off reply. The instructions keep questions off counting things in a picture
 (small models miscount: 2 of 12 answers wrong in our test with a 4B model,
 both counts) and off registration and phone numbers.
 
