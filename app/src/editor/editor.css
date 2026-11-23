@@ -825,6 +825,301 @@
   resize: none;
 }
 
+/* AI assistant panel (AiPanel.tsx): in the properties panel's place. Its
+   list and request scroll; the buttons stay at its foot. */
+
+.ai-panel {
+  flex: none;
+  width: 320px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: #fff;
+  border-left: 1px solid var(--line);
+}
+
+.studio .ai-panel-close {
+  flex: none;
+  margin-left: auto;
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border-radius: 3px;
+}
+
+.studio .ai-panel-close:hover,
+.studio .ai-file button:hover:not(:disabled) {
+  border-color: var(--hover-line);
+  background: var(--hover);
+}
+
+.ai-panel-close svg {
+  width: 14px;
+  height: 14px;
+}
+
+.ai-panel-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 4px 12px 12px;
+}
+
+.ai-panel-hint,
+.ai-panel-empty,
+.ai-panel-setup p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.ai-panel-setup {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.ai-drop {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 10px;
+  border: 1px dashed #b9b9b9;
+  border-radius: 6px;
+  text-align: center;
+  color: var(--muted);
+}
+
+.ai-drop.dropping {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: inherit;
+}
+
+.ai-files {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ai-file {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.ai-file-thumb {
+  flex: none;
+  width: 40px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 3px;
+  background: #f0f0f0;
+  color: var(--muted);
+}
+
+.ai-file-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.ai-file-thumb svg {
+  width: 18px;
+  height: 18px;
+}
+
+.ai-file-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.studio .ai-file button {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border-radius: 3px;
+}
+
+.ai-file button svg {
+  width: 12px;
+  height: 12px;
+}
+
+.ai-prompt {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.studio .ai-prompt textarea {
+  resize: vertical;
+  min-height: 90px;
+  line-height: 1.4;
+}
+
+.ai-internet {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  line-height: 1.4;
+  cursor: pointer;
+}
+
+.ai-internet input {
+  margin-top: 3px;
+}
+
+.ai-internet small,
+.ai-sources small {
+  display: block;
+  color: var(--muted);
+}
+
+.ai-sources ul {
+  margin: 4px 0 0;
+  padding-left: 18px;
+}
+
+.ai-sources li {
+  overflow-wrap: anywhere;
+}
+
+.ai-sources small {
+  display: inline;
+}
+
+.ai-listener {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  line-height: 1.4;
+}
+
+.ai-listener p {
+  margin: 0;
+}
+
+.ai-listener-progress {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.ai-panel-footer {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px 12px;
+  border-top: 1px solid var(--line);
+}
+
+.ai-panel-status {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0;
+  line-height: 1.4;
+}
+
+.ai-spinner {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  margin-top: 2px;
+  border: 2px solid var(--accent-soft);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: ai-spin 0.9s linear infinite;
+}
+
+@keyframes ai-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ai-spinner {
+    animation: none;
+  }
+}
+
+.ai-panel-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.studio .ai-panel-buttons .browse {
+  min-width: 0;
+}
+
+.studio .ai-generate {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 14px;
+  border: 1px solid var(--accent);
+  border-radius: 3px;
+  background: var(--accent);
+  color: #fff;
+}
+
+.studio .ai-generate:hover:not(:disabled) {
+  background: var(--accent-dark);
+}
+
+.studio .ai-generate:disabled {
+  border-color: #c8c8c8;
+  background: #e8e8e8;
+  color: #a8a8a8;
+}
+
+.ai-generate svg {
+  width: 16px;
+  height: 16px;
+}
+
+.ai-panel-privacy {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.studio .ai-change-model {
+  align-self: flex-start;
+  padding: 0;
+  color: var(--accent);
+  text-decoration: underline;
+}
+
 /* Properties panel */
 
 .properties-panel {
@@ -2431,6 +2726,31 @@
 .ai-app-maker {
   font-weight: normal;
   color: var(--muted);
+}
+
+/* File › AI assistants: the model for Studio's AI assistant. */
+.ai-local {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 8px 12px;
+  max-width: 640px;
+}
+
+.ai-local label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.studio .ai-local .browse {
+  min-width: 130px;
+  padding: 6px 12px;
+}
+
+.ai-local-state {
+  margin: 0 0 10px;
 }
 
 .ai-app .browse {

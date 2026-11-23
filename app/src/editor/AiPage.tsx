@@ -1,8 +1,9 @@
 // File › AI assistants (docs/ai-assistants.md): the folder AI apps work in,
-// the apps connected to the app's MCP server, and the quizmaster's own
-// instructions for every quiz. None of it needs an open quiz.
+// the apps connected to the app's MCP server, the quizmaster's own
+// instructions for every quiz, and the model on this computer that Studio's
+// AI assistant asks. None of it needs an open quiz.
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import { confirmAction } from "../confirm";
 import { useApp, useRun } from "../app-context";
@@ -11,7 +12,7 @@ import { aiConnectionText, aiRestartText, errorNotice, settingsLostNotice } from
 import { NoticeBox } from "../notice";
 import { readPreference, writePreference } from "../preferences";
 import { createStore, useStore } from "../store";
-import type { AiPage as AiPageInfo, AssistantInfo, ConnectionState } from "../types";
+import type { AiPage as AiPageInfo, AssistantInfo, ConnectionState, LocalModelInfo } from "../types";
 
 const STATE_KEYS: Record<ConnectionState, StringKey> = {
   connected: "aiConnectedState",
@@ -184,6 +185,104 @@ export function AiPage() {
           {t("aiDefaultInstructions")}
         </button>
       </div>
+
+      <LocalModelChoice />
+    </>
+  );
+}
+
+/**
+ * The model on this computer that Studio's AI assistant asks (AiPanel.tsx):
+ * the server's address, its models, and the one chosen.
+ */
+function LocalModelChoice() {
+  const { t, notify } = useApp();
+  const run = useRun();
+  const [info, setInfo] = useState<LocalModelInfo | null>(null);
+  const [url, setUrl] = useState("");
+  const [models, setModels] = useState<string[] | null>(null);
+  const [model, setModel] = useState("");
+  const [loading, setLoading] = useState(false);
+  // Only the address asked last fills the list: an earlier one that answers late (a mistyped
+  // address fails after its time limit) does not replace it.
+  const asked = useRef(0);
+  const list = useCallback((address: string) => {
+    const request = ++asked.current;
+    const latest = () => request === asked.current;
+    setLoading(true);
+    return api.aiLocalModels(address).then(
+      (found) => {
+        if (!latest()) return;
+        setModels(found);
+        setModel((current) => (found.includes(current) ? current : (found[0] ?? "")));
+      },
+      (error: unknown) => {
+        if (!latest()) return;
+        setModels(null);
+        throw error;
+      },
+    ).finally(() => {
+      if (latest()) setLoading(false);
+    });
+  }, []);
+  useEffect(() => {
+    void api.aiLocalModel().then((read) => {
+      setInfo(read);
+      const address = read.chosen?.url ?? read.defaultUrl;
+      setUrl(address);
+      setModel(read.chosen?.model ?? "");
+      // A server already running lists its models at once; one that is not is said only when asked.
+      list(address).catch(() => undefined);
+    });
+  }, [list]);
+  if (!info) return null;
+  const use = () =>
+    run(
+      api.aiSetLocalModel(url, model).then((chosen) => {
+        setInfo({ ...info, chosen });
+        setUrl(chosen.url);
+        notify(t("aiLocalSaved", { model: chosen.model }));
+      }),
+    );
+  const unchanged = info.chosen !== null && info.chosen.url === url.trim() && info.chosen.model === model;
+  return (
+    <>
+      <h2>{t("aiLocalTitle")}</h2>
+      <p className="backstage-hint">{t("aiLocalHint")}</p>
+      <p className="ai-local-state">{info.chosen ? t("aiLocalInUse", { model: info.chosen.model, url: info.chosen.url }) : t("aiLocalNotSet")}</p>
+      <div className="ai-local">
+        <label>
+          <span>{t("aiLocalUrl")}</span>
+          <input
+            type="url"
+            value={url}
+            spellCheck={false}
+            onChange={(e) => {
+              setUrl(e.target.value);
+              setModels(null);
+            }}
+            onKeyDown={(e) => e.key === "Enter" && run(list(url))}
+          />
+        </label>
+        <button type="button" className="browse" disabled={loading || url.trim() === ""} onClick={() => run(list(url))}>
+          {t("aiLocalLoad")}
+        </button>
+        <label>
+          <span>{t("aiLocalModel")}</span>
+          <select value={model} disabled={!models || models.length === 0} onChange={(e) => setModel(e.target.value)}>
+            {!models?.includes(model) && <option value={model}>{model || t("aiLocalPick")}</option>}
+            {models?.map((name) => (
+              <option key={name} value={name}>
+                {name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <button type="button" className="browse" disabled={model === "" || url.trim() === "" || unchanged} onClick={use}>
+          {t("aiLocalUse")}
+        </button>
+      </div>
+      <p className="backstage-hint">{models?.length === 0 ? t("aiLocalNoModels") : t("aiLocalUrlHint")}</p>
     </>
   );
 }

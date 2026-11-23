@@ -1,5 +1,5 @@
 //! Renders with the real voice model when `VOICE_MODEL_ROOT` names a folder
-//! it is installed under (`voice::model::installed`); skipped otherwise, as
+//! it is installed under (`ModelSource::installed`); skipped otherwise, as
 //! the model is a 129 MB download.
 
 use voice::engine::Engine;
@@ -12,7 +12,7 @@ fn the_model_says_a_czech_question() {
         return;
     };
     let root = std::path::PathBuf::from(root);
-    assert!(voice::model::installed(&root), "no model under {}", root.display());
+    assert!(voice::MODEL.installed(&root), "no model under {}", root.display());
     let engine = Engine::load(&root).unwrap();
     let line = Line {
         question: "Kolik nohou má pavouk?".into(),
@@ -40,10 +40,10 @@ fn the_real_download_unpacks() {
         return;
     };
     let file = std::fs::File::open(&archive).unwrap();
-    let sha = voice::model::receive(file, std::io::sink(), |_| true).unwrap();
+    let sha = voice::MODEL.receive(file, std::io::sink(), |_| true).unwrap();
     let root = std::env::temp_dir().join(format!("voice-real-unpack-{}", std::process::id()));
     std::fs::create_dir_all(&root).unwrap();
-    voice::model::unpack(std::path::Path::new(&archive), &sha, &root).unwrap();
-    assert!(voice::model::installed(&root));
+    voice::MODEL.unpack(std::path::Path::new(&archive), &sha, &root).unwrap();
+    assert!(voice::MODEL.installed(&root));
     std::fs::remove_dir_all(&root).unwrap();
 }
