@@ -66,6 +66,7 @@ export type ActionId =
   | "categories"
   | "saveAsCategory"
   | "properties"
+  | "aiPanel"
   | "findProperty"
   | "importSheet"
   | "sheetTemplate"

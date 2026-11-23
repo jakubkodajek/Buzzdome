@@ -114,6 +114,7 @@ export function Ribbon({ tab, onTab, actions, onGallery, slide, element, propert
                 <BigButton action={actions.edit} />
               </Group>
               <Group title="groupTools">
+                <BigButton action={actions.aiPanel} />
                 <BigButton action={actions.normalizeAll} />
               </Group>
             </>
@@ -162,6 +163,7 @@ export function Ribbon({ tab, onTab, actions, onGallery, slide, element, propert
               </Group>
               <Group title="groupPanels">
                 <BigButton action={actions.properties} />
+                <BigButton action={actions.aiPanel} />
                 <BigButton action={actions.notes} />
               </Group>
             </>

@@ -235,6 +235,19 @@ pub enum QuizLanguage {
 impl QuizLanguage {
     /// Every language, in the order the quizmaster picks from.
     pub const ALL: [QuizLanguage; 2] = [QuizLanguage::Cs, QuizLanguage::En];
+
+    /// Its ISO 639-1 code, as the quiz file writes it (`cs`, `en`).
+    pub fn code(self) -> &'static str {
+        match self {
+            QuizLanguage::Cs => "cs",
+            QuizLanguage::En => "en",
+        }
+    }
+
+    /// The language of `code` (`code`); None for one the app has not.
+    pub fn of_code(code: &str) -> Option<QuizLanguage> {
+        QuizLanguage::ALL.into_iter().find(|language| language.code() == code)
+    }
 }
 
 /// What of a question the Director reads out when it comes on screen.
@@ -312,6 +325,15 @@ mod voice_speed {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_language_code_is_the_one_the_quiz_file_writes() {
+        for language in QuizLanguage::ALL {
+            assert_eq!(serde_json::to_value(language).unwrap(), language.code());
+            assert_eq!(QuizLanguage::of_code(language.code()), Some(language));
+        }
+        assert_eq!(QuizLanguage::of_code("de"), None);
+    }
 
     fn read(json: &str) -> QuizSettings {
         serde_json::from_str(json).unwrap()

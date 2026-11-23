@@ -198,7 +198,7 @@ pub fn team_names(bytes: &[u8], csv: bool) -> Result<Vec<String>> {
     let names: Vec<String> = if csv {
         csv_table(bytes, Room::FULL)?.rows.into_iter().filter_map(|row| row.into_iter().next()).collect()
     } else {
-        decode(bytes).split(['\r', '\n']).map(str::to_owned).collect()
+        decode_text(bytes).split(['\r', '\n']).map(str::to_owned).collect()
     };
     Ok(names.into_iter().map(|name| name.trim().to_owned()).filter(|name| !name.is_empty()).collect())
 }
@@ -442,7 +442,7 @@ fn iso_duration_seconds(iso: &str) -> Option<i64> {
 /// Refused at the first record that does not fit in `room` or spans more
 /// than `MAX_SHEET_COLUMNS` columns.
 fn csv_table(bytes: &[u8], room: Room) -> Result<Table> {
-    let decoded = decode(bytes);
+    let decoded = decode_text(bytes);
     let (skipped, named, text) = leading_lines(&decoded);
     let mut reader = csv::ReaderBuilder::new().has_headers(false).flexible(true).delimiter(named.unwrap_or_else(|| separator(text))).from_reader(text.as_bytes());
     let mut rows: Vec<Vec<String>> = Vec::new();
@@ -484,12 +484,18 @@ fn leading_lines(text: &str) -> (u32, Option<u8>, &str) {
     (skipped, named, rest)
 }
 
-fn decode(bytes: &[u8]) -> Cow<'_, str> {
+/// The text in `bytes`, as text editors and spreadsheets save it: UTF-8,
+/// or UTF-16 with its byte order mark; otherwise Windows-1250, in which
+/// Czech Windows and Excel save a CSV. A UTF-8 character cut at the end
+/// (only the start of a file was read) is dropped.
+pub fn decode_text(bytes: &[u8]) -> Cow<'_, str> {
     if let Some((encoding, bom)) = encoding_rs::Encoding::for_bom(bytes) {
         return encoding.decode_without_bom_handling(&bytes[bom..]).0;
     }
     match std::str::from_utf8(bytes) {
         Ok(text) => Cow::Borrowed(text),
+        // Valid but for its last character, which was cut.
+        Err(e) if e.error_len().is_none() && bytes.len() - e.valid_up_to() < 4 => Cow::Borrowed(std::str::from_utf8(&bytes[..e.valid_up_to()]).unwrap_or_default()),
         Err(_) => encoding_rs::WINDOWS_1250.decode_without_bom_handling(bytes).0,
     }
 }
@@ -561,6 +567,20 @@ fn write_csv(rows: Vec<Vec<String>>, dest: &Path, separator: u8) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn text_is_read_as_utf8_utf16_or_czech_windows() {
+        let czech = "Příliš žluťoučký kůň";
+        assert_eq!(super::decode_text(czech.as_bytes()), czech);
+        let mut utf16 = vec![0xff, 0xfe];
+        utf16.extend(czech.encode_utf16().flat_map(u16::to_le_bytes));
+        assert_eq!(super::decode_text(&utf16), czech);
+        // Windows-1250: ř 0xF8, í 0xED, š 0x9A.
+        assert_eq!(super::decode_text(&[0x50, 0xf8, 0xed, 0x6c, 0x69, 0x9a]), "Příliš");
+        // A UTF-8 character cut at the end of what was read is dropped, not read as Windows-1250.
+        let cut = "kůň".as_bytes();
+        assert_eq!(super::decode_text(&cut[..cut.len() - 1]), "ků");
+    }
+
     use super::*;
     use quiz_core::{Background, ImportIssue, Place, SlideContent, SoundClip};
 

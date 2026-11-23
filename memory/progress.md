@@ -157,3 +157,25 @@ Template:
 - State: make check green; branch `claude/project-thread-dv8265`.
 - Next: guardian review, Jakub's OK to merge.
 - Blockers / open questions: none.
+
+## 2026-11-23 - local-ai-panel (QZ-13)
+
+- Done (Jakub chose "local AI only", no API keys, no subscription logins:
+  Anthropic and Google forbid them in other apps, OpenAI's is partner-only):
+  Studio's AI assistant (Home › AI assistant, `editor/AiPanel.tsx`) takes
+  pictures, videos and text files and a request, and asks a model on this
+  computer through an OpenAI-compatible server (Ollama, LM Studio). The
+  window shrinks pictures and takes video frames (canvas, `ai-files.ts`;
+  CSP media-src now allows `blob:`); `editor_add_dropped_media` copies the
+  media into the draft; `editor_ask_local_model` streams the reply with
+  progress and a real cancel (`app/src-tauri/src/local_model.rs`); the
+  questions become sheet rows read by `quiz_core::import_tables`
+  (`quiz_ai::local_model::draft_table`) and are inserted like a sheet
+  import. The model is chosen in File › AI assistants (`ai.json`
+  `localModel`). Refused during a show.
+- State: branch `claude/project-thread-5u62lr`; not tried against a real
+  model (the container cannot reach Ollama's registry or Hugging Face).
+- Next: Jakub tries it with Ollama on his Mac or Windows (a vision model
+  such as qwen3-vl:8b or gemma3, context 16k); review; merge only with his OK.
+- Blockers / open questions: Ollama's default 4k context on < 24 GiB VRAM
+  limits how much a request may carry (limits in `local_model.rs`).

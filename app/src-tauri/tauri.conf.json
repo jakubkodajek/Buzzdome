@@ -28,7 +28,7 @@
         "style-src": "'self'",
         "img-src": "'self' data: asset: http://asset.localhost",
         "font-src": "'self' data: asset: http://asset.localhost",
-        "media-src": "'self' asset: http://asset.localhost",
+        "media-src": "'self' asset: http://asset.localhost blob:",
         "connect-src": "'self' ipc: http://ipc.localhost asset: http://asset.localhost",
         "worker-src": "'self'",
         "object-src": "'none'",

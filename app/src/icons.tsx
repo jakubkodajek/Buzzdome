@@ -430,6 +430,16 @@ export function GamepadIcon(props: IconProps) {
   );
 }
 
+/** Two sparkles: the AI assistant. */
+export function SparkleIcon(props: IconProps) {
+  return (
+    <LineIcon {...props}>
+      <path d="M10 3.5l1.6 4.4 4.4 1.6-4.4 1.6L10 15.5l-1.6-4.4L4 9.5l4.4-1.6z" />
+      <path d="M17.5 13.5l.9 2.1 2.1.9-2.1.9-.9 2.1-.9-2.1-2.1-.9 2.1-.9z" />
+    </LineIcon>
+  );
+}
+
 export function StarIcon(props: IconProps) {
   return (
     <LineIcon {...props}>

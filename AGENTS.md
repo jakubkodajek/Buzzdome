@@ -85,9 +85,10 @@ Layout: `crates/quiz-core` (model, game state machine, scoring, view, results, w
 `sheet.rs` spreadsheet import and CSV export),
 `crates/quiz-ai` (quiz writing for AI assistants: the quiz JSON Schema, `workbench.rs` quiz folders,
 `mcp.rs` the MCP server, `roots.rs` the folders it may use, `settings.rs` the folder and instructions the app keeps,
-`assistants.rs` connecting AI apps),
+`assistants.rs` connecting AI apps, `local_model.rs` requests to a model on this computer and its questions as slides,
+`asking.rs` the AI panel's research, retry and streamed replies, `web_page.rs` reading web pages and search results),
 `crates/buzzers` (driver trait, USB-HID receiver thread, protocols, light colours, learn mode, `clock.rs` show clock, `fake_receiver.rs` the E2E tests' fake receiver),
-`crates/voice` (reading questions aloud offline: voice model download check, sherpa-onnx engine, the voice process's protocol),
+`crates/voice` (reading questions aloud offline: voice model download check, sherpa-onnx engine, the voice process's protocol; `listen.rs` writing down speech for the AI panel),
 `crates/lights` (stage lights: DMX outputs, looks, the lights thread, OSC and MIDI show messages),
 `app/src-tauri` (Tauri shell, `session.rs` session journal, `crash_drill.rs` crash drills, `show_thread.rs` and `pump.rs` the show thread and its
 event order, `app_windows.rs` the Director and projector windows, `remote.rs` what the quizmaster's remote keys do, `app_log.rs` the log file, `editor.rs` draft,
@@ -95,7 +96,7 @@ event order, `app_windows.rs` the Director and projector windows, `remote.rs` wh
 `teams.rs` prepared team names, `media_player.rs` media library, player, volume and sound board,
 `themes.rs` built-in themes, `fonts.rs` installed fonts, `app_file.rs` settings files,
 `app_icon.rs` the windows' icon colour, `stage_lights.rs` the lights setup and what the show tells them,
-`fixture_library.rs` the fixture library in use and its download, `ai.rs` `--mcp` and File › AI assistants,
+`fixture_library.rs` the fixture library in use and its download, `ai.rs` `--mcp` and File › AI assistants, `local_model.rs` Studio's AI assistant asking a model on this computer, `listen.rs` the speech recognition model and the listening process,
 `updates.rs` checking for and installing app updates, `read_aloud.rs` the voice model and the voice process),
 `app/src` (React UI: `director/`, `host/`, `editor/`; `browser-guard.ts` and `error-boundary.tsx`
 keep the windows from acting as a browser or going blank), `app/e2e` (E2E tests through WebDriver),
