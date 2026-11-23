@@ -24,8 +24,7 @@ fn the_listener_hears_what_the_voice_says() {
         speed: quiz_core::DEFAULT_VOICE_SPEED,
     };
     let clip = Engine::load(&voice_root).unwrap().render(&line).unwrap();
-    let resampler = sherpa_onnx::LinearResampler::create(clip.rate as i32, RATE as i32).unwrap();
-    let samples = resampler.resample(&clip.samples, true);
+    let samples = voice::listen::resampled(&clip.samples, clip.rate);
     let started = std::time::Instant::now();
     let listener = Listener::load(&heard_root, quiz_core::QuizLanguage::Cs).unwrap();
     let loaded = started.elapsed();

@@ -850,12 +850,11 @@ mod tests {
             whole_quiz: true,
             internet: false,
         };
-        let body = local_model::request(&model, &asked, None, local_model::MAX_TEXT_CHARS).unwrap();
         let told = Arc::new(AtomicUsize::new(0));
         let counted = told.clone();
         let started = std::time::Instant::now();
         let (content, cut_off) = cancellably(Arc::new(AtomicBool::new(false)), move |stop| {
-            ask(&model, body, stop, move |progress| {
+            write_questions(&model, &asked, &Research::default(), stop, move |progress| {
                 if let LocalModelProgress::Writing { questions, .. } = progress {
                     counted.store(questions, Ordering::SeqCst);
                 }
@@ -875,6 +874,48 @@ mod tests {
         assert!(matches!(slides.last().unwrap().content, quiz_core::SlideContent::Final { .. }));
         assert!(told.load(Ordering::SeqCst) >= 1, "the progress was told");
         println!("pictures shown: {}", slides.iter().filter(|s| s.picture.is_some()).count());
+    }
+
+    /// With `BUZZDOME_LIVE_MODEL`, `LISTENER_MODEL_ROOT` and
+    /// `VOICE_MODEL_ROOT` set (folders the speech recognition model and the
+    /// reading voice are installed under), the reading voice says a short
+    /// talk, the listener writes it down as the panel does with a
+    /// recording, and the real model writes questions about it and about a
+    /// video's frames and speech. What was heard and written is printed.
+    #[test]
+    fn live_model_writes_questions_about_what_a_recording_says() {
+        let (Ok(name), Some(heard_root), Some(voice_root)) = (std::env::var("BUZZDOME_LIVE_MODEL"), std::env::var_os("LISTENER_MODEL_ROOT"), std::env::var_os("VOICE_MODEL_ROOT")) else { return };
+        let say = |text: &str| -> Vec<f32> {
+            let line = voice::Line { question: text.into(), answers: vec![], language: QuizLanguage::Cs, voice: 1, speed: quiz_core::DEFAULT_VOICE_SPEED };
+            let clip = voice::engine::Engine::load(std::path::Path::new(&voice_root)).unwrap().render(&line).unwrap();
+            voice::listen::resampled(&clip.samples, clip.rate)
+        };
+        let listener = voice::listen::Listener::load(std::path::Path::new(&heard_root), QuizLanguage::Cs).unwrap();
+        let started = std::time::Instant::now();
+        let talk = listener.transcribe(&say("Hrad Karlštejn založil Karel Čtvrtý v roce 1348. Měl chránit korunovační klenoty. Leží asi třicet kilometrů od Prahy."), |_| {}).unwrap();
+        let video_words = listener.transcribe(&say("Na videu vidíte logo aplikace Buzzdome, oranžové tlačítko v modrém kruhu."), |_| {}).unwrap();
+        println!("heard in {:?}:\n  {talk}\n  {video_words}", started.elapsed());
+        let url = std::env::var("BUZZDOME_LIVE_URL").unwrap_or_else(|_| DEFAULT_URL.to_string());
+        let model = LocalModel::new(&url, &name);
+        let image = format!("data:image/png;base64,{}", base64(include_bytes!("../icons/128x128.png")));
+        let asked = QuestionRequest {
+            prompt: "Udělej 4 otázky: 3 z nahrávky a 1 z videa.".into(),
+            attachments: vec![
+                Attachment { name: "pruvodce.mp3".into(), media: None, content: AttachmentContent::Recording { words: talk } },
+                Attachment { name: "logo.mp4".into(), media: Some("media/logo.mp4".into()), content: AttachmentContent::Video { frames: vec![image.clone(), image], words: video_words } },
+            ],
+            language: QuizLanguage::Cs,
+            whole_quiz: false,
+            internet: false,
+        };
+        let started = std::time::Instant::now();
+        let (content, cut_off) = cancellably(Arc::new(AtomicBool::new(false)), move |stop| write_questions(&model, &asked, &Research::default(), stop, |_| {})).unwrap();
+        println!("model wrote in {:?}:\n{content}", started.elapsed());
+        let questions = local_model::read_questions(&content, cut_off).unwrap();
+        for question in &questions {
+            println!("{question:?}");
+        }
+        assert!(questions.len() >= 2, "{} questions", questions.len());
     }
 
     /// With `BUZZDOME_LIVE_MODEL` and `BUZZDOME_LIVE_WEB` set, asks a real

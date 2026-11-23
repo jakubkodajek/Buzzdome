@@ -78,6 +78,14 @@ impl Listener {
     }
 }
 
+/// `samples` at `rate` a second as the model hears them, `RATE` a second.
+pub fn resampled(samples: &[f32], rate: u32) -> Vec<f32> {
+    match sherpa_onnx::LinearResampler::create(rate as i32, RATE as i32) {
+        Some(resampler) if rate as usize != RATE => resampler.resample(samples, true),
+        _ => samples.to_vec(),
+    }
+}
+
 /// Where `samples` are cut into pieces Whisper hears whole: at most
 /// `MAX_PIECE_SECONDS` each, each ending at the quietest `FRAME` of its
 /// last `LOOK_BACK_SECONDS`, at most `MAX_SECONDS` in all. Silence alone is
