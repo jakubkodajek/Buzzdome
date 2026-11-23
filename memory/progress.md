@@ -179,3 +179,26 @@ Template:
   such as qwen3-vl:8b or gemma3, context 16k); review; merge only with his OK.
 - Blockers / open questions: Ollama's default 4k context on < 24 GiB VRAM
   limits how much a request may carry (limits in `local_model.rs`).
+
+## 2026-11-23 - release-1.3.0
+
+- Done: review of #83, #84 and #85 in fresh contexts (code, security, UX)
+  before the release; #85 merged as it was, #83 and #84 through this
+  branch. Fixed on #84: page fetches refuse a public name that resolves
+  to a local address (`InternetOnly`, wider `web_page::is_local_address`);
+  the unpacking mark is a count, so the voice and the speech recognition
+  model can unpack at once without a show starting; `decode_text` keeps a
+  Windows-1250 letter at a whole file's end (`decode_text_start` for the
+  start of a file); a cancelled request is not sent; the panel shows a
+  failure by its buttons; the AI assistant is spec QZ-14 (QZ-13 is the
+  text lengths). Version raised to 1.3.0 (Jakub's OK).
+- State: make check green on main + #85 + #83 + #84 with the fixes;
+  layout check clean at 960x600, 1280x640, 1366x690 and 1920x1000; branch
+  `claude/project-thread-il2cug`.
+- Next: Jakub pushes tag `v1.3.0`.
+- Blockers / open questions: left for later, none blocks the release: a
+  very long recording is decoded whole before it is cut to 15 minutes
+  (`ai-files.ts` `soundOf`); the panel's pinned footer is tall at
+  1024x700; `maxLength` in `reply_schema` (BF212) was left out, as no real
+  model could be asked with it here; the layout script does not open the
+  AI panel; no test that a show's start cancels the panel's request.
