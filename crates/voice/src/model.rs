@@ -9,28 +9,33 @@ use std::fs;
 use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
 
-/// The voice model: Supertonic 3 (Supertone, OpenRAIL-M licence, 31
-/// languages), quantized to 8 bits and packed for sherpa-onnx by its authors.
+/// A model the app downloads once, as an archive packed for sherpa-onnx
+/// by its authors.
 pub struct ModelSource {
-    /// Names the model's folder, and goes into every clip's cache key.
+    /// Names the model's folder (and, for the voice, goes into every clip's cache key).
     pub id: &'static str,
     pub url: &'static str,
     /// SHA-256 of the archive, so that a damaged or changed download is refused.
     pub sha256: &'static str,
     pub bytes: u64,
-    /// How many voices it has, numbered from 0.
-    pub voices: u8,
+    /// The files the engine loads from the model's folder; nothing else of the archive is kept.
+    pub files: &'static [&'static str],
 }
 
+/// The voice model: Supertonic 3 (Supertone, OpenRAIL-M licence, 31
+/// languages), quantized to 8 bits.
 pub const MODEL: ModelSource = ModelSource {
     id: "sherpa-onnx-supertonic-3-tts-int8-2026-05-11",
     url: "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/sherpa-onnx-supertonic-3-tts-int8-2026-05-11.tar.bz2",
     sha256: "82fa96f91c4ef8abaae3a14a3f4153facf88bed821d1f7331cec2700f432c427",
     bytes: 128_774_318,
-    voices: quiz_core::MAX_VOICE + 1,
+    files: &MODEL_FILES,
 };
 
-/// The files the engine loads from the model's folder.
+/// How many voices the voice model has, numbered from 0.
+pub const VOICES: u8 = quiz_core::MAX_VOICE + 1;
+
+/// The files the voice engine loads from its model's folder.
 pub const MODEL_FILES: [&str; 7] = [
     "duration_predictor.int8.onnx",
     "text_encoder.int8.onnx",
@@ -44,91 +49,93 @@ pub const MODEL_FILES: [&str; 7] = [
 /// Written last when a model is unpacked: a folder without it is not used.
 const INSTALLED_MARK: &str = "installed";
 
-/// The model's folder under `root`, the app's voice folder.
-pub fn model_dir(root: &Path) -> PathBuf {
-    root.join(MODEL.id)
-}
+impl ModelSource {
+    /// The model's folder under `root`.
+    pub fn dir(&self, root: &Path) -> PathBuf {
+        root.join(self.id)
+    }
 
-/// Whether the model under `root` was unpacked whole.
-pub fn installed(root: &Path) -> bool {
-    let dir = model_dir(root);
-    dir.join(INSTALLED_MARK).is_file() && MODEL_FILES.iter().all(|file| dir.join(file).is_file())
-}
+    /// Whether the model under `root` was unpacked whole.
+    pub fn installed(&self, root: &Path) -> bool {
+        let dir = self.dir(root);
+        dir.join(INSTALLED_MARK).is_file() && self.files.iter().all(|file| dir.join(file).is_file())
+    }
 
-/// Copies `from` into `to`, hashing what passes; `progress` hears the bytes
-/// so far, and stops it by answering false (`VoiceError::Stopped`). Fails
-/// once more than `MODEL.bytes` arrive.
-pub fn receive(mut from: impl Read, mut to: impl Write, mut progress: impl FnMut(u64) -> bool) -> Result<String, VoiceError> {
-    let mut hasher = Sha256::new();
-    let mut buffer = vec![0u8; 1 << 16];
-    let mut total = 0u64;
-    loop {
-        let n = from.read(&mut buffer).map_err(VoiceError::download)?;
-        if n == 0 {
-            break;
+    /// Copies `from` into `to`, hashing what passes; `progress` hears the bytes
+    /// so far, and stops it by answering false (`VoiceError::Stopped`). Fails
+    /// once more than `bytes` arrive.
+    pub fn receive(&self, mut from: impl Read, mut to: impl Write, mut progress: impl FnMut(u64) -> bool) -> Result<String, VoiceError> {
+        let mut hasher = Sha256::new();
+        let mut buffer = vec![0u8; 1 << 16];
+        let mut total = 0u64;
+        loop {
+            let n = from.read(&mut buffer).map_err(VoiceError::download)?;
+            if n == 0 {
+                break;
+            }
+            total += n as u64;
+            if total > self.bytes {
+                return Err(VoiceError::Damaged);
+            }
+            hasher.update(&buffer[..n]);
+            to.write_all(&buffer[..n]).map_err(VoiceError::disk)?;
+            if !progress(total) {
+                return Err(VoiceError::Stopped);
+            }
         }
-        total += n as u64;
-        if total > MODEL.bytes {
+        to.flush().map_err(VoiceError::disk)?;
+        Ok(hex(&hasher.finalize()))
+    }
+
+    /// Unpacks the downloaded `archive`, whose hash `receive` gave as `sha256`,
+    /// into the model's folder under `root`. Only the model's own files are
+    /// taken; the folder is replaced as a whole, so a failed unpack leaves none.
+    pub fn unpack(&self, archive: &Path, sha256: &str, root: &Path) -> Result<(), VoiceError> {
+        if sha256 != self.sha256 {
             return Err(VoiceError::Damaged);
         }
-        hasher.update(&buffer[..n]);
-        to.write_all(&buffer[..n]).map_err(VoiceError::disk)?;
-        if !progress(total) {
-            return Err(VoiceError::Stopped);
-        }
-    }
-    to.flush().map_err(VoiceError::disk)?;
-    Ok(hex(&hasher.finalize()))
-}
-
-/// Unpacks the downloaded `archive`, whose hash `receive` gave as `sha256`,
-/// into the model's folder under `root`. Only the model's own files are
-/// taken; the folder is replaced as a whole, so a failed unpack leaves none.
-pub fn unpack(archive: &Path, sha256: &str, root: &Path) -> Result<(), VoiceError> {
-    if sha256 != MODEL.sha256 {
-        return Err(VoiceError::Damaged);
-    }
-    let staging = root.join(format!("{}.unpacking", MODEL.id));
-    let _ = fs::remove_dir_all(&staging);
-    fs::create_dir_all(&staging).map_err(VoiceError::disk)?;
-    let unpacked = unpack_into(archive, &staging);
-    if let Err(e) = unpacked {
+        let staging = root.join(format!("{}.unpacking", self.id));
         let _ = fs::remove_dir_all(&staging);
-        return Err(e);
-    }
-    let dir = model_dir(root);
-    let _ = fs::remove_dir_all(&dir);
-    fs::rename(&staging, &dir).map_err(VoiceError::disk)
-}
-
-fn unpack_into(archive: &Path, staging: &Path) -> Result<(), VoiceError> {
-    let file = fs::File::open(archive).map_err(VoiceError::disk)?;
-    let mut tar = tar::Archive::new(bzip2::read::BzDecoder::new(io::BufReader::new(file)));
-    for entry in tar.entries().map_err(|_| VoiceError::Damaged)? {
-        let mut entry = entry.map_err(|_| VoiceError::Damaged)?;
-        let path = entry.path().map_err(|_| VoiceError::Damaged)?.into_owned();
-        // Only `<id>/<file>` for a file the engine loads: nothing else is written.
-        let name = path.file_name().and_then(|name| name.to_str()).unwrap_or_default();
-        let parent = path.parent().and_then(|parent| parent.to_str()).unwrap_or_default();
-        if parent != MODEL.id || !MODEL_FILES.contains(&name) {
-            continue;
+        fs::create_dir_all(&staging).map_err(VoiceError::disk)?;
+        let unpacked = self.unpack_into(archive, &staging);
+        if let Err(e) = unpacked {
+            let _ = fs::remove_dir_all(&staging);
+            return Err(e);
         }
-        let mut out = fs::File::create(staging.join(name)).map_err(VoiceError::disk)?;
-        io::copy(&mut entry, &mut out).map_err(|_| VoiceError::Damaged)?;
-        out.sync_all().map_err(VoiceError::disk)?;
+        let dir = self.dir(root);
+        let _ = fs::remove_dir_all(&dir);
+        fs::rename(&staging, &dir).map_err(VoiceError::disk)
     }
-    if !MODEL_FILES.iter().all(|file| staging.join(file).is_file()) {
-        return Err(VoiceError::Damaged);
-    }
-    fs::write(staging.join(INSTALLED_MARK), MODEL.sha256).map_err(VoiceError::disk)
-}
 
-/// Removes the model under `root`, and anything left of an unpack.
-pub fn remove(root: &Path) -> Result<(), VoiceError> {
-    let _ = fs::remove_dir_all(root.join(format!("{}.unpacking", MODEL.id)));
-    match fs::remove_dir_all(model_dir(root)) {
-        Err(e) if e.kind() != io::ErrorKind::NotFound => Err(VoiceError::disk(e)),
-        _ => Ok(()),
+    fn unpack_into(&self, archive: &Path, staging: &Path) -> Result<(), VoiceError> {
+        let file = fs::File::open(archive).map_err(VoiceError::disk)?;
+        let mut tar = tar::Archive::new(bzip2::read::BzDecoder::new(io::BufReader::new(file)));
+        for entry in tar.entries().map_err(|_| VoiceError::Damaged)? {
+            let mut entry = entry.map_err(|_| VoiceError::Damaged)?;
+            let path = entry.path().map_err(|_| VoiceError::Damaged)?.into_owned();
+            // Only `<id>/<file>` for a file the engine loads: nothing else is written.
+            let name = path.file_name().and_then(|name| name.to_str()).unwrap_or_default();
+            let parent = path.parent().and_then(|parent| parent.to_str()).unwrap_or_default();
+            if parent != self.id || !self.files.contains(&name) {
+                continue;
+            }
+            let mut out = fs::File::create(staging.join(name)).map_err(VoiceError::disk)?;
+            io::copy(&mut entry, &mut out).map_err(|_| VoiceError::Damaged)?;
+            out.sync_all().map_err(VoiceError::disk)?;
+        }
+        if !self.files.iter().all(|file| staging.join(file).is_file()) {
+            return Err(VoiceError::Damaged);
+        }
+        fs::write(staging.join(INSTALLED_MARK), self.sha256).map_err(VoiceError::disk)
+    }
+
+    /// Removes the model under `root`, and anything left of an unpack.
+    pub fn remove(&self, root: &Path) -> Result<(), VoiceError> {
+        let _ = fs::remove_dir_all(root.join(format!("{}.unpacking", self.id)));
+        match fs::remove_dir_all(self.dir(root)) {
+            Err(e) if e.kind() != io::ErrorKind::NotFound => Err(VoiceError::disk(e)),
+            _ => Ok(()),
+        }
     }
 }
 
@@ -166,7 +173,7 @@ mod tests {
     fn a_download_is_hashed_as_it_arrives() {
         let mut out = Vec::new();
         let mut heard = 0;
-        let sha = receive(&b"abc"[..], &mut out, |n| {
+        let sha = MODEL.receive(&b"abc"[..], &mut out, |n| {
             heard = n;
             true
         })
@@ -178,7 +185,7 @@ mod tests {
     #[test]
     fn a_download_stops_when_asked() {
         let mut out = Vec::new();
-        assert!(matches!(receive(&b"abc"[..], &mut out, |_| false), Err(VoiceError::Stopped)));
+        assert!(matches!(MODEL.receive(&b"abc"[..], &mut out, |_| false), Err(VoiceError::Stopped)));
     }
 
     #[test]
@@ -189,17 +196,17 @@ mod tests {
         let file = root.join("download.tar.bz2");
         fs::write(&file, model_archive(&[("other/evil.txt", b"no"), ("evil.txt", b"no"), (&format!("{}/README.md", MODEL.id), b"no")])).unwrap();
 
-        assert!(matches!(unpack(&file, "0000", &root), Err(VoiceError::Damaged)));
-        assert!(!installed(&root));
+        assert!(matches!(MODEL.unpack(&file, "0000", &root), Err(VoiceError::Damaged)));
+        assert!(!MODEL.installed(&root));
 
-        unpack(&file, MODEL.sha256, &root).unwrap();
-        assert!(installed(&root));
-        assert!(!model_dir(&root).join("README.md").exists());
-        assert!(!root.join("evil.txt").exists() && !root.join("other").exists() && !model_dir(&root).join("evil.txt").exists());
+        MODEL.unpack(&file, MODEL.sha256, &root).unwrap();
+        assert!(MODEL.installed(&root));
+        assert!(!MODEL.dir(&root).join("README.md").exists());
+        assert!(!root.join("evil.txt").exists() && !root.join("other").exists() && !MODEL.dir(&root).join("evil.txt").exists());
 
-        remove(&root).unwrap();
-        assert!(!installed(&root));
-        remove(&root).unwrap();
+        MODEL.remove(&root).unwrap();
+        assert!(!MODEL.installed(&root));
+        MODEL.remove(&root).unwrap();
         let _ = fs::remove_dir_all(&root);
     }
 
@@ -210,8 +217,8 @@ mod tests {
         fs::create_dir_all(&root).unwrap();
         let file = root.join("download.tar.bz2");
         fs::write(&file, archive(&[(&format!("{}/tts.json", MODEL.id), b"{}")])).unwrap();
-        assert!(matches!(unpack(&file, MODEL.sha256, &root), Err(VoiceError::Damaged)));
-        assert!(!model_dir(&root).exists() && !installed(&root));
+        assert!(matches!(MODEL.unpack(&file, MODEL.sha256, &root), Err(VoiceError::Damaged)));
+        assert!(!MODEL.dir(&root).exists() && !MODEL.installed(&root));
         let _ = fs::remove_dir_all(&root);
     }
 }

@@ -117,7 +117,7 @@ impl Voice {
     }
 
     fn model(&self) -> VoiceModel {
-        VoiceModel { installed: voice::model::installed(&self.root), bytes: MODEL.bytes, voices: MODEL.voices }
+        VoiceModel { installed: voice::MODEL.installed(&self.root), bytes: MODEL.bytes, voices: voice::model::VOICES }
     }
 
     /// The clip of `line` when it is kept; rendered first when `render`.
@@ -129,7 +129,7 @@ impl Voice {
         if path.is_file() || !render {
             return Ok(path.is_file().then_some(path));
         }
-        if !voice::model::installed(&self.root) {
+        if !voice::MODEL.installed(&self.root) {
             return Err(AppError::VoiceMissing);
         }
         fs::create_dir_all(&self.clips).map_err(|e| AppError::file(FileAction::CreateFolder, &self.clips, e))?;
@@ -284,7 +284,7 @@ pub async fn voice_install(app: AppHandle, progress: Channel<VoiceDownload>) -> 
         let state = app.state::<Voice>();
         let _installing = state.installing.lock().unwrap();
         // A second request, given while the first one downloaded, finds it done.
-        if voice::model::installed(&state.root) {
+        if voice::MODEL.installed(&state.root) {
             return Ok(state.model());
         }
         fs::create_dir_all(&state.root).map_err(|e| AppError::file(FileAction::CreateFolder, &state.root, e))?;
@@ -303,7 +303,7 @@ pub async fn voice_install(app: AppHandle, progress: Channel<VoiceDownload>) -> 
         let installed = downloaded.and_then(|sha| {
             let _unpacking = Unpacking::begin(&app)?;
             state.stop();
-            voice::model::unpack(&archive, &sha, &state.root).map_err(voice_error)
+            voice::MODEL.unpack(&archive, &sha, &state.root).map_err(voice_error)
         });
         let _ = fs::remove_file(&archive);
         installed?;
@@ -359,7 +359,7 @@ pub async fn voice_remove(app: AppHandle) -> CmdResult<VoiceModel> {
         let state = app.state::<Voice>();
         let _installing = state.installing.lock().unwrap();
         state.stop();
-        voice::model::remove(&state.root).map_err(voice_error)?;
+        voice::MODEL.remove(&state.root).map_err(voice_error)?;
         match fs::remove_dir_all(&state.clips) {
             Err(e) if e.kind() != std::io::ErrorKind::NotFound => return Err(AppError::file(FileAction::Delete, &state.clips, e)),
             _ => {}
@@ -401,7 +401,7 @@ fn download(archive: &Path, mut progress: impl FnMut(VoiceDownload), go_on: impl
     .map_err(|e| failed(e.to_string()))?;
     let mut last = Instant::now();
     let total = MODEL.bytes;
-    let sha = voice::model::receive(body, std::io::BufWriter::new(&file), |received| {
+    let sha = voice::MODEL.receive(body, std::io::BufWriter::new(&file), |received| {
         if last.elapsed() < PROGRESS_EVERY && received != total {
             return true;
         }
@@ -601,7 +601,7 @@ mod tests {
     #[test]
     fn a_voice_process_that_cannot_start_is_not_started_again_until_the_model_changes() {
         let (voice, dir) = voice("broken");
-        let model = voice::model::model_dir(&voice.root);
+        let model = voice::MODEL.dir(&voice.root);
         fs::create_dir_all(&model).unwrap();
         for file in voice::model::MODEL_FILES.iter().chain(["installed"].iter()) {
             fs::write(model.join(file), b"x").unwrap();
