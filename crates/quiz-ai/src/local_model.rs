@@ -159,6 +159,10 @@ pub struct QuestionRequest {
     /// Whether the questions make a whole quiz (an empty one): its rounds
     /// then end with their scores and the quiz with the results.
     pub whole_quiz: bool,
+    /// Whether the app may look up on the internet what the request needs
+    /// (`research_plan`).
+    #[serde(default)]
+    pub internet: bool,
 }
 
 /// Why a request was not sent.
@@ -254,8 +258,89 @@ pub fn reply_schema() -> Value {
     })
 }
 
-/// The chat completion request for `asked` of `model`.
-pub fn request(model: &LocalModel, asked: &QuestionRequest) -> Result<Value, RequestError> {
+/// Most searches a request leads to.
+pub const MAX_SEARCHES: usize = 3;
+
+/// What to look up on the internet for a request: searches and the web
+/// addresses it names.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ResearchPlan {
+    pub queries: Vec<String>,
+    pub sites: Vec<String>,
+}
+
+impl ResearchPlan {
+    pub fn is_empty(&self) -> bool {
+        self.queries.is_empty() && self.sites.is_empty()
+    }
+}
+
+/// The request that asks `model` what to look up for `asked`: only the
+/// request and the files' names go, so it is quick.
+pub fn research_plan_request(model: &LocalModel, asked: &QuestionRequest) -> Value {
+    let files: Vec<String> = asked.attachments.iter().map(|a| a.name.replace(['\n', '\r'], " ")).collect();
+    let task = format!(
+        "The quizmaster's request:\n{}\n\nFiles given: {}.",
+        asked.prompt.trim().chars().take(MAX_PROMPT_CHARS).collect::<String>(),
+        if files.is_empty() { "none".to_string() } else { files.join(", ") }
+    );
+    json!({
+        "model": model.model,
+        "messages": [
+            { "role": "system", "content":
+                "You prepare the research for a quiz. Read the quizmaster's request. When writing it needs facts from the \
+                 internet (a company, an organisation, a person, a place or an event it names, or recent facts), give at most \
+                 3 short web search queries in the request's language (the name, its town, what it does) in \"queries\", \
+                 and the web addresses the request names in \"sites\". When the files and general knowledge are enough, \
+                 give two empty lists. Reply with JSON only." },
+            { "role": "user", "content": task }
+        ],
+        "response_format": {
+            "type": "json_schema",
+            "json_schema": { "name": "research", "schema": {
+                "type": "object",
+                "properties": {
+                    "queries": { "type": "array", "items": { "type": "string" }, "maxItems": MAX_SEARCHES },
+                    "sites": { "type": "array", "items": { "type": "string" }, "maxItems": MAX_SEARCHES }
+                },
+                "required": ["queries", "sites"]
+            } }
+        },
+        "temperature": 0.1,
+        "stream": false
+    })
+}
+
+/// What the model said to look up, from its reply `content`: at most
+/// `MAX_SEARCHES` of each, without blanks and repeats. A reply that is not
+/// the plan is an empty one.
+pub fn research_plan(content: &str) -> ResearchPlan {
+    let text = without_thinking(content);
+    let value = text
+        .match_indices('{')
+        .take(JSON_STARTS)
+        .find_map(|(start, _)| serde_json::Deserializer::from_str(&text[start..]).into_iter::<Value>().next()?.ok().filter(Value::is_object));
+    let list = |name: &str| -> Vec<String> {
+        let mut items: Vec<String> = Vec::new();
+        if let Some(Value::Array(values)) = value.as_ref().and_then(|v| v.get(name)) {
+            for item in values.iter().map(text_of).map(|t| one_line(&t)) {
+                if !item.is_empty() && items.len() < MAX_SEARCHES && !items.iter().any(|had| had.eq_ignore_ascii_case(&item)) {
+                    items.push(item.chars().take(200).collect());
+                }
+            }
+        }
+        items
+    };
+    ResearchPlan { queries: list("queries"), sites: list("sites") }
+}
+
+fn one_line(text: &str) -> String {
+    text.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+/// The chat completion request for `asked` of `model`, with `research`,
+/// what was found on the internet for it (`web_page::research_text`).
+pub fn request(model: &LocalModel, asked: &QuestionRequest, research: Option<&str>) -> Result<Value, RequestError> {
     if asked.prompt.trim().is_empty() && asked.attachments.is_empty() {
         return Err(RequestError::Empty);
     }
@@ -291,7 +376,16 @@ pub fn request(model: &LocalModel, asked: &QuestionRequest) -> Result<Value, Req
                 text_left -= taken.chars().count();
                 parts.push(text_part(format!("Attachment {number}: text \"{name}\":\n{taken}")));
             }
+
         }
+    }
+    if let Some(research) = research.filter(|r| !r.trim().is_empty()) {
+        // Taken out of what text files left, so the request stays its size.
+        let taken: String = research.chars().take(text_left.max(MAX_TEXT_CHARS / 2)).collect();
+        parts.push(text_part(format!(
+            "Found on the internet for this request (search results and the pages read). Questions about the company, person \
+             or subject asked for come from what this says; it is not an attachment, so \"attachment\" is 0 for them:\n{taken}"
+        )));
     }
     Ok(json!({
         "model": model.model,
@@ -644,7 +738,7 @@ mod tests {
     const PICTURE: &str = "data:image/jpeg;base64,/9j/4AAQ";
 
     fn asked(prompt: &str, attachments: Vec<Attachment>) -> QuestionRequest {
-        QuestionRequest { prompt: prompt.into(), attachments, language: QuizLanguage::Cs, whole_quiz: false }
+        QuestionRequest { prompt: prompt.into(), attachments, language: QuizLanguage::Cs, whole_quiz: false, internet: false }
     }
 
     fn attachment(name: &str, content: AttachmentContent) -> Attachment {
@@ -676,7 +770,7 @@ mod tests {
             attachment("poznámky.txt", AttachmentContent::Text { text: "Vltava teče Prahou.".into() }),
         ];
         let model = LocalModel::new(DEFAULT_URL, "gemma3");
-        let body = request(&model, &asked("Kvíz o Praze", files)).unwrap();
+        let body = request(&model, &asked("Kvíz o Praze", files), None).unwrap();
         assert_eq!(body["model"], "gemma3");
         assert_eq!(body["response_format"]["json_schema"]["schema"], reply_schema());
         assert!(body["messages"][0]["content"].as_str().unwrap().contains("in Czech"));
@@ -694,22 +788,22 @@ mod tests {
     #[test]
     fn a_request_is_refused_when_it_cannot_be_sent() {
         let model = LocalModel::new(DEFAULT_URL, "m");
-        assert_eq!(request(&model, &asked("  ", vec![])), Err(RequestError::Empty));
+        assert_eq!(request(&model, &asked("  ", vec![]), None), Err(RequestError::Empty));
         let picture = || attachment("a.png", AttachmentContent::Picture { image: PICTURE.into() });
-        assert_eq!(request(&model, &asked("x", vec![picture(); MAX_ATTACHMENTS + 1])), Err(RequestError::TooManyFiles { max: MAX_ATTACHMENTS }));
+        assert_eq!(request(&model, &asked("x", vec![picture(); MAX_ATTACHMENTS + 1]), None), Err(RequestError::TooManyFiles { max: MAX_ATTACHMENTS }));
         let videos = vec![attachment("v.mp4", AttachmentContent::Video { frames: vec![PICTURE.into(); VIDEO_FRAMES] }); MAX_IMAGES / VIDEO_FRAMES + 1];
-        assert_eq!(request(&model, &asked("x", videos)), Err(RequestError::TooManyPictures { max: MAX_IMAGES }));
+        assert_eq!(request(&model, &asked("x", videos), None), Err(RequestError::TooManyPictures { max: MAX_IMAGES }));
         let not_a_picture = attachment("a.png", AttachmentContent::Picture { image: "file:///etc/passwd".into() });
-        assert_eq!(request(&model, &asked("x", vec![not_a_picture])), Err(RequestError::NotAPicture));
+        assert_eq!(request(&model, &asked("x", vec![not_a_picture]), None), Err(RequestError::NotAPicture));
         // Files alone are a request.
-        assert!(request(&model, &asked("", vec![picture()])).is_ok());
+        assert!(request(&model, &asked("", vec![picture()]), None).is_ok());
     }
 
     #[test]
     fn long_texts_are_cut_to_what_a_request_takes() {
         let model = LocalModel::new(DEFAULT_URL, "m");
         let long = || attachment("a.txt", AttachmentContent::Text { text: "é".repeat(MAX_TEXT_CHARS) });
-        let body = request(&model, &asked("x", vec![long(), long()])).unwrap();
+        let body = request(&model, &asked("x", vec![long(), long()]), None).unwrap();
         let sent: usize = body["messages"][1]["content"].as_array().unwrap().iter().filter_map(|p| p["text"].as_str()).map(|t| t.matches('é').count()).sum();
         assert_eq!(sent, MAX_TEXT_CHARS);
     }
@@ -761,6 +855,21 @@ mod tests {
         // A right answer that is a question, or with no wrong one left, is no question.
         let unusable = r#"{"questions":[{"question":"A?","right":"Proč?","wrong":["b"]},{"question":"B?","right":"a","wrong":["A"]}]}"#;
         assert_eq!(read_questions(unusable, false), Err(ReplyError::NoQuestions));
+    }
+
+    #[test]
+    fn the_model_says_what_to_look_up_and_what_was_found_goes_with_the_request() {
+        let model = LocalModel::new(DEFAULT_URL, "m");
+        let plan_body = research_plan_request(&model, &asked("Kvíz o firmě Pekárna Novák z Brna", vec![attachment("logo.png", AttachmentContent::Picture { image: PICTURE.into() })]));
+        let task = plan_body["messages"][1]["content"].as_str().unwrap();
+        assert!(task.contains("Pekárna Novák") && task.contains("logo.png") && !task.contains("base64"));
+        let plan = research_plan(r#"<think>{maybe}</think>{"queries":["Pekárna Novák Brno"," pekárna  novák brno ","","Novák historie","a","b"],"sites":["pekarna-novak.cz"]}"#);
+        assert_eq!(plan, ResearchPlan { queries: vec!["Pekárna Novák Brno".into(), "Novák historie".into(), "a".into()], sites: vec!["pekarna-novak.cz".into()] });
+        assert!(research_plan("Nevím.").is_empty());
+        let body = request(&model, &asked("Kvíz o firmě", vec![]), Some("Page https://pekarna.cz/ — Úvod\nPečeme od 1921.")).unwrap();
+        let parts = body["messages"][1]["content"].as_array().unwrap();
+        assert!(parts.last().unwrap()["text"].as_str().unwrap().ends_with("Pečeme od 1921."));
+        assert_eq!(request(&model, &asked("Kvíz", vec![]), Some("  ")).unwrap()["messages"][1]["content"].as_array().unwrap().len(), 1);
     }
 
     #[test]
@@ -871,7 +980,7 @@ mod tests {
         assert!(refuses_format("'response_format.type' must be 'json_schema' or 'text'"));
         assert!(!refuses_format("model 'x' not found"));
         let model = LocalModel::new(DEFAULT_URL, "m");
-        let body = request(&model, &asked("x", vec![])).unwrap();
+        let body = request(&model, &asked("x", vec![]), None).unwrap();
         assert!(without_format(body.clone()).get("response_format").is_none());
         assert_eq!(streamed(body)["stream"], true);
     }

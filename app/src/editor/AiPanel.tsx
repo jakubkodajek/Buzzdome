@@ -14,23 +14,28 @@ import { carriesFiles } from "../director/media-parts";
 import { CrossIcon, PictureIcon, SparkleIcon, TextIcon, VideoIcon } from "../icons";
 import { errorNotice, isAppError, type Notice } from "../messages";
 import { NoticeBox } from "../notice";
+import type { Translate } from "../i18n";
 import { createStore, useStore } from "../store";
-import type { Attachment, LocalModelInfo, QuizLanguage, Slide } from "../types";
+import type { Attachment, LocalModelInfo, LocalModelProgress, QuizLanguage, Slide, Source } from "../types";
 import { MAX_DROPPED_MB } from "../bindings/Constants";
 import { addFiles, aiFileKind, attachmentFor, thumbnailOf, type AiFile } from "./ai-files";
 
-/** Where a request is. */
-type Job = { phase: "preparing" } | { phase: "waiting" } | { phase: "writing"; questions: number };
+/** Where a request is: the files prepared, then as the backend tells (`LocalModelProgress`). */
+type Job = { step: "preparing" } | { step: "waiting" } | LocalModelProgress;
 
 interface PanelState {
   files: AiFile[];
   prompt: string;
+  /** Whether the request may be looked up on the internet. */
+  internet: boolean;
   job: Job | null;
   /** Why the last request failed, until the next one. */
   failed: Notice | null;
+  /** The web pages the last questions were written from. */
+  sources: Source[];
 }
 
-const panelState = createStore<PanelState>({ files: [], prompt: "", job: null, failed: null });
+const panelState = createStore<PanelState>({ files: [], prompt: "", internet: true, job: null, failed: null, sources: [] });
 const change = (next: Partial<PanelState>) => panelState.set({ ...panelState.get(), ...next });
 
 /**
@@ -54,7 +59,7 @@ export interface AiPanelProps {
 
 export function AiPanel({ draftId, language, emptyQuiz, onInsert, onChooseModel, onClose }: AiPanelProps) {
   const { t, notify, caution } = useApp();
-  const { files, prompt, job, failed } = useStore(panelState);
+  const { files, prompt, internet, job, failed, sources } = useStore(panelState);
   const [info, setInfo] = useState<LocalModelInfo | null>(null);
   const [dropping, setDropping] = useState(false);
   const [picked, setPicked] = useState<HTMLInputElement | null>(null);
@@ -93,7 +98,7 @@ export function AiPanel({ draftId, language, emptyQuiz, onInsert, onChooseModel,
     const draft = draftId;
     const run = ++latestRun;
     const current = () => run === latestRun;
-    change({ job: { phase: "preparing" }, failed: null });
+    change({ job: { step: "preparing" }, failed: null, sources: [] });
     try {
       const attachments: Attachment[] = [];
       let textLeft = info.maxTextChars;
@@ -110,14 +115,16 @@ export function AiPanel({ draftId, language, emptyQuiz, onInsert, onChooseModel,
         attachments.push(attachment);
         if (!current()) return;
       }
-      change({ job: { phase: "waiting" } });
-      const slides = await api.editorAskLocalModel(draft, { prompt, attachments, language, wholeQuiz: emptyQuiz }, (progress) => {
-        if (current()) change({ job: { phase: "writing", questions: progress.questions } });
+      change({ job: { step: "waiting" } });
+      const asked = await api.editorAskLocalModel(draft, { prompt, attachments, language, wholeQuiz: emptyQuiz, internet }, (progress) => {
+        if (current()) change({ job: progress });
       });
       if (!current()) return;
-      const inserted = onInsert(draft, slides);
+      const inserted = onInsert(draft, asked.slides);
+      change({ sources: asked.sources });
       if (inserted === null) caution(t("aiPanelOtherQuiz"));
       else notify(t("aiPanelInserted", { n: inserted }));
+      if (asked.webFailed) caution(t(asked.sources.length > 0 ? "aiPanelWebPartly" : "aiPanelWebFailed"));
     } catch (error) {
       if (current() && !(isAppError(error) && error.code === "localModelCancelled")) change({ failed: errorNotice(t, error) });
     } finally {
@@ -127,7 +134,7 @@ export function AiPanel({ draftId, language, emptyQuiz, onInsert, onChooseModel,
   const cancel = () => {
     // The panel is free again at once; files being prepared stop at the
     // next, and a request under way ends in the backend too.
-    const waited = job?.phase !== "preparing";
+    const waited = job?.step !== "preparing";
     latestRun++;
     change({ job: null });
     if (waited) void api.editorAskLocalModelCancel();
@@ -135,8 +142,7 @@ export function AiPanel({ draftId, language, emptyQuiz, onInsert, onChooseModel,
 
   const chosen = info?.chosen ?? null;
   const promptMax = info?.maxPromptChars;
-  const status =
-    job?.phase === "preparing" ? t("aiPanelPreparing") : job?.phase === "waiting" ? t("aiPanelWaiting") : job ? t("aiPanelWriting", { n: job.questions }) : null;
+  const status = job ? jobStatus(t, job) : null;
 
   return (
     <aside className="ai-panel" aria-label={t("aiPanel")} onDragOver={onDragOver} onDragLeave={(e) => !e.currentTarget.contains(e.relatedTarget as Node | null) && setDropping(false)} onDrop={onDrop}>
@@ -213,7 +219,26 @@ export function AiPanel({ draftId, language, emptyQuiz, onInsert, onChooseModel,
                 }}
               />
             </label>
+            <label className="ai-internet">
+              <input type="checkbox" checked={internet} disabled={job !== null} onChange={(e) => change({ internet: e.target.checked })} />
+              <span>
+                {t("aiPanelInternet")}
+                <small>{t("aiPanelInternetHint")}</small>
+              </span>
+            </label>
             {failed && <NoticeBox notice={failed} />}
+            {sources.length > 0 && !job && (
+              <div className="ai-sources">
+                <span>{t("aiPanelSources")}</span>
+                <ul>
+                  {sources.map((source) => (
+                    <li key={source.url} title={source.url}>
+                      {source.title} <small>{hostOf(source.url)}</small>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </>
         )}
       </div>
@@ -242,7 +267,7 @@ export function AiPanel({ draftId, language, emptyQuiz, onInsert, onChooseModel,
               </>
             )}
           </div>
-          <p className="ai-panel-privacy">{t("aiPanelPrivacy", { url: chosen.url })}</p>
+          <p className="ai-panel-privacy">{t(internet ? "aiPanelPrivacyInternet" : "aiPanelPrivacy", { url: chosen.url })}</p>
           <button type="button" className="ai-change-model" disabled={job !== null} onClick={onChooseModel}>
             {t("aiPanelChangeModel")}
           </button>
@@ -250,6 +275,33 @@ export function AiPanel({ draftId, language, emptyQuiz, onInsert, onChooseModel,
       )}
     </aside>
   );
+}
+
+/** What the panel says while `job` is under way. */
+function jobStatus(t: Translate, job: Job): string {
+  switch (job.step) {
+    case "preparing":
+      return t("aiPanelPreparing");
+    case "waiting":
+      return t("aiPanelWaiting");
+    case "planning":
+      return t("aiPanelPlanning");
+    case "searching":
+      return t("aiPanelSearching", { query: job.query });
+    case "reading":
+      return t("aiPanelReading", { page: hostOf(job.url) + new URL(job.url, "https://x").pathname.replace(/\/$/, "") });
+    case "writing":
+      return t("aiPanelWriting", { n: job.questions });
+  }
+}
+
+/** The site of the web address `url`, without `www.`. */
+function hostOf(url: string): string {
+  try {
+    return new URL(url).host.replace(/^www\./, "");
+  } catch {
+    return url;
+  }
 }
 
 /** A file in the list: a small picture or the kind's icon, its name, and a button that takes it out. */

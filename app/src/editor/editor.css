@@ -977,6 +977,37 @@
   line-height: 1.4;
 }
 
+.ai-internet {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  line-height: 1.4;
+  cursor: pointer;
+}
+
+.ai-internet input {
+  margin-top: 3px;
+}
+
+.ai-internet small,
+.ai-sources small {
+  display: block;
+  color: var(--muted);
+}
+
+.ai-sources ul {
+  margin: 4px 0 0;
+  padding-left: 18px;
+}
+
+.ai-sources li {
+  overflow-wrap: anywhere;
+}
+
+.ai-sources small {
+  display: inline;
+}
+
 .ai-panel-footer {
   flex: none;
   display: flex;

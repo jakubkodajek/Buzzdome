@@ -14,4 +14,9 @@ language: QuizLanguage,
  * Whether the questions make a whole quiz (an empty one): its rounds
  * then end with their scores and the quiz with the results.
  */
-wholeQuiz: boolean, };
+wholeQuiz: boolean, 
+/**
+ * Whether the app may look up on the internet what the request needs
+ * (`research_plan`).
+ */
+internet: boolean, };

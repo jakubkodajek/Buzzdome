@@ -3370,6 +3370,7 @@ version = "1.2.1"
 dependencies = [
  "base64 0.22.1",
  "dirs",
+ "encoding_rs",
  "quiz-core",
  "quiz-file",
  "schemars 1.2.2",
@@ -3378,6 +3379,7 @@ dependencies = [
  "thiserror 2.0.21",
  "toml_edit 0.25.15+spec-1.1.0",
  "ts-rs",
+ "url",
  "zip 9.0.0",
 ]
 

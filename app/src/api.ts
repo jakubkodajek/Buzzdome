@@ -34,6 +34,7 @@ import type {
   LocalModel,
   LocalModelInfo,
   LocalModelProgress,
+  AskedQuestions,
   MediaKind,
   MediaLibrary,
   MediaNow,
@@ -59,7 +60,6 @@ import type {
   SettingsLost,
   SheetExport,
   SheetImport,
-  Slide,
   ShowResults,
   SoundBoard,
   Theme,
@@ -288,7 +288,7 @@ export const api = {
   editorAskLocalModel: (draft: string, asked: QuestionRequest, onProgress: (progress: LocalModelProgress) => void) => {
     const progress = new Channel<LocalModelProgress>();
     progress.onmessage = onProgress;
-    return invoke<Slide[]>("editor_ask_local_model", { draft, asked, progress });
+    return invoke<AskedQuestions>("editor_ask_local_model", { draft, asked, progress });
   },
   editorAskLocalModelCancel: () => invoke<void>("editor_ask_local_model_cancel"),
 };

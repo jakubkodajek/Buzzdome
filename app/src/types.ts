@@ -26,6 +26,8 @@ export type { AttachmentContent } from "./bindings/AttachmentContent";
 export type { LocalModel } from "./bindings/LocalModel";
 export type { LocalModelInfo } from "./bindings/LocalModelInfo";
 export type { LocalModelProgress } from "./bindings/LocalModelProgress";
+export type { AskedQuestions } from "./bindings/AskedQuestions";
+export type { Source } from "./bindings/Source";
 export type { QuestionRequest } from "./bindings/QuestionRequest";
 export type { Assistant } from "./bindings/Assistant";
 export type { AssistantInfo } from "./bindings/AssistantInfo";

@@ -74,7 +74,7 @@ const resume = params.get("resume");
 const saving = params.get("saving");
 /** `unreadable`: the editor's draft does not read; `failing`: writing it fails, as on a full disk; `busy`: a sheet import does not finish; `unsaved`: it has changes its quiz file does not have. */
 const draft = params.get("draft");
-/** The AI assistant's model: `none` is not chosen yet; `offline`: its server does not answer; `slow`: asking it never ends; `fail`: its answer is not questions. */
+/** The AI assistant's model: `none` is not chosen yet; `offline`: its server does not answer; `slow`: asking it never ends; `fail`: its answer is not questions; `webpartly`: some web pages could not be read. */
 const aiModel = params.get("ai");
 /** `problems=warnings`: the editor's quiz has warnings only (it plays); `both`: a problem to fix too. */
 const quizChecks = params.get("problems");
@@ -1054,7 +1054,20 @@ mockIPC(
         if (aiModel === "slow") return new Promise(() => undefined);
         if (aiModel === "fail") return Promise.reject({ code: "localModelNotQuestions" });
         if (aiModel === "offline") return Promise.reject({ code: "localModelUnreachable", url: "http://localhost:11434/v1", detail: "Connection refused (os error 111)" });
-        return new Promise((resolve) => setTimeout(() => resolve(SHEET_IMPORT.slides), 800));
+        // The steps of a request that looks up a company on the internet.
+        const progress = (payload as { progress?: { onmessage?: (step: unknown) => void } }).progress;
+        const steps = [
+          { step: "planning" },
+          { step: "searching", query: "Pekárna Novák Brno" },
+          { step: "reading", url: "https://www.pekarna-novak.cz/o-nas/" },
+          { step: "writing", characters: 420, questions: 2 },
+        ];
+        steps.forEach((step, i) => setTimeout(() => progress?.onmessage?.(step), i * 180));
+        const sources = [
+          { url: "https://www.pekarna-novak.cz/", title: "Pekárna Novák – pečeme od roku 1921" },
+          { url: "https://www.pekarna-novak.cz/o-nas/", title: "O nás" },
+        ];
+        return new Promise((resolve) => setTimeout(() => resolve({ slides: SHEET_IMPORT.slides, sources, webFailed: aiModel === "webpartly" }), 800));
       }
       case "editor_ask_local_model_cancel":
         return null;
