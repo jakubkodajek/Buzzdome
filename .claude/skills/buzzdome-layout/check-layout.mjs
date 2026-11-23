@@ -50,11 +50,19 @@ const scenes = (() => {
   return [...block.matchAll(/^ {2}(\w+):/gm)].map((m) => m[1]);
 })();
 
-/** Window sizes: the smallest laptop the Director should work on, a common laptop, a full HD screen. */
+/**
+ * Window sizes the Director meets on Windows, as CSS pixels inside a maximized
+ * window (screen / display scale, less the title bar and the taskbar), each at
+ * its display scale so text and borders round as they do there:
+ * the smallest the Director allows (`minWidth`/`minHeight` in tauri.conf.json),
+ * a full HD laptop at 150 % and at 125 %, an HD laptop at 100 %, full HD at 100 %.
+ */
 const SIZES = [
-  { width: 1024, height: 640 },
-  { width: 1366, height: 768 },
-  { width: 1920, height: 1080 },
+  { width: 960, height: 600, scale: 1 },
+  { width: 1280, height: 640, scale: 1.5 },
+  { width: 1366, height: 690, scale: 1 },
+  { width: 1536, height: 780, scale: 1.25 },
+  { width: 1920, height: 1000, scale: 1 },
 ];
 
 /** Bars that keep their place while the rest scrolls, and the edge each belongs to. */
@@ -143,7 +151,7 @@ function inspect(bars) {
 const browser = await chromium.launch();
 async function check(label, url, size, lang, steps = async () => {}) {
   label = `${label} ${lang}`;
-  const page = await browser.newPage({ viewport: size });
+  const page = await browser.newPage({ viewport: { width: size.width, height: size.height }, deviceScaleFactor: size.scale });
   // The UI's language is a preference (`i18n.ts`), read before the first render.
   await page.addInitScript((value) => localStorage.setItem("quiz-show.lang", value), lang);
   const errors = [];

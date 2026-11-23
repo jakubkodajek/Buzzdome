@@ -1027,6 +1027,9 @@ pub fn run() {
             app.manage(app_icon::AppIcon::load(app_data(app.handle(), app_icon::ICON_FILE)?));
             app.manage(ai::SavedAiSettings::load(app_data(app.handle(), quiz_ai::settings::SETTINGS_FILE)?));
             app.manage(recent_files::RecentFiles::load(app_local_data(app.handle(), recent_files::RECENT_FILES)?));
+            if let Some(director) = app.get_webview_window(app_windows::DIRECTOR_LABEL) {
+                app_windows::fit_on_screen(&director);
+            }
             for window in app.webview_windows().values() {
                 app_icon::apply(app.handle(), window);
             }

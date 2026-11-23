@@ -121,3 +121,20 @@ Template:
   Version raised to 1.2.1 (Jakub's OK).
 - State: make check green; branch `claude/project-thread-28dmvy`.
 - Next: guardian review, CI, merge, Jakub pushes tag `v1.2.1`.
+
+## 2026-11-23 - windows-display-scale
+
+- Done: a colleague's Lenovo laptop showed the app differently. The
+  Director opens at 1280x800 logical pixels, which Windows' display scale
+  enlarges past the work area of a full HD laptop at 150 % (about
+  1280x690 above the taskbar) or an HD laptop at 100 %: its status bar sat
+  under the taskbar or off the screen. `app_windows::fit_on_screen`
+  maximizes a Director (and a projector window that is not full screen)
+  larger than its screen's work area, and centres one that fits but sticks
+  out. The buzzdome-layout check now runs at the sizes a maximized window
+  has on Windows, at their display scale (960x600, 1280x640 @1.5,
+  1366x690, 1536x780 @1.25, 1920x1000): no layout problems in any window.
+- State: make check green; branch `claude/project-thread-tuspp5`.
+- Next: Jakub's colleague confirms on the laptop (a screenshot if it still
+  differs); the UI font is Segoe UI on Windows and the system font on
+  macOS, so Windows and a Mac never look exactly alike.
