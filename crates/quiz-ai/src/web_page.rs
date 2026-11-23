@@ -373,20 +373,26 @@ pub fn links_to_follow(base: &Url, links: &[String], max: usize) -> Vec<Url> {
     found.into_iter().map(|(_, url)| url).take(max).collect()
 }
 
-/// What was found for the model, at most `MAX_RESEARCH_CHARS`: the
-/// searches' `results`, then the `pages` read (address and page), each at
-/// most `MAX_PAGE_CHARS`, under its address and title, without a line an
-/// earlier page had (a menu, a footer).
-pub fn research_text(results: &[(String, Vec<SearchResult>)], pages: &[(String, Page)]) -> String {
+/// What was found for the model, at most `max_chars` (`MAX_RESEARCH_CHARS`
+/// for a model with room enough): the searches' `results` in at most a
+/// quarter of it, then the `pages` read (address and page), each in its
+/// share of the rest and at most `MAX_PAGE_CHARS`, under its address and
+/// title, without a line an earlier page had (a menu, a footer).
+pub fn research_text(results: &[(String, Vec<SearchResult>)], pages: &[(String, Page)], max_chars: usize) -> String {
     let mut seen = std::collections::HashSet::new();
     let mut out = String::new();
-    for (query, found) in results {
+    'searches: for (query, found) in results {
         out.push_str(&format!("Search \"{query}\":\n"));
         for result in found {
-            out.push_str(&format!("- {} ({}): {}\n", result.title, result.url, result.snippet));
+            let line = format!("- {} ({}): {}\n", result.title, result.url, result.snippet);
+            if out.chars().count() + line.chars().count() > max_chars / 4 {
+                break 'searches;
+            }
+            out.push_str(&line);
         }
         out.push('\n');
     }
+    let page_chars = (max_chars.saturating_sub(out.chars().count()) / pages.len().max(1)).min(MAX_PAGE_CHARS);
     for (url, page) in pages {
         let start = out.chars().count();
         out.push_str(&format!("Page {url}"));
@@ -399,7 +405,7 @@ pub fn research_text(results: &[(String, Vec<SearchResult>)], pages: &[(String, 
             out.push('\n');
         }
         for line in page.text.lines() {
-            if out.chars().count() - start >= MAX_PAGE_CHARS {
+            if out.chars().count() - start >= page_chars {
                 break;
             }
             if seen.insert(line.to_string()) {
@@ -410,7 +416,17 @@ pub fn research_text(results: &[(String, Vec<SearchResult>)], pages: &[(String, 
         out.push('\n');
     }
     let text = out.trim_end();
-    text.chars().take(MAX_RESEARCH_CHARS).collect()
+    text.chars().take(max_chars).collect()
+}
+
+/// `url` as compared with the pages read before: without its scheme,
+/// `www.`, fragment and closing slash, so one page is read once.
+pub fn page_key(url: &str) -> String {
+    let Ok(mut parsed) = Url::parse(url) else { return url.to_string() };
+    parsed.set_fragment(None);
+    let host = parsed.host_str().unwrap_or_default().trim_start_matches("www.").to_lowercase();
+    let rest = &parsed[url::Position::BeforePath..];
+    format!("{host}{}", rest.trim_end_matches('/'))
 }
 
 /// The page `bytes` as text, in the character set its `content_type` or
@@ -466,15 +482,26 @@ mod tests {
         let pages = vec![("https://a.cz/".to_string(), page("Úvod", "Menu\nPečeme chléb.")), ("https://a.cz/o-nas".to_string(), page("O nás", "Menu\nZaloženo 1921."))];
         let results = vec![("pekárna a".to_string(), vec![SearchResult { title: "Pekárna A".into(), url: "https://a.cz/".into(), snippet: "Chléb od 1921.".into() }])];
         assert_eq!(
-            research_text(&results, &pages),
+            research_text(&results, &pages, MAX_RESEARCH_CHARS),
             "Search \"pekárna a\":\n- Pekárna A (https://a.cz/): Chléb od 1921.\n\nPage https://a.cz/ — Úvod\nMenu\nPečeme chléb.\n\nPage https://a.cz/o-nas — O nás\nZaloženo 1921."
         );
         let lines = "Věta o firmě, která se neopakuje.\n".repeat(1000).lines().enumerate().map(|(i, l)| format!("{i} {l}")).collect::<Vec<_>>().join("\n");
         let long: Vec<(String, Page)> = (0..5).map(|i| (format!("https://a.cz/{i}"), page("", &lines))).collect();
-        let text = research_text(&[], &long);
+        let text = research_text(&[], &long, MAX_RESEARCH_CHARS);
         assert!(text.chars().count() <= MAX_RESEARCH_CHARS);
         // Each page gets its share, not the first all of it.
         assert!(text.contains("Page https://a.cz/3"));
+        // A model with a small context gets less, every page still in it.
+        let small = research_text(&results, &long, 3_000);
+        assert!(small.chars().count() <= 3_000);
+        assert!(small.contains("Page https://a.cz/4") && small.contains("Pekárna A"));
+    }
+
+    #[test]
+    fn a_page_is_the_same_page_however_its_address_is_written() {
+        assert_eq!(page_key("https://www.bakerini.cz/kontakt/"), page_key("http://bakerini.cz/kontakt#mapa"));
+        assert_ne!(page_key("https://bakerini.cz/kontakt"), page_key("https://bakerini.cz/produkty"));
+        assert_ne!(page_key("https://a.cz/?p=1"), page_key("https://a.cz/?p=2"));
     }
 
     #[test]

@@ -38,6 +38,13 @@ pub const IMAGE_SIDE_PX: u32 = 768;
 pub const MAX_IMAGE_BYTES: usize = 3 << 20;
 /// Most characters of all text files together.
 pub const MAX_TEXT_CHARS: usize = 20_000;
+/// Most characters of text files and what was found on the internet
+/// together, asked again of a model whose context the request did not fit:
+/// Ollama gives a model 4096 tokens on a computer with less than 24 GB of
+/// graphics memory (docs.ollama.com/context-length), and this much text
+/// leaves room there for the instructions, a few pictures and the reply
+/// [no source - estimate: about 3 to 4 characters a token in Czech].
+pub const SMALL_TEXT_CHARS: usize = 4_000;
 /// Most questions taken from one reply.
 pub const MAX_QUESTIONS: usize = 100;
 
@@ -220,6 +227,10 @@ fn instructions(language: QuizLanguage) -> String {
          - Write everything in {language}, with correct spelling.\n\
          - Keep every answer under 40 characters.\n\
          - Ask about facts the attachments and the request give. Do not invent facts you are not sure of.\n\
+         - Ask what is interesting to know (what it is, does or makes, its story, people, places, dates), not \
+         identifiers such as registration, tax, phone or house numbers.\n\
+         - Do not ask how many things a picture shows: counting in a picture is often wrong.\n\
+         - A wrong answer differs clearly from the right one (not the same street with another number).\n\
          - Questions of a round come together.\n\
          - Unless the request says how many, write 10 questions."
     )
@@ -290,9 +301,11 @@ pub fn research_plan_request(model: &LocalModel, asked: &QuestionRequest) -> Val
             { "role": "system", "content":
                 "You prepare the research for a quiz. Read the quizmaster's request. When writing it needs facts from the \
                  internet (a company, an organisation, a person, a place or an event it names, or recent facts), give at most \
-                 3 short web search queries in the request's language (the name, its town, what it does) in \"queries\", \
-                 and the web addresses the request names in \"sites\". When the files and general knowledge are enough, \
-                 give two empty lists. Reply with JSON only." },
+                 3 short web search queries in the request's language in \"queries\". Every query names the subject in full, \
+                 as the request does (a company's whole name and its town), and adds what to find out (what it does, its \
+                 history, its products), so that it finds that subject and nothing else of the same name. Give the web \
+                 addresses the request names in \"sites\". When the files and general knowledge are enough, give two empty \
+                 lists. Reply with JSON only." },
             { "role": "user", "content": task }
         ],
         "response_format": {
@@ -340,7 +353,7 @@ fn one_line(text: &str) -> String {
 
 /// The chat completion request for `asked` of `model`, with `research`,
 /// what was found on the internet for it (`web_page::research_text`).
-pub fn request(model: &LocalModel, asked: &QuestionRequest, research: Option<&str>) -> Result<Value, RequestError> {
+pub fn request(model: &LocalModel, asked: &QuestionRequest, research: Option<&str>, max_text: usize) -> Result<Value, RequestError> {
     if asked.prompt.trim().is_empty() && asked.attachments.is_empty() {
         return Err(RequestError::Empty);
     }
@@ -353,7 +366,7 @@ pub fn request(model: &LocalModel, asked: &QuestionRequest, research: Option<&st
     }
     let prompt: String = asked.prompt.trim().chars().take(MAX_PROMPT_CHARS).collect();
     let mut parts = vec![text_part(if prompt.is_empty() { "Write questions about the attachments.".to_string() } else { prompt })];
-    let mut text_left = MAX_TEXT_CHARS;
+    let mut text_left = max_text;
     for (number, attachment) in (1..).zip(&asked.attachments) {
         let name = attachment.name.replace(['\n', '\r'], " ");
         match &attachment.content {
@@ -381,7 +394,7 @@ pub fn request(model: &LocalModel, asked: &QuestionRequest, research: Option<&st
     }
     if let Some(research) = research.filter(|r| !r.trim().is_empty()) {
         // Taken out of what text files left, so the request stays its size.
-        let taken: String = research.chars().take(text_left.max(MAX_TEXT_CHARS / 2)).collect();
+        let taken: String = research.chars().take(text_left.max(max_text / 2)).collect();
         parts.push(text_part(format!(
             "Found on the internet for this request (search results and the pages read). Questions about the company, person \
              or subject asked for come from what this says; it is not an attachment, so \"attachment\" is 0 for them:\n{taken}"
@@ -604,6 +617,15 @@ pub fn error_detail(body: &str) -> String {
 /// Whether a server refused a request for its `response_format`, which
 /// some servers do not take: the request is then sent without it, and the
 /// instructions alone ask for the JSON.
+/// Whether a server's refusal `detail` says the request did not fit the
+/// model's context, as Ollama ("the prompt is longer than the context
+/// length"), llama.cpp ("exceeds the available context size"), LM Studio
+/// ("when context the overflows") and vLLM ("maximum context length") say it.
+pub fn context_full(detail: &str) -> bool {
+    let detail = detail.to_lowercase();
+    detail.contains("context") && ["length", "size", "overflow", "window", "n_ctx"].iter().any(|word| detail.contains(word))
+}
+
 pub fn refuses_format(detail: &str) -> bool {
     let detail = detail.to_lowercase();
     ["response_format", "json_schema", "structured output", "grammar"].iter().any(|word| detail.contains(word))
@@ -770,7 +792,7 @@ mod tests {
             attachment("poznámky.txt", AttachmentContent::Text { text: "Vltava teče Prahou.".into() }),
         ];
         let model = LocalModel::new(DEFAULT_URL, "gemma3");
-        let body = request(&model, &asked("Kvíz o Praze", files), None).unwrap();
+        let body = request(&model, &asked("Kvíz o Praze", files), None, MAX_TEXT_CHARS).unwrap();
         assert_eq!(body["model"], "gemma3");
         assert_eq!(body["response_format"]["json_schema"]["schema"], reply_schema());
         assert!(body["messages"][0]["content"].as_str().unwrap().contains("in Czech"));
@@ -788,24 +810,42 @@ mod tests {
     #[test]
     fn a_request_is_refused_when_it_cannot_be_sent() {
         let model = LocalModel::new(DEFAULT_URL, "m");
-        assert_eq!(request(&model, &asked("  ", vec![]), None), Err(RequestError::Empty));
+        assert_eq!(request(&model, &asked("  ", vec![]), None, MAX_TEXT_CHARS), Err(RequestError::Empty));
         let picture = || attachment("a.png", AttachmentContent::Picture { image: PICTURE.into() });
-        assert_eq!(request(&model, &asked("x", vec![picture(); MAX_ATTACHMENTS + 1]), None), Err(RequestError::TooManyFiles { max: MAX_ATTACHMENTS }));
+        assert_eq!(request(&model, &asked("x", vec![picture(); MAX_ATTACHMENTS + 1]), None, MAX_TEXT_CHARS), Err(RequestError::TooManyFiles { max: MAX_ATTACHMENTS }));
         let videos = vec![attachment("v.mp4", AttachmentContent::Video { frames: vec![PICTURE.into(); VIDEO_FRAMES] }); MAX_IMAGES / VIDEO_FRAMES + 1];
-        assert_eq!(request(&model, &asked("x", videos), None), Err(RequestError::TooManyPictures { max: MAX_IMAGES }));
+        assert_eq!(request(&model, &asked("x", videos), None, MAX_TEXT_CHARS), Err(RequestError::TooManyPictures { max: MAX_IMAGES }));
         let not_a_picture = attachment("a.png", AttachmentContent::Picture { image: "file:///etc/passwd".into() });
-        assert_eq!(request(&model, &asked("x", vec![not_a_picture]), None), Err(RequestError::NotAPicture));
+        assert_eq!(request(&model, &asked("x", vec![not_a_picture]), None, MAX_TEXT_CHARS), Err(RequestError::NotAPicture));
         // Files alone are a request.
-        assert!(request(&model, &asked("", vec![picture()]), None).is_ok());
+        assert!(request(&model, &asked("", vec![picture()]), None, MAX_TEXT_CHARS).is_ok());
     }
 
     #[test]
     fn long_texts_are_cut_to_what_a_request_takes() {
         let model = LocalModel::new(DEFAULT_URL, "m");
         let long = || attachment("a.txt", AttachmentContent::Text { text: "é".repeat(MAX_TEXT_CHARS) });
-        let body = request(&model, &asked("x", vec![long(), long()]), None).unwrap();
+        let body = request(&model, &asked("x", vec![long(), long()]), None, MAX_TEXT_CHARS).unwrap();
         let sent: usize = body["messages"][1]["content"].as_array().unwrap().iter().filter_map(|p| p["text"].as_str()).map(|t| t.matches('é').count()).sum();
         assert_eq!(sent, MAX_TEXT_CHARS);
+        // Asked again of a model with a small context, files and what was found share less.
+        let found = "ü".repeat(MAX_TEXT_CHARS);
+        let body = request(&model, &asked("x", vec![long()]), Some(&found), SMALL_TEXT_CHARS).unwrap();
+        let count = |c: char| -> usize { body["messages"][1]["content"].as_array().unwrap().iter().filter_map(|p| p["text"].as_str()).map(|t| t.matches(c).count()).sum() };
+        assert_eq!((count('é'), count('ü')), (SMALL_TEXT_CHARS, SMALL_TEXT_CHARS / 2));
+    }
+
+    #[test]
+    fn a_request_too_long_for_the_context_is_known_by_what_servers_say() {
+        for said in [
+            "the prompt is longer than the context length currently available to the model; shorten the prompt, adjust the context length in settings, or use a model with a longer context length",
+            "the request exceeds the available context size, try increasing it",
+            "Trying to keep the first 5000 tokens when context the overflows. However, the model is loaded with context length of only 4096 tokens",
+            "This model's maximum context length is 8192 tokens. However, you requested 9000 tokens",
+        ] {
+            assert!(context_full(said), "{said}");
+        }
+        assert!(!context_full("model 'x' not found") && !context_full("out of memory"));
     }
 
     #[test]
@@ -866,10 +906,10 @@ mod tests {
         let plan = research_plan(r#"<think>{maybe}</think>{"queries":["Pekárna Novák Brno"," pekárna  novák brno ","","Novák historie","a","b"],"sites":["pekarna-novak.cz"]}"#);
         assert_eq!(plan, ResearchPlan { queries: vec!["Pekárna Novák Brno".into(), "Novák historie".into(), "a".into()], sites: vec!["pekarna-novak.cz".into()] });
         assert!(research_plan("Nevím.").is_empty());
-        let body = request(&model, &asked("Kvíz o firmě", vec![]), Some("Page https://pekarna.cz/ — Úvod\nPečeme od 1921.")).unwrap();
+        let body = request(&model, &asked("Kvíz o firmě", vec![]), Some("Page https://pekarna.cz/ — Úvod\nPečeme od 1921."), MAX_TEXT_CHARS).unwrap();
         let parts = body["messages"][1]["content"].as_array().unwrap();
         assert!(parts.last().unwrap()["text"].as_str().unwrap().ends_with("Pečeme od 1921."));
-        assert_eq!(request(&model, &asked("Kvíz", vec![]), Some("  ")).unwrap()["messages"][1]["content"].as_array().unwrap().len(), 1);
+        assert_eq!(request(&model, &asked("Kvíz", vec![]), Some("  "), MAX_TEXT_CHARS).unwrap()["messages"][1]["content"].as_array().unwrap().len(), 1);
     }
 
     #[test]
@@ -980,7 +1020,7 @@ mod tests {
         assert!(refuses_format("'response_format.type' must be 'json_schema' or 'text'"));
         assert!(!refuses_format("model 'x' not found"));
         let model = LocalModel::new(DEFAULT_URL, "m");
-        let body = request(&model, &asked("x", vec![]), None).unwrap();
+        let body = request(&model, &asked("x", vec![]), None, MAX_TEXT_CHARS).unwrap();
         assert!(without_format(body.clone()).get("response_format").is_none());
         assert_eq!(streamed(body)["stream"], true);
     }

@@ -1273,6 +1273,8 @@ const strings = {
     errLocalModelRefused: "Server modelu žádost odmítl (chyba {status}). Když jste přidali obrázky, umí je vybraný model číst?",
     errLocalModelTimedOut: "Model odpovídal příliš dlouho. Zkuste menší model, nebo méně souborů.",
     errLocalModelInterrupted: "Spojení s modelem se přerušilo.",
+    errLocalModelContextFull:
+      "Žádost se nevešla do paměti modelu {model} ani se zkrácenými texty. V Ollamě nastavte v Settings větší Context length (16k a víc), nebo přidejte méně souborů a obrázků.",
     errLocalModelFailed: "Model při psaní skončil s chybou. Často mu dojde paměť: zkuste menší model nebo méně obrázků.",
     errLocalModelCancelled: "Vytváření otázek je zrušené.",
     errLocalModelBusy: "Model ještě píše předchozí otázky.",
@@ -2875,6 +2877,8 @@ const strings = {
     errLocalModelRefused: "The model's server refused the request (error {status}). If you added pictures, can the chosen model read them?",
     errLocalModelTimedOut: "The model took too long. Try a smaller model, or fewer files.",
     errLocalModelInterrupted: "The connection to the model broke off.",
+    errLocalModelContextFull:
+      "The request did not fit model {model}'s memory, even with shorter texts. In Ollama, set a larger Context length in Settings (16k or more), or add fewer files and pictures.",
     errLocalModelFailed: "The model stopped with an error while writing. It often runs out of memory: try a smaller model or fewer pictures.",
     errLocalModelCancelled: "Making the questions is cancelled.",
     errLocalModelBusy: "The model is still writing the questions asked before.",

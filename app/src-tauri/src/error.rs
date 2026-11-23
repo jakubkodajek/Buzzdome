@@ -195,6 +195,9 @@ pub enum AppError {
     /// The server refused the request; `detail` is its own message.
     #[error("the model's server refused ({status}): {detail}")]
     LocalModelRefused { status: u16, detail: String },
+    /// The request did not fit the model's context, even with its texts shortened.
+    #[error("the request does not fit the context of model {model}")]
+    LocalModelContextFull { model: String },
     #[error("the model took too long")]
     LocalModelTimedOut,
     /// The connection broke while the model wrote.

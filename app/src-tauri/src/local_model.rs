@@ -79,9 +79,23 @@ pub struct AskedQuestions {
 /// What was found on the internet for a request (`research`).
 #[derive(Debug, Default)]
 struct Research {
-    text: Option<String>,
+    /// The searches made and what each found.
+    results: Vec<(String, Vec<web_page::SearchResult>)>,
+    /// The pages read, by the address each was read at.
+    pages: Vec<(String, web_page::Page)>,
     sources: Vec<Source>,
     failed: bool,
+}
+
+impl Research {
+    /// What was found, as the model reads it in a request of `room` text
+    /// characters (`local_model::MAX_TEXT_CHARS` or `SMALL_TEXT_CHARS`).
+    fn text(&self, room: usize) -> Option<String> {
+        if self.results.is_empty() && self.pages.is_empty() {
+            return None;
+        }
+        Some(web_page::research_text(&self.results, &self.pages, web_page::MAX_RESEARCH_CHARS * room / local_model::MAX_TEXT_CHARS))
+    }
 }
 
 /// The request under way, one at a time, and how to cancel it.
@@ -188,7 +202,7 @@ pub async fn editor_ask_local_model(app: AppHandle, draft: String, asked: Questi
         return Err(AppError::LocalModelBadUrl { url: model.url });
     }
     // Checked before anything is looked up.
-    local_model::request(&model, &asked, None).map_err(request_error)?;
+    local_model::request(&model, &asked, None, local_model::MAX_TEXT_CHARS).map_err(request_error)?;
     let media = editor::draft_media(app.clone(), draft, asked.attachments.iter().map(|a| a.media.clone()).collect()).await?;
     // A slide shows a file as what it is, whatever the attachment says.
     let media: Vec<Option<(String, bool)>> = asked
@@ -210,8 +224,7 @@ pub async fn editor_ask_local_model(app: AppHandle, draft: String, asked: Questi
                 let _ = progress.send(step);
             };
             let found = if asked.internet { research(&model, &asked, stop, &tell)? } else { Research::default() };
-            let body = local_model::request(&model, &asked, found.text.as_deref()).map_err(request_error)?;
-            let (content, cut_off) = ask(&model, body, stop, tell)?;
+            let (content, cut_off) = write_questions(&model, &asked, &found, stop, tell)?;
             Ok((content, cut_off, found))
         })
     })
@@ -225,6 +238,22 @@ pub async fn editor_ask_local_model(app: AppHandle, draft: String, asked: Questi
     let seed = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_nanos() as u64);
     let imported = import_tables(&[table], &[], seed).map_err(|_| AppError::LocalModelNoQuestions)?;
     Ok(AskedQuestions { slides: imported.slides.into_iter().map(|(_, slide)| slide).collect(), sources: found.sources, web_failed: found.failed })
+}
+
+/// Asks `model` for the questions `asked` for, with what was `found` on the
+/// internet. A request that does not fit the model's context is asked
+/// again with its texts shortened (`local_model::SMALL_TEXT_CHARS`): a
+/// model in Ollama has 4096 tokens unless the quizmaster gives it more.
+fn write_questions(model: &LocalModel, asked: &QuestionRequest, found: &Research, stop: &AtomicBool, tell: impl Fn(LocalModelProgress)) -> CmdResult<(String, bool)> {
+    let mut rooms = [local_model::MAX_TEXT_CHARS, local_model::SMALL_TEXT_CHARS].into_iter().peekable();
+    while let Some(room) = rooms.next() {
+        let body = local_model::request(model, asked, found.text(room).as_deref(), room).map_err(request_error)?;
+        match ask(model, body, stop, &tell) {
+            Err(AppError::LocalModelContextFull { .. }) if rooms.peek().is_some() => crate::app_log::note("local model: the request did not fit its context; asking again with shorter texts"),
+            done => return done,
+        }
+    }
+    Err(AppError::LocalModelContextFull { model: model.model.clone() })
 }
 
 fn request_error(error: RequestError) -> AppError {
@@ -258,16 +287,22 @@ fn research(model: &LocalModel, asked: &QuestionRequest, stop: &AtomicBool, tell
     let (mut pages, mut results, mut failed): (Vec<(String, web_page::Page)>, Vec<(String, Vec<web_page::SearchResult>)>, bool) = (Vec::new(), Vec::new(), false);
     // The page at `url` added to `pages`, unless there are enough or it is
     // there already; the address it was read at, or Err when it could not be.
-    let read = |url: &str, pages: &mut Vec<(String, web_page::Page)>| -> CmdResult<Result<Option<Url>, ()>> {
+    // Every page asked for and read at, so that one is read once however its address is written.
+    let mut tried = std::collections::HashSet::new();
+    let mut read = |url: &str, pages: &mut Vec<(String, web_page::Page)>| -> CmdResult<Result<Option<Url>, ()>> {
         if stop.load(Ordering::SeqCst) {
             return Err(AppError::LocalModelCancelled);
         }
-        if pages.len() >= web_page::MAX_PAGES || pages.iter().any(|(had, _)| had == url) {
+        if pages.len() >= web_page::MAX_PAGES || !tried.insert(web_page::page_key(url)) {
             return Ok(Ok(None));
         }
         tell(LocalModelProgress::Reading { url: url.to_string() });
         Ok(match fetch_page(url) {
             Some((at, page)) => {
+                if !tried.insert(web_page::page_key(&at)) && web_page::page_key(&at) != web_page::page_key(url) {
+                    // Redirected to a page read before.
+                    return Ok(Ok(None));
+                }
                 let followed = Url::parse(&at).ok();
                 pages.push((at, page));
                 Ok(followed)
@@ -303,7 +338,7 @@ fn research(model: &LocalModel, asked: &QuestionRequest, stop: &AtomicBool, tell
         results.push((query, found));
     }
     let sources = pages.iter().map(|(url, page)| Source { url: url.clone(), title: if page.title.is_empty() { url.clone() } else { page.title.clone() } }).collect();
-    Ok(Research { text: Some(web_page::research_text(&results, &pages)), sources, failed })
+    Ok(Research { results, pages, sources, failed })
 }
 
 /// A client for the web page at `url`: a browser's redirects, a time
@@ -469,10 +504,13 @@ fn unreachable(url: &str, error: ureq::Error) -> AppError {
     }
 }
 
-/// The server refused the request; a model it does not have is said so.
+/// The server refused the request; a model it does not have, and a request
+/// too long for its context, are said so.
 fn refused(status: u16, detail: String, model: &str) -> AppError {
     if status == 404 && detail.to_lowercase().contains("not found") {
         AppError::LocalModelMissing { model: model.to_string() }
+    } else if local_model::context_full(&detail) {
+        AppError::LocalModelContextFull { model: model.to_string() }
     } else {
         AppError::LocalModelRefused { status, detail }
     }
@@ -554,7 +592,7 @@ mod tests {
 
     fn ask_server(url: &str) -> (CmdResult<(String, bool)>, usize) {
         let model = LocalModel::new(url, "gemma3");
-        let body = local_model::request(&model, &asked(), None).unwrap();
+        let body = local_model::request(&model, &asked(), None, local_model::MAX_TEXT_CHARS).unwrap();
         let told = Arc::new(AtomicUsize::new(0));
         let counted = told.clone();
         let reply = ask(&model, body, &AtomicBool::new(false), move |_| {
@@ -613,7 +651,7 @@ mod tests {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let url = format!("http://127.0.0.1:{}/v1", listener.local_addr().unwrap().port());
         let model = LocalModel::new(&url, "m");
-        let body = local_model::request(&model, &asked(), None).unwrap();
+        let body = local_model::request(&model, &asked(), None, local_model::MAX_TEXT_CHARS).unwrap();
         let cancelled = Arc::new(AtomicBool::new(false));
         let cancel = cancelled.clone();
         std::thread::spawn(move || {
@@ -639,16 +677,47 @@ mod tests {
         let found = research(&model, &asked, &AtomicBool::new(false), &|step| steps.lock().unwrap().push(step)).unwrap();
         assert_eq!(found.sources.iter().map(|s| s.title.as_str()).collect::<Vec<_>>(), ["Pekárna Novák", "O nás"]);
         assert!(!found.failed);
-        let text = found.text.unwrap();
+        let text = found.text(local_model::MAX_TEXT_CHARS).unwrap();
         assert!(text.contains("Pečeme od 1921") && text.contains("Založil ji Jan Novák v Brně."), "{text}");
         assert_eq!(steps.lock().unwrap()[0], LocalModelProgress::Planning);
         // Then the questions are asked with what was found.
-        let body = local_model::request(&model, &asked, Some(&text)).unwrap();
+        let body = local_model::request(&model, &asked, Some(&text), local_model::MAX_TEXT_CHARS).unwrap();
         ask(&model, body, &AtomicBool::new(false), |_| {}).unwrap();
         let seen = seen.lock().unwrap();
         assert_eq!(seen[1], "GET /firma HTTP/1.1");
         assert_eq!(seen[2], "GET /o-nas HTTP/1.1");
         assert!(seen[3].contains("Založil ji Jan Novák"));
+    }
+
+    #[test]
+    fn a_request_too_long_for_the_context_is_asked_again_shorter() {
+        let full = r#"{"error":{"message":"the prompt is longer than the context length currently available to the model"}}"#.to_string();
+        let reply = sse(&[r#"{"questions":[]}"#]);
+        let (url, seen) = server(vec![(400, "application/json", full.clone()), (200, "text/event-stream", reply), (400, "application/json", full.clone()), (400, "application/json", full)]);
+        let model = LocalModel::new(&url, "gemma3:4b");
+        let text = Attachment { name: "a.txt".into(), media: None, content: AttachmentContent::Text { text: "slovo ".repeat(5_000) } };
+        let asked = QuestionRequest { prompt: "Kvíz".into(), attachments: vec![text], language: QuizLanguage::Cs, whole_quiz: false, internet: false };
+        assert!(write_questions(&model, &asked, &Research::default(), &AtomicBool::new(false), |_| {}).is_ok());
+        {
+            let seen = seen.lock().unwrap();
+            assert!(seen[0].len() > local_model::MAX_TEXT_CHARS && seen[1].len() < local_model::MAX_TEXT_CHARS, "{} then {}", seen[0].len(), seen[1].len());
+        }
+        // Once shortened, a refusal is said so with the model's name.
+        assert_eq!(write_questions(&model, &asked, &Research::default(), &AtomicBool::new(false), |_| {}), Err(AppError::LocalModelContextFull { model: "gemma3:4b".into() }));
+    }
+
+    #[test]
+    fn a_page_is_read_once_however_its_address_is_written() {
+        let plan = serde_json::json!({ "choices": [{ "message": { "content": "{\"queries\":[],\"sites\":[]}" }, "finish_reason": "stop" }] }).to_string();
+        let page = "<html><head><title>Firma</title></head><body><p>Pečeme.</p><a href=\"/kontakt/\">Kontakt</a><a href=\"/kontakt#mapa\">Mapa</a></body></html>".to_string();
+        let contact = "<html><head><title>Kontakt</title></head><body><p>Brno</p></body></html>".to_string();
+        let (url, seen) = server(vec![(200, "application/json", plan), (200, "text/html", page), (200, "text/html", contact)]);
+        let model = LocalModel::new(&url, "m");
+        let base = url.trim_end_matches("/v1");
+        let asked = QuestionRequest { prompt: format!("Kvíz podle {base}/ a {base}"), attachments: vec![], language: QuizLanguage::Cs, whole_quiz: false, internet: true };
+        let found = research(&model, &asked, &AtomicBool::new(false), &|_| {}).unwrap();
+        assert_eq!(found.sources.iter().map(|s| s.title.as_str()).collect::<Vec<_>>(), ["Firma", "Kontakt"]);
+        assert_eq!(seen.lock().unwrap().len(), 3);
     }
 
     #[test]
@@ -658,7 +727,7 @@ mod tests {
         let model = LocalModel::new(&url, "m");
         let asked = QuestionRequest { prompt: "Kvíz o Praze".into(), attachments: vec![], language: QuizLanguage::Cs, whole_quiz: false, internet: true };
         let found = research(&model, &asked, &AtomicBool::new(false), &|_| {}).unwrap();
-        assert!(found.text.is_none() && found.sources.is_empty() && !found.failed);
+        assert!(found.text(local_model::MAX_TEXT_CHARS).is_none() && found.sources.is_empty() && !found.failed);
         assert_eq!(seen.lock().unwrap().len(), 1);
     }
 
@@ -745,7 +814,7 @@ mod tests {
             whole_quiz: true,
             internet: false,
         };
-        let body = local_model::request(&model, &asked, None).unwrap();
+        let body = local_model::request(&model, &asked, None, local_model::MAX_TEXT_CHARS).unwrap();
         let told = Arc::new(AtomicUsize::new(0));
         let counted = told.clone();
         let started = std::time::Instant::now();
@@ -786,13 +855,12 @@ mod tests {
         let (content, cut_off, found) = cancellably(Arc::new(AtomicBool::new(false)), move |stop| {
             let tell = |step: LocalModelProgress| println!("{:?} {step:?}", std::time::Instant::now() - started);
             let found = research(&model, &asked, stop, &tell)?;
-            let body = local_model::request(&model, &asked, found.text.as_deref()).map_err(request_error)?;
-            let (content, cut_off) = ask(&model, body, stop, |_| {})?;
+            let (content, cut_off) = write_questions(&model, &asked, &found, stop, |_| {})?;
             Ok((content, cut_off, found))
         })
         .unwrap();
         println!("in {:?}; pages read: {:?}; a search or page failed: {}", started.elapsed(), found.sources, found.failed);
-        println!("found:\n{}\n\nmodel wrote:\n{content}", found.text.as_deref().unwrap_or("(nothing)"));
+        println!("found:\n{}\n\nmodel wrote:\n{content}", found.text(local_model::MAX_TEXT_CHARS).as_deref().unwrap_or("(nothing)"));
         let questions = local_model::read_questions(&content, cut_off).unwrap();
         assert!(!questions.is_empty());
         assert!(!found.sources.is_empty(), "nothing was read");
