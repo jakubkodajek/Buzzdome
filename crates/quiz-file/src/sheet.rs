@@ -486,17 +486,25 @@ fn leading_lines(text: &str) -> (u32, Option<u8>, &str) {
 
 /// The text in `bytes`, as text editors and spreadsheets save it: UTF-8,
 /// or UTF-16 with its byte order mark; otherwise Windows-1250, in which
-/// Czech Windows and Excel save a CSV. A UTF-8 character cut at the end
-/// (only the start of a file was read) is dropped.
+/// Czech Windows and Excel save a CSV.
 pub fn decode_text(bytes: &[u8]) -> Cow<'_, str> {
     if let Some((encoding, bom)) = encoding_rs::Encoding::for_bom(bytes) {
         return encoding.decode_without_bom_handling(&bytes[bom..]).0;
     }
     match std::str::from_utf8(bytes) {
         Ok(text) => Cow::Borrowed(text),
-        // Valid but for its last character, which was cut.
-        Err(e) if e.error_len().is_none() && bytes.len() - e.valid_up_to() < 4 => Cow::Borrowed(std::str::from_utf8(&bytes[..e.valid_up_to()]).unwrap_or_default()),
         Err(_) => encoding_rs::WINDOWS_1250.decode_without_bom_handling(bytes).0,
+    }
+}
+
+/// The text in `bytes` when they are only the start of a file
+/// (`decode_text`): a UTF-8 character cut at their end is dropped, so the
+/// rest is not read as Windows-1250. A whole file is read with
+/// `decode_text`, which keeps a Windows-1250 letter at its end.
+pub fn decode_text_start(bytes: &[u8]) -> Cow<'_, str> {
+    match std::str::from_utf8(bytes) {
+        Err(e) if e.error_len().is_none() => decode_text(&bytes[..e.valid_up_to()]),
+        _ => decode_text(bytes),
     }
 }
 
@@ -576,9 +584,13 @@ mod tests {
         assert_eq!(super::decode_text(&utf16), czech);
         // Windows-1250: ř 0xF8, í 0xED, š 0x9A.
         assert_eq!(super::decode_text(&[0x50, 0xf8, 0xed, 0x6c, 0x69, 0x9a]), "Příliš");
-        // A UTF-8 character cut at the end of what was read is dropped, not read as Windows-1250.
+        // A UTF-8 character cut at the end of the start of a file is dropped, not read as Windows-1250.
         let cut = "kůň".as_bytes();
-        assert_eq!(super::decode_text(&cut[..cut.len() - 1]), "ků");
+        assert_eq!(super::decode_text_start(&cut[..cut.len() - 1]), "ků");
+        assert_eq!(super::decode_text_start(cut), "kůň");
+        // A whole Windows-1250 file keeps the letter at its end (ň 0xF2, which starts a UTF-8 character).
+        assert_eq!(super::decode_text(&[0x50, 0x6c, 0x7a, 0x65, 0xf2]), "Plzeň");
+        assert_eq!(super::team_names(b"Sparta\nSlavia Plze\xf2", false).unwrap(), ["Sparta", "Slavia Plze\u{148}"]);
     }
 
     use super::*;

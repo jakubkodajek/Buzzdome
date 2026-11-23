@@ -332,9 +332,10 @@ pub fn voice_install_cancel(app: AppHandle) {
     app.state::<Voice>().cancelled.store(true, Ordering::SeqCst);
 }
 
-/// Marks the show state while the voice model is put in place, so that no
-/// show begins meanwhile (`Inner::voice_unpacking`); the mark goes when
-/// this does, however unpacking ends.
+/// Marks the show state while a model (the voice's, the speech
+/// recognition's) is put in place, so that no show begins meanwhile
+/// (`Inner::voice_unpacking`, a count: both can unpack at once); the mark
+/// goes when this does, however unpacking ends.
 pub(crate) struct Unpacking<'a>(&'a AppHandle);
 
 impl<'a> Unpacking<'a> {
@@ -342,14 +343,15 @@ impl<'a> Unpacking<'a> {
     pub(crate) fn begin(app: &'a AppHandle) -> CmdResult<Unpacking<'a>> {
         let mut inner = crate::lock_show(app);
         crate::refuse_show(&inner)?;
-        inner.voice_unpacking = true;
+        inner.voice_unpacking += 1;
         Ok(Unpacking(app))
     }
 }
 
 impl Drop for Unpacking<'_> {
     fn drop(&mut self) {
-        crate::lock_show(self.0).voice_unpacking = false;
+        let mut inner = crate::lock_show(self.0);
+        inner.voice_unpacking = inner.voice_unpacking.saturating_sub(1);
     }
 }
 

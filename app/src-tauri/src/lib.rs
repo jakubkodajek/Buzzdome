@@ -70,10 +70,10 @@ struct Inner {
     /// A new version of the app is being installed, which ends the app, so
     /// no show may begin (`updates::install`).
     updating: bool,
-    /// The voice model is being put in place, which stops the voice
-    /// process and fills its folder, so no show may begin
-    /// (`read_aloud::voice_install`).
-    voice_unpacking: bool,
+    /// How many models are being put in place now (the voice's, the
+    /// speech recognition's), which fills their folders, so no show may
+    /// begin (`read_aloud::Unpacking`).
+    voice_unpacking: u32,
     /// How many commands read or write much on the disk now, such as
     /// saving a quiz file or copying a video, so no show may begin
     /// (`DiskWork`): its journal would wait for the disk behind them.
@@ -99,7 +99,7 @@ impl Inner {
             began_ms: 0,
             close_request: app_windows::CloseRequest::default(),
             updating: false,
-            voice_unpacking: false,
+            voice_unpacking: 0,
             disk_work: 0,
             recovery_due: false,
         }
@@ -115,7 +115,7 @@ impl Inner {
         if self.updating {
             return Err(AppError::UpdateInstalling);
         }
-        if self.voice_unpacking {
+        if self.voice_unpacking > 0 {
             return Err(AppError::VoiceInstalling);
         }
         if self.disk_work > 0 {
@@ -1170,9 +1170,12 @@ mod tests {
         inner.updating = true;
         assert_eq!(inner.may_start_show(), Err(AppError::UpdateInstalling));
         inner.updating = false;
-        inner.voice_unpacking = true;
+        // The voice and the speech recognition model at once: the show waits for both.
+        inner.voice_unpacking = 2;
         assert_eq!(inner.may_start_show(), Err(AppError::VoiceInstalling));
-        inner.voice_unpacking = false;
+        inner.voice_unpacking = 1;
+        assert_eq!(inner.may_start_show(), Err(AppError::VoiceInstalling));
+        inner.voice_unpacking = 0;
         // Saving a quiz file and copying a video at once: the show waits for both.
         inner.disk_work = 2;
         assert_eq!(inner.may_start_show(), Err(AppError::DiskBusy));

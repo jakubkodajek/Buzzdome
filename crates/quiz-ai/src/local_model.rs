@@ -760,7 +760,8 @@ pub fn draft_table(questions: &[DraftQuestion], media: &[Option<(String, bool)>]
     let mut round: Option<&str> = None;
     let rounds = has_rounds(questions);
     for question in questions {
-        let name = question.round.trim();
+        // A question without a round's name among named rounds stays in the round before it.
+        let name = Some(question.round.trim()).filter(|name| !name.is_empty()).or(round).unwrap_or_default();
         if rounds && round != Some(name) {
             if whole_quiz && round.is_some() {
                 rows.push(row("End of round", ""));
@@ -1066,6 +1067,11 @@ mod tests {
         };
         assert_eq!(kinds(false), ["section Zeměpis", "A?", "B?", "section Historie", "C?"]);
         assert_eq!(kinds(true), ["section Zeměpis", "A?", "B?", "end", "section Historie", "C?", "end", "results"]);
+        // A question without a round's name stays in the round before it: no second end of round.
+        let mut unnamed = questions.clone();
+        unnamed.insert(2, question("", "X?", &["a", "b"], 0));
+        let kinds_of = |questions: &[DraftQuestion]| -> Vec<bool> { import_tables(&[draft_table(questions, &[], true)], &[], 1).unwrap().slides.into_iter().map(|(_, slide)| matches!(slide.content, SlideContent::EndOfRound { .. })).collect() };
+        assert_eq!(kinds_of(&unnamed).iter().filter(|end| **end).count(), 2);
         // Without rounds, a whole quiz still ends with the results.
         let plain = import_tables(&[draft_table(&questions[..1].iter().map(|q| DraftQuestion { round: String::new(), ..q.clone() }).collect::<Vec<_>>(), &[], true)], &[], 1).unwrap();
         assert!(matches!(plain.slides.last().unwrap().1.content, SlideContent::Final { .. }));
