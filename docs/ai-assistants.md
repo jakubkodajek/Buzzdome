@@ -208,13 +208,21 @@ about the trip photos, in two rounds") and presses Make questions:
    (`quiz_ai::local_model::request`): instructions for a buzzer quiz in the
    quiz's language, the request, each file as "Attachment n" with its
    pictures, and a small JSON Schema of the reply (`reply_schema`) as
-   `response_format`. A server that refuses the format is asked again
+   `response_format`, at a low temperature (0.2). The schema has the model
+   write, for each question, the attachment it is about, the question, the
+   fact that answers it and only then the right answer and 1 to 3 wrong
+   ones: a model writes the fields in the schema's order, and stating the
+   fact first is a chain of thought (Wei et al., "Chain-of-Thought
+   Prompting Elicits Reasoning in Large Language Models",
+   https://arxiv.org/abs/2201.11903). With gemma3:4b on a 16 GB Mac, the
+   former schema (answers first) marked a wrong answer right in 1 or 2 of
+   4 questions. A server that refuses the format is asked again
    without it. The reply is streamed, so the panel shows how many
    questions the model has begun. Cancel frees the panel at once; the
    request's connection closes as the server next writes, which stops the
    server too (while a model is still loading, it writes nothing for a
    while). A show that begins cancels the request the same way.
-4. The model's questions (first answer correct) become rows of a sheet
+4. The model's questions become rows of a sheet
    (`draft_table`) that the spreadsheet import reads, so they get its
    defaults and checks: answers shuffled, a section for each named round,
    and in an empty quiz an end of round after each and the results at the
@@ -234,7 +242,10 @@ https://lmstudio.ai/docs/developer/openai-compat/structured-output); the
 reply is read also when the JSON is wrapped in a code block or a sentence
 or follows a reasoning model's `<think>` block, and a field written oddly
 (`null`, a number for a text) loses only itself. A question whose first
-(correct) answer is empty, or that has fewer than two answers, is left out.
+(right) answer is empty, or that has fewer than two answers, is left out;
+an answer given twice or that is itself a question is dropped, and a
+numbering a model adds to each question's round ("Geography (2/3)") is
+taken off, so the round stays one.
 An error the server sends midway (a model out of memory) is shown as such,
 and a model that does not stop is stopped after 400,000 characters. The
 address must be `http` or `https` with no user name or password, and

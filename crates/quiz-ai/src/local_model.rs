@@ -199,24 +199,35 @@ fn instructions(language: QuizLanguage) -> String {
     format!(
         "You write questions for a live quiz played in a room with buzzers. The questions are shown on a projector and \
          every team answers by pressing A, B, C or D.\n\
-         Reply with JSON only, as the schema says: {{\"questions\": [...]}}.\n\
+         Reply with JSON only, as the schema says: {{\"questions\": [...]}}. For each question, in this order:\n\
+         - \"attachment\": the number of the picture or video attachment the question is about, so the slide shows \
+         it; 0 when it is about none.\n\
+         - \"question\": the question, under 150 characters so it reads well on a projector.\n\
+         - \"reason\": one short sentence with the fact that answers it, taken from the attachment or the request \
+         (for a picture: what is really seen in it). The quizmaster reads it.\n\
+         - \"right\": the one correct answer. It must agree with the reason and with the attachments: what a text \
+         attachment says is true.\n\
+         - \"round\": the round's name when the request asks for rounds, the same for every question of that round \
+         (not numbered per question); empty otherwise.\n\
+         - \"wrong\": 1 to 3 wrong but believable answers of the same kind as the right one (all colours when it \
+         is a colour, all numbers when it is a number). None repeats the right answer or another wrong one, none \
+         is a question.\n\
          Rules:\n\
-         - Write every question, answer and explanation in {language}.\n\
-         - Each question has 2 to 4 answers. The FIRST answer is the correct one; the app shuffles them. \
-         Exactly one answer is correct, the others are wrong but believable.\n\
-         - Keep a question under 150 characters and an answer under 40, so they read well on a projector.\n\
+         - Write everything in {language}, with correct spelling.\n\
+         - Keep every answer under 40 characters.\n\
          - Ask about facts the attachments and the request give. Do not invent facts you are not sure of.\n\
-         - When a question is about a picture or a video attachment, set \"file\" to that attachment's number so \
-         the slide shows it, and ask about what it shows.\n\
-         - \"explanation\" is one short sentence for the quizmaster on why the answer is right.\n\
-         - When the request asks for rounds, give each question its round's name in \"round\"; questions of a round \
-         come together.\n\
+         - Questions of a round come together.\n\
          - Unless the request says how many, write 10 questions."
     )
 }
 
 /// The JSON Schema the model's reply follows: small, so models of a few
-/// billion parameters keep to it.
+/// billion parameters keep to it. A model writes the fields in the order
+/// the schema gives them, which is the alphabetical order of their names
+/// (`serde_json` sorts them): so the fields are named for a model to write
+/// what the question is about, the question, the fact that answers it and
+/// only then the right answer (small models mark a wrong answer right far
+/// less often when they state the fact first, as in a chain of thought).
 pub fn reply_schema() -> Value {
     json!({
         "type": "object",
@@ -228,13 +239,14 @@ pub fn reply_schema() -> Value {
                 "items": {
                     "type": "object",
                     "properties": {
-                        "round": { "type": "string" },
+                        "attachment": { "type": "integer", "minimum": 0 },
                         "question": { "type": "string" },
-                        "answers": { "type": "array", "items": { "type": "string" }, "minItems": 2, "maxItems": MAX_EVERYONE_ANSWERS },
-                        "explanation": { "type": "string" },
-                        "file": { "type": "integer", "minimum": 0 }
+                        "reason": { "type": "string" },
+                        "right": { "type": "string" },
+                        "round": { "type": "string" },
+                        "wrong": { "type": "array", "items": { "type": "string" }, "minItems": 1, "maxItems": MAX_EVERYONE_ANSWERS - 1 }
                     },
-                    "required": ["question", "answers"]
+                    "required": ["attachment", "question", "reason", "right", "wrong"]
                 }
             }
         },
@@ -291,7 +303,8 @@ pub fn request(model: &LocalModel, asked: &QuestionRequest) -> Result<Value, Req
             "type": "json_schema",
             "json_schema": { "name": "quiz_questions", "schema": reply_schema() }
         },
-        "temperature": 0.7,
+        // Low, for facts rather than invention.
+        "temperature": 0.2,
         "stream": false
     }))
 }
@@ -331,27 +344,69 @@ impl DraftQuestion {
     /// The question in `value`, read field by field so that one field a
     /// small model wrote oddly (`null`, a number for a text, `"2"` for a
     /// number) loses no more than itself; None for what is not an object.
+    /// The schema's fields (`reply_schema`) are read, and also the form a
+    /// model that does not keep to it often writes (`answers`, the first
+    /// correct; `explanation`; `file`).
     fn read(value: &Value) -> Option<DraftQuestion> {
-        let field = |name: &str| value.get(name).map_or_else(String::new, text_of);
-        let answers = match value.get("answers") {
-            Some(Value::Array(answers)) => answers.iter().map(text_of).collect(),
+        let field = |names: &[&str]| names.iter().find_map(|name| value.get(*name).filter(|v| !v.is_null())).map_or_else(String::new, text_of);
+        let list = |name: &str| match value.get(name) {
+            Some(Value::Array(items)) => items.iter().map(text_of).collect(),
+            Some(Value::String(one)) => vec![one.clone()],
             _ => Vec::new(),
         };
-        let file = match value.get("file") {
+        let answers = match value.get("right").filter(|v| !v.is_null()) {
+            Some(right) => std::iter::once(text_of(right)).chain(list("wrong")).collect(),
+            None => list("answers"),
+        };
+        let file = match value.get("attachment").or_else(|| value.get("file")) {
             Some(Value::Number(n)) => n.as_u64().and_then(|n| usize::try_from(n).ok()).unwrap_or(0),
             Some(Value::String(s)) => s.trim().parse().unwrap_or(0),
             _ => 0,
         };
-        value.is_object().then(|| DraftQuestion { round: field("round"), question: field("question"), answers, explanation: field("explanation"), file })
+        value.is_object().then(|| DraftQuestion { round: round_name(&field(&["round"])), question: field(&["question"]), answers, explanation: field(&["reason", "explanation"]), file })
     }
 
-    /// Whether the question can be asked: a text, and a correct (first)
-    /// answer with at least one other. A first answer left empty would make
-    /// the next one correct, which the model did not mean.
-    fn askable(&self) -> bool {
-        let answers: Vec<String> = self.answers.iter().map(|a| answer_cell(a)).collect();
-        !self.question.trim().is_empty() && answers.first().is_some_and(|a| !a.is_empty()) && answers.iter().filter(|a| !a.is_empty()).count() >= 2
+    /// The question with the answers a quiz can use: none empty, none twice
+    /// (whatever the case and spaces), none that is itself a question. None
+    /// when it cannot be asked then: no text, its correct (first) answer is
+    /// one of those, or no other answer is left.
+    fn askable(mut self) -> Option<DraftQuestion> {
+        let mut seen: Vec<String> = Vec::new();
+        let usable = |answer: &String, seen: &mut Vec<String>| {
+            let cell = answer_cell(answer);
+            let key = cell.to_lowercase();
+            let ok = !cell.is_empty() && !cell.ends_with('?') && !seen.contains(&key);
+            seen.push(key);
+            ok
+        };
+        let first_ok = self.answers.first().is_some_and(|first| usable(first, &mut seen));
+        let wrong: Vec<String> = self.answers.iter().skip(1).filter(|a| usable(a, &mut seen)).cloned().collect();
+        if self.question.trim().is_empty() || !first_ok || wrong.is_empty() {
+            return None;
+        }
+        self.answers.truncate(1);
+        self.answers.extend(wrong);
+        Some(self)
     }
+}
+
+/// A round's name as the model wrote it, without the numbering some
+/// models add to each question's ("Geography (2/3)", "Geography 2/3"):
+/// a round's questions then share one name, so they make one round.
+fn round_name(name: &str) -> String {
+    let name = name.trim();
+    let in_brackets = name.strip_suffix(')').and_then(|n| n.rsplit_once('(')).filter(|(_, inside)| numbered(inside)).map(|(before, _)| before);
+    let at_end = || {
+        let start = name.trim_end_matches(|c: char| c.is_ascii_digit() || c == ' ' || c == '/').len();
+        numbered(&name[start..]).then(|| &name[..start])
+    };
+    let without = in_brackets.or_else(at_end).unwrap_or(name).trim_end_matches([' ', '-', '–', ':', ',']);
+    if without.is_empty() { name } else { without }.to_string()
+}
+
+/// Whether `text` is a numbering such as `2/3` or `2 / 3`.
+fn numbered(text: &str) -> bool {
+    text.split_once('/').is_some_and(|(a, b)| [a, b].iter().all(|n| !n.trim().is_empty() && n.trim().bytes().all(|b| b.is_ascii_digit())))
 }
 
 /// A text or a number or a truth as the text it says; anything else as none.
@@ -384,7 +439,7 @@ pub fn read_questions(content: &str, cut_off: bool) -> Result<Vec<DraftQuestion>
         None if cut_off => return Err(ReplyError::CutOff),
         None => return Err(ReplyError::NotQuestions),
     };
-    let questions: Vec<DraftQuestion> = questions.into_iter().filter(DraftQuestion::askable).take(MAX_QUESTIONS).collect();
+    let questions: Vec<DraftQuestion> = questions.into_iter().filter_map(DraftQuestion::askable).take(MAX_QUESTIONS).collect();
     if questions.is_empty() {
         return Err(ReplyError::NoQuestions);
     }
@@ -686,7 +741,33 @@ mod tests {
             {"question":"Záporný soubor?","answers":["a","b"],"file":-1}
         ]}"#;
         let questions = read_questions(reply, false).unwrap();
-        assert_eq!(questions, vec![question("", "Rok?", &["1945", "1939", ""], 2), question("", "Záporný soubor?", &["a", "b"], 0)]);
+        assert_eq!(questions, vec![question("", "Rok?", &["1945", "1939"], 2), question("", "Záporný soubor?", &["a", "b"], 0)]);
+    }
+
+    #[test]
+    fn the_schemas_fields_are_read_with_the_reason_before_the_right_answer() {
+        // serde_json keeps object keys sorted: the order a model writes them in.
+        let item = &reply_schema()["properties"]["questions"]["items"]["properties"];
+        let order: Vec<&String> = item.as_object().unwrap().keys().collect();
+        assert_eq!(order, ["attachment", "question", "reason", "right", "round", "wrong"]);
+        let reply = r#"{"questions":[{"attachment":1,"question":"Jaká barva převládá?","reason":"Tlačítko na obrázku je oranžové.","right":"Oranžová","round":"Logo (1/2)","wrong":["Modrá","modrá ","Oranžová","Co je to?","Zelená"]},
+            {"attachment":0,"question":"Kolik měří Vltava?","reason":"Text říká 430 km.","right":"430 km","round":"Logo 2/2","wrong":"300 km"}]}"#;
+        let questions = read_questions(reply, false).unwrap();
+        assert_eq!(questions[0].answers, ["Oranžová", "Modrá", "Zelená"]);
+        assert_eq!((questions[0].file, questions[0].explanation.as_str()), (1, "Tlačítko na obrázku je oranžové."));
+        assert_eq!(questions[1].answers, ["430 km", "300 km"]);
+        // Both are of one round, whatever numbering the model gave each.
+        assert_eq!([questions[0].round.as_str(), questions[1].round.as_str()], ["Logo", "Logo"]);
+        // A right answer that is a question, or with no wrong one left, is no question.
+        let unusable = r#"{"questions":[{"question":"A?","right":"Proč?","wrong":["b"]},{"question":"B?","right":"a","wrong":["A"]}]}"#;
+        assert_eq!(read_questions(unusable, false), Err(ReplyError::NoQuestions));
+    }
+
+    #[test]
+    fn round_names_lose_only_their_numbering() {
+        for (written, name) in [("Zeměpis (2/3)", "Zeměpis"), ("Zeměpis 2/3", "Zeměpis"), ("Kolo – 1 / 4", "Kolo"), ("Rok 1945", "Rok 1945"), ("1/2", "1/2"), ("Hudba (pop)", "Hudba (pop)"), ("", "")] {
+            assert_eq!(round_name(written), name, "{written}");
+        }
     }
 
     #[test]
