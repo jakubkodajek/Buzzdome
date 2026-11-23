@@ -22,12 +22,16 @@ preview.
    (`--only director|editor|host` and `--lang cs|en` narrow it, `--url`
    points at another dev server). It needs Playwright: the cloud container
    has it; elsewhere `npm i -g playwright && npx playwright install chromium`.
-   A full run takes about five minutes.
 3. It opens each Director tab with no show, in the lobby, while a
    question runs (also with 20 long team names, and a long buzz queue), light and dark, in Czech and English; each ribbon tab and
    properties page of the editor; and every projector scene of
-   `app/src/dev/preview.tsx` (new scenes are picked up). Each at
-   1024x640, 1366x768 and 1920x1080. It exits 1 and prints one line per
+   `app/src/dev/preview.tsx` (new scenes are picked up). Each at the
+   window sizes a maximized window has on Windows, at that display scale
+   (`ALL_SIZES` in the script): laptops from 960x600 (the Director's
+   smallest) and full HD at 125 % and 150 %, monitors from full HD to QHD,
+   4K and ultrawide, and 4:3 and 16:10 projectors. `--size WxH` checks one;
+   a full run takes about half an hour, so run sizes in parallel
+   (`xargs -P4`) when checking them all. It exits 1 and prints one line per
    problem. Look at the screenshots of anything it reports, and of the
    screens you changed, even when it reports nothing.
 

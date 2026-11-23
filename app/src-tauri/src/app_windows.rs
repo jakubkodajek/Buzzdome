@@ -12,7 +12,7 @@ use std::sync::{Arc, Mutex, TryLockError};
 use std::time::{Duration, Instant};
 use tauri::menu::{Menu, MenuEvent};
 use tauri::plugin::TauriPlugin;
-use tauri::{AppHandle, Emitter, Manager, Monitor, Runtime, State, Url, Webview, WebviewUrl, WebviewWindowBuilder, Window, WindowEvent};
+use tauri::{AppHandle, Emitter, Manager, Monitor, PhysicalPosition, Runtime, State, Url, Webview, WebviewUrl, WebviewWindow, WebviewWindowBuilder, Window, WindowEvent};
 use ts_rs::TS;
 
 /// The projector window.
@@ -93,6 +93,52 @@ fn projector_place(ids: &[String], director: Option<&str>, chosen: Option<&str>)
     }
 }
 
+/// How a window that opened at its set size goes on the screen it is on.
+#[derive(Debug, PartialEq, Eq)]
+enum Fit {
+    /// It lies within the screen's work area.
+    Keep,
+    /// It fits, but sticks out: centred in the work area, at this corner.
+    Move(i32, i32),
+    /// It is larger than the work area: maximized.
+    Maximize,
+}
+
+/// Where a window at `at` of `size` goes in the `work` area (its corner and
+/// size), all in physical pixels. Sizes are set in logical pixels, which
+/// Windows' display scale enlarges: the Director's 1280x800 is taller than a
+/// full HD laptop at 150 % leaves above the taskbar (about 1280x690), so its
+/// status bar would sit under the taskbar or off the screen.
+fn fit(at: (i32, i32), size: (u32, u32), work: ((i32, i32), (u32, u32))) -> Fit {
+    let ((wx, wy), (ww, wh)) = work;
+    if size.0 > ww || size.1 > wh {
+        return Fit::Maximize;
+    }
+    let inside = at.0 >= wx && at.1 >= wy && i64::from(at.0) + i64::from(size.0) <= i64::from(wx) + i64::from(ww) && i64::from(at.1) + i64::from(size.1) <= i64::from(wy) + i64::from(wh);
+    if inside {
+        return Fit::Keep;
+    }
+    let centre = |start: i32, room: u32, length: u32| start.saturating_add(i32::try_from((room - length) / 2).unwrap_or(0));
+    Fit::Move(centre(wx, ww, size.0), centre(wy, wh, size.1))
+}
+
+/// Keeps a window that is not full screen within the work area of its
+/// screen (`fit`), so no edge of it lies under the taskbar or off the screen.
+pub fn fit_on_screen(window: &WebviewWindow) {
+    let (Ok(Some(monitor)), Ok(at), Ok(size)) = (window.current_monitor(), window.outer_position(), window.outer_size()) else {
+        return;
+    };
+    let work = monitor.work_area();
+    let done = match fit((at.x, at.y), (size.width, size.height), ((work.position.x, work.position.y), (work.size.width, work.size.height))) {
+        Fit::Keep => Ok(()),
+        Fit::Move(x, y) => window.set_position(PhysicalPosition::new(x, y)),
+        Fit::Maximize => window.maximize(),
+    };
+    if let Err(e) = done {
+        app_log::note(&format!("fitting the {} window on its screen: {e}", window.label()));
+    }
+}
+
 /// Opens (or moves) the projector window on the `monitor` chosen (by
 /// `MonitorInfo::id`), or on a screen the Director is not on, full screen
 /// if so asked (`projector_place`). Monitors are listed now, so one plugged
@@ -121,6 +167,9 @@ pub async fn open_host_window(app: AppHandle, monitor: Option<String>, fullscree
     if let Some((index, may_fill)) = place {
         window.set_position(*monitors[index].position())?;
         window.set_fullscreen(fullscreen && may_fill)?;
+        if !(fullscreen && may_fill) {
+            fit_on_screen(&window);
+        }
     }
     window.set_focus()?;
     let _ = app.emit("host-window", true);
@@ -474,7 +523,10 @@ pub fn show_director(app: &AppHandle) {
     tauri::async_runtime::spawn(async move {
         let Some(config) = app.config().app.windows.iter().find(|w| w.label == DIRECTOR_LABEL) else { return };
         match WebviewWindowBuilder::from_config(&app, config).and_then(|builder| builder.build()) {
-            Ok(window) => app_icon::apply(&app, &window),
+            Ok(window) => {
+                fit_on_screen(&window);
+                app_icon::apply(&app, &window);
+            }
             Err(e) => app_log::note(&format!("director window: {e}")),
         }
     });
@@ -507,6 +559,27 @@ fn is_app_url(url: &Url, dev: Option<&Url>) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_window_taller_than_the_work_area_is_maximized() {
+        // Full HD at 150 %: 1280x800 logical is 1920x1200, the work area above the taskbar 1920x1008.
+        assert_eq!(fit((0, 0), (1920, 1200), ((0, 0), (1920, 1008))), Fit::Maximize);
+        // HD at 100 %: 1280x800 against 1366x728.
+        assert_eq!(fit((10, 10), (1280, 800), ((0, 0), (1366, 728))), Fit::Maximize);
+        // Too wide only.
+        assert_eq!(fit((0, 0), (1500, 600), ((0, 0), (1366, 728))), Fit::Maximize);
+    }
+
+    #[test]
+    fn a_window_that_fits_stays_or_is_centred_in_the_work_area() {
+        let work = ((0, 0), (1920, 1040));
+        assert_eq!(fit((100, 50), (1280, 800), work), Fit::Keep);
+        assert_eq!(fit((800, 400), (1280, 800), work), Fit::Move(320, 120));
+        assert_eq!(fit((-5, 0), (1280, 800), work), Fit::Move(320, 120));
+        // A second screen left of the first, with its taskbar on top.
+        assert_eq!(fit((0, 0), (1280, 800), ((-2560, 40), (2560, 1400))), Fit::Move(-1920, 340));
+        assert_eq!(fit((-2000, 100), (1280, 800), ((-2560, 40), (2560, 1400))), Fit::Keep);
+    }
 
     #[test]
     fn closing_asks_for_every_reason_that_holds_and_none_without_one() {

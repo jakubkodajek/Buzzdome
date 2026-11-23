@@ -12,7 +12,7 @@
 //   off-screen   a control lies outside the window with no way to scroll to it
 //
 // Usage (from the repo root, with `cd app && npm run dev` running):
-//   node .claude/skills/buzzdome-layout/check-layout.mjs [--url http://localhost:5173] [--only director|editor|host] [--lang cs|en] [--shots <dir>]
+//   node .claude/skills/buzzdome-layout/check-layout.mjs [--url http://localhost:5173] [--only director|editor|host] [--lang cs|en] [--size WxH] [--shots <dir>]
 // The Director and the editor are checked in Czech and English (texts differ in length),
 // the projector in Czech (its texts are the quiz's).
 // Exits 1 when it finds a problem.
@@ -50,12 +50,35 @@ const scenes = (() => {
   return [...block.matchAll(/^ {2}(\w+):/gm)].map((m) => m[1]);
 })();
 
-/** Window sizes: the smallest laptop the Director should work on, a common laptop, a full HD screen. */
-const SIZES = [
-  { width: 1024, height: 640 },
-  { width: 1366, height: 768 },
-  { width: 1920, height: 1080 },
+/**
+ * Window sizes the app meets on Windows, as CSS pixels inside a maximized
+ * window (screen / display scale, less the title bar and the taskbar), each at
+ * its display scale so text and borders round as they do there. Laptops:
+ * the smallest the Director allows (`minWidth`/`minHeight` in tauri.conf.json),
+ * full HD at 150 % and 125 %, HD at 100 %, 16:10 full HD at 150 %. Monitors:
+ * full HD (or 4K at 200 %), QHD at 100 % and 125 %, 4K at 150 % and 100 %,
+ * ultrawide 2560x1080 and 3440x1440. Projectors (full screen): XGA 4:3 and WXGA 16:10.
+ * `--size WxH` checks one of them.
+ */
+const ALL_SIZES = [
+  { width: 960, height: 600, scale: 1 },
+  { width: 1280, height: 640, scale: 1.5 },
+  { width: 1366, height: 690, scale: 1 },
+  { width: 1280, height: 720, scale: 1.5 },
+  { width: 1536, height: 780, scale: 1.25 },
+  { width: 1920, height: 1000, scale: 1 },
+  { width: 2048, height: 1080, scale: 1.25 },
+  { width: 2560, height: 1360, scale: 1 },
+  { width: 2560, height: 1360, scale: 1.5 },
+  { width: 3840, height: 2080, scale: 1 },
+  { width: 2560, height: 1000, scale: 1 },
+  { width: 3440, height: 1360, scale: 1 },
+  { width: 1024, height: 768, scale: 1 },
+  { width: 1280, height: 800, scale: 1 },
 ];
+const SIZES = option("size", null)
+  ? ALL_SIZES.filter((s) => `${s.width}x${s.height}` === option("size"))
+  : ALL_SIZES;
 
 /** Bars that keep their place while the rest scrolls, and the edge each belongs to. */
 const BARS = [
@@ -143,7 +166,7 @@ function inspect(bars) {
 const browser = await chromium.launch();
 async function check(label, url, size, lang, steps = async () => {}) {
   label = `${label} ${lang}`;
-  const page = await browser.newPage({ viewport: size });
+  const page = await browser.newPage({ viewport: { width: size.width, height: size.height }, deviceScaleFactor: size.scale });
   // The UI's language is a preference (`i18n.ts`), read before the first render.
   await page.addInitScript((value) => localStorage.setItem("quiz-show.lang", value), lang);
   const errors = [];
@@ -154,7 +177,7 @@ async function check(label, url, size, lang, steps = async () => {}) {
   await steps(page);
   const visit = async (what) => {
     await page.waitForTimeout(250);
-    const where = `${label} ${what} @${size.width}x${size.height}`;
+    const where = `${label} ${what} @${size.width}x${size.height}${size.scale === 1 ? "" : `x${size.scale}`}`;
     for (const p of await page.evaluate(inspect, BARS)) problems.push(`${where}: ${p}`);
     if (shots) await page.screenshot({ path: join(shots, `${where.replace(/[^\w@.-]+/g, "_")}.png`) });
   };
