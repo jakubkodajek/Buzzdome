@@ -10,6 +10,7 @@ use crate::settings::QuizSettings;
 use crate::sounds::{QuizSounds, SoundSlot};
 use crate::style::SlideStyle;
 use crate::text::file_key;
+use crate::text_limits::TextField;
 use crate::welcome::{Welcome, WelcomeFile};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -58,6 +59,7 @@ pub const FULL_SHARE: u8 = 100;
 pub struct Quiz {
     #[schemars(range(min = 1, max = SCHEMA_VERSION))]
     pub schema_version: u32,
+    #[schemars(length(max = crate::text_limits::MAX_QUIZ_TITLE_CHARS))]
     pub title: String,
     /// Id of the look the screens use (spec section 5.2); the app's default
     /// when missing or not installed.
@@ -114,6 +116,7 @@ pub struct Slide {
     pub id: String,
     /// Shown only to the quizmaster in the Director.
     #[serde(default)]
+    #[schemars(length(max = crate::text_limits::MAX_NOTES_CHARS))]
     pub notes: String,
     #[serde(default)]
     #[schemars(pattern(crate::media::MEDIA_PATTERN))]
@@ -198,6 +201,34 @@ impl Slide {
         }
     }
 
+    /// The slide's texts, each with its field (`TextField`); a question's
+    /// answers are `answers` apart.
+    fn texts(&self) -> Vec<(TextField, &str)> {
+        let mut texts = vec![(TextField::Notes, self.notes.as_str())];
+        match &self.content {
+            SlideContent::Billboard { title, text } => texts.extend([(TextField::Title, title.as_str()), (TextField::Text, text.as_str())]),
+            SlideContent::Question(q) => texts.extend([(TextField::Question, q.text.as_str()), (TextField::ReadAs, q.read_as.as_str())]),
+            SlideContent::Explanation { text } => texts.push((TextField::Text, text.as_str())),
+            SlideContent::EndOfRound { title } | SlideContent::Final { title } => texts.push((TextField::Title, title.as_str())),
+        }
+        texts
+    }
+
+    /// Adds a problem to `found` for each of the slide's texts that is
+    /// longer than its field takes (spec QZ-13).
+    fn text_problems(&self, found: &mut impl FnMut(Problem)) {
+        for (text, value) in self.texts() {
+            if text.too_long(value) {
+                found(Problem::TextTooLong { text, max: text.max_chars() });
+            }
+        }
+        if let SlideContent::Question(q) = &self.content {
+            for (answer, _) in q.answers.iter().enumerate().filter(|(_, value)| TextField::Answer.too_long(value)) {
+                found(Problem::AnswerTooLong { answer, max: TextField::Answer.max_chars() });
+            }
+        }
+    }
+
     /// The media files this slide uses, with the kinds each may be.
     pub fn media(&self) -> Vec<(&str, &'static [MediaKind])> {
         const IMAGE: &[MediaKind] = &[MediaKind::Image];
@@ -265,8 +296,10 @@ pub enum SlideContent {
     /// Information slide without interaction: round intros, announcements.
     #[serde(rename_all = "camelCase")]
     Billboard {
+        #[schemars(length(max = crate::text_limits::MAX_TITLE_CHARS))]
         title: String,
         #[serde(default)]
+        #[schemars(length(max = crate::text_limits::MAX_SLIDE_TEXT_CHARS))]
         text: String,
     },
     Question(Question),
@@ -276,17 +309,22 @@ pub enum SlideContent {
     #[serde(rename_all = "camelCase")]
     Explanation {
         #[serde(default)]
+        #[schemars(length(max = crate::text_limits::MAX_SLIDE_TEXT_CHARS))]
         text: String,
     },
     /// Closes a round and shows the leaderboard.
     #[serde(rename_all = "camelCase")]
-    EndOfRound { title: String },
+    EndOfRound {
+        #[schemars(length(max = crate::text_limits::MAX_TITLE_CHARS))]
+        title: String,
+    },
     /// The final ranking: a drum roll, then third, second and first place,
     /// then everyone. As a slide it has a sound (the winners' music) and a
     /// background; a quiz without one shows the ranking after its last slide.
     #[serde(rename_all = "camelCase")]
     Final {
         #[serde(default)]
+        #[schemars(length(max = crate::text_limits::MAX_TITLE_CHARS))]
         title: String,
     },
 }
@@ -374,10 +412,12 @@ impl AnswerMode {
 #[ts(export)]
 #[serde(rename_all = "camelCase")]
 pub struct Question {
+    #[schemars(length(max = crate::text_limits::MAX_QUESTION_CHARS))]
     pub text: String,
     pub mode: AnswerMode,
     /// Empty for a fastest-finger question answered verbally.
     #[serde(default)]
+    #[schemars(inner(length(max = crate::text_limits::MAX_ANSWER_CHARS)))]
     pub answers: Vec<String>,
     /// The right answers, each once. Required for everyone-answers
     /// questions; a fastest finger question shows them at the reveal.
@@ -400,6 +440,7 @@ pub struct Question {
     /// such as a name written as it sounds; empty reads `text`.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     #[ts(optional, as = "Option<String>")]
+    #[schemars(length(max = crate::text_limits::MAX_READ_AS_CHARS))]
     pub read_as: String,
 }
 
@@ -640,6 +681,13 @@ pub enum Problem {
     /// A warning: answer `answer` (from 0) of a question is empty.
     #[error("answer {answer} is empty")]
     AnswerEmpty { answer: usize },
+    /// A text with more characters than its field takes (spec QZ-13); one
+    /// of a question's answers is `AnswerTooLong`.
+    #[error("{} has more than {max} characters", text.json_name())]
+    TextTooLong { text: TextField, max: usize },
+    /// Answer `answer` (from 0) of a question has more than `max` characters.
+    #[error("answer {answer} has more than {max} characters")]
+    AnswerTooLong { answer: usize, max: usize },
 }
 
 impl Problem {
@@ -666,6 +714,9 @@ impl Problem {
                     | Problem::CategoryNameTooLong { .. }
                     | Problem::CategoryNameTaken { .. }
                     | Problem::CategoryMedia { .. }
+                    // A file saved before the limits plays as it did; the editor has it shortened.
+                    | Problem::TextTooLong { .. }
+                    | Problem::AnswerTooLong { .. }
             )
     }
 }
@@ -972,6 +1023,11 @@ impl Quiz {
             if let SlideContent::Question(q) = &slide.content {
                 q.problems(&mut found);
             }
+            slide.text_problems(&mut found);
+        }
+        let quiz_texts = [(TextField::QuizTitle, &self.title), (TextField::WelcomeHeading, &self.welcome.heading), (TextField::WelcomeFooter, &self.welcome.footer)];
+        for (text, _) in quiz_texts.into_iter().filter(|(text, value)| text.too_long(value)) {
+            errors.push(ValidationError { slide_id: None, problem: Problem::TextTooLong { text, max: text.max_chars() } });
         }
         for (slot, file, issue) in self.sounds.problems() {
             errors.push(ValidationError { slide_id: None, problem: Problem::SoundMedia { slot, file: file.to_string(), issue } });
@@ -1211,6 +1267,45 @@ mod tests {
         assert_eq!(warned, [Problem::QuestionTextEmpty, Problem::AnswerEmpty { answer: 1 }]);
         assert!(warned.iter().all(|w| w.is_warning() && !w.keeps_from_playing()));
         assert_eq!(Quiz::new("x", vec![question_slide(|_| {})]).warnings(), [], "a written question");
+    }
+
+    #[test]
+    fn a_text_longer_than_its_field_takes_keeps_the_quiz_from_being_saved_but_not_from_playing() {
+        use crate::text_limits::{MAX_ANSWER_CHARS, MAX_NOTES_CHARS, MAX_QUESTION_CHARS, MAX_SLIDE_TEXT_CHARS, MAX_TITLE_CHARS};
+        fn over(max: usize) -> String {
+            "ž".repeat(max + 1)
+        }
+        fn at(max: usize) -> String {
+            "ž".repeat(max)
+        }
+        let longest = question_slide(|q| (q.text, q.answers[1]) = (at(MAX_QUESTION_CHARS), at(MAX_ANSWER_CHARS)));
+        assert_eq!(problems_of(vec![longest]), [], "a text as long as its field takes");
+
+        let mut question = question_slide(|q| (q.text, q.answers[1]) = (over(MAX_QUESTION_CHARS), over(MAX_ANSWER_CHARS)));
+        question.notes = over(MAX_NOTES_CHARS);
+        let billboard = Slide::new("b", SlideContent::Billboard { title: over(MAX_TITLE_CHARS), text: over(MAX_SLIDE_TEXT_CHARS) });
+        let explanation = Slide::new("c", SlideContent::Explanation { text: over(MAX_SLIDE_TEXT_CHARS) });
+        let end = Slide::new("d", SlideContent::EndOfRound { title: over(MAX_TITLE_CHARS) });
+        let found = problems_of(vec![question, billboard, explanation, end]);
+        let too_long = |text: TextField| Problem::TextTooLong { text, max: text.max_chars() };
+        assert_eq!(
+            found,
+            [
+                too_long(TextField::Notes),
+                too_long(TextField::Question),
+                Problem::AnswerTooLong { answer: 1, max: MAX_ANSWER_CHARS },
+                too_long(TextField::Title),
+                too_long(TextField::Text),
+                too_long(TextField::Text),
+                too_long(TextField::Title),
+            ]
+        );
+        assert!(found.iter().all(|p| !p.is_warning() && !p.keeps_from_playing()), "a file written before the limits still plays");
+
+        let mut quiz = Quiz::new(over(TextField::QuizTitle.max_chars()), vec![]);
+        quiz.welcome.footer = over(TextField::WelcomeFooter.max_chars());
+        let found: Vec<Problem> = quiz.validate().unwrap_err().into_iter().map(|e| e.problem).collect();
+        assert_eq!(found, [too_long(TextField::QuizTitle), too_long(TextField::WelcomeFooter)]);
     }
 
     #[test]

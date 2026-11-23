@@ -7,12 +7,12 @@ import { useEffect, useId, useRef } from "react";
 import { BackIcon, CheckIcon, PlayIcon, StopIcon } from "../icons";
 import { keyHint, KEYS } from "../keyboard";
 import { problemText } from "../messages";
-import { DEFAULT_POINTS, DEFAULT_TIME_LIMIT_S, MAX_AFTER_REVEAL_DELAY_S, MAX_ALL_ANSWERED_DELAY_S, MAX_JOKERS, QUIZ_LANGUAGES, SHEET_WORDS } from "../bindings/Constants";
+import { DEFAULT_POINTS, DEFAULT_TIME_LIMIT_S, MAX_AFTER_REVEAL_DELAY_S, MAX_ALL_ANSWERED_DELAY_S, MAX_JOKERS, QUIZ_LANGUAGES, SHEET_WORDS, TEXT_LIMITS } from "../bindings/Constants";
 import type { StringKey } from "../i18n";
 import type { MediaKind } from "../media";
 import { LANGUAGE_LABEL, NO_CONTEXT, questionCount, settingsOf, soundsOf, welcomeOf } from "../quiz";
 import { RecentFileList } from "../recent-files";
-import type { AllAnswered, Quiz, QuizLanguage, QuizSettings, QuizSounds, ReadAloud, ValidationError, Welcome } from "../types";
+import type { AllAnswered, Quiz, QuizLanguage, QuizSettings, QuizSounds, ReadAloud, TextField, ValidationError, Welcome } from "../types";
 import { actionButton, tooltip, type Action, type Actions } from "./actions";
 import { AiPage } from "./AiPage";
 import { MediaPicker, NumberBox, Select, Switch } from "./controls";
@@ -135,7 +135,7 @@ function InfoPage({ open, unsaved, onTitle, onShowSlide }: BackstageProps & { op
       <h1>{t("info")}</h1>
       <label className="field">
         <span>{t("quizTitle")}</span>
-        <input value={quiz.title} placeholder={t("untitledQuiz")} onChange={(e) => onTitle(e.target.value)} />
+        <input value={quiz.title} placeholder={t("untitledQuiz")} maxLength={TEXT_LIMITS.quizTitle} onChange={(e) => onTitle(e.target.value)} />
       </label>
       <dl className="info-list">
         <dt>{t("file")}</dt>
@@ -352,10 +352,10 @@ function WelcomeSettings({ quiz, onWelcome, onPickMedia }: { quiz: Quiz; onWelco
   const { t } = useApp();
   const welcome = welcomeOf(quiz);
   const set = (change: Partial<Welcome>) => onWelcome({ ...welcome, ...change });
-  const text = (label: string, value: string, change: (text: string) => Partial<Welcome>, placeholder?: string) => (
+  const text = (label: string, field: TextField, value: string, change: (text: string) => Partial<Welcome>, placeholder?: string) => (
     <label>
       <span>{label}</span>
-      <input value={value} placeholder={placeholder} onChange={(e) => set(change(e.target.value))} />
+      <input value={value} placeholder={placeholder} maxLength={TEXT_LIMITS[field]} onChange={(e) => set(change(e.target.value))} />
     </label>
   );
   const file = (label: string, value: string | null, kinds: MediaKind[], change: (file: string | null) => Partial<Welcome>) => (
@@ -370,10 +370,10 @@ function WelcomeSettings({ quiz, onWelcome, onPickMedia }: { quiz: Quiz; onWelco
       <h3>{t("welcomeScreen")}</h3>
       <SettingSwitch label={t("welcomeOn")} hint={t("welcomeOnHint", { key: keyHint(t, KEYS.next) })} checked={welcome.on} onChange={(on) => set({ on })} />
       <div className="welcome-fields">
-        {text(t("welcomeHeading"), welcome.heading, (heading) => ({ heading }), quiz.title)}
+        {text(t("welcomeHeading"), "welcomeHeading", welcome.heading, (heading) => ({ heading }), quiz.title)}
         {file(t("welcomeLogo"), welcome.logo, ["image"], (logo) => ({ logo }))}
         {file(t("welcomeIntro"), welcome.intro, ["image", "video"], (intro) => ({ intro }))}
-        {text(t("welcomeFooter"), welcome.footer, (footer) => ({ footer }))}
+        {text(t("welcomeFooter"), "welcomeFooter", welcome.footer, (footer) => ({ footer }))}
       </div>
       <p className="backstage-hint">{t("welcomeIntroHint")}</p>
       <Stage className="thumbnail-stage welcome-preview" screen="welcome" slide={null} mode="thumbnail">

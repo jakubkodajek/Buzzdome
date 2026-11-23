@@ -14,6 +14,7 @@ pub mod sounds;
 pub mod stage;
 pub mod style;
 mod text;
+pub mod text_limits;
 pub mod theme;
 pub mod view;
 pub mod welcome;
@@ -40,6 +41,7 @@ pub use model::{
 };
 pub use sheet::{defused, export_table, import_tables, rows_without_correct, ImportIssue, ImportNote, ImportedRows, Notes, Place, SheetError, Table};
 pub use text::file_key;
+pub use text_limits::TextField;
 pub use stage::{Stage, LAST_SECONDS_MS};
 pub use sound_board::{BoardChange, BoardError, Pad, PadClick, PadColor, PadSource, SoundBoard};
 pub use sounds::{is_sound_id, QuizSounds, SoundChoice, SoundSlot, DEFAULT_EFFECTS_VOLUME, DEFAULT_MUSIC_VOLUME, MAX_SOUND_ID_LEN, MAX_SOUND_VOLUME};
@@ -97,6 +99,7 @@ mod ui_constants {
             ("MAX_TRANSPARENCY", crate::MAX_TRANSPARENCY.to_string()),
             ("MAX_CATEGORY_NAME_CHARS", crate::MAX_CATEGORY_NAME_CHARS.to_string()),
             ("FULL_SHARE", crate::FULL_SHARE.to_string()),
+            ("TEXT_LIMITS", text_limits()),
             ("DEFAULT_QUIZ_SETTINGS", format!("{} as const", serde_json::to_string(&crate::QuizSettings::default()).unwrap())),
             ("MAX_ALL_ANSWERED_DELAY_S", crate::MAX_ALL_ANSWERED_DELAY_S.to_string()),
             ("MAX_AFTER_REVEAL_DELAY_S", crate::MAX_AFTER_REVEAL_DELAY_S.to_string()),
@@ -125,6 +128,12 @@ mod ui_constants {
             ts.push_str(&format!("export const {name} = {value};\n"));
         }
         std::fs::write(std::path::Path::new(&dir).join("Constants.ts"), ts).unwrap();
+    }
+
+    /// The most characters each text of a quiz can have (`TextField::max_chars`).
+    fn text_limits() -> String {
+        let limits: std::collections::BTreeMap<_, _> = crate::TextField::ALL.into_iter().map(|field| (field, field.max_chars())).collect();
+        format!("{} as const", serde_json::to_string(&limits).unwrap())
     }
 
     /// The moments of the show that play music, or those that play effects.

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ANSWER_LETTERS } from "../answers";
 import { useApp } from "../app-context";
+import { TEXT_LIMITS } from "../bindings/Constants";
 import { CrossIcon } from "../icons";
 import { hasTitle, isCorrect, SLIDE_TYPE_LABEL } from "../quiz";
 import type { QuestionSlide, Slide } from "../types";
@@ -81,13 +82,13 @@ export function EditSlideDialog(props: {
         {hasTitle(draft) && (
           <label className="field">
             <span>{t("slideTitleField")}</span>
-            <input data-field="title" value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })} />
+            <input data-field="title" maxLength={TEXT_LIMITS.title} value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })} />
           </label>
         )}
         {draft.type === "billboard" && (
           <label className="field">
             <span>{t("slideTextField")}</span>
-            <textarea data-field="text" rows={4} value={draft.text} onChange={(e) => setDraft({ ...draft, text: e.target.value })} />
+            <textarea data-field="text" rows={4} maxLength={TEXT_LIMITS.text} value={draft.text} onChange={(e) => setDraft({ ...draft, text: e.target.value })} />
           </label>
         )}
         {draft.type === "explanation" && (
@@ -96,6 +97,7 @@ export function EditSlideDialog(props: {
             <textarea
               data-field="text"
               rows={6}
+              maxLength={TEXT_LIMITS.text}
               placeholder={t("explanationPlaceholder")}
               value={draft.text}
               onChange={(e) => setDraft({ ...draft, text: e.target.value })}
@@ -104,7 +106,7 @@ export function EditSlideDialog(props: {
         )}
         <label className="field">
           <span>{t("notes")}</span>
-          <textarea rows={3} value={draft.notes} onChange={(e) => setDraft({ ...draft, notes: e.target.value })} />
+          <textarea rows={3} maxLength={TEXT_LIMITS.notes} value={draft.notes} onChange={(e) => setDraft({ ...draft, notes: e.target.value })} />
         </label>
       </form>
     </Dialog>
@@ -120,7 +122,7 @@ function QuestionFields({ question, onChange }: { question: QuestionSlide; onCha
     <>
       <label className="field">
         <span>{t("questionField")}</span>
-        <textarea data-field="question" rows={3} value={question.text} onChange={(e) => onChange({ ...question, text: e.target.value })} />
+        <textarea data-field="question" rows={3} maxLength={TEXT_LIMITS.question} value={question.text} onChange={(e) => onChange({ ...question, text: e.target.value })} />
       </label>
       <fieldset className="answer-rows">
         <legend>{t("answersField")}</legend>
@@ -145,6 +147,7 @@ function QuestionFields({ question, onChange }: { question: QuestionSlide; onCha
                 data-field={`answer-${i}`}
                 aria-label={t("elementAnswer", { letter })}
                 placeholder={i === count ? t("addAnswer") : ""}
+                maxLength={TEXT_LIMITS.answer}
                 disabled={i > count}
                 value={question.answers[i] ?? ""}
                 onChange={(e) => onChange(setAnswerAt(question, i, e.target.value))}

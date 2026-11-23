@@ -1005,9 +1005,9 @@ mockIPC(
           defaultInstructions: "When I give you only a topic, make the whole quiz without asking me anything.\n\n- 3 rounds of 6 questions.",
           maxInstructionsChars: 4000,
           assistants: [
-            { assistant: "claudeDesktop", name: "Claude Desktop", state: "connected", configFiles: ["C:\\Users\\Eva\\AppData\\Roaming\\Claude\\claude_desktop_config.json"] },
-            { assistant: "antigravity", name: "Antigravity", state: "outdated", configFiles: ["C:\\Users\\Eva\\.gemini\\config\\mcp_config.json"] },
-            { assistant: "codex", name: "Codex", state: "notConnected", configFiles: ["C:\\Users\\Eva\\.codex\\config.toml"] },
+            { assistant: "claudeDesktop", name: "Claude Desktop", maker: "Claude / Anthropic", state: "connected", configFiles: ["C:\\Users\\Eva\\AppData\\Roaming\\Claude\\claude_desktop_config.json"] },
+            { assistant: "antigravity", name: "Antigravity", maker: "Gemini / Google", state: "outdated", configFiles: ["C:\\Users\\Eva\\.gemini\\config\\mcp_config.json"] },
+            { assistant: "codex", name: "Codex", maker: "ChatGPT / OpenAI", state: "notConnected", configFiles: ["C:\\Users\\Eva\\.codex\\config.toml"] },
           ],
           settingsError: null,
           platform: "windows",

@@ -32,6 +32,7 @@ import type {
   SettingsLost,
   SetupError,
   ShapeChange,
+  TextField,
   WelcomeFile,
 } from "./types";
 
@@ -239,7 +240,7 @@ function errorWords(t: Translate, error: Exclude<AppError, { code: "file" }>): s
 }
 
 /** Problems worded with their own parameters, see `problemText`. */
-type ProblemApart = "media" | "categoryMedia" | "soundMedia" | "welcomeMedia" | "volume" | "partEmpty" | "replayNotOnQuestion" | "answerEmpty";
+type ProblemApart = "media" | "categoryMedia" | "soundMedia" | "welcomeMedia" | "volume" | "partEmpty" | "replayNotOnQuestion" | "answerEmpty" | "textTooLong" | "answerTooLong";
 
 const PROBLEM_KEYS: Record<Exclude<Problem["code"], ProblemApart>, StringKey> = {
   duplicateSlideId: "problemDuplicateSlideId",
@@ -289,6 +290,19 @@ const MEDIA_KIND_KEYS: Record<MediaKind, StringKey> = {
   video: "mediaKindVideo",
 };
 
+/** What each text with a longest length is called (`TextField`). */
+const TEXT_FIELD_LABEL: Record<TextField, StringKey> = {
+  quizTitle: "quizTitle",
+  question: "questionField",
+  answer: "propAnswerText",
+  readAs: "readAsField",
+  title: "slideTitleField",
+  text: "slideTextField",
+  notes: "notes",
+  welcomeHeading: "textFieldWelcomeHeading",
+  welcomeFooter: "textFieldWelcomeFooter",
+};
+
 /** What each file of the welcome screen is called. */
 const WELCOME_FILE_LABEL: Record<WelcomeFile, StringKey> = {
   logo: "welcomeLogo",
@@ -308,6 +322,10 @@ export function problemText(t: Translate, problem: Problem): string {
       return t("problemWelcomeMedia", { place: t(WELCOME_FILE_LABEL[problem.place]), file: problem.file, issue: mediaIssueText(t, problem.issue) });
     case "answerEmpty":
       return t("problemAnswerEmpty", { letter: ANSWER_LETTERS[problem.answer] ?? String(problem.answer + 1) });
+    case "answerTooLong":
+      return t("problemAnswerTooLong", { letter: ANSWER_LETTERS[problem.answer] ?? String(problem.answer + 1), max: problem.max });
+    case "textTooLong":
+      return t("problemTextTooLong", { field: t(TEXT_FIELD_LABEL[problem.text]), max: problem.max });
     // Rules a sound and a video share, said of the one that breaks them.
     case "volume":
       return t(problem.media === "audio" ? "problemSoundVolume" : "problemVideoVolume");

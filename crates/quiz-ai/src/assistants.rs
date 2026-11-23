@@ -155,6 +155,16 @@ impl Assistant {
         }
     }
 
+    /// The AI model the app runs and the company that makes it, so the
+    /// quizmaster knows the app by either.
+    pub fn maker(self) -> &'static str {
+        match self {
+            Assistant::ClaudeDesktop => "Claude / Anthropic",
+            Assistant::Antigravity => "Gemini / Google",
+            Assistant::Codex => "ChatGPT / OpenAI",
+        }
+    }
+
     fn format(self) -> Format {
         match self {
             Assistant::ClaudeDesktop | Assistant::Antigravity => Format::Json,

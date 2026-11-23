@@ -43,32 +43,10 @@ export function SlideScreen(props: { view: GameView; context: SlideContext; cloc
     case "lobby":
       return <Registration view={view} />;
     case "billboard":
-      return view.slide?.type === "billboard" ? (
-        <div className="center-slide">
-          <h1 className="slide-title" data-element="title" style={look("title")}>
-            {placeholder(view.slide.title, t("titlePlaceholder"))}
-          </h1>
-          <SlideMedia slide={view.slide} className="slide-media" mode={mode} live={{ view, clock }} />
-          {(view.slide.text || mode === "preview") && (
-            <p className="slide-text" data-element="text" style={look("text")}>
-              {placeholder(view.slide.text, t("textPlaceholder"))}
-            </p>
-          )}
-        </div>
-      ) : null;
+      return view.slide?.type === "billboard" ? <BillboardScreen view={view} slide={view.slide} clock={clock} mode={mode} placeholder={placeholder} /> : null;
     case "explanation":
       return view.slide?.type === "explanation" ? (
-        <div className="explanation-screen">
-          {context.explains ? (
-            <ExplainedHeader explained={context.explains.question} n={context.explains.position.n} />
-          ) : (
-            mode !== "show" && <p className="explained-missing">{t("noQuestionToExplain")}</p>
-          )}
-          <SlideMedia slide={view.slide} className="explanation-media" mode={mode} live={{ view, clock }} />
-          <p className="explanation-text" data-element="text" style={look("text")}>
-            {placeholder(view.slide.text, t("explanationPlaceholder"))}
-          </p>
-        </div>
+        <ExplanationScreen view={view} slide={view.slide} context={context} clock={clock} mode={mode} placeholder={placeholder} />
       ) : null;
     case "endOfRound":
       return (
@@ -102,6 +80,54 @@ export function SlideScreen(props: { view: GameView; context: SlideContext; cloc
         />
       ) : null;
   }
+}
+
+/** What the screens of one slide type draw from. */
+interface ScreenProps<S extends Slide> {
+  view: GameView;
+  slide: S;
+  clock: ClockView | null;
+  mode: ScreenMode;
+  placeholder: (text: string, empty: string) => ReactNode;
+}
+
+/** An information slide: its title, picture or video, and text, drawn smaller when they would not fit. */
+function BillboardScreen({ view, slide, clock, mode, placeholder }: ScreenProps<Extract<Slide, { type: "billboard" }>>) {
+  const { t } = useApp();
+  const screen = useRef<HTMLDivElement>(null);
+  const themeId = useTheme()?.id ?? null;
+  useFitText(screen, ".slide-text", JSON.stringify([slide.title, slide.text, slide.style ?? null, slide.picture, slide.video?.file ?? null, themeId]));
+  return (
+    <div ref={screen} className="center-slide">
+      <h1 className="slide-title" data-element="title" style={styledText(slide, "title")}>
+        {placeholder(slide.title, t("titlePlaceholder"))}
+      </h1>
+      <SlideMedia slide={slide} className="slide-media" mode={mode} live={{ view, clock }} />
+      {(slide.text || mode === "preview") && (
+        <p className="slide-text" data-element="text" style={styledText(slide, "text")}>
+          {placeholder(slide.text, t("textPlaceholder"))}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/** An explanation slide: the question it explains with its right answers, then why, drawn smaller when they would not fit. */
+function ExplanationScreen({ view, slide, context, clock, mode, placeholder }: ScreenProps<Extract<Slide, { type: "explanation" }>> & { context: SlideContext }) {
+  const { t } = useApp();
+  const screen = useRef<HTMLDivElement>(null);
+  const themeId = useTheme()?.id ?? null;
+  const explains = context.explains;
+  useFitText(screen, ".explanation-text", JSON.stringify([slide.text, slide.style ?? null, slide.picture, slide.video?.file ?? null, explains?.question ?? null, themeId]));
+  return (
+    <div ref={screen} className="explanation-screen">
+      {explains ? <ExplainedHeader explained={explains.question} n={explains.position.n} /> : mode !== "show" && <p className="explained-missing">{t("noQuestionToExplain")}</p>}
+      <SlideMedia slide={slide} className="explanation-media" mode={mode} live={{ view, clock }} />
+      <p className="explanation-text" data-element="text" style={styledText(slide, "text")}>
+        {placeholder(slide.text, t("explanationPlaceholder"))}
+      </p>
+    </div>
+  );
 }
 
 /** The inline style of a slide's text from the slide's style (theme/slide-style.ts). */
@@ -172,14 +198,7 @@ function CorrectMark({ share }: { share: number }) {
   );
 }
 
-function QuestionScreen(props: {
-  view: GameView;
-  slide: QuestionSlide;
-  clock: ClockView | null;
-  position: QuestionPosition | null;
-  mode: ScreenMode;
-  placeholder: (text: string, empty: string) => ReactNode;
-}) {
+function QuestionScreen(props: ScreenProps<QuestionSlide> & { position: QuestionPosition | null }) {
   const { view, slide: question, clock, position, mode, placeholder } = props;
   const { t } = useApp();
   const step = view.phase.phase === "question" ? view.phase.step : "ready";

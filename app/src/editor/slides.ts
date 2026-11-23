@@ -34,6 +34,7 @@ import type {
   SlideType,
   SoundClip,
   Span,
+  TextField,
   TextStyle,
   TimerDesign,
   VideoClip,
@@ -81,6 +82,11 @@ export function newSlide(type: SlideType, id: string): Slide {
 /** Sets the text the slide is listed by (see `slideTitle`). */
 export function setHeadline(slide: Slide, text: string): Slide {
   return hasTitle(slide) ? { ...slide, title: text } : { ...slide, text };
+}
+
+/** The field of the text `setHeadline` sets, for its longest length (`TEXT_LIMITS`). */
+export function headlineField(slide: Slide): TextField {
+  return hasTitle(slide) ? "title" : slide.type === "question" ? "question" : "text";
 }
 
 /** Sets the text under a billboard's title; other slides have none. */

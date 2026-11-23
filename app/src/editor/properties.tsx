@@ -13,15 +13,16 @@ import {
   MAX_VIDEO_SPEED,
   MIN_GAIN_DB,
   MIN_VIDEO_SPEED,
+  TEXT_LIMITS,
 } from "../bindings/Constants";
 import { sameSpan, WHOLE_FILE } from "../audio/clip-player";
 import { trackTime } from "../format";
 import type { StringKey, Translate } from "../i18n";
 import { isVideo, mediaKindOf, type MediaKind } from "../media";
 import { isCorrect, plays, shareOf, SLIDE_TYPE_LABEL, type SlideContext } from "../quiz";
-import type { Category, QuestionSlide, Replay, Slide, SlideType, SoundClip, SoundStart, Span, TitledSlide, VideoClip, VideoEffect } from "../types";
+import type { Category, QuestionSlide, Replay, Slide, SlideType, SoundClip, SoundStart, Span, TextField, TitledSlide, VideoClip, VideoEffect } from "../types";
 import { categoryName } from "./categories";
-import { AnswerToggles, MediaPicker } from "./controls";
+import { AnswerToggles, MediaPicker, TextCount } from "./controls";
 import type { PropertyRow } from "./property-rows";
 import { rowBuilders } from "./row-builders";
 import {
@@ -102,8 +103,12 @@ export function slideProperties(t: Translate, { slide, context, categories, upda
         },
       },
     );
-  const textArea = (label: StringKey, value: string, onChange: (text: string) => void) => (
-    <textarea rows={3} aria-label={t(label)} value={value} onChange={(e) => onChange(e.target.value)} />
+  /** A text of the slide, as long as its `field` takes. */
+  const textArea = (label: StringKey, field: TextField, value: string, onChange: (text: string) => void) => (
+    <div className="limited-text">
+      <textarea rows={3} aria-label={t(label)} maxLength={TEXT_LIMITS[field]} value={value} onChange={(e) => onChange(e.target.value)} />
+      <TextCount field={field} text={value} />
+    </div>
   );
   const { clockAndReveal } = plays(slide.type);
   const soundStarts: [SoundStart, string][] = [
@@ -280,7 +285,7 @@ export function slideProperties(t: Translate, { slide, context, categories, upda
         "questionText",
         "questionField",
         "descQuestionText",
-        textArea("questionField", q.text, (text) => update((s) => setHeadline(s, text), "text")),
+        textArea("questionField", "question", q.text, (text) => update((s) => setHeadline(s, text), "text")),
         { wide: true },
       ),
     /** How the voice says the question (spec SN-10). */
@@ -289,7 +294,7 @@ export function slideProperties(t: Translate, { slide, context, categories, upda
         "readAs",
         "readAsField",
         "descReadAs",
-        textArea("readAsField", q.readAs ?? "", (text) => question((s) => setReadAs(s, text), "readAs")),
+        textArea("readAsField", "readAs", q.readAs ?? "", (text) => question((s) => setReadAs(s, text), "readAs")),
         { wide: true },
       ),
     title: (s: TitledSlide) =>
@@ -297,7 +302,7 @@ export function slideProperties(t: Translate, { slide, context, categories, upda
         "title",
         "slideTitleField",
         "descTitle",
-        textArea("slideTitleField", s.title, (title) => update((x) => setHeadline(x, title), "title")),
+        textArea("slideTitleField", "title", s.title, (title) => update((x) => setHeadline(x, title), "title")),
         { wide: true },
       ),
     bodyText: (s: Extract<Slide, { type: "billboard" }>) =>
@@ -305,7 +310,7 @@ export function slideProperties(t: Translate, { slide, context, categories, upda
         "bodyText",
         "slideTextField",
         "descBodyText",
-        textArea("slideTextField", s.text, (text) => update((x) => setBodyText(x, text), "text")),
+        textArea("slideTextField", "text", s.text, (text) => update((x) => setBodyText(x, text), "text")),
         { wide: true },
       ),
     explanationText: (s: Extract<Slide, { type: "explanation" }>) =>
@@ -313,7 +318,7 @@ export function slideProperties(t: Translate, { slide, context, categories, upda
         "explanationText",
         "explanationField",
         "descExplanation",
-        textArea("explanationField", s.text, (text) => update((x) => setHeadline(x, text), "text")),
+        textArea("explanationField", "text", s.text, (text) => update((x) => setHeadline(x, text), "text")),
         { wide: true },
       ),
     /** Which question an explanation slide explains; set by where it stands. */
@@ -330,7 +335,7 @@ export function slideProperties(t: Translate, { slide, context, categories, upda
       "notes",
       "notes",
       "descNotes",
-      textArea("notes", slide.notes, (notes) => update((s) => setNotes(s, notes), "notes")),
+      textArea("notes", "notes", slide.notes, (notes) => update((s) => setNotes(s, notes), "notes")),
       { wide: true },
     ),
 
@@ -339,7 +344,7 @@ export function slideProperties(t: Translate, { slide, context, categories, upda
         `answer${i}.text`,
         "propAnswerText",
         "descAnswerText",
-        textArea("propAnswerText", q.answers[i] ?? "", (text) => question((s) => setAnswer(s, i, text), `answer${i}`)),
+        textArea("propAnswerText", "answer", q.answers[i] ?? "", (text) => question((s) => setAnswer(s, i, text), `answer${i}`)),
         { wide: true },
       ),
     isCorrect: (q: QuestionSlide, i: number) =>

@@ -108,6 +108,8 @@ pub struct AiPage {
 pub struct AssistantInfo {
     pub assistant: Assistant,
     pub name: String,
+    /// The AI model the app runs and its company (`Assistant::maker`).
+    pub maker: String,
     pub state: ConnectionState,
     /// The configuration files connecting writes; none when the app is not
     /// installed (Claude Desktop, known by its folder).
@@ -136,6 +138,7 @@ pub async fn ai_page(app: AppHandle, language: Language) -> CmdResult<AiPage> {
         let info = |assistant: Assistant| AssistantInfo {
             assistant,
             name: assistant.name().into(),
+            maker: assistant.maker().into(),
             state: assistant.state(&command),
             config_files: assistant.config_files().iter().map(|config| shown(config)).collect(),
         };
