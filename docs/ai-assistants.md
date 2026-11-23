@@ -175,7 +175,7 @@ a `.quiz` file.
 
 ## Studio's AI assistant: a model on this computer
 
-Studio has an AI assistant of its own (Home › AI assistant, spec QZ-13). It
+Studio has an AI assistant of its own (Home › AI assistant, spec QZ-14). It
 asks a model that runs on the quizmaster's computer, through a server that
 speaks the OpenAI chat completions API, with no account and no API key:
 

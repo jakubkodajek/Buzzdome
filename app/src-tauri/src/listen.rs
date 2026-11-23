@@ -1,6 +1,6 @@
 //! Writes down what a recording dropped into the AI panel says, offline,
 //! so that the panel's model, which reads no sound, gets its words as text
-//! (spec QZ-13). The speech recognition model (`voice::LISTENER`) is
+//! (spec QZ-14). The speech recognition model (`voice::LISTENER`) is
 //! downloaded once into the app's local data (`listener/`) and checked
 //! against its hash, as the voice model is (`read_aloud`). A recording is
 //! written down in the listening process, the app started again with

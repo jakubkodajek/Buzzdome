@@ -158,7 +158,7 @@ Template:
 - Next: guardian review, Jakub's OK to merge.
 - Blockers / open questions: none.
 
-## 2026-11-23 - local-ai-panel (QZ-13)
+## 2026-11-23 - local-ai-panel (QZ-14)
 
 - Done (Jakub chose "local AI only", no API keys, no subscription logins:
   Anthropic and Google forbid them in other apps, OpenAI's is partner-only):
