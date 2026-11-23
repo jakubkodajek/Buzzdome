@@ -18,6 +18,7 @@ import {
   MIN_GAIN_DB,
   MIN_VIDEO_SPEED,
   NEW_VIDEO_INTRO_PAUSE_MS,
+  TEXT_LIMITS,
 } from "../bindings/Constants";
 import { hasTitle, isCorrect, plays, slideTitle } from "../quiz";
 import type {
@@ -123,7 +124,8 @@ export function setEditedTexts(slide: Slide, opened: Slide, edited: Slide): Slid
  * What the new type cannot play goes (`plays`): without a reveal, the
  * replay parts of the sound and video; without a clock, a video effect,
  * and a sound waiting for the clock plays when the slide opens; on a
- * ranking, the picture and video. The fill behind the slide and the clock's
+ * ranking, the picture and video. The headline is cut to the most the
+ * new type's field takes (`TEXT_LIMITS`). The fill behind the slide and the clock's
  * design stay, and the headline keeps its look (`headlinePart`); the texts
  * that start anew start with the theme's look.
  */
@@ -135,7 +137,8 @@ export function convertSlide(slide: Slide, type: SlideType): Slide {
     slide.sound && !clockAndReveal ? { ...slide.sound, start: slide.sound.start === "withClock" ? "onSlide" : slide.sound.start, replay: null } : slide.sound;
   const video = slide.video && !clockAndReveal ? { ...slide.video, replay: null, effect: null } : slide.video;
   const media = pictureAndVideo ? { picture: slide.picture, video } : { picture: null, video: null };
-  const converted = setHeadline({ ...newSlide(type, id), notes, ...media, sound, background, category }, slideTitle(slide));
+  const blank: Slide = { ...newSlide(type, id), notes, ...media, sound, background, category };
+  const converted = setHeadline(blank, slideTitle(slide).slice(0, TEXT_LIMITS[headlineField(blank)]));
   return withStyle(converted, { fill: slide.style?.fill, timer: slide.style?.timer, [headlinePart(type)]: slide.style?.[headlinePart(slide.type)] });
 }
 

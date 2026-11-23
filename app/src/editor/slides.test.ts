@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MAX_ANSWERS, MAX_EVERYONE_ANSWERS } from "../bindings/Constants";
+import { MAX_ANSWERS, MAX_EVERYONE_ANSWERS, TEXT_LIMITS } from "../bindings/Constants";
 import type { Category, QuestionSlide, Quiz } from "../types";
 import {
   addAnswer,
@@ -9,6 +9,7 @@ import {
   formatLike,
   freshSlideId,
   fullyCorrect,
+  headlineField,
   headlinePart,
   newSlide,
   removeAnswer,
@@ -217,6 +218,17 @@ describe("slides", () => {
     const replay = { part: { fromMs: 60_000, toMs: null }, delayMs: 999_999 };
     expect(setSoundOptions(chorus, { replay }).sound?.replay).toEqual({ part: { fromMs: 60_000, toMs: null }, delayMs: 60_000 });
     expect(setSoundOptions(chorus, { replay: { part: { fromMs: 5, toMs: 1 }, delayMs: 0 } })).toBe(chorus);
+  });
+
+  it("cuts the headline to the most the new type's field takes when a slide changes type", () => {
+    const explanation = setHeadline(newSlide("explanation", "e"), "x".repeat(TEXT_LIMITS.text));
+    const asQuestion = convertSlide(explanation, "question");
+    expect(headlineField(asQuestion)).toBe("question");
+    expect(asQuestion.type === "question" && asQuestion.text.length).toBe(TEXT_LIMITS.question);
+    const asEnd = convertSlide(asQuestion, "endOfRound");
+    expect(headlineField(asEnd)).toBe("title");
+    expect(asEnd.type === "endOfRound" && asEnd.title).toBe("x".repeat(TEXT_LIMITS.title));
+    expect(headlineField(convertSlide(asEnd, "explanation"))).toBe("text");
   });
 
   it("gives only questions a replay part, since only they reveal an answer", () => {

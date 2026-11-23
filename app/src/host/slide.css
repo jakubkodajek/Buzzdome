@@ -7,8 +7,8 @@
    texts it changes: --style-* (read under "Styled texts" below, each
    falling back to the theme's look), --text-scale for their size and
    --answer-fill for the answers' panels. The texts of a question, an
-   information slide and an explanation are also multiplied by --fit,
-   which makes them small enough to fit (fit-text.ts).
+   information slide, an explanation and a ranking's title are also
+   multiplied by --fit, which makes them small enough to fit (fit-text.ts).
    Every rounded corner is multiplied by --theme-roundness, 0 in a theme
    with square corners. */
 
@@ -96,7 +96,7 @@
 }
 
 .slide-title.small {
-  font-size: calc(80px * var(--text-scale, 1));
+  font-size: calc(80px * var(--text-scale, 1) * var(--fit, 1));
 }
 
 .slide-text {

@@ -74,16 +74,17 @@ impl TextField {
         }
     }
 
-    /// The field as the quiz file names it, for logs and AI assistants.
-    pub fn json_name(self) -> &'static str {
+    /// The text as logs and AI assistants are told of it, with the quiz
+    /// file's name for it.
+    pub fn label(self) -> &'static str {
         match self {
-            TextField::QuizTitle => "title",
-            TextField::Question => "text",
-            TextField::Answer => "answers",
-            TextField::ReadAs => "readAs",
-            TextField::Title => "title",
-            TextField::Text => "text",
-            TextField::Notes => "notes",
+            TextField::QuizTitle => "the quiz's title",
+            TextField::Question => "the question's text",
+            TextField::Answer => "an answer",
+            TextField::ReadAs => "the question's readAs",
+            TextField::Title => "the slide's title",
+            TextField::Text => "the slide's text",
+            TextField::Notes => "the slide's notes",
             TextField::WelcomeHeading => "welcome.heading",
             TextField::WelcomeFooter => "welcome.footer",
         }

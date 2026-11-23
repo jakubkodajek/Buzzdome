@@ -467,6 +467,8 @@ const SCENES: Record<string, GameView | null> = {
   }, "endQuestion"),
   crowdLeaderboard: view({ phase: { phase: "endOfRound" }, slideIndex: 5, slide: { ...quiz.slides[5], title: "" } as Quiz["slides"][number], players: crowd(47) }, "nextSlide"),
   crowdOverlay: view({ leaderboardVisible: true, players: crowd(47) }, "startQuestion"),
+  // An end of round title as long as it may be (TEXT_LIMITS.title) over a full leaderboard.
+  longTitleLeaderboard: view({ phase: { phase: "endOfRound" }, slideIndex: 5, slide: { ...quiz.slides[5], title: "Které z následujících měst neleží na řece a přitom má historické centrum zapsané" } as Quiz["slides"][number], players: crowd(47) }, "nextSlide"),
   // Names and texts as long as they may be: the buzz bar, the podium, a question and answers that need smaller text.
   longName: view({
     phase: { phase: "question", step: "buzzed", buzzer: 1, button: "big", clock: { limitMs: 30000, elapsedBeforeMs: 4300, runningSinceMs: null, pressesFromMs: 0 } },

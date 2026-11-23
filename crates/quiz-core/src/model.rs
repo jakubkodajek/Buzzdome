@@ -683,7 +683,7 @@ pub enum Problem {
     AnswerEmpty { answer: usize },
     /// A text with more characters than its field takes (spec QZ-13); one
     /// of a question's answers is `AnswerTooLong`.
-    #[error("{} has more than {max} characters", text.json_name())]
+    #[error("{} has more than {max} characters", text.label())]
     TextTooLong { text: TextField, max: usize },
     /// Answer `answer` (from 0) of a question has more than `max` characters.
     #[error("answer {answer} has more than {max} characters")]

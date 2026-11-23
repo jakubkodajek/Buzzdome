@@ -48,15 +48,17 @@ export function SlideScreen(props: { view: GameView; context: SlideContext; cloc
       return view.slide?.type === "explanation" ? (
         <ExplanationScreen view={view} slide={view.slide} context={context} clock={clock} mode={mode} placeholder={placeholder} />
       ) : null;
-    case "endOfRound":
+    case "endOfRound": {
+      const title = view.slide?.type === "endOfRound" ? heading(view.slide.title, t("endOfRound")) : t("endOfRound");
       return (
-        <div className="center-slide">
+        <RankingScreen fit={[title, ranked(view).length]}>
           <h1 className="slide-title small" data-element="title" style={view.slide?.type === "endOfRound" ? look("title") : undefined}>
-            {view.slide?.type === "endOfRound" ? heading(view.slide.title, t("endOfRound")) : t("endOfRound")}
+            {title}
           </h1>
           <Leaderboard players={ranked(view)} />
-        </div>
+        </RankingScreen>
       );
+    }
     case "final":
       return (
         <FinalScores
@@ -80,6 +82,21 @@ export function SlideScreen(props: { view: GameView; context: SlideContext; cloc
         />
       ) : null;
   }
+}
+
+/**
+ * A ranking under its title (end of round, final): the title is drawn
+ * smaller when the two would not fit the screen. `fit` is what they show.
+ */
+function RankingScreen({ fit, children }: { fit: unknown[]; children: ReactNode }) {
+  const screen = useRef<HTMLDivElement>(null);
+  const themeId = useTheme()?.id ?? null;
+  useFitText(screen, ".slide-title", JSON.stringify([...fit, themeId]));
+  return (
+    <div ref={screen} className="center-slide">
+      {children}
+    </div>
+  );
 }
 
 /** What the screens of one slide type draw from. */
@@ -454,16 +471,16 @@ function FinalScores({ players, step, title, titled, titleStyle, sample }: Final
   );
   if (step >= FINAL_LAST_STEP) {
     return (
-      <div className="center-slide">
+      <RankingScreen fit={[title, players.length, step]}>
         {heading(title)}
         <Leaderboard players={players} />
-      </div>
+      </RankingScreen>
     );
   }
   // Steps 1..3 reveal third, second, then first place on a podium. Players
   // who share a place stand on its block with the score they share.
   return (
-    <div className="center-slide">
+    <RankingScreen fit={[step === 0 ? t("drumroll") : title, players.length, step]}>
       {heading(step === 0 ? t("drumroll") : title)}
       <div className="podium">
         {podiumBlocks(players).map(({ place, named, more }) => {
@@ -492,6 +509,6 @@ function FinalScores({ players, step, title, titled, titleStyle, sample }: Final
           );
         })}
       </div>
-    </div>
+    </RankingScreen>
   );
 }
