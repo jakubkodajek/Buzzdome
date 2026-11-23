@@ -152,6 +152,7 @@ export function AiPanel({ draftId, language, emptyQuiz, onInsert, onChooseModel,
         try {
           attachment = await attachmentFor(file, info, reference, textLeft);
         } catch {
+          if (!current()) return;
           // A file the window cannot decode is left out, and said so.
           caution(t("aiPanelFileFailed", { name: file.file.name }));
           continue;
@@ -161,6 +162,8 @@ export function AiPanel({ draftId, language, emptyQuiz, onInsert, onChooseModel,
         attachments.push(attachment);
         if (!current()) return;
       }
+      // Cancelled while the last file was prepared: nothing is asked.
+      if (!current()) return;
       change({ job: { step: "waiting" } });
       const asked = await api.editorAskLocalModel(draft, { prompt, attachments, language, wholeQuiz: emptyQuiz, internet }, (progress) => {
         if (current()) change({ job: progress });
@@ -191,6 +194,10 @@ export function AiPanel({ draftId, language, emptyQuiz, onInsert, onChooseModel,
   const chosen = info?.chosen ?? null;
   const promptMax = info?.maxPromptChars;
   const status = job ? jobStatus(t, job) : null;
+  /** Neither a file nor a request: nothing to make questions from. */
+  const nothingAsked = files.length === 0 && prompt.trim() === "";
+  // What failed stays in view by the buttons: the panel's body scrolls, and its end is out of sight on a laptop.
+  const failure = failed && <NoticeBox notice={failed} />;
 
   return (
     <aside className="ai-panel" aria-label={t("aiPanel")} onDragOver={onDragOver} onDragLeave={(e) => !e.currentTarget.contains(e.relatedTarget as Node | null) && setDropping(false)} onDrop={onDrop}>
@@ -277,7 +284,7 @@ export function AiPanel({ draftId, language, emptyQuiz, onInsert, onChooseModel,
                 onChange={(e) => change({ prompt: e.target.value })}
                 onKeyDown={(e) => {
                   // Ctrl+Enter asks, as in a chat.
-                  if (keyCombo(e) === GENERATE_KEYS[0] && !job && chosen) {
+                  if (keyCombo(e) === GENERATE_KEYS[0] && !job && chosen && !nothingAsked) {
                     e.preventDefault();
                     void generate();
                   }
@@ -291,7 +298,7 @@ export function AiPanel({ draftId, language, emptyQuiz, onInsert, onChooseModel,
                 <small>{t("aiPanelInternetHint")}</small>
               </span>
             </label>
-            {failed && <NoticeBox notice={failed} />}
+            {!chosen && failure}
             {sources.length > 0 && !job && (
               <div className="ai-sources">
                 <span>{t("aiPanelSources")}</span>
@@ -310,6 +317,7 @@ export function AiPanel({ draftId, language, emptyQuiz, onInsert, onChooseModel,
 
       {chosen && (
         <footer className="ai-panel-footer">
+          {failure}
           {status && (
             <p className="ai-panel-status" role="status">
               <span className="ai-spinner" aria-hidden="true" />
@@ -326,7 +334,7 @@ export function AiPanel({ draftId, language, emptyQuiz, onInsert, onChooseModel,
                 <button type="button" className="browse" disabled={files.length === 0 && prompt === ""} onClick={() => change({ files: [], prompt: "", failed: null })}>
                   {t("aiPanelClear")}
                 </button>
-                <button type="button" className="ai-generate" disabled={files.length === 0 && prompt.trim() === ""} title={tooltip({ label: t("aiPanelGenerate"), keys: GENERATE_KEYS })} onClick={() => void generate()}>
+                <button type="button" className="ai-generate" disabled={nothingAsked} title={tooltip({ label: t("aiPanelGenerate"), keys: GENERATE_KEYS })} onClick={() => void generate()}>
                   <SparkleIcon /> {t("aiPanelGenerate")}
                 </button>
               </>

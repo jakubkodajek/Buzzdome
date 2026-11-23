@@ -3,7 +3,7 @@
 // instructions for every quiz, and the model on this computer that Studio's
 // AI assistant asks. None of it needs an open quiz.
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import { confirmAction } from "../confirm";
 import { useApp, useRun } from "../app-context";
@@ -203,18 +203,27 @@ function LocalModelChoice() {
   const [models, setModels] = useState<string[] | null>(null);
   const [model, setModel] = useState("");
   const [loading, setLoading] = useState(false);
+  // Only the address asked last fills the list: an earlier one that answers late (a mistyped
+  // address fails after its time limit) does not replace it.
+  const asked = useRef(0);
   const list = useCallback((address: string) => {
+    const request = ++asked.current;
+    const latest = () => request === asked.current;
     setLoading(true);
     return api.aiLocalModels(address).then(
       (found) => {
+        if (!latest()) return;
         setModels(found);
         setModel((current) => (found.includes(current) ? current : (found[0] ?? "")));
       },
       (error: unknown) => {
+        if (!latest()) return;
         setModels(null);
         throw error;
       },
-    ).finally(() => setLoading(false));
+    ).finally(() => {
+      if (latest()) setLoading(false);
+    });
   }, []);
   useEffect(() => {
     void api.aiLocalModel().then((read) => {

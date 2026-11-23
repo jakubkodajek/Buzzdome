@@ -1297,6 +1297,7 @@ its text, and the answers); `crates/voice` decides how it is said
   at all, as a slide with its own sound), which starts its clock. That
   command is journaled like any other, so a replay starts the clock at the
   same moment; one for another slide, or once the clock runs, is ignored.
+  Next starts the clock sooner, and a restarted question waits for Next.
 - **Listening.** `crates/voice` knows a second model, the one that writes
   down speech for Studio's AI panel (`model::LISTENER`: Whisper large-v3
   turbo, int8, packed for sherpa-onnx, 564 MB; `listen.rs`). It is
@@ -1310,7 +1311,6 @@ its text, and the answers); `crates/voice` decides how it is said
   last 6 s, and at most 15 minutes are heard. A show that begins, a
   cancel or a deadline (90 s plus 2.5 s for each second of sound) ends
   the process. Details: `docs/ai-assistants.md` (Sound).
-  Next starts the clock sooner, and a restarted question waits for Next.
 
 ## 2. Buzzer link
 
