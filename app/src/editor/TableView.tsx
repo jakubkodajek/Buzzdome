@@ -1,5 +1,6 @@
 import { useState, type MouseEvent, type ReactNode } from "react";
 import { ANSWER_LETTERS } from "../answers";
+import { TEXT_LIMITS } from "../bindings/Constants";
 import { useApp } from "../app-context";
 import type { StringKey } from "../i18n";
 import { isCorrect, slideTitle } from "../quiz";
@@ -8,7 +9,7 @@ import type { Quiz, Slide } from "../types";
 import type { Action } from "./actions";
 import { ContextMenu } from "./controls";
 import { slideProperties, type SlideEditing } from "./properties";
-import { addAnswer, setAnswerAt, setHeadline, setNotes } from "./slides";
+import { addAnswer, headlineField, setAnswerAt, setHeadline, setNotes } from "./slides";
 
 type ColumnId = "answers" | "correct" | "time" | "points" | "pointsEnd" | "penalty" | "notes";
 
@@ -108,6 +109,7 @@ function SlideRow(props: { index: number; selected: boolean; editing: SlideEditi
       <td className="wide">
         <input
           aria-label={t("colContent")}
+          maxLength={TEXT_LIMITS[headlineField(slide)]}
           value={slideTitle(slide)}
           onChange={(e) => {
             const text = e.target.value;
@@ -124,6 +126,7 @@ function SlideRow(props: { index: number; selected: boolean; editing: SlideEditi
               {editable && (
                 <input
                   aria-label={t("elementAnswer", { letter })}
+                  maxLength={TEXT_LIMITS.answer}
                   value={q.answers[i] ?? ""}
                   onChange={(e) => {
                     const text = e.target.value;
@@ -151,6 +154,7 @@ function SlideRow(props: { index: number; selected: boolean; editing: SlideEditi
         <td>
           <input
             aria-label={t("notes")}
+            maxLength={TEXT_LIMITS.notes}
             value={slide.notes}
             onChange={(e) => {
               const notes = e.target.value;

@@ -96,3 +96,13 @@ export function parseTrackTime(text: string): number | null {
 export function fileName(path: string): string {
   return path.slice(Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\")) + 1);
 }
+
+/** How many characters `text` has, as quiz-core counts them (code points, not UTF-16 units). */
+export function charCount(text: string): number {
+  return [...text].length;
+}
+
+/** The first `max` characters of `text`, never splitting a character's two UTF-16 halves. */
+export function firstChars(text: string, max: number): string {
+  return charCount(text) <= max ? text : Array.from(text).slice(0, max).join("");
+}

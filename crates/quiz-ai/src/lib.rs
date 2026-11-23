@@ -48,6 +48,12 @@ mod tests {
         let media = format!("^{}", quiz_core::MEDIA_PREFIX);
         assert_eq!(schema["$defs"]["Slide"]["properties"]["picture"]["pattern"], media);
         assert_eq!(schema["$defs"]["SoundClip"]["properties"]["file"]["pattern"], media);
+        // So do the lengths of the texts (spec QZ-13), so an assistant writes them short enough.
+        use quiz_core::text_limits::{MAX_ANSWER_CHARS, MAX_QUESTION_CHARS};
+        let question = &schema["$defs"]["Question"];
+        assert_eq!(question["properties"]["text"]["maxLength"], MAX_QUESTION_CHARS);
+        assert_eq!(question["properties"]["answers"]["items"]["maxLength"], MAX_ANSWER_CHARS);
+        assert_eq!(schema["properties"]["title"]["maxLength"], quiz_core::text_limits::MAX_QUIZ_TITLE_CHARS);
     }
 
     #[test]

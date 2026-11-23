@@ -1658,6 +1658,15 @@ mod tests {
     }
 
     #[test]
+    fn a_quiz_file_with_a_text_longer_than_its_field_plays_but_is_not_saved() {
+        let mut quiz = quiz_with_picture("media/flag.png");
+        quiz.slides[0].content = SlideContent::Billboard { title: "x".repeat(quiz_core::text_limits::MAX_TITLE_CHARS + 1), text: String::new() };
+        let root = media_folder("long-title", &[("media/flag.png", b"png")]);
+        assert!(check_playable(&quiz, &root).is_ok(), "a file written before the limits still plays");
+        assert!(check(&quiz, &root).is_err());
+    }
+
+    #[test]
     fn prune_keeps_only_the_given_package() {
         let cache = temp("prune");
         for dir in ["a", "b", ".incoming-1-2"] {

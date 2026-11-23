@@ -1,5 +1,6 @@
 import type { MouseEvent } from "react";
 import { useApp } from "../app-context";
+import { TEXT_LIMITS } from "../bindings/Constants";
 import { previewView } from "../host/preview";
 import { SlideBoundary } from "../host/SlideBoundary";
 import { SlideScreen } from "../host/SlideScreen";
@@ -70,5 +71,5 @@ function DesignStage({ quiz, index, slide, context, playingBackground }: Pick<De
 /** The quizmaster's notes of the slide, under the design area. */
 export function NotesBox({ notes, onChange }: { notes: string; onChange: (notes: string) => void }) {
   const { t } = useApp();
-  return <textarea className="notes-box" aria-label={t("notes")} placeholder={t("notesPlaceholder")} value={notes} onChange={(e) => onChange(e.target.value)} />;
+  return <textarea className="notes-box" aria-label={t("notes")} maxLength={TEXT_LIMITS.notes} placeholder={t("notesPlaceholder")} value={notes} onChange={(e) => onChange(e.target.value)} />;
 }

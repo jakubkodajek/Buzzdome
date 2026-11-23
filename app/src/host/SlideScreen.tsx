@@ -43,42 +43,22 @@ export function SlideScreen(props: { view: GameView; context: SlideContext; cloc
     case "lobby":
       return <Registration view={view} />;
     case "billboard":
-      return view.slide?.type === "billboard" ? (
-        <div className="center-slide">
-          <h1 className="slide-title" data-element="title" style={look("title")}>
-            {placeholder(view.slide.title, t("titlePlaceholder"))}
-          </h1>
-          <SlideMedia slide={view.slide} className="slide-media" mode={mode} live={{ view, clock }} />
-          {(view.slide.text || mode === "preview") && (
-            <p className="slide-text" data-element="text" style={look("text")}>
-              {placeholder(view.slide.text, t("textPlaceholder"))}
-            </p>
-          )}
-        </div>
-      ) : null;
+      return view.slide?.type === "billboard" ? <BillboardScreen view={view} slide={view.slide} clock={clock} mode={mode} placeholder={placeholder} /> : null;
     case "explanation":
       return view.slide?.type === "explanation" ? (
-        <div className="explanation-screen">
-          {context.explains ? (
-            <ExplainedHeader explained={context.explains.question} n={context.explains.position.n} />
-          ) : (
-            mode !== "show" && <p className="explained-missing">{t("noQuestionToExplain")}</p>
-          )}
-          <SlideMedia slide={view.slide} className="explanation-media" mode={mode} live={{ view, clock }} />
-          <p className="explanation-text" data-element="text" style={look("text")}>
-            {placeholder(view.slide.text, t("explanationPlaceholder"))}
-          </p>
-        </div>
+        <ExplanationScreen view={view} slide={view.slide} context={context} clock={clock} mode={mode} placeholder={placeholder} />
       ) : null;
-    case "endOfRound":
+    case "endOfRound": {
+      const title = view.slide?.type === "endOfRound" ? heading(view.slide.title, t("endOfRound")) : t("endOfRound");
       return (
-        <div className="center-slide">
+        <RankingScreen fit={[title, ranked(view).length]}>
           <h1 className="slide-title small" data-element="title" style={view.slide?.type === "endOfRound" ? look("title") : undefined}>
-            {view.slide?.type === "endOfRound" ? heading(view.slide.title, t("endOfRound")) : t("endOfRound")}
+            {title}
           </h1>
           <Leaderboard players={ranked(view)} />
-        </div>
+        </RankingScreen>
       );
+    }
     case "final":
       return (
         <FinalScores
@@ -102,6 +82,69 @@ export function SlideScreen(props: { view: GameView; context: SlideContext; cloc
         />
       ) : null;
   }
+}
+
+/**
+ * A ranking under its title (end of round, final): the title is drawn
+ * smaller when the two would not fit the screen. `fit` is what they show.
+ */
+function RankingScreen({ fit, children }: { fit: unknown[]; children: ReactNode }) {
+  const screen = useRef<HTMLDivElement>(null);
+  const themeId = useTheme()?.id ?? null;
+  useFitText(screen, ".slide-title", JSON.stringify([...fit, themeId]));
+  return (
+    <div ref={screen} className="center-slide">
+      {children}
+    </div>
+  );
+}
+
+/** What the screens of one slide type draw from. */
+interface ScreenProps<S extends Slide> {
+  view: GameView;
+  slide: S;
+  clock: ClockView | null;
+  mode: ScreenMode;
+  placeholder: (text: string, empty: string) => ReactNode;
+}
+
+/** An information slide: its title, picture or video, and text, drawn smaller when they would not fit. */
+function BillboardScreen({ view, slide, clock, mode, placeholder }: ScreenProps<Extract<Slide, { type: "billboard" }>>) {
+  const { t } = useApp();
+  const screen = useRef<HTMLDivElement>(null);
+  const themeId = useTheme()?.id ?? null;
+  useFitText(screen, ".slide-text", JSON.stringify([slide.title, slide.text, slide.style ?? null, slide.picture, slide.video?.file ?? null, themeId]));
+  return (
+    <div ref={screen} className="center-slide">
+      <h1 className="slide-title" data-element="title" style={styledText(slide, "title")}>
+        {placeholder(slide.title, t("titlePlaceholder"))}
+      </h1>
+      <SlideMedia slide={slide} className="slide-media" mode={mode} live={{ view, clock }} />
+      {(slide.text || mode === "preview") && (
+        <p className="slide-text" data-element="text" style={styledText(slide, "text")}>
+          {placeholder(slide.text, t("textPlaceholder"))}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/** An explanation slide: the question it explains with its right answers, then why, drawn smaller when they would not fit. */
+function ExplanationScreen({ view, slide, context, clock, mode, placeholder }: ScreenProps<Extract<Slide, { type: "explanation" }>> & { context: SlideContext }) {
+  const { t } = useApp();
+  const screen = useRef<HTMLDivElement>(null);
+  const themeId = useTheme()?.id ?? null;
+  const explains = context.explains;
+  useFitText(screen, ".explanation-text", JSON.stringify([slide.text, slide.style ?? null, slide.picture, slide.video?.file ?? null, explains?.question ?? null, themeId]));
+  return (
+    <div ref={screen} className="explanation-screen">
+      {explains ? <ExplainedHeader explained={explains.question} n={explains.position.n} /> : mode !== "show" && <p className="explained-missing">{t("noQuestionToExplain")}</p>}
+      <SlideMedia slide={slide} className="explanation-media" mode={mode} live={{ view, clock }} />
+      <p className="explanation-text" data-element="text" style={styledText(slide, "text")}>
+        {placeholder(slide.text, t("explanationPlaceholder"))}
+      </p>
+    </div>
+  );
 }
 
 /** The inline style of a slide's text from the slide's style (theme/slide-style.ts). */
@@ -172,14 +215,7 @@ function CorrectMark({ share }: { share: number }) {
   );
 }
 
-function QuestionScreen(props: {
-  view: GameView;
-  slide: QuestionSlide;
-  clock: ClockView | null;
-  position: QuestionPosition | null;
-  mode: ScreenMode;
-  placeholder: (text: string, empty: string) => ReactNode;
-}) {
+function QuestionScreen(props: ScreenProps<QuestionSlide> & { position: QuestionPosition | null }) {
   const { view, slide: question, clock, position, mode, placeholder } = props;
   const { t } = useApp();
   const step = view.phase.phase === "question" ? view.phase.step : "ready";
@@ -435,16 +471,16 @@ function FinalScores({ players, step, title, titled, titleStyle, sample }: Final
   );
   if (step >= FINAL_LAST_STEP) {
     return (
-      <div className="center-slide">
+      <RankingScreen fit={[title, players.length, step]}>
         {heading(title)}
         <Leaderboard players={players} />
-      </div>
+      </RankingScreen>
     );
   }
   // Steps 1..3 reveal third, second, then first place on a podium. Players
   // who share a place stand on its block with the score they share.
   return (
-    <div className="center-slide">
+    <RankingScreen fit={[step === 0 ? t("drumroll") : title, players.length, step]}>
       {heading(step === 0 ? t("drumroll") : title)}
       <div className="podium">
         {podiumBlocks(players).map(({ place, named, more }) => {
@@ -473,6 +509,6 @@ function FinalScores({ players, step, title, titled, titleStyle, sample }: Final
           );
         })}
       </div>
-    </div>
+    </RankingScreen>
   );
 }

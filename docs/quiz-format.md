@@ -116,6 +116,31 @@ tools' checks list them under `leftOut`. One of the app's sounds that does not
 fit its moment is kept (a newer build may have it) and only the AI tools'
 checks list it.
 
+### Text lengths
+
+Each text has a longest length in characters (spec QZ-13), so the room can
+read it on the projector: a long text is drawn smaller until it fits, down
+to a floor, and these lengths fit there with six answers and a picture on
+the slide.
+
+| Text | Most characters |
+| --- | --- |
+| the quiz's `title` | 80 |
+| a question's `text` | 250 |
+| each of a question's `answers` | 80 |
+| a question's `readAs` | 500 |
+| the `title` of a `billboard`, `endOfRound` or `final` slide | 80 |
+| the `text` of a `billboard` or `explanation` slide | 400 |
+| a slide's `notes` | 2000 |
+| `welcome.heading` | 80 |
+| `welcome.footer` | 120 |
+
+The editor's fields take no more and count the characters as the limit
+nears. A longer text keeps the quiz from being saved, and the AI tools'
+checks refuse it (`textTooLong`, `answerTooLong`); a file written before
+the limits still opens and plays, and the editor lists each text to
+shorten. The JSON Schema gives each as `maxLength`.
+
 ### Every slide
 
 | Field | Type | Default | Meaning |
@@ -542,7 +567,9 @@ starts with), so it does not come back as a right one.
 **What is left out.** Columns the app does not know, a second column
 with the same heading, answers on a slide that is no question, a picture
 next to a video, media a slide cannot have and files that are not there
-are left out, and the import lists each with the rows it came up in.
+are left out, and the import lists each with the rows it came up in. A
+text longer than its [length](#text-lengths) is imported whole, and the
+editor lists it to shorten before the quiz is saved.
 
 ## Playback notes
 
@@ -563,7 +590,7 @@ are left out, and the import lists each with the rows it came up in.
 | 2 | Adds `explanation` slides and, later within version 2, the quiz `theme` (builds from before that drop it when they save). Version 1 files read as version 2 unchanged. |
 | 3 | `background` becomes an object with video options; sounds get `part`, `gainDb` and `replay`. Version 1 and 2 files read as version 3 unchanged. Later within version 3, a `fastestFinger` question may have up to 6 answers instead of 4; earlier builds list such a question as a problem. |
 | 4 | Adds `final` slides. Version 1 to 3 files read as version 4 unchanged. Later within version 4, videos get `introPauseMs`, `volume`, `speed`, `part`, `effect` and `replay`; a video without them plays as before. Later still, slides get `style`; builds before it show the theme's look and drop the style when they save. |
-| 5 | A question's `correct` becomes a list of right answers, each with a `share` of the points. A version 1 to 4 question with `correct: n` reads as `[{ "answer": n, "share": 100 }]`, and one without as `[]`. Later within version 5, the quiz gets `categories` and slides `category`; builds before it drop them when they save, and the slides keep the look they took on. Later still, a slide's `style` gets `timer`; builds before it draw a ring and drop it when they save. Later still, the quiz gets `settings`; builds before it play as with the defaults and drop them when they save. Later still, `settings` gets `nextAfterReveal`, `nextAfterRevealDelayS`, `runClockOut`, `changeAnswer`, `oneBuzz`, `noAnswerPenalty`, `hideAnswer`, `hideBuzzPoints` and `jokers`; builds before it play as with the defaults and drop them when they save. Later still, the quiz gets `sounds`; builds before it play their own sounds and drop it when they save. Later still, `settings` gets `answerChart`; builds before it show the counts only and drop it when they save. Later still, the quiz gets `welcome`; builds before it open on the registration and drop it when they save. Later still, `settings` gets `startOnNext`; builds before it always wait for Next and drop it when they save. Later still, `settings` gets `language`, `readAloud`, `voice` and `clockAfterReading`; builds before it read nothing out and drop them when they save. Later still, `settings` gets `voiceSpeed` and a question `readAs`; builds before it read at the voice's own pace and the question as written, and drop them when they save. |
+| 5 | A question's `correct` becomes a list of right answers, each with a `share` of the points. A version 1 to 4 question with `correct: n` reads as `[{ "answer": n, "share": 100 }]`, and one without as `[]`. Later within version 5, the quiz gets `categories` and slides `category`; builds before it drop them when they save, and the slides keep the look they took on. Later still, a slide's `style` gets `timer`; builds before it draw a ring and drop it when they save. Later still, the quiz gets `settings`; builds before it play as with the defaults and drop them when they save. Later still, `settings` gets `nextAfterReveal`, `nextAfterRevealDelayS`, `runClockOut`, `changeAnswer`, `oneBuzz`, `noAnswerPenalty`, `hideAnswer`, `hideBuzzPoints` and `jokers`; builds before it play as with the defaults and drop them when they save. Later still, the quiz gets `sounds`; builds before it play their own sounds and drop it when they save. Later still, `settings` gets `answerChart`; builds before it show the counts only and drop it when they save. Later still, the quiz gets `welcome`; builds before it open on the registration and drop it when they save. Later still, `settings` gets `startOnNext`; builds before it always wait for Next and drop it when they save. Later still, `settings` gets `language`, `readAloud`, `voice` and `clockAfterReading`; builds before it read nothing out and drop them when they save. Later still, `settings` gets `voiceSpeed` and a question `readAs`; builds before it read at the voice's own pace and the question as written, and drop them when they save. Later still, texts have [longest lengths](#text-lengths); a longer text in a file written before plays, and the editor lists it to shorten before saving. |
 
 Fields may be added within a version as long as older files keep their
 meaning; readers ignore fields they do not know. Anything else (a new slide

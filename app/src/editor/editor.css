@@ -2427,6 +2427,12 @@
   display: contents;
 }
 
+/* The model and company by the app's name. */
+.ai-app-maker {
+  font-weight: normal;
+  color: var(--muted);
+}
+
 .ai-app .browse {
   min-width: 130px;
   padding: 6px 12px;
@@ -2945,4 +2951,24 @@
 .new-quiz-form .primary svg {
   width: 14px;
   height: 14px;
+}
+
+/* A text with a longest length (spec QZ-13): its count under it once it nears it (TextCount). */
+.limited-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  min-width: 0;
+}
+
+.text-count {
+  align-self: flex-end;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.text-count.over {
+  color: var(--bad);
+  font-weight: 600;
 }
