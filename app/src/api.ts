@@ -31,6 +31,9 @@ import type {
   LightsSetup,
   LightsStatus,
   ListSeparator,
+  LocalModel,
+  LocalModelInfo,
+  LocalModelProgress,
   MediaKind,
   MediaLibrary,
   MediaNow,
@@ -41,6 +44,7 @@ import type {
   PlayerCommand,
   Press,
   PressEvent,
+  QuestionRequest,
   Quiz,
   QuizLanguage,
   RawReport,
@@ -55,6 +59,7 @@ import type {
   SettingsLost,
   SheetExport,
   SheetImport,
+  Slide,
   ShowResults,
   SoundBoard,
   Theme,
@@ -67,6 +72,8 @@ import type {
 
 /** The header that names a file dropped into the window (`media_add_dropped`). */
 const DROPPED_NAME_HEADER = "file-name";
+/** The header that names the draft a dropped file is for (`editor::DRAFT_HEADER`). */
+const DRAFT_HEADER = "draft";
 
 /** The backend commands (`#[tauri::command]` in app/src-tauri). */
 export const api = {
@@ -262,6 +269,28 @@ export const api = {
   aiServerConfig: (language: Lang) => invoke<string>("ai_server_config", { language }),
   /** Keeps the quizmaster's instructions for every quiz; empty gives the default ones back. */
   aiSetInstructions: (instructions: string, language: Lang) => invoke<void>("ai_set_instructions", { instructions, language }),
+  /** The model on this computer that the AI panel asks, and what a request may carry. */
+  aiLocalModel: () => invoke<LocalModelInfo>("ai_local_model"),
+  /** The models the server at `url` (Ollama, LM Studio...) offers, sorted. */
+  aiLocalModels: (url: string) => invoke<string[]>("ai_local_models", { url }),
+  /** Keeps the server and model the AI panel asks; returns them as kept. */
+  aiSetLocalModel: (url: string, model: string) => invoke<LocalModel>("ai_set_local_model", { url, model }),
+  /** Copies a picture or video dropped into the AI panel into the draft; returns its reference. */
+  editorAddDroppedMedia: async (draft: string, file: File) =>
+    invoke<string>("editor_add_dropped_media", new Uint8Array(await file.arrayBuffer()), {
+      headers: { [DROPPED_NAME_HEADER]: encodeURIComponent(file.name), [DRAFT_HEADER]: encodeURIComponent(draft) },
+    }),
+  /**
+   * Asks the chosen model for questions about `asked`, telling `onProgress`
+   * how far it is; returns them as slides for the editor to insert. Fails
+   * with `localModelCancelled` after `editorAskLocalModelCancel`.
+   */
+  editorAskLocalModel: (draft: string, asked: QuestionRequest, onProgress: (progress: LocalModelProgress) => void) => {
+    const progress = new Channel<LocalModelProgress>();
+    progress.onmessage = onProgress;
+    return invoke<Slide[]>("editor_ask_local_model", { draft, asked, progress });
+  },
+  editorAskLocalModelCancel: () => invoke<void>("editor_ask_local_model_cancel"),
 };
 
 /** Events the backend emits (`app.emit` in app/src-tauri), with their payloads. */

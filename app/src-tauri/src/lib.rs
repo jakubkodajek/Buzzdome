@@ -15,6 +15,7 @@ mod error;
 mod fixture_library;
 mod fonts;
 mod hardware;
+mod local_model;
 mod media_player;
 mod pump;
 mod recent_files;
@@ -1025,6 +1026,7 @@ pub fn run() {
             app.asset_protocol_scope().allow_directory(library.root(), true)?;
             app.manage(library);
             app.manage(app_icon::AppIcon::load(app_data(app.handle(), app_icon::ICON_FILE)?));
+            app.manage(local_model::LocalModelState::default());
             app.manage(ai::SavedAiSettings::load(app_data(app.handle(), quiz_ai::settings::SETTINGS_FILE)?));
             app.manage(recent_files::RecentFiles::load(app_local_data(app.handle(), recent_files::RECENT_FILES)?));
             for window in app.webview_windows().values() {
@@ -1096,6 +1098,12 @@ pub fn run() {
             ai::ai_connect,
             ai::ai_server_config,
             ai::ai_set_instructions,
+            local_model::ai_local_model,
+            local_model::ai_local_models,
+            local_model::ai_set_local_model,
+            editor::editor_add_dropped_media,
+            local_model::editor_ask_local_model,
+            local_model::editor_ask_local_model_cancel,
             hardware::receiver_info,
             hardware::receiver_devices,
             hardware::receiver_select,

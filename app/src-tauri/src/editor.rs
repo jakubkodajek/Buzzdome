@@ -18,7 +18,7 @@ use crate::dialogs::{self, Picker};
 use crate::error::{AppError, CmdResult};
 use crate::recent_files::RecentFiles;
 use crate::{app_local_data, app_log, folder_prefix, lock_show, media_player, off_ui, roaming_leftover, DiskWork};
-use quiz_core::{Category, MediaKind, Quiz, QuizLanguage, ValidationError};
+use quiz_core::{Category, MediaKind, Quiz, QuizLanguage, ValidationError, MAX_DROPPED_MB};
 use quiz_file::{FileAction, SheetExport, SheetImport};
 use serde::de::{Error as _, Unexpected};
 use serde::{Deserialize, Deserializer, Serialize};
@@ -27,6 +27,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, MutexGuard};
 use std::time::{SystemTime, UNIX_EPOCH};
+use tauri::ipc::{InvokeBody, Request};
 use tauri::{AppHandle, Manager, Window};
 use ts_rs::TS;
 
@@ -456,6 +457,45 @@ pub async fn editor_add_media(app: AppHandle, window: Window, draft: String, kin
     on_draft(app, draft, move |app, _, root, _| {
         let _disk = DiskWork::begin(app)?;
         Ok(Some(quiz_file::import_media(&root, quiz_file::MediaSource::File(&path))?))
+    })
+    .await
+}
+
+/// The header that names the draft a dropped file is for: a command whose
+/// body is a file's bytes takes no other arguments.
+const DRAFT_HEADER: &str = "draft";
+
+/// Copies a picture or video dropped into the AI panel, sent as its bytes
+/// with its name in `media_player::DROPPED_NAME_HEADER` and the draft in
+/// `DRAFT_HEADER`, into that draft, and returns its reference. Refused during
+/// a show (`DiskWork`).
+#[tauri::command]
+pub async fn editor_add_dropped_media(app: AppHandle, request: Request<'_>) -> CmdResult<String> {
+    let InvokeBody::Raw(bytes) = request.body() else { return Err(AppError::system("a dropped file comes as its bytes")) };
+    let header = |name: &str| {
+        let encoded = request.headers().get(name).and_then(|value| value.to_str().ok()).unwrap_or_default();
+        percent_encoding::percent_decode_str(encoded).decode_utf8_lossy().into_owned()
+    };
+    let (name, draft) = (header(media_player::DROPPED_NAME_HEADER), header(DRAFT_HEADER));
+    if bytes.len() as u64 > MAX_DROPPED_MB << 20 {
+        return Err(AppError::DroppedFileTooLarge { name, mb: MAX_DROPPED_MB });
+    }
+    media_player::of_kind(&name, &[MediaKind::Image, MediaKind::Video])?;
+    // The request only lends its bytes.
+    let bytes = bytes.clone();
+    on_draft(app, draft, move |app, _, root, _| {
+        let _disk = DiskWork::begin(app)?;
+        Ok(quiz_file::import_media(&root, quiz_file::MediaSource::Bytes { name: &name, bytes: &bytes })?)
+    })
+    .await
+}
+
+/// Of the media `references` the AI panel gave, those in the draft `draft`;
+/// none in the place of one that is not.
+pub(crate) async fn draft_media(app: AppHandle, draft: String, references: Vec<Option<String>>) -> CmdResult<Vec<Option<String>>> {
+    on_draft(app, draft, move |_, _, root, _| {
+        let there = |reference: &String| quiz_core::is_safe_reference(reference) && root.join(reference).is_file();
+        Ok(references.into_iter().map(|reference| reference.filter(there)).collect())
     })
     .await
 }

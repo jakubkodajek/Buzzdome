@@ -173,6 +173,67 @@ a `.quiz` file.
 | `save_quiz_file` | Makes the `.quiz` file; refuses a quiz with problems, and an existing file unless `replace` is given. |
 | `unpack_quiz_file` | Unpacks a `.quiz` file into a new folder to change it. |
 
+## Studio's AI assistant: a model on this computer
+
+Studio has an AI assistant of its own (Home › AI assistant, spec QZ-13). It
+asks a model that runs on the quizmaster's computer, through a server that
+speaks the OpenAI chat completions API, with no account and no API key:
+
+| Server | Address | Source |
+| --- | --- | --- |
+| Ollama | `http://localhost:11434/v1` (the default) | Ollama, "OpenAI compatibility", https://docs.ollama.com/api/openai-compatibility |
+| LM Studio (start its server) | `http://localhost:1234/v1` | LM Studio, "OpenAI Compatibility Endpoints", https://lmstudio.ai/docs/developer/openai-compat |
+| llama.cpp's `llama-server`, vLLM and others | their `/v1` address | |
+
+File › AI assistants lists the server's models (`GET /models`) and keeps
+the one chosen in `ai.json` (`localModel`). Signing in with a ChatGPT,
+Claude or Gemini subscription is not offered: Anthropic and Google forbid
+using those logins in other apps (The Register, 2026-02-20,
+https://www.theregister.com/software/2026/02/20/anthropic-clarifies-ban-on-third-party-tool-access-to-claude/5014546;
+Gemini CLI terms, https://geminicli.com/docs/resources/tos-privacy/), and
+OpenAI's "Sign in with ChatGPT" is for its partners only (The New Stack,
+https://thenewstack.io/sign-in-with-chatgpt/). Those subscriptions reach
+Buzzdome through their own apps and the MCP server above.
+
+In the panel, the quizmaster adds pictures, videos and text files
+(`.txt`, `.md`, `.csv`; at most 12), types what they want ("10 questions
+about the trip photos, in two rounds") and presses Make questions:
+
+1. Pictures and videos are copied into the draft (`editor_add_dropped_media`),
+   so the slides can show them.
+2. The window makes each picture at most 768 px on its longest side and
+   takes three frames of each video, both as JPEG data URLs. A video the
+   window cannot play goes by its name only.
+3. `editor_ask_local_model` sends one chat completion request
+   (`quiz_ai::local_model::request`): instructions for a buzzer quiz in the
+   quiz's language, the request, each file as "Attachment n" with its
+   pictures, and a small JSON Schema of the reply (`reply_schema`) as
+   `response_format`. A server that refuses the format is asked again
+   without it. The reply is streamed, so the panel shows how many
+   questions the model has begun, and Cancel closes the connection, which
+   stops the server too.
+4. The model's questions (first answer correct) become rows of a sheet
+   (`draft_table`) that the spreadsheet import reads, so they get its
+   defaults and checks: answers shuffled, a section for each named round,
+   and in an empty quiz an end of round after each and the results at the
+   end. A question about an attachment shows its picture or video.
+5. The editor inserts the slides after the selected one as one change.
+   Slides asked for one quiz are not put into another opened meanwhile.
+
+A request stays small (at most 16 pictures and 20,000 characters of
+text), as the model reads it within its context: Ollama gives a model 4k
+tokens on a computer with less than 24 GiB of graphics memory, and a longer
+one is set in its app (Settings › Context length) or with
+`OLLAMA_CONTEXT_LENGTH` (Ollama, "Context length",
+https://docs.ollama.com/context-length). A request is refused during a show: a model takes the computer's processor
+and memory for minutes. Small models (under about 7B parameters) may not
+keep to the schema (LM Studio, "Structured Output",
+https://lmstudio.ai/docs/developer/openai-compat/structured-output); the
+reply is read also when the JSON is wrapped in a code block or a sentence.
+Ollama takes pictures but no video (Ollama, "Ollama's new engine for
+multimodal models", https://registry.ollama.ai/blog/multimodal-models), hence
+the frames.
+
 ## After an update
 
 The MCP server is the app itself, so an update brings it along. An AI app

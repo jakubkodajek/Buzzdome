@@ -8,12 +8,15 @@
 //!   pack and fill quiz folders (`workbench`), only in the folder the
 //!   quizmaster chose (`roots`), and give the quizmaster's own instructions
 //!   for every quiz (`settings`);
-//! - the AI apps' settings it adds itself to (`assistants`).
+//! - the AI apps' settings it adds itself to (`assistants`);
+//! - questions from a model on this computer, for Studio's AI panel
+//!   (`local_model`).
 //!
 //! Every check is the app's own: the tools read and write quizzes through
 //! `quiz_file`, so what they accept is what the editor and the show accept.
 
 pub mod assistants;
+pub mod local_model;
 pub mod mcp;
 pub mod roots;
 pub mod settings;

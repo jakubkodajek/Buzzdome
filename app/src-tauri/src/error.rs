@@ -176,6 +176,49 @@ pub enum AppError {
     /// An AI app's configuration file holds something else than its settings, so it is left as it is.
     #[error("{path} is not an AI app's configuration")]
     AiConfigUnreadable { path: String },
+    /// No model is chosen for Studio's AI panel yet (File > AI assistants).
+    #[error("no model on this computer is chosen")]
+    LocalModelNotChosen,
+    /// The address given for the model's server is no web address.
+    #[error("{url} is no server address")]
+    LocalModelBadUrl { url: String },
+    /// Nothing answers at the model's address: the server (Ollama, LM
+    /// Studio) is not running, or listens elsewhere.
+    #[error("no server answers at {url}: {detail}")]
+    LocalModelUnreachable { url: String, detail: String },
+    /// The server answers but lists no models at its address.
+    #[error("{url} lists no models")]
+    LocalModelNoList { url: String },
+    /// The server does not have the model chosen (deleted since, say).
+    #[error("the server has no model {model}")]
+    LocalModelMissing { model: String },
+    /// The server refused the request; `detail` is its own message.
+    #[error("the model's server refused ({status}): {detail}")]
+    LocalModelRefused { status: u16, detail: String },
+    #[error("the model took too long")]
+    LocalModelTimedOut,
+    /// The connection broke while the model wrote.
+    #[error("the model's reply broke off: {detail}")]
+    LocalModelInterrupted { detail: String },
+    #[error("the request to the model was cancelled")]
+    LocalModelCancelled,
+    /// The panel asks one request at a time.
+    #[error("the model is still writing")]
+    LocalModelBusy,
+    #[error("nothing asked of the model")]
+    LocalModelNothingAsked,
+    #[error("more than {max} files for the model")]
+    LocalModelTooManyFiles { max: usize },
+    #[error("more than {max} pictures for the model")]
+    LocalModelTooManyPictures { max: usize },
+    /// The model wrote something else than the questions asked for.
+    #[error("the model's answer is not questions")]
+    LocalModelNotQuestions,
+    /// The model stopped at its length limit before the questions ended.
+    #[error("the model's answer was cut off")]
+    LocalModelCutOff,
+    #[error("the model wrote no questions")]
+    LocalModelNoQuestions,
     /// The folder chosen for an assistant holds or is inside the app's own data (shows, drafts, settings).
     #[error("{path} holds or is inside Buzzdome's own data")]
     AiFolderNotAllowed { path: String },

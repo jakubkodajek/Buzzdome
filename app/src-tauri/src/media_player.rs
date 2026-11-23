@@ -35,7 +35,7 @@ pub const LIBRARY_FOLDER: &str = "library";
 const BOARD_FILE: &str = "soundboard.json";
 const PLAYER_FILE: &str = "player.json";
 /// The header that names a file dropped into the window (percent-encoded, as headers are ASCII).
-const DROPPED_NAME_HEADER: &str = "file-name";
+pub(crate) const DROPPED_NAME_HEADER: &str = "file-name";
 /// How long a new volume waits before it is kept, so that the steps of one
 /// drag of the slider, which come faster than a disk writes, are written once.
 const KEEP_VOLUME_AFTER: Duration = Duration::from_millis(250);
