@@ -26,10 +26,12 @@ preview.
    question runs (also with 20 long team names, and a long buzz queue), light and dark, in Czech and English; each ribbon tab and
    properties page of the editor; and every projector scene of
    `app/src/dev/preview.tsx` (new scenes are picked up). Each at the
-   window sizes a maximized window has on Windows, at that display scale:
-   960x600 (the Director's smallest), 1280x640 (full HD laptop at 150 %),
-   1366x690 (HD at 100 %), 1536x780 (full HD at 125 %) and 1920x1000.
-   A full run takes about ten minutes. It exits 1 and prints one line per
+   window sizes a maximized window has on Windows, at that display scale
+   (`ALL_SIZES` in the script): laptops from 960x600 (the Director's
+   smallest) and full HD at 125 % and 150 %, monitors from full HD to QHD,
+   4K and ultrawide, and 4:3 and 16:10 projectors. `--size WxH` checks one;
+   a full run takes about half an hour, so run sizes in parallel
+   (`xargs -P4`) when checking them all. It exits 1 and prints one line per
    problem. Look at the screenshots of anything it reports, and of the
    screens you changed, even when it reports nothing.
 

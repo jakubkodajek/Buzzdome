@@ -132,8 +132,9 @@ Template:
   maximizes a Director (and a projector window that is not full screen)
   larger than its screen's work area, and centres one that fits but sticks
   out. The buzzdome-layout check now runs at the sizes a maximized window
-  has on Windows, at their display scale (960x600, 1280x640 @1.5,
-  1366x690, 1536x780 @1.25, 1920x1000): no layout problems in any window.
+  has on Windows, at their display scale: laptops (960x600 up, full HD at
+  125 % and 150 %), full HD, QHD, 4K and ultrawide monitors, 4:3 and 16:10
+  projectors (14 sizes): no layout problems in any window.
 - State: make check green; branch `claude/project-thread-tuspp5`.
 - Next: Jakub's colleague confirms on the laptop (a screenshot if it still
   differs); the UI font is Segoe UI on Windows and the system font on
