@@ -16,7 +16,8 @@ import { errorNotice, isAppError, type Notice } from "../messages";
 import { NoticeBox } from "../notice";
 import { createStore, useStore } from "../store";
 import type { Attachment, LocalModelInfo, QuizLanguage, Slide } from "../types";
-import { addFiles, attachmentFor, thumbnailOf, type AiFile } from "./ai-files";
+import { MAX_DROPPED_MB } from "../bindings/Constants";
+import { addFiles, aiFileKind, attachmentFor, thumbnailOf, type AiFile } from "./ai-files";
 
 /** Where a request is. */
 type Job = { phase: "preparing" } | { phase: "waiting" } | { phase: "writing"; questions: number };
@@ -31,6 +32,12 @@ interface PanelState {
 
 const panelState = createStore<PanelState>({ files: [], prompt: "", job: null, failed: null });
 const change = (next: Partial<PanelState>) => panelState.set({ ...panelState.get(), ...next });
+
+/**
+ * The latest request: one that is cancelled or followed by another stops
+ * changing the panel, even while it still waits on a file or the model.
+ */
+let latestRun = 0;
 
 export interface AiPanelProps {
   /** The open draft (`EditorDraft.id`). */
@@ -56,10 +63,15 @@ export function AiPanel({ draftId, language, emptyQuiz, onInsert, onChooseModel,
     api.aiLocalModel().then(setInfo, (error: unknown) => change({ failed: errorNotice(t, error) }));
   }, [t]);
 
-  const add = (dropped: File[]) => {
-    if (!info || dropped.length === 0) return;
+  const add = (given: File[]) => {
+    if (!info || given.length === 0) return;
+    // A picture or video is copied into the quiz whole, so one too large for that is not taken (a text file is read only in part).
+    const tooLarge = given.find((file) => aiFileKind(file.name) !== "text" && file.size > MAX_DROPPED_MB * 2 ** 20);
+    if (tooLarge) caution(t("mediaDropTooLarge", { name: tooLarge.name, mb: MAX_DROPPED_MB }));
+    const dropped = given.filter((file) => aiFileKind(file.name) === "text" || file.size <= MAX_DROPPED_MB * 2 ** 20);
     const added = addFiles(panelState.get().files, dropped, info.maxAttachments);
     change({ files: added.files });
+    if (tooLarge) return;
     if (added.unsupported.length > 0) caution(t("aiPanelUnsupported", { names: added.unsupported.join(", ") }));
     else if (added.tooMany) caution(t("aiPanelTooMany", { max: info.maxAttachments }));
   };
@@ -77,8 +89,10 @@ export function AiPanel({ draftId, language, emptyQuiz, onInsert, onChooseModel,
   };
 
   const generate = async () => {
-    if (!info?.chosen) return;
+    if (!info?.chosen || panelState.get().job) return;
     const draft = draftId;
+    const run = ++latestRun;
+    const current = () => run === latestRun;
     change({ job: { phase: "preparing" }, failed: null });
     try {
       const attachments: Attachment[] = [];
@@ -94,25 +108,29 @@ export function AiPanel({ draftId, language, emptyQuiz, onInsert, onChooseModel,
         const attachment = await attachmentFor(file, info, reference, textLeft);
         if (attachment.content.kind === "text") textLeft -= attachment.content.text.length;
         attachments.push(attachment);
-        if (!panelState.get().job) return;
+        if (!current()) return;
       }
       change({ job: { phase: "waiting" } });
-      const slides = await api.editorAskLocalModel(draft, { prompt, attachments, language, wholeQuiz: emptyQuiz }, (progress) =>
-        change({ job: { phase: "writing", questions: progress.questions } }),
-      );
+      const slides = await api.editorAskLocalModel(draft, { prompt, attachments, language, wholeQuiz: emptyQuiz }, (progress) => {
+        if (current()) change({ job: { phase: "writing", questions: progress.questions } });
+      });
+      if (!current()) return;
       const inserted = onInsert(draft, slides);
       if (inserted === null) caution(t("aiPanelOtherQuiz"));
       else notify(t("aiPanelInserted", { n: inserted }));
     } catch (error) {
-      if (!(isAppError(error) && error.code === "localModelCancelled")) change({ failed: errorNotice(t, error) });
+      if (current() && !(isAppError(error) && error.code === "localModelCancelled")) change({ failed: errorNotice(t, error) });
     } finally {
-      change({ job: null });
+      if (current()) change({ job: null });
     }
   };
   const cancel = () => {
-    // Files being prepared stop at the next; a request under way ends at once.
-    if (job?.phase === "preparing") change({ job: null });
-    else void api.editorAskLocalModelCancel();
+    // The panel is free again at once; files being prepared stop at the
+    // next, and a request under way ends in the backend too.
+    const waited = job?.phase !== "preparing";
+    latestRun++;
+    change({ job: null });
+    if (waited) void api.editorAskLocalModelCancel();
   };
 
   const chosen = info?.chosen ?? null;

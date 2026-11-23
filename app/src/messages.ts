@@ -99,6 +99,7 @@ const ERROR_KEYS: Record<Exclude<AppError["code"], WordedApart>, StringKey> = {
   localModelRefused: "errLocalModelRefused",
   localModelTimedOut: "errLocalModelTimedOut",
   localModelInterrupted: "errLocalModelInterrupted",
+  localModelFailed: "errLocalModelFailed",
   localModelCancelled: "errLocalModelCancelled",
   localModelBusy: "errLocalModelBusy",
   localModelNothingAsked: "errLocalModelNothingAsked",

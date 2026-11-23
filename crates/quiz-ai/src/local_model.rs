@@ -96,6 +96,22 @@ impl LocalModel {
         LocalModel { url, model: model.trim().chars().take(MAX_MODEL_CHARS).collect() }
     }
 
+    /// Whether `url` (as `new` tidies it) is an address the app sends to:
+    /// `http` or `https`, a host, and no user name or password, which would
+    /// be kept in the settings file as plain text.
+    pub fn usable_url(url: &str) -> bool {
+        let url = LocalModel::new(url, "").url;
+        let Some((scheme, rest)) = url.split_once("://") else { return false };
+        let authority = rest.split(['/', '?', '#']).next().unwrap_or_default();
+        // A port, when there is one, is a number: `[::1]:8080`, `box:1234`.
+        let port = authority.rsplit_once(']').map_or(authority, |(_, after)| after).split_once(':').map(|(_, port)| port);
+        matches!(scheme.to_ascii_lowercase().as_str(), "http" | "https")
+            && !authority.is_empty()
+            && !authority.contains('@')
+            && !authority.starts_with(':')
+            && port.is_none_or(|port| !port.is_empty() && port.bytes().all(|b| b.is_ascii_digit()))
+    }
+
     pub fn models_url(url: &str) -> String {
         format!("{}/models", LocalModel::new(url, "").url)
     }
@@ -301,8 +317,7 @@ fn image_part(image: &str) -> Result<Value, RequestError> {
 }
 
 /// A question as the model writes it.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
-#[serde(default)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct DraftQuestion {
     pub round: String,
     pub question: String,
@@ -310,6 +325,43 @@ pub struct DraftQuestion {
     pub explanation: String,
     /// The attachment it is about, counted from 1; 0 for none.
     pub file: usize,
+}
+
+impl DraftQuestion {
+    /// The question in `value`, read field by field so that one field a
+    /// small model wrote oddly (`null`, a number for a text, `"2"` for a
+    /// number) loses no more than itself; None for what is not an object.
+    fn read(value: &Value) -> Option<DraftQuestion> {
+        let field = |name: &str| value.get(name).map_or_else(String::new, text_of);
+        let answers = match value.get("answers") {
+            Some(Value::Array(answers)) => answers.iter().map(text_of).collect(),
+            _ => Vec::new(),
+        };
+        let file = match value.get("file") {
+            Some(Value::Number(n)) => n.as_u64().and_then(|n| usize::try_from(n).ok()).unwrap_or(0),
+            Some(Value::String(s)) => s.trim().parse().unwrap_or(0),
+            _ => 0,
+        };
+        value.is_object().then(|| DraftQuestion { round: field("round"), question: field("question"), answers, explanation: field("explanation"), file })
+    }
+
+    /// Whether the question can be asked: a text, and a correct (first)
+    /// answer with at least one other. A first answer left empty would make
+    /// the next one correct, which the model did not mean.
+    fn askable(&self) -> bool {
+        let answers: Vec<String> = self.answers.iter().map(|a| answer_cell(a)).collect();
+        !self.question.trim().is_empty() && answers.first().is_some_and(|a| !a.is_empty()) && answers.iter().filter(|a| !a.is_empty()).count() >= 2
+    }
+}
+
+/// A text or a number or a truth as the text it says; anything else as none.
+fn text_of(value: &Value) -> String {
+    match value {
+        Value::String(s) => s.clone(),
+        Value::Number(n) => n.to_string(),
+        Value::Bool(b) => b.to_string(),
+        _ => String::new(),
+    }
 }
 
 /// The questions in the server's `reply` to a chat completion request that
@@ -324,24 +376,34 @@ pub fn read_reply(reply: &str) -> Result<Vec<DraftQuestion>, ReplyError> {
 /// The questions the model wrote as `content`; `cut_off` when it stopped
 /// at its length limit. Models that do not keep to the schema often wrap
 /// the JSON in a code block or a sentence, or give a bare list: those are
-/// read too.
+/// read too, and a reasoning model's thinking before them is skipped.
+/// Questions that cannot be asked (`DraftQuestion::askable`) are left out.
 pub fn read_questions(content: &str, cut_off: bool) -> Result<Vec<DraftQuestion>, ReplyError> {
     let questions = match questions_in(content) {
         Some(questions) => questions,
         None if cut_off => return Err(ReplyError::CutOff),
         None => return Err(ReplyError::NotQuestions),
     };
-    let questions: Vec<DraftQuestion> = questions.into_iter().filter(|q| !q.question.trim().is_empty()).take(MAX_QUESTIONS).collect();
+    let questions: Vec<DraftQuestion> = questions.into_iter().filter(DraftQuestion::askable).take(MAX_QUESTIONS).collect();
     if questions.is_empty() {
         return Err(ReplyError::NoQuestions);
     }
     Ok(questions)
 }
 
-/// How many questions the model has begun so far in `content`, to show
-/// while it writes.
-pub fn questions_begun(content: &str) -> usize {
-    content.matches("\"question\"").count()
+/// What marks the start of a question in the model's text.
+const QUESTION_KEY: &str = "\"question\"";
+
+/// How many questions the model began in `content` after its first `from`
+/// bytes, which were counted before: the panel counts as the model writes,
+/// without reading the whole text again each time.
+pub fn questions_begun(content: &str, from: usize) -> usize {
+    // A key that the last piece cut in two is counted now.
+    let mut start = from.saturating_sub(QUESTION_KEY.len() - 1).min(content.len());
+    while !content.is_char_boundary(start) {
+        start -= 1;
+    }
+    content[start..].matches(QUESTION_KEY).count()
 }
 
 /// A line of a streamed reply (server-sent events).
@@ -355,6 +417,9 @@ pub enum StreamLine {
     Nothing,
     /// A line that is not a server-sent event: the server did not stream.
     NotStreamed,
+    /// The server stopped the reply with an error (`error_detail`), as
+    /// Ollama and LM Studio do when the model runs out of memory midway.
+    Failed { detail: String },
 }
 
 /// Reads a line of a streamed chat completion.
@@ -368,6 +433,9 @@ pub fn stream_line(line: &str) -> StreamLine {
         return StreamLine::Done;
     }
     let Ok(chunk) = serde_json::from_str::<Value>(data) else { return StreamLine::Nothing };
+    if chunk.get("error").is_some_and(|e| !e.is_null()) {
+        return StreamLine::Failed { detail: error_detail(data) };
+    }
     let Some(choice) = chunk.get("choices").and_then(|choices| choices.get(0)) else { return StreamLine::Nothing };
     let text = choice.pointer("/delta/content").and_then(Value::as_str).unwrap_or_default().to_string();
     StreamLine::Text { text, cut_off: choice.get("finish_reason").and_then(Value::as_str) == Some("length") }
@@ -406,23 +474,39 @@ pub fn streamed(mut body: Value) -> Value {
     body
 }
 
+/// Most places in a reply where the questions' JSON is looked for: prose
+/// before it rarely has more braces than this.
+const JSON_STARTS: usize = 64;
+
 fn questions_in(content: &str) -> Option<Vec<DraftQuestion>> {
-    let json = |text: &str| -> Option<Vec<DraftQuestion>> {
-        let value: Value = serde_json::from_str(text).ok()?;
+    let questions = |value: Value| -> Option<Vec<DraftQuestion>> {
         let list = match value {
-            Value::Array(_) => value,
-            Value::Object(mut object) => object.remove("questions")?,
+            Value::Array(list) => list,
+            Value::Object(mut object) => match object.remove("questions")? {
+                Value::Array(list) => list,
+                _ => return None,
+            },
             _ => return None,
         };
-        serde_json::from_value::<Vec<DraftQuestion>>(list).ok()
+        let read: Vec<DraftQuestion> = list.iter().filter_map(DraftQuestion::read).collect();
+        (!read.is_empty()).then_some(read)
     };
-    let trimmed = content.trim();
-    json(trimmed).or_else(|| {
-        // The first `{` or `[` to the last `}` or `]`, around a code block's fences or prose.
-        let start = trimmed.find(['{', '['])?;
-        let end = trimmed.rfind(['}', ']'])?;
-        (start < end).then(|| json(&trimmed[start..=end])).flatten()
-    })
+    let text = without_thinking(content);
+    // The first JSON value that holds questions, from where a `{` or `[`
+    // begins: so a code block's fences, a sentence around it or a brace in
+    // the prose before it does not hide it.
+    text.match_indices(['{', '['])
+        .take(JSON_STARTS)
+        .find_map(|(start, _)| serde_json::Deserializer::from_str(&text[start..]).into_iter::<Value>().next()?.ok().and_then(questions))
+}
+
+/// `content` after a reasoning model's thinking (`<think>…</think>`), which
+/// some servers leave in the text before the answer.
+fn without_thinking(content: &str) -> &str {
+    match content.rfind("</think>") {
+        Some(end) => &content[end + "</think>".len()..],
+        None => content,
+    }
 }
 
 /// The questions as a sheet that `quiz_core::import_tables` reads: a
@@ -592,6 +676,40 @@ mod tests {
     }
 
     #[test]
+    fn a_field_written_oddly_loses_only_itself() {
+        let reply = r#"{"questions":[
+            {"question":"Rok?","answers":[1945, "1939", null],"explanation":null,"round":null,"file":"2"},
+            {"question":"Bez odpovědi?","answers":"a"},
+            {"question":"Prázdná správná?","answers":["", "Brno", "Praha"]},
+            {"question":"Jen jedna?","answers":["Praha", " "]},
+            "not a question",
+            {"question":"Záporný soubor?","answers":["a","b"],"file":-1}
+        ]}"#;
+        let questions = read_questions(reply, false).unwrap();
+        assert_eq!(questions, vec![question("", "Rok?", &["1945", "1939", ""], 2), question("", "Záporný soubor?", &["a", "b"], 0)]);
+    }
+
+    #[test]
+    fn a_reasoning_models_thinking_and_braces_in_prose_do_not_hide_the_questions() {
+        let json = r#"{"questions":[{"question":"A?","answers":["a","b"]}]}"#;
+        let thinking = format!("<think>The user wants {{a quiz}}. Maybe {{\"x\": 1}}.</think>\n{json}");
+        assert_eq!(read_questions(&thinking, false).unwrap().len(), 1);
+        let prose = format!("Here is a set {{of questions}} as asked: {json} Enjoy {{!}}");
+        assert_eq!(read_questions(&prose, false).unwrap().len(), 1);
+        assert_eq!(read_questions(r#"Answers ["a","b"] then {"questions":[{"question":"A?","answers":["a","b"]}]}"#, false).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn only_plain_web_addresses_are_used() {
+        for good in ["localhost:11434/v1", "http://127.0.0.1:1234/v1", "https://box.local/v1", "http://[::1]:8080/v1"] {
+            assert!(LocalModel::usable_url(good), "{good}");
+        }
+        for bad in ["", "ftp://box/v1", "file:///etc", "http://user:pass@box/v1", "http://localhost:80@evil.example/v1", "http:///v1", "javascript:alert(1)"] {
+            assert!(!LocalModel::usable_url(bad), "{bad}");
+        }
+    }
+
+    #[test]
     fn questions_become_slides_with_the_first_answer_correct() {
         let questions = vec![
             question("", "Které město leží na Vltavě?", &["Praha", "Brno", "Ostrava", "Plzeň", "Olomouc"], 1),
@@ -651,7 +769,16 @@ mod tests {
         assert_eq!(stream_line(": keep-alive"), StreamLine::Nothing);
         assert_eq!(stream_line(""), StreamLine::Nothing);
         assert_eq!(stream_line(r#"{"choices":[]}"#), StreamLine::NotStreamed);
-        assert_eq!(questions_begun(r#"{"questions":[{"question":"a"},{"question":"#), 2);
+        assert_eq!(questions_begun(r#"{"questions":[{"question":"a"},{"question":"#, 0), 2);
+        // Counted piece by piece, a key cut between two pieces is counted once.
+        let whole = r#"{"questions":[{"question":"a"},{"question":"b"}]}"#;
+        let (mut counted, mut from) = (0, 0);
+        for end in [20, 33, 37, whole.len()] {
+            counted += questions_begun(&whole[..end], from);
+            from = end;
+        }
+        assert_eq!(counted, 2);
+        assert_eq!(stream_line(r#"data: {"error":{"message":"model ran out of memory"}}"#), StreamLine::Failed { detail: "model ran out of memory".into() });
         assert_eq!(read_questions(r#"{"questions":[{"question":"A?","answers":["a","b"]}]}"#, false).unwrap().len(), 1);
     }
 

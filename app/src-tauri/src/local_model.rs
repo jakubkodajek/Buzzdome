@@ -4,21 +4,21 @@
 //! sent and how the reply becomes slides is `quiz_ai::local_model`; here the
 //! requests are sent, streamed back and cancelled.
 //!
-//! A request is refused during a show: a model takes the computer's
-//! processor and memory for minutes, which a live show must not compete
-//! with.
+//! A request is refused during a show, and a show that begins cancels the
+//! request under way: a model takes the computer's processor and memory for
+//! minutes, which a live show must not compete with.
 
 use crate::ai::SavedAiSettings;
 use crate::editor;
 use crate::error::{AppError, CmdResult};
 use crate::{off_ui, refuse_during_show};
 use quiz_ai::local_model::{self, AttachmentContent, LocalModel, LocalModelInfo, QuestionRequest, ReplyError, RequestError, StreamLine};
-use quiz_core::{import_tables, Slide};
+use quiz_core::{import_tables, MediaKind, Slide};
 use serde::Serialize;
 use serde_json::Value;
 use std::io::{BufRead, BufReader};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{mpsc, Arc, Mutex};
+use std::sync::{mpsc, Arc, Mutex, PoisonError};
 use std::time::Duration;
 use tauri::ipc::Channel;
 use tauri::{AppHandle, Manager, State};
@@ -37,6 +37,9 @@ const REPLY_TIMEOUT: Duration = Duration::from_secs(30 * 60);
 const MAX_REPLY_BYTES: u64 = 16 << 20;
 /// How often a waiting request looks whether it was cancelled.
 const CANCEL_CHECK: Duration = Duration::from_millis(100);
+/// Most characters of a model's reply: far more than `MAX_QUESTIONS`
+/// questions take, so a model that keeps writing is stopped.
+const MAX_REPLY_CHARS: usize = 400_000;
 
 /// What the panel shows while the model writes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
@@ -49,11 +52,47 @@ pub struct LocalModelProgress {
     pub questions: usize,
 }
 
-/// The request under way, one at a time, and whether it was cancelled.
+/// The request under way, one at a time, and how to cancel it.
 #[derive(Default)]
 pub struct LocalModelState {
-    asking: Mutex<()>,
-    cancelled: Arc<AtomicBool>,
+    asking: AtomicBool,
+    /// Set to cancel the latest request. Each request has its own, so a
+    /// cancelled one whose thread still waits on the server is not asked
+    /// on by the next.
+    cancelled: Mutex<Arc<AtomicBool>>,
+}
+
+impl LocalModelState {
+    /// Begins a request, unless one is under way: the mark goes when the
+    /// first of the two given back does, and the second cancels it.
+    fn begin(&self) -> CmdResult<(Asking<'_>, Arc<AtomicBool>)> {
+        if self.asking.swap(true, Ordering::SeqCst) {
+            return Err(AppError::LocalModelBusy);
+        }
+        let cancelled = Arc::new(AtomicBool::new(false));
+        *self.cancelled.lock().unwrap_or_else(PoisonError::into_inner) = cancelled.clone();
+        Ok((Asking(&self.asking), cancelled))
+    }
+
+    fn cancel(&self) {
+        self.cancelled.lock().unwrap_or_else(PoisonError::into_inner).store(true, Ordering::SeqCst);
+    }
+}
+
+/// A request under way (`LocalModelState::begin`).
+struct Asking<'a>(&'a AtomicBool);
+
+impl Drop for Asking<'_> {
+    fn drop(&mut self) {
+        self.0.store(false, Ordering::SeqCst);
+    }
+}
+
+/// Cancels a request to the model as a show begins.
+pub(crate) fn cancel_for_show(app: &AppHandle) {
+    if let Some(state) = app.try_state::<LocalModelState>() {
+        state.cancel();
+    }
 }
 
 /// The model the AI panel asks (none until the quizmaster chose one) and
@@ -67,6 +106,9 @@ pub fn ai_local_model(saved: State<'_, SavedAiSettings>) -> LocalModelInfo {
 #[tauri::command]
 pub async fn ai_local_models(url: String) -> CmdResult<Vec<String>> {
     off_ui(move || {
+        if !LocalModel::usable_url(&url) {
+            return Err(AppError::LocalModelBadUrl { url });
+        }
         let address = LocalModel::models_url(&url);
         let mut response = agent(&address, LIST_TIMEOUT).get(&address).call().map_err(|e| unreachable(&url, e))?;
         let body = read_body(&mut response, &url)?;
@@ -86,6 +128,9 @@ pub async fn ai_set_local_model(app: AppHandle, url: String, model: String) -> C
         if chosen.url.is_empty() || chosen.model.is_empty() {
             return Err(AppError::LocalModelNotChosen);
         }
+        if !LocalModel::usable_url(&chosen.url) {
+            return Err(AppError::LocalModelBadUrl { url: chosen.url });
+        }
         app.state::<SavedAiSettings>().change(|settings| settings.local_model = Some(chosen.clone()))?;
         Ok(chosen)
     })
@@ -97,12 +142,19 @@ pub async fn ai_set_local_model(app: AppHandle, url: String, model: String) -> C
 /// (`editor_import_sheet`). The pictures and videos the request names must
 /// be the draft's already (`editor_add_dropped_media`); one that is not is
 /// not shown. `progress` hears how far the model is. Cancelled by
-/// `editor_ask_local_model_cancel`, which closes the connection, so the
-/// server stops too.
+/// `editor_ask_local_model_cancel` or a show that begins: the command
+/// ends at once, and the connection closes as the server next writes, so
+/// the server stops too.
 #[tauri::command]
 pub async fn editor_ask_local_model(app: AppHandle, draft: String, asked: QuestionRequest, progress: Channel<LocalModelProgress>) -> CmdResult<Vec<Slide>> {
+    let state = app.state::<LocalModelState>();
+    // Begun first, so a cancel from now on reaches this request.
+    let (_asking, cancelled) = state.begin()?;
     refuse_during_show(&app)?;
     let model = app.state::<SavedAiSettings>().get().local_model.ok_or(AppError::LocalModelNotChosen)?;
+    if !LocalModel::usable_url(&model.url) {
+        return Err(AppError::LocalModelBadUrl { url: model.url });
+    }
     let body = local_model::request(&model, &asked).map_err(|e| match e {
         RequestError::Empty => AppError::LocalModelNothingAsked,
         RequestError::TooManyFiles { max } => AppError::LocalModelTooManyFiles { max },
@@ -110,13 +162,21 @@ pub async fn editor_ask_local_model(app: AppHandle, draft: String, asked: Questi
         RequestError::NotAPicture => AppError::system("a picture for the model is not a data URL"),
     })?;
     let media = editor::draft_media(app.clone(), draft, asked.attachments.iter().map(|a| a.media.clone()).collect()).await?;
-    let media: Vec<Option<(String, bool)>> =
-        asked.attachments.iter().zip(media).map(|(attachment, found)| found.map(|reference| (reference, matches!(attachment.content, AttachmentContent::Video { .. })))).collect();
+    // A slide shows a file as what it is, whatever the attachment says.
+    let media: Vec<Option<(String, bool)>> = asked
+        .attachments
+        .iter()
+        .zip(media)
+        .map(|(attachment, found)| match (&attachment.content, found.as_deref().and_then(MediaKind::of)) {
+            (AttachmentContent::Picture { .. } | AttachmentContent::Video { .. }, Some(kind @ (MediaKind::Image | MediaKind::Video))) => found.map(|reference| (reference, kind == MediaKind::Video)),
+            _ => None,
+        })
+        .collect();
+    if cancelled.load(Ordering::SeqCst) {
+        return Err(AppError::LocalModelCancelled);
+    }
     let (content, cut_off) = off_ui(move || {
-        let state = app.state::<LocalModelState>();
-        let _one_at_a_time = state.asking.try_lock().map_err(|_| AppError::LocalModelBusy)?;
-        state.cancelled.store(false, Ordering::SeqCst);
-        ask_cancellably(model, body, state.cancelled.clone(), move |done| {
+        ask_cancellably(model, body, cancelled, move |done| {
             let _ = progress.send(done);
         })
     })
@@ -135,13 +195,15 @@ pub async fn editor_ask_local_model(app: AppHandle, draft: String, asked: Questi
 /// Cancels the request under way; it then fails with `localModelCancelled`.
 #[tauri::command]
 pub fn editor_ask_local_model_cancel(state: State<'_, LocalModelState>) {
-    state.cancelled.store(true, Ordering::SeqCst);
+    state.cancel();
 }
 
 /// Sends `body` on a thread of its own and waits for its reply, which ends
 /// at once when `cancelled` is set: a server that takes minutes before it
-/// writes does not keep the panel waiting. The thread then closes the
-/// connection when the server next writes, or at its time limit.
+/// writes (loading the model, reading the pictures) does not keep the panel
+/// waiting. The thread then closes the connection when the server next
+/// writes, or at its time limit; `cancelled` stays set for it, as the next
+/// request has its own.
 fn ask_cancellably(
     model: LocalModel,
     body: Value,
@@ -190,7 +252,8 @@ fn ask(model: &LocalModel, body: Value, cancelled: &AtomicBool, progress: impl F
 /// begins a question and every few hundred characters. A server that sends
 /// the whole reply at once is read too.
 fn read_stream(mut reader: impl BufRead, cancelled: &AtomicBool, progress: impl Fn(LocalModelProgress)) -> CmdResult<(String, bool)> {
-    let (mut content, mut cut_off, mut told) = (String::new(), false, LocalModelProgress { characters: 0, questions: 0 });
+    let (mut content, mut cut_off) = (String::new(), false);
+    let (mut now, mut told) = (LocalModelProgress { characters: 0, questions: 0 }, LocalModelProgress { characters: 0, questions: 0 });
     let mut line = String::new();
     loop {
         line.clear();
@@ -203,14 +266,21 @@ fn read_stream(mut reader: impl BufRead, cancelled: &AtomicBool, progress: impl 
         }
         match local_model::stream_line(&line) {
             StreamLine::Text { text, cut_off: at_limit } => {
+                let had = content.len();
                 content.push_str(&text);
                 cut_off |= at_limit;
-                let now = LocalModelProgress { characters: content.chars().count(), questions: local_model::questions_begun(&content) };
+                now.characters += text.chars().count();
+                now.questions += local_model::questions_begun(&content, had);
                 if now.questions != told.questions || now.characters >= told.characters + 200 {
                     progress(now);
                     told = now;
                 }
+                if now.characters > MAX_REPLY_CHARS {
+                    // A model that does not stop: what it wrote is read as cut off.
+                    return Ok((content, true));
+                }
             }
+            StreamLine::Failed { detail } => return Err(AppError::LocalModelFailed { detail }),
             StreamLine::Done => break,
             StreamLine::Nothing => {}
             StreamLine::NotStreamed => {
@@ -232,7 +302,8 @@ fn read_stream(mut reader: impl BufRead, cancelled: &AtomicBool, progress: impl 
 fn agent(address: &str, first_word: Duration) -> ureq::Agent {
     let config = ureq::Agent::config_builder()
         .http_status_as_error(false)
-        .max_redirects(3)
+        // The address the quizmaster gave, and no other it sends on to.
+        .max_redirects(0)
         .timeout_connect(Some(CONNECT_TIMEOUT))
         .timeout_recv_response(Some(first_word))
         .timeout_recv_body(Some(REPLY_TIMEOUT));
@@ -242,9 +313,9 @@ fn agent(address: &str, first_word: Duration) -> ureq::Agent {
 
 /// Whether `address` names this computer.
 fn is_this_computer(address: &str) -> bool {
-    let host = address.split_once("://").map_or(address, |(_, rest)| rest);
-    let host = host.split(['/', '?']).next().unwrap_or_default();
-    let host = if host.starts_with('[') { host.split(']').next().unwrap_or_default().trim_start_matches('[') } else { host.split(':').next().unwrap_or_default() };
+    let Ok(uri) = address.parse::<ureq::http::Uri>() else { return false };
+    let Some(host) = uri.host() else { return false };
+    let host = host.trim_start_matches('[').trim_end_matches(']');
     host.eq_ignore_ascii_case("localhost") || host.parse::<std::net::IpAddr>().is_ok_and(|ip| ip.is_loopback())
 }
 
@@ -404,13 +475,103 @@ mod tests {
     }
 
     #[test]
+    fn a_cancelled_request_stays_cancelled_and_one_runs_at_a_time() {
+        let state = LocalModelState::default();
+        let (asking, first) = state.begin().unwrap();
+        assert!(matches!(state.begin(), Err(AppError::LocalModelBusy)));
+        state.cancel();
+        drop(asking);
+        // The next request has its own flag: the first, whose thread may
+        // still wait on the server, is not asked on again.
+        let (_asking, second) = state.begin().unwrap();
+        assert!(first.load(Ordering::SeqCst));
+        assert!(!second.load(Ordering::SeqCst));
+        state.cancel();
+        assert!(second.load(Ordering::SeqCst));
+    }
+
+    #[test]
+    fn an_error_midway_and_a_model_that_does_not_stop_are_told() {
+        let midway = "data: {\"choices\":[{\"delta\":{\"content\":\"{\\\"q\"}}]}\n\ndata: {\"error\":{\"message\":\"out of memory\"}}\n\n";
+        let reply = read_stream(BufReader::new(midway.as_bytes()), &AtomicBool::new(false), |_| {});
+        assert_eq!(reply, Err(AppError::LocalModelFailed { detail: "out of memory".into() }));
+        let endless = sse(&vec!["{\"question\": \"ano\", "; MAX_REPLY_CHARS / 10]);
+        let told = std::cell::Cell::new(LocalModelProgress { characters: 0, questions: 0 });
+        let (content, cut_off) = read_stream(BufReader::new(endless.as_bytes()), &AtomicBool::new(false), |now| told.set(now)).unwrap();
+        assert!(cut_off);
+        assert!(content.chars().count() <= MAX_REPLY_CHARS + 30);
+        // Counted as written, the same as counting the whole text.
+        assert_eq!(told.get().questions, local_model::questions_begun(&content, 0));
+    }
+
+    #[test]
     fn this_computer_is_known_by_its_names() {
-        for address in ["http://localhost:11434/v1", "http://127.0.0.1:1234/v1", "http://[::1]:8080/v1", "localhost"] {
+        for address in ["http://localhost:11434/v1", "http://127.0.0.1:1234/v1", "http://[::1]:8080/v1", "http://LocalHost/v1"] {
             assert!(is_this_computer(address), "{address}");
         }
-        for address in ["http://192.168.1.5:11434/v1", "https://example.com/v1", "http://localhost.example.com/v1"] {
+        for address in ["http://192.168.1.5:11434/v1", "https://example.com/v1", "http://localhost.example.com/v1", "http://localhost:80@evil.example/v1", "not an address"] {
             assert!(!is_this_computer(address), "{address}");
         }
+    }
+
+    /// `bytes` in base64 (RFC 4648), for the live test's picture.
+    fn base64(bytes: &[u8]) -> String {
+        const DIGITS: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+        let mut text = String::new();
+        for chunk in bytes.chunks(3) {
+            let n = chunk.iter().enumerate().fold(0u32, |n, (i, &b)| n | u32::from(b) << (16 - 8 * i));
+            for i in 0..4 {
+                text.push(if i <= chunk.len() { DIGITS[(n >> (18 - 6 * i) & 63) as usize] as char } else { '=' });
+            }
+        }
+        text
+    }
+
+    #[test]
+    fn base64_is_as_the_rfc_says() {
+        assert_eq!([base64(b""), base64(b"f"), base64(b"fo"), base64(b"foo"), base64(b"foob")], ["", "Zg==", "Zm8=", "Zm9v", "Zm9vYg=="]);
+    }
+
+    /// Asks a real model, when `BUZZDOME_LIVE_MODEL` names one (and
+    /// `BUZZDOME_LIVE_URL` its server, Ollama's by default), about a
+    /// picture and a text, and checks that its reply becomes slides that
+    /// show the picture (docs/ai-assistants.md). Does nothing otherwise.
+    #[test]
+    fn live_model_writes_slides_about_a_picture_and_a_text() {
+        let Ok(name) = std::env::var("BUZZDOME_LIVE_MODEL") else { return };
+        let url = std::env::var("BUZZDOME_LIVE_URL").unwrap_or_else(|_| DEFAULT_URL.to_string());
+        let model = LocalModel::new(&url, &name);
+        let image = format!("data:image/png;base64,{}", base64(include_bytes!("../icons/128x128.png")));
+        let asked = QuestionRequest {
+            prompt: "4 otázky: 2 o obrázku (logo aplikace na kvízy) a 2 o textu, ve dvou kolech.".into(),
+            attachments: vec![
+                Attachment { name: "logo.png".into(), media: Some("media/logo.png".into()), content: AttachmentContent::Picture { image } },
+                Attachment { name: "poznamky.txt".into(), media: None, content: AttachmentContent::Text { text: "Vltava je nejdelší řeka v Česku. Měří 430 km a teče Prahou.".into() } },
+            ],
+            language: QuizLanguage::Cs,
+            whole_quiz: true,
+        };
+        let body = local_model::request(&model, &asked).unwrap();
+        let told = Arc::new(AtomicUsize::new(0));
+        let counted = told.clone();
+        let started = std::time::Instant::now();
+        let (content, cut_off) = ask_cancellably(model, body, Arc::new(AtomicBool::new(false)), move |progress| {
+            counted.store(progress.questions, Ordering::SeqCst);
+        })
+        .unwrap();
+        println!("model wrote in {:?} ({} questions told):\n{content}", started.elapsed(), told.load(Ordering::SeqCst));
+        let questions = local_model::read_questions(&content, cut_off).unwrap();
+        let table = local_model::draft_table(&questions, &[Some(("media/logo.png".into(), false)), None], true);
+        let imported = import_tables(&[table], &[], 1).unwrap();
+        let slides: Vec<Slide> = imported.slides.into_iter().map(|(_, slide)| slide).collect();
+        for slide in &slides {
+            println!("{:?} picture={:?}", slide.content, slide.picture);
+        }
+        let questions = slides.iter().filter(|s| matches!(s.content, quiz_core::SlideContent::Question(_))).count();
+        assert!(questions >= 2, "{questions} questions");
+        assert!(matches!(slides.last().unwrap().content, quiz_core::SlideContent::Final { .. }));
+        assert!(told.load(Ordering::SeqCst) >= 1, "the progress was told");
+        println!("pictures shown: {}", slides.iter().filter(|s| s.picture.is_some()).count());
     }
 
     #[test]

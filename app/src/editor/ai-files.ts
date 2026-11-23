@@ -171,8 +171,11 @@ async function framesFor(file: File, info: LocalModelInfo): Promise<string[]> {
     await once(video, "loadeddata", VIDEO_WAIT_MS);
     const frames: string[] = [];
     for (const time of frameTimes(video.duration, info.videoFrames)) {
-      video.currentTime = time;
-      await once(video, "seeked", VIDEO_WAIT_MS);
+      // A video already at that time fires no `seeked`.
+      if (video.currentTime !== time) {
+        video.currentTime = time;
+        await once(video, "seeked", VIDEO_WAIT_MS);
+      }
       const frame = drawn(video, video.videoWidth, video.videoHeight, info.imageSidePx, info.maxImageBytes);
       if (frame) frames.push(frame);
     }
@@ -197,8 +200,26 @@ export async function attachmentFor(file: AiFile, info: LocalModelInfo, referenc
       return { name, media: reference, content: { kind: "picture", image: await pictureFor(file.file, info) } };
     case "video":
       return { name, media: reference, content: { kind: "video", frames: await framesFor(file.file, info) } };
-    case "text":
-      // Read whole only up to what is sent; a huge log file is not read in full.
-      return { name, media: null, content: { kind: "text", text: await file.file.slice(0, Math.max(0, textLeft) * 4).text().then((text) => text.slice(0, textLeft)) } };
+    case "text": {
+      // Read only up to what is sent (at most four bytes a character); a huge log file is not read in full.
+      const bytes = new Uint8Array(await file.file.slice(0, Math.max(0, textLeft) * 4).arrayBuffer());
+      return { name, media: null, content: { kind: "text", text: decodedText(bytes).slice(0, textLeft) } };
+    }
+  }
+}
+
+/**
+ * The text in `bytes`: UTF-8, or UTF-16 with its byte order mark, as text
+ * editors save it; otherwise Windows-1250, in which Czech Windows and Excel
+ * save a CSV. The last character may be cut, as only the start is read.
+ */
+export function decodedText(bytes: Uint8Array): string {
+  if (bytes[0] === 0xff && bytes[1] === 0xfe) return new TextDecoder("utf-16le").decode(bytes);
+  if (bytes[0] === 0xfe && bytes[1] === 0xff) return new TextDecoder("utf-16be").decode(bytes);
+  try {
+    // `stream` lets a character cut at the end pass; the decoder drops it.
+    return new TextDecoder("utf-8", { fatal: true }).decode(bytes, { stream: true });
+  } catch {
+    return new TextDecoder("windows-1250").decode(bytes);
   }
 }

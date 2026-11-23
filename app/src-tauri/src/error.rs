@@ -200,6 +200,9 @@ pub enum AppError {
     /// The connection broke while the model wrote.
     #[error("the model's reply broke off: {detail}")]
     LocalModelInterrupted { detail: String },
+    /// The server stopped the reply with an error while the model wrote.
+    #[error("the model stopped with an error: {detail}")]
+    LocalModelFailed { detail: String },
     #[error("the request to the model was cancelled")]
     LocalModelCancelled,
     /// The panel asks one request at a time.

@@ -440,6 +440,7 @@ fn lock_for_new_show(app: &AppHandle) -> CmdResult<MutexGuard<'_, Inner>> {
     let inner = lock_show(app);
     inner.may_start_show()?;
     hardware::end_learning(app);
+    local_model::cancel_for_show(app);
     Ok(inner)
 }
 

@@ -210,8 +210,10 @@ about the trip photos, in two rounds") and presses Make questions:
    pictures, and a small JSON Schema of the reply (`reply_schema`) as
    `response_format`. A server that refuses the format is asked again
    without it. The reply is streamed, so the panel shows how many
-   questions the model has begun, and Cancel closes the connection, which
-   stops the server too.
+   questions the model has begun. Cancel frees the panel at once; the
+   request's connection closes as the server next writes, which stops the
+   server too (while a model is still loading, it writes nothing for a
+   while). A show that begins cancels the request the same way.
 4. The model's questions (first answer correct) become rows of a sheet
    (`draft_table`) that the spreadsheet import reads, so they get its
    defaults and checks: answers shuffled, a section for each named round,
@@ -229,10 +231,46 @@ https://docs.ollama.com/context-length). A request is refused during a show: a m
 and memory for minutes. Small models (under about 7B parameters) may not
 keep to the schema (LM Studio, "Structured Output",
 https://lmstudio.ai/docs/developer/openai-compat/structured-output); the
-reply is read also when the JSON is wrapped in a code block or a sentence.
+reply is read also when the JSON is wrapped in a code block or a sentence
+or follows a reasoning model's `<think>` block, and a field written oddly
+(`null`, a number for a text) loses only itself. A question whose first
+(correct) answer is empty, or that has fewer than two answers, is left out.
+An error the server sends midway (a model out of memory) is shown as such,
+and a model that does not stop is stopped after 400,000 characters. The
+address must be `http` or `https` with no user name or password, and
+redirects are not followed. Text files are read as UTF-8, as UTF-16 with a
+byte order mark, or else as Windows-1250 (Czech Excel's CSV).
 Ollama takes pictures but no video (Ollama, "Ollama's new engine for
 multimodal models", https://registry.ollama.ai/blog/multimodal-models), hence
 the frames.
+
+### Checking it with a real model
+
+The tests use a fake server on this computer
+(`app/src-tauri/src/local_model.rs`). With Ollama running and a model that
+reads pictures pulled (`ollama pull qwen3-vl:8b`, or `gemma3:4b` on a
+smaller computer), one test asks the real model too:
+
+```sh
+BUZZDOME_LIVE_MODEL=qwen3-vl:8b cargo test -p buzzdome live_model -- --nocapture
+```
+
+`BUZZDOME_LIVE_URL` gives another server (`http://localhost:1234/v1` for LM
+Studio). Without `BUZZDOME_LIVE_MODEL` the test does nothing. By hand, in
+`npm run tauri dev`:
+
+1. File › AI assistants: Load models lists Ollama's models; choose one and Use.
+2. In an empty quiz, Home › AI assistant: add two photos, a short video and
+   a `.txt` file, ask for "8 questions in two rounds", press Make questions.
+   The status says the model reads, then counts questions; the slides come
+   in after the selected one: sections, questions with the photos and the
+   video, an end of round after each round and the results.
+3. Undo (Ctrl+Z) takes all of them out as one change.
+4. Ask again and press Cancel while the model reads: the panel is free at
+   once and Make questions works again.
+5. Quit Ollama and ask: the panel says the server does not answer, with its
+   address. Choose a model name that is not pulled: it says so.
+6. Start a show while a request runs: the request is cancelled.
 
 ## After an update
 
