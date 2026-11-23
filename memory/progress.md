@@ -157,3 +157,48 @@ Template:
 - State: make check green; branch `claude/project-thread-dv8265`.
 - Next: guardian review, Jakub's OK to merge.
 - Blockers / open questions: none.
+
+## 2026-11-23 - local-ai-panel (QZ-14)
+
+- Done (Jakub chose "local AI only", no API keys, no subscription logins:
+  Anthropic and Google forbid them in other apps, OpenAI's is partner-only):
+  Studio's AI assistant (Home › AI assistant, `editor/AiPanel.tsx`) takes
+  pictures, videos and text files and a request, and asks a model on this
+  computer through an OpenAI-compatible server (Ollama, LM Studio). The
+  window shrinks pictures and takes video frames (canvas, `ai-files.ts`;
+  CSP media-src now allows `blob:`); `editor_add_dropped_media` copies the
+  media into the draft; `editor_ask_local_model` streams the reply with
+  progress and a real cancel (`app/src-tauri/src/local_model.rs`); the
+  questions become sheet rows read by `quiz_core::import_tables`
+  (`quiz_ai::local_model::draft_table`) and are inserted like a sheet
+  import. The model is chosen in File › AI assistants (`ai.json`
+  `localModel`). Refused during a show.
+- State: branch `claude/project-thread-5u62lr`; not tried against a real
+  model (the container cannot reach Ollama's registry or Hugging Face).
+- Next: Jakub tries it with Ollama on his Mac or Windows (a vision model
+  such as qwen3-vl:8b or gemma3, context 16k); review; merge only with his OK.
+- Blockers / open questions: Ollama's default 4k context on < 24 GiB VRAM
+  limits how much a request may carry (limits in `local_model.rs`).
+
+## 2026-11-23 - release-1.3.0
+
+- Done: review of #83, #84 and #85 in fresh contexts (code, security, UX)
+  before the release; #85 merged as it was, #83 and #84 through this
+  branch. Fixed on #84: page fetches refuse a public name that resolves
+  to a local address (`InternetOnly`, wider `web_page::is_local_address`);
+  the unpacking mark is a count, so the voice and the speech recognition
+  model can unpack at once without a show starting; `decode_text` keeps a
+  Windows-1250 letter at a whole file's end (`decode_text_start` for the
+  start of a file); a cancelled request is not sent; the panel shows a
+  failure by its buttons; the AI assistant is spec QZ-14 (QZ-13 is the
+  text lengths). Version raised to 1.3.0 (Jakub's OK).
+- State: make check green on main + #85 + #83 + #84 with the fixes;
+  layout check clean at 960x600, 1280x640, 1366x690 and 1920x1000; branch
+  `claude/project-thread-il2cug`.
+- Next: Jakub pushes tag `v1.3.0`.
+- Blockers / open questions: left for later, none blocks the release: a
+  very long recording is decoded whole before it is cut to 15 minutes
+  (`ai-files.ts` `soundOf`); the panel's pinned footer is tall at
+  1024x700; `maxLength` in `reply_schema` (BF212) was left out, as no real
+  model could be asked with it here; the layout script does not open the
+  AI panel; no test that a show's start cancels the panel's request.

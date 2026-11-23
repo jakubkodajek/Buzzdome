@@ -5,6 +5,7 @@
 //! server reads the folder when it starts and the instructions each time an
 //! assistant reads the format, so a change to them needs no restart.
 
+use crate::local_model::LocalModel;
 use crate::roots::{self, RootError, Roots};
 use serde::{Deserialize, Serialize};
 use std::fs;
@@ -41,6 +42,9 @@ pub struct AiSettings {
     /// the instructions: the default instructions are given in it, as the
     /// app showed them.
     pub language: Language,
+    /// The model on this computer that Studio's AI panel asks, once the
+    /// quizmaster chose one.
+    pub local_model: Option<LocalModel>,
 }
 
 impl AiSettings {

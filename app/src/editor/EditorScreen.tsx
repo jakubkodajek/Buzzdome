@@ -18,6 +18,7 @@ import {
   SaveIcon,
   SlideAddIcon,
   SlideIcon,
+  SparkleIcon,
   TableIcon,
   UndoIcon,
   WarningIcon,
@@ -43,6 +44,7 @@ import { LayoutGallery } from "./LayoutGallery";
 import { NewQuizDialog, QuizStartDialog } from "./QuizStartDialog";
 import { DEFAULT_LAYOUT, slideFromLayout, type SlideLayout } from "./layouts";
 import { menuItems, type MenuContext, type MenuTarget } from "./menus";
+import { AiPanel } from "./AiPanel";
 import { categoryHeader, PropertiesPanel, selectionHeader } from "./PropertiesPanel";
 import { slideProperties, type SlideEditing } from "./properties";
 import { selectionPages } from "./property-pages";
@@ -74,6 +76,8 @@ type View = "graphical" | "table" | "categories";
 const shownTab = createStore<RibbonTab>("home");
 const shownView = createStore<View>("graphical");
 const panelShown = createStore(true);
+/** Whether the AI assistant takes the properties panel's place (AiPanel.tsx). */
+const aiShown = createStore(false);
 const notesOn = createStore(true);
 const copiedValues = draftStore<CopiedValue>();
 
@@ -165,6 +169,7 @@ function Studio({ editor, open, ask, onExit }: { editor: QuizEditor; open: OpenQ
   const setView = shownView.set;
   const panel = useStore(panelShown);
   const setPanel = panelShown.set;
+  const aiOpen = useStore(aiShown);
   const notesShown = useStore(notesOn);
   const setNotesShown = notesOn.set;
   /** The value last copied from a property, to paste into another; a media file only in its own quiz. */
@@ -237,16 +242,25 @@ function Studio({ editor, open, ask, onExit }: { editor: QuizEditor; open: OpenQ
     if (isMediaElement(part)) media.choosePart(slide.id, part);
     else setDialog({ id: slide.id, focus: part });
   };
-  // The quiz and place as they are once a spreadsheet is read, after its dialogs.
-  const latest = useLatest({ quiz, index });
-  const sheet = useSheetActions(editor, quiz, (imported) => {
+  // The quiz and place as they are once a spreadsheet is read, after its
+  // dialogs, or once the AI assistant's model has written.
+  const latest = useLatest({ quiz, index, draftId: open?.draftId ?? null });
+  /** Inserts slides made elsewhere after the selected one, as one change; how many. */
+  const insertImported = (imported: Slide[]) => {
     const { quiz: now, index: at } = latest.current;
     if (!now) return 0;
     // A row that names a category is formatted like it.
     list.insert(withFreshIds(now, imported).map((s) => formatImported(s, now.categories ?? [])), at + 1);
-    setBackstage(null);
     return imported.length;
+  };
+  const sheet = useSheetActions(editor, quiz, (imported) => {
+    const inserted = insertImported(imported);
+    setBackstage(null);
+    return inserted;
   });
+  // The AI assistant's slides go only into the draft they were asked for: their media are copied into it.
+  const insertAsked = (draft: string, asked: Slide[]) => (latest.current.draftId === draft ? insertImported(asked) : null);
+  const aiPanelShown = aiOpen && view !== "categories" && open !== null;
   // The backend refuses what a show cannot play (not a category's problems,
   // say); what is to fix is then listed in File › Info.
   const testRun = (from?: number) =>
@@ -311,7 +325,17 @@ function Studio({ editor, open, ask, onExit }: { editor: QuizEditor; open: OpenQ
         setView("categories");
       },
     },
-    properties: { label: t("viewProperties"), icon: <PanelIcon />, checked: panel, run: () => setPanel(!panel) },
+    properties: {
+      label: t("viewProperties"),
+      icon: <PanelIcon />,
+      checked: panel && !aiPanelShown,
+      run: () => {
+        // The AI assistant gives the properties their place back.
+        setPanel(aiPanelShown || !panel);
+        aiShown.set(false);
+      },
+    },
+    aiPanel: { label: t("aiPanel"), icon: <SparkleIcon />, checked: aiPanelShown, disabled: view === "categories", run: () => aiShown.set(!aiPanelShown) },
     findProperty: {
       label: t("findProperty"),
       keys: ["Ctrl+F"],
@@ -319,6 +343,7 @@ function Studio({ editor, open, ask, onExit }: { editor: QuizEditor; open: OpenQ
       disabled: view === "table" || (view === "graphical" ? noSlide : !categories.category),
       run: () => {
         setPanel(true);
+        aiShown.set(false);
         setFindProperty(true);
       },
     },
@@ -467,7 +492,7 @@ function Studio({ editor, open, ask, onExit }: { editor: QuizEditor; open: OpenQ
                     apply: (id) => editor.edit({ type: "applyCategory", id, slides: selected }),
                   }}
                 />
-                <div className={panel && panelContent ? "studio-main with-panel" : "studio-main"}>
+                <div className={aiPanelShown || (panel && panelContent) ? "studio-main with-panel" : "studio-main"}>
                   {view === "graphical" ? (
                     <>
                       <Thumbnails
@@ -523,7 +548,18 @@ function Studio({ editor, open, ask, onExit }: { editor: QuizEditor; open: OpenQ
                   ) : (
                     <CategoryView quiz={quiz} categories={categories} canvasTheme={canvasTheme} onMenu={(e) => openMenu(e, { kind: "category" })} />
                   )}
-                  {panel && panelContent && (
+                  {aiPanelShown && open ? (
+                    <AiPanel
+                      draftId={open.draftId}
+                      language={settingsOf(quiz).language}
+                      emptyQuiz={slides.length === 0}
+                      onInsert={insertAsked}
+                      onChooseModel={() => setBackstage("ai")}
+                      onClose={() => aiShown.set(false)}
+                    />
+                  ) : (
+                    panel &&
+                    panelContent && (
                     <PropertiesPanel
                       {...panelContent}
                       copied={copiedValue}
@@ -531,6 +567,7 @@ function Studio({ editor, open, ask, onExit }: { editor: QuizEditor; open: OpenQ
                       focusSearch={findProperty}
                       onSearchFocused={() => setFindProperty(false)}
                     />
+                    )
                   )}
                 </div>
               </>

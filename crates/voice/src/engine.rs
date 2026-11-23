@@ -1,7 +1,7 @@
 //! Renders words into speech with the voice model, through sherpa-onnx
 //! (ONNX Runtime, on the CPU). Used only in the voice process.
 
-use crate::model::{model_dir, MODEL_FILES};
+use crate::model::{MODEL, MODEL_FILES};
 use crate::{audio, Line, VoiceError};
 use sherpa_onnx::{GenerationConfig, OfflineTts, OfflineTtsConfig, OfflineTtsModelConfig, OfflineTtsSupertonicModelConfig};
 use std::collections::HashMap;
@@ -28,9 +28,9 @@ pub struct Engine {
 }
 
 impl Engine {
-    /// Loads the model installed under `root` (`model::installed`).
+    /// Loads the model installed under `root` (`ModelSource::installed`).
     pub fn load(root: &Path) -> Result<Engine, VoiceError> {
-        let dir = model_dir(root);
+        let dir = MODEL.dir(root);
         let file = |name: &str| Some(dir.join(name).to_string_lossy().into_owned());
         let [duration_predictor, text_encoder, vector_estimator, vocoder, tts_json, unicode_indexer, voice_style] = MODEL_FILES.map(file);
         let threads = std::thread::available_parallelism().map_or(2, |n| n.get().saturating_sub(1).clamp(1, MAX_THREADS));

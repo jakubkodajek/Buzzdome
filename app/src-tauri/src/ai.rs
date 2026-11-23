@@ -61,13 +61,13 @@ impl SavedAiSettings {
         SavedAiSettings { file: Mutex::new(file), settings: Mutex::new(settings) }
     }
 
-    fn get(&self) -> AiSettings {
+    pub(crate) fn get(&self) -> AiSettings {
         self.settings.lock().unwrap().clone()
     }
 
     /// Changes the settings by `change` and keeps them on disk when that
     /// changed them; the settings as they are then.
-    fn change(&self, change: impl FnOnce(&mut AiSettings)) -> CmdResult<AiSettings> {
+    pub(crate) fn change(&self, change: impl FnOnce(&mut AiSettings)) -> CmdResult<AiSettings> {
         // Held through the write, so the file ends with the latest settings.
         let file = self.file.lock().unwrap();
         let mut settings = self.get();

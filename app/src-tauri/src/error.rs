@@ -176,6 +176,62 @@ pub enum AppError {
     /// An AI app's configuration file holds something else than its settings, so it is left as it is.
     #[error("{path} is not an AI app's configuration")]
     AiConfigUnreadable { path: String },
+    /// No model is chosen for Studio's AI panel yet (File > AI assistants).
+    #[error("no model on this computer is chosen")]
+    LocalModelNotChosen,
+    /// The address given for the model's server is no web address.
+    #[error("{url} is no server address")]
+    LocalModelBadUrl { url: String },
+    /// Nothing answers at the model's address: the server (Ollama, LM
+    /// Studio) is not running, or listens elsewhere.
+    #[error("no server answers at {url}: {detail}")]
+    LocalModelUnreachable { url: String, detail: String },
+    /// The server answers but lists no models at its address.
+    #[error("{url} lists no models")]
+    LocalModelNoList { url: String },
+    /// The server does not have the model chosen (deleted since, say).
+    #[error("the server has no model {model}")]
+    LocalModelMissing { model: String },
+    /// The server refused the request; `detail` is its own message.
+    #[error("the model's server refused ({status}): {detail}")]
+    LocalModelRefused { status: u16, detail: String },
+    /// The request did not fit the model's context, even with its texts shortened.
+    #[error("the request does not fit the context of model {model}")]
+    LocalModelContextFull { model: String },
+    /// A reasoning model reasoned up to its length limit and wrote no answer.
+    #[error("the model reasoned until its limit and wrote no questions")]
+    LocalModelThoughtTooLong,
+    #[error("the model took too long")]
+    LocalModelTimedOut,
+    /// The connection broke while the model wrote.
+    #[error("the model's reply broke off: {detail}")]
+    LocalModelInterrupted { detail: String },
+    /// The server stopped the reply with an error while the model wrote.
+    #[error("the model stopped with an error: {detail}")]
+    LocalModelFailed { detail: String },
+    #[error("the request to the model was cancelled")]
+    LocalModelCancelled,
+    /// A show began, which stops the AI panel's request or the recording
+    /// being written down (`local_model::cancel_for_show`).
+    #[error("a show began, so the AI panel stopped")]
+    LocalModelStoppedForShow,
+    /// The panel asks one request at a time.
+    #[error("the model is still writing")]
+    LocalModelBusy,
+    #[error("nothing asked of the model")]
+    LocalModelNothingAsked,
+    #[error("more than {max} files for the model")]
+    LocalModelTooManyFiles { max: usize },
+    #[error("more than {max} pictures for the model")]
+    LocalModelTooManyPictures { max: usize },
+    /// The model wrote something else than the questions asked for.
+    #[error("the model's answer is not questions")]
+    LocalModelNotQuestions,
+    /// The model stopped at its length limit before the questions ended.
+    #[error("the model's answer was cut off")]
+    LocalModelCutOff,
+    #[error("the model wrote no questions")]
+    LocalModelNoQuestions,
     /// The folder chosen for an assistant holds or is inside the app's own data (shows, drafts, settings).
     #[error("{path} holds or is inside Buzzdome's own data")]
     AiFolderNotAllowed { path: String },
@@ -262,6 +318,32 @@ pub enum AppError {
     /// The model or a clip could not be written to the disk (full, refused).
     #[error("the voice model cannot be saved: {detail}")]
     VoiceDisk { detail: String },
+
+    // Writing down what a recording says, for the AI panel (`listen`).
+    /// The speech recognition model could not be downloaded.
+    #[error("the speech recognition model cannot be downloaded: {detail}")]
+    ListenerDownload { detail: String },
+    /// The download is not the model it should be.
+    #[error("the downloaded speech recognition model is damaged")]
+    ListenerDamaged,
+    /// A show began during the download, which stopped it.
+    #[error("the speech recognition model download stopped as a show began")]
+    ListenerDownloadStopped,
+    /// The quizmaster cancelled the download.
+    #[error("the speech recognition model download was cancelled")]
+    ListenerDownloadCancelled,
+    /// The model is not downloaded, so no recording can be written down.
+    #[error("the speech recognition model is not downloaded")]
+    ListenerMissing,
+    /// The model could not be written to the disk (full, refused).
+    #[error("the speech recognition model cannot be saved: {detail}")]
+    ListenerDisk { detail: String },
+    /// The listening process did not start, load the model or finish in time.
+    #[error("the recording {name} could not be written down")]
+    ListenerFailed { name: String },
+    /// The quizmaster cancelled writing a recording down.
+    #[error("writing the recording down was cancelled")]
+    ListenerCancelled,
 
     // Updates of the app.
     /// No newer version was found to install.

@@ -6,6 +6,7 @@
 
 pub mod audio;
 pub mod engine;
+pub mod listen;
 pub mod model;
 pub mod server;
 pub mod speech;
@@ -16,7 +17,7 @@ use sha2::{Digest, Sha256};
 use quiz_core::QuizLanguage;
 use ts_rs::TS;
 
-pub use model::{MODEL, MODEL_FILES};
+pub use model::{LISTENER, MODEL, MODEL_FILES};
 
 /// Longest text a clip is rendered for, in characters; more is cut.
 pub const MAX_TEXT_CHARS: usize = 2000;

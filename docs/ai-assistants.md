@@ -173,6 +173,206 @@ a `.quiz` file.
 | `save_quiz_file` | Makes the `.quiz` file; refuses a quiz with problems, and an existing file unless `replace` is given. |
 | `unpack_quiz_file` | Unpacks a `.quiz` file into a new folder to change it. |
 
+## Studio's AI assistant: a model on this computer
+
+Studio has an AI assistant of its own (Home › AI assistant, spec QZ-14). It
+asks a model that runs on the quizmaster's computer, through a server that
+speaks the OpenAI chat completions API, with no account and no API key:
+
+| Server | Address | Source |
+| --- | --- | --- |
+| Ollama | `http://localhost:11434/v1` (the default) | Ollama, "OpenAI compatibility", https://docs.ollama.com/api/openai-compatibility |
+| LM Studio (start its server) | `http://localhost:1234/v1` | LM Studio, "OpenAI Compatibility Endpoints", https://lmstudio.ai/docs/developer/openai-compat |
+| llama.cpp's `llama-server`, vLLM and others | their `/v1` address | |
+
+File › AI assistants lists the server's models (`GET /models`) and keeps
+the one chosen in `ai.json` (`localModel`). Signing in with a ChatGPT,
+Claude or Gemini subscription is not offered: Anthropic and Google forbid
+using those logins in other apps (The Register, 2026-02-20,
+https://www.theregister.com/software/2026/02/20/anthropic-clarifies-ban-on-third-party-tool-access-to-claude/5014546;
+Gemini CLI terms, https://geminicli.com/docs/resources/tos-privacy/), and
+OpenAI's "Sign in with ChatGPT" is for its partners only (The New Stack,
+https://thenewstack.io/sign-in-with-chatgpt/). Those subscriptions reach
+Buzzdome through their own apps and the MCP server above.
+
+Which model to use is the quizmaster's choice; the app and these docs
+name none.
+
+In the panel, the quizmaster adds pictures, videos, sound recordings and
+text files (`.txt`, `.md`, `.csv`; at most 12), types what they want ("10 questions
+about the trip photos, in two rounds") and presses Make questions:
+
+1. Pictures and videos are copied into the draft (`editor_add_dropped_media`),
+   so the slides can show them.
+2. The window makes each picture at most 768 px on its longest side and
+   takes three frames of each video, both as JPEG data URLs. A video the
+   window cannot play goes by its name only.
+3. `editor_ask_local_model` sends one chat completion request
+   (`quiz_ai::local_model::request`): instructions for a buzzer quiz in the
+   quiz's language, the request, each file as "Attachment n" with its
+   pictures, and a small JSON Schema of the reply (`reply_schema`) as
+   `response_format`, at a low temperature (0.2). The schema has the model
+   write, for each question, the attachment it is about, the question, the
+   fact that answers it and only then the right answer and 1 to 3 wrong
+   ones: a model writes the fields in the schema's order, and stating the
+   fact first is a chain of thought (Wei et al., "Chain-of-Thought
+   Prompting Elicits Reasoning in Large Language Models",
+   https://arxiv.org/abs/2201.11903). With gemma3:4b on a 16 GB Mac, the
+   former schema (answers first) marked a wrong answer right in 1 or 2 of
+   4 questions. A server that refuses the format is asked again
+   without it. The reply is streamed, so the panel shows how many
+   questions the model has begun. Cancel frees the panel at once; the
+   request's connection closes as the server next writes, which stops the
+   server too (while a model is still loading or reading a long request,
+   it writes nothing for a while, and keeps the processor busy until it
+   does). A show that begins cancels the request the same way and says so
+   with a caution, as it does for a recording being written down.
+4. The model's questions become rows of a sheet
+   (`draft_table`) that the spreadsheet import reads, so they get its
+   defaults and checks: answers shuffled, a section for each named round,
+   and in an empty quiz an end of round after each and the results at the
+   end. A question about an attachment shows its picture or video.
+5. The editor inserts the slides after the selected one as one change.
+   Slides asked for one quiz are not put into another opened meanwhile.
+
+A request stays small (at most 16 pictures and 20,000 characters of
+text), as the model reads it within its context: Ollama gives a model 4k
+tokens on a computer with less than 24 GiB of graphics memory, and a longer
+one is set in its app (Settings › Context length) or with
+`OLLAMA_CONTEXT_LENGTH` (Ollama, "Context length",
+https://docs.ollama.com/context-length). A request is refused during a show: a model takes the computer's processor
+and memory for minutes. Small models (under about 7B parameters) may not
+keep to the schema (LM Studio, "Structured Output",
+https://lmstudio.ai/docs/developer/openai-compat/structured-output); the
+reply is read also when the JSON is wrapped in a code block or a sentence
+or follows a reasoning model's `<think>` block, and a field written oddly
+(`null`, a number for a text) loses only itself. A question whose first
+(right) answer is empty, or that has fewer than two answers, is left out;
+an answer given twice or that is itself a question is dropped, and a
+numbering a model adds to each question's round ("Geography (2/3)") is
+taken off, so the round stays one. Round names that make rounds of about one question each
+(8 questions in 7 rounds, which a 4B model wrote when asked for none) are
+dropped (`has_rounds`).
+An error the server sends midway (a model out of memory) is shown as such,
+and a model that does not stop is stopped after 400,000 characters. The
+address must be `http` or `https` with no user name or password, and
+redirects are not followed. Text files are read as UTF-8, as UTF-16 with a
+byte order mark, or else as Windows-1250 (Czech Excel's CSV).
+Ollama takes pictures but no video (Ollama, "Ollama's new engine for
+multimodal models", https://registry.ollama.ai/blog/multimodal-models), hence
+the frames.
+
+A request that does not fit (`asking::write_questions`) is asked once
+more with its texts and what was found on the internet cut to 4,000
+characters (`SMALL_TEXT_CHARS`) and with `reasoning_effort: "none"`,
+which Ollama turns into thinking off for a model that can turn it off
+(Ollama, "OpenAI compatibility",
+https://docs.ollama.com/api/openai-compatibility). It does not fit when
+the server says it overflows the model's context (Ollama, llama.cpp, LM
+Studio and vLLM each say so in their own words, `context_full`), when a
+reasoning model reasons up to its limit without answering, or when the
+reply is cut off while the texts were longer than that: in Ollama's
+default 4k tokens, the request, the reasoning and the reply share the
+context. If the second request fails too, the panel says so (raise the
+context length). The research plan is always asked for with
+`reasoning_effort: "none"`: it is a few search queries, and a reasoning
+model otherwise spent 97 to 157 s on it in our test. Not every model
+can stop reasoning: in our test on 2026-11-23 a vision model of 8B
+parameters in Ollama 4k context reasoned with "none" too (and with the
+native API's `think: false`), until its limit at every step; such a model
+needs a longer context. A server that
+refuses that field, or the JSON Schema, is asked again without them. A
+reasoning model's reasoning, which Ollama, llama.cpp and LM Studio stream
+apart from the answer (`reasoning`, `reasoning_content`), shows as "the
+model is thinking"; one that reasons up to its limit without answering is
+told apart from a cut-off reply. The instructions keep questions off counting things in a picture
+(small models miscount: 2 of 12 answers wrong in our test with a 4B model,
+both counts) and off registration and phone numbers.
+
+### Sound
+
+The local servers' models read no sound, so the app writes down what is
+said in a sound recording, and in a video's sound track, before it asks:
+offline, with Whisper large-v3-turbo (Radford et al., "Robust Speech
+Recognition via Large-Scale Weak Supervision",
+https://arxiv.org/abs/2212.04356) as k2-fsa exported it for sherpa-onnx
+(`voice::LISTENER`, release `asr-models`, 564 MB, checked by its SHA-256 as
+the reading voice is). The panel offers the download the first time a
+recording or video is added; it lives in the app's local data
+(`listener/`). The window decodes the sound (Web Audio `decodeAudioData`)
+to 16 kHz mono, at most 15 minutes, and sends it as raw samples to
+`editor_transcribe`, which writes it down in a process of its own
+(`buzzdome --listen <folder> <language>`, `app/src-tauri/src/listen.rs`)
+in pieces of at most 28 s cut at the quietest moment (Whisper hears 30 s
+at once). The words go to the model as text with the attachment; music
+without speech is said to be such. In a 4-core container, 5.2 s of Czech
+speech took 2.0 s, the model loaded in 1.8 s, and the sentence came back
+word for word (`crates/voice/tests/listen.rs`, with `LISTENER_MODEL_ROOT`
+and `VOICE_MODEL_ROOT`: the reading voice says it, the listener writes it).
+
+### The internet
+
+With "Look up on the internet" ticked (the default), the request may name
+a company, a person or an event, and the app looks it up before the model
+writes. No address is needed:
+
+1. The model is asked, in a short request with the prompt and the files'
+   names only, for at most 3 web searches (`research_plan_request`), each
+   with the subject's whole name and town. A model that gives none (it
+   reasoned past its limit, say) has the prompt itself searched.
+2. Addresses written in the prompt are read, with two of their pages that
+   say most about a company (about us, history, products, contact;
+   `links_to_follow`). The model's guesses at an address are not used: a
+   guessed domain led to another company of the same name.
+3. Each search goes to DuckDuckGo's HTML page, which needs no key (Open
+   WebUI's web search uses it the same way), and its two best results are
+   read, at most 6 pages in all. Legal pages (privacy, cookies, terms) are
+   passed over, and a page is read once however its address is written.
+4. The search results and the pages' text, without menus repeated from
+   page to page, go to the model after the files, at most 14,000
+   characters, each page its share.
+
+Pages on this computer or the local network are read only when the request
+names their address. A search result, a link or a redirect cannot lead
+there: not by an address (`web_page::may_read`: loopback, private,
+link-local and the like, a name without a dot, `.local`, `.lan`), and not
+by a public name that resolves to such an address (`InternetOnly` in
+`app/src-tauri/src/local_model.rs` checks the addresses it connects to).
+Behind a proxy the proxy looks names up, so only the first check applies.
+
+The panel shows each step and lists the pages read with the questions; a
+search or page that failed is said so. With it unticked, nothing leaves
+the computer.
+
+### Checking it with a real model
+
+The tests use a fake server on this computer
+(`app/src-tauri/src/local_model.rs`). With Ollama running and a model that
+reads pictures pulled (`ollama pull <model>`; which one is the user's
+choice), one test asks the real model too:
+
+```sh
+BUZZDOME_LIVE_MODEL=<model> cargo test -p buzzdome live_model -- --nocapture
+```
+
+`BUZZDOME_LIVE_URL` gives another server (`http://localhost:1234/v1` for LM
+Studio). Without `BUZZDOME_LIVE_MODEL` the test does nothing. By hand, in
+`npm run tauri dev`:
+
+1. File › AI assistants: Load models lists Ollama's models; choose one and Use.
+2. In an empty quiz, Home › AI assistant: add two photos, a short video and
+   a `.txt` file, ask for "8 questions in two rounds", press Make questions.
+   The status says the model reads, then counts questions; the slides come
+   in after the selected one: sections, questions with the photos and the
+   video, an end of round after each round and the results.
+3. Undo (Ctrl+Z) takes all of them out as one change.
+4. Ask again and press Cancel while the model reads: the panel is free at
+   once and Make questions works again.
+5. Quit Ollama and ask: the panel says the server does not answer, with its
+   address. Choose a model name that is not pulled: it says so.
+6. Start a show while a request runs: the request is cancelled, and a
+   caution says that the show stopped the panel.
+
 ## After an update
 
 The MCP server is the app itself, so an update brings it along. An AI app

@@ -19,6 +19,10 @@ base64 = "0.22"
 dirs = "7"
 # Codex's configuration, changed without losing its comments (assistants.rs).
 toml_edit = "0.25"
+# Web pages for the AI panel (web_page.rs): their character sets, and
+# their links resolved as a browser does.
+encoding_rs = "0.8"
+url = "2"
 
 [dev-dependencies]
 # Quiz files made by hand for the workbench's tests.
