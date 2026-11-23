@@ -223,8 +223,10 @@ about the trip photos, in two rounds") and presses Make questions:
    without it. The reply is streamed, so the panel shows how many
    questions the model has begun. Cancel frees the panel at once; the
    request's connection closes as the server next writes, which stops the
-   server too (while a model is still loading, it writes nothing for a
-   while). A show that begins cancels the request the same way.
+   server too (while a model is still loading or reading a long request,
+   it writes nothing for a while, and keeps the processor busy until it
+   does). A show that begins cancels the request the same way and says so
+   with a caution, as it does for a recording being written down.
 4. The model's questions become rows of a sheet
    (`draft_table`) that the spreadsheet import reads, so they get its
    defaults and checks: answers shuffled, a section for each named round,
@@ -343,7 +345,8 @@ Studio). Without `BUZZDOME_LIVE_MODEL` the test does nothing. By hand, in
    once and Make questions works again.
 5. Quit Ollama and ask: the panel says the server does not answer, with its
    address. Choose a model name that is not pulled: it says so.
-6. Start a show while a request runs: the request is cancelled.
+6. Start a show while a request runs: the request is cancelled, and a
+   caution says that the show stopped the panel.
 
 ## After an update
 

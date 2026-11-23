@@ -10,6 +10,7 @@
 
 use crate::error::{AppError, CmdResult};
 use crate::read_aloud::{download, Unpacking, VoiceDownload};
+use crate::media_player::header;
 use crate::{app_log, off_ui, refuse_during_show};
 use quiz_core::QuizLanguage;
 use quiz_file::FileAction;
@@ -170,19 +171,12 @@ pub async fn listener_remove(app: AppHandle) -> CmdResult<ListenerModel> {
 #[tauri::command]
 pub async fn editor_transcribe(app: AppHandle, request: Request<'_>) -> CmdResult<String> {
     let InvokeBody::Raw(bytes) = request.body() else { return Err(AppError::system("a recording comes as its samples")) };
-    let header = |name: &str| {
-        let encoded = request.headers().get(name).and_then(|value| value.to_str().ok()).unwrap_or_default();
-        percent_encoding::percent_decode_str(encoded).decode_utf8_lossy().into_owned()
-    };
-    let name = header(NAME_HEADER);
-    let language = if header(LANGUAGE_HEADER) == "en" { QuizLanguage::En } else { QuizLanguage::Cs };
+    let name = header(&request, NAME_HEADER);
+    let language = QuizLanguage::of_code(&header(&request, LANGUAGE_HEADER)).unwrap_or_default();
     let samples = bytes[..bytes.len().min(MAX_SECONDS * RATE * 4) / 4 * 4].to_vec();
     off_ui(move || {
-        refuse_during_show(&app)?;
         let state = app.state::<Listening>();
-        if !LISTENER.installed(&state.root) {
-            return Err(AppError::ListenerMissing);
-        }
+        // Set before the show is checked, so a show that begins after the check stops it (`cancel_for_show`).
         let stop = Arc::new(AtomicBool::new(false));
         {
             let mut current = state.stop.lock().unwrap();
@@ -190,13 +184,17 @@ pub async fn editor_transcribe(app: AppHandle, request: Request<'_>) -> CmdResul
                 earlier.store(true, Ordering::SeqCst);
             }
         }
+        refuse_during_show(&app)?;
+        if !LISTENER.installed(&state.root) {
+            return Err(AppError::ListenerMissing);
+        }
         let exe = std::env::current_exe().map_err(|_| AppError::ListenerFailed { name: name.clone() })?;
         let started = Instant::now();
         let heard = transcribe(&exe, &state.root, language, samples, &stop);
         app_log::note(&format!("listener: {name} in {} ms: {}", started.elapsed().as_millis(), heard.as_ref().map_or("failed", |_| "done")));
         match heard {
             Some(text) => Ok(text),
-            None if stop.load(Ordering::SeqCst) => Err(AppError::ListenerCancelled),
+            None if stop.load(Ordering::SeqCst) => Err(crate::local_model::stopped_for_show(&app, AppError::ListenerCancelled)),
             None => Err(AppError::ListenerFailed { name }),
         }
     })
@@ -214,7 +212,7 @@ pub fn editor_transcribe_cancel(app: AppHandle) {
 fn transcribe(exe: &std::path::Path, root: &std::path::Path, language: QuizLanguage, samples: Vec<u8>, stop: &AtomicBool) -> Option<String> {
     let seconds = samples.len() / 4 / RATE;
     let mut command = Command::new(exe);
-    command.arg(LISTEN).arg(root).arg(language_code(language)).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::null());
+    command.arg(LISTEN).arg(root).arg(language.code()).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::null());
     #[cfg(windows)]
     std::os::windows::process::CommandExt::creation_flags(&mut command, windows_sys::Win32::System::Threading::BELOW_NORMAL_PRIORITY_CLASS);
     let mut child = Ended(command.spawn().ok()?);
@@ -253,13 +251,6 @@ impl Drop for Ended {
     }
 }
 
-fn language_code(language: QuizLanguage) -> &'static str {
-    match language {
-        QuizLanguage::Cs => "cs",
-        QuizLanguage::En => "en",
-    }
-}
-
 /// Called first in `main`: when the app was started as the listening
 /// process, writes down the samples on its input and ends.
 pub fn serve_if_asked() {
@@ -277,7 +268,7 @@ pub fn serve_if_asked() {
     unsafe {
         libc::nice(10);
     }
-    let language = if language == "en" { QuizLanguage::En } else { QuizLanguage::Cs };
+    let language = language.to_str().and_then(QuizLanguage::of_code).unwrap_or_default();
     let mut bytes = Vec::new();
     if std::io::stdin().lock().take((MAX_SECONDS * RATE * 4) as u64).read_to_end(&mut bytes).is_err() {
         std::process::exit(3);

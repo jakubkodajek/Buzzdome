@@ -73,6 +73,7 @@ const COMMANDS: &[&str] = &[
     "editor_add_dropped_media",
     "editor_ask_local_model",
     "editor_ask_local_model_cancel",
+    "editor_read_text",
     "listener_model",
     "listener_install",
     "listener_install_cancel",

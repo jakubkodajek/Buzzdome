@@ -13,13 +13,18 @@ import { useApp } from "../app-context";
 import { carriesFiles } from "../director/media-parts";
 import { CrossIcon, PictureIcon, SoundIcon, SparkleIcon, TextIcon, VideoIcon } from "../icons";
 import { diskSize } from "../format";
-import { errorNotice, isAppError, type Notice } from "../messages";
+import { errorNotice, errorText, isAppError, type Notice } from "../messages";
 import { NoticeBox } from "../notice";
 import type { Translate } from "../i18n";
 import { createStore, useStore } from "../store";
 import type { Attachment, ListenerModel, LocalModelInfo, LocalModelProgress, QuizLanguage, Slide, Source, VoiceDownload } from "../types";
 import { MAX_DROPPED_MB } from "../bindings/Constants";
+import { keyCombo } from "../keyboard";
+import { tooltip } from "./actions";
 import { addFiles, aiFileKind, attachmentFor, hasSound, soundOf, thumbnailOf, type AiFile } from "./ai-files";
+
+/** The keys that ask, as in a chat (Cmd on a Mac, `keyCombo`). */
+const GENERATE_KEYS = ["Ctrl+Enter"];
 
 /** Where a request is: the files prepared, the speech in one written down, then as the backend tells (`LocalModelProgress`). */
 type Job = { step: "preparing" } | { step: "listening"; name: string } | { step: "waiting" } | LocalModelProgress;
@@ -143,7 +148,14 @@ export function AiPanel({ draftId, language, emptyQuiz, onInsert, onChooseModel,
           const copied = { draft, reference };
           change({ files: panelState.get().files.map((f) => (f.id === file.id ? { ...f, copied } : f)) });
         }
-        const attachment = await attachmentFor(file, info, reference, textLeft);
+        let attachment: Attachment;
+        try {
+          attachment = await attachmentFor(file, info, reference, textLeft);
+        } catch {
+          // A file the window cannot decode is left out, and said so.
+          caution(t("aiPanelFileFailed", { name: file.file.name }));
+          continue;
+        }
         const content = attachment.content;
         textLeft -= content.kind === "text" ? content.text.length : content.kind === "recording" || content.kind === "video" ? content.words.length : 0;
         attachments.push(attachment);
@@ -160,7 +172,8 @@ export function AiPanel({ draftId, language, emptyQuiz, onInsert, onChooseModel,
       else notify(t("aiPanelInserted", { n: inserted }));
       if (asked.webFailed) caution(t(asked.sources.length > 0 ? "aiPanelWebPartly" : "aiPanelWebFailed"));
     } catch (error) {
-      if (current() && !(isAppError(error) && error.code === "localModelCancelled")) change({ failed: errorNotice(t, error) });
+      if (isAppError(error) && error.code === "localModelStoppedForShow") caution(errorText(t, error));
+      else if (current() && !(isAppError(error) && error.code === "localModelCancelled")) change({ failed: errorNotice(t, error) });
     } finally {
       if (current()) change({ job: null });
     }
@@ -264,7 +277,7 @@ export function AiPanel({ draftId, language, emptyQuiz, onInsert, onChooseModel,
                 onChange={(e) => change({ prompt: e.target.value })}
                 onKeyDown={(e) => {
                   // Ctrl+Enter asks, as in a chat.
-                  if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && !job && chosen) {
+                  if (keyCombo(e) === GENERATE_KEYS[0] && !job && chosen) {
                     e.preventDefault();
                     void generate();
                   }
@@ -313,7 +326,7 @@ export function AiPanel({ draftId, language, emptyQuiz, onInsert, onChooseModel,
                 <button type="button" className="browse" disabled={files.length === 0 && prompt === ""} onClick={() => change({ files: [], prompt: "", failed: null })}>
                   {t("aiPanelClear")}
                 </button>
-                <button type="button" className="ai-generate" disabled={files.length === 0 && prompt.trim() === ""} title="Ctrl+Enter" onClick={() => void generate()}>
+                <button type="button" className="ai-generate" disabled={files.length === 0 && prompt.trim() === ""} title={tooltip({ label: t("aiPanelGenerate"), keys: GENERATE_KEYS })} onClick={() => void generate()}>
                   <SparkleIcon /> {t("aiPanelGenerate")}
                 </button>
               </>

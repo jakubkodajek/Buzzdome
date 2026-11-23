@@ -1108,6 +1108,7 @@ pub fn run() {
             editor::editor_add_dropped_media,
             local_model::editor_ask_local_model,
             local_model::editor_ask_local_model_cancel,
+            local_model::editor_read_text,
             listen::listener_model,
             listen::listener_install,
             listen::listener_install_cancel,

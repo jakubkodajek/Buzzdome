@@ -41,13 +41,9 @@ impl Listener {
         let file = |name: &str| Some(dir.join(name).to_string_lossy().into_owned());
         let [encoder, decoder, tokens] = LISTENER_FILES.map(file);
         let threads = std::thread::available_parallelism().map_or(2, |n| n.get().saturating_sub(1).clamp(1, MAX_THREADS));
-        let language = match language {
-            QuizLanguage::Cs => "cs",
-            QuizLanguage::En => "en",
-        };
         let config = OfflineRecognizerConfig {
             model_config: OfflineModelConfig {
-                whisper: OfflineWhisperModelConfig { encoder, decoder, language: Some(language.into()), task: Some("transcribe".into()), tail_paddings: -1, ..Default::default() },
+                whisper: OfflineWhisperModelConfig { encoder, decoder, language: Some(language.code().into()), task: Some("transcribe".into()), tail_paddings: -1, ..Default::default() },
                 tokens,
                 num_threads: threads as i32,
                 provider: Some("cpu".into()),

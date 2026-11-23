@@ -244,6 +244,8 @@ export const api = {
       headers: { name: encodeURIComponent(name), language },
     }),
   editorTranscribeCancel: () => invoke<void>("editor_transcribe_cancel"),
+  /** The text in `bytes`, the start of a text file, decoded as a CSV is (UTF-8, UTF-16 or Windows-1250). */
+  editorReadText: (bytes: Uint8Array) => invoke<string>("editor_read_text", bytes),
   /** The path of the kept clip that says `line`; with `render`, rendered first when it is not kept (a few seconds). Null when there is nothing to say, or it is not kept and not to be rendered. */
   voiceClip: (line: VoiceLine, render: boolean) => invoke<VoiceClip>("voice_clip", { line, render }),
   // The editor's commands on a draft name it (`EditorDraft.id`): one that

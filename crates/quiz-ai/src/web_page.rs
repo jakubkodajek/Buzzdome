@@ -139,7 +139,9 @@ pub fn addresses_in(text: &str) -> Vec<Url> {
     let mut found: Vec<Url> = Vec::new();
     for word in text.split_whitespace() {
         let word = word.trim_matches(|c: char| matches!(c, ',' | '.' | ';' | ':' | '!' | '?' | '(' | ')' | '"' | '\'' | '„' | '“' | '<' | '>'));
-        let named = word.contains("://") || word.starts_with("www.") || word.rsplit_once('.').is_some_and(|(name, end)| !name.is_empty() && (2..=6).contains(&end.len()) && end.chars().all(|c| c.is_ascii_alphabetic()) && !word.contains('@'));
+        // A host (`firma.cz`), with a path or not (`firma.cz/o-nas`).
+        let host = word.split('/').next().unwrap_or_default();
+        let named = word.contains("://") || word.starts_with("www.") || host.rsplit_once('.').is_some_and(|(name, end)| !name.is_empty() && (2..=6).contains(&end.len()) && end.chars().all(|c| c.is_ascii_alphabetic()) && !word.contains('@'));
         if !named {
             continue;
         }
@@ -148,6 +150,34 @@ pub fn addresses_in(text: &str) -> Vec<Url> {
         }
     }
     found
+}
+
+/// Whether the page at `url` may be read for a request that named the
+/// sites `typed`: any on the internet, but one on this computer or the
+/// local network (`localhost`, a loopback, private, link-local or
+/// unique-local address) only when the request named its host, so that a
+/// search result or a redirect cannot make the app read the router's or
+/// a cloud machine's own pages.
+pub fn may_read(url: &Url, typed: &[Url]) -> bool {
+    use std::net::IpAddr;
+    let local = match url.host() {
+        None => true,
+        Some(url::Host::Domain(name)) => {
+            let name = name.trim_end_matches('.').to_ascii_lowercase();
+            name == "localhost" || name.ends_with(".localhost") || name.ends_with(".local")
+        }
+        Some(url::Host::Ipv4(ip)) => is_local(IpAddr::V4(ip)),
+        Some(url::Host::Ipv6(ip)) => is_local(ip.to_ipv4_mapped().map_or(IpAddr::V6(ip), IpAddr::V4)),
+    };
+    !local || typed.iter().any(|site| site.host() == url.host())
+}
+
+fn is_local(ip: std::net::IpAddr) -> bool {
+    match ip {
+        std::net::IpAddr::V4(ip) => ip.is_loopback() || ip.is_private() || ip.is_link_local() || ip.is_unspecified() || ip.is_broadcast() || ip.octets()[0] == 100 && (64..128).contains(&ip.octets()[1]),
+        // Loopback, unspecified, unique local (fc00::/7) and link-local (fe80::/10).
+        std::net::IpAddr::V6(ip) => ip.is_loopback() || ip.is_unspecified() || (ip.segments()[0] & 0xfe00) == 0xfc00 || (ip.segments()[0] & 0xffc0) == 0xfe80,
+    }
 }
 
 /// The address the quizmaster typed as a web address: `https://` added
@@ -171,6 +201,8 @@ const BLOCKS: [&str; 29] = [
 
 /// The title, summary, text and links of the page `html`.
 pub fn read_page(html: &str) -> Page {
+    // Lowercased once, to find end tags in (`end_of`); it keeps the byte offsets.
+    let lower = html.to_ascii_lowercase();
     let mut page = Page::default();
     let mut text = String::new();
     let mut rest = html;
@@ -197,7 +229,7 @@ pub fn read_page(html: &str) -> Page {
         }
         if !closing && SKIPPED.contains(&name.as_str()) && !tag.ends_with('/') {
             // To its end, also when it holds other tags.
-            rest = end_of(rest, &name);
+            rest = &html[end_of(&lower, html.len() - rest.len(), &name)..];
             text.push('\n');
             continue;
         }
@@ -246,14 +278,11 @@ fn tag_end(rest: &str) -> Option<usize> {
     None
 }
 
-/// `rest` after the end tag of `name`, whatever case it is written in.
-fn end_of<'a>(rest: &'a str, name: &str) -> &'a str {
-    let lower = rest.to_ascii_lowercase();
+/// Where the page goes on after the end tag of `name` that follows `from`,
+/// found in the page `lower`cased; its end when there is none.
+fn end_of(lower: &str, from: usize, name: &str) -> usize {
     let end = format!("</{name}");
-    match lower.find(&end) {
-        Some(at) => rest[at..].find('>').map_or("", |close| &rest[at + close + 1..]),
-        None => "",
-    }
+    lower[from..].find(&end).map(|at| from + at).and_then(|at| lower[at..].find('>').map(|close| at + close + 1)).unwrap_or(lower.len())
 }
 
 /// The value of the attribute `name` in the tag `tag`, decoded.
@@ -390,43 +419,57 @@ pub fn links_to_follow(base: &Url, links: &[String], max: usize) -> Vec<Url> {
 /// title, without a line an earlier page had (a menu, a footer).
 pub fn research_text(results: &[(String, Vec<SearchResult>)], pages: &[(String, Page)], max_chars: usize) -> String {
     let mut seen = std::collections::HashSet::new();
-    let mut out = String::new();
+    let mut out = Counted::default();
     'searches: for (query, found) in results {
-        out.push_str(&format!("Search \"{query}\":\n"));
+        out.push(&format!("Search \"{query}\":\n"));
         for result in found {
             let line = format!("- {} ({}): {}\n", result.title, result.url, result.snippet);
-            if out.chars().count() + line.chars().count() > max_chars / 4 {
+            if out.chars + line.chars().count() > max_chars / 4 {
                 break 'searches;
             }
-            out.push_str(&line);
+            out.push(&line);
         }
-        out.push('\n');
+        out.push("\n");
     }
-    let page_chars = (max_chars.saturating_sub(out.chars().count()) / pages.len().max(1)).min(MAX_PAGE_CHARS);
+    let page_chars = (max_chars.saturating_sub(out.chars) / pages.len().max(1)).min(MAX_PAGE_CHARS);
     for (url, page) in pages {
-        let start = out.chars().count();
-        out.push_str(&format!("Page {url}"));
+        let start = out.chars;
+        out.push(&format!("Page {url}"));
         if !page.title.is_empty() {
-            out.push_str(&format!(" — {}", page.title));
+            out.push(&format!(" — {}", page.title));
         }
-        out.push('\n');
+        out.push("\n");
         if !page.description.is_empty() && seen.insert(page.description.clone()) {
-            out.push_str(&page.description);
-            out.push('\n');
+            out.push(&page.description);
+            out.push("\n");
         }
         for line in page.text.lines() {
-            if out.chars().count() - start >= page_chars {
+            if out.chars - start >= page_chars {
                 break;
             }
             if seen.insert(line.to_string()) {
-                out.push_str(line);
-                out.push('\n');
+                out.push(line);
+                out.push("\n");
             }
         }
-        out.push('\n');
+        out.push("\n");
     }
-    let text = out.trim_end();
+    let text = out.text.trim_end();
     text.chars().take(max_chars).collect()
+}
+
+/// Text and how many characters it has, counted as it grows.
+#[derive(Default)]
+struct Counted {
+    text: String,
+    chars: usize,
+}
+
+impl Counted {
+    fn push(&mut self, text: &str) {
+        self.text.push_str(text);
+        self.chars += text.chars().count();
+    }
 }
 
 /// `url` as compared with the pages read before: without its scheme,
@@ -508,6 +551,28 @@ mod tests {
     }
 
     #[test]
+    fn a_page_of_many_skipped_elements_is_read_in_linear_time() {
+        let html = format!("<p>Pekárna</p>{}<p>Brno</p>", "<svg><path/></SVG>".repeat(150_000));
+        let started = std::time::Instant::now();
+        let page = read_page(&html);
+        assert_eq!(page.text, "Pekárna\nBrno");
+        assert!(started.elapsed() < std::time::Duration::from_secs(5), "{:?}", started.elapsed());
+    }
+
+    #[test]
+    fn a_page_on_the_local_network_is_read_only_when_the_request_named_it() {
+        let url = |text: &str| Url::parse(text).unwrap();
+        for local in ["http://localhost:8080/", "http://127.0.0.1/", "http://192.168.1.1/admin", "http://10.0.0.5/", "http://172.16.0.1/", "http://169.254.169.254/latest/meta-data", "http://[::1]/", "http://[fd00::1]/", "http://[fe80::1]/", "http://[::ffff:192.168.1.1]/", "http://router.local/", "http://0.0.0.0/"] {
+            assert!(!may_read(&url(local), &[]), "{local}");
+        }
+        for public in ["https://bakerini.cz/kontakt", "http://8.8.8.8/", "https://[2001:db8::1]/", "https://172.32.0.1/"] {
+            assert!(may_read(&url(public), &[]), "{public}");
+        }
+        assert!(may_read(&url("http://192.168.1.10/menu"), &[url("http://192.168.1.10/")]));
+        assert!(!may_read(&url("http://192.168.1.11/"), &[url("http://192.168.1.10/")]));
+    }
+
+    #[test]
     fn legal_pages_are_not_read() {
         assert!(says_nothing("https://bakchus.cz/ochrana-osobnich-udaju") && says_nothing("https://a.cz/en/privacy-policy") && says_nothing("https://a.cz/cookies"));
         assert!(!says_nothing("https://a.cz/o-nas") && !says_nothing("https://a.cz/nase-nabidka"));
@@ -555,6 +620,9 @@ mod tests {
         let found: Vec<String> = addresses_in("Udělej kvíz o firmě podle webu www.pekarna.cz a https://pekarna.cz/o-nas. Piš na info@pekarna.cz, cca 10 otázek.").iter().map(Url::to_string).collect();
         assert_eq!(found, ["https://www.pekarna.cz/", "https://pekarna.cz/o-nas"]);
         assert!(addresses_in("Kvíz o Praze, 10 otázek.").is_empty());
+        assert_eq!(addresses_in("podle webu pekarna.cz/o-nas").iter().map(Url::to_string).collect::<Vec<_>>(), ["https://pekarna.cz/o-nas"]);
+        // A date or a number with a slash is no address.
+        assert!(addresses_in("Kolo 1.5/3 a datum 12.3/2024").is_empty());
     }
 
     #[test]

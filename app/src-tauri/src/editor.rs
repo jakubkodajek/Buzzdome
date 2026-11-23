@@ -18,7 +18,7 @@ use crate::dialogs::{self, Picker};
 use crate::error::{AppError, CmdResult};
 use crate::recent_files::RecentFiles;
 use crate::{app_local_data, app_log, folder_prefix, lock_show, media_player, off_ui, roaming_leftover, DiskWork};
-use quiz_core::{Category, MediaKind, Quiz, QuizLanguage, ValidationError, MAX_DROPPED_MB};
+use quiz_core::{Category, MediaKind, Quiz, QuizLanguage, ValidationError};
 use quiz_file::{FileAction, SheetExport, SheetImport};
 use serde::de::{Error as _, Unexpected};
 use serde::{Deserialize, Deserializer, Serialize};
@@ -27,7 +27,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, MutexGuard};
 use std::time::{SystemTime, UNIX_EPOCH};
-use tauri::ipc::{InvokeBody, Request};
+use tauri::ipc::Request;
 use tauri::{AppHandle, Manager, Window};
 use ts_rs::TS;
 
@@ -471,18 +471,9 @@ const DRAFT_HEADER: &str = "draft";
 /// a show (`DiskWork`).
 #[tauri::command]
 pub async fn editor_add_dropped_media(app: AppHandle, request: Request<'_>) -> CmdResult<String> {
-    let InvokeBody::Raw(bytes) = request.body() else { return Err(AppError::system("a dropped file comes as its bytes")) };
-    let header = |name: &str| {
-        let encoded = request.headers().get(name).and_then(|value| value.to_str().ok()).unwrap_or_default();
-        percent_encoding::percent_decode_str(encoded).decode_utf8_lossy().into_owned()
-    };
-    let (name, draft) = (header(media_player::DROPPED_NAME_HEADER), header(DRAFT_HEADER));
-    if bytes.len() as u64 > MAX_DROPPED_MB << 20 {
-        return Err(AppError::DroppedFileTooLarge { name, mb: MAX_DROPPED_MB });
-    }
+    let (name, draft) = (media_player::header(&request, media_player::DROPPED_NAME_HEADER), media_player::header(&request, DRAFT_HEADER));
+    let bytes = media_player::dropped_bytes(&request, &name)?;
     media_player::of_kind(&name, &[MediaKind::Image, MediaKind::Video])?;
-    // The request only lends its bytes.
-    let bytes = bytes.clone();
     on_draft(app, draft, move |app, _, root, _| {
         let _disk = DiskWork::begin(app)?;
         Ok(quiz_file::import_media(&root, quiz_file::MediaSource::Bytes { name: &name, bytes: &bytes })?)

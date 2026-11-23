@@ -1071,6 +1071,8 @@ mockIPC(
         ];
         return new Promise((resolve) => setTimeout(() => resolve({ slides: SHEET_IMPORT.slides, sources, webFailed: aiModel === "webpartly" }), 800));
       }
+      case "editor_read_text":
+        return new TextDecoder().decode(payload as Uint8Array);
       case "editor_ask_local_model_cancel":
         return null;
       case "listener_model":

@@ -266,21 +266,34 @@ fn media_work(app: &AppHandle) -> CmdResult<DiskWork<'_>> {
     DiskWork::begin(app).map_err(|error| if error == AppError::ShowRunning { AppError::MediaDuringShow } else { error })
 }
 
+/// The value of the header `name` of a request whose body is a file, which
+/// the window percent-encodes (`api.ts`); empty when there is none.
+pub(crate) fn header(request: &Request<'_>, name: &str) -> String {
+    let encoded = request.headers().get(name).and_then(|value| value.to_str().ok()).unwrap_or_default();
+    percent_encoding::percent_decode_str(encoded).decode_utf8_lossy().into_owned()
+}
+
+/// The bytes of a file dropped into a window, named `name`, copied, as
+/// the request only lends them: at most `MAX_DROPPED_MB`, as a file that
+/// large is copied whole.
+pub(crate) fn dropped_bytes(request: &Request<'_>, name: &str) -> CmdResult<Vec<u8>> {
+    let InvokeBody::Raw(bytes) = request.body() else { return Err(AppError::system("a dropped file comes as its bytes")) };
+    if bytes.len() as u64 > MAX_DROPPED_MB << 20 {
+        return Err(AppError::DroppedFileTooLarge { name: name.to_string(), mb: MAX_DROPPED_MB });
+    }
+    Ok(bytes.clone())
+}
+
 /// Copies a file dropped into the window, sent as its bytes with its name
 /// in a header, into the library and returns its reference. Refused during
 /// a show, as `media_add` is.
 #[tauri::command]
 pub async fn media_add_dropped(app: AppHandle, request: Request<'_>) -> CmdResult<String> {
-    let InvokeBody::Raw(bytes) = request.body() else { return Err(AppError::system("a dropped file comes as its bytes")) };
-    let encoded = request.headers().get(DROPPED_NAME_HEADER).and_then(|value| value.to_str().ok()).unwrap_or_default();
-    let name = percent_encoding::percent_decode_str(encoded).decode_utf8_lossy().into_owned();
-    if bytes.len() as u64 > MAX_DROPPED_MB << 20 {
-        return Err(AppError::DroppedFileTooLarge { name, mb: MAX_DROPPED_MB });
-    }
-    // The request only lends its bytes, and the import may wait for another
-    // one copying a large file (`file_changes`): a copy waits off the
-    // async runtime, which the show's commands use too.
-    let bytes = bytes.clone();
+    let name = header(&request, DROPPED_NAME_HEADER);
+    // The import may wait for another one copying a large file
+    // (`file_changes`): a copy waits off the async runtime, which the
+    // show's commands use too.
+    let bytes = dropped_bytes(&request, &name)?;
     off_ui(move || {
         let _disk = media_work(&app)?;
         let state = app.state::<MediaState>();

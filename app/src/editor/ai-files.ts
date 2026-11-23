@@ -7,6 +7,7 @@
 // A recording's and a video's sound is decoded here too, and the backend
 // writes down what is said in it (`listen.rs`), as the model hears no sound.
 
+import { api } from "../api";
 import { mediaKindOf } from "../media";
 import type { Attachment, LocalModelInfo } from "../types";
 
@@ -261,23 +262,7 @@ export async function attachmentFor(file: AiFile, info: LocalModelInfo, referenc
     case "text": {
       // Read only up to what is sent (at most four bytes a character); a huge log file is not read in full.
       const bytes = new Uint8Array(await file.file.slice(0, Math.max(0, textLeft) * 4).arrayBuffer());
-      return { name, media: null, content: { kind: "text", text: decodedText(bytes).slice(0, textLeft) } };
+      return { name, media: null, content: { kind: "text", text: (await api.editorReadText(bytes)).slice(0, textLeft) } };
     }
-  }
-}
-
-/**
- * The text in `bytes`: UTF-8, or UTF-16 with its byte order mark, as text
- * editors save it; otherwise Windows-1250, in which Czech Windows and Excel
- * save a CSV. The last character may be cut, as only the start is read.
- */
-export function decodedText(bytes: Uint8Array): string {
-  if (bytes[0] === 0xff && bytes[1] === 0xfe) return new TextDecoder("utf-16le").decode(bytes);
-  if (bytes[0] === 0xfe && bytes[1] === 0xff) return new TextDecoder("utf-16be").decode(bytes);
-  try {
-    // `stream` lets a character cut at the end pass; the decoder drops it.
-    return new TextDecoder("utf-8", { fatal: true }).decode(bytes, { stream: true });
-  } catch {
-    return new TextDecoder("windows-1250").decode(bytes);
   }
 }

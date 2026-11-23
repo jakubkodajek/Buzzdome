@@ -15,6 +15,7 @@
 //! Every check is the app's own: the tools read and write quizzes through
 //! `quiz_file`, so what they accept is what the editor and the show accept.
 
+pub mod asking;
 pub mod assistants;
 pub mod local_model;
 pub mod web_page;

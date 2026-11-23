@@ -211,6 +211,10 @@ pub enum AppError {
     LocalModelFailed { detail: String },
     #[error("the request to the model was cancelled")]
     LocalModelCancelled,
+    /// A show began, which stops the AI panel's request or the recording
+    /// being written down (`local_model::cancel_for_show`).
+    #[error("a show began, so the AI panel stopped")]
+    LocalModelStoppedForShow,
     /// The panel asks one request at a time.
     #[error("the model is still writing")]
     LocalModelBusy,
