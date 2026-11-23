@@ -154,29 +154,75 @@ pub fn addresses_in(text: &str) -> Vec<Url> {
 
 /// Whether the page at `url` may be read for a request that named the
 /// sites `typed`: any on the internet, but one on this computer or the
-/// local network (`localhost`, a loopback, private, link-local or
-/// unique-local address) only when the request named its host, so that a
-/// search result or a redirect cannot make the app read the router's or
-/// a cloud machine's own pages.
+/// local network (`names_local_network`) only when the request named its
+/// host, so that a search result or a redirect cannot make the app read
+/// the router's or a cloud machine's own pages. A public name can still
+/// lead to a local address: whoever connects checks the addresses it
+/// resolves to with `is_local_address` (`typed_host` says when not to).
 pub fn may_read(url: &Url, typed: &[Url]) -> bool {
+    !names_local_network(url) || typed_host(url, typed)
+}
+
+/// Whether the request named the host of `url` among its sites `typed`.
+pub fn typed_host(url: &Url, typed: &[Url]) -> bool {
+    typed.iter().any(|site| site.host() == url.host())
+}
+
+/// Endings of names that only a local network gives its machines.
+const LOCAL_NAME_ENDINGS: [&str; 6] = [".localhost", ".local", ".lan", ".internal", ".home.arpa", ".localdomain"];
+
+/// Whether `url` names this computer or a machine of the local network:
+/// by address (`is_local_address`), or by a name without a dot (`router`)
+/// or with a local ending (`nas.local`, `printer.lan`).
+fn names_local_network(url: &Url) -> bool {
     use std::net::IpAddr;
-    let local = match url.host() {
+    match url.host() {
         None => true,
         Some(url::Host::Domain(name)) => {
             let name = name.trim_end_matches('.').to_ascii_lowercase();
-            name == "localhost" || name.ends_with(".localhost") || name.ends_with(".local")
+            !name.contains('.') || LOCAL_NAME_ENDINGS.iter().any(|ending| name.ends_with(ending))
         }
-        Some(url::Host::Ipv4(ip)) => is_local(IpAddr::V4(ip)),
-        Some(url::Host::Ipv6(ip)) => is_local(ip.to_ipv4_mapped().map_or(IpAddr::V6(ip), IpAddr::V4)),
-    };
-    !local || typed.iter().any(|site| site.host() == url.host())
+        Some(url::Host::Ipv4(ip)) => is_local_address(IpAddr::V4(ip)),
+        Some(url::Host::Ipv6(ip)) => is_local_address(IpAddr::V6(ip)),
+    }
 }
 
-fn is_local(ip: std::net::IpAddr) -> bool {
+/// Whether `ip` is this computer, the local network or no host's address
+/// on the internet. IPv4: loopback, private, link-local, 0.0.0.0/8,
+/// carrier NAT 100.64/10, 192.0.0.0/24, benchmarking 198.18/15, multicast
+/// and 240/4 with the broadcast address (RFC 6890). IPv6: loopback,
+/// unspecified, unique local fc00::/7, link-local fe80::/10, site-local
+/// fec0::/10, multicast, and an address that carries a local IPv4 one:
+/// IPv4-mapped and IPv4-compatible, NAT64 64:ff9b::/96 and 6to4 2002::/16.
+pub fn is_local_address(ip: std::net::IpAddr) -> bool {
+    use std::net::{IpAddr, Ipv4Addr};
     match ip {
-        std::net::IpAddr::V4(ip) => ip.is_loopback() || ip.is_private() || ip.is_link_local() || ip.is_unspecified() || ip.is_broadcast() || ip.octets()[0] == 100 && (64..128).contains(&ip.octets()[1]),
-        // Loopback, unspecified, unique local (fc00::/7) and link-local (fe80::/10).
-        std::net::IpAddr::V6(ip) => ip.is_loopback() || ip.is_unspecified() || (ip.segments()[0] & 0xfe00) == 0xfc00 || (ip.segments()[0] & 0xffc0) == 0xfe80,
+        IpAddr::V4(ip) => {
+            let [a, b, c, _] = ip.octets();
+            ip.is_loopback()
+                || ip.is_private()
+                || ip.is_link_local()
+                || ip.is_multicast()
+                || a == 0
+                || a >= 240
+                || a == 100 && (64..128).contains(&b)
+                || (a, b, c) == (192, 0, 0)
+                || a == 198 && (18..20).contains(&b)
+        }
+        IpAddr::V6(ip) => {
+            let s = ip.segments();
+            let v4 = |high: u16, low: u16| is_local_address(IpAddr::V4(Ipv4Addr::from(u32::from(high) << 16 | u32::from(low))));
+            ip.is_loopback()
+                || ip.is_unspecified()
+                || ip.is_multicast()
+                || (s[0] & 0xfe00) == 0xfc00
+                || (s[0] & 0xffc0) == 0xfe80
+                || (s[0] & 0xffc0) == 0xfec0
+                // IPv4-mapped (::ffff:a.b.c.d) and IPv4-compatible (::a.b.c.d).
+                || s[..5] == [0; 5] && matches!(s[5], 0 | 0xffff) && v4(s[6], s[7])
+                || s[..6] == [0x64, 0xff9b, 0, 0, 0, 0] && v4(s[6], s[7])
+                || s[0] == 0x2002 && v4(s[1], s[2])
+        }
     }
 }
 
@@ -570,6 +616,38 @@ mod tests {
         }
         assert!(may_read(&url("http://192.168.1.10/menu"), &[url("http://192.168.1.10/")]));
         assert!(!may_read(&url("http://192.168.1.11/"), &[url("http://192.168.1.10/")]));
+    }
+
+    #[test]
+    fn a_name_or_an_address_that_only_a_local_network_has_is_local() {
+        let url = |text: &str| Url::parse(text).unwrap();
+        for local in [
+            "http://router/",
+            "http://nas.lan/",
+            "http://printer.internal/",
+            "http://box.home.arpa/",
+            "http://ROUTER.LOCAL./",
+            "http://0.1.2.3/",
+            "http://192.0.0.8/",
+            "http://198.18.0.1/",
+            "http://224.0.0.1/",
+            "http://255.255.255.255/",
+            "http://[::7f00:1]/",
+            "http://[64:ff9b::7f00:1]/",
+            "http://[2002:c0a8:101::1]/",
+            "http://[fec0::1]/",
+            "http://[ff02::1]/",
+        ] {
+            assert!(!may_read(&url(local), &[]), "{local}");
+        }
+        for public in ["https://internal.example.com/", "https://lan.cz/", "https://[64:ff9b::808:808]/", "https://[2002:808:808::1]/", "http://198.20.0.1/", "http://192.0.2.1/"] {
+            assert!(may_read(&url(public), &[]), "{public}");
+        }
+        // What a public name resolves to is checked by its address.
+        let ip = |text: &str| text.parse::<std::net::IpAddr>().unwrap();
+        assert!(is_local_address(ip("127.0.0.1")) && is_local_address(ip("192.168.1.1")) && is_local_address(ip("169.254.169.254")) && is_local_address(ip("::ffff:10.0.0.1")));
+        assert!(!is_local_address(ip("93.184.216.34")) && !is_local_address(ip("2606:2800:220:1::1")));
+        assert!(typed_host(&url("http://nas.lan/a"), &[url("http://nas.lan/")]) && !typed_host(&url("http://nas.lan/"), &[url("http://firma.cz/")]));
     }
 
     #[test]

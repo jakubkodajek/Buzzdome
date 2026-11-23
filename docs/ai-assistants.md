@@ -332,6 +332,14 @@ writes. No address is needed:
    page to page, go to the model after the files, at most 14,000
    characters, each page its share.
 
+Pages on this computer or the local network are read only when the request
+names their address. A search result, a link or a redirect cannot lead
+there: not by an address (`web_page::may_read`: loopback, private,
+link-local and the like, a name without a dot, `.local`, `.lan`), and not
+by a public name that resolves to such an address (`InternetOnly` in
+`app/src-tauri/src/local_model.rs` checks the addresses it connects to).
+Behind a proxy the proxy looks names up, so only the first check applies.
+
 The panel shows each step and lists the pages read with the questions; a
 search or page that failed is said so. With it unticked, nothing leaves
 the computer.

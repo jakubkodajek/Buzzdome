@@ -33,6 +33,8 @@ use std::time::Duration;
 use tauri::ipc::Channel;
 use tauri::{AppHandle, Manager, State};
 use ts_rs::TS;
+use ureq::unversioned::resolver::{DefaultResolver, ResolvedSocketAddrs, Resolver};
+use ureq::unversioned::transport::{DefaultConnector, NextTimeout};
 
 pub use quiz_ai::asking::LocalModelProgress;
 
@@ -160,6 +162,15 @@ pub async fn ai_set_local_model(app: AppHandle, url: String, model: String) -> C
     .await
 }
 
+/// The text of a text file added to the AI panel, sent as its first bytes
+/// (at most four for each character a request takes), decoded as the
+/// spreadsheet import decodes a CSV (`quiz_file::decode_text_start`).
+#[tauri::command]
+pub fn editor_read_text(request: tauri::ipc::Request<'_>) -> CmdResult<String> {
+    let tauri::ipc::InvokeBody::Raw(bytes) = request.body() else { return Err(AppError::system("a text file comes as its bytes")) };
+    Ok(quiz_file::decode_text_start(&bytes[..bytes.len().min(local_model::MAX_TEXT_CHARS * 4)]).into_owned())
+}
+
 /// Asks the chosen model for questions and makes them slides of the draft
 /// `draft`, for the editor to insert as one change, as a sheet's
 /// (`editor_import_sheet`). The pictures and videos the request names must
@@ -168,15 +179,6 @@ pub async fn ai_set_local_model(app: AppHandle, url: String, model: String) -> C
 /// `editor_ask_local_model_cancel` or a show that begins: the command
 /// ends at once, and the connection closes as the server next writes, so
 /// the server stops too.
-/// The text of a text file added to the AI panel, sent as its first bytes
-/// (at most four for each character a request takes), decoded as the
-/// spreadsheet import decodes a CSV (`quiz_file::decode_text`).
-#[tauri::command]
-pub fn editor_read_text(request: tauri::ipc::Request<'_>) -> CmdResult<String> {
-    let tauri::ipc::InvokeBody::Raw(bytes) = request.body() else { return Err(AppError::system("a text file comes as its bytes")) };
-    Ok(quiz_file::decode_text(&bytes[..bytes.len().min(local_model::MAX_TEXT_CHARS * 4)]).into_owned())
-}
-
 #[tauri::command]
 pub async fn editor_ask_local_model(app: AppHandle, draft: String, asked: QuestionRequest, progress: Channel<LocalModelProgress>) -> CmdResult<AskedQuestions> {
     let state = app.state::<LocalModelState>();
@@ -261,13 +263,41 @@ impl From<Halt> for AppError {
     }
 }
 
-/// A client for web pages: a time limit, no redirects of its own
-/// (`fetch_html` checks each), and the system's proxy unless `url` is on
-/// this computer.
-fn web_agent(url: &str) -> ureq::Agent {
+/// A client for the web page at `url`: a time limit, no redirects of its
+/// own (`fetch_html` checks each), and the system's proxy unless `url` is
+/// on this computer. Unless the request named the page's host (`named`),
+/// it connects only to addresses on the internet (`InternetOnly`).
+fn web_agent(url: &Url, named: bool) -> ureq::Agent {
     let config = ureq::Agent::config_builder().http_status_as_error(false).max_redirects(0).timeout_global(Some(WEB_TIMEOUT)).user_agent("Mozilla/5.0 (compatible; Buzzdome)");
-    let config = if is_this_computer(url) { config.proxy(None) } else { config };
-    config.build().into()
+    let config = if is_this_computer(url.as_str()) { config.proxy(None) } else { config }.build();
+    match url.host_str() {
+        Some(host) if !named => ureq::Agent::with_parts(config, DefaultConnector::default(), InternetOnly { host: host.to_string(), system: DefaultResolver::default() }),
+        _ => config.into(),
+    }
+}
+
+/// Looks names up as the system does, and refuses the page's `host` when
+/// any address it resolves to is on this computer or the local network
+/// (`web_page::is_local_address`): a public name in a search result, a
+/// link or a redirect can point there (`127.0.0.1.nip.io`, or a name whose
+/// owner answers with the router's address). The connection goes to the
+/// addresses checked here, so a second lookup cannot answer differently.
+/// A proxy looks the page's name up itself; its own name is not checked.
+#[derive(Debug)]
+struct InternetOnly {
+    host: String,
+    system: DefaultResolver,
+}
+
+impl Resolver for InternetOnly {
+    fn resolve(&self, uri: &ureq::http::Uri, config: &ureq::config::Config, timeout: NextTimeout) -> Result<ResolvedSocketAddrs, ureq::Error> {
+        let found = self.system.resolve(uri, config, timeout)?;
+        let of_page = uri.host().is_some_and(|host| host.eq_ignore_ascii_case(&self.host));
+        if of_page && found.iter().any(|address| web_page::is_local_address(address.ip())) {
+            return Err(ureq::Error::HostNotFound);
+        }
+        Ok(found)
+    }
 }
 
 /// Redirects a page may take, as a browser follows them.
@@ -276,14 +306,15 @@ const MAX_REDIRECTS: usize = 5;
 /// The page at `url` as HTML, with the address it was read at after its
 /// redirects; None for one that is not there, is no web page, or redirects
 /// to this computer or the local network when the request did not name that
-/// address (`web_page::may_read` against `typed`).
+/// address (`web_page::may_read` against `typed`, and `InternetOnly` for
+/// what a name resolves to).
 fn fetch_html(url: &str, typed: &[Url]) -> Option<(String, String)> {
     let mut at = Url::parse(url).ok()?;
     for _ in 0..=MAX_REDIRECTS {
         if !web_page::may_read(&at, typed) {
             return None;
         }
-        let mut response = web_agent(at.as_str()).get(at.as_str()).header("Accept", "text/html,application/xhtml+xml;q=0.9,*/*;q=0.5").header("Accept-Language", "cs,en;q=0.8").call().ok()?;
+        let mut response = web_agent(&at, web_page::typed_host(&at, typed)).get(at.as_str()).header("Accept", "text/html,application/xhtml+xml;q=0.9,*/*;q=0.5").header("Accept-Language", "cs,en;q=0.8").call().ok()?;
         if response.status().is_redirection() {
             let location = response.headers().get("location").and_then(|v| v.to_str().ok())?;
             at = at.join(location).ok().filter(|next| matches!(next.scheme(), "http" | "https"))?;
@@ -334,7 +365,13 @@ fn cancellably<T: Send + 'static>(cancelled: Arc<AtomicBool>, job: impl FnOnce(&
 fn ask(model: &LocalModel, body: Value, cancelled: &AtomicBool, progress: impl Fn(LocalModelProgress)) -> CmdResult<(String, bool)> {
     let address = model.chat_url();
     let agent = agent(&address, FIRST_WORD_TIMEOUT);
-    let send = |body: &Value| agent.post(&address).header("Content-Type", "application/json").send(local_model::streamed(body.clone()).to_string()).map_err(|e| unreachable(&model.url, e));
+    // A request cancelled meanwhile (a show began while a page was read) is not sent: the model would work on during the show.
+    let send = |body: &Value| {
+        if cancelled.load(Ordering::SeqCst) {
+            return Err(AppError::LocalModelCancelled);
+        }
+        agent.post(&address).header("Content-Type", "application/json").send(local_model::streamed(body.clone()).to_string()).map_err(|e| unreachable(&model.url, e))
+    };
     let mut response = send(&body)?;
     if !response.status().is_success() {
         let detail = local_model::error_detail(&read_body(&mut response, &model.url)?);
@@ -586,6 +623,24 @@ mod tests {
         // A page on this computer the request did not name is not read at all.
         assert_eq!(fetch_html(base.join("stary").unwrap().as_str(), &[]), None);
         assert_eq!(seen.lock().unwrap().len(), 3);
+    }
+
+    #[test]
+    fn a_cancelled_request_is_not_sent_to_the_model() {
+        let (url, seen) = server_for(|_| vec![(200, "text/event-stream", sse(&[r#"{"questions":[]}"#]))]);
+        let model = LocalModel::new(&url, "gemma3");
+        let body = local_model::request(&model, &asked(), None, local_model::MAX_TEXT_CHARS).unwrap();
+        assert_eq!(ask(&model, body, &AtomicBool::new(true), |_| {}), Err(AppError::LocalModelCancelled));
+        assert!(seen.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn a_name_that_resolves_to_this_computer_is_not_connected_to_unless_the_request_named_it() {
+        // `localhost` stands for a public name whose owner points it at a local address:
+        // `fetch_html` refuses the name itself earlier (`web_page::may_read`).
+        let page = Url::parse("http://localhost:9/").unwrap();
+        assert!(matches!(web_agent(&page, false).get(page.as_str()).call(), Err(ureq::Error::HostNotFound)));
+        assert!(!matches!(web_agent(&page, true).get(page.as_str()).call(), Err(ureq::Error::HostNotFound)), "a named host is looked up as it is");
     }
 
     #[test]

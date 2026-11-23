@@ -191,7 +191,8 @@ pub async fn editor_transcribe(app: AppHandle, request: Request<'_>) -> CmdResul
         let exe = std::env::current_exe().map_err(|_| AppError::ListenerFailed { name: name.clone() })?;
         let started = Instant::now();
         let heard = transcribe(&exe, &state.root, language, samples, &stop);
-        app_log::note(&format!("listener: {name} in {} ms: {}", started.elapsed().as_millis(), heard.as_ref().map_or("failed", |_| "done")));
+        // Without the recording's name: it is the quizmaster's own, and the page sends it.
+        app_log::note(&format!("listener: a recording in {} ms: {}", started.elapsed().as_millis(), heard.as_ref().map_or("failed", |_| "done")));
         match heard {
             Some(text) => Ok(text),
             None if stop.load(Ordering::SeqCst) => Err(crate::local_model::stopped_for_show(&app, AppError::ListenerCancelled)),
