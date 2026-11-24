@@ -23,7 +23,9 @@ use crate::{off_ui, refuse_during_show};
 use quiz_ai::asking::{self, Halt, Reading, Research};
 use quiz_ai::local_model::{self, LocalModel, LocalModelInfo, QuestionRequest, ReplyError, RequestError};
 use quiz_ai::web_page::{self, Source, Url};
-use quiz_core::{import_tables, Slide};
+use crate::themes::Themes;
+use quiz_ai::quiz_edits::{self, QuizChange};
+use quiz_core::{QuizLanguage, Theme};
 use serde::Serialize;
 use serde_json::{json, Value};
 use std::io::BufReader;
@@ -55,12 +57,17 @@ const CANCEL_CHECK: Duration = Duration::from_millis(100);
 /// How long a web page or a search may take.
 const WEB_TIMEOUT: Duration = Duration::from_secs(20);
 
-/// The questions the model wrote, as slides, and what they come from.
+/// The changes the model made to the quiz, as the editor applies them, and
+/// what they come from.
 #[derive(Debug, Clone, PartialEq, Serialize, TS)]
 #[ts(export)]
 #[serde(rename_all = "camelCase")]
-pub struct AskedQuestions {
-    pub slides: Vec<Slide>,
+pub struct AiChanges {
+    pub changes: Vec<QuizChange>,
+    /// How many of the model's changes could not be read and were left out.
+    pub left_out: usize,
+    /// What the model says it changed, for the quizmaster.
+    pub summary: String,
     /// The web pages read for them.
     pub sources: Vec<Source>,
     /// Whether a search or a page the request needed could not be read.
@@ -171,20 +178,21 @@ pub fn editor_read_text(request: tauri::ipc::Request<'_>) -> CmdResult<String> {
     Ok(quiz_file::decode_text_start(&bytes[..bytes.len().min(local_model::MAX_TEXT_CHARS * 4)]).into_owned())
 }
 
-/// Asks the chosen model for questions and makes them slides of the draft
-/// `draft`, for the editor to insert as one change, as a sheet's
-/// (`editor_import_sheet`). The pictures and videos the request names must
-/// be the draft's already (`editor_add_dropped_media`); one that is not is
-/// not shown. `progress` hears how far the model is. Cancelled by
+/// Asks the chosen model to change the quiz `asked` holds (`quiz_edits`),
+/// for the editor to apply as one undo step. The files the request names
+/// must be the draft's already (`editor_add_dropped_media`); one that is
+/// not is on no slide. `progress` hears how far the model is. Cancelled by
 /// `editor_ask_local_model_cancel` or a show that begins: the command
 /// ends at once, and the connection closes as the server next writes, so
 /// the server stops too.
 #[tauri::command]
-pub async fn editor_ask_local_model(app: AppHandle, draft: String, asked: QuestionRequest, progress: Channel<LocalModelProgress>) -> CmdResult<AskedQuestions> {
+pub async fn editor_ask_local_model(app: AppHandle, draft: String, mut asked: QuestionRequest, progress: Channel<LocalModelProgress>) -> CmdResult<AiChanges> {
     let state = app.state::<LocalModelState>();
     // Begun first, so a cancel from now on reaches this request.
     let (_asking, cancelled) = state.begin()?;
     let model = chosen_model(&app)?;
+    let themes = app.state::<Themes>().0.iter().map(|theme| (theme.id.clone(), theme_name(theme, asked.language))).collect();
+    asked.themes = themes;
     // Checked before anything is looked up.
     local_model::request(&model, &asked, None, local_model::MAX_TEXT_CHARS)?;
     let media = editor::draft_media(app.clone(), draft, asked.attachments.iter().map(|a| a.media.clone()).collect()).await?;
@@ -192,7 +200,8 @@ pub async fn editor_ask_local_model(app: AppHandle, draft: String, asked: Questi
     if cancelled.load(Ordering::SeqCst) {
         return Err(stopped_for_show(&app, AppError::LocalModelCancelled));
     }
-    let whole_quiz = asked.whole_quiz;
+    let quiz = asked.quiz.clone().unwrap_or_else(|| quiz_core::Quiz::new("", Vec::new()));
+    let (selected, theme_ids): (Option<usize>, Vec<String>) = (asked.selected, asked.themes.iter().map(|(id, _)| id.clone()).collect());
     let (content, cut_off, found) = off_ui(move || {
         cancellably(cancelled, move |stop| {
             let tell = |step: LocalModelProgress| {
@@ -203,15 +212,17 @@ pub async fn editor_ask_local_model(app: AppHandle, draft: String, asked: Questi
     })
     .await
     .map_err(|e| if e == AppError::LocalModelCancelled { stopped_for_show(&app, e) } else { e })?;
-    let questions = local_model::read_questions(&content, cut_off).map_err(|e| match e {
+    let edits = local_model::read_changes(&content, cut_off).map_err(|e| match e {
         ReplyError::CutOff => AppError::LocalModelCutOff,
-        ReplyError::NoQuestions => AppError::LocalModelNoQuestions,
-        ReplyError::NotQuestions | ReplyError::NotACompletion => AppError::LocalModelNotQuestions,
+        ReplyError::NoChanges => AppError::LocalModelNoChanges,
+        ReplyError::NotChanges => AppError::LocalModelNotChanges,
     })?;
-    let table = local_model::draft_table(&questions, &media, whole_quiz);
     let seed = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_nanos() as u64);
-    let imported = import_tables(&[table], &[], seed).map_err(|_| AppError::LocalModelNoQuestions)?;
-    Ok(AskedQuestions { slides: imported.slides.into_iter().map(|(_, slide)| slide).collect(), sources: found.sources, web_failed: found.failed })
+    let resolved = quiz_edits::resolve(&quiz, &edits, &media, selected, &theme_ids, seed);
+    if resolved.changes.is_empty() {
+        return Err(AppError::LocalModelNoChanges);
+    }
+    Ok(AiChanges { changes: resolved.changes, left_out: resolved.left_out, summary: edits.summary, sources: found.sources, web_failed: found.failed })
 }
 
 /// The model's turn of the conversation about the quiz, as the panel shows it.
@@ -257,6 +268,14 @@ pub async fn editor_chat_local_model(app: AppHandle, asked: QuestionRequest, pro
     .map_err(|e| if e == AppError::LocalModelCancelled { stopped_for_show(&app, e) } else { e })
 }
 
+/// A theme's name in the quiz's language, which the model is shown.
+fn theme_name(theme: &Theme, language: QuizLanguage) -> String {
+    match language {
+        QuizLanguage::Cs => theme.name.cs.clone(),
+        QuizLanguage::En => theme.name.en.clone(),
+    }
+}
+
 /// The model the quizmaster chose, unless a show runs.
 fn chosen_model(app: &AppHandle) -> CmdResult<LocalModel> {
     refuse_during_show(app)?;
@@ -284,20 +303,20 @@ fn look_up(model: &LocalModel, server: &Server, asked: &QuestionRequest, stop: &
     asking::research(model, asked, stop, tell, plan, |url| fetch_html(url, &typed), for_quiz)
 }
 
-/// Whether a request did not fit the model: asked again shorter (`asking::write_questions`).
+/// Whether a request did not fit the model: asked again shorter (`asking::write_changes`).
 fn too_much(error: &AppError) -> bool {
     matches!(error, AppError::LocalModelContextFull { .. } | AppError::LocalModelThoughtTooLong)
 }
 
 /// Looks up on the internet what `asked` needs when it may (with notes from
 /// the conversation, only the sites its latest message names), then asks `model` for the questions
-/// (`asking::write_questions`): the model's text, whether it stopped at its
+/// (`asking::write_changes`): the model's text, whether it stopped at its
 /// length limit, and what was found.
 fn find_and_write(model: &LocalModel, server: &Server, asked: &QuestionRequest, stop: &AtomicBool, tell: impl Fn(LocalModelProgress)) -> CmdResult<(String, bool, Research)> {
     // With notes from the conversation, only sites named in the latest message are read.
     let fresh = asked.notes.is_none();
     let found = if asked.internet && (fresh || !web_page::addresses_in(&asked.prompt).is_empty()) { look_up(model, server, asked, stop, &tell, fresh)? } else { Research::default() };
-    let (content, cut_off) = asking::write_questions(model, asked, &found, |body| ask(model, server, body, stop, Reading::QUESTIONS, &tell), too_much)?;
+    let (content, cut_off) = asking::write_changes(model, asked, &found, |body| ask(model, server, body, stop, Reading::CHANGES, &tell), too_much)?;
     Ok((content, cut_off, found))
 }
 
@@ -331,7 +350,7 @@ impl From<Halt> for AppError {
             Halt::Cancelled => AppError::LocalModelCancelled,
             Halt::ThoughtTooLong => AppError::LocalModelThoughtTooLong,
             Halt::Failed { detail } => AppError::LocalModelFailed { detail },
-            Halt::NotQuestions => AppError::LocalModelNotQuestions,
+            Halt::NotACompletion => AppError::LocalModelNotChanges,
         }
     }
 }
@@ -642,7 +661,7 @@ mod tests {
 
     fn asked() -> QuestionRequest {
         let picture = Attachment { name: "a.jpg".into(), media: Some("media/a.jpg".into()), content: AttachmentContent::Picture { image: "data:image/jpeg;base64,AAAA".into() } };
-        QuestionRequest { prompt: "Kvíz".into(), attachments: vec![picture], language: QuizLanguage::Cs, whole_quiz: false, internet: false, ..Default::default() }
+        QuestionRequest { prompt: "Kvíz".into(), attachments: vec![picture], language: QuizLanguage::Cs, internet: false, ..Default::default() }
     }
 
     fn ask_server(url: &str) -> (CmdResult<(String, bool)>, usize) {
@@ -650,7 +669,7 @@ mod tests {
         let body = local_model::request(&model, &asked(), None, local_model::MAX_TEXT_CHARS).unwrap();
         let told = Arc::new(AtomicUsize::new(0));
         let counted = told.clone();
-        let reply = ask(&model, &Server::OpenAi, body, &AtomicBool::new(false), Reading::QUESTIONS, move |_| {
+        let reply = ask(&model, &Server::OpenAi, body, &AtomicBool::new(false), Reading::CHANGES, move |_| {
             counted.fetch_add(1, Ordering::SeqCst);
         });
         (reply, told.load(Ordering::SeqCst))
@@ -658,7 +677,7 @@ mod tests {
 
     #[test]
     fn a_streamed_reply_is_put_together_and_its_progress_told() {
-        let json = r#"{"questions":[{"question":"Co je na obrázku?","answers":["Most","Řeka"],"file":1}]}"#;
+        let json = r#"{"changes":[{"action":"add","slides":[{"type":"question","text":"Co je na obrázku?","answers":["Most","Řeka"]}]}],"summary":"Přidal jsem otázku."}"#;
         let (first, rest) = json.split_at(30);
         let (url, seen) = server(vec![(200, "text/event-stream", sse(&[first, rest]))]);
         let (reply, told) = ask_server(&url);
@@ -713,7 +732,7 @@ mod tests {
             std::thread::sleep(Duration::from_millis(300));
             cancel.store(true, Ordering::SeqCst);
         });
-        assert_eq!(cancellably(cancelled, move |stop| ask(&model, &Server::OpenAi, body, stop, Reading::QUESTIONS, |_| {})), Err(AppError::LocalModelCancelled));
+        assert_eq!(cancellably(cancelled, move |stop| ask(&model, &Server::OpenAi, body, stop, Reading::CHANGES, |_| {})), Err(AppError::LocalModelCancelled));
         drop(listener);
     }
 
@@ -727,7 +746,7 @@ mod tests {
         });
         let base = url.trim_end_matches("/v1").to_string();
         let model = LocalModel::new(&url, "m");
-        let asked = QuestionRequest { prompt: format!("Kvíz o firmě podle webu {base}/firma"), attachments: vec![], language: QuizLanguage::Cs, whole_quiz: false, internet: true, ..Default::default() };
+        let asked = QuestionRequest { prompt: format!("Kvíz o firmě podle webu {base}/firma"), attachments: vec![], language: QuizLanguage::Cs, internet: true, ..Default::default() };
         let steps = Mutex::new(Vec::new());
         let (_, _, found) = find_and_write(&model, &Server::OpenAi, &asked, &AtomicBool::new(false), |step| steps.lock().unwrap().push(step)).unwrap();
         assert_eq!(found.sources.iter().map(|s| s.title.as_str()).collect::<Vec<_>>(), ["Pekárna Novák", "O nás"]);
@@ -760,10 +779,10 @@ mod tests {
 
     #[test]
     fn a_cancelled_request_is_not_sent_to_the_model() {
-        let (url, seen) = server_for(|_| vec![(200, "text/event-stream", sse(&[r#"{"questions":[]}"#]))]);
+        let (url, seen) = server_for(|_| vec![(200, "text/event-stream", sse(&[r#"{"changes":[]}"#]))]);
         let model = LocalModel::new(&url, "gemma3");
         let body = local_model::request(&model, &asked(), None, local_model::MAX_TEXT_CHARS).unwrap();
-        assert_eq!(ask(&model, &Server::OpenAi, body, &AtomicBool::new(true), Reading::QUESTIONS, |_| {}), Err(AppError::LocalModelCancelled));
+        assert_eq!(ask(&model, &Server::OpenAi, body, &AtomicBool::new(true), Reading::CHANGES, |_| {}), Err(AppError::LocalModelCancelled));
         assert!(seen.lock().unwrap().is_empty());
     }
 
@@ -779,11 +798,11 @@ mod tests {
     #[test]
     fn a_request_too_long_for_the_context_is_asked_again_shorter() {
         let full = r#"{"error":{"message":"the prompt is longer than the context length currently available to the model"}}"#.to_string();
-        let reply = sse(&[r#"{"questions":[]}"#]);
+        let reply = sse(&[r#"{"changes":[]}"#]);
         let (url, seen) = server(vec![(400, "application/json", full.clone()), (200, "text/event-stream", reply), (400, "application/json", full.clone()), (400, "application/json", full)]);
         let model = LocalModel::new(&url, "gemma3:4b");
         let text = Attachment { name: "a.txt".into(), media: None, content: AttachmentContent::Text { text: "slovo ".repeat(5_000) } };
-        let asked = QuestionRequest { prompt: "Kvíz".into(), attachments: vec![text], language: QuizLanguage::Cs, whole_quiz: false, internet: false, ..Default::default() };
+        let asked = QuestionRequest { prompt: "Kvíz".into(), attachments: vec![text], language: QuizLanguage::Cs, internet: false, ..Default::default() };
         assert!(find_and_write(&model, &Server::OpenAi, &asked, &AtomicBool::new(false), |_| {}).is_ok());
         {
             let seen = seen.lock().unwrap();
@@ -905,7 +924,6 @@ mod tests {
                 Attachment { name: "poznamky.txt".into(), media: None, content: AttachmentContent::Text { text: "Vltava je nejdelší řeka v Česku. Měří 430 km a teče Prahou.".into() } },
             ],
             language: QuizLanguage::Cs,
-            whole_quiz: true,
             internet: false,
             ..Default::default()
         };
@@ -914,18 +932,16 @@ mod tests {
         let started = std::time::Instant::now();
         let (content, cut_off) = cancellably(Arc::new(AtomicBool::new(false)), move |stop| {
             find_and_write(&model, &Server::of(&model), &asked, stop, move |progress| {
-                if let LocalModelProgress::Writing { questions, .. } = progress {
-                    counted.store(questions, Ordering::SeqCst);
+                if let LocalModelProgress::Writing { changes, .. } = progress {
+                    counted.store(changes, Ordering::SeqCst);
                 }
             })
             .map(|(content, cut_off, _)| (content, cut_off))
         })
         .unwrap();
-        println!("model wrote in {:?} ({} questions told):\n{content}", started.elapsed(), told.load(Ordering::SeqCst));
-        let questions = local_model::read_questions(&content, cut_off).unwrap();
-        let table = local_model::draft_table(&questions, &[Some(("media/logo.png".into(), false)), None], true);
-        let imported = import_tables(&[table], &[], 1).unwrap();
-        let slides: Vec<Slide> = imported.slides.into_iter().map(|(_, slide)| slide).collect();
+        println!("model wrote in {:?} ({} changes told):\n{content}", started.elapsed(), told.load(Ordering::SeqCst));
+        let logo = quiz_edits::AttachedFile { reference: "media/logo.png".into(), kind: quiz_core::MediaKind::Image };
+        let slides = live_quiz(&content, cut_off, &[Some(logo), None]).slides;
         for slide in &slides {
             println!("{:?} picture={:?}", slide.content, slide.picture);
         }
@@ -965,18 +981,19 @@ mod tests {
                 Attachment { name: "logo.mp4".into(), media: Some("media/logo.mp4".into()), content: AttachmentContent::Video { frames: vec![image.clone(), image], words: video_words } },
             ],
             language: QuizLanguage::Cs,
-            whole_quiz: false,
             internet: false,
             ..Default::default()
         };
         let started = std::time::Instant::now();
         let (content, cut_off) = cancellably(Arc::new(AtomicBool::new(false)), move |stop| find_and_write(&model, &Server::of(&model), &asked, stop, |_| {}).map(|(content, cut_off, _)| (content, cut_off))).unwrap();
         println!("model wrote in {:?}:\n{content}", started.elapsed());
-        let questions = local_model::read_questions(&content, cut_off).unwrap();
-        for question in &questions {
-            println!("{question:?}");
+        let video = quiz_edits::AttachedFile { reference: "media/logo.mp4".into(), kind: quiz_core::MediaKind::Video };
+        let slides = live_quiz(&content, cut_off, &[None, Some(video)]).slides;
+        for slide in &slides {
+            println!("{slide:?}");
         }
-        assert!(questions.len() >= 2, "{} questions", questions.len());
+        let questions = slides.iter().filter(|s| matches!(s.content, quiz_core::SlideContent::Question(_))).count();
+        assert!(questions >= 2, "{questions} questions");
     }
 
     /// With `BUZZDOME_LIVE_MODEL` and `BUZZDOME_LIVE_WEB` set, asks a real
@@ -988,7 +1005,7 @@ mod tests {
         let url = std::env::var("BUZZDOME_LIVE_URL").unwrap_or_else(|_| DEFAULT_URL.to_string());
         let model = LocalModel::new(&url, &name);
         let prompt = std::env::var("BUZZDOME_LIVE_PROMPT").unwrap_or_else(|_| "Udělej 5 otázek o firmě Bakerini, pekárně v Brně, podle jejích webových stránek.".into());
-        let asked = QuestionRequest { prompt, attachments: vec![], language: QuizLanguage::Cs, whole_quiz: false, internet: true, ..Default::default() };
+        let asked = QuestionRequest { prompt, attachments: vec![], language: QuizLanguage::Cs, internet: true, ..Default::default() };
         let started = std::time::Instant::now();
         let (content, cut_off, found) = cancellably(Arc::new(AtomicBool::new(false)), move |stop| {
             let tell = |step: LocalModelProgress| println!("{:?} {step:?}", std::time::Instant::now() - started);
@@ -997,9 +1014,18 @@ mod tests {
         .unwrap();
         println!("in {:?}; pages read: {:?}; a search or page failed: {}", started.elapsed(), found.sources, found.failed);
         println!("found:\n{}\n\nmodel wrote:\n{content}", found.text(local_model::MAX_TEXT_CHARS).as_deref().unwrap_or("(nothing)"));
-        let questions = local_model::read_questions(&content, cut_off).unwrap();
-        assert!(!questions.is_empty());
+        assert!(!live_quiz(&content, cut_off, &[]).slides.is_empty());
         assert!(!found.sources.is_empty(), "nothing was read");
+    }
+
+    /// The empty quiz a live model was asked to change, with its changes made.
+    fn live_quiz(content: &str, cut_off: bool, media: &[Option<quiz_edits::AttachedFile>]) -> quiz_core::Quiz {
+        let empty = quiz_core::Quiz::new("", Vec::new());
+        let edits = local_model::read_changes(content, cut_off).unwrap();
+        println!("summary: {}", edits.summary);
+        let resolved = quiz_edits::resolve(&empty, &edits, media, None, &[], 1);
+        println!("{} changes, {} left out", resolved.changes.len(), resolved.left_out);
+        quiz_edits::apply(&empty, &resolved.changes)
     }
 
     #[test]

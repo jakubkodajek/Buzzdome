@@ -20,7 +20,7 @@ import { errorNotice, errorText, isAppError, type Notice } from "../messages";
 import { NoticeBox } from "../notice";
 import type { Translate } from "../i18n";
 import { createStore, useStore } from "../store";
-import type { Attachment, ListenerModel, LocalModelInfo, LocalModelProgress, QuestionRequest, QuizLanguage, Slide, VoiceDownload } from "../types";
+import type { Attachment, ListenerModel, LocalModelInfo, LocalModelProgress, QuestionRequest, Quiz, QuizChange, QuizLanguage, VoiceDownload } from "../types";
 import { MAX_DROPPED_MB } from "../bindings/Constants";
 import { keyCombo } from "../keyboard";
 import { tooltip } from "./actions";
@@ -70,16 +70,18 @@ export interface AiPanelProps {
   /** The open draft (`EditorDraft.id`). */
   draftId: string;
   language: QuizLanguage;
-  /** Whether the quiz has no slides yet: the questions then make a whole quiz, ending with the results. */
-  emptyQuiz: boolean;
-  /** Inserts the slides the model wrote into the draft `draft`; the number inserted, or null when another draft is open now. */
-  onInsert: (draft: string, slides: Slide[]) => number | null;
+  /** The quiz as it is now, which the model reads and changes. */
+  quiz: Quiz;
+  /** The selected slide's index, -1 for none. */
+  selected: number;
+  /** Makes the model's changes in the draft `draft` as one undo step; how many it made, or null when another draft is open now. */
+  onChange: (draft: string, changes: QuizChange[]) => number | null;
   /** Opens File › AI assistants, where the model is chosen. */
   onChooseModel: () => void;
   onClose: () => void;
 }
 
-export function AiPanel({ draftId, language, emptyQuiz, onInsert, onChooseModel, onClose }: AiPanelProps) {
+export function AiPanel({ draftId, language, quiz, selected, onChange, onChooseModel, onClose }: AiPanelProps) {
   const { t, caution } = useApp();
   const { entries, message, files, internet, job, saying, failed, listenerDownload } = useStore(panelState);
   const [info, setInfo] = useState<LocalModelInfo | null>(null);
@@ -211,7 +213,16 @@ export function AiPanel({ draftId, language, emptyQuiz, onInsert, onChooseModel,
         return;
       }
       change({ job: { step: "waiting", making } });
-      const asked: QuestionRequest = { prompt, attachments, language, wholeQuiz: emptyQuiz, internet: panelState.get().internet, conversation, notes: panelState.get().notes };
+      const asked: QuestionRequest = {
+        prompt,
+        attachments,
+        language,
+        quiz,
+        selected: selected >= 0 ? selected : null,
+        internet: panelState.get().internet,
+        conversation,
+        notes: panelState.get().notes,
+      };
       const progress = (step: LocalModelProgress) => {
         if (!current()) return;
         if (step.step === "said") change({ saying: panelState.get().saying + step.text, job: { ...step, making } });
@@ -220,11 +231,16 @@ export function AiPanel({ draftId, language, emptyQuiz, onInsert, onChooseModel,
       if (making) {
         const made = await api.editorAskLocalModel(draft, asked, progress);
         if (!current()) return;
-        const inserted = onInsert(draft, made.slides);
+        const changed = onChange(draft, made.changes);
         if (made.webFailed) caution(t(made.sources.length > 0 ? "aiPanelWebPartly" : "aiPanelWebFailed"));
         // Said in the conversation, where the quizmaster looks; a quiz opened meanwhile is told apart.
-        if (inserted === null) caution(t("aiPanelOtherQuiz"));
-        else change({ entries: [...panelState.get().entries, entry({ role: "note", text: t("aiPanelInserted", { n: inserted }) })] });
+        if (changed === null) caution(t("aiPanelOtherQuiz"));
+        else {
+          const summary = made.summary === "" ? [] : [entry({ role: "assistant", text: made.summary, cutOff: false, sources: made.sources })];
+          const done = t(changed > 0 ? "aiPanelChanged" : "aiPanelNothingChanged", { n: changed });
+          const note = made.leftOut > 0 ? `${done} ${t("aiPanelLeftOut", { n: made.leftOut })}` : done;
+          change({ entries: [...panelState.get().entries, ...summary, entry({ role: "note", text: note })] });
+        }
       } else {
         const reply = await api.editorChatLocalModel(asked, progress);
         if (!current()) return;
@@ -463,7 +479,7 @@ function jobStatus(t: Translate, job: Job): string | null {
     case "thinking":
       return t("aiPanelThinking", { n: job.characters });
     case "writing":
-      return job.making ? t("aiPanelWriting", { n: job.questions }) : null;
+      return job.making ? t("aiPanelWriting", { n: job.changes }) : null;
     case "said":
       return null;
   }

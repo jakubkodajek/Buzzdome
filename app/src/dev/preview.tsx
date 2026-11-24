@@ -74,7 +74,7 @@ const resume = params.get("resume");
 const saving = params.get("saving");
 /** `unreadable`: the editor's draft does not read; `failing`: writing it fails, as on a full disk; `busy`: a sheet import does not finish; `unsaved`: it has changes its quiz file does not have. */
 const draft = params.get("draft");
-/** The AI assistant's model: `none` is not chosen yet; `offline`: its server does not answer; `slow`: asking it never ends; `fail`: its answer is not questions; `webpartly`: some web pages could not be read. */
+/** The AI assistant's model: `none` is not chosen yet; `offline`: its server does not answer; `slow`: asking it never ends; `fail`: its answer is not changes; `webpartly`: some web pages could not be read. */
 const aiModel = params.get("ai");
 /** Whether the speech recognition model is downloaded in the preview (`listener=missing` for not). */
 let listenerInstalled = params.get("listener") !== "missing";
@@ -1056,7 +1056,7 @@ mockIPC(
       case "editor_ask_local_model": {
         called.push({ cmd, ...(payload as object) });
         if (aiModel === "slow") return new Promise(() => undefined);
-        if (aiModel === "fail") return Promise.reject({ code: "localModelNotQuestions" });
+        if (aiModel === "fail") return Promise.reject({ code: "localModelNotChanges" });
         if (aiModel === "offline") return Promise.reject({ code: "localModelUnreachable", url: "http://localhost:11434/v1", detail: "Connection refused (os error 111)" });
         // The steps of a request that looks up a company on the internet.
         const progress = (payload as { progress?: { onmessage?: (step: unknown) => void } }).progress;
@@ -1064,14 +1064,22 @@ mockIPC(
           { step: "planning" },
           { step: "searching", query: "Pekárna Novák Brno" },
           { step: "reading", url: "https://www.pekarna-novak.cz/o-nas/" },
-          { step: "writing", characters: 420, questions: 2 },
+          { step: "writing", characters: 420, changes: 2 },
         ];
         steps.forEach((step, i) => setTimeout(() => progress?.onmessage?.(step), i * 180));
         const sources = [
           { url: "https://www.pekarna-novak.cz/", title: "Pekárna Novák – pečeme od roku 1921" },
           { url: "https://www.pekarna-novak.cz/o-nas/", title: "O nás" },
         ];
-        return new Promise((resolve) => setTimeout(() => resolve({ slides: SHEET_IMPORT.slides, sources, webFailed: aiModel === "webpartly" }), 800));
+        // The quiz gets a title and the questions after the selected slide; the slides the panel was not given are left out.
+        const asked = (payload as { asked: { quiz: Quiz; selected: number | null } }).asked;
+        const after = asked.selected === null ? null : (asked.quiz.slides[asked.selected]?.id ?? null);
+        const changes = [
+          { type: "setTitle", title: "Praha" },
+          { type: "insertSlides", after, slides: SHEET_IMPORT.slides },
+        ];
+        const summary = "Přidal jsem 3 kola o Praze za vybraný snímek a kvíz jsem pojmenoval Praha.";
+        return new Promise((resolve) => setTimeout(() => resolve({ changes, leftOut: aiModel === "webpartly" ? 1 : 0, summary, sources, webFailed: aiModel === "webpartly" }), 800));
       }
       case "editor_chat_local_model": {
         called.push({ cmd, ...(payload as object) });

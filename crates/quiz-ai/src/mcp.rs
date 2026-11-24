@@ -12,6 +12,7 @@
 use crate::roots::Roots;
 use crate::settings::AiSettings;
 use crate::workbench::{self, Check, WorkError};
+use quiz_core::Quiz;
 use base64::Engine;
 use serde::Serialize;
 use serde_json::{json, Map, Value};
@@ -39,7 +40,7 @@ When the quizmaster gives you only a topic, make the whole quiz by those instruc
 You may work only in these folders: {}. Unless the quizmaster says otherwise, make each quiz in a new folder in the first of them. \
 To make a quiz: find the quizmaster's media with list_media_files (look_at_picture shows you a picture), \
 copy the media the quiz uses into its folder with add_media, \
-write the quiz with write_quiz and fix the problems it reports, then save_quiz_file makes the .quiz file \
+write the quiz with write_quiz and fix the problems it reports (change_quiz changes a quiz written before, slide by slide, as the editor does), then save_quiz_file makes the .quiz file \
 the quizmaster opens in Buzzdome (File > Open). Use absolute paths. \
 add_media copies only files inside those folders: save a file you make or download into one of them first. \
 A quiz can set everything the format describes, such as its theme (list_themes shows them), welcome screen, sounds, \
@@ -278,7 +279,7 @@ fn path_property(description: &str) -> Value {
 const QUIZMASTER_INSTRUCTIONS: &str =
     "The quizmaster's instructions for every quiz, which they write in Buzzdome. Follow them; what the quizmaster asks for in the chat wins over them:";
 
-const TOOLS: [Tool; 10] = [
+const TOOLS: [Tool; 11] = [
     Tool {
         name: "quiz_format",
         title: "Read the quiz format",
@@ -353,6 +354,50 @@ const TOOLS: [Tool; 10] = [
             let json = quiz.as_str().map_or_else(|| quiz.to_string(), str::to_owned);
             let check = workbench::write_quiz(&args.path("folder")?, &json).map_err(worded)?;
             Ok(checked(&noted(check, args.context), "The quiz is ready: save_quiz_file makes the .quiz file."))
+        },
+    },
+    Tool {
+        name: "change_quiz",
+        title: "Change a quiz",
+        description: "Changes the quiz.json of a quiz folder as the quizmaster asks, the way Buzzdome's editor does, without writing \
+                      the whole quiz again: adds, edits, deletes and moves slides of every type, and changes the quiz's title, theme, \
+                      settings, sounds, welcome screen and categories. Slides are numbered from 1 in the order quiz.json lists them \
+                      (read_quiz), before any of these changes. Each change is one of: \
+                      {\"action\":\"add\",\"after\":N,\"slides\":[slide, ...]} (new slides after slide N, 0 for the start); \
+                      {\"action\":\"edit\",\"slide\":N,\"set\":{fields}} (a merge patch of slide N: fields set to null are removed, \
+                      the others stay); {\"action\":\"delete\",\"slide\":N}; {\"action\":\"move\",\"slide\":N,\"after\":M}; \
+                      {\"action\":\"quiz\",\"set\":{\"title\"|\"theme\"|\"settings\"|\"sounds\"|\"welcome\"|\"categories\": ...}}. \
+                      Slides and fields are written as quiz_format describes them. It returns how many changes were made, how many \
+                      could not be read and were left out, and the check of the changed quiz.",
+        read_only: false,
+        input: || {
+            let changes = crate::quiz_edits::edits_schema()["properties"]["changes"].clone();
+            object(json!({ "folder": path_property("Absolute path of the quiz folder."), "changes": changes }), &["folder", "changes"])
+        },
+        run: |args| {
+            let folder = args.path("folder")?;
+            let changes = args.get("changes").ok_or("changes is missing: give a list of changes")?;
+            // Changes sent as a JSON text read as well as a list.
+            let changes = match changes.as_str() {
+                Some(text) => serde_json::from_str(text).map_err(|e| format!("changes is not JSON: {e}"))?,
+                None => changes.clone(),
+            };
+            let edits = crate::quiz_edits::read_edits(&json!({ "changes": changes }).to_string()).ok_or("changes is not a list of changes")?;
+            let quiz = Quiz::read_json(&workbench::read_quiz(&folder).map_err(worded)?).map_err(|e| e.to_string())?.quiz;
+            let themes: Vec<String> = args.context.themes.iter().map(|theme| theme.id.clone()).collect();
+            let seed = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(1, |t| t.as_nanos() as u64);
+            let resolved = crate::quiz_edits::resolve(&quiz, &edits, &[], None, &themes, seed);
+            let changed = crate::quiz_edits::apply(&quiz, &resolved.changes);
+            let json = serde_json::to_string_pretty(&changed).expect("a quiz serializes");
+            let check = workbench::write_quiz(&folder, &json).map_err(worded)?;
+            let mut content = vec![text_block(&format!(
+                "Made {} of {} changes; {} could not be read and were left out.",
+                resolved.changes.len(),
+                edits.changes.len(),
+                resolved.left_out
+            ))];
+            content.extend(checked(&noted(check, args.context), "The quiz is ready: save_quiz_file makes the .quiz file."));
+            Ok(content)
         },
     },
     Tool {
@@ -487,7 +532,7 @@ mod tests {
         let tools: Vec<&str> = replies[1]["result"]["tools"].as_array().unwrap().iter().map(|t| t["name"].as_str().unwrap()).collect();
         assert_eq!(
             tools,
-            ["quiz_format", "list_themes", "list_media_files", "look_at_picture", "add_media", "write_quiz", "read_quiz", "check_quiz", "save_quiz_file", "unpack_quiz_file"]
+            ["quiz_format", "list_themes", "list_media_files", "look_at_picture", "add_media", "write_quiz", "change_quiz", "read_quiz", "check_quiz", "save_quiz_file", "unpack_quiz_file"]
         );
         let write = &replies[1]["result"]["tools"][5]["inputSchema"];
         assert_eq!(write["$defs"]["Quiz"]["required"], json!(["schemaVersion", "title"]));
@@ -553,6 +598,39 @@ mod tests {
         assert!(text(&replies[7]).contains("exists already"), "{}", text(&replies[7]));
         assert_eq!(replies[8]["result"]["isError"], false, "{}", text(&replies[8]));
         assert!(text(&replies[9]).contains("Capital of Moravia?"));
+    }
+
+    #[test]
+    fn an_assistant_changes_a_quiz_slide_by_slide_as_the_editor_does() {
+        let dir = scratch("mcp-change");
+        let folder = dir.join("quiz");
+        let quiz: Value = serde_json::from_str(&quiz_with_picture("")).unwrap();
+        let changes = json!([
+            { "action": "edit", "slide": 2, "set": { "text": "Capital of Bohemia?", "answers": ["Prague", "Brno"] } },
+            { "action": "add", "after": 3, "slides": [{ "type": "final", "title": "Results" }] },
+            { "action": "move", "slide": 3, "after": 1 },
+            { "action": "delete", "slide": 1 },
+            { "action": "quiz", "set": { "title": "Cities" } },
+            { "action": "edit", "slide": 7, "set": { "title": "none" } },
+        ]);
+        let replies = session(&[&dir], &[call_tool(1, "write_quiz", json!({ "folder": folder, "quiz": quiz })), call_tool(2, "change_quiz", json!({ "folder": folder, "changes": changes }))]);
+        assert_eq!(replies[1]["result"]["isError"], false, "{}", text(&replies[1]));
+        assert!(text(&replies[1]).starts_with("Made 5 of 6 changes; 1 could not be read"), "{}", text(&replies[1]));
+        let changed = Quiz::read_json(&crate::workbench::read_quiz(&folder).unwrap()).unwrap().quiz;
+        let kinds: Vec<String> = changed.slides.iter().map(|slide| serde_json::to_value(slide).unwrap()["type"].as_str().unwrap().to_string()).collect();
+        assert_eq!(kinds, ["endOfRound", "question", "final"]);
+        assert_eq!(changed.title, "Cities");
+        assert!(serde_json::to_string(&changed.slides[1]).unwrap().contains("Capital of Bohemia?"));
+        // Changes sent as a JSON text are read too; what is not changes, or no quiz, is the assistant's to fix.
+        let more = json!([{ "action": "delete", "slide": 3 }]).to_string();
+        let replies = session(&[&dir], &[
+            call_tool(1, "change_quiz", json!({ "folder": folder, "changes": more })),
+            call_tool(2, "change_quiz", json!({ "folder": folder, "changes": "not json" })),
+            call_tool(3, "change_quiz", json!({ "folder": dir.join("missing"), "changes": [] })),
+        ]);
+        assert_eq!(replies[0]["result"]["isError"], false, "{}", text(&replies[0]));
+        assert_eq!(Quiz::read_json(&crate::workbench::read_quiz(&folder).unwrap()).unwrap().quiz.slides.len(), 2);
+        assert_eq!((replies[1]["result"]["isError"].clone(), replies[2]["result"]["isError"].clone()), (json!(true), json!(true)));
     }
 
     #[test]

@@ -29,7 +29,7 @@ import { ThemeContext } from "../theme/context";
 import { useLatest, useWindowTitle } from "../hooks";
 import { createStore, useStore } from "../store";
 import type { StringKey } from "../i18n";
-import type { Checked, EditorDraft, Slide, ValidationError } from "../types";
+import type { Checked, EditorDraft, QuizChange, Slide, ValidationError } from "../types";
 import type { DraftOperation } from "./draft-session";
 import { actionButton, tooltip, useActionKeys, type Action, type ActionId, type Actions } from "./actions";
 import { Backstage, type BackstagePage } from "./Backstage";
@@ -39,7 +39,8 @@ import { DesignArea, NotesBox } from "./DesignArea";
 import { EditSlideDialog } from "./EditSlideDialog";
 import { isUnsaved, needsInfo, type OpenQuiz } from "./editor-state";
 import { isMediaElement, type ElementId } from "./elements";
-import { fieldsMerge } from "./history";
+import { applyEdit, fieldsMerge } from "./history";
+import { changeCount, changeEdits } from "./ai-changes";
 import { LayoutGallery } from "./LayoutGallery";
 import { NewQuizDialog, QuizStartDialog } from "./QuizStartDialog";
 import { DEFAULT_LAYOUT, slideFromLayout, type SlideLayout } from "./layouts";
@@ -258,8 +259,17 @@ function Studio({ editor, open, ask, onExit }: { editor: QuizEditor; open: OpenQ
     setBackstage(null);
     return inserted;
   });
-  // The AI assistant's slides go only into the draft they were asked for: their media are copied into it.
-  const insertAsked = (draft: string, asked: Slide[]) => (latest.current.draftId === draft ? insertImported(asked) : null);
+  // The AI assistant's changes go only into the draft they were asked for: their media are copied into it.
+  const changeAsked = (draft: string, changes: QuizChange[]) => {
+    const { quiz: now, draftId } = latest.current;
+    if (draftId !== draft || !now) return null;
+    const made = changeEdits(now, changes);
+    editor.edit(made.edit);
+    // What was added is selected, so the quizmaster sees it.
+    const first = made.added.length > 0 ? applyEdit(now, made.edit).slides.findIndex((s) => s.id === made.added[0]) : -1;
+    if (first >= 0) list.select(first);
+    return changeCount(made.counts);
+  };
   const aiPanelShown = aiOpen && view !== "categories" && open !== null;
   // The backend refuses what a show cannot play (not a category's problems,
   // say); what is to fix is then listed in File › Info.
@@ -552,8 +562,9 @@ function Studio({ editor, open, ask, onExit }: { editor: QuizEditor; open: OpenQ
                     <AiPanel
                       draftId={open.draftId}
                       language={settingsOf(quiz).language}
-                      emptyQuiz={slides.length === 0}
-                      onInsert={insertAsked}
+                      quiz={quiz}
+                      selected={index}
+                      onChange={changeAsked}
                       onChooseModel={() => setBackstage("ai")}
                       onClose={() => aiShown.set(false)}
                     />

@@ -9,11 +9,11 @@
 //! `quiz_core::import_tables` reads as it reads a spreadsheet, so a question
 //! from a model gets the same defaults and checks as one from a sheet.
 
-use quiz_core::{QuizLanguage, Table, MAX_EVERYONE_ANSWERS};
+use crate::quiz_edits::{self, text_of, JSON_STARTS};
+use quiz_core::{Quiz, QuizLanguage};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use ts_rs::TS;
-use std::collections::HashSet;
 
 /// Where Ollama, the most common such server, listens.
 pub const DEFAULT_URL: &str = "http://localhost:11434/v1";
@@ -48,6 +48,10 @@ pub const MAX_TEXT_CHARS: usize = 20_000;
 pub const SMALL_TEXT_CHARS: usize = 4_000;
 /// Most questions taken from one reply.
 pub const MAX_QUESTIONS: usize = 100;
+
+/// Characters of the quiz the model reads at least, even when a request is
+/// asked again shorter (`quiz_edits::quiz_view`).
+pub const MIN_QUIZ_VIEW_CHARS: usize = 6_000;
 
 /// What the AI panel needs to know before it asks: the model chosen and
 /// what a request may carry, so the panel prepares no more than is sent.
@@ -190,17 +194,25 @@ pub const MAX_NOTES_CHARS: usize = 14_000;
 
 /// What the quizmaster asks for: the latest message (`prompt`), the files,
 /// and the conversation before it.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, TS)]
+#[derive(Debug, Clone, Default, PartialEq, Deserialize, TS)]
 #[ts(export)]
 #[serde(rename_all = "camelCase")]
 pub struct QuestionRequest {
     pub prompt: String,
     pub attachments: Vec<Attachment>,
-    /// The quiz's language, which the questions are written in.
+    /// The quiz's language, which the model writes in.
     pub language: QuizLanguage,
-    /// Whether the questions make a whole quiz (an empty one): its rounds
-    /// then end with their scores and the quiz with the results.
-    pub whole_quiz: bool,
+    /// The quiz open in Studio, which the model reads and changes
+    /// (`quiz_edits`); none for a request without one.
+    #[serde(default)]
+    pub quiz: Option<Quiz>,
+    /// The slide the quizmaster has selected, by its index from 0.
+    #[serde(default)]
+    pub selected: Option<usize>,
+    /// The themes the quiz can take, by id and name, which the app adds.
+    #[serde(skip)]
+    #[ts(skip)]
+    pub themes: Vec<(String, String)>,
     /// Whether the app may look up on the internet what the request needs
     /// (`research_plan`).
     #[serde(default)]
@@ -238,114 +250,71 @@ pub enum RequestError {
     NotAPicture,
 }
 
-/// Why a reply gave no questions.
+/// Why a reply gave no changes.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum ReplyError {
-    /// The server's reply is not a chat completion.
-    #[error("not a chat completion")]
-    NotACompletion,
-    /// The model wrote something that is not the questions asked for.
-    #[error("the model's answer is not questions")]
-    NotQuestions,
-    /// The model stopped at its length limit before the questions ended.
+    /// The model wrote something that is not the changes asked for.
+    #[error("the model's answer is not changes")]
+    NotChanges,
+    /// The model stopped at its length limit before the changes ended.
     #[error("the model's answer was cut off")]
     CutOff,
-    #[error("the model wrote no questions")]
-    NoQuestions,
+    #[error("the model made no changes")]
+    NoChanges,
 }
 
-/// What the model is told to do, whatever it is asked.
+/// What the model is told to do when it makes the changes.
 fn instructions(language: QuizLanguage) -> String {
-    let language = match language {
-        QuizLanguage::Cs => "Czech",
-        QuizLanguage::En => "English",
-    };
+    let language = quiz_edits::language_name(language);
     format!(
-        "You write questions for a live quiz played in a room with buzzers. The questions are shown on a projector and \
-         every team answers by pressing A, B, C or D.\n\
-         Reply with JSON only, as the schema says: {{\"questions\": [...]}}. For each question, in this order:\n\
-         - \"attachment\": the number of the picture or video attachment the question is about, so the slide shows \
-         it; 0 when it is about none.\n\
-         - \"question\": the question, under 150 characters so it reads well on a projector.\n\
-         - \"reason\": one short sentence with the fact that answers it, taken from the attachment or the request \
-         (for a picture: what is really seen in it). The quizmaster reads it.\n\
-         - \"right\": the one correct answer. It must agree with the reason and with the attachments: what a text \
-         attachment says is true.\n\
-         - \"round\": the round's name when the request or the conversation asks for rounds, the same for every question of that round \
-         (not numbered per question); empty otherwise.\n\
-         - \"wrong\": 1 to 3 wrong but believable answers of the same kind as the right one (all colours when it \
-         is a colour, all numbers when it is a number). None repeats the right answer or another wrong one, none \
-         is a question. Each is false for this question by the attachments and what was found: never another \
-         true answer (another product it also makes, another of its addresses).\n\
+        "You change a quiz in a quiz app for live quiz nights, as the quizmaster asks: anything the app's editor can \
+         change. Slides are shown on a projector; teams answer on buzzers.\n\
+         Reply with JSON only, as the schema says: {{\"changes\": [...], \"summary\": \"...\"}}. Each change is one of:\n\
+         - {{\"action\":\"add\",\"after\":N,\"slides\":[slide, ...]}}: new slides after slide N (0: at the start).\n\
+         - {{\"action\":\"edit\",\"slide\":N,\"set\":{{fields}}}}: changes these fields of slide N; a field set to null is \
+         removed, the others stay as they are. A slide changes type with \"type\" and the new type's fields.\n\
+         - {{\"action\":\"delete\",\"slide\":N}}: removes slide N.\n\
+         - {{\"action\":\"move\",\"slide\":N,\"after\":M}}: moves slide N after slide M (0: to the start).\n\
+         - {{\"action\":\"quiz\",\"set\":{{fields}}}}: changes the quiz's own fields: \"title\", \"theme\", \"settings\", \
+         \"sounds\", \"welcome\", \"categories\" (a list replaces the whole list).\n\
+         Slide numbers are those of the quiz as shown to you, before any change.\n\
+         \"summary\": one or two sentences for the quizmaster, in {language}, saying what you changed.\n\
+         {guide}\n\
          Rules:\n\
+         - Change only what the quizmaster asked for, or what was agreed in the conversation before.\n\
          - Write everything in {language}, with correct spelling.\n\
-         - Keep every answer under 40 characters.\n\
-         - Ask about facts the attachments and the request give. Do not invent facts you are not sure of.\n\
+         - Ask about facts the attachments, the request and what was found give. Do not invent facts you are not sure of.\n\
          - Ask what is interesting to know (what it is, does or makes, its story, people, places, dates), not \
-         identifiers such as registration, tax, phone or house numbers.\n\
-         - Do not ask how many things a picture shows: counting in a picture is often wrong.\n\
-         - A wrong answer differs clearly from the right one (not the same street with another number).\n\
-         - Questions of a round come together.\n\
-         - The questions agree with each other: one never says what another says is wrong.\n\
-         - When a conversation with the quizmaster comes before, write the quiz agreed there: its rounds, topics, \
-         number and kind of questions.\n\
-         - Unless the request or the conversation says how many, write 10 questions."
+         identifiers such as registration, tax, phone or house numbers. Do not ask how many things a picture shows.\n\
+         - The correct answer agrees with the reason and the attachments. Wrong answers are believable, of the same kind \
+         as the right one, clearly different from it, and false for this question: never another true answer.\n\
+         - A round opens with a billboard of its name and ends with an end of round; a whole new quiz ends with the final.\n\
+         - Unless the quizmaster says how many, a new quiz or round has 10 questions.",
+        guide = quiz_edits::format_guide()
     )
 }
 
 /// What the model is told when the quizmaster talks with it about the quiz
 /// before it is written.
 fn chat_instructions(language: QuizLanguage) -> String {
-    let language = match language {
-        QuizLanguage::Cs => "Czech",
-        QuizLanguage::En => "English",
-    };
+    let language = quiz_edits::language_name(language);
     format!(
-        "You help a quizmaster plan a quiz in a quiz app. It is played live in a room: questions on a projector, \
-         every team answers A, B, C or D on a buzzer.\n\
-         Talk with the quizmaster about the quiz: its topic, audience, rounds, how many questions and how hard, and \
-         what the attached files and the facts found on the internet offer. Propose a concrete outline: the rounds, \
-         each with its topic and number of questions, and a few examples of what you would ask. When something \
-         important is unclear, ask about it, at most two questions at a time. Change the outline as the quizmaster \
-         says.\n\
-         Do not write out all the questions with their answers: when the quizmaster is happy, they press the button \
-         that makes the questions, and the questions are then written from this conversation.\n\
+        "You help a quizmaster with a quiz in a quiz app. It is played live in a room: slides on a projector, every \
+         team answers on a buzzer (A to D for everyone, or the fastest finger answers aloud). The app's editor can \
+         change anything in the quiz: add, edit, delete and move slides of every type (questions, billboards, \
+         explanations, ends of round, the final), their answers, points, time, notes, pictures, videos, sounds, \
+         backgrounds and look, and the quiz's title, theme, settings, sounds, welcome screen and categories. You see \
+         the quiz as it is now.\n\
+         Talk with the quizmaster about what to make or change: for a new quiz its topic, audience, rounds, how many \
+         questions and how hard, and what the attached files and the facts found on the internet offer. Propose \
+         concretely what you would change: for new questions the rounds, each with its topic and number of questions, \
+         and a few examples. When something important is unclear, ask about it, at most two questions at a time. \
+         Change the proposal as the quizmaster says.\n\
+         Do not write out every question with its answers: when the quizmaster is happy, they press the button that \
+         makes the changes, and the changes are then made from this conversation.\n\
          Use only facts you are sure of or that the files or the internet give. Reply in {language}, with correct \
          spelling, briefly, in plain text: short paragraphs and simple lists, no tables and no headings."
     )
-}
-
-/// The JSON Schema the model's reply follows: small, so models of a few
-/// billion parameters keep to it. A model writes the fields in the order
-/// the schema gives them, which is the alphabetical order of their names
-/// (`serde_json` sorts them): so the fields are named for a model to write
-/// what the question is about, the question, the fact that answers it and
-/// only then the right answer (small models mark a wrong answer right far
-/// less often when they state the fact first, as in a chain of thought).
-pub fn reply_schema() -> Value {
-    json!({
-        "type": "object",
-        "properties": {
-            "questions": {
-                "type": "array",
-                "minItems": 1,
-                "maxItems": MAX_QUESTIONS,
-                "items": {
-                    "type": "object",
-                    "properties": {
-                        "attachment": { "type": "integer", "minimum": 0 },
-                        "question": { "type": "string" },
-                        "reason": { "type": "string" },
-                        "right": { "type": "string" },
-                        "round": { "type": "string" },
-                        "wrong": { "type": "array", "items": { "type": "string" }, "minItems": 1, "maxItems": MAX_EVERYONE_ANSWERS - 1 }
-                    },
-                    "required": ["attachment", "question", "reason", "right", "wrong"]
-                }
-            }
-        },
-        "required": ["questions"]
-    })
 }
 
 /// Most searches a request leads to.
@@ -459,13 +428,13 @@ fn one_line(text: &str) -> String {
 /// (`web_page::research_text`), and at most `max_text` characters of text
 /// files and of the conversation each.
 pub fn request(model: &LocalModel, asked: &QuestionRequest, research: Option<&str>, max_text: usize) -> Result<Value, RequestError> {
-    let ask = if asked.conversation.is_empty() { "Write questions about the attachments." } else { "Write the questions of the quiz we agreed on above." };
+    let ask = if asked.conversation.is_empty() { "Write questions about the attachments." } else { "Make the changes we agreed on above." };
     Ok(json!({
         "model": model.model,
         "messages": messages(instructions(asked.language), asked, research, max_text, ask)?,
         "response_format": {
             "type": "json_schema",
-            "json_schema": { "name": "quiz_questions", "schema": reply_schema() }
+            "json_schema": { "name": "quiz_changes", "schema": quiz_edits::edits_schema() }
         },
         // Low, for facts rather than invention.
         "temperature": 0.2,
@@ -478,7 +447,7 @@ pub fn request(model: &LocalModel, asked: &QuestionRequest, research: Option<&st
 pub fn chat_request(model: &LocalModel, asked: &QuestionRequest, research: Option<&str>, max_text: usize) -> Result<Value, RequestError> {
     Ok(json!({
         "model": model.model,
-        "messages": messages(chat_instructions(asked.language), asked, research, max_text, "What quiz could we make from the attachments?")?,
+        "messages": messages(chat_instructions(asked.language), asked, research, max_text, "What could we make from the attachments?")?,
         "temperature": 0.6,
         "stream": false
     }))
@@ -501,6 +470,10 @@ fn messages(system: String, asked: &QuestionRequest, research: Option<&str>, max
     }
     let prompt: String = asked.prompt.trim().chars().take(MAX_PROMPT_CHARS).collect();
     let mut parts = vec![text_part(if prompt.is_empty() { ask.to_string() } else { prompt })];
+    if let Some(quiz) = &asked.quiz {
+        // The quiz has a budget of its own: without it the model cannot change it.
+        parts.push(text_part(quiz_edits::quiz_view(quiz, asked.selected, &asked.themes, max_text.max(MIN_QUIZ_VIEW_CHARS))));
+    }
     // The conversation, files' text and what was found share `max_text`: the conversation up to half.
     let (mut history, used) = conversation(&asked.conversation, max_text / 2);
     let mut text_left = max_text - used;
@@ -660,136 +633,17 @@ fn image_part(image: &str) -> Result<Value, RequestError> {
     Ok(json!({ "type": "image_url", "image_url": { "url": image } }))
 }
 
-/// A question as the model writes it.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct DraftQuestion {
-    pub round: String,
-    pub question: String,
-    pub answers: Vec<String>,
-    pub explanation: String,
-    /// The attachment it is about, counted from 1; 0 for none.
-    pub file: usize,
-}
-
-impl DraftQuestion {
-    /// The question in `value`, read field by field so that one field a
-    /// small model wrote oddly (`null`, a number for a text, `"2"` for a
-    /// number) loses no more than itself; None for what is not an object.
-    /// The schema's fields (`reply_schema`) are read, and also the form a
-    /// model that does not keep to it often writes (`answers`, the first
-    /// correct; `explanation`; `file`).
-    fn read(value: &Value) -> Option<DraftQuestion> {
-        let field = |names: &[&str]| names.iter().find_map(|name| value.get(*name).filter(|v| !v.is_null())).map_or_else(String::new, text_of);
-        let list = |name: &str| match value.get(name) {
-            Some(Value::Array(items)) => items.iter().map(text_of).collect(),
-            Some(Value::String(one)) => vec![one.clone()],
-            _ => Vec::new(),
-        };
-        let answers = match value.get("right").filter(|v| !v.is_null()) {
-            Some(right) => std::iter::once(text_of(right)).chain(list("wrong")).collect(),
-            None => list("answers"),
-        };
-        let file = match value.get("attachment").or_else(|| value.get("file")) {
-            Some(Value::Number(n)) => n.as_u64().and_then(|n| usize::try_from(n).ok()).unwrap_or(0),
-            Some(Value::String(s)) => s.trim().parse().unwrap_or(0),
-            _ => 0,
-        };
-        value.is_object().then(|| DraftQuestion { round: round_name(&field(&["round"])), question: field(&["question"]), answers, explanation: field(&["reason", "explanation"]), file })
+/// The changes the model wrote as `content`; `cut_off` when it stopped at
+/// its length limit. Models that do not keep to the schema often wrap the
+/// JSON in a code block or a sentence: that is read too, and a reasoning
+/// model's thinking before it is skipped (`quiz_edits::read_edits`).
+pub fn read_changes(content: &str, cut_off: bool) -> Result<quiz_edits::ModelEdits, ReplyError> {
+    match quiz_edits::read_edits(without_thinking(content)) {
+        Some(edits) if edits.changes.is_empty() => Err(ReplyError::NoChanges),
+        Some(edits) => Ok(edits),
+        None if cut_off => Err(ReplyError::CutOff),
+        None => Err(ReplyError::NotChanges),
     }
-
-    /// The question with the answers a quiz can use: none empty, none twice
-    /// (whatever the case and spaces), none that is itself a question. None
-    /// when it cannot be asked then: no text, its correct (first) answer is
-    /// one of those, or no other answer is left.
-    fn askable(mut self) -> Option<DraftQuestion> {
-        let mut seen: Vec<String> = Vec::new();
-        let usable = |answer: &String, seen: &mut Vec<String>| {
-            let cell = answer_cell(answer);
-            let key = cell.to_lowercase();
-            let ok = !cell.is_empty() && !cell.ends_with('?') && !seen.contains(&key);
-            seen.push(key);
-            ok
-        };
-        let first_ok = self.answers.first().is_some_and(|first| usable(first, &mut seen));
-        let wrong: Vec<String> = self.answers.iter().skip(1).filter(|a| usable(a, &mut seen)).cloned().collect();
-        if self.question.trim().is_empty() || !first_ok || wrong.is_empty() {
-            return None;
-        }
-        self.answers.truncate(1);
-        self.answers.extend(wrong);
-        Some(self)
-    }
-}
-
-/// A round's name as the model wrote it, without the numbering some
-/// models add to each question's ("Geography (2/3)", "Geography 2/3"):
-/// a round's questions then share one name, so they make one round.
-fn round_name(name: &str) -> String {
-    let name = name.trim();
-    let in_brackets = name.strip_suffix(')').and_then(|n| n.rsplit_once('(')).filter(|(_, inside)| numbered(inside)).map(|(before, _)| before);
-    let at_end = || {
-        let start = name.trim_end_matches(|c: char| c.is_ascii_digit() || c == ' ' || c == '/').len();
-        numbered(&name[start..]).then(|| &name[..start])
-    };
-    let without = in_brackets.or_else(at_end).unwrap_or(name).trim_end_matches([' ', '-', '–', ':', ',']);
-    if without.is_empty() { name } else { without }.to_string()
-}
-
-/// Whether `text` is a numbering such as `2/3` or `2 / 3`.
-fn numbered(text: &str) -> bool {
-    text.split_once('/').is_some_and(|(a, b)| [a, b].iter().all(|n| !n.trim().is_empty() && n.trim().bytes().all(|b| b.is_ascii_digit())))
-}
-
-/// A text or a number or a truth as the text it says; anything else as none.
-fn text_of(value: &Value) -> String {
-    match value {
-        Value::String(s) => s.clone(),
-        Value::Number(n) => n.to_string(),
-        Value::Bool(b) => b.to_string(),
-        _ => String::new(),
-    }
-}
-
-/// The questions in the server's `reply` to a chat completion request that
-/// was not streamed.
-pub fn read_reply(reply: &str) -> Result<Vec<DraftQuestion>, ReplyError> {
-    let reply: Value = serde_json::from_str(reply).map_err(|_| ReplyError::NotACompletion)?;
-    let choice = reply.get("choices").and_then(|choices| choices.get(0)).ok_or(ReplyError::NotACompletion)?;
-    let content = choice.pointer("/message/content").and_then(Value::as_str).ok_or(ReplyError::NotACompletion)?;
-    read_questions(content, choice.get("finish_reason").and_then(Value::as_str) == Some("length"))
-}
-
-/// The questions the model wrote as `content`; `cut_off` when it stopped
-/// at its length limit. Models that do not keep to the schema often wrap
-/// the JSON in a code block or a sentence, or give a bare list: those are
-/// read too, and a reasoning model's thinking before them is skipped.
-/// Questions that cannot be asked (`DraftQuestion::askable`) are left out.
-pub fn read_questions(content: &str, cut_off: bool) -> Result<Vec<DraftQuestion>, ReplyError> {
-    let questions = match questions_in(content) {
-        Some(questions) => questions,
-        None if cut_off => return Err(ReplyError::CutOff),
-        None => return Err(ReplyError::NotQuestions),
-    };
-    let questions: Vec<DraftQuestion> = questions.into_iter().filter_map(DraftQuestion::askable).take(MAX_QUESTIONS).collect();
-    if questions.is_empty() {
-        return Err(ReplyError::NoQuestions);
-    }
-    Ok(questions)
-}
-
-/// What marks the start of a question in the model's text.
-const QUESTION_KEY: &str = "\"question\"";
-
-/// How many questions the model began in `content` after its first `from`
-/// bytes, which were counted before: the panel counts as the model writes,
-/// without reading the whole text again each time.
-pub fn questions_begun(content: &str, from: usize) -> usize {
-    // A key that the last piece cut in two is counted now.
-    let mut start = from.saturating_sub(QUESTION_KEY.len() - 1).min(content.len());
-    while !content.is_char_boundary(start) {
-        start -= 1;
-    }
-    content[start..].matches(QUESTION_KEY).count()
 }
 
 /// A line of a streamed reply (server-sent events).
@@ -1027,32 +881,6 @@ pub fn streamed(mut body: Value) -> Value {
     body
 }
 
-/// Most places in a reply where the questions' JSON is looked for: prose
-/// before it rarely has more braces than this.
-const JSON_STARTS: usize = 64;
-
-fn questions_in(content: &str) -> Option<Vec<DraftQuestion>> {
-    let questions = |value: Value| -> Option<Vec<DraftQuestion>> {
-        let list = match value {
-            Value::Array(list) => list,
-            Value::Object(mut object) => match object.remove("questions")? {
-                Value::Array(list) => list,
-                _ => return None,
-            },
-            _ => return None,
-        };
-        let read: Vec<DraftQuestion> = list.iter().filter_map(DraftQuestion::read).collect();
-        (!read.is_empty()).then_some(read)
-    };
-    let text = without_thinking(content);
-    // The first JSON value that holds questions, from where a `{` or `[`
-    // begins: so a code block's fences, a sentence around it or a brace in
-    // the prose before it does not hide it.
-    text.match_indices(['{', '['])
-        .take(JSON_STARTS)
-        .find_map(|(start, _)| serde_json::Deserializer::from_str(&text[start..]).into_iter::<Value>().next()?.ok().and_then(questions))
-}
-
 /// The model's turn of the conversation as the panel shows it: its text
 /// without a reasoning model's thinking, trimmed.
 pub fn said(content: &str) -> String {
@@ -1085,80 +913,6 @@ fn without_thinking(content: &str) -> &str {
     }
 }
 
-/// The questions as a sheet that `quiz_core::import_tables` reads: a
-/// section opens each named round and, in a whole quiz, an end of round
-/// closes it and the results end the quiz. A question shows the picture or
-/// video of the attachment it names in `media` (by its number, from 1);
-/// another number is left out. Answers are left unmarked, so the import
-/// takes the first as the correct one and shuffles them.
-pub fn draft_table(questions: &[DraftQuestion], media: &[Option<(String, bool)>], whole_quiz: bool) -> Table {
-    const HEADINGS: [&str; 9] = ["Type", "Question", "Answer 1", "Answer 2", "Answer 3", "Answer 4", "Notes", "Picture", "Video"];
-    let row = |kind: &str, text: &str| {
-        let mut row = vec![String::new(); HEADINGS.len()];
-        row[0] = kind.to_string();
-        row[1] = cell(text);
-        row
-    };
-    let mut rows = vec![HEADINGS.iter().map(|heading| heading.to_string()).collect::<Vec<_>>()];
-    let mut round: Option<&str> = None;
-    let rounds = has_rounds(questions);
-    for question in questions {
-        // A question without a round's name among named rounds stays in the round before it.
-        let name = Some(question.round.trim()).filter(|name| !name.is_empty()).or(round).unwrap_or_default();
-        if rounds && round != Some(name) {
-            if whole_quiz && round.is_some() {
-                rows.push(row("End of round", ""));
-            }
-            if !name.is_empty() {
-                rows.push(row("Section", name));
-            }
-            round = Some(name);
-        }
-        let mut cells = row("Question", question.question.trim());
-        let answers = question.answers.iter().map(|a| answer_cell(a)).filter(|a| !a.is_empty());
-        for (i, answer) in answers.take(MAX_EVERYONE_ANSWERS).enumerate() {
-            cells[2 + i] = answer;
-        }
-        cells[6] = cell(question.explanation.trim());
-        if let Some(Some((reference, video))) = question.file.checked_sub(1).and_then(|i| media.get(i)) {
-            cells[if *video { 8 } else { 7 }] = reference.clone();
-        }
-        rows.push(cells);
-    }
-    if whole_quiz {
-        if rounds {
-            rows.push(row("End of round", ""));
-        }
-        rows.push(row("Results", ""));
-    }
-    Table { name: String::new(), first_row: 1, rows }
-}
-
-/// A cell of model text, which an import reads as it is: on one line (a
-/// line break would split a question's title from its text), and with a
-/// `'` before what a sheet would read as a formula (`quiz_core::defused`).
-fn cell(text: &str) -> String {
-    quiz_core::defused(text.split_whitespace().collect::<Vec<_>>().join(" "))
-}
-
-/// Whether the model's `questions` make rounds: some name a round, and
-/// rounds hold two questions on average, about. A model sometimes names a
-/// round for nearly every question when it was asked for none ("První
-/// kolo" … "Sedmé kolo" for 8 questions); such names are no rounds
-/// [no source - our rule from a test with a 4B model].
-fn has_rounds(questions: &[DraftQuestion]) -> bool {
-    let names: HashSet<&str> = questions.iter().map(|q| q.round.trim()).filter(|name| !name.is_empty()).collect();
-    !names.is_empty() && names.len() * 2 <= questions.len() + 1
-}
-
-/// An answer's cell. Brackets around a cell mark an answer correct in a
-/// sheet, so the model's own brackets are taken off.
-fn answer_cell(text: &str) -> String {
-    let text = text.trim();
-    let text = text.strip_prefix('[').and_then(|t| t.strip_suffix(']')).unwrap_or(text);
-    cell(text)
-}
-
 /// The model names a server lists in its reply to `GET /models`, sorted.
 pub fn read_models(reply: &str) -> Option<Vec<String>> {
     let reply: Value = serde_json::from_str(reply).ok()?;
@@ -1171,7 +925,6 @@ pub fn read_models(reply: &str) -> Option<Vec<String>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use quiz_core::{import_tables, AnswerMode, SlideContent};
 
     const PICTURE: &str = "data:image/jpeg;base64,/9j/4AAQ";
 
@@ -1181,14 +934,6 @@ mod tests {
 
     fn attachment(name: &str, content: AttachmentContent) -> Attachment {
         Attachment { name: name.into(), media: None, content }
-    }
-
-    fn completion(content: &str, finish: &str) -> String {
-        json!({ "choices": [{ "message": { "role": "assistant", "content": content }, "finish_reason": finish }] }).to_string()
-    }
-
-    fn question(round: &str, text: &str, answers: &[&str], file: usize) -> DraftQuestion {
-        DraftQuestion { round: round.into(), question: text.into(), answers: answers.iter().map(|a| a.to_string()).collect(), explanation: String::new(), file }
     }
 
     #[test]
@@ -1211,7 +956,7 @@ mod tests {
         let model = LocalModel::new(DEFAULT_URL, "gemma3");
         let body = request(&model, &asked("Kvíz o Praze", files), None, MAX_TEXT_CHARS).unwrap();
         assert_eq!(body["model"], "gemma3");
-        assert_eq!(body["response_format"]["json_schema"]["schema"], reply_schema());
+        assert_eq!(body["response_format"]["json_schema"]["schema"], quiz_edits::edits_schema());
         assert!(body["messages"][0]["content"].as_str().unwrap().contains("in Czech"));
         let parts = body["messages"][1]["content"].as_array().unwrap();
         let images = parts.iter().filter(|p| p["type"] == "image_url").count();
@@ -1271,55 +1016,6 @@ mod tests {
     }
 
     #[test]
-    fn replies_are_read_also_when_the_model_wraps_its_json() {
-        let json = r#"{"questions":[{"question":"Kde je Praha?","answers":["Čechy","Morava"],"file":1}]}"#;
-        let expected = vec![question("", "Kde je Praha?", &["Čechy", "Morava"], 1)];
-        assert_eq!(read_reply(&completion(json, "stop")), Ok(expected.clone()));
-        assert_eq!(read_reply(&completion(&format!("Tady jsou otázky:\n```json\n{json}\n```"), "stop")), Ok(expected.clone()));
-        let list = r#"[{"question":"Kde je Praha?","answers":["Čechy","Morava"],"file":1}]"#;
-        assert_eq!(read_reply(&completion(list, "stop")), Ok(expected));
-        // Blank questions are skipped; none left is no questions.
-        assert_eq!(read_reply(&completion(r#"{"questions":[{"question":" ","answers":["a","b"]}]}"#, "stop")), Err(ReplyError::NoQuestions));
-        assert_eq!(read_reply(&completion("Nevím.", "stop")), Err(ReplyError::NotQuestions));
-        assert_eq!(read_reply(&completion(r#"{"questions":[{"question":"Kde"#, "length")), Err(ReplyError::CutOff));
-        assert_eq!(read_reply("<html>"), Err(ReplyError::NotACompletion));
-        assert_eq!(read_reply(r#"{"error":"model not found"}"#), Err(ReplyError::NotACompletion));
-    }
-
-    #[test]
-    fn a_field_written_oddly_loses_only_itself() {
-        let reply = r#"{"questions":[
-            {"question":"Rok?","answers":[1945, "1939", null],"explanation":null,"round":null,"file":"2"},
-            {"question":"Bez odpovědi?","answers":"a"},
-            {"question":"Prázdná správná?","answers":["", "Brno", "Praha"]},
-            {"question":"Jen jedna?","answers":["Praha", " "]},
-            "not a question",
-            {"question":"Záporný soubor?","answers":["a","b"],"file":-1}
-        ]}"#;
-        let questions = read_questions(reply, false).unwrap();
-        assert_eq!(questions, vec![question("", "Rok?", &["1945", "1939"], 2), question("", "Záporný soubor?", &["a", "b"], 0)]);
-    }
-
-    #[test]
-    fn the_schemas_fields_are_read_with_the_reason_before_the_right_answer() {
-        // serde_json keeps object keys sorted: the order a model writes them in.
-        let item = &reply_schema()["properties"]["questions"]["items"]["properties"];
-        let order: Vec<&String> = item.as_object().unwrap().keys().collect();
-        assert_eq!(order, ["attachment", "question", "reason", "right", "round", "wrong"]);
-        let reply = r#"{"questions":[{"attachment":1,"question":"Jaká barva převládá?","reason":"Tlačítko na obrázku je oranžové.","right":"Oranžová","round":"Logo (1/2)","wrong":["Modrá","modrá ","Oranžová","Co je to?","Zelená"]},
-            {"attachment":0,"question":"Kolik měří Vltava?","reason":"Text říká 430 km.","right":"430 km","round":"Logo 2/2","wrong":"300 km"}]}"#;
-        let questions = read_questions(reply, false).unwrap();
-        assert_eq!(questions[0].answers, ["Oranžová", "Modrá", "Zelená"]);
-        assert_eq!((questions[0].file, questions[0].explanation.as_str()), (1, "Tlačítko na obrázku je oranžové."));
-        assert_eq!(questions[1].answers, ["430 km", "300 km"]);
-        // Both are of one round, whatever numbering the model gave each.
-        assert_eq!([questions[0].round.as_str(), questions[1].round.as_str()], ["Logo", "Logo"]);
-        // A right answer that is a question, or with no wrong one left, is no question.
-        let unusable = r#"{"questions":[{"question":"A?","right":"Proč?","wrong":["b"]},{"question":"B?","right":"a","wrong":["A"]}]}"#;
-        assert_eq!(read_questions(unusable, false), Err(ReplyError::NoQuestions));
-    }
-
-    #[test]
     fn the_model_says_what_to_look_up_and_what_was_found_goes_with_the_request() {
         let model = LocalModel::new(DEFAULT_URL, "m");
         let plan_body = research_plan_request(&model, &asked("Kvíz o firmě Pekárna Novák z Brna", vec![attachment("logo.png", AttachmentContent::Picture { image: PICTURE.into() })]));
@@ -1337,20 +1033,28 @@ mod tests {
     }
 
     #[test]
-    fn round_names_lose_only_their_numbering() {
-        for (written, name) in [("Zeměpis (2/3)", "Zeměpis"), ("Zeměpis 2/3", "Zeměpis"), ("Kolo – 1 / 4", "Kolo"), ("Rok 1945", "Rok 1945"), ("1/2", "1/2"), ("Hudba (pop)", "Hudba (pop)"), ("", "")] {
-            assert_eq!(round_name(written), name, "{written}");
-        }
+    fn changes_are_read_also_when_the_model_wraps_its_json_or_thinks_first() {
+        let json = r#"{"changes":[{"action":"delete","slide":2}],"summary":"Smazal jsem druhý snímek."}"#;
+        let expected = quiz_edits::ModelEdits { changes: vec![quiz_edits::ModelChange { action: Some(quiz_edits::Action::Delete), slide: Some(2), ..Default::default() }], summary: "Smazal jsem druhý snímek.".into() };
+        assert_eq!(read_changes(json, false), Ok(expected.clone()));
+        assert_eq!(read_changes(&format!("Tady:\n```json\n{json}\n```"), false), Ok(expected.clone()));
+        let thinking = format!("<think>The user wants {{a change}}. Maybe {{\"x\": 1}}.</think>\n{json}");
+        assert_eq!(read_changes(&thinking, false), Ok(expected));
+        assert_eq!(read_changes(r#"{"changes":[],"summary":"Nic."}"#, false), Err(ReplyError::NoChanges));
+        assert_eq!(read_changes("Nevím.", false), Err(ReplyError::NotChanges));
+        assert_eq!(read_changes(r#"{"changes":[{"action":"de"#, true), Err(ReplyError::CutOff));
     }
 
     #[test]
-    fn a_reasoning_models_thinking_and_braces_in_prose_do_not_hide_the_questions() {
-        let json = r#"{"questions":[{"question":"A?","answers":["a","b"]}]}"#;
-        let thinking = format!("<think>The user wants {{a quiz}}. Maybe {{\"x\": 1}}.</think>\n{json}");
-        assert_eq!(read_questions(&thinking, false).unwrap().len(), 1);
-        let prose = format!("Here is a set {{of questions}} as asked: {json} Enjoy {{!}}");
-        assert_eq!(read_questions(&prose, false).unwrap().len(), 1);
-        assert_eq!(read_questions(r#"Answers ["a","b"] then {"questions":[{"question":"A?","answers":["a","b"]}]}"#, false).unwrap().len(), 1);
+    fn the_quiz_goes_with_the_request_and_with_the_chat() {
+        let quiz = Quiz::new("Praha", vec![serde_json::from_value(json!({ "id": "s1", "type": "billboard", "title": "Úvod", "text": "" })).unwrap()]);
+        let model = LocalModel::new(DEFAULT_URL, "m");
+        let with_quiz = QuestionRequest { quiz: Some(quiz), selected: Some(0), themes: vec![("classic".into(), "Classic".into())], ..asked("Přidej otázku", vec![]) };
+        for body in [request(&model, &with_quiz, None, MAX_TEXT_CHARS).unwrap(), chat_request(&model, &with_quiz, None, MAX_TEXT_CHARS).unwrap()] {
+            let texts: Vec<&str> = body["messages"].as_array().unwrap().last().unwrap()["content"].as_array().unwrap().iter().filter_map(|p| p["text"].as_str()).collect();
+            assert!(texts.iter().any(|t| t.contains("\"Praha\"") && t.contains("Úvod") && t.contains("classic")), "{texts:?}");
+        }
+        assert!(request(&model, &with_quiz, None, MAX_TEXT_CHARS).unwrap()["messages"][0]["content"].as_str().unwrap().contains("\"action\":\"edit\""));
     }
 
     #[test]
@@ -1364,75 +1068,6 @@ mod tests {
     }
 
     #[test]
-    fn questions_become_slides_with_the_first_answer_correct() {
-        let questions = vec![
-            question("", "Které město leží na Vltavě?", &["Praha", "Brno", "Ostrava", "Plzeň", "Olomouc"], 1),
-            question("", "Co je na videu?", &["[Most]", "Řeka"], 2),
-            question("", "=1+1", &["2", "3"], 7),
-        ];
-        let media = vec![Some(("media/praha.jpg".to_string(), false)), Some(("media/klip.mp4".to_string(), true))];
-        let slides = import_tables(&[draft_table(&questions, &media, false)], &[], 7).unwrap();
-        assert!(slides.notes.into_vec().is_empty());
-        let slides: Vec<_> = slides.slides.into_iter().map(|(_, slide)| slide).collect();
-        assert_eq!(slides.len(), 3);
-        let SlideContent::Question(first) = &slides[0].content else { panic!("{:?}", slides[0]) };
-        assert_eq!(first.mode, AnswerMode::Everyone);
-        // At most four answers, the first one correct wherever the shuffle put it.
-        assert_eq!(first.answers.len(), MAX_EVERYONE_ANSWERS);
-        assert_eq!(first.correct.len(), 1);
-        assert_eq!(first.answers[first.correct[0].answer], "Praha");
-        assert_eq!(slides[0].picture.as_deref(), Some("media/praha.jpg"));
-        let SlideContent::Question(second) = &slides[1].content else { panic!() };
-        assert_eq!(second.answers[second.correct[0].answer], "Most");
-        assert_eq!(slides[1].video.as_ref().map(|v| v.file.as_str()), Some("media/klip.mp4"));
-        // A formula stays text, and a file the request did not carry is left out.
-        let SlideContent::Question(third) = &slides[2].content else { panic!() };
-        assert_eq!(third.text, "=1+1");
-        assert_eq!((slides[2].picture.as_ref(), slides[2].video.as_ref()), (None, None));
-    }
-
-    #[test]
-    fn rounds_open_with_a_section_and_a_whole_quiz_ends_with_the_results() {
-        let questions = vec![question("Zeměpis", "A?", &["a", "b"], 0), question("Zeměpis", "B?", &["a", "b"], 0), question("Historie", "C?", &["a", "b"], 0)];
-        let kinds = |whole| -> Vec<String> {
-            let imported = import_tables(&[draft_table(&questions, &[], whole)], &[], 1).unwrap();
-            imported
-                .slides
-                .into_iter()
-                .map(|(_, slide)| match slide.content {
-                    SlideContent::Billboard { title, .. } => format!("section {title}"),
-                    SlideContent::Question(q) => q.text,
-                    SlideContent::EndOfRound { .. } => "end".into(),
-                    SlideContent::Final { .. } => "results".into(),
-                    other => format!("{other:?}"),
-                })
-                .collect()
-        };
-        assert_eq!(kinds(false), ["section Zeměpis", "A?", "B?", "section Historie", "C?"]);
-        assert_eq!(kinds(true), ["section Zeměpis", "A?", "B?", "end", "section Historie", "C?", "end", "results"]);
-        // A question without a round's name stays in the round before it: no second end of round.
-        let mut unnamed = questions.clone();
-        unnamed.insert(2, question("", "X?", &["a", "b"], 0));
-        let kinds_of = |questions: &[DraftQuestion]| -> Vec<bool> { import_tables(&[draft_table(questions, &[], true)], &[], 1).unwrap().slides.into_iter().map(|(_, slide)| matches!(slide.content, SlideContent::EndOfRound { .. })).collect() };
-        assert_eq!(kinds_of(&unnamed).iter().filter(|end| **end).count(), 2);
-        // Without rounds, a whole quiz still ends with the results.
-        let plain = import_tables(&[draft_table(&questions[..1].iter().map(|q| DraftQuestion { round: String::new(), ..q.clone() }).collect::<Vec<_>>(), &[], true)], &[], 1).unwrap();
-        assert!(matches!(plain.slides.last().unwrap().1.content, SlideContent::Final { .. }));
-    }
-
-    #[test]
-    fn a_round_for_nearly_every_question_is_no_round() {
-        let names = ["Úvodní kolo", "První kolo", "Druhé kolo", "Třetí kolo", "Čtvrté kolo", "Páté kolo", "Šesté kolo", "Sedmé kolo"];
-        let mut questions: Vec<DraftQuestion> = names.iter().map(|name| question(name, "Q?", &["a", "b"], 0)).collect();
-        questions[1].round = "Úvodní kolo".into();
-        let imported = import_tables(&[draft_table(&questions, &[], false)], &[], 1).unwrap();
-        assert!(imported.slides.iter().all(|(_, slide)| matches!(slide.content, SlideContent::Question(_))));
-        // Two rounds of two are rounds.
-        let four: Vec<DraftQuestion> = ["Logo", "Logo", "Text", "Text"].iter().map(|name| question(name, "Q?", &["a", "b"], 0)).collect();
-        assert!(has_rounds(&four));
-    }
-
-    #[test]
     fn streamed_lines_give_the_text_and_its_end() {
         assert_eq!(stream_line(r#"data: {"choices":[{"delta":{"content":"{\"q"},"finish_reason":null}]}"#), StreamLine::Text { text: "{\"q".into(), thought: 0, cut_off: false });
         assert_eq!(stream_line(r#"data: {"choices":[{"delta":{"content":"","reasoning":"Hmm, Praha"},"finish_reason":null}]}"#), StreamLine::Text { text: String::new(), thought: 10, cut_off: false });
@@ -1442,17 +1077,16 @@ mod tests {
         assert_eq!(stream_line(": keep-alive"), StreamLine::Nothing);
         assert_eq!(stream_line(""), StreamLine::Nothing);
         assert_eq!(stream_line(r#"{"choices":[]}"#), StreamLine::NotStreamed);
-        assert_eq!(questions_begun(r#"{"questions":[{"question":"a"},{"question":"#, 0), 2);
+        assert_eq!(quiz_edits::changes_begun(r#"{"changes":[{"action":"add"},{"action":"#, 0), 2);
         // Counted piece by piece, a key cut between two pieces is counted once.
-        let whole = r#"{"questions":[{"question":"a"},{"question":"b"}]}"#;
+        let whole = r#"{"changes":[{"action":"add"},{"action":"edit"}]}"#;
         let (mut counted, mut from) = (0, 0);
-        for end in [20, 33, 37, whole.len()] {
-            counted += questions_begun(&whole[..end], from);
+        for end in [16, 31, 35, whole.len()] {
+            counted += quiz_edits::changes_begun(&whole[..end], from);
             from = end;
         }
         assert_eq!(counted, 2);
         assert_eq!(stream_line(r#"data: {"error":{"message":"model ran out of memory"}}"#), StreamLine::Failed { detail: "model ran out of memory".into() });
-        assert_eq!(read_questions(r#"{"questions":[{"question":"A?","answers":["a","b"]}]}"#, false).unwrap().len(), 1);
     }
 
     #[test]
@@ -1494,10 +1128,10 @@ mod tests {
         let roles: Vec<&str> = messages.iter().map(|m| m["role"].as_str().unwrap()).collect();
         assert_eq!(roles, ["system", "user", "assistant", "user"], "the oldest turn does not fit");
         assert_eq!(messages[2]["content"], "Navrhuji 3 kola po 5 otázkách.");
-        assert_eq!(messages[3]["content"][0]["text"], "Write the questions of the quiz we agreed on above.");
+        assert_eq!(messages[3]["content"][0]["text"], "Make the changes we agreed on above.");
         let chat = chat_request(&model, &QuestionRequest { prompt: "Přidej kolo o mostech".into(), ..asked.clone() }, None, MAX_TEXT_CHARS).unwrap();
         assert!(chat.get("response_format").is_none());
-        assert!(chat["messages"][0]["content"].as_str().unwrap().contains("Propose a concrete outline"));
+        assert!(chat["messages"][0]["content"].as_str().unwrap().contains("Propose concretely what you would change"));
         assert_eq!(request(&model, &QuestionRequest { conversation: vec![], ..asked }, None, MAX_TEXT_CHARS), Err(RequestError::Empty));
     }
 
@@ -1564,7 +1198,7 @@ mod tests {
         let native = for_ollama(&streamed(body), 16_384);
         assert_eq!(native["options"], json!({ "num_ctx": 16_384, "temperature": 0.2 }));
         assert_eq!((native["think"].clone(), native["stream"].clone()), (json!(false), json!(true)));
-        assert_eq!(native["format"], reply_schema());
+        assert_eq!(native["format"], quiz_edits::edits_schema());
         let user = &native["messages"][1];
         assert_eq!(user["images"], json!(["AAAA"]));
         assert!(user["content"].as_str().unwrap().starts_with("Kvíz\n\nAttachment 1: picture"));

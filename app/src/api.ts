@@ -34,7 +34,7 @@ import type {
   LocalModel,
   LocalModelInfo,
   LocalModelProgress,
-  AskedQuestions,
+  AiChanges,
   ChatReply,
   MediaKind,
   MediaLibrary,
@@ -301,14 +301,15 @@ export const api = {
       headers: { [DROPPED_NAME_HEADER]: encodeURIComponent(file.name), [DRAFT_HEADER]: encodeURIComponent(draft) },
     }),
   /**
-   * Asks the chosen model for questions about `asked`, telling `onProgress`
-   * how far it is; returns them as slides for the editor to insert. Fails
-   * with `localModelCancelled` after `editorAskLocalModelCancel`.
+   * Asks the chosen model to change the quiz `asked` holds, telling
+   * `onProgress` how far it is; returns the changes for the editor to make
+   * as one undo step (`editor/ai-changes.ts`). Fails with
+   * `localModelCancelled` after `editorAskLocalModelCancel`.
    */
   editorAskLocalModel: (draft: string, asked: QuestionRequest, onProgress: (progress: LocalModelProgress) => void) => {
     const progress = new Channel<LocalModelProgress>();
     progress.onmessage = onProgress;
-    return invoke<AskedQuestions>("editor_ask_local_model", { draft, asked, progress });
+    return invoke<AiChanges>("editor_ask_local_model", { draft, asked, progress });
   },
   /**
    * The model's next turn of the conversation `asked` holds; `onProgress`

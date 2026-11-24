@@ -1,11 +1,12 @@
 //! The AI panel's request from start to reply (docs/ai-assistants.md):
 //! what is looked up on the internet (`research`), how the model's turn of
-//! the conversation (`chat`) and the questions (`write_questions`) are
+//! the conversation (`chat`) and the changes to the quiz (`write_changes`) are
 //! asked again of a model whose context the request did not fit, and how a
 //! streamed reply is read (`read_stream`).
 //! The network is the caller's: it passes in how to ask the model and how
 //! to fetch a page, so all of this runs in tests without one.
 
+use crate::quiz_edits::AttachedFile;
 use crate::local_model::{self, AttachmentContent, LocalModel, QuestionRequest, RequestError, StreamLine};
 use crate::web_page::{self, Page, SearchResult, Source, Url};
 use quiz_core::MediaKind;
@@ -17,7 +18,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use ts_rs::TS;
 
 /// Most characters of a model's reply, reasoning included: far more than
-/// `MAX_QUESTIONS` questions take, so a model that keeps writing is stopped.
+/// `quiz_edits::MAX_CHANGES` changes take, so a model that keeps writing is stopped.
 pub const MAX_REPLY_CHARS: usize = 400_000;
 /// How many more characters the model writes before the panel is told again.
 const TELL_EVERY: usize = 200;
@@ -35,8 +36,8 @@ pub enum LocalModelProgress {
     Reading { url: String },
     /// The model reasons before it answers (a reasoning model): characters so far.
     Thinking { characters: usize },
-    /// The model writes the questions: characters so far, questions begun.
-    Writing { characters: usize, questions: usize },
+    /// The model writes the changes: characters so far, changes begun.
+    Writing { characters: usize, changes: usize },
     /// More of the model's turn of the conversation (`Reading::words`).
     Said { text: String },
 }
@@ -53,8 +54,8 @@ pub struct Reading {
 }
 
 impl Reading {
-    /// The questions: a reasoning model may reason as long as it needs.
-    pub const QUESTIONS: Reading = Reading { max_thought: MAX_REPLY_CHARS, words: false, max_reply: MAX_REPLY_CHARS };
+    /// The changes: a reasoning model may reason as long as it needs.
+    pub const CHANGES: Reading = Reading { max_thought: MAX_REPLY_CHARS, words: false, max_reply: MAX_REPLY_CHARS };
     /// The model's turn of the conversation, shown as it is written.
     pub const CHAT: Reading = Reading { max_thought: MAX_REPLY_CHARS, words: true, max_reply: CHAT_REPLY_CHARS };
     /// The research plan: a few search queries, which need no long
@@ -87,7 +88,7 @@ pub enum Halt {
     /// The server stopped the reply with an error (`StreamLine::Failed`).
     Failed { detail: String },
     /// A reply that is not a chat completion.
-    NotQuestions,
+    NotACompletion,
 }
 
 /// What was found on the internet for a request (`research`).
@@ -212,7 +213,7 @@ pub fn research<E: From<Halt> + PartialEq>(
     Ok(found)
 }
 
-/// Asks `model` for the questions `asked` for, with what was `found` on the
+/// Asks `model` for the changes `asked` for, with what was `found` on the
 /// internet, through `ask`. Asked once more, with the texts shortened
 /// (`local_model::SMALL_TEXT_CHARS`) and the model asked not to reason
 /// first (`local_model::thinking_off`), when the request does not fit
@@ -221,7 +222,7 @@ pub fn research<E: From<Halt> + PartialEq>(
 /// a model in Ollama has 4096 tokens unless the quizmaster gives it more,
 /// for the request, the model's reasoning and its reply together. If that
 /// fails too, its failure is given back.
-pub fn write_questions<E: From<RequestError>>(
+pub fn write_changes<E: From<RequestError>>(
     model: &LocalModel,
     asked: &QuestionRequest,
     found: &Research,
@@ -232,8 +233,8 @@ pub fn write_questions<E: From<RequestError>>(
 }
 
 /// Asks `model` for its next turn of the conversation `asked` holds, with
-/// what was `found` on the internet for it, as `write_questions` asks for
-/// the questions.
+/// what was `found` on the internet for it, as `write_changes` asks for
+/// the changes.
 pub fn chat<E: From<RequestError>>(
     model: &LocalModel,
     asked: &QuestionRequest,
@@ -247,7 +248,7 @@ pub fn chat<E: From<RequestError>>(
 
 /// Asks the request `build` makes with `MAX_TEXT_CHARS` of text, and once
 /// more with `SMALL_TEXT_CHARS` and reasoning off when it does not fit
-/// (`write_questions`).
+/// (`write_changes`).
 fn ask_fitting<E: From<RequestError>>(
     build: impl Fn(usize) -> Result<Value, RequestError>,
     mut ask: impl FnMut(Value) -> Result<(String, bool), E>,
@@ -311,9 +312,9 @@ pub fn read_stream<E: From<Halt>>(mut reader: impl BufRead, cancelled: &AtomicBo
                 }
                 cut_off |= at_limit;
                 now.0 += text.chars().count();
-                now.1 += local_model::questions_begun(&content, had);
+                now.1 += crate::quiz_edits::changes_begun(&content, had);
                 if now.1 != told.1 || now.0 >= told.0 + TELL_EVERY {
-                    progress(LocalModelProgress::Writing { characters: now.0, questions: now.1 });
+                    progress(LocalModelProgress::Writing { characters: now.0, changes: now.1 });
                     told = now;
                 }
                 if now.0 > reading.max_reply || now.0 + thought > MAX_REPLY_CHARS {
@@ -327,7 +328,7 @@ pub fn read_stream<E: From<Halt>>(mut reader: impl BufRead, cancelled: &AtomicBo
             StreamLine::NotStreamed => {
                 let mut whole = line.clone();
                 reader.read_to_string(&mut whole).map_err(&read_failed)?;
-                let not_questions = || E::from(Halt::NotQuestions);
+                let not_questions = || E::from(Halt::NotACompletion);
                 let reply: Value = serde_json::from_str(&whole).map_err(|_| not_questions())?;
                 let choice = reply.pointer("/choices/0").ok_or_else(not_questions)?;
                 let text = choice.pointer("/message/content").and_then(Value::as_str).ok_or_else(not_questions)?;
@@ -347,17 +348,23 @@ pub fn read_stream<E: From<Halt>>(mut reader: impl BufRead, cancelled: &AtomicBo
     Ok((content, cut_off))
 }
 
-/// The picture or video each of the `attachments` shows on its questions'
-/// slides: its reference in the draft as `found` there, and whether it is
-/// a video. A slide shows a file as what it is, whatever the attachment
-/// says; a text, a recording or a file not in the draft shows none.
-pub fn slide_media(attachments: &[local_model::Attachment], found: Vec<Option<String>>) -> Vec<Option<(String, bool)>> {
+/// The file each of the `attachments` is on a slide that uses it
+/// (`quiz_edits::AttachedFile`): its reference in the draft as `found`
+/// there, and whether it is a picture, a video or a sound. A slide uses a
+/// file as what it is, whatever the attachment says; a text or a file not
+/// in the draft is none.
+pub fn slide_media(attachments: &[local_model::Attachment], found: Vec<Option<String>>) -> Vec<Option<AttachedFile>> {
     attachments
         .iter()
         .zip(found)
-        .map(|(attachment, found)| match (&attachment.content, found.as_deref().and_then(MediaKind::of)) {
-            (AttachmentContent::Picture { .. } | AttachmentContent::Video { .. }, Some(kind @ (MediaKind::Image | MediaKind::Video))) => found.map(|reference| (reference, kind == MediaKind::Video)),
-            _ => None,
+        .map(|(attachment, found)| {
+            let kind = found.as_deref().and_then(MediaKind::of)?;
+            let usable = match &attachment.content {
+                AttachmentContent::Picture { .. } | AttachmentContent::Video { .. } => matches!(kind, MediaKind::Image | MediaKind::Video),
+                AttachmentContent::Recording { .. } => matches!(kind, MediaKind::Audio | MediaKind::Video),
+                AttachmentContent::Text { .. } => false,
+            };
+            usable.then_some(AttachedFile { reference: found?, kind })
         })
         .collect()
 }
@@ -394,7 +401,7 @@ mod tests {
     }
 
     fn asked(prompt: &str, internet: bool) -> QuestionRequest {
-        QuestionRequest { prompt: prompt.into(), attachments: vec![], language: QuizLanguage::Cs, whole_quiz: false, internet, ..Default::default() }
+        QuestionRequest { prompt: prompt.into(), attachments: vec![], language: QuizLanguage::Cs, internet, ..Default::default() }
     }
 
     /// A model's reply: its text and whether it stopped at its limit.
@@ -407,7 +414,7 @@ mod tests {
 
     fn read(stream: &str) -> (Result<(String, bool), Failure>, Vec<LocalModelProgress>) {
         let steps = RefCell::new(Vec::new());
-        let read = read_stream(std::io::Cursor::new(stream.to_string()), &AtomicBool::new(false), Reading::QUESTIONS, |step| steps.borrow_mut().push(step), |_| Failure::Refused);
+        let read = read_stream(std::io::Cursor::new(stream.to_string()), &AtomicBool::new(false), Reading::CHANGES, |step| steps.borrow_mut().push(step), |_| Failure::Refused);
         (read, steps.into_inner())
     }
 
@@ -493,12 +500,12 @@ mod tests {
             }
         };
         let full = |e: &Failure| matches!(e, Failure::ContextFull | Failure::Halt(Halt::ThoughtTooLong));
-        assert!(write_questions(&model(), &asked, &Research::default(), ask(vec![Err(Failure::ContextFull), Ok(("{}".into(), false))]), full).is_ok());
+        assert!(write_changes(&model(), &asked, &Research::default(), ask(vec![Err(Failure::ContextFull), Ok(("{}".into(), false))]), full).is_ok());
         let sizes = sent.take();
         assert!(sizes[0] > local_model::MAX_TEXT_CHARS && sizes[1] < local_model::MAX_TEXT_CHARS, "{sizes:?}");
-        assert_eq!(write_questions(&model(), &asked, &Research::default(), ask(vec![Err(Failure::ContextFull), Err(Failure::ContextFull)]), full), Err(Failure::ContextFull));
+        assert_eq!(write_changes(&model(), &asked, &Research::default(), ask(vec![Err(Failure::ContextFull), Err(Failure::ContextFull)]), full), Err(Failure::ContextFull));
         assert_eq!(sent.take().len(), 2, "asked twice, not more");
-        assert_eq!(write_questions(&model(), &asked, &Research::default(), ask(vec![Err(Failure::Refused)]), full), Err(Failure::Refused));
+        assert_eq!(write_changes(&model(), &asked, &Research::default(), ask(vec![Err(Failure::Refused)]), full), Err(Failure::Refused));
     }
 
     #[test]
@@ -517,16 +524,16 @@ mod tests {
         let full = |e: &Failure| matches!(e, Failure::ContextFull | Failure::Halt(Halt::ThoughtTooLong));
         let cut = || Ok(("{\"questions\": [".to_string(), true));
         let whole = || Ok(("{}".to_string(), false));
-        assert_eq!(write_questions(&model(), &long, &Research::default(), ask(vec![cut(), whole()]), full), whole());
+        assert_eq!(write_changes(&model(), &long, &Research::default(), ask(vec![cut(), whole()]), full), whole());
         let bodies = sent.take();
         assert!(bodies[1].to_string().len() < bodies[0].to_string().len());
         assert_eq!((bodies[0].get("reasoning_effort"), &bodies[1]["reasoning_effort"]), (None, &serde_json::json!("none")));
         // A short request cut off is not shortened: it is what the model wrote.
-        assert_eq!(write_questions(&model(), &asked("Kvíz", false), &Research::default(), ask(vec![cut()]), full), cut());
+        assert_eq!(write_changes(&model(), &asked("Kvíz", false), &Research::default(), ask(vec![cut()]), full), cut());
         assert_eq!(sent.take().len(), 1);
         // A model that reasons to its limit is asked once more not to.
         let thought = || Err(Failure::Halt(Halt::ThoughtTooLong));
-        assert_eq!(write_questions(&model(), &asked("Kvíz", false), &Research::default(), ask(vec![thought(), whole()]), full), whole());
+        assert_eq!(write_changes(&model(), &asked("Kvíz", false), &Research::default(), ask(vec![thought(), whole()]), full), whole());
         assert_eq!(sent.take()[1]["reasoning_effort"], "none");
     }
 
@@ -537,10 +544,10 @@ mod tests {
 
     #[test]
     fn a_streamed_reply_is_put_together_and_its_progress_told() {
-        let stream = format!("{}{}data: [DONE]\n\n", chunk(serde_json::json!({ "content": "{\"questions\":[{\"question\"" }), None), chunk(serde_json::json!({ "content": ":\"Kde?\"}]}" }), Some("stop")));
+        let stream = format!("{}{}data: [DONE]\n\n", chunk(serde_json::json!({ "content": "{\"changes\":[{\"action\"" }), None), chunk(serde_json::json!({ "content": ":\"add\"}]}" }), Some("stop")));
         let (reply, steps) = read(&stream);
-        assert_eq!(reply, Ok(("{\"questions\":[{\"question\":\"Kde?\"}]}".to_string(), false)));
-        assert!(steps.contains(&LocalModelProgress::Writing { characters: 25, questions: 1 }), "{steps:?}");
+        assert_eq!(reply, Ok(("{\"changes\":[{\"action\":\"add\"}]}".to_string(), false)));
+        assert!(steps.contains(&LocalModelProgress::Writing { characters: 21, changes: 1 }), "{steps:?}");
     }
 
     #[test]
@@ -560,7 +567,7 @@ mod tests {
         assert_eq!(failed, Err(Failure::Halt(Halt::Failed { detail: "out of memory".into() })));
         let whole = serde_json::json!({ "choices": [{ "message": { "content": "[]" }, "finish_reason": "length" }] }).to_string();
         assert_eq!(read(&whole).0, Ok(("[]".to_string(), true)));
-        assert_eq!(read("not json at all").0, Err(Failure::Halt(Halt::NotQuestions)));
+        assert_eq!(read("not json at all").0, Err(Failure::Halt(Halt::NotACompletion)));
         let endless = chunk(serde_json::json!({ "content": "x".repeat(MAX_REPLY_CHARS / 4) }), None).repeat(5);
         let (stopped, _) = read(&endless);
         assert!(matches!(stopped, Ok((_, true))));
@@ -576,7 +583,11 @@ mod tests {
             attachment(AttachmentContent::Recording { words: String::new() }),
         ];
         let found = vec![Some("media/a.mp4".into()), Some("media/b.jpg".into()), None, Some("media/c.mp3".into())];
-        assert_eq!(slide_media(&attachments, found), [Some(("media/a.mp4".into(), true)), Some(("media/b.jpg".into(), false)), None, None]);
+        let file = |reference: &str, kind| Some(AttachedFile { reference: reference.into(), kind });
+        assert_eq!(slide_media(&attachments, found), [file("media/a.mp4", MediaKind::Video), file("media/b.jpg", MediaKind::Image), None, file("media/c.mp3", MediaKind::Audio)]);
+        // A text is on no slide, and a picture is not a sound.
+        let text = [attachment(AttachmentContent::Text { text: String::new() }), attachment(AttachmentContent::Recording { words: String::new() })];
+        assert_eq!(slide_media(&text, vec![Some("media/a.txt".into()), Some("media/b.png".into())]), [None, None]);
     }
 
     #[test]
@@ -640,6 +651,6 @@ mod tests {
         let read = |reading| read_stream(std::io::Cursor::new(thought.clone()), &AtomicBool::new(false), reading, |_| {}, |_| Failure::Refused);
         assert_eq!(read(Reading::PLAN), Err(Failure::Halt(Halt::ThoughtTooLong)));
         // Questions may be reasoned over as long as a model needs: it ends without an answer, and no limit is said.
-        assert_eq!(read(Reading::QUESTIONS), Ok((String::new(), false)));
+        assert_eq!(read(Reading::CHANGES), Ok((String::new(), false)));
     }
 }

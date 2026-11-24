@@ -224,17 +224,18 @@ pub enum AppError {
     LocalModelTooManyFiles { max: usize },
     #[error("more than {max} pictures for the model")]
     LocalModelTooManyPictures { max: usize },
-    /// The model wrote something else than the questions asked for.
-    #[error("the model's answer is not questions")]
-    LocalModelNotQuestions,
+    /// The model wrote something else than the changes asked for.
+    #[error("the model's answer is not changes to the quiz")]
+    LocalModelNotChanges,
     /// The model's turn of the conversation was empty.
     #[error("the model said nothing")]
     LocalModelSaidNothing,
-    /// The model stopped at its length limit before the questions ended.
+    /// The model stopped at its length limit before the changes ended.
     #[error("the model's answer was cut off")]
     LocalModelCutOff,
-    #[error("the model wrote no questions")]
-    LocalModelNoQuestions,
+    /// The model made no change the quiz can take.
+    #[error("the model made no changes")]
+    LocalModelNoChanges,
     /// The folder chosen for an assistant holds or is inside the app's own data (shows, drafts, settings).
     #[error("{path} holds or is inside Buzzdome's own data")]
     AiFolderNotAllowed { path: String },

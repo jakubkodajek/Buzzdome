@@ -18,6 +18,7 @@
 pub mod asking;
 pub mod assistants;
 pub mod local_model;
+pub mod quiz_edits;
 pub mod web_page;
 pub mod mcp;
 pub mod roots;
