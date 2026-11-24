@@ -262,4 +262,12 @@ Template:
   MCP adds `QUIZ_RULES`, and Studio's AI assistant follows them too. Guard
   nits BF224 (edited slide takes the category's background, as the
   editor) and BF225 fixed.
-- Next: Fable review, guard round, then merge and a new version (Jakub OK'd).
+- Review fixes (Fable CR-1..CR-9, guard BF226/BF227): each address is
+  probed within 2.5 s in all; the chosen server under another spelling
+  of localhost is probed once; auto-use only in the AI panel; the
+  instructions say how they apply (quiz language wins, the chat still
+  talks first, the app saves); runs of 3+ angle brackets are cut in web
+  text; the research plan reads the model's replies until something was
+  read from the web. Version 1.5.0 (Jakub OK'd merge and release).
+- Next: Jakub pushes tag `v1.5.0`. Open: CR-2 (how long Windows takes to
+  refuse a closed loopback port) needs a measurement on the event laptop.

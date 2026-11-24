@@ -94,8 +94,6 @@ impl AiSettings {
     }
 }
 
-/// The instructions assistants follow until the quizmaster writes their own:
-/// enough for a whole quiz from a topic alone.
 /// How the quizmaster's instructions name slides and questions (the app's
 /// own words, as the editor shows them), in the quiz format's terms: told
 /// to a model with the instructions, so they can be written in plain words.
@@ -104,6 +102,8 @@ pub const SLIDE_WORDS: &str = "The quizmaster's instructions name slides as the 
      (Vysvětlení odpovědi) is explanation; a question everyone answers (otázka, na kterou odpovídají všichni) has mode \
      everyone; a fastest-finger question (otázka s rychlou odpovědí) has mode fastestFinger.";
 
+/// The instructions assistants follow until the quizmaster writes their own:
+/// enough for a whole quiz from a topic alone.
 pub fn default_instructions(language: Language) -> &'static str {
     match language {
         Language::Cs => include_str!("instructions/cs.md"),
