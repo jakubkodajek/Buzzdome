@@ -1059,7 +1059,7 @@
   place-items: center;
   border: 2px dashed var(--accent);
   border-radius: 8px;
-  background: rgb(227 238 251 / 92%);
+  background: color-mix(in srgb, var(--accent-soft) 92%, transparent);
   color: var(--accent);
   font-weight: 600;
   pointer-events: none;

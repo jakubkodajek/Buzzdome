@@ -220,3 +220,23 @@ Template:
   and on the event laptop (memory for 16k context).
 - Blockers / open questions: pictures are sent with every turn and not
   dropped on the shorter retry; no UI test of the panel's run/cancel flow.
+
+## 2026-11-24 - ai-quiz-changes (release 1.4.0)
+
+- Done: the AI panel and the MCP server change anything the editor can
+  (Jakub: "uplne vsechno jako v editoru", also fonts and looks). The
+  model sees the whole quiz (`quiz_edits::quiz_view`) and replies with
+  changes (add, edit as a JSON merge patch, delete, move, quiz fields);
+  `quiz_edits::resolve` checks them with the quiz model and the editor
+  applies them as one undo step (`editor/ai-changes.ts`). MCP gained
+  `change_quiz` (same changes) and `list_fonts`. A test checks the guide
+  names every field of the quiz format. Review findings CR-1..CR-11
+  fixed (edits build on each other, insert order, deleted anchors, view
+  budget, correct answers by text, stale snapshot kept as the
+  quizmaster's, media and category checks).
+- State: make check green before the fix commit; layout check clean (editor).
+- Next: Jakub pushes tag `v1.4.0`; try "change" requests (time, theme,
+  fonts, move a round) with a real model on his Mac.
+- Blockers / open questions: MCP cannot measure loudness (gainDb is set
+  blind), transcribe recordings, or render a slide; it works on quiz
+  folders, not on the draft open in Studio.

@@ -12,7 +12,7 @@
 use quiz_core::{AnswerMode, Category, Quiz, QuizLanguage, QuizSettings, QuizSounds, Slide, SlideStyle, Welcome, MAX_ANSWERS};
 use serde::Serialize;
 use serde_json::{json, Map, Value};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use ts_rs::TS;
 
 /// Most changes one reply makes.
@@ -152,7 +152,16 @@ pub fn quiz_view(quiz: &Quiz, selected: Option<usize>, themes: &[(String, String
         fields.remove("slides");
         fields.remove("schemaVersion");
     }
-    let head = format!("The quiz now: {own}");
+    let mut head = format!("The quiz now: {own}");
+    // The quiz's own fields take at most a third: categories then by their id and name, and the rest cut.
+    let most = max_chars / 3;
+    if head.len() > most {
+        own["categories"] = json!(quiz.categories.iter().map(|c| json!({ "id": c.id, "name": c.name })).collect::<Vec<_>>());
+        head = format!("The quiz now: {own}");
+    }
+    if head.len() > most {
+        head = format!("{}… (shortened)", head.chars().take(most).collect::<String>());
+    }
     let mut left = max_chars.saturating_sub(head.len());
     // Nearest the selected slide first (the start when none is), so what the quizmaster works on is seen best.
     let centre = selected.filter(|index| *index < quiz.slides.len()).unwrap_or(0);
@@ -365,12 +374,15 @@ pub fn changes_begun(content: &str, from: usize) -> usize {
 }
 
 /// A change to the quiz, as the editor applies it (`history.ts`), by the
-/// slides' ids as they were when the model was asked.
+/// slides' ids. The changes are made in order, each on the quiz the ones
+/// before it left (`apply`).
 #[derive(Debug, Clone, PartialEq, Serialize, TS)]
 #[ts(export)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum QuizChange {
-    /// New slides, without ids yet, after the slide `after` (none: at the start).
+    /// New slides after the slide `after` (none: at the start). Their ids
+    /// are this reply's own (`NEW_ID_PREFIX`), which a later change may
+    /// name as its `after`; the quiz gives them ids of its own.
     #[serde(rename_all = "camelCase")]
     InsertSlides { after: Option<String>, slides: Vec<Slide> },
     /// The slide with this id, changed.
@@ -397,6 +409,10 @@ pub enum QuizChange {
     SetCategories { categories: Vec<Category> },
 }
 
+/// What the ids of slides added by a reply start with, before the quiz
+/// gives them its own.
+pub const NEW_ID_PREFIX: &str = "ai-new-";
+
 /// The changes the editor applies, and how many of the model's it left out.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Resolved {
@@ -415,86 +431,104 @@ pub struct AttachedFile {
 /// What `edits` change in `quiz`, as `QuizChange`s by the slides' ids:
 /// slides numbered as `quiz_view` showed them, attachments (`attachment:N`
 /// in a file field) as `attachments` has them in the draft, a theme only
-/// one of `themes`. A slide or value the quiz model cannot read, or a
-/// change of a slide that is not there, is left out. Added slides go after
-/// the selected slide when the model says nowhere. `seed` shuffles the
-/// answers of a question written with `right` and `wrong`.
+/// one of `themes`. The changes are made one by one on a copy of the quiz,
+/// so each is said against the quiz as the ones before it left it: a
+/// second edit of a slide builds on the first, slides added at one place
+/// follow each other in the order written, and a place after a slide
+/// deleted is after the slide that was before it. A slide or value the
+/// quiz model cannot read, a change of a slide that is not there, and a
+/// change that changes nothing are left out. Added slides go after the
+/// selected slide when the model says nowhere. `seed` shuffles the answers
+/// of a question written with `right` and `wrong`.
 pub fn resolve(quiz: &Quiz, edits: &ModelEdits, attachments: &[Option<AttachedFile>], selected: Option<usize>, themes: &[String], seed: u64) -> Resolved {
     let mut resolved = Resolved::default();
     let mut shuffle = Shuffler(seed | 1);
     let id_of = |number: usize| number.checked_sub(1).and_then(|i| quiz.slides.get(i)).map(|slide| slide.id.clone());
-    // After slide `number`: 0 is the start, past the end is the end.
-    let after = |number: usize| if number == 0 { None } else { id_of(number.min(quiz.slides.len())) };
-    let mut gone: HashSet<String> = HashSet::new();
-    // The quiz as the changes so far leave it: a second edit of a slide or
-    // of the settings builds on the first.
     let mut working = quiz.clone();
-    for change in &edits.changes {
-        let changes = &mut resolved.changes;
-        let done = match change.action {
-            Some(Action::Add) => {
-                let slides: Vec<Slide> = change.slides.iter().filter_map(|written| new_slide(written, attachments, &mut shuffle)).collect();
-                let place = change.after.or(change.slide).unwrap_or_else(|| selected.map_or(quiz.slides.len(), |index| index + 1));
-                let anchor = after(place);
-                // Slides added where earlier ones were go after them, in the order the model wrote them.
-                let earlier = changes.iter_mut().find_map(|done| match done {
-                    QuizChange::InsertSlides { after, slides } if *after == anchor => Some(slides),
-                    _ => None,
-                });
-                match (slides.is_empty(), earlier) {
-                    (true, _) => false,
-                    (false, Some(earlier)) => {
-                        earlier.extend(slides);
-                        true
-                    }
-                    (false, None) => {
-                        changes.push(QuizChange::InsertSlides { after: anchor, slides });
-                        true
-                    }
-                }
+    let mut ids = Ids::kept();
+    // A slide deleted: the slide that was before it then (none: the start).
+    let mut deleted: HashMap<String, Option<String>> = HashMap::new();
+    // The last slide added at a place, so the next one added there follows it.
+    let mut last_added: HashMap<Option<String>, String> = HashMap::new();
+    let mut added = 0;
+    // The categories change first, so a slide added in the same reply takes on its new category's look.
+    let sets_categories = |change: &&ModelChange| change.action == Some(Action::Quiz) && change.set.contains_key("categories");
+    let ordered = edits.changes.iter().filter(sets_categories).chain(edits.changes.iter().filter(|change| !sets_categories(change)));
+    for change in ordered {
+        // After slide `number`: 0 is the start, past the end is the end; after a slide deleted, after the one before it.
+        let place = |number: usize| -> Option<String> {
+            let mut at = if number == 0 { None } else { id_of(number.min(quiz.slides.len())) };
+            while let Some(before) = at.as_ref().and_then(|id| deleted.get(id)) {
+                at = before.clone();
             }
-            Some(Action::Edit) => {
-                let index = change.slide.and_then(id_of).filter(|id| !gone.contains(id)).and_then(|id| working.slides.iter().position(|slide| slide.id == id));
-                match index.and_then(|i| edited_slide(&working.slides[i], &change.set, attachments, &mut shuffle).map(|edited| (i, edited))) {
-                    Some((i, edited)) if edited != working.slides[i] => {
-                        working.slides[i] = edited.clone();
-                        let replaced = QuizChange::ReplaceSlide { slide: Box::new(edited) };
-                        // One change for each slide, however often it is edited.
-                        match changes.iter_mut().find(|done| matches!(done, QuizChange::ReplaceSlide { slide } if slide.id == working.slides[i].id)) {
-                            Some(earlier) => *earlier = replaced,
-                            None => changes.push(replaced),
-                        }
-                        true
-                    }
-                    _ => false,
-                }
-            }
-            Some(Action::Delete) => match change.slide.and_then(id_of).filter(|id| gone.insert(id.clone())) {
-                Some(id) => {
-                    changes.push(QuizChange::RemoveSlide { id });
-                    true
-                }
-                None => false,
-            },
-            Some(Action::Move) => match (change.slide.and_then(id_of).filter(|id| !gone.contains(id)), change.after) {
-                (Some(id), Some(to)) if after(to).as_ref() != Some(&id) => {
-                    changes.push(QuizChange::MoveSlide { id, after: after(to) });
-                    true
-                }
-                _ => false,
-            },
-            Some(Action::Quiz) => quiz_changes(&mut working, &change.set, themes, changes),
-            None => false,
+            at
         };
+        let is_there = |id: &String| working.slides.iter().any(|slide| slide.id == *id);
+        let made: Vec<QuizChange> = match change.action {
+            Some(Action::Add) => {
+                let slides: Vec<Slide> = change
+                    .slides
+                    .iter()
+                    .filter_map(|written| new_slide(written, attachments, &mut shuffle))
+                    .map(|mut slide| {
+                        added += 1;
+                        slide.id = (added..).map(|k| format!("{NEW_ID_PREFIX}{k}")).find(|id| !quiz.slides.iter().any(|s| s.id == *id)).expect("an id is free");
+                        added = slide.id[NEW_ID_PREFIX.len()..].parse().unwrap_or(added);
+                        slide
+                    })
+                    .collect();
+                let key = place(change.after.or(change.slide).unwrap_or_else(|| selected.map_or(quiz.slides.len(), |index| index + 1)));
+                let after = last_added.get(&key).filter(|id| is_there(id)).cloned().or_else(|| key.clone());
+                if let Some(last) = slides.last() {
+                    last_added.insert(key, last.id.clone());
+                }
+                if slides.is_empty() { Vec::new() } else { vec![QuizChange::InsertSlides { after, slides }] }
+            }
+            Some(Action::Edit) => change
+                .slide
+                .and_then(id_of)
+                .and_then(|id| working.slides.iter().find(|slide| slide.id == id))
+                .and_then(|slide| edited_slide(slide, &change.set, attachments, &mut shuffle))
+                .map(|edited| vec![QuizChange::ReplaceSlide { slide: Box::new(edited) }])
+                .unwrap_or_default(),
+            Some(Action::Delete) => match change.slide.and_then(id_of).filter(is_there) {
+                Some(id) => {
+                    let at = working.slides.iter().position(|slide| slide.id == id).expect("it is there");
+                    deleted.insert(id.clone(), at.checked_sub(1).map(|i| working.slides[i].id.clone()));
+                    vec![QuizChange::RemoveSlide { id }]
+                }
+                None => Vec::new(),
+            },
+            Some(Action::Move) => match (change.slide.and_then(id_of).filter(is_there), change.after) {
+                (Some(id), Some(to)) if place(to).as_ref() != Some(&id) => vec![QuizChange::MoveSlide { id, after: place(to) }],
+                _ => Vec::new(),
+            },
+            Some(Action::Quiz) => quiz_changes(&working, &change.set, themes),
+            None => Vec::new(),
+        };
+        let mut done = false;
+        for one in made {
+            let before = working.clone();
+            apply_one(&mut working, &one, &mut ids);
+            if working == before {
+                continue;
+            }
+            done = true;
+            // One change for each slide and each of the quiz's fields, however often the model changes it.
+            let same = |earlier: &QuizChange| match (earlier, &one) {
+                (QuizChange::ReplaceSlide { slide: a }, QuizChange::ReplaceSlide { slide: b }) => a.id == b.id,
+                (QuizChange::InsertSlides { .. } | QuizChange::RemoveSlide { .. } | QuizChange::MoveSlide { .. } | QuizChange::ReplaceSlide { .. }, _) => false,
+                (earlier, one) => std::mem::discriminant(earlier) == std::mem::discriminant(one),
+            };
+            match resolved.changes.iter_mut().find(|earlier| same(earlier)) {
+                Some(earlier) => *earlier = one,
+                None => resolved.changes.push(one),
+            }
+        }
         if !done {
             resolved.left_out += 1;
         }
     }
-    // A place after a slide deleted is after the nearest slide before it that stays.
-    let stays = |id: &str| -> Option<String> {
-        let at = quiz.slides.iter().position(|slide| slide.id == id)?;
-        quiz.slides[..at].iter().rev().find(|slide| !gone.contains(&slide.id)).map(|slide| slide.id.clone())
-    };
     // A slide keeps only a category the quiz has once the changes are made.
     let categories: HashSet<&str> = working.categories.iter().map(|category| category.id.as_str()).collect();
     let known = |slide: &mut Slide| {
@@ -504,13 +538,7 @@ pub fn resolve(quiz: &Quiz, edits: &ModelEdits, attachments: &[Option<AttachedFi
     };
     for change in &mut resolved.changes {
         match change {
-            QuizChange::InsertSlides { after, slides } => {
-                if after.as_ref().is_some_and(|id| gone.contains(id)) {
-                    *after = after.as_deref().and_then(stays);
-                }
-                slides.iter_mut().for_each(known);
-            }
-            QuizChange::MoveSlide { after, .. } if after.as_ref().is_some_and(|id| gone.contains(id)) => *after = after.as_deref().and_then(stays),
+            QuizChange::InsertSlides { slides, .. } => slides.iter_mut().for_each(known),
             QuizChange::ReplaceSlide { slide } => known(slide),
             _ => {}
         }
@@ -518,98 +546,140 @@ pub fn resolve(quiz: &Quiz, edits: &ModelEdits, attachments: &[Option<AttachedFi
     resolved
 }
 
-/// `quiz` with `changes` made, as the editor makes them (`history.ts`),
-/// for an assistant that changes a quiz folder (`mcp.rs` `change_quiz`).
-/// Added slides get ids no slide has; a change of a slide that is not
-/// there does nothing.
+/// The ids of slides added by a reply as a quiz has them.
+struct Ids {
+    /// Whether added slides get new ids (`apply`), or keep the reply's (`resolve`).
+    fresh: bool,
+    renamed: HashMap<String, String>,
+    next: usize,
+}
+
+impl Ids {
+    fn kept() -> Ids {
+        Ids { fresh: false, renamed: HashMap::new(), next: 1 }
+    }
+
+    fn fresh() -> Ids {
+        Ids { fresh: true, renamed: HashMap::new(), next: 1 }
+    }
+
+    /// The id an added slide gets in `quiz`.
+    fn add(&mut self, quiz: &Quiz, id: &str) -> String {
+        if !self.fresh {
+            return id.to_string();
+        }
+        let taken = |candidate: &str| quiz.slides.iter().any(|slide| slide.id == candidate);
+        let fresh = (self.next..).map(|n| format!("slide-{n}")).find(|candidate| !taken(candidate)).expect("an id is free");
+        self.next = fresh["slide-".len()..].parse::<usize>().map_or(self.next, |n| n + 1);
+        self.renamed.insert(id.to_string(), fresh.clone());
+        fresh
+    }
+
+    /// The id the slide `id` has in the quiz.
+    fn of(&self, id: &str) -> String {
+        self.renamed.get(id).cloned().unwrap_or_else(|| id.to_string())
+    }
+}
+
+/// `quiz` with `changes` made one by one, as the editor makes them
+/// (`ai-changes.ts`), for an assistant that changes a quiz folder (`mcp.rs`
+/// `change_quiz`). Added slides get ids no slide has; a change of a slide
+/// that is not there does nothing.
 pub fn apply(quiz: &Quiz, changes: &[QuizChange]) -> Quiz {
     let mut quiz = quiz.clone();
-    let mut used: HashSet<String> = quiz.slides.iter().map(|slide| slide.id.clone()).collect();
-    let mut next = used.len() + 1;
-    let place = |slides: &[Slide], after: &Option<String>| after.as_ref().map_or(Some(0), |id| slides.iter().position(|s| s.id == *id).map(|i| i + 1));
-    // The categories change first, as in the editor (`ai-changes.ts`), so a slide added finds its new category.
-    let categories_first = changes.iter().filter(|c| matches!(c, QuizChange::SetCategories { .. })).chain(changes.iter().filter(|c| !matches!(c, QuizChange::SetCategories { .. })));
-    for change in categories_first {
-        match change {
-            QuizChange::InsertSlides { after, slides } => {
-                let at = place(&quiz.slides, after).unwrap_or(quiz.slides.len());
-                let fresh: Vec<Slide> = slides
-                    .iter()
-                    .map(|slide| {
-                        let mut slide = slide.clone();
-                        while used.contains(&format!("slide-{next}")) {
-                            next += 1;
-                        }
-                        slide.id = format!("slide-{next}");
-                        used.insert(slide.id.clone());
-                        slide
-                    })
-                    .collect();
-                // A new slide takes on the look of the category it names; a background of its own stays.
-                let fresh: Vec<Slide> = fresh
-                    .into_iter()
-                    .map(|slide| match quiz.categories.iter().find(|c| Some(&c.id) == slide.category.as_ref()) {
-                        Some(category) => {
-                            let background = slide.background.clone();
-                            let mut formatted = format_like(slide, category);
-                            formatted.background = background.or(formatted.background);
-                            formatted
-                        }
-                        None => slide,
-                    })
-                    .collect();
-                quiz.slides.splice(at..at, fresh);
+    let mut ids = Ids::fresh();
+    for change in changes {
+        apply_one(&mut quiz, change, &mut ids);
+    }
+    quiz
+}
+
+/// `change` made in `quiz`.
+fn apply_one(quiz: &mut Quiz, change: &QuizChange, ids: &mut Ids) {
+    let place = |slides: &[Slide], after: &Option<String>, ids: &Ids| match after {
+        None => Some(0),
+        Some(id) => {
+            let id = ids.of(id);
+            slides.iter().position(|slide| slide.id == id).map(|i| i + 1)
+        }
+    };
+    match change {
+        QuizChange::InsertSlides { after, slides } => {
+            let at = place(&quiz.slides, after, ids).unwrap_or(quiz.slides.len());
+            for (offset, slide) in slides.iter().enumerate() {
+                let mut slide = format_imported(slide.clone(), &quiz.categories);
+                slide.id = ids.add(quiz, &slide.id);
+                quiz.slides.insert(at + offset, slide);
             }
-            QuizChange::ReplaceSlide { slide } => {
-                if let Some(had) = quiz.slides.iter_mut().find(|had| had.id == slide.id) {
-                    // A slide that takes on another category takes on its look, as in the editor.
-                    let category = quiz.categories.iter().find(|c| Some(&c.id) == slide.category.as_ref()).filter(|_| had.category != slide.category);
-                    *had = match category {
-                        Some(category) => format_like(Slide::clone(slide), category),
-                        None => Slide::clone(slide),
-                    };
-                }
+        }
+        QuizChange::ReplaceSlide { slide } => {
+            let categories = quiz.categories.clone();
+            if let Some(had) = quiz.slides.iter_mut().find(|had| had.id == slide.id) {
+                // A slide that takes on another category takes on its look, as in the editor.
+                *had = if had.category != slide.category { format_imported(Slide::clone(slide), &categories) } else { Slide::clone(slide) };
             }
-            QuizChange::RemoveSlide { id } => quiz.slides.retain(|slide| slide.id != *id),
-            QuizChange::MoveSlide { id, after } => {
-                if let Some(from) = quiz.slides.iter().position(|slide| slide.id == *id) {
-                    let moved = quiz.slides.remove(from);
-                    let at = place(&quiz.slides, after).unwrap_or(quiz.slides.len());
-                    quiz.slides.insert(at, moved);
-                }
+        }
+        QuizChange::RemoveSlide { id } => quiz.slides.retain(|slide| slide.id != *id),
+        QuizChange::MoveSlide { id, after } => {
+            if let Some(from) = quiz.slides.iter().position(|slide| slide.id == *id) {
+                let moved = quiz.slides.remove(from);
+                let at = place(&quiz.slides, after, ids).unwrap_or(quiz.slides.len());
+                quiz.slides.insert(at, moved);
             }
-            QuizChange::SetTitle { title } => quiz.title = title.clone(),
-            QuizChange::SetTheme { theme } => quiz.theme = Some(theme.clone()),
-            QuizChange::SetSettings { settings } => quiz.settings = *settings,
-            QuizChange::SetSounds { sounds } => quiz.sounds = sounds.clone(),
-            QuizChange::SetWelcome { welcome } => quiz.welcome = welcome.clone(),
-            QuizChange::SetCategories { categories } => {
-                quiz.categories = categories.clone();
-                // A slide whose category is gone forgets it and keeps its look, as `history.ts` `removeCategory` does.
-                let kept: HashSet<&str> = categories.iter().map(|category| category.id.as_str()).collect();
-                for slide in &mut quiz.slides {
-                    if slide.category.as_deref().is_some_and(|id| !kept.contains(id)) {
-                        slide.category = None;
-                    }
+        }
+        QuizChange::SetTitle { title } => quiz.title = title.clone(),
+        QuizChange::SetTheme { theme } => quiz.theme = Some(theme.clone()),
+        QuizChange::SetSettings { settings } => quiz.settings = *settings,
+        QuizChange::SetSounds { sounds } => quiz.sounds = sounds.clone(),
+        QuizChange::SetWelcome { welcome } => quiz.welcome = welcome.clone(),
+        QuizChange::SetCategories { categories } => {
+            // As the editor makes it (`ai-changes.ts` `categoryEdits`): those kept stay where they were, changed; new ones go last.
+            let listed: HashMap<&str, &Category> = categories.iter().map(|category| (category.id.as_str(), category)).collect();
+            let had: HashSet<String> = quiz.categories.iter().map(|category| category.id.clone()).collect();
+            let mut now: Vec<Category> = quiz.categories.iter().filter_map(|category| listed.get(category.id.as_str()).map(|c| (*c).clone())).collect();
+            now.extend(categories.iter().filter(|category| !had.contains(&category.id)).cloned());
+            quiz.categories = now;
+            // A slide whose category is gone forgets it and keeps its look, as `history.ts` `removeCategory` does.
+            let kept: HashSet<&str> = quiz.categories.iter().map(|category| category.id.as_str()).collect();
+            for slide in &mut quiz.slides {
+                if slide.category.as_deref().is_some_and(|id| !kept.contains(id)) {
+                    slide.category = None;
                 }
             }
         }
     }
-    quiz
+}
+
+/// A slide added or given a category with the look of its category (the
+/// editor's `formatImported`): a background of its own stays.
+fn format_imported(slide: Slide, categories: &[Category]) -> Slide {
+    match categories.iter().find(|category| Some(&category.id) == slide.category.as_ref()) {
+        Some(category) => {
+            let background = slide.background.clone();
+            let mut formatted = format_like(slide, category);
+            formatted.background = background.or(formatted.background);
+            formatted
+        }
+        None => slide,
+    }
 }
 
 /// `slide` with the look of `category` (the editor's `formatLike`, spec
 /// QZ-10): the category's fill and text looks, a question's clock, and its
 /// background when it has one. The slide's picture, video and sound stay.
 fn format_like(mut slide: Slide, category: &Category) -> Slide {
+    use quiz_core::SlideContent;
     let look = &category.style;
-    slide.style.fill = look.fill.clone();
-    slide.style.headline = look.headline.clone();
-    slide.style.text = look.text.clone();
-    slide.style.answers = look.answers.clone();
-    if slide.content.slide_type().plays().clock_and_reveal {
-        slide.style.timer = look.timer;
-    }
+    // The looks of the texts the slide shows, as the editor's `styledParts`; the others are cleared.
+    let (headline, text, answers) = match slide.content {
+        SlideContent::Question(_) => (true, false, true),
+        SlideContent::Billboard { .. } => (true, true, false),
+        SlideContent::Explanation { .. } => (false, true, false),
+        SlideContent::EndOfRound { .. } | SlideContent::Final { .. } => (true, false, false),
+    };
+    let part = |shown: bool, style: &quiz_core::TextStyle| if shown { style.clone() } else { quiz_core::TextStyle::default() };
+    let timer = if slide.content.slide_type().plays().clock_and_reveal { look.timer } else { slide.style.timer };
+    slide.style = SlideStyle { fill: look.fill.clone(), headline: part(headline, &look.headline), text: part(text, &look.text), answers: part(answers, &look.answers), timer };
     slide.background = category.background.clone().or(slide.background);
     slide.category = Some(category.id.clone());
     slide
@@ -731,6 +801,16 @@ fn plain_fields(fields: &mut Map<String, Value>, attachments: &[Option<AttachedF
         fields.insert("answers".into(), json!(order.iter().map(|&i| &answers[i]).collect::<Vec<_>>()));
         let right_at = order.iter().position(|&i| i == 0).unwrap_or(0);
         fields.insert("correct".into(), json!([{ "answer": right_at }]));
+    }
+    // A correct answer given alone is a list of one.
+    if let Some(one) = fields.get("correct").filter(|c| !c.is_array() && !c.is_null()).cloned() {
+        fields.insert("correct".into(), json!([one]));
+    }
+    // New answers without new correct ones: the correct ones that are still answers stay.
+    if let (Some(Value::Array(answers)), None, Some(Value::Array(had))) = (fields.get("answers"), fields.get("correct"), before.and_then(|b| b.get("correct"))) {
+        let count = answers.len();
+        let kept: Vec<Value> = had.iter().filter(|c| c.get("answer").and_then(Value::as_u64).is_some_and(|i| (i as usize) < count)).cloned().collect();
+        fields.insert("correct".into(), Value::Array(kept));
     }
     if let Some(Value::Array(correct)) = fields.get("correct") {
         // The answers as they will be: those the change sets, or else the slide's own.
@@ -866,13 +946,12 @@ pub(crate) fn text_of(value: &Value) -> String {
     }
 }
 
-/// The quiz's own fields `set` changes, as `QuizChange`s, made in
-/// `quiz` too, so a later change builds on them: each value read by the
-/// quiz model, the theme only one of `themes`, a category without an id
-/// given one and one with an id given before left out. A field changed
-/// again replaces its earlier change. Whether anything changed.
-fn quiz_changes(quiz: &mut Quiz, set: &Map<String, Value>, themes: &[String], changes: &mut Vec<QuizChange>) -> bool {
-    let mut own = serde_json::to_value(&*quiz).expect("a quiz serializes");
+/// The quiz's own fields `set` changes in `quiz`, as `QuizChange`s: each
+/// value read by the quiz model, the theme only one of `themes`, a
+/// category without an id given one and one with an id given before left
+/// out.
+fn quiz_changes(quiz: &Quiz, set: &Map<String, Value>, themes: &[String]) -> Vec<QuizChange> {
+    let mut own = serde_json::to_value(quiz).expect("a quiz serializes");
     own["slides"] = json!([]);
     let mut patch = set.clone();
     for kept in ["slides", "schemaVersion"] {
@@ -892,40 +971,26 @@ fn quiz_changes(quiz: &mut Quiz, set: &Map<String, Value>, themes: &[String], ch
             listed.insert(fields["id"].as_str().unwrap_or_default().to_string())
         });
     }
-    let mut changed = false;
+    let mut changes = Vec::new();
     // Each field is read on its own, so one the quiz model cannot read loses no other.
     for (key, value) in patch {
         let mut one = own.clone();
         merge(&mut one, &json!({ key.clone(): value }));
         let Ok(read) = serde_json::from_value::<Quiz>(one) else { continue };
-        let change = match key.as_str() {
-            "title" if read.title != quiz.title => QuizChange::SetTitle { title: read.title },
-            "theme" => match read.theme.filter(|theme| themes.contains(theme) && quiz.theme.as_ref() != Some(theme)) {
+        changes.push(match key.as_str() {
+            "title" => QuizChange::SetTitle { title: read.title },
+            "theme" => match read.theme.filter(|theme| themes.contains(theme)) {
                 Some(theme) => QuizChange::SetTheme { theme },
                 None => continue,
             },
-            "settings" if read.settings != quiz.settings => QuizChange::SetSettings { settings: read.settings },
-            "sounds" if read.sounds != quiz.sounds => QuizChange::SetSounds { sounds: read.sounds },
-            "welcome" if read.welcome != quiz.welcome => QuizChange::SetWelcome { welcome: read.welcome },
-            "categories" if read.categories != quiz.categories => QuizChange::SetCategories { categories: read.categories },
+            "settings" => QuizChange::SetSettings { settings: read.settings },
+            "sounds" => QuizChange::SetSounds { sounds: read.sounds },
+            "welcome" => QuizChange::SetWelcome { welcome: read.welcome },
+            "categories" => QuizChange::SetCategories { categories: read.categories },
             _ => continue,
-        };
-        match &change {
-            QuizChange::SetTitle { title } => quiz.title = title.clone(),
-            QuizChange::SetTheme { theme } => quiz.theme = Some(theme.clone()),
-            QuizChange::SetSettings { settings } => quiz.settings = *settings,
-            QuizChange::SetSounds { sounds } => quiz.sounds = sounds.clone(),
-            QuizChange::SetWelcome { welcome } => quiz.welcome = welcome.clone(),
-            QuizChange::SetCategories { categories } => quiz.categories = categories.clone(),
-            _ => {}
-        }
-        match changes.iter_mut().find(|done| std::mem::discriminant(*done) == std::mem::discriminant(&change)) {
-            Some(earlier) => *earlier = change,
-            None => changes.push(change),
-        }
-        changed = true;
+        });
     }
-    changed
+    changes
 }
 
 /// A small seeded shuffle (xorshift), so the right answer is not always first.
@@ -1289,5 +1354,69 @@ mod tests {
             assert_eq!(slide.background.as_ref().map(|b| b.file.as_str()), Some("media/film.jpg"));
         }
         assert!(changed.slides[2].style.timer.is_some(), "a question takes on the clock");
+    }
+
+    /// Four billboards a, b, c, d.
+    fn abcd() -> Quiz {
+        Quiz::new("", ["a", "b", "c", "d"].iter().map(|id| slide(json!({ "id": id, "type": "billboard", "title": id.to_uppercase() }))).collect())
+    }
+
+    /// The titles of `quiz`'s slides once `changes` are made.
+    fn order_after(quiz: &Quiz, changes: Value) -> Vec<String> {
+        let done = resolve(quiz, &edits(changes), &[], None, &[], 1);
+        apply(quiz, &done.changes)
+            .slides
+            .iter()
+            .map(|slide| match &slide.content {
+                SlideContent::Billboard { title, .. } => title.clone(),
+                _ => slide.id.clone(),
+            })
+            .collect()
+    }
+
+    #[test]
+    fn moves_deletes_and_adds_are_made_one_after_another() {
+        let add = |after: usize, title: &str| json!({ "action": "add", "after": after, "slides": [{ "type": "billboard", "title": title }] });
+        // A slide moved after one that is then deleted stays where it went.
+        assert_eq!(order_after(&abcd(), json!([{ "action": "move", "slide": 1, "after": 2 }, { "action": "delete", "slide": 2 }])), ["A", "C", "D"]);
+        // After a deleted slide is after the slide before it as the quiz then was.
+        assert_eq!(order_after(&abcd(), json!([{ "action": "move", "slide": 1, "after": 4 }, { "action": "delete", "slide": 2 }, add(2, "X")])), ["X", "C", "D", "A"]);
+        // An add before a delete goes where it was asked, before what was added there later.
+        assert_eq!(order_after(&abcd(), json!([add(1, "P"), add(2, "X"), { "action": "delete", "slide": 2 }])), ["A", "P", "X", "C", "D"]);
+        assert_eq!(order_after(&abcd(), json!([add(1, "P"), { "action": "delete", "slide": 2 }, add(2, "X")])), ["A", "P", "X", "C", "D"]);
+        // A second add at one place follows the first wherever it is by then.
+        assert_eq!(order_after(&abcd(), json!([add(3, "X"), { "action": "move", "slide": 4, "after": 3 }, add(3, "Y")])), ["A", "B", "C", "D", "X", "Y"]);
+        // A move that changes nothing is left out.
+        let still = resolve(&abcd(), &edits(json!([{ "action": "move", "slide": 2, "after": 1 }])), &[], None, &[], 1);
+        assert_eq!((still.changes.len(), still.left_out), (0, 1));
+    }
+
+    #[test]
+    fn new_answers_keep_only_the_correct_ones_still_there() {
+        let done = resolved(json!([{ "action": "edit", "slide": 2, "set": { "answers": ["Brno"], "correct": 0 } }]));
+        let QuizChange::ReplaceSlide { slide: one } = &done.changes[0] else { panic!("{done:?}") };
+        assert_eq!(question(one).correct.len(), 1, "a correct answer given alone is read");
+        let mut third = quiz();
+        third.slides[1] = slide(json!({ "id": "q1", "type": "question", "mode": "everyone", "text": "?", "answers": ["a", "b", "c", "d"], "correct": [{ "answer": 3 }] }));
+        let fewer = resolve(&third, &edits(json!([{ "action": "edit", "slide": 2, "set": { "answers": ["a", "b"] } }])), &[], None, &[], 1);
+        let QuizChange::ReplaceSlide { slide } = &fewer.changes[0] else { panic!("{fewer:?}") };
+        assert!(question(slide).correct.is_empty(), "{:?}", question(slide).correct);
+    }
+
+    #[test]
+    fn categories_keep_their_order_new_ones_last_and_an_edit_keeps_its_own_background() {
+        let mut two = quiz();
+        two.categories = serde_json::from_value(json!([{ "id": "c1", "name": "Jedna" }, { "id": "c2", "name": "Dvě", "background": { "file": "media/cat.jpg" } }])).unwrap();
+        let reordered = resolve(&two, &edits(json!([{ "action": "quiz", "set": { "categories": [{ "name": "Nová" }, { "id": "c2", "name": "Dvě", "background": { "file": "media/cat.jpg" } }, { "id": "c1", "name": "Jedna" }] } }])), &[], None, &[], 1);
+        let ids: Vec<String> = apply(&two, &reordered.changes).categories.iter().map(|c| c.id.clone()).collect();
+        assert_eq!(ids, ["c1", "c2", "ai-category-1"]);
+        let own = resolve(&two, &edits(json!([{ "action": "edit", "slide": 1, "set": { "category": "c2", "background": { "file": "media/own.jpg" } } }])), &[], None, &[], 1);
+        assert_eq!(apply(&two, &own.changes).slides[0].background.as_ref().map(|b| b.file.as_str()), Some("media/own.jpg"));
+        // An explanation takes on only the look of its text.
+        let mut looks = quiz();
+        looks.categories = serde_json::from_value(json!([{ "id": "c1", "name": "x", "style": { "headline": { "bold": true }, "text": { "italic": true } } }])).unwrap();
+        let explained = resolve(&looks, &edits(json!([{ "action": "add", "slides": [{ "type": "explanation", "text": "Proto.", "category": "c1" }] }])), &[], None, &[], 1);
+        let added = apply(&looks, &explained.changes).slides[3].style.clone();
+        assert!(added.headline.is_empty() && !added.text.is_empty(), "{added:?}");
     }
 }

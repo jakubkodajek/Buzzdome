@@ -7,6 +7,7 @@ import type { Welcome } from "./Welcome";
 
 /**
  * A change to the quiz, as the editor applies it (`history.ts`), by the
- * slides' ids as they were when the model was asked.
+ * slides' ids. The changes are made in order, each on the quiz the ones
+ * before it left (`apply`).
  */
 export type QuizChange = { "type": "insertSlides", after: string | null, slides: Array<Slide>, } | { "type": "replaceSlide", slide: Slide, } | { "type": "removeSlide", id: string, } | { "type": "moveSlide", id: string, after: string | null, } | { "type": "setTitle", title: string, } | { "type": "setTheme", theme: string, } | { "type": "setSettings", settings: QuizSettings, } | { "type": "setSounds", sounds: QuizSounds, } | { "type": "setWelcome", welcome: Welcome, } | { "type": "setCategories", categories: Array<Category>, };

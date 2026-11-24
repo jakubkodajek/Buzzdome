@@ -30,8 +30,8 @@ export interface ChangeEdits {
  * field of the quiz that has changed since keeps the quizmaster's change
  * and the model's is skipped. Slides are found by id as the quiz has them
  * now: a change of a slide deleted meanwhile does nothing. Added slides get ids no slide has (`withFreshIds`) and the
- * look of their category (`formatImported`). The categories change first,
- * so a slide added in the same reply finds its new category.
+ * look of their category (`formatImported`). The changes are made in
+ * order, as `quiz_edits::apply` makes them for the MCP server.
  */
 export function changeEdits(quiz: Quiz, asked: Quiz, changes: readonly QuizChange[], random?: () => string): ChangeEdits {
   const edits: Edit[] = [];
@@ -52,14 +52,22 @@ export function changeEdits(quiz: Quiz, asked: Quiz, changes: readonly QuizChang
     if (changed) counts.skipped++;
     return changed;
   };
+  // The ids the slides this reply added have in the quiz (the reply names them `ai-new-N`).
+  const renamed = new Map<string, string>();
   // After the slide `after`: none is the start, one gone meanwhile the end.
-  const placeAfter = (after: string | null) => (after === null ? 0 : indexOf(after) < 0 ? now.slides.length : indexOf(after) + 1);
-  const ordered = [...changes.filter((c) => c.type === "setCategories"), ...changes.filter((c) => c.type !== "setCategories")];
-  for (const change of ordered) {
+  const placeAfter = (after: string | null) => {
+    if (after === null) return 0;
+    const at = indexOf(renamed.get(after) ?? after);
+    return at < 0 ? now.slides.length : at + 1;
+  };
+  // In order, each on the quiz the ones before left, as the backend worked them out (`quiz_edits::resolve`).
+  for (const change of changes) {
     switch (change.type) {
       case "insertSlides": {
         let at = placeAfter(change.after);
-        for (const slide of withFreshIds(now, change.slides, random).map((s) => formatImported(s, now.categories ?? []))) {
+        const fresh = withFreshIds(now, change.slides, random);
+        fresh.forEach((slide, i) => renamed.set(change.slides[i].id, slide.id));
+        for (const slide of fresh.map((s) => formatImported(s, now.categories ?? []))) {
           if (push({ type: "insertSlide", index: at, slide })) {
             added.push(slide.id);
             counts.added++;
@@ -77,6 +85,8 @@ export function changeEdits(quiz: Quiz, asked: Quiz, changes: readonly QuizChang
         break;
       }
       case "removeSlide":
+        // A slide the quizmaster changed meanwhile is theirs to delete.
+        if (indexOf(change.id) < 0 || changedSince(asked.slides.find((s) => s.id === change.id), quiz.slides.find((s) => s.id === change.id))) break;
         if (push({ type: "removeSlide", index: indexOf(change.id) })) counts.removed++;
         break;
       case "moveSlide": {
@@ -104,7 +114,7 @@ export function changeEdits(quiz: Quiz, asked: Quiz, changes: readonly QuizChang
         if (!changedSince(asked.welcome, quiz.welcome) && push({ type: "setWelcome", welcome: change.welcome })) counts.quiz++;
         break;
       case "setCategories":
-        if (!changedSince(asked.categories, quiz.categories) && categoryEdits(now.categories ?? [], change.categories).filter(push).length > 0) counts.quiz++;
+        if (!changedSince(asked.categories ?? [], quiz.categories ?? []) && categoryEdits(now.categories ?? [], change.categories).filter(push).length > 0) counts.quiz++;
         break;
     }
   }

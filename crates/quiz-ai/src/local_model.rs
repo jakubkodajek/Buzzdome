@@ -235,6 +235,37 @@ impl QuestionRequest {
         let turns = self.conversation.iter().filter(|turn| turn.role == ChatRole::User).map(|turn| turn.text.as_str());
         turns.chain([self.prompt.as_str()]).map(str::trim).filter(|text| !text.is_empty()).collect::<Vec<_>>().join("\n")
     }
+
+    /// The messages whose sites are read, and whose addresses on this
+    /// computer or the local network may be read (`web_page::may_read`):
+    /// all the quizmaster's (`request_text`) when `whole`, else the latest.
+    pub fn read_from(&self, whole: bool) -> String {
+        if whole {
+            self.request_text()
+        } else {
+            self.prompt.clone()
+        }
+    }
+
+    /// Whether the internet is looked up for this request, and if so how
+    /// widely (`asking::research`'s `for_quiz`): never with the internet
+    /// off; in the conversation (`making` false) for the latest message;
+    /// for the changes, for all the quizmaster's messages when the
+    /// conversation found nothing yet, else only when the latest message
+    /// names a site, and then only for it.
+    pub fn research_scope(&self, making: bool) -> Option<bool> {
+        if !self.internet {
+            return None;
+        }
+        if !making {
+            return Some(false);
+        }
+        match &self.notes {
+            None => Some(true),
+            Some(_) if !crate::web_page::addresses_in(&self.prompt).is_empty() => Some(false),
+            Some(_) => None,
+        }
+    }
 }
 
 /// Why a request was not sent.
@@ -890,8 +921,6 @@ pub fn said(content: &str) -> String {
     text.trim().to_string()
 }
 
-/// `content` after a reasoning model's thinking (`<think>…</think>`), which
-/// some servers leave in the text before the answer.
 /// What of `content`, a reply still coming, is said rather than thought:
 /// nothing while a `<think>` it begins with is open (or may be beginning),
 /// what follows the `</think>` once it closes. It only grows as `content`
@@ -907,6 +936,8 @@ pub fn shown_so_far(content: &str) -> &str {
     content
 }
 
+/// `content` after a reasoning model's thinking (`<think>…</think>`), which
+/// some servers leave in the text before the answer.
 fn without_thinking(content: &str) -> &str {
     match content.rfind("</think>") {
         Some(end) => &content[end + "</think>".len()..],
@@ -1250,5 +1281,22 @@ mod tests {
         assert_eq!(stream_line(r#"{"message":{"role":"assistant","content":""},"done":true,"done_reason":"length"}"#), StreamLine::Text { text: String::new(), thought: 0, cut_off: true });
         assert_eq!(stream_line(r#"{"error":"model ran out of memory"}"#), StreamLine::Failed { detail: "model ran out of memory".into() });
         assert_eq!(stream_line(r#"{"choices":[{"message":{"content":"{}"}}]}"#), StreamLine::NotStreamed);
+    }
+
+    #[test]
+    fn what_is_looked_up_follows_the_internet_switch_the_notes_and_the_latest_message() {
+        let base = QuestionRequest { prompt: "Kvíz o firmě".into(), internet: true, conversation: vec![turn(ChatRole::User, "Podle webu pekarna.cz")], ..Default::default() };
+        // Internet off: nothing, in the chat or for the changes.
+        let off = QuestionRequest { internet: false, ..base.clone() };
+        assert_eq!((off.research_scope(true), off.research_scope(false)), (None, None));
+        // No notes yet: the changes look up all the quizmaster's messages; the chat only the latest.
+        assert_eq!((base.research_scope(true), base.research_scope(false)), (Some(true), Some(false)));
+        assert!(base.read_from(true).contains("pekarna.cz") && !base.read_from(false).contains("pekarna.cz"));
+        // Notes from the conversation, no site in the latest message: the changes look up nothing more.
+        let noted = QuestionRequest { notes: Some("Pečeme od 1921.".into()), ..base.clone() };
+        assert_eq!(noted.research_scope(true), None);
+        // Notes and a site in the latest message: only that message.
+        let named = QuestionRequest { prompt: "A ještě podle https://pekarna.cz/historie".into(), ..noted };
+        assert_eq!(named.research_scope(true), Some(false));
     }
 }

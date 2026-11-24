@@ -68,27 +68,40 @@ describe("the AI assistant's changes", () => {
     expect(changeCount(result.counts)).toBe(0);
   });
 
+  it("place later changes after slides the same reply added, by the reply's ids", () => {
+    const x: Slide = { ...newSlide("billboard", ""), id: "ai-new-1" };
+    const y: Slide = { ...newSlide("billboard", ""), id: "ai-new-2" };
+    const result = made(quiz, [
+      { type: "insertSlides", after: "a", slides: [x] },
+      { type: "insertSlides", after: "ai-new-1", slides: [y] },
+      { type: "moveSlide", id: "c", after: "ai-new-1" },
+    ]);
+    expect(ids(result.quiz)).toEqual(["a", result.added[0], "c", result.added[1], "b"]);
+    expect(result.added.some((id) => id.startsWith("ai-new-"))).toBe(false);
+  });
+
   it("keep what the quizmaster changed while the model wrote", () => {
     const typed: Quiz = { ...quiz, title: "Můj název", slides: quiz.slides.map((s) => (s.id === "b" ? { ...s, notes: "moje" } : s)) };
     const result = made(typed, [
       { type: "replaceSlide", slide: { ...quiz.slides[1], notes: "modelu" } },
       { type: "replaceSlide", slide: { ...quiz.slides[0], notes: "modelu" } },
       { type: "setTitle", title: "Model" },
+      { type: "removeSlide", id: "b" },
     ], quiz);
     expect(result.quiz.title).toBe("Můj název");
     expect(result.quiz.slides[1].notes).toBe("moje");
     expect(result.quiz.slides[0].notes).toBe("modelu");
-    expect(result.counts).toMatchObject({ changed: 1, quiz: 0, skipped: 2 });
+    expect(result.counts).toMatchObject({ changed: 1, quiz: 0, removed: 0, skipped: 3 });
   });
 
-  it("change the categories first, so new slides take on a new category's look", () => {
+  it("give slides a new category's look, the categories changed first as the backend orders them", () => {
     const films = { ...newCategory("c-1", "Filmy"), background: { file: "media/film.jpg" } } as ReturnType<typeof newCategory>;
     const old = newCategory("c-2", "Staré");
     const withOld: Quiz = { ...quiz, categories: [old] };
     const slide: Slide = { ...newSlide("question", ""), category: "c-1" };
     const result = made(withOld, [
-      { type: "insertSlides", after: "c", slides: [slide] },
       { type: "setCategories", categories: [films] },
+      { type: "insertSlides", after: "c", slides: [slide] },
     ]);
     expect(result.quiz.categories?.map((c) => c.id)).toEqual(["c-1"]);
     const added = result.quiz.slides.find((s) => s.id === result.added[0]);

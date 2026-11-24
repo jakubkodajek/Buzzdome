@@ -295,7 +295,7 @@ fn chosen_model(app: &AppHandle) -> CmdResult<LocalModel> {
 fn look_up(model: &LocalModel, server: &Server, asked: &QuestionRequest, stop: &AtomicBool, tell: &impl Fn(LocalModelProgress), for_quiz: bool) -> CmdResult<Research> {
     // Pages on this computer or the local network only when the quizmaster named them, redirects included:
     // in the same messages whose sites are read (`asking::research`).
-    let typed = web_page::addresses_in(&if for_quiz { asked.request_text() } else { asked.prompt.clone() });
+    let typed = web_page::addresses_in(&asked.read_from(for_quiz));
     let plan = |body: Value, thinking: &dyn Fn(LocalModelProgress)| {
         ask(model, server, body, stop, Reading::PLAN, thinking).inspect_err(|e| {
             if *e != AppError::LocalModelCancelled {
@@ -317,8 +317,10 @@ fn too_much(error: &AppError) -> bool {
 /// length limit, and what was found.
 fn find_and_write(model: &LocalModel, server: &Server, asked: &QuestionRequest, stop: &AtomicBool, tell: impl Fn(LocalModelProgress)) -> CmdResult<(String, bool, Research)> {
     // With notes from the conversation, only sites named in the latest message are read.
-    let fresh = asked.notes.is_none();
-    let found = if asked.internet && (fresh || !web_page::addresses_in(&asked.prompt).is_empty()) { look_up(model, server, asked, stop, &tell, fresh)? } else { Research::default() };
+    let found = match asked.research_scope(true) {
+        Some(whole) => look_up(model, server, asked, stop, &tell, whole)?,
+        None => Research::default(),
+    };
     let (content, cut_off) = asking::write_changes(model, asked, &found, |body| ask(model, server, body, stop, Reading::CHANGES, &tell), too_much)?;
     Ok((content, cut_off, found))
 }
@@ -326,7 +328,10 @@ fn find_and_write(model: &LocalModel, server: &Server, asked: &QuestionRequest, 
 /// The model's turn of the conversation `asked` holds, with what the latest
 /// message needs from the internet when it may (`editor_chat_local_model`).
 fn chat_turn(model: &LocalModel, server: &Server, asked: &QuestionRequest, stop: &AtomicBool, tell: impl Fn(LocalModelProgress)) -> CmdResult<ChatReply> {
-    let found = if asked.internet { look_up(model, server, asked, stop, &tell, false)? } else { Research::default() };
+    let found = match asked.research_scope(false) {
+        Some(whole) => look_up(model, server, asked, stop, &tell, whole)?,
+        None => Research::default(),
+    };
     let (content, cut_off) = asking::chat(model, asked, &found, |body| ask(model, server, body, stop, Reading::CHAT, &tell), too_much)?;
     let text = local_model::said(&content);
     if text.is_empty() {

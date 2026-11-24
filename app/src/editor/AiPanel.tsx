@@ -550,6 +550,7 @@ function ChatBubble({ entry: shown, files, t }: { entry: ChatEntry; files: reado
 
 /** Copies the model's reply as it wrote it, and says so for a moment. */
 function CopyButton({ text, t }: { text: string; t: Translate }) {
+  const { fail } = useApp();
   const [copied, setCopied] = useState(false);
   useEffect(() => {
     if (!copied) return;
@@ -565,9 +566,11 @@ function CopyButton({ text, t }: { text: string; t: Translate }) {
         title={label}
         aria-label={label}
         onClick={() => {
-          navigator.clipboard?.writeText(text).then(
+          // Said when it fails, as the other copy buttons do.
+          const copying = navigator.clipboard?.writeText(text) ?? Promise.reject(new Error("no clipboard"));
+          copying.then(
             () => setCopied(true),
-            () => {},
+            () => fail(t("notCopied")),
           );
         }}
       >

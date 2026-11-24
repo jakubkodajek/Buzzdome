@@ -137,7 +137,7 @@ pub fn research<E: From<Halt> + PartialEq>(
     fetch: impl Fn(&str) -> Option<(String, String)>,
     for_quiz: bool,
 ) -> Result<Research, E> {
-    let written = if for_quiz { asked.request_text() } else { asked.prompt.clone() };
+    let written = asked.read_from(for_quiz);
     tell(LocalModelProgress::Planning);
     let thinking = |step: LocalModelProgress| {
         if matches!(step, LocalModelProgress::Thinking { .. }) {
