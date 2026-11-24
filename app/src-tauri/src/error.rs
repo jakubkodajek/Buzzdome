@@ -227,6 +227,9 @@ pub enum AppError {
     /// The model wrote something else than the questions asked for.
     #[error("the model's answer is not questions")]
     LocalModelNotQuestions,
+    /// The model's turn of the conversation was empty.
+    #[error("the model said nothing")]
+    LocalModelSaidNothing,
     /// The model stopped at its length limit before the questions ended.
     #[error("the model's answer was cut off")]
     LocalModelCutOff,

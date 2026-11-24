@@ -1073,6 +1073,19 @@ mockIPC(
         ];
         return new Promise((resolve) => setTimeout(() => resolve({ slides: SHEET_IMPORT.slides, sources, webFailed: aiModel === "webpartly" }), 800));
       }
+      case "editor_chat_local_model": {
+        called.push({ cmd, ...(payload as object) });
+        if (aiModel === "slow") return new Promise(() => undefined);
+        if (aiModel === "offline") return Promise.reject({ code: "localModelUnreachable", url: "http://localhost:11434/v1", detail: "Connection refused (os error 111)" });
+        // A proposal, said word by word as a model streams it.
+        const progress = (payload as { progress?: { onmessage?: (step: unknown) => void } }).progress;
+        const text =
+          "Navrhuji kvíz o Praze ve 3 kolech po 5 otázkách:\n\n1. Památky: Karlův most, Pražský hrad, orloj.\n2. Historie: od Karla IV. po sametovou revoluci.\n3. Praha dnes: metro, čtvrti, slavné podniky.\n\nMají být otázky spíš lehké, nebo pro znalce?";
+        const words = text.split(/(?<= )/);
+        progress?.onmessage?.({ step: "thinking", characters: 600 });
+        words.forEach((word, i) => setTimeout(() => progress?.onmessage?.({ step: "said", text: word }), 300 + i * 25));
+        return new Promise((resolve) => setTimeout(() => resolve({ text, cutOff: false, sources: [], webFailed: false, notes: null }), 400 + words.length * 25));
+      }
       case "editor_read_text":
         return new TextDecoder().decode(payload as Uint8Array);
       case "editor_ask_local_model_cancel":

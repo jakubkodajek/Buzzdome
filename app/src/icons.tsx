@@ -532,6 +532,16 @@ export function TimerIcon(props: IconProps) {
   );
 }
 
+/** A globe: the internet. */
+export function GlobeIcon(props: IconProps) {
+  return (
+    <LineIcon {...props}>
+      <circle cx="12" cy="12" r="8.5" />
+      <path d="M3.5 12h17M12 3.5c2.4 2.3 3.5 5.2 3.5 8.5s-1.1 6.2-3.5 8.5c-2.4-2.3-3.5-5.2-3.5-8.5s1.1-6.2 3.5-8.5z" />
+    </LineIcon>
+  );
+}
+
 export function AddIcon(props: IconProps) {
   return (
     <LineIcon {...props}>

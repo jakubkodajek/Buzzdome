@@ -35,6 +35,7 @@ import type {
   LocalModelInfo,
   LocalModelProgress,
   AskedQuestions,
+  ChatReply,
   MediaKind,
   MediaLibrary,
   MediaNow,
@@ -308,6 +309,16 @@ export const api = {
     const progress = new Channel<LocalModelProgress>();
     progress.onmessage = onProgress;
     return invoke<AskedQuestions>("editor_ask_local_model", { draft, asked, progress });
+  },
+  /**
+   * The model's next turn of the conversation `asked` holds; `onProgress`
+   * hears its words as they come. Fails with `localModelCancelled` after
+   * `editorAskLocalModelCancel`.
+   */
+  editorChatLocalModel: (asked: QuestionRequest, onProgress: (progress: LocalModelProgress) => void) => {
+    const progress = new Channel<LocalModelProgress>();
+    progress.onmessage = onProgress;
+    return invoke<ChatReply>("editor_chat_local_model", { asked, progress });
   },
   editorAskLocalModelCancel: () => invoke<void>("editor_ask_local_model_cancel"),
 };

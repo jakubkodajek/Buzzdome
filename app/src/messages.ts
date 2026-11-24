@@ -110,6 +110,7 @@ const ERROR_KEYS: Record<Exclude<AppError["code"], WordedApart>, StringKey> = {
   localModelTooManyFiles: "errLocalModelTooManyFiles",
   localModelTooManyPictures: "errLocalModelTooManyPictures",
   localModelNotQuestions: "errLocalModelNotQuestions",
+  localModelSaidNothing: "errLocalModelSaidNothing",
   localModelCutOff: "errLocalModelCutOff",
   localModelNoQuestions: "errLocalModelNoQuestions",
   aiFolderNotAllowed: "errAiFolderNotAllowed",

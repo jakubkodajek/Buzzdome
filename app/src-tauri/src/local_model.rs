@@ -20,12 +20,12 @@ use crate::ai::SavedAiSettings;
 use crate::editor;
 use crate::error::{AppError, CmdResult};
 use crate::{off_ui, refuse_during_show};
-use quiz_ai::asking::{self, Halt, Research};
+use quiz_ai::asking::{self, Halt, Reading, Research};
 use quiz_ai::local_model::{self, LocalModel, LocalModelInfo, QuestionRequest, ReplyError, RequestError};
 use quiz_ai::web_page::{self, Source, Url};
 use quiz_core::{import_tables, Slide};
 use serde::Serialize;
-use serde_json::Value;
+use serde_json::{json, Value};
 use std::io::BufReader;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{mpsc, Arc, Mutex, PoisonError};
@@ -184,11 +184,7 @@ pub async fn editor_ask_local_model(app: AppHandle, draft: String, asked: Questi
     let state = app.state::<LocalModelState>();
     // Begun first, so a cancel from now on reaches this request.
     let (_asking, cancelled) = state.begin()?;
-    refuse_during_show(&app)?;
-    let model = app.state::<SavedAiSettings>().get().local_model.ok_or(AppError::LocalModelNotChosen)?;
-    if !LocalModel::usable_url(&model.url) {
-        return Err(AppError::LocalModelBadUrl { url: model.url });
-    }
+    let model = chosen_model(&app)?;
     // Checked before anything is looked up.
     local_model::request(&model, &asked, None, local_model::MAX_TEXT_CHARS)?;
     let media = editor::draft_media(app.clone(), draft, asked.attachments.iter().map(|a| a.media.clone()).collect()).await?;
@@ -202,7 +198,7 @@ pub async fn editor_ask_local_model(app: AppHandle, draft: String, asked: Questi
             let tell = |step: LocalModelProgress| {
                 let _ = progress.send(step);
             };
-            find_and_write(&model, &asked, stop, tell)
+            find_and_write(&model, &Server::of(&model), &asked, stop, tell)
         })
     })
     .await
@@ -218,27 +214,101 @@ pub async fn editor_ask_local_model(app: AppHandle, draft: String, asked: Questi
     Ok(AskedQuestions { slides: imported.slides.into_iter().map(|(_, slide)| slide).collect(), sources: found.sources, web_failed: found.failed })
 }
 
-/// Looks up on the internet what `asked` needs when it may
-/// (`asking::research`), then asks `model` for the questions
+/// The model's turn of the conversation about the quiz, as the panel shows it.
+#[derive(Debug, Clone, PartialEq, Serialize, TS)]
+#[ts(export)]
+#[serde(rename_all = "camelCase")]
+pub struct ChatReply {
+    pub text: String,
+    /// Whether the model stopped at its length limit before it ended.
+    pub cut_off: bool,
+    /// The web pages read for it.
+    pub sources: Vec<Source>,
+    /// Whether a search or a page could not be read.
+    pub web_failed: bool,
+    /// What was found on the internet so far in the conversation
+    /// (`QuestionRequest::notes`), which the panel sends with the next
+    /// message and with the request for the questions.
+    pub notes: Option<String>,
+}
+
+/// The model's next turn of the conversation about the quiz that `asked`
+/// holds (`asking::chat`), after it looked up on the internet what the
+/// latest message needs, when it may. `progress` hears the words as they
+/// come (`LocalModelProgress::Said`). Refused during a show, and cancelled
+/// as `editor_ask_local_model` is.
+#[tauri::command]
+pub async fn editor_chat_local_model(app: AppHandle, asked: QuestionRequest, progress: Channel<LocalModelProgress>) -> CmdResult<ChatReply> {
+    let state = app.state::<LocalModelState>();
+    // Begun first, so a cancel from now on reaches this request.
+    let (_asking, cancelled) = state.begin()?;
+    let model = chosen_model(&app)?;
+    // Checked before anything is looked up.
+    local_model::chat_request(&model, &asked, None, local_model::MAX_TEXT_CHARS)?;
+    off_ui(move || {
+        cancellably(cancelled, move |stop| {
+            let tell = |step: LocalModelProgress| {
+                let _ = progress.send(step);
+            };
+            chat_turn(&model, &Server::of(&model), &asked, stop, tell)
+        })
+    })
+    .await
+    .map_err(|e| if e == AppError::LocalModelCancelled { stopped_for_show(&app, e) } else { e })
+}
+
+/// The model the quizmaster chose, unless a show runs.
+fn chosen_model(app: &AppHandle) -> CmdResult<LocalModel> {
+    refuse_during_show(app)?;
+    let model = app.state::<SavedAiSettings>().get().local_model.ok_or(AppError::LocalModelNotChosen)?;
+    if !LocalModel::usable_url(&model.url) {
+        return Err(AppError::LocalModelBadUrl { url: model.url });
+    }
+    Ok(model)
+}
+
+/// What the latest message of `asked` needs from the internet, when it may
+/// be looked up (`asking::research`; `for_quiz` when the questions are to
+/// be written, which then reads all the sites the quizmaster named).
+fn look_up(model: &LocalModel, server: &Server, asked: &QuestionRequest, stop: &AtomicBool, tell: &impl Fn(LocalModelProgress), for_quiz: bool) -> CmdResult<Research> {
+    // Pages on this computer or the local network only when the quizmaster named them, redirects included.
+    let typed = web_page::addresses_in(&asked.request_text());
+    let plan = |body: Value, thinking: &dyn Fn(LocalModelProgress)| {
+        ask(model, server, body, stop, Reading::PLAN, thinking).inspect_err(|e| {
+            if *e != AppError::LocalModelCancelled {
+                crate::app_log::note(&format!("local model: no research plan ({e})"));
+            }
+        })
+    };
+    asking::research(model, asked, stop, tell, plan, |url| fetch_html(url, &typed), for_quiz)
+}
+
+/// Whether a request did not fit the model: asked again shorter (`asking::write_questions`).
+fn too_much(error: &AppError) -> bool {
+    matches!(error, AppError::LocalModelContextFull { .. } | AppError::LocalModelThoughtTooLong)
+}
+
+/// Looks up on the internet what `asked` needs when it may and nothing was
+/// found earlier in the conversation, then asks `model` for the questions
 /// (`asking::write_questions`): the model's text, whether it stopped at its
 /// length limit, and what was found.
-fn find_and_write(model: &LocalModel, asked: &QuestionRequest, stop: &AtomicBool, tell: impl Fn(LocalModelProgress)) -> CmdResult<(String, bool, Research)> {
-    let found = if asked.internet {
-        // Pages on this computer or the local network only when the request named them, redirects included.
-        let typed = web_page::addresses_in(&asked.prompt);
-        let plan = |body: Value, thinking: &dyn Fn(LocalModelProgress)| {
-            ask(model, body, stop, thinking).inspect_err(|e| {
-                if *e != AppError::LocalModelCancelled {
-                    crate::app_log::note(&format!("local model: no research plan ({e}); the request is searched as it is"));
-                }
-            })
-        };
-        asking::research(model, asked, stop, &tell, plan, |url| fetch_html(url, &typed), |e| *e == AppError::LocalModelCancelled)?
-    } else {
-        Research::default()
-    };
-    let (content, cut_off) = asking::write_questions(model, asked, &found, |body| ask(model, body, stop, &tell), |e| matches!(e, AppError::LocalModelContextFull { .. } | AppError::LocalModelThoughtTooLong))?;
+fn find_and_write(model: &LocalModel, server: &Server, asked: &QuestionRequest, stop: &AtomicBool, tell: impl Fn(LocalModelProgress)) -> CmdResult<(String, bool, Research)> {
+    let found = if asked.internet && asked.notes.is_none() { look_up(model, server, asked, stop, &tell, true)? } else { Research::default() };
+    let (content, cut_off) = asking::write_questions(model, asked, &found, |body| ask(model, server, body, stop, Reading::QUESTIONS, &tell), too_much)?;
     Ok((content, cut_off, found))
+}
+
+/// The model's turn of the conversation `asked` holds, with what the latest
+/// message needs from the internet when it may (`editor_chat_local_model`).
+fn chat_turn(model: &LocalModel, server: &Server, asked: &QuestionRequest, stop: &AtomicBool, tell: impl Fn(LocalModelProgress)) -> CmdResult<ChatReply> {
+    let found = if asked.internet { look_up(model, server, asked, stop, &tell, false)? } else { Research::default() };
+    let (content, cut_off) = asking::chat(model, asked, &found, |body| ask(model, server, body, stop, Reading::CHAT, &tell), too_much)?;
+    let text = local_model::said(&content);
+    if text.is_empty() {
+        return Err(AppError::LocalModelSaidNothing);
+    }
+    let notes = local_model::notes(asked.notes.as_deref(), found.text(local_model::MAX_TEXT_CHARS).as_deref());
+    Ok(ChatReply { text, cut_off, sources: found.sources, web_failed: found.failed, notes })
 }
 
 impl From<RequestError> for AppError {
@@ -358,19 +428,60 @@ fn cancellably<T: Send + 'static>(cancelled: Arc<AtomicBool>, job: impl FnOnce(&
     }
 }
 
-/// Sends `body` to `model`'s server as a streamed request and gives back
-/// the model's text and whether it stopped at its length limit. A server
-/// that refuses the response format or `reasoning_effort` is asked again
-/// without them (`local_model::without_extras`).
-fn ask(model: &LocalModel, body: Value, cancelled: &AtomicBool, progress: impl Fn(LocalModelProgress)) -> CmdResult<(String, bool)> {
-    let address = model.chat_url();
+/// What kind of server the model is on.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum Server {
+    /// Any server of the OpenAI chat completions API.
+    OpenAi,
+    /// Ollama, asked through its own API at `root` (`local_model::for_ollama`),
+    /// which sets the model's context: its OpenAI-compatible API cannot,
+    /// and Ollama's default leaves a reasoning model no room to answer.
+    /// `most` is the model's own longest context.
+    Ollama { root: String, most: Option<u32> },
+}
+
+impl Server {
+    /// The server of `model`: Ollama when `/api/version` there answers as
+    /// Ollama does, else any OpenAI-compatible one.
+    fn of(model: &LocalModel) -> Server {
+        let root = local_model::ollama_root(&model.url);
+        let version = format!("{root}/api/version");
+        let agent = agent(&version, CONNECT_TIMEOUT);
+        let answers = |response: Result<ureq::http::Response<ureq::Body>, ureq::Error>| -> Option<Value> {
+            let mut response = response.ok().filter(|r| r.status().is_success())?;
+            serde_json::from_str(&read_body(&mut response, &model.url).ok()?).ok()
+        };
+        if answers(agent.get(&version).call()).and_then(|v| v.get("version").cloned()).is_none() {
+            return Server::OpenAi;
+        }
+        let show = format!("{root}/api/show");
+        let most = answers(agent.post(&show).header("Content-Type", "application/json").send(json!({ "model": model.model }).to_string())).and_then(|v| local_model::model_context(&v));
+        Server::Ollama { root, most }
+    }
+}
+
+/// Sends `body`, a chat completion request, to `model`'s server as a
+/// streamed request (in Ollama's own form on `Server::Ollama`) and gives
+/// back the model's text and whether it stopped at its length limit, read
+/// as `reading` says. A server that refuses the response format or the
+/// reasoning setting is asked again without them
+/// (`local_model::without_extras`).
+fn ask(model: &LocalModel, server: &Server, body: Value, cancelled: &AtomicBool, reading: Reading, progress: impl Fn(LocalModelProgress)) -> CmdResult<(String, bool)> {
+    let (address, body) = match server {
+        Server::OpenAi => (model.chat_url(), local_model::streamed(body)),
+        Server::Ollama { root, most } => {
+            let mut native = local_model::for_ollama(&local_model::streamed(body), 0);
+            native["options"]["num_ctx"] = json!(local_model::ollama_context(&native, *most));
+            (format!("{root}/api/chat"), native)
+        }
+    };
     let agent = agent(&address, FIRST_WORD_TIMEOUT);
     // A request cancelled meanwhile (a show began while a page was read) is not sent: the model would work on during the show.
     let send = |body: &Value| {
         if cancelled.load(Ordering::SeqCst) {
             return Err(AppError::LocalModelCancelled);
         }
-        agent.post(&address).header("Content-Type", "application/json").send(local_model::streamed(body.clone()).to_string()).map_err(|e| unreachable(&model.url, e))
+        agent.post(&address).header("Content-Type", "application/json").send(body.to_string()).map_err(|e| unreachable(&model.url, e))
     };
     let mut response = send(&body)?;
     if !response.status().is_success() {
@@ -385,7 +496,7 @@ fn ask(model: &LocalModel, body: Value, cancelled: &AtomicBool, progress: impl F
         }
     }
     let reader = response.into_body().into_with_config().limit(MAX_REPLY_BYTES).reader();
-    asking::read_stream(BufReader::new(reader), cancelled, progress, stream_failed)
+    asking::read_stream(BufReader::new(reader), cancelled, reading, progress, stream_failed)
 }
 
 /// A client for a model's server at `address`: plain HTTP is fine, as the
@@ -509,7 +620,7 @@ mod tests {
 
     fn asked() -> QuestionRequest {
         let picture = Attachment { name: "a.jpg".into(), media: Some("media/a.jpg".into()), content: AttachmentContent::Picture { image: "data:image/jpeg;base64,AAAA".into() } };
-        QuestionRequest { prompt: "Kvíz".into(), attachments: vec![picture], language: QuizLanguage::Cs, whole_quiz: false, internet: false }
+        QuestionRequest { prompt: "Kvíz".into(), attachments: vec![picture], language: QuizLanguage::Cs, whole_quiz: false, internet: false, ..Default::default() }
     }
 
     fn ask_server(url: &str) -> (CmdResult<(String, bool)>, usize) {
@@ -517,7 +628,7 @@ mod tests {
         let body = local_model::request(&model, &asked(), None, local_model::MAX_TEXT_CHARS).unwrap();
         let told = Arc::new(AtomicUsize::new(0));
         let counted = told.clone();
-        let reply = ask(&model, body, &AtomicBool::new(false), move |_| {
+        let reply = ask(&model, &Server::OpenAi, body, &AtomicBool::new(false), Reading::QUESTIONS, move |_| {
             counted.fetch_add(1, Ordering::SeqCst);
         });
         (reply, told.load(Ordering::SeqCst))
@@ -580,7 +691,7 @@ mod tests {
             std::thread::sleep(Duration::from_millis(300));
             cancel.store(true, Ordering::SeqCst);
         });
-        assert_eq!(cancellably(cancelled, move |stop| ask(&model, body, stop, |_| {})), Err(AppError::LocalModelCancelled));
+        assert_eq!(cancellably(cancelled, move |stop| ask(&model, &Server::OpenAi, body, stop, Reading::QUESTIONS, |_| {})), Err(AppError::LocalModelCancelled));
         drop(listener);
     }
 
@@ -594,9 +705,9 @@ mod tests {
         });
         let base = url.trim_end_matches("/v1").to_string();
         let model = LocalModel::new(&url, "m");
-        let asked = QuestionRequest { prompt: format!("Kvíz o firmě podle webu {base}/firma"), attachments: vec![], language: QuizLanguage::Cs, whole_quiz: false, internet: true };
+        let asked = QuestionRequest { prompt: format!("Kvíz o firmě podle webu {base}/firma"), attachments: vec![], language: QuizLanguage::Cs, whole_quiz: false, internet: true, ..Default::default() };
         let steps = Mutex::new(Vec::new());
-        let (_, _, found) = find_and_write(&model, &asked, &AtomicBool::new(false), |step| steps.lock().unwrap().push(step)).unwrap();
+        let (_, _, found) = find_and_write(&model, &Server::OpenAi, &asked, &AtomicBool::new(false), |step| steps.lock().unwrap().push(step)).unwrap();
         assert_eq!(found.sources.iter().map(|s| s.title.as_str()).collect::<Vec<_>>(), ["Pekárna Novák", "O nás"]);
         assert!(!found.failed);
         let text = found.text(local_model::MAX_TEXT_CHARS).unwrap();
@@ -630,7 +741,7 @@ mod tests {
         let (url, seen) = server_for(|_| vec![(200, "text/event-stream", sse(&[r#"{"questions":[]}"#]))]);
         let model = LocalModel::new(&url, "gemma3");
         let body = local_model::request(&model, &asked(), None, local_model::MAX_TEXT_CHARS).unwrap();
-        assert_eq!(ask(&model, body, &AtomicBool::new(true), |_| {}), Err(AppError::LocalModelCancelled));
+        assert_eq!(ask(&model, &Server::OpenAi, body, &AtomicBool::new(true), Reading::QUESTIONS, |_| {}), Err(AppError::LocalModelCancelled));
         assert!(seen.lock().unwrap().is_empty());
     }
 
@@ -650,14 +761,48 @@ mod tests {
         let (url, seen) = server(vec![(400, "application/json", full.clone()), (200, "text/event-stream", reply), (400, "application/json", full.clone()), (400, "application/json", full)]);
         let model = LocalModel::new(&url, "gemma3:4b");
         let text = Attachment { name: "a.txt".into(), media: None, content: AttachmentContent::Text { text: "slovo ".repeat(5_000) } };
-        let asked = QuestionRequest { prompt: "Kvíz".into(), attachments: vec![text], language: QuizLanguage::Cs, whole_quiz: false, internet: false };
-        assert!(find_and_write(&model, &asked, &AtomicBool::new(false), |_| {}).is_ok());
+        let asked = QuestionRequest { prompt: "Kvíz".into(), attachments: vec![text], language: QuizLanguage::Cs, whole_quiz: false, internet: false, ..Default::default() };
+        assert!(find_and_write(&model, &Server::OpenAi, &asked, &AtomicBool::new(false), |_| {}).is_ok());
         {
             let seen = seen.lock().unwrap();
             assert!(seen[0].len() > local_model::MAX_TEXT_CHARS && seen[1].len() < local_model::MAX_TEXT_CHARS, "{} then {}", seen[0].len(), seen[1].len());
         }
         // Once shortened, a refusal is said so with the model's name.
-        assert_eq!(find_and_write(&model, &asked, &AtomicBool::new(false), |_| {}).map(|_| ()), Err(AppError::LocalModelContextFull { model: "gemma3:4b".into() }));
+        assert_eq!(find_and_write(&model, &Server::OpenAi, &asked, &AtomicBool::new(false), |_| {}).map(|_| ()), Err(AppError::LocalModelContextFull { model: "gemma3:4b".into() }));
+    }
+
+    #[test]
+    fn ollama_is_asked_through_its_own_api_with_room_to_reason_and_reply() {
+        let stream = [r#"{"message":{"role":"assistant","content":"","thinking":"Hm"},"done":false}"#, r#"{"message":{"role":"assistant","content":"Navrhuji 3 kola."},"done":false}"#, r#"{"message":{"role":"assistant","content":""},"done":true,"done_reason":"stop"}"#].join("\n");
+        let (url, seen) = server(vec![
+            (200, "application/json", r#"{"version":"0.12.0"}"#.into()),
+            (200, "application/json", r#"{"model_info":{"general.architecture":"qwen3vl","qwen3vl.context_length":262144}}"#.into()),
+            (200, "application/x-ndjson", stream),
+        ]);
+        let model = LocalModel::new(&url, "qwen3-vl:8b");
+        let kind = Server::of(&model);
+        assert_eq!(kind, Server::Ollama { root: url.trim_end_matches("/v1").into(), most: Some(262_144) });
+        let said = Mutex::new(String::new());
+        let asked = QuestionRequest { prompt: "Kvíz o Praze".into(), ..Default::default() };
+        let reply = chat_turn(&model, &kind, &asked, &AtomicBool::new(false), |step| {
+            if let LocalModelProgress::Said { text } = step {
+                said.lock().unwrap().push_str(&text);
+            }
+        })
+        .unwrap();
+        assert_eq!((reply.text.as_str(), said.lock().unwrap().as_str(), reply.notes), ("Navrhuji 3 kola.", "Navrhuji 3 kola.", None));
+        let seen = seen.lock().unwrap();
+        assert_eq!(seen[0], "GET /api/version HTTP/1.1");
+        assert_eq!(serde_json::from_str::<Value>(&seen[1]).unwrap()["model"], "qwen3-vl:8b");
+        let chat: Value = serde_json::from_str(&seen[2]).unwrap();
+        assert_eq!((chat["options"]["num_ctx"].as_u64(), chat["stream"].as_bool()), (Some(u64::from(local_model::OLLAMA_CONTEXT)), Some(true)));
+        assert!(chat["messages"][1]["content"].as_str().unwrap().contains("Kvíz o Praze"));
+    }
+
+    #[test]
+    fn another_server_is_asked_through_the_openai_api() {
+        let (url, _) = server(vec![(404, "text/plain", "404 page not found".into())]);
+        assert_eq!(Server::of(&LocalModel::new(&url, "m")), Server::OpenAi);
     }
 
     #[test]
@@ -723,12 +868,13 @@ mod tests {
             language: QuizLanguage::Cs,
             whole_quiz: true,
             internet: false,
+            ..Default::default()
         };
         let told = Arc::new(AtomicUsize::new(0));
         let counted = told.clone();
         let started = std::time::Instant::now();
         let (content, cut_off) = cancellably(Arc::new(AtomicBool::new(false)), move |stop| {
-            find_and_write(&model, &asked, stop, move |progress| {
+            find_and_write(&model, &Server::of(&model), &asked, stop, move |progress| {
                 if let LocalModelProgress::Writing { questions, .. } = progress {
                     counted.store(questions, Ordering::SeqCst);
                 }
@@ -782,9 +928,10 @@ mod tests {
             language: QuizLanguage::Cs,
             whole_quiz: false,
             internet: false,
+            ..Default::default()
         };
         let started = std::time::Instant::now();
-        let (content, cut_off) = cancellably(Arc::new(AtomicBool::new(false)), move |stop| find_and_write(&model, &asked, stop, |_| {}).map(|(content, cut_off, _)| (content, cut_off))).unwrap();
+        let (content, cut_off) = cancellably(Arc::new(AtomicBool::new(false)), move |stop| find_and_write(&model, &Server::of(&model), &asked, stop, |_| {}).map(|(content, cut_off, _)| (content, cut_off))).unwrap();
         println!("model wrote in {:?}:\n{content}", started.elapsed());
         let questions = local_model::read_questions(&content, cut_off).unwrap();
         for question in &questions {
@@ -802,11 +949,11 @@ mod tests {
         let url = std::env::var("BUZZDOME_LIVE_URL").unwrap_or_else(|_| DEFAULT_URL.to_string());
         let model = LocalModel::new(&url, &name);
         let prompt = std::env::var("BUZZDOME_LIVE_PROMPT").unwrap_or_else(|_| "Udělej 5 otázek o firmě Bakerini, pekárně v Brně, podle jejích webových stránek.".into());
-        let asked = QuestionRequest { prompt, attachments: vec![], language: QuizLanguage::Cs, whole_quiz: false, internet: true };
+        let asked = QuestionRequest { prompt, attachments: vec![], language: QuizLanguage::Cs, whole_quiz: false, internet: true, ..Default::default() };
         let started = std::time::Instant::now();
         let (content, cut_off, found) = cancellably(Arc::new(AtomicBool::new(false)), move |stop| {
             let tell = |step: LocalModelProgress| println!("{:?} {step:?}", std::time::Instant::now() - started);
-            find_and_write(&model, &asked, stop, tell)
+            find_and_write(&model, &Server::of(&model), &asked, stop, tell)
         })
         .unwrap();
         println!("in {:?}; pages read: {:?}; a search or page failed: {}", started.elapsed(), found.sources, found.failed);

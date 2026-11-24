@@ -163,8 +163,34 @@ pub struct Attachment {
     pub content: AttachmentContent,
 }
 
-/// What the quizmaster asks for.
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize, TS)]
+/// Who said a turn of the panel's conversation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+#[serde(rename_all = "camelCase")]
+pub enum ChatRole {
+    User,
+    Assistant,
+}
+
+/// A turn of the conversation the quizmaster had with the model about the
+/// quiz, which the next reply and the questions follow.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+#[serde(rename_all = "camelCase")]
+pub struct ChatTurn {
+    pub role: ChatRole,
+    pub text: String,
+}
+
+/// Most characters of one turn of the conversation sent.
+pub const MAX_TURN_CHARS: usize = 8_000;
+/// Most characters kept of what was found on the internet during a
+/// conversation (`QuestionRequest::notes`): the newest are kept.
+pub const MAX_NOTES_CHARS: usize = 14_000;
+
+/// What the quizmaster asks for: the latest message (`prompt`), the files,
+/// and the conversation before it.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, TS)]
 #[ts(export)]
 #[serde(rename_all = "camelCase")]
 pub struct QuestionRequest {
@@ -179,6 +205,24 @@ pub struct QuestionRequest {
     /// (`research_plan`).
     #[serde(default)]
     pub internet: bool,
+    /// The conversation before `prompt`, oldest first; the newest turns
+    /// are sent when it is long.
+    #[serde(default)]
+    pub conversation: Vec<ChatTurn>,
+    /// What was found on the internet during the conversation, which the
+    /// next replies and the questions are written from too.
+    #[serde(default)]
+    pub notes: Option<String>,
+}
+
+impl QuestionRequest {
+    /// What the quizmaster wrote: their turns of the conversation and the
+    /// latest message. The web addresses they named are taken from it, and
+    /// it is searched when the model gives no plan.
+    pub fn request_text(&self) -> String {
+        let turns = self.conversation.iter().filter(|turn| turn.role == ChatRole::User).map(|turn| turn.text.as_str());
+        turns.chain([self.prompt.as_str()]).map(str::trim).filter(|text| !text.is_empty()).collect::<Vec<_>>().join("\n")
+    }
 }
 
 /// Why a request was not sent.
@@ -227,7 +271,7 @@ fn instructions(language: QuizLanguage) -> String {
          (for a picture: what is really seen in it). The quizmaster reads it.\n\
          - \"right\": the one correct answer. It must agree with the reason and with the attachments: what a text \
          attachment says is true.\n\
-         - \"round\": the round's name when the request asks for rounds, the same for every question of that round \
+         - \"round\": the round's name when the request or the conversation asks for rounds, the same for every question of that round \
          (not numbered per question); empty otherwise.\n\
          - \"wrong\": 1 to 3 wrong but believable answers of the same kind as the right one (all colours when it \
          is a colour, all numbers when it is a number). None repeats the right answer or another wrong one, none \
@@ -243,7 +287,31 @@ fn instructions(language: QuizLanguage) -> String {
          - A wrong answer differs clearly from the right one (not the same street with another number).\n\
          - Questions of a round come together.\n\
          - The questions agree with each other: one never says what another says is wrong.\n\
-         - Unless the request says how many, write 10 questions."
+         - When a conversation with the quizmaster comes before, write the quiz agreed there: its rounds, topics, \
+         number and kind of questions.\n\
+         - Unless the request or the conversation says how many, write 10 questions."
+    )
+}
+
+/// What the model is told when the quizmaster talks with it about the quiz
+/// before it is written.
+fn chat_instructions(language: QuizLanguage) -> String {
+    let language = match language {
+        QuizLanguage::Cs => "Czech",
+        QuizLanguage::En => "English",
+    };
+    format!(
+        "You help a quizmaster plan a quiz in a quiz app. It is played live in a room: questions on a projector, \
+         every team answers A, B, C or D on a buzzer.\n\
+         Talk with the quizmaster about the quiz: its topic, audience, rounds, how many questions and how hard, and \
+         what the attached files and the facts found on the internet offer. Propose a concrete outline: the rounds, \
+         each with its topic and number of questions, and a few examples of what you would ask. When something \
+         important is unclear, ask about it, at most two questions at a time. Change the outline as the quizmaster \
+         says.\n\
+         Do not write out all the questions with their answers: when the quizmaster is happy, they press the button \
+         that makes the questions, and the questions are then written from this conversation.\n\
+         Use only facts you are sure of or that the files or the internet give. Reply in {language}, with correct \
+         spelling, briefly, in plain text: short paragraphs and simple lists, no tables and no headings."
     )
 }
 
@@ -308,7 +376,8 @@ pub fn research_plan_request(model: &LocalModel, asked: &QuestionRequest) -> Val
 fn plan_request(model: &LocalModel, asked: &QuestionRequest) -> Value {
     let files: Vec<String> = asked.attachments.iter().map(|a| a.name.replace(['\n', '\r'], " ")).collect();
     let task = format!(
-        "The quizmaster's request:\n{}\n\nFiles given: {}.",
+        "{}The quizmaster's request:\n{}\n\nFiles given: {}.",
+        conversation_before(asked),
         asked.prompt.trim().chars().take(MAX_PROMPT_CHARS).collect::<String>(),
         if files.is_empty() { "none".to_string() } else { files.join(", ") }
     );
@@ -339,6 +408,25 @@ fn plan_request(model: &LocalModel, asked: &QuestionRequest) -> Value {
     })
 }
 
+/// The last turns of the conversation, for the research plan: what the
+/// latest message is about may be named only before it.
+fn conversation_before(asked: &QuestionRequest) -> String {
+    const TURNS: usize = 4;
+    const TURN_CHARS: usize = 600;
+    let recent = &asked.conversation[asked.conversation.len().saturating_sub(TURNS)..];
+    if recent.is_empty() {
+        return String::new();
+    }
+    let lines: Vec<String> = recent
+        .iter()
+        .map(|turn| {
+            let who = if turn.role == ChatRole::User { "Quizmaster" } else { "Assistant" };
+            format!("{who}: {}", one_line(&turn.text).chars().take(TURN_CHARS).collect::<String>())
+        })
+        .collect();
+    format!("The conversation so far:\n{}\n\n", lines.join("\n"))
+}
+
 /// What the model said to look up, from its reply `content`: at most
 /// `MAX_SEARCHES` of each, without blanks and repeats. A reply that is not
 /// the plan is an empty one.
@@ -366,10 +454,42 @@ fn one_line(text: &str) -> String {
     text.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
-/// The chat completion request for `asked` of `model`, with `research`,
-/// what was found on the internet for it (`web_page::research_text`).
+/// The chat completion request for the questions `asked` of `model`, with
+/// `research`, what was found on the internet for it
+/// (`web_page::research_text`), and at most `max_text` characters of text
+/// files and of the conversation each.
 pub fn request(model: &LocalModel, asked: &QuestionRequest, research: Option<&str>, max_text: usize) -> Result<Value, RequestError> {
-    if asked.prompt.trim().is_empty() && asked.attachments.is_empty() {
+    let ask = if asked.conversation.is_empty() { "Write questions about the attachments." } else { "Write the questions of the quiz we agreed on above." };
+    Ok(json!({
+        "model": model.model,
+        "messages": messages(instructions(asked.language), asked, research, max_text, ask)?,
+        "response_format": {
+            "type": "json_schema",
+            "json_schema": { "name": "quiz_questions", "schema": reply_schema() }
+        },
+        // Low, for facts rather than invention.
+        "temperature": 0.2,
+        "stream": false
+    }))
+}
+
+/// The chat completion request for the model's next turn of the
+/// conversation about the quiz (`chat_instructions`): plain text.
+pub fn chat_request(model: &LocalModel, asked: &QuestionRequest, research: Option<&str>, max_text: usize) -> Result<Value, RequestError> {
+    Ok(json!({
+        "model": model.model,
+        "messages": messages(chat_instructions(asked.language), asked, research, max_text, "What quiz could we make from the attachments?")?,
+        "temperature": 0.6,
+        "stream": false
+    }))
+}
+
+/// The messages of a request: the instructions `system`, the newest turns
+/// of the conversation within `max_text` characters, and the latest
+/// message (`ask` when it is empty) with the files and what was found on
+/// the internet, before and now.
+fn messages(system: String, asked: &QuestionRequest, research: Option<&str>, max_text: usize, ask: &str) -> Result<Vec<Value>, RequestError> {
+    if asked.prompt.trim().is_empty() && asked.attachments.is_empty() && asked.conversation.is_empty() {
         return Err(RequestError::Empty);
     }
     if asked.attachments.len() > MAX_ATTACHMENTS {
@@ -380,7 +500,7 @@ pub fn request(model: &LocalModel, asked: &QuestionRequest, research: Option<&st
         return Err(RequestError::TooManyPictures { max: MAX_IMAGES });
     }
     let prompt: String = asked.prompt.trim().chars().take(MAX_PROMPT_CHARS).collect();
-    let mut parts = vec![text_part(if prompt.is_empty() { "Write questions about the attachments.".to_string() } else { prompt })];
+    let mut parts = vec![text_part(if prompt.is_empty() { ask.to_string() } else { prompt })];
     let mut text_left = max_text;
     for (number, attachment) in (1..).zip(&asked.attachments) {
         let name = attachment.name.replace(['\n', '\r'], " ");
@@ -418,7 +538,9 @@ pub fn request(model: &LocalModel, asked: &QuestionRequest, research: Option<&st
 
         }
     }
-    if let Some(research) = research.filter(|r| !r.trim().is_empty()) {
+    let found: Vec<&str> = [asked.notes.as_deref(), research].into_iter().flatten().map(str::trim).filter(|text| !text.is_empty()).collect();
+    if !found.is_empty() {
+        let research = found.join("\n\n");
         // Taken out of what text files left, so the request stays its size.
         let taken: String = research.chars().take(text_left.max(max_text / 2)).collect();
         parts.push(text_part(format!(
@@ -426,20 +548,47 @@ pub fn request(model: &LocalModel, asked: &QuestionRequest, research: Option<&st
              or subject asked for come from what this says; it is not an attachment, so \"attachment\" is 0 for them:\n{taken}"
         )));
     }
-    Ok(json!({
-        "model": model.model,
-        "messages": [
-            { "role": "system", "content": instructions(asked.language) },
-            { "role": "user", "content": parts }
-        ],
-        "response_format": {
-            "type": "json_schema",
-            "json_schema": { "name": "quiz_questions", "schema": reply_schema() }
-        },
-        // Low, for facts rather than invention.
-        "temperature": 0.2,
-        "stream": false
-    }))
+    let mut messages = vec![json!({ "role": "system", "content": system })];
+    messages.extend(conversation(&asked.conversation, max_text));
+    messages.push(json!({ "role": "user", "content": parts }));
+    Ok(messages)
+}
+
+/// The newest turns of `turns` that fit in `max_chars` characters, each at
+/// most `MAX_TURN_CHARS`, oldest first, as chat messages.
+fn conversation(turns: &[ChatTurn], max_chars: usize) -> Vec<Value> {
+    let mut left = max_chars;
+    let mut kept: Vec<Value> = Vec::new();
+    for turn in turns.iter().rev() {
+        let text: String = turn.text.trim().chars().take(MAX_TURN_CHARS).collect();
+        let length = text.chars().count();
+        if text.is_empty() {
+            continue;
+        }
+        if length > left {
+            break;
+        }
+        left -= length;
+        kept.push(json!({ "role": if turn.role == ChatRole::User { "user" } else { "assistant" }, "content": text }));
+    }
+    kept.reverse();
+    kept
+}
+
+/// `notes` from before and what was `found` now, the newest
+/// `MAX_NOTES_CHARS` characters, from a line's start.
+pub fn notes(before: Option<&str>, found: Option<&str>) -> Option<String> {
+    let all: Vec<&str> = [before, found].into_iter().flatten().map(str::trim).filter(|text| !text.is_empty()).collect();
+    if all.is_empty() {
+        return None;
+    }
+    let all = all.join("\n\n");
+    let count = all.chars().count();
+    if count <= MAX_NOTES_CHARS {
+        return Some(all);
+    }
+    let cut: String = all.chars().skip(count - MAX_NOTES_CHARS).collect();
+    Some(cut.split_once('\n').map_or(cut.clone(), |(_, rest)| rest.to_string()))
 }
 
 fn images(content: &AttachmentContent) -> &[String] {
@@ -626,6 +775,9 @@ pub fn stream_line(line: &str) -> StreamLine {
     if line.is_empty() || line.starts_with(':') || line.starts_with("event:") || line.starts_with("id:") {
         return StreamLine::Nothing;
     }
+    if line.starts_with('{') {
+        return ollama_line(line);
+    }
     let Some(data) = line.strip_prefix("data:").map(str::trim) else { return StreamLine::NotStreamed };
     if data == "[DONE]" {
         return StreamLine::Done;
@@ -638,6 +790,22 @@ pub fn stream_line(line: &str) -> StreamLine {
     let text = choice.pointer("/delta/content").and_then(Value::as_str).unwrap_or_default().to_string();
     let thought = ["/delta/reasoning", "/delta/reasoning_content"].iter().filter_map(|at| choice.pointer(at).and_then(Value::as_str)).map(|t| t.chars().count()).sum();
     StreamLine::Text { text, thought, cut_off: choice.get("finish_reason").and_then(Value::as_str) == Some("length") }
+}
+
+/// A line of Ollama's own streamed chat (`/api/chat`, one JSON object a
+/// line: `message.content`, `message.thinking`, `done`, `done_reason`), or
+/// an OpenAI reply sent whole.
+fn ollama_line(line: &str) -> StreamLine {
+    let Ok(chunk) = serde_json::from_str::<Value>(line) else { return StreamLine::NotStreamed };
+    if chunk.get("error").is_some_and(|e| !e.is_null()) {
+        return StreamLine::Failed { detail: error_detail(line) };
+    }
+    if chunk.get("message").is_none() && chunk.get("done").is_none() {
+        return StreamLine::NotStreamed;
+    }
+    let text = chunk.pointer("/message/content").and_then(Value::as_str).unwrap_or_default().to_string();
+    let thought = chunk.pointer("/message/thinking").and_then(Value::as_str).map_or(0, |t| t.chars().count());
+    StreamLine::Text { text, thought, cut_off: chunk.get("done_reason").and_then(Value::as_str) == Some("length") }
 }
 
 /// The message in a server's error reply, in OpenAI's form
@@ -660,16 +828,17 @@ pub fn context_full(detail: &str) -> bool {
     detail.contains("context") && ["length", "size", "overflow", "window", "n_ctx"].iter().any(|word| detail.contains(word))
 }
 
-/// Fields of a request that not every OpenAI-compatible server takes: the
-/// reply's JSON Schema, and `reasoning_effort` (`thinking_off`).
-const EXTRAS: [&str; 2] = ["response_format", "reasoning_effort"];
+/// Fields of a request that not every server takes: the reply's JSON
+/// Schema, and `reasoning_effort` (`thinking_off`); in Ollama's own form
+/// (`for_ollama`), `format` and `think`.
+const EXTRAS: [&str; 4] = ["response_format", "reasoning_effort", "format", "think"];
 
 /// Whether a server refused a request for one of its `EXTRAS`, which some
 /// servers do not take: the request is then sent without them, and the
 /// instructions alone ask for the JSON.
 pub fn refuses_extras(detail: &str) -> bool {
     let detail = detail.to_lowercase();
-    ["response_format", "json_schema", "structured output", "grammar", "reasoning_effort"].iter().any(|word| detail.contains(word))
+    ["response_format", "json_schema", "structured output", "grammar", "reasoning_effort", "think"].iter().any(|word| detail.contains(word))
 }
 
 /// Whether `body` has any of the `EXTRAS`.
@@ -699,6 +868,90 @@ pub fn thinking_off(mut body: Value) -> Value {
         object.insert("reasoning_effort".into(), json!("none"));
     }
     body
+}
+
+/// The address of Ollama's own API for a server at `url`: `url` without
+/// its `/v1`, where Ollama serves the OpenAI-compatible API.
+pub fn ollama_root(url: &str) -> String {
+    let url = LocalModel::new(url, "").url;
+    url.strip_suffix("/v1").unwrap_or(&url).to_string()
+}
+
+/// Tokens of context a request to Ollama asks for (`num_ctx`), which
+/// Ollama's OpenAI-compatible API cannot set (Ollama docs, OpenAI
+/// compatibility, https://docs.ollama.com/api/openai-compatibility) and
+/// which is 4096 by default on a computer with less than 24 GiB of
+/// graphics memory (https://docs.ollama.com/context-length): too little for
+/// a reasoning model, whose thoughts come before its reply.
+pub const OLLAMA_CONTEXT: u32 = 16_384;
+/// Tokens of context for a request too long for `OLLAMA_CONTEXT`.
+pub const OLLAMA_LARGE_CONTEXT: u32 = 32_768;
+/// Tokens kept for the model's reasoning and reply [no source - estimate:
+/// a reasoning model thought 7,000 to 14,000 characters in our test].
+const REPLY_TOKENS: usize = 8_192;
+/// Tokens a picture takes [no source - estimate: vision models take some
+/// hundreds to about a thousand for a 768 px picture].
+const IMAGE_TOKENS: usize = 1_024;
+
+/// The context to ask Ollama for `body` (as `for_ollama` sends it):
+/// `OLLAMA_CONTEXT`, or `OLLAMA_LARGE_CONTEXT` when the request and room
+/// for the reply need more; never more than the model's own `most`. The
+/// same for most requests, as Ollama loads a model again for another.
+pub fn ollama_context(body: &Value, most: Option<u32>) -> u32 {
+    let messages = body.get("messages").and_then(Value::as_array).map(Vec::as_slice).unwrap_or_default();
+    let chars: usize = messages.iter().map(|m| m.get("content").and_then(Value::as_str).map_or(0, |t| t.chars().count())).sum();
+    let images: usize = messages.iter().map(|m| m.get("images").and_then(Value::as_array).map_or(0, Vec::len)).sum();
+    // About 3 characters a token [no source - estimate for Czech and English].
+    let needed = chars / 3 + images * IMAGE_TOKENS + REPLY_TOKENS;
+    let wanted = if needed <= OLLAMA_CONTEXT as usize { OLLAMA_CONTEXT } else { OLLAMA_LARGE_CONTEXT };
+    most.filter(|most| *most >= 2_048).map_or(wanted, |most| wanted.min(most))
+}
+
+/// The model's longest context from Ollama's `/api/show` reply
+/// (`model_info."<architecture>.context_length"`).
+pub fn model_context(show: &Value) -> Option<u32> {
+    let info = show.get("model_info")?.as_object()?;
+    info.iter().find(|(key, _)| key.ends_with(".context_length")).and_then(|(_, value)| value.as_u64()).map(|n| n.min(u32::MAX as u64) as u32)
+}
+
+/// `body`, a chat completion request, in the form of Ollama's own chat
+/// API (`/api/chat`), with `context` tokens of context: each message's
+/// text as one string and its pictures as base64 (`images`), the JSON
+/// Schema as `format`, `reasoning_effort: "none"` as `think: false`
+/// (Ollama docs, Chat, https://docs.ollama.com/api/chat).
+pub fn for_ollama(body: &Value, context: u32) -> Value {
+    let messages: Vec<Value> = body.get("messages").and_then(Value::as_array).map(Vec::as_slice).unwrap_or_default().iter().map(ollama_message).collect();
+    let mut options = json!({ "num_ctx": context });
+    if let Some(temperature) = body.get("temperature") {
+        options["temperature"] = temperature.clone();
+    }
+    let mut native = json!({
+        "model": body.get("model").cloned().unwrap_or_default(),
+        "messages": messages,
+        "options": options,
+        "stream": body.get("stream").and_then(Value::as_bool).unwrap_or(false)
+    });
+    if let Some(schema) = body.pointer("/response_format/json_schema/schema") {
+        native["format"] = schema.clone();
+    }
+    if body.get("reasoning_effort").and_then(Value::as_str) == Some("none") {
+        native["think"] = Value::Bool(false);
+    }
+    native
+}
+
+fn ollama_message(message: &Value) -> Value {
+    let role = message.get("role").cloned().unwrap_or_else(|| json!("user"));
+    let Some(parts) = message.get("content").and_then(Value::as_array) else {
+        return json!({ "role": role, "content": message.get("content").and_then(Value::as_str).unwrap_or_default() });
+    };
+    let texts: Vec<&str> = parts.iter().filter_map(|part| part.get("text").and_then(Value::as_str)).collect();
+    let images: Vec<&str> = parts.iter().filter_map(|part| part.pointer("/image_url/url").and_then(Value::as_str)).filter_map(|url| url.split_once(";base64,").map(|(_, data)| data)).collect();
+    let mut native = json!({ "role": role, "content": texts.join("\n\n") });
+    if !images.is_empty() {
+        native["images"] = json!(images);
+    }
+    native
 }
 
 /// `body` as a streamed request.
@@ -731,6 +984,12 @@ fn questions_in(content: &str) -> Option<Vec<DraftQuestion>> {
     text.match_indices(['{', '['])
         .take(JSON_STARTS)
         .find_map(|(start, _)| serde_json::Deserializer::from_str(&text[start..]).into_iter::<Value>().next()?.ok().and_then(questions))
+}
+
+/// The model's turn of the conversation as the panel shows it: its text
+/// without a reasoning model's thinking, trimmed.
+pub fn said(content: &str) -> String {
+    without_thinking(content).trim().to_string()
 }
 
 /// `content` after a reasoning model's thinking (`<think>…</think>`), which
@@ -833,7 +1092,7 @@ mod tests {
     const PICTURE: &str = "data:image/jpeg;base64,/9j/4AAQ";
 
     fn asked(prompt: &str, attachments: Vec<Attachment>) -> QuestionRequest {
-        QuestionRequest { prompt: prompt.into(), attachments, language: QuizLanguage::Cs, whole_quiz: false, internet: false }
+        QuestionRequest { prompt: prompt.into(), attachments, language: QuizLanguage::Cs, ..Default::default() }
     }
 
     fn attachment(name: &str, content: AttachmentContent) -> Attachment {
@@ -1133,5 +1392,80 @@ mod tests {
         let reply = r#"{"object":"list","data":[{"id":"qwen3-vl:8b"},{"id":"Gemma3:4b"},{"id":"qwen3-vl:8b"},{"x":1}]}"#;
         assert_eq!(read_models(reply), Some(vec!["Gemma3:4b".into(), "qwen3-vl:8b".into()]));
         assert_eq!(read_models("{}"), None);
+    }
+
+    fn turn(role: ChatRole, text: &str) -> ChatTurn {
+        ChatTurn { role, text: text.into() }
+    }
+
+    #[test]
+    fn the_conversation_comes_between_the_instructions_and_the_latest_message_newest_kept() {
+        let model = LocalModel::new(DEFAULT_URL, "m");
+        let old = turn(ChatRole::User, &"staré ".repeat(2_000));
+        let asked = QuestionRequest { conversation: vec![old, turn(ChatRole::User, "Kvíz o Praze"), turn(ChatRole::Assistant, "Navrhuji 3 kola po 5 otázkách.")], ..asked("", vec![]) };
+        let body = request(&model, &asked, None, 1_000).unwrap();
+        let messages = body["messages"].as_array().unwrap();
+        let roles: Vec<&str> = messages.iter().map(|m| m["role"].as_str().unwrap()).collect();
+        assert_eq!(roles, ["system", "user", "assistant", "user"], "the oldest turn does not fit");
+        assert_eq!(messages[2]["content"], "Navrhuji 3 kola po 5 otázkách.");
+        assert_eq!(messages[3]["content"][0]["text"], "Write the questions of the quiz we agreed on above.");
+        let chat = chat_request(&model, &QuestionRequest { prompt: "Přidej kolo o mostech".into(), ..asked.clone() }, None, MAX_TEXT_CHARS).unwrap();
+        assert!(chat.get("response_format").is_none());
+        assert!(chat["messages"][0]["content"].as_str().unwrap().contains("Propose a concrete outline"));
+        assert_eq!(request(&model, &QuestionRequest { conversation: vec![], ..asked }, None, MAX_TEXT_CHARS), Err(RequestError::Empty));
+    }
+
+    #[test]
+    fn the_research_plan_reads_the_last_turns_and_the_request_text_the_quizmasters() {
+        let asked = QuestionRequest { conversation: vec![turn(ChatRole::User, "Kvíz o Bakerini z Brna"), turn(ChatRole::Assistant, "Jaká kola?")], ..asked("Přidej kolo o historii", vec![]) };
+        let plan = research_plan_request(&LocalModel::new(DEFAULT_URL, "m"), &asked);
+        assert!(plan["messages"][1]["content"].as_str().unwrap().contains("Quizmaster: Kvíz o Bakerini z Brna"));
+        assert_eq!(asked.request_text(), "Kvíz o Bakerini z Brna\nPřidej kolo o historii");
+    }
+
+    #[test]
+    fn notes_keep_the_newest_from_a_line_start() {
+        assert_eq!(notes(None, None), None);
+        assert_eq!(notes(Some("a"), Some("b")).as_deref(), Some("a\n\nb"));
+        let old = "x".repeat(MAX_NOTES_CHARS);
+        let kept = notes(Some(&old), Some("nové\nřádky")).unwrap();
+        assert!(kept.chars().count() <= MAX_NOTES_CHARS && kept.ends_with("nové\nřádky") && !kept.starts_with('x'), "{}", &kept[..20.min(kept.len())]);
+    }
+
+    #[test]
+    fn a_request_goes_to_ollama_in_its_own_form() {
+        let picture = Attachment { name: "a.jpg".into(), media: None, content: AttachmentContent::Picture { image: "data:image/jpeg;base64,AAAA".into() } };
+        let body = thinking_off(request(&LocalModel::new(DEFAULT_URL, "gemma3:4b"), &asked("Kvíz", vec![picture]), None, MAX_TEXT_CHARS).unwrap());
+        let native = for_ollama(&streamed(body), 16_384);
+        assert_eq!(native["options"], json!({ "num_ctx": 16_384, "temperature": 0.2 }));
+        assert_eq!((native["think"].clone(), native["stream"].clone()), (json!(false), json!(true)));
+        assert_eq!(native["format"], reply_schema());
+        let user = &native["messages"][1];
+        assert_eq!(user["images"], json!(["AAAA"]));
+        assert!(user["content"].as_str().unwrap().starts_with("Kvíz\n\nAttachment 1: picture"));
+        assert!(native["messages"][0]["content"].is_string());
+        assert!(!has_extras(&without_extras(native.clone())) && has_extras(&native));
+        assert_eq!(ollama_root("http://localhost:11434/v1/"), "http://localhost:11434");
+        assert_eq!(ollama_root("box:8080"), "http://box:8080");
+    }
+
+    #[test]
+    fn ollama_is_given_a_context_that_fits_the_request_and_the_model() {
+        let body = |chars: usize, images: usize| json!({ "messages": [{ "role": "user", "content": "a".repeat(chars), "images": vec!["x"; images] }] });
+        assert_eq!(ollama_context(&body(100, 1), None), OLLAMA_CONTEXT);
+        assert_eq!(ollama_context(&body(40_000, 2), None), OLLAMA_LARGE_CONTEXT);
+        assert_eq!(ollama_context(&body(40_000, 2), Some(8_192)), 8_192);
+        assert_eq!(ollama_context(&body(100, 0), Some(0)), OLLAMA_CONTEXT, "a context too small to be true is not taken");
+        let show = json!({ "model_info": { "general.architecture": "gemma3", "gemma3.context_length": 131_072 } });
+        assert_eq!(model_context(&show), Some(131_072));
+        assert_eq!(model_context(&json!({})), None);
+    }
+
+    #[test]
+    fn ollamas_own_stream_is_read() {
+        assert_eq!(stream_line(r#"{"message":{"role":"assistant","content":"Ahoj","thinking":"Hm"},"done":false}"#), StreamLine::Text { text: "Ahoj".into(), thought: 2, cut_off: false });
+        assert_eq!(stream_line(r#"{"message":{"role":"assistant","content":""},"done":true,"done_reason":"length"}"#), StreamLine::Text { text: String::new(), thought: 0, cut_off: true });
+        assert_eq!(stream_line(r#"{"error":"model ran out of memory"}"#), StreamLine::Failed { detail: "model ran out of memory".into() });
+        assert_eq!(stream_line(r#"{"choices":[{"message":{"content":"{}"}}]}"#), StreamLine::NotStreamed);
     }
 }

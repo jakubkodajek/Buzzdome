@@ -198,9 +198,19 @@ Buzzdome through their own apps and the MCP server above.
 Which model to use is the quizmaster's choice; the app and these docs
 name none.
 
-In the panel, the quizmaster adds pictures, videos, sound recordings and
-text files (`.txt`, `.md`, `.csv`; at most 12), types what they want ("10 questions
-about the trip photos, in two rounds") and presses Make questions:
+The panel is a chat (Jakub's choice, 2026-11-24). The quizmaster says
+what quiz they want ("a quiz about Prague for a company party, 3 rounds of
+5"), adds pictures, videos, sound recordings and text files (`.txt`,
+`.md`, `.csv`; at most 12) with the + button or by dropping them on the
+panel, and sends the message (Enter; Shift+Enter starts a new line). The
+model replies with a proposal: rounds, their topics and numbers of
+questions, a few example questions, and a question or two where something
+is unclear (`editor_chat_local_model`, `quiz_ai::local_model::chat_request`:
+the conversation so far, newest turns first within the text budget, then
+the message with the files; plain text, streamed word by word to the
+panel). The quizmaster refines it in more messages. Make questions
+(Ctrl+Enter) then has the model write the questions of the quiz agreed in
+the conversation:
 
 1. Pictures and videos are copied into the draft (`editor_add_dropped_media`),
    so the slides can show them.
@@ -344,6 +354,32 @@ The panel shows each step and lists the pages read with the questions; a
 search or page that failed is said so. With it unticked, nothing leaves
 the computer.
 
+### Ollama's own API
+
+Ollama's OpenAI-compatible API cannot set a model's context length (Ollama,
+"OpenAI compatibility", https://docs.ollama.com/api/openai-compatibility),
+and Ollama's default is 4096 tokens on a computer with less than 24 GiB of
+graphics memory (https://docs.ollama.com/context-length). A reasoning model
+reasons for thousands of tokens before it answers, so in 4k it ran out of
+room at every step in our test (2026-11-23), even when asked not to reason
+(`reasoning_effort: "none"`, and `think: false` in Ollama's own API: the
+model reasoned anyway). So when `/api/version` at the server's address
+without `/v1` answers as Ollama does, the panel talks to Ollama's own chat
+API (`/api/chat`, Ollama, "Chat", https://docs.ollama.com/api/chat;
+`quiz_ai::local_model::for_ollama`) and sets `num_ctx` to 16,384 tokens, or
+32,768 for a long request, never more than the model's own context
+(`/api/show`, `model_info.<architecture>.context_length`). The same value
+for most requests, as Ollama loads a model again for another. Other servers
+keep the OpenAI API and the context they were started with.
+
+The research plan stops a model that reasons over it for more than 3,000
+characters (`asking::Reading::PLAN`): then nothing is looked up for that
+message in the conversation, and Make questions searches the quizmaster's
+messages as they are written. What was found during the conversation goes
+back with each message and with Make questions (`notes`, the newest 14,000
+characters), so the questions are written from the same pages as the
+proposal.
+
 ### Checking it with a real model
 
 The tests use a fake server on this computer
@@ -361,7 +397,8 @@ Studio). Without `BUZZDOME_LIVE_MODEL` the test does nothing. By hand, in
 
 1. File › AI assistants: Load models lists Ollama's models; choose one and Use.
 2. In an empty quiz, Home › AI assistant: add two photos, a short video and
-   a `.txt` file, ask for "8 questions in two rounds", press Make questions.
+   a `.txt` file with +, write "8 questions in two rounds" and send it; the
+   model proposes the rounds. Ask for a change, then press Make questions.
    The status says the model reads, then counts questions; the slides come
    in after the selected one: sections, questions with the photos and the
    video, an end of round after each round and the results.
