@@ -1,9 +1,9 @@
 // The changes the AI assistant's model made to the quiz (`AiChanges`), as
 // the editor's edits: one batch, so one undo step takes them all back.
 
-import type { Category, Quiz, QuizChange, Slide } from "../types";
+import type { Category, Quiz, QuizChange } from "../types";
 import { applyEdit, type Edit } from "./history";
-import { formatImported, withFreshIds } from "./slides";
+import { withFreshIds } from "./slides";
 
 /** What the changes did, for the note in the panel. */
 export interface ChangeCounts {
@@ -29,9 +29,11 @@ export interface ChangeEdits {
  * them for `asked`, the quiz as it was when it was asked: a slide or a
  * field of the quiz that has changed since keeps the quizmaster's change
  * and the model's is skipped. Slides are found by id as the quiz has them
- * now: a change of a slide deleted meanwhile does nothing. Added slides get ids no slide has (`withFreshIds`) and the
- * look of their category (`formatImported`). The changes are made in
- * order, as `quiz_edits::apply` makes them for the MCP server.
+ * now: a change of a slide deleted meanwhile does nothing. Added slides get
+ * ids no slide has (`withFreshIds`). Slides come as they are to be: the
+ * backend gave them their category's look (`quiz_edits::resolve`). The
+ * changes are made in order, as `quiz_edits::apply` makes them for the MCP
+ * server; `quiz-changes.json` holds the cases both must make alike.
  */
 export function changeEdits(quiz: Quiz, asked: Quiz, changes: readonly QuizChange[], random?: () => string): ChangeEdits {
   const edits: Edit[] = [];
@@ -67,7 +69,7 @@ export function changeEdits(quiz: Quiz, asked: Quiz, changes: readonly QuizChang
         let at = placeAfter(change.after);
         const fresh = withFreshIds(now, change.slides, random);
         fresh.forEach((slide, i) => renamed.set(change.slides[i].id, slide.id));
-        for (const slide of fresh.map((s) => formatImported(s, now.categories ?? []))) {
+        for (const slide of fresh) {
           if (push({ type: "insertSlide", index: at, slide })) {
             added.push(slide.id);
             counts.added++;
@@ -79,8 +81,7 @@ export function changeEdits(quiz: Quiz, asked: Quiz, changes: readonly QuizChang
       case "replaceSlide": {
         const before = now.slides[indexOf(change.slide.id)];
         if (!before || changedSince(asked.slides.find((s) => s.id === before.id), quiz.slides.find((s) => s.id === before.id))) break;
-        // A slide that takes on another category takes on its look.
-        const slide: Slide = change.slide.category !== before.category ? formatImported(change.slide, now.categories ?? []) : change.slide;
+        const slide = change.slide;
         if (push({ type: "updateSlide", id: slide.id, update: () => slide })) counts.changed++;
         break;
       }

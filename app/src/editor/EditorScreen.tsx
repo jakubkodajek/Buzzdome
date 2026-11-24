@@ -259,7 +259,7 @@ function Studio({ editor, open, ask, onExit }: { editor: QuizEditor; open: OpenQ
     setBackstage(null);
     return inserted;
   });
-  // The AI assistant's changes go only into the draft they were asked for: their media are copied into it.
+  // The AI assistant's changes go only into the draft they were asked for: the backend copied the files they use into that draft.
   const changeAsked = (draft: string, asked: Quiz, changes: QuizChange[]) => {
     const { quiz: now, draftId } = latest.current;
     if (draftId !== draft || !now) return null;

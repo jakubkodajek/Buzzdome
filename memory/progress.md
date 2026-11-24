@@ -233,8 +233,15 @@ Template:
   names every field of the quiz format. Review findings CR-1..CR-11
   fixed (edits build on each other, insert order, deleted anchors, view
   budget, correct answers by text, stale snapshot kept as the
-  quizmaster's, media and category checks).
-- State: make check green before the fix commit; layout check clean (editor).
+  quizmaster's, media and category checks). Guard findings BF215-BF223
+  fixed: `resolve` gives a slide its category's look once, under the
+  style the model wrote, and the changes carry final slides (neither
+  `apply` nor `changeEdits` restyles); `Quiz::drop_unsafe_media` covers
+  the quiz's own fields; the shared cases in
+  `crates/quiz-ai/tests/fixtures/quiz-changes.json` run in cargo test and
+  vitest; cut-off changes are counted as left out; at most
+  `MAX_ADDED_SLIDES` per reply.
+- State: make check green; layout check clean (editor).
 - Next: Jakub pushes tag `v1.4.0`; try "change" requests (time, theme,
   fonts, move a round) with a real model on his Mac.
 - Blockers / open questions: MCP cannot measure loudness (gainDb is set

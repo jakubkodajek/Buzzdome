@@ -196,6 +196,12 @@ impl QuizSounds {
         })
     }
 
+    /// Forgets each file outside the quiz's media folder
+    /// (`is_safe_reference`): its moment plays its default.
+    pub fn drop_unsafe_media(&mut self) {
+        self.slots.retain(|_, choice| !matches!(choice, SoundChoice::File(file) if !crate::is_safe_reference(file)));
+    }
+
     /// Points the files in `renamed` (old reference to new one) to their new names.
     pub fn rename_media(&mut self, renamed: &BTreeMap<String, String>) {
         for choice in self.slots.values_mut() {

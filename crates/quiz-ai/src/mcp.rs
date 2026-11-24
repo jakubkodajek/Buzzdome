@@ -398,8 +398,9 @@ const TOOLS: [Tool; 12] = [
             let themes: Vec<String> = args.context.themes.iter().map(|theme| theme.id.clone()).collect();
             let seed = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(1, |t| t.as_nanos() as u64);
             let resolved = crate::quiz_edits::resolve(&quiz, &edits, &[], None, &themes, seed);
-            let made = edits.changes.len() - resolved.left_out;
-            let told = format!("Made {made} of {} changes; {} could not be read and were left out.", edits.changes.len(), resolved.left_out);
+            let written = edits.changes.len() + edits.unread;
+            let made = written - resolved.left_out;
+            let told = format!("Made {made} of {written} changes; {} could not be read and were left out.", resolved.left_out);
             if resolved.changes.is_empty() {
                 // Nothing to write: quiz.json stays as it is.
                 return Ok(vec![text_block(&told)]);

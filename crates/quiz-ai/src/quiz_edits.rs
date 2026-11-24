@@ -18,6 +18,9 @@ use ts_rs::TS;
 /// Most changes one reply makes.
 pub const MAX_CHANGES: usize = 200;
 
+/// Most slides one reply adds; the rest are left out.
+pub const MAX_ADDED_SLIDES: usize = 500;
+
 /// Characters of a slide's JSON shown in full while the view has room;
 /// the rest are shown in short (`short_slide`).
 const SHORT_SLIDE_CHARS: usize = 120;
@@ -296,6 +299,8 @@ pub struct ModelChange {
 pub struct ModelEdits {
     pub changes: Vec<ModelChange>,
     pub summary: String,
+    /// Changes written that are not in `changes`: not a change at all, or past `MAX_CHANGES`.
+    pub unread: usize,
 }
 
 impl ModelChange {
@@ -350,7 +355,7 @@ pub fn read_edits(content: &str) -> Option<ModelEdits> {
             _ => return None,
         };
         let changes: Vec<ModelChange> = list.iter().filter_map(ModelChange::read).take(MAX_CHANGES).collect();
-        Some(ModelEdits { changes, summary })
+        Some(ModelEdits { unread: list.len() - changes.len(), changes, summary })
     };
     content
         .match_indices(['{', '['])
@@ -441,7 +446,7 @@ pub struct AttachedFile {
 /// selected slide when the model says nowhere. `seed` shuffles the answers
 /// of a question written with `right` and `wrong`.
 pub fn resolve(quiz: &Quiz, edits: &ModelEdits, attachments: &[Option<AttachedFile>], selected: Option<usize>, themes: &[String], seed: u64) -> Resolved {
-    let mut resolved = Resolved::default();
+    let mut resolved = Resolved { left_out: edits.unread, ..Resolved::default() };
     let mut shuffle = Shuffler(seed | 1);
     let id_of = |number: usize| number.checked_sub(1).and_then(|i| quiz.slides.get(i)).map(|slide| slide.id.clone());
     let mut working = quiz.clone();
@@ -451,6 +456,7 @@ pub fn resolve(quiz: &Quiz, edits: &ModelEdits, attachments: &[Option<AttachedFi
     // The last slide added at a place, so the next one added there follows it.
     let mut last_added: HashMap<Option<String>, String> = HashMap::new();
     let mut added = 0;
+    let mut slides_added = 0;
     // The categories change first, so a slide added in the same reply takes on its new category's look.
     let sets_categories = |change: &&ModelChange| change.action == Some(Action::Quiz) && change.set.contains_key("categories");
     let ordered = edits.changes.iter().filter(sets_categories).chain(edits.changes.iter().filter(|change| !sets_categories(change)));
@@ -466,10 +472,12 @@ pub fn resolve(quiz: &Quiz, edits: &ModelEdits, attachments: &[Option<AttachedFi
         let is_there = |id: &String| working.slides.iter().any(|slide| slide.id == *id);
         let made: Vec<QuizChange> = match change.action {
             Some(Action::Add) => {
+                let room = MAX_ADDED_SLIDES - slides_added;
                 let slides: Vec<Slide> = change
                     .slides
                     .iter()
-                    .filter_map(|written| new_slide(written, attachments, &mut shuffle))
+                    .filter_map(|written| new_slide(written, attachments, &working.categories, &mut shuffle))
+                    .take(room)
                     .map(|mut slide| {
                         added += 1;
                         slide.id = (added..).map(|k| format!("{NEW_ID_PREFIX}{k}")).find(|id| !quiz.slides.iter().any(|s| s.id == *id)).expect("an id is free");
@@ -477,6 +485,7 @@ pub fn resolve(quiz: &Quiz, edits: &ModelEdits, attachments: &[Option<AttachedFi
                         slide
                     })
                     .collect();
+                slides_added += slides.len();
                 let key = place(change.after.or(change.slide).unwrap_or_else(|| selected.map_or(quiz.slides.len(), |index| index + 1)));
                 let after = last_added.get(&key).filter(|id| is_there(id)).cloned().or_else(|| key.clone());
                 if let Some(last) = slides.last() {
@@ -488,7 +497,7 @@ pub fn resolve(quiz: &Quiz, edits: &ModelEdits, attachments: &[Option<AttachedFi
                 .slide
                 .and_then(id_of)
                 .and_then(|id| working.slides.iter().find(|slide| slide.id == id))
-                .and_then(|slide| edited_slide(slide, &change.set, attachments, &mut shuffle))
+                .and_then(|slide| edited_slide(slide, &change.set, attachments, &working.categories, &mut shuffle))
                 .map(|edited| vec![QuizChange::ReplaceSlide { slide: Box::new(edited) }])
                 .unwrap_or_default(),
             Some(Action::Delete) => match change.slide.and_then(id_of).filter(is_there) {
@@ -507,7 +516,8 @@ pub fn resolve(quiz: &Quiz, edits: &ModelEdits, attachments: &[Option<AttachedFi
             None => Vec::new(),
         };
         let mut done = false;
-        for one in made {
+        for mut one in made {
+            without_unsafe_media(&mut one);
             let before = working.clone();
             apply_one(&mut working, &one, &mut ids);
             if working == before {
@@ -607,16 +617,15 @@ fn apply_one(quiz: &mut Quiz, change: &QuizChange, ids: &mut Ids) {
         QuizChange::InsertSlides { after, slides } => {
             let at = place(&quiz.slides, after, ids).unwrap_or(quiz.slides.len());
             for (offset, slide) in slides.iter().enumerate() {
-                let mut slide = format_imported(slide.clone(), &quiz.categories);
+                let mut slide = slide.clone();
                 slide.id = ids.add(quiz, &slide.id);
                 quiz.slides.insert(at + offset, slide);
             }
         }
+        // The slide as it is to be: `resolve` gave it its category's look.
         QuizChange::ReplaceSlide { slide } => {
-            let categories = quiz.categories.clone();
             if let Some(had) = quiz.slides.iter_mut().find(|had| had.id == slide.id) {
-                // A slide that takes on another category takes on its look, as in the editor.
-                *had = if had.category != slide.category { format_imported(Slide::clone(slide), &categories) } else { Slide::clone(slide) };
+                *had = Slide::clone(slide);
             }
         }
         QuizChange::RemoveSlide { id } => quiz.slides.retain(|slide| slide.id != *id),
@@ -685,45 +694,66 @@ fn format_like(mut slide: Slide, category: &Category) -> Slide {
     slide
 }
 
-/// A new slide from what the model wrote; none when the quiz model cannot read it.
-fn new_slide(written: &Map<String, Value>, attachments: &[Option<AttachedFile>], shuffle: &mut Shuffler) -> Option<Slide> {
-    let mut value = Value::Object(written.clone());
-    let fields = value.as_object_mut()?;
+/// A new slide from what the model wrote, with the look of its category
+/// under the style the model wrote; none when the quiz model cannot read it.
+fn new_slide(written: &Map<String, Value>, attachments: &[Option<AttachedFile>], categories: &[Category], shuffle: &mut Shuffler) -> Option<Slide> {
+    let mut fields = written.clone();
     fields.insert("id".into(), json!(""));
-    plain_fields(fields, attachments, shuffle, None);
-    serde_json::from_value(value).ok().map(playable)
+    plain_fields(&mut fields, attachments, shuffle, None);
+    let slide: Slide = serde_json::from_value(Value::Object(fields.clone())).ok()?;
+    with_category_look(slide, None, &fields, categories).map(playable)
 }
 
 /// `slide` with the fields `set` changes (a merge patch: null removes a
-/// field); none when the quiz model cannot read the result.
-fn edited_slide(slide: &Slide, set: &Map<String, Value>, attachments: &[Option<AttachedFile>], shuffle: &mut Shuffler) -> Option<Slide> {
+/// field), and the look of a category it takes on under the style `set`
+/// changes; none when the quiz model cannot read the result.
+fn edited_slide(slide: &Slide, set: &Map<String, Value>, attachments: &[Option<AttachedFile>], categories: &[Category], shuffle: &mut Shuffler) -> Option<Slide> {
     let mut patch = set.clone();
     patch.remove("id");
     let mut value = serde_json::to_value(slide).ok()?;
     plain_fields(&mut patch, attachments, shuffle, Some(&value));
-    merge(&mut value, &Value::Object(patch));
+    merge(&mut value, &Value::Object(patch.clone()));
     let mut edited: Slide = serde_json::from_value(value).ok()?;
     edited.id = slide.id.clone();
-    Some(playable(edited))
+    with_category_look(edited, slide.category.as_deref(), &patch, categories).map(playable)
+}
+
+/// `slide`, which had the category `had`, with the look of a category it
+/// takes on (`format_imported`, as the editor gives it), and then the
+/// style `written` sets over that look, so a style the model wrote with
+/// the category stays. A slide that keeps its category keeps its look.
+fn with_category_look(slide: Slide, had: Option<&str>, written: &Map<String, Value>, categories: &[Category]) -> Option<Slide> {
+    if slide.category.as_deref() == had || !categories.iter().any(|category| Some(&category.id) == slide.category.as_ref()) {
+        return Some(slide);
+    }
+    let id = slide.id.clone();
+    let formatted = format_imported(slide, categories);
+    let Some(style) = written.get("style") else { return Some(formatted) };
+    let mut value = serde_json::to_value(&formatted).ok()?;
+    merge(&mut value, &json!({ "style": style }));
+    let mut styled: Slide = serde_json::from_value(value).ok()?;
+    styled.id = id;
+    Some(styled)
+}
+
+/// `change` without a media reference outside the quiz's media folder
+/// (`Quiz::drop_unsafe_media`, part by part), wherever it has one.
+fn without_unsafe_media(change: &mut QuizChange) {
+    match change {
+        QuizChange::InsertSlides { slides, .. } => slides.iter_mut().for_each(Slide::drop_unsafe_media),
+        QuizChange::ReplaceSlide { slide } => slide.drop_unsafe_media(),
+        QuizChange::SetCategories { categories } => categories.iter_mut().for_each(Category::drop_unsafe_media),
+        QuizChange::SetSounds { sounds } => sounds.drop_unsafe_media(),
+        QuizChange::SetWelcome { welcome } => welcome.drop_unsafe_media(),
+        QuizChange::RemoveSlide { .. } | QuizChange::MoveSlide { .. } | QuizChange::SetTitle { .. } | QuizChange::SetTheme { .. } | QuizChange::SetSettings { .. } => {}
+    }
 }
 
 /// `slide` with only the files it can play: each in the quiz's media
-/// folder (`is_safe_reference`), a picture or a video but not both, and
-/// neither on an end of round or the final.
+/// folder (`Slide::drop_unsafe_media`), a picture or a video but not both,
+/// and neither on an end of round or the final.
 fn playable(mut slide: Slide) -> Slide {
-    let safe = |file: &str| quiz_core::is_safe_reference(file);
-    if slide.picture.as_deref().is_some_and(|file| !safe(file)) {
-        slide.picture = None;
-    }
-    if slide.video.as_ref().is_some_and(|clip| !safe(&clip.file)) {
-        slide.video = None;
-    }
-    if slide.sound.as_ref().is_some_and(|clip| !safe(&clip.file)) {
-        slide.sound = None;
-    }
-    if slide.background.as_ref().is_some_and(|background| !safe(&background.file)) {
-        slide.background = None;
-    }
+    slide.drop_unsafe_media();
     if slide.picture.is_some() {
         slide.video = None;
     }
@@ -1075,7 +1105,32 @@ mod tests {
         assert_eq!(read_edits(r#"[{"action":"delete","slide":1}]"#).unwrap().changes.len(), 1);
         assert_eq!(read_edits("Nevím {co} dělat."), None);
         let many: Vec<Value> = (0..MAX_CHANGES + 5).map(|_| json!({ "action": "delete", "slide": 1 })).collect();
-        assert_eq!(edits(json!(many)).changes.len(), MAX_CHANGES);
+        let cut = edits(json!(many));
+        assert_eq!((cut.changes.len(), cut.unread), (MAX_CHANGES, 5));
+    }
+
+    #[test]
+    fn changes_cut_off_or_unread_and_slides_past_the_most_are_left_out() {
+        let quiz = quiz();
+        // Past MAX_CHANGES, and one that is not a change at all: each is left out and counted.
+        let mut many: Vec<Value> = (0..MAX_CHANGES + 2).map(|n| json!({ "action": "edit", "slide": 1, "set": { "title": format!("T{n}") } })).collect();
+        many.push(json!("no change"));
+        let resolved = resolve(&quiz, &edits(json!(many)), &[], None, &[], 1);
+        assert_eq!(resolved.left_out, 3);
+        // One reply adds at most MAX_ADDED_SLIDES slides, in however many changes.
+        let slides: Vec<Value> = (0..MAX_ADDED_SLIDES - 1).map(|n| json!({ "type": "explanation", "text": format!("S{n}") })).collect();
+        let two = json!([{ "action": "add", "after": 3, "slides": slides }, { "action": "add", "after": 3, "slides": [{ "type": "explanation", "text": "x" }, { "type": "explanation", "text": "y" }] }]);
+        let resolved = resolve(&quiz, &edits(two), &[], None, &[], 1);
+        assert_eq!(apply(&quiz, &resolved.changes).slides.len(), 3 + MAX_ADDED_SLIDES);
+    }
+
+    #[test]
+    fn a_media_file_outside_the_quiz_is_left_out_of_the_quizs_own_fields_too() {
+        let quiz = quiz();
+        let set = json!({ "sounds": { "slots": { "correct": { "file": "../x.mp3" }, "wrong": { "file": "media/no.mp3" } } }, "welcome": { "logo": "..\\x.png" } });
+        let resolved = resolve(&quiz, &edits(json!([{ "action": "quiz", "set": set }])), &[], None, &[], 1);
+        let changed = apply(&quiz, &resolved.changes);
+        assert_eq!(changed.media_files().into_iter().collect::<Vec<_>>(), ["media/brno.jpg", "media/no.mp3"]);
     }
 
     #[test]
@@ -1418,5 +1473,26 @@ mod tests {
         let explained = resolve(&looks, &edits(json!([{ "action": "add", "slides": [{ "type": "explanation", "text": "Proto.", "category": "c1" }] }])), &[], None, &[], 1);
         let added = apply(&looks, &explained.changes).slides[3].style.clone();
         assert!(added.headline.is_empty() && !added.text.is_empty(), "{added:?}");
+    }
+
+    /// The cases `ai-changes.test.ts` makes in Studio's way: resolve and
+    /// apply must make each of them as the fixture says.
+    #[test]
+    fn makes_the_shared_cases_as_the_editor_does() {
+        let fixture: Value = serde_json::from_str(include_str!("../tests/fixtures/quiz-changes.json")).unwrap();
+        for case in fixture["cases"].as_array().unwrap() {
+            let name = case["name"].as_str().unwrap();
+            let quiz = Quiz::from_json(&case["quiz"].to_string()).unwrap();
+            assert_eq!(serde_json::to_value(&quiz).unwrap(), case["quiz"], "{name}: the quiz is written as the quiz model writes it");
+            let resolved = resolve(&quiz, &read_edits(&case["edits"].to_string()).unwrap(), &[], None, &[], 1);
+            assert_eq!((serde_json::to_value(&resolved.changes).unwrap(), resolved.left_out), (case["changes"].clone(), 0), "{name}");
+            let mut changed = apply(&quiz, &resolved.changes);
+            let mut added = 0;
+            for slide in changed.slides.iter_mut().filter(|slide| !quiz.slides.iter().any(|had| had.id == slide.id)) {
+                added += 1;
+                slide.id = format!("new-{added}");
+            }
+            assert_eq!(serde_json::to_value(&changed).unwrap(), case["expected"], "{name}");
+        }
     }
 }

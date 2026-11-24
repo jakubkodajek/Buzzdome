@@ -1067,7 +1067,7 @@ mod tests {
     #[test]
     fn changes_are_read_also_when_the_model_wraps_its_json_or_thinks_first() {
         let json = r#"{"changes":[{"action":"delete","slide":2}],"summary":"Smazal jsem druhý snímek."}"#;
-        let expected = quiz_edits::ModelEdits { changes: vec![quiz_edits::ModelChange { action: Some(quiz_edits::Action::Delete), slide: Some(2), ..Default::default() }], summary: "Smazal jsem druhý snímek.".into() };
+        let expected = quiz_edits::ModelEdits { changes: vec![quiz_edits::ModelChange { action: Some(quiz_edits::Action::Delete), slide: Some(2), ..Default::default() }], summary: "Smazal jsem druhý snímek.".into(), unread: 0 };
         assert_eq!(read_changes(json, false), Ok(expected.clone()));
         assert_eq!(read_changes(&format!("Tady:\n```json\n{json}\n```"), false), Ok(expected.clone()));
         let thinking = format!("<think>The user wants {{a change}}. Maybe {{\"x\": 1}}.</think>\n{json}");

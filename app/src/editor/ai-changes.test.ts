@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+// @ts-expect-error type error without @types/node package
+import { readFileSync } from "node:fs";
 import { DEFAULT_QUIZ_SETTINGS } from "../bindings/Constants";
 import type { Quiz, QuizChange, Slide } from "../types";
 import { changeCount, changeEdits } from "./ai-changes";
@@ -94,19 +96,30 @@ describe("the AI assistant's changes", () => {
     expect(result.counts).toMatchObject({ changed: 1, quiz: 0, removed: 0, skipped: 3 });
   });
 
-  it("give slides a new category's look, the categories changed first as the backend orders them", () => {
+  it("take slides as the backend made them, with their category's look and the style written over it", () => {
     const films = { ...newCategory("c-1", "Filmy"), background: { file: "media/film.jpg" } } as ReturnType<typeof newCategory>;
-    const old = newCategory("c-2", "Staré");
-    const withOld: Quiz = { ...quiz, categories: [old] };
-    const slide: Slide = { ...newSlide("question", ""), category: "c-1" };
+    const withOld: Quiz = { ...quiz, categories: [newCategory("c-2", "Staré")] };
+    const styled: Slide = { ...withOld.slides[0], category: "c-1", style: { headline: { color: "#FF0000" } } };
     const result = made(withOld, [
       { type: "setCategories", categories: [films] },
-      { type: "insertSlides", after: "c", slides: [slide] },
+      { type: "replaceSlide", slide: styled },
     ]);
     expect(result.quiz.categories?.map((c) => c.id)).toEqual(["c-1"]);
-    const added = result.quiz.slides.find((s) => s.id === result.added[0]);
-    expect(added?.category).toBe("c-1");
-    expect(added?.background).toEqual(films.background);
-    expect(result.counts.quiz).toBe(1);
+    expect(result.quiz.slides[0]).toEqual(styled);
+    expect(result.counts).toMatchObject({ changed: 1, quiz: 1 });
   });
+
+  // The same cases `quiz_edits.rs` makes for the MCP server: the two must make them alike.
+  const fixture = JSON.parse(readFileSync(new URL("../../../crates/quiz-ai/tests/fixtures/quiz-changes.json", import.meta.url), "utf8") as string) as {
+    cases: { name: string; quiz: Quiz; changes: QuizChange[]; expected: Quiz }[];
+  };
+  for (const { name, quiz: before, changes, expected } of fixture.cases) {
+    it(`make the shared case: ${name}`, () => {
+      const { quiz: after } = made(before, changes);
+      const had = new Set(before.slides.map((s) => s.id));
+      let added = 0;
+      const named = { ...after, slides: after.slides.map((s) => (had.has(s.id) ? s : { ...s, id: `new-${++added}` })) };
+      expect(JSON.parse(JSON.stringify(named))).toEqual(expected);
+    });
+  }
 });

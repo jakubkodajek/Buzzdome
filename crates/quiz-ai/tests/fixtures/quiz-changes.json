@@ -1,0 +1,714 @@
+{
+  "about": "Cases that quiz_edits::resolve and apply (Rust, for the MCP server) and changeEdits (TypeScript, for Studio) must make alike. quiz is in the form the quiz model writes it; edits are what a model wrote; changes are what resolve makes of them; expected is the quiz afterwards, with the ids of added slides as new-1, new-2 and so on in the order the quiz lists them.",
+  "cases": [
+    {
+      "name": "a category and then a style, in two edits: the style stays over the category's look",
+      "quiz": {
+        "categories": [
+          {
+            "background": {
+              "file": "media/film.mp4",
+              "muted": true,
+              "repeat": true,
+              "sync": false
+            },
+            "id": "c1",
+            "name": "Film",
+            "style": {
+              "answers": {
+                "color": "#FFFF00"
+              },
+              "headline": {
+                "color": "#0000FF",
+                "size": 120
+              },
+              "text": {
+                "color": "#00FF00"
+              }
+            }
+          }
+        ],
+        "schemaVersion": 5,
+        "slides": [
+          {
+            "background": null,
+            "id": "a",
+            "notes": "",
+            "picture": null,
+            "sound": null,
+            "text": "",
+            "title": "A",
+            "type": "billboard",
+            "video": null
+          }
+        ],
+        "theme": null,
+        "title": "Q"
+      },
+      "edits": {
+        "changes": [
+          {
+            "action": "edit",
+            "set": {
+              "category": "c1"
+            },
+            "slide": 1
+          },
+          {
+            "action": "edit",
+            "set": {
+              "style": {
+                "headline": {
+                  "color": "#FF0000"
+                }
+              }
+            },
+            "slide": 1
+          }
+        ]
+      },
+      "changes": [
+        {
+          "slide": {
+            "background": {
+              "file": "media/film.mp4",
+              "muted": true,
+              "repeat": true,
+              "sync": false
+            },
+            "category": "c1",
+            "id": "a",
+            "notes": "",
+            "picture": null,
+            "sound": null,
+            "style": {
+              "headline": {
+                "color": "#FF0000",
+                "size": 120
+              },
+              "text": {
+                "color": "#00FF00"
+              }
+            },
+            "text": "",
+            "title": "A",
+            "type": "billboard",
+            "video": null
+          },
+          "type": "replaceSlide"
+        }
+      ],
+      "expected": {
+        "categories": [
+          {
+            "background": {
+              "file": "media/film.mp4",
+              "muted": true,
+              "repeat": true,
+              "sync": false
+            },
+            "id": "c1",
+            "name": "Film",
+            "style": {
+              "answers": {
+                "color": "#FFFF00"
+              },
+              "headline": {
+                "color": "#0000FF",
+                "size": 120
+              },
+              "text": {
+                "color": "#00FF00"
+              }
+            }
+          }
+        ],
+        "schemaVersion": 5,
+        "slides": [
+          {
+            "background": {
+              "file": "media/film.mp4",
+              "muted": true,
+              "repeat": true,
+              "sync": false
+            },
+            "category": "c1",
+            "id": "a",
+            "notes": "",
+            "picture": null,
+            "sound": null,
+            "style": {
+              "headline": {
+                "color": "#FF0000",
+                "size": 120
+              },
+              "text": {
+                "color": "#00FF00"
+              }
+            },
+            "text": "",
+            "title": "A",
+            "type": "billboard",
+            "video": null
+          }
+        ],
+        "theme": null,
+        "title": "Q"
+      }
+    },
+    {
+      "name": "a category and a style in one edit: the style stays over the category's look",
+      "quiz": {
+        "categories": [
+          {
+            "background": null,
+            "id": "c1",
+            "name": "Film",
+            "style": {
+              "headline": {
+                "color": "#0000FF",
+                "size": 120
+              }
+            }
+          }
+        ],
+        "schemaVersion": 5,
+        "slides": [
+          {
+            "background": {
+              "file": "media/own.mp4",
+              "muted": true,
+              "repeat": true,
+              "sync": false
+            },
+            "id": "a",
+            "notes": "",
+            "picture": null,
+            "sound": null,
+            "text": "",
+            "title": "A",
+            "type": "billboard",
+            "video": null
+          }
+        ],
+        "theme": null,
+        "title": "Q"
+      },
+      "edits": {
+        "changes": [
+          {
+            "action": "edit",
+            "set": {
+              "category": "c1",
+              "style": {
+                "headline": {
+                  "bold": true
+                }
+              }
+            },
+            "slide": 1
+          }
+        ]
+      },
+      "changes": [
+        {
+          "slide": {
+            "background": {
+              "file": "media/own.mp4",
+              "muted": true,
+              "repeat": true,
+              "sync": false
+            },
+            "category": "c1",
+            "id": "a",
+            "notes": "",
+            "picture": null,
+            "sound": null,
+            "style": {
+              "headline": {
+                "bold": true,
+                "color": "#0000FF",
+                "size": 120
+              }
+            },
+            "text": "",
+            "title": "A",
+            "type": "billboard",
+            "video": null
+          },
+          "type": "replaceSlide"
+        }
+      ],
+      "expected": {
+        "categories": [
+          {
+            "background": null,
+            "id": "c1",
+            "name": "Film",
+            "style": {
+              "headline": {
+                "color": "#0000FF",
+                "size": 120
+              }
+            }
+          }
+        ],
+        "schemaVersion": 5,
+        "slides": [
+          {
+            "background": {
+              "file": "media/own.mp4",
+              "muted": true,
+              "repeat": true,
+              "sync": false
+            },
+            "category": "c1",
+            "id": "a",
+            "notes": "",
+            "picture": null,
+            "sound": null,
+            "style": {
+              "headline": {
+                "bold": true,
+                "color": "#0000FF",
+                "size": 120
+              }
+            },
+            "text": "",
+            "title": "A",
+            "type": "billboard",
+            "video": null
+          }
+        ],
+        "theme": null,
+        "title": "Q"
+      }
+    },
+    {
+      "name": "slides added with a category, with and without a background of the category's or their own",
+      "quiz": {
+        "categories": [
+          {
+            "background": {
+              "file": "media/film.mp4",
+              "muted": true,
+              "repeat": true,
+              "sync": false
+            },
+            "id": "c1",
+            "name": "Film",
+            "style": {
+              "headline": {
+                "color": "#0000FF"
+              },
+              "text": {
+                "color": "#00FF00"
+              }
+            }
+          },
+          {
+            "background": null,
+            "id": "c2",
+            "name": "Sport",
+            "style": {
+              "text": {
+                "italic": true
+              }
+            }
+          }
+        ],
+        "schemaVersion": 5,
+        "slides": [
+          {
+            "background": null,
+            "id": "a",
+            "notes": "",
+            "picture": null,
+            "sound": null,
+            "text": "",
+            "title": "A",
+            "type": "billboard",
+            "video": null
+          }
+        ],
+        "theme": null,
+        "title": "Q"
+      },
+      "edits": {
+        "changes": [
+          {
+            "action": "add",
+            "after": 1,
+            "slides": [
+              {
+                "category": "c1",
+                "text": "",
+                "title": "B",
+                "type": "billboard"
+              },
+              {
+                "background": {
+                  "file": "media/own.mp4"
+                },
+                "category": "c1",
+                "text": "C",
+                "type": "explanation"
+              },
+              {
+                "category": "c2",
+                "text": "D",
+                "type": "explanation"
+              }
+            ]
+          }
+        ]
+      },
+      "changes": [
+        {
+          "after": "a",
+          "slides": [
+            {
+              "background": {
+                "file": "media/film.mp4",
+                "muted": true,
+                "repeat": true,
+                "sync": false
+              },
+              "category": "c1",
+              "id": "ai-new-1",
+              "notes": "",
+              "picture": null,
+              "sound": null,
+              "style": {
+                "headline": {
+                  "color": "#0000FF"
+                },
+                "text": {
+                  "color": "#00FF00"
+                }
+              },
+              "text": "",
+              "title": "B",
+              "type": "billboard",
+              "video": null
+            },
+            {
+              "background": {
+                "file": "media/own.mp4",
+                "muted": true,
+                "repeat": true,
+                "sync": false
+              },
+              "category": "c1",
+              "id": "ai-new-2",
+              "notes": "",
+              "picture": null,
+              "sound": null,
+              "style": {
+                "text": {
+                  "color": "#00FF00"
+                }
+              },
+              "text": "C",
+              "type": "explanation",
+              "video": null
+            },
+            {
+              "background": null,
+              "category": "c2",
+              "id": "ai-new-3",
+              "notes": "",
+              "picture": null,
+              "sound": null,
+              "style": {
+                "text": {
+                  "italic": true
+                }
+              },
+              "text": "D",
+              "type": "explanation",
+              "video": null
+            }
+          ],
+          "type": "insertSlides"
+        }
+      ],
+      "expected": {
+        "categories": [
+          {
+            "background": {
+              "file": "media/film.mp4",
+              "muted": true,
+              "repeat": true,
+              "sync": false
+            },
+            "id": "c1",
+            "name": "Film",
+            "style": {
+              "headline": {
+                "color": "#0000FF"
+              },
+              "text": {
+                "color": "#00FF00"
+              }
+            }
+          },
+          {
+            "background": null,
+            "id": "c2",
+            "name": "Sport",
+            "style": {
+              "text": {
+                "italic": true
+              }
+            }
+          }
+        ],
+        "schemaVersion": 5,
+        "slides": [
+          {
+            "background": null,
+            "id": "a",
+            "notes": "",
+            "picture": null,
+            "sound": null,
+            "text": "",
+            "title": "A",
+            "type": "billboard",
+            "video": null
+          },
+          {
+            "background": {
+              "file": "media/film.mp4",
+              "muted": true,
+              "repeat": true,
+              "sync": false
+            },
+            "category": "c1",
+            "id": "new-1",
+            "notes": "",
+            "picture": null,
+            "sound": null,
+            "style": {
+              "headline": {
+                "color": "#0000FF"
+              },
+              "text": {
+                "color": "#00FF00"
+              }
+            },
+            "text": "",
+            "title": "B",
+            "type": "billboard",
+            "video": null
+          },
+          {
+            "background": {
+              "file": "media/own.mp4",
+              "muted": true,
+              "repeat": true,
+              "sync": false
+            },
+            "category": "c1",
+            "id": "new-2",
+            "notes": "",
+            "picture": null,
+            "sound": null,
+            "style": {
+              "text": {
+                "color": "#00FF00"
+              }
+            },
+            "text": "C",
+            "type": "explanation",
+            "video": null
+          },
+          {
+            "background": null,
+            "category": "c2",
+            "id": "new-3",
+            "notes": "",
+            "picture": null,
+            "sound": null,
+            "style": {
+              "text": {
+                "italic": true
+              }
+            },
+            "text": "D",
+            "type": "explanation",
+            "video": null
+          }
+        ],
+        "theme": null,
+        "title": "Q"
+      }
+    },
+    {
+      "name": "a new category that a slide added in the same reply takes, and media outside the quiz's folder left out",
+      "quiz": {
+        "schemaVersion": 5,
+        "slides": [
+          {
+            "background": null,
+            "id": "a",
+            "notes": "",
+            "picture": null,
+            "sound": null,
+            "text": "",
+            "title": "A",
+            "type": "billboard",
+            "video": null
+          }
+        ],
+        "theme": null,
+        "title": "Q"
+      },
+      "edits": {
+        "changes": [
+          {
+            "action": "add",
+            "after": 0,
+            "slides": [
+              {
+                "category": "film",
+                "picture": "../x.png",
+                "text": "",
+                "title": "B",
+                "type": "billboard"
+              }
+            ]
+          },
+          {
+            "action": "quiz",
+            "set": {
+              "categories": [
+                {
+                  "background": {
+                    "file": "..\\x.mp4"
+                  },
+                  "id": "film",
+                  "name": "Film",
+                  "style": {
+                    "headline": {
+                      "color": "#0000FF"
+                    }
+                  }
+                }
+              ],
+              "welcome": {
+                "intro": "media/intro.mp4",
+                "logo": "/etc/logo.png",
+                "on": true
+              }
+            }
+          }
+        ]
+      },
+      "changes": [
+        {
+          "categories": [
+            {
+              "background": null,
+              "id": "film",
+              "name": "Film",
+              "style": {
+                "headline": {
+                  "color": "#0000FF"
+                }
+              }
+            }
+          ],
+          "type": "setCategories"
+        },
+        {
+          "type": "setWelcome",
+          "welcome": {
+            "footer": "",
+            "heading": "",
+            "intro": "media/intro.mp4",
+            "logo": null,
+            "on": true
+          }
+        },
+        {
+          "after": null,
+          "slides": [
+            {
+              "background": null,
+              "category": "film",
+              "id": "ai-new-1",
+              "notes": "",
+              "picture": null,
+              "sound": null,
+              "style": {
+                "headline": {
+                  "color": "#0000FF"
+                }
+              },
+              "text": "",
+              "title": "B",
+              "type": "billboard",
+              "video": null
+            }
+          ],
+          "type": "insertSlides"
+        }
+      ],
+      "expected": {
+        "categories": [
+          {
+            "background": null,
+            "id": "film",
+            "name": "Film",
+            "style": {
+              "headline": {
+                "color": "#0000FF"
+              }
+            }
+          }
+        ],
+        "schemaVersion": 5,
+        "slides": [
+          {
+            "background": null,
+            "category": "film",
+            "id": "new-1",
+            "notes": "",
+            "picture": null,
+            "sound": null,
+            "style": {
+              "headline": {
+                "color": "#0000FF"
+              }
+            },
+            "text": "",
+            "title": "B",
+            "type": "billboard",
+            "video": null
+          },
+          {
+            "background": null,
+            "id": "a",
+            "notes": "",
+            "picture": null,
+            "sound": null,
+            "text": "",
+            "title": "A",
+            "type": "billboard",
+            "video": null
+          }
+        ],
+        "theme": null,
+        "title": "Q",
+        "welcome": {
+          "footer": "",
+          "heading": "",
+          "intro": "media/intro.mp4",
+          "logo": null,
+          "on": true
+        }
+      }
+    }
+  ]
+}

@@ -260,6 +260,15 @@ impl Slide {
         }
     }
 
+    /// Takes off the slide each file outside the quiz's media folder
+    /// (`is_safe_reference`), with its options.
+    pub fn drop_unsafe_media(&mut self) {
+        let unsafe_files: Vec<String> = self.media().into_iter().map(|(file, _)| file).filter(|file| !crate::is_safe_reference(file)).map(str::to_string).collect();
+        for file in unsafe_files {
+            self.remove_media(&file);
+        }
+    }
+
     /// Takes `file` off the slide wherever it is used, with its options.
     pub fn remove_media(&mut self, file: &str) {
         if self.picture.as_deref() == Some(file) {
@@ -951,6 +960,21 @@ impl Quiz {
         }
         self.sounds.rename_media(renamed);
         self.welcome.rename_media(renamed);
+    }
+
+    /// Forgets every media reference outside the quiz's media folder
+    /// (`is_safe_reference`), wherever `media_files` finds one: on the
+    /// slides, the categories, the sounds and the welcome screen. For a quiz
+    /// written by someone the app does not trust, such as an AI model.
+    pub fn drop_unsafe_media(&mut self) {
+        for slide in &mut self.slides {
+            slide.drop_unsafe_media();
+        }
+        for category in &mut self.categories {
+            category.drop_unsafe_media();
+        }
+        self.sounds.drop_unsafe_media();
+        self.welcome.drop_unsafe_media();
     }
 
     /// What looks unfinished but plays (`Problem::is_warning`): no slides,
@@ -1806,6 +1830,26 @@ mod tests {
                 ValidationError { slide_id: Some("a".into()), problem: Problem::UnknownCategory },
             ]
         );
+    }
+
+    #[test]
+    fn unsafe_media_is_dropped_wherever_the_quiz_uses_it() {
+        use crate::sounds::{SoundChoice, SoundSlot};
+        let mut slide = Slide::new("b", SlideContent::Billboard { title: "T".into(), text: String::new() });
+        slide.picture = Some("../x.png".into());
+        slide.sound = Some(crate::media::SoundClip::new("media/song.mp3"));
+        slide.background = Some(Background::new("C:\\x.mp4"));
+        let mut quiz = Quiz::new("x", vec![slide]);
+        quiz.categories = vec![Category::new("c1", "Sport"), Category::new("c2", "Film")];
+        quiz.categories[0].background = Some(Background::new("..\\x.mp4"));
+        quiz.categories[1].background = Some(Background::new("media/hall.mp4"));
+        quiz.sounds.slots.insert(SoundSlot::Correct, SoundChoice::File("/etc/x.wav".into()));
+        quiz.sounds.slots.insert(SoundSlot::Wrong, SoundChoice::File("media/no.wav".into()));
+        quiz.welcome.logo = Some("..\\x.png".into());
+        quiz.welcome.intro = Some("media/intro.mp4".into());
+        quiz.drop_unsafe_media();
+        assert_eq!(quiz.media_files().into_iter().collect::<Vec<_>>(), ["media/hall.mp4", "media/intro.mp4", "media/no.wav", "media/song.mp3"]);
+        assert_eq!((quiz.slides[0].picture.as_deref(), quiz.welcome.logo.as_deref()), (None, None));
     }
 
     #[test]
