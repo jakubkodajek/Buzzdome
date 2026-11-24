@@ -202,3 +202,21 @@ Template:
   1024x700; `maxLength` in `reply_schema` (BF212) was left out, as no real
   model could be asked with it here; the layout script does not open the
   AI panel; no test that a show's start cancels the panel's request.
+
+## 2026-11-24 - ai-panel-chat (release 1.4.0)
+
+- Done: Studio's AI panel (QZ-14) is a chat: talk, a proposal, refine it,
+  then Make questions from the conversation (PR #88). One + button for all
+  files; files sent move into the message's bubble; replies drawn with
+  paragraphs, lists and bold, a copy button, Stop while the model works.
+  Ollama is asked through its own `/api/chat` with `num_ctx` 16k/32k
+  (8k when short of memory), so reasoning models (qwen3-vl) have room.
+  Two review rounds (fresh context, then code and security) fixed: role
+  alternation, one text budget, newest notes kept, local redirects only
+  to addresses typed in the message, chat reply cap. Version 1.4.0
+  (Jakub's OK, 2026-11-24).
+- State: make check green; layout check clean (editor).
+- Next: Jakub pushes tag `v1.4.0`; try qwen3-vl through Ollama on his Mac
+  and on the event laptop (memory for 16k context).
+- Blockers / open questions: pictures are sent with every turn and not
+  dropped on the shorter retry; no UI test of the panel's run/cancel flow.
