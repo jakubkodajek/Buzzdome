@@ -271,8 +271,9 @@ fn chosen_model(app: &AppHandle) -> CmdResult<LocalModel> {
 /// be looked up (`asking::research`; `for_quiz` when the questions are to
 /// be written, which then reads all the sites the quizmaster named).
 fn look_up(model: &LocalModel, server: &Server, asked: &QuestionRequest, stop: &AtomicBool, tell: &impl Fn(LocalModelProgress), for_quiz: bool) -> CmdResult<Research> {
-    // Pages on this computer or the local network only when the quizmaster named them, redirects included.
-    let typed = web_page::addresses_in(&asked.request_text());
+    // Pages on this computer or the local network only when the quizmaster named them, redirects included:
+    // in the same messages whose sites are read (`asking::research`).
+    let typed = web_page::addresses_in(&if for_quiz { asked.request_text() } else { asked.prompt.clone() });
     let plan = |body: Value, thinking: &dyn Fn(LocalModelProgress)| {
         ask(model, server, body, stop, Reading::PLAN, thinking).inspect_err(|e| {
             if *e != AppError::LocalModelCancelled {
@@ -489,16 +490,31 @@ fn ask(model: &LocalModel, server: &Server, body: Value, cancelled: &AtomicBool,
         }
         agent.post(&address).header("Content-Type", "application/json").send(body.to_string()).map_err(|e| unreachable(&model.url, e))
     };
+    let mut body = body;
     let mut response = send(&body)?;
     if !response.status().is_success() {
-        let detail = local_model::error_detail(&read_body(&mut response, &model.url)?);
-        if !local_model::refuses_extras(&detail) || !local_model::has_extras(&body) {
-            return Err(refused(response.status().as_u16(), detail, &model.model));
+        let mut detail = local_model::error_detail(&read_body(&mut response, &model.url)?);
+        // A computer without the memory for the context Ollama was asked for is asked again with less.
+        let asked_for = body.pointer("/options/num_ctx").and_then(Value::as_u64).unwrap_or(0);
+        if asked_for > u64::from(local_model::OLLAMA_SMALL_CONTEXT) && local_model::short_of_memory(&detail) {
+            body["options"]["num_ctx"] = json!(local_model::OLLAMA_SMALL_CONTEXT);
+            if !local_model::ollama_fits(&body, local_model::OLLAMA_SMALL_CONTEXT) {
+                return Err(AppError::LocalModelContextFull { model: model.model.clone() });
+            }
+            response = send(&body)?;
+            if !response.status().is_success() {
+                detail = local_model::error_detail(&read_body(&mut response, &model.url)?);
+            }
         }
-        response = send(&local_model::without_extras(body))?;
         if !response.status().is_success() {
-            let detail = local_model::error_detail(&read_body(&mut response, &model.url)?);
-            return Err(refused(response.status().as_u16(), detail, &model.model));
+            if !local_model::refuses_extras(&detail) || !local_model::has_extras(&body) {
+                return Err(refused(response.status().as_u16(), detail, &model.model));
+            }
+            response = send(&local_model::without_extras(body))?;
+            if !response.status().is_success() {
+                let detail = local_model::error_detail(&read_body(&mut response, &model.url)?);
+                return Err(refused(response.status().as_u16(), detail, &model.model));
+            }
         }
     }
     let reader = response.into_body().into_with_config().limit(MAX_REPLY_BYTES).reader();
@@ -803,6 +819,23 @@ mod tests {
         let chat: Value = serde_json::from_str(&seen[2]).unwrap();
         assert_eq!((chat["options"]["num_ctx"].as_u64(), chat["stream"].as_bool()), (Some(u64::from(local_model::OLLAMA_CONTEXT)), Some(true)));
         assert!(chat["messages"][1]["content"].as_str().unwrap().contains("Kvíz o Praze"));
+    }
+
+    #[test]
+    fn ollama_without_the_memory_for_the_context_is_asked_again_with_less() {
+        let stream = r#"{"message":{"role":"assistant","content":"Dobře."},"done":true,"done_reason":"stop"}"#.to_string();
+        let (url, seen) = server(vec![
+            (500, "application/json", r#"{"error":"model requires more system memory (9.1 GiB) than is available (6.0 GiB)"}"#.into()),
+            (200, "application/x-ndjson", stream),
+        ]);
+        let model = LocalModel::new(&url, "qwen3-vl:8b");
+        let kind = Server::Ollama { root: url.trim_end_matches("/v1").into(), most: None };
+        let asked = QuestionRequest { prompt: "Kvíz o Praze".into(), ..Default::default() };
+        let reply = chat_turn(&model, &kind, &asked, &AtomicBool::new(false), |_| {}).unwrap();
+        assert_eq!(reply.text, "Dobře.");
+        let seen = seen.lock().unwrap();
+        let contexts: Vec<_> = seen.iter().map(|body| serde_json::from_str::<Value>(body).unwrap()["options"]["num_ctx"].as_u64()).collect();
+        assert_eq!(contexts, [Some(u64::from(local_model::OLLAMA_CONTEXT)), Some(u64::from(local_model::OLLAMA_SMALL_CONTEXT))]);
     }
 
     #[test]

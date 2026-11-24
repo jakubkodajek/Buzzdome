@@ -48,18 +48,29 @@ pub struct Reading {
     pub max_thought: usize,
     /// Whether the panel is told the reply's words as they come (`LocalModelProgress::Said`).
     pub words: bool,
+    /// Most characters of the reply itself; past them it is read as cut off.
+    pub max_reply: usize,
 }
 
 impl Reading {
     /// The questions: a reasoning model may reason as long as it needs.
-    pub const QUESTIONS: Reading = Reading { max_thought: MAX_REPLY_CHARS, words: false };
+    pub const QUESTIONS: Reading = Reading { max_thought: MAX_REPLY_CHARS, words: false, max_reply: MAX_REPLY_CHARS };
     /// The model's turn of the conversation, shown as it is written.
-    pub const CHAT: Reading = Reading { max_thought: MAX_REPLY_CHARS, words: true };
+    pub const CHAT: Reading = Reading { max_thought: MAX_REPLY_CHARS, words: true, max_reply: CHAT_REPLY_CHARS };
     /// The research plan: a few search queries, which need no long
     /// reasoning; a model that reasons on anyway (some cannot stop, whatever
     /// they are asked) is stopped, and the plan made without it.
-    pub const PLAN: Reading = Reading { max_thought: PLAN_THOUGHT_CHARS, words: false };
+    pub const PLAN: Reading = Reading { max_thought: PLAN_THOUGHT_CHARS, words: false, max_reply: MAX_REPLY_CHARS };
 }
+
+/// Most characters of a turn of the conversation: a proposal is a few
+/// thousand, so a model that runs on past these is looping [no source -
+/// estimate], and the panel is not made to draw it all.
+pub const CHAT_REPLY_CHARS: usize = 40_000;
+
+/// Bytes of the reply gathered before the panel is told them, so that a
+/// model writing a word at a time does not redraw the panel for each.
+const SAID_EVERY: usize = 64;
 
 /// Most characters a model may reason over the research plan [no source -
 /// estimate: an 8B reasoning model thought 9,000 to 14,000 characters,
@@ -217,7 +228,7 @@ pub fn write_questions<E: From<RequestError>>(
     ask: impl FnMut(Value) -> Result<(String, bool), E>,
     too_much: impl Fn(&E) -> bool,
 ) -> Result<(String, bool), E> {
-    ask_fitting(|room| local_model::request(model, asked, found.text(room).as_deref(), room), ask, too_much)
+    ask_fitting(|room| local_model::request(model, asked, found.text(room).as_deref(), room), ask, too_much, true)
 }
 
 /// Asks `model` for its next turn of the conversation `asked` holds, with
@@ -230,7 +241,8 @@ pub fn chat<E: From<RequestError>>(
     ask: impl FnMut(Value) -> Result<(String, bool), E>,
     too_much: impl Fn(&E) -> bool,
 ) -> Result<(String, bool), E> {
-    ask_fitting(|room| local_model::chat_request(model, asked, found.text(room).as_deref(), room), ask, too_much)
+    // A turn cut off is shown as it is (`ChatReply::cut_off`) rather than asked again.
+    ask_fitting(|room| local_model::chat_request(model, asked, found.text(room).as_deref(), room), ask, too_much, false)
 }
 
 /// Asks the request `build` makes with `MAX_TEXT_CHARS` of text, and once
@@ -240,13 +252,14 @@ fn ask_fitting<E: From<RequestError>>(
     build: impl Fn(usize) -> Result<Value, RequestError>,
     mut ask: impl FnMut(Value) -> Result<(String, bool), E>,
     too_much: impl Fn(&E) -> bool,
+    again_when_cut_off: bool,
 ) -> Result<(String, bool), E> {
     let body = build(local_model::MAX_TEXT_CHARS)?;
     let shorter = build(local_model::SMALL_TEXT_CHARS)?;
     let shortened = shorter != body;
     match ask(body) {
         Err(e) if too_much(&e) => ask(local_model::thinking_off(shorter)),
-        Ok((_, true)) if shortened => ask(local_model::thinking_off(shorter)),
+        Ok((_, true)) if shortened && again_when_cut_off => ask(local_model::thinking_off(shorter)),
         done => done,
     }
 }
@@ -291,7 +304,7 @@ pub fn read_stream<E: From<Halt>>(mut reader: impl BufRead, cancelled: &AtomicBo
                 if reading.words {
                     // Thoughts in the reply's own text (`<think>`) are not told as said.
                     let shown = local_model::shown_so_far(&content);
-                    if shown.len() > told_words {
+                    if shown.len() >= told_words + SAID_EVERY {
                         progress(LocalModelProgress::Said { text: shown[told_words..].to_string() });
                         told_words = shown.len();
                     }
@@ -303,7 +316,7 @@ pub fn read_stream<E: From<Halt>>(mut reader: impl BufRead, cancelled: &AtomicBo
                     progress(LocalModelProgress::Writing { characters: now.0, questions: now.1 });
                     told = now;
                 }
-                if now.0 + thought > MAX_REPLY_CHARS {
+                if now.0 > reading.max_reply || now.0 + thought > MAX_REPLY_CHARS {
                     // A model that does not stop: what it wrote is read as cut off.
                     return if content.trim().is_empty() { Err(Halt::ThoughtTooLong.into()) } else { Ok((content, true)) };
                 }
@@ -324,6 +337,12 @@ pub fn read_stream<E: From<Halt>>(mut reader: impl BufRead, cancelled: &AtomicBo
     }
     if cut_off && content.trim().is_empty() && thought > 0 {
         return Err(Halt::ThoughtTooLong.into());
+    }
+    if reading.words {
+        let shown = local_model::shown_so_far(&content);
+        if shown.len() > told_words {
+            progress(LocalModelProgress::Said { text: shown[told_words..].to_string() });
+        }
     }
     Ok((content, cut_off))
 }
@@ -592,7 +611,17 @@ mod tests {
         };
         assert_eq!(said, Ok(("Navrhuji 3 kola.".to_string(), false)));
         let words: Vec<_> = steps.iter().filter_map(|step| if let LocalModelProgress::Said { text } = step { Some(text.as_str()) } else { None }).collect();
-        assert_eq!(words, ["Navrhuji ", "3 kola."]);
+        assert_eq!(words, ["Navrhuji 3 kola."], "told in a few pieces, the last at the end");
+        let long = "slovo ".repeat(40);
+        let steps = RefCell::new(Vec::new());
+        let stream: String = long.split_inclusive(' ').map(|word| chunk(serde_json::json!({ "content": word }), None)).collect::<String>() + "data: [DONE]\n\n";
+        let (told, _) = read_stream(std::io::Cursor::new(stream), &AtomicBool::new(false), Reading::CHAT, |step| steps.borrow_mut().push(step), |_| Failure::Refused).unwrap();
+        let pieces: Vec<String> = steps.into_inner().into_iter().filter_map(|step| if let LocalModelProgress::Said { text } = step { Some(text) } else { None }).collect();
+        assert_eq!((pieces.concat(), told.clone()), (long.clone(), long));
+        assert!(pieces.len() < 10, "40 words told in {} pieces", pieces.len());
+        let looping = chunk(serde_json::json!({ "content": "x".repeat(CHAT_REPLY_CHARS / 2) }), None).repeat(3);
+        let (_, cut_off) = read_stream(std::io::Cursor::new(looping), &AtomicBool::new(false), Reading::CHAT, |_| {}, |_| Failure::Refused).unwrap();
+        assert!(cut_off, "a turn that runs on is cut off long before a quiz's questions would be");
         let sent = RefCell::new(Vec::new());
         let mut answers = vec![Err(Failure::ContextFull), Ok(("Dobře.".to_string(), false))].into_iter();
         let reply = chat(&model(), &asked("Kvíz o Praze", false), &Research::default(), |body: Value| {

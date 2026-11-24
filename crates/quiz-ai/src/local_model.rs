@@ -501,7 +501,9 @@ fn messages(system: String, asked: &QuestionRequest, research: Option<&str>, max
     }
     let prompt: String = asked.prompt.trim().chars().take(MAX_PROMPT_CHARS).collect();
     let mut parts = vec![text_part(if prompt.is_empty() { ask.to_string() } else { prompt })];
-    let mut text_left = max_text;
+    // The conversation, files' text and what was found share `max_text`: the conversation up to half.
+    let (mut history, used) = conversation(&asked.conversation, max_text / 2);
+    let mut text_left = max_text - used;
     for (number, attachment) in (1..).zip(&asked.attachments) {
         let name = attachment.name.replace(['\n', '\r'], " ");
         match &attachment.content {
@@ -538,48 +540,82 @@ fn messages(system: String, asked: &QuestionRequest, research: Option<&str>, max
 
         }
     }
-    // What was found now comes first, so a shorter request keeps it over older notes.
-    let found: Vec<&str> = [research, asked.notes.as_deref()].into_iter().flatten().map(str::trim).filter(|text| !text.is_empty()).collect();
+    // Taken out of what text files left, so the request stays its size: what was found now first,
+    // from its start, then the newest of the notes from before.
+    let mut room = text_left.max(max_text / 2);
+    let now: String = research.map(str::trim).unwrap_or_default().chars().take(room).collect();
+    room -= now.chars().count();
+    let before = asked.notes.as_deref().map(str::trim).unwrap_or_default();
+    let before: String = before.chars().skip(before.chars().count().saturating_sub(room)).collect();
+    let found: Vec<&str> = [now.as_str(), before.as_str()].into_iter().filter(|text| !text.trim().is_empty()).collect();
     if !found.is_empty() {
-        let research = found.join("\n\n");
-        // Taken out of what text files left, so the request stays its size.
-        let taken: String = research.chars().take(text_left.max(max_text / 2)).collect();
+        let taken = found.join("\n\n");
         parts.push(text_part(format!(
             "Found on the internet for this request (search results and the pages read). Questions about the company, person \
              or subject asked for come from what this says; it is not an attachment, so \"attachment\" is 0 for them:\n{taken}"
         )));
     }
+    // A last turn of the quizmaster's (questions asked for, never answered) joins this message, as roles must alternate.
+    if history.last().is_some_and(|turn| turn["role"] == "user") {
+        let unanswered = history.pop().and_then(|turn| turn["content"].as_str().map(str::to_string)).unwrap_or_default();
+        parts.insert(0, text_part(unanswered));
+    }
     let mut messages = vec![json!({ "role": "system", "content": system })];
-    messages.extend(conversation(&asked.conversation, max_text));
+    messages.extend(history);
     messages.push(json!({ "role": "user", "content": parts }));
     Ok(messages)
 }
 
 /// The newest turns of `turns` that fit in `max_chars` characters, each at
-/// most `MAX_TURN_CHARS`, oldest first, as chat messages.
-fn conversation(turns: &[ChatTurn], max_chars: usize) -> Vec<Value> {
+/// most `MAX_TURN_CHARS`, oldest first, as chat messages whose roles
+/// alternate from the quizmaster's (which strict chat templates require),
+/// and the characters they take.
+fn conversation(turns: &[ChatTurn], max_chars: usize) -> (Vec<Value>, usize) {
     let mut left = max_chars;
-    let mut kept: Vec<Value> = Vec::new();
+    let mut kept: Vec<(ChatRole, String)> = Vec::new();
     for turn in turns.iter().rev() {
-        let text: String = turn.text.trim().chars().take(MAX_TURN_CHARS).collect();
-        let length = text.chars().count();
+        let mut text: String = turn.text.trim().chars().take(MAX_TURN_CHARS).collect();
         if text.is_empty() {
-            continue;
+            // Files sent without words are still the quizmaster's turn; an empty reply is none.
+            if turn.role == ChatRole::Assistant {
+                continue;
+            }
+            text = FILES_ONLY_TURN.to_string();
         }
+        let length = text.chars().count();
         if length > left {
             // The newest turn is kept in part rather than the conversation dropped.
             if kept.is_empty() && left > 0 {
-                let part: String = text.chars().take(left).collect();
-                kept.push(json!({ "role": if turn.role == ChatRole::User { "user" } else { "assistant" }, "content": part }));
+                kept.push((turn.role, text.chars().take(left).collect()));
+                left = 0;
             }
             break;
         }
         left -= length;
-        kept.push(json!({ "role": if turn.role == ChatRole::User { "user" } else { "assistant" }, "content": text }));
+        kept.push((turn.role, text));
     }
     kept.reverse();
-    kept
+    if kept.first().is_some_and(|(role, _)| *role == ChatRole::Assistant) {
+        kept.insert(0, (ChatRole::User, EARLIER_TURNS.to_string()));
+    }
+    let mut merged: Vec<(ChatRole, String)> = Vec::new();
+    for (role, text) in kept {
+        match merged.last_mut() {
+            Some((last, joined)) if *last == role => {
+                joined.push_str("\n\n");
+                joined.push_str(&text);
+            }
+            _ => merged.push((role, text)),
+        }
+    }
+    let history = merged.into_iter().map(|(role, text)| json!({ "role": if role == ChatRole::User { "user" } else { "assistant" }, "content": text })).collect();
+    (history, max_chars - left)
 }
+
+/// The quizmaster's turn that sent files without words.
+const FILES_ONLY_TURN: &str = "(I sent the attachments.)";
+/// The quizmaster's turn before the model's oldest kept, when the turns before it do not fit.
+const EARLIER_TURNS: &str = "(Earlier messages left out.)";
 
 /// `notes` from before and what was `found` now, the newest
 /// `MAX_NOTES_CHARS` characters, from a line's start.
@@ -890,6 +926,17 @@ pub fn ollama_root(url: &str) -> String {
 /// graphics memory (https://docs.ollama.com/context-length): too little for
 /// a reasoning model, whose thoughts come before its reply.
 pub const OLLAMA_CONTEXT: u32 = 16_384;
+/// Tokens of context asked for again when the computer has not the memory
+/// for `OLLAMA_CONTEXT` (`short_of_memory`).
+pub const OLLAMA_SMALL_CONTEXT: u32 = 8_192;
+
+/// Whether Ollama refused a request for want of memory for the model and
+/// its context ("model requires more system memory", "out of memory").
+pub fn short_of_memory(detail: &str) -> bool {
+    let detail = detail.to_lowercase();
+    detail.contains("memory") && (detail.contains("requires more") || detail.contains("out of") || detail.contains("insufficient") || detail.contains("not enough"))
+}
+
 /// Tokens of context for a request too long for `OLLAMA_CONTEXT`.
 pub const OLLAMA_LARGE_CONTEXT: u32 = 32_768;
 /// Tokens kept for the model's reasoning and reply [no source - estimate:
@@ -1009,7 +1056,9 @@ fn questions_in(content: &str) -> Option<Vec<DraftQuestion>> {
 /// The model's turn of the conversation as the panel shows it: its text
 /// without a reasoning model's thinking, trimmed.
 pub fn said(content: &str) -> String {
-    without_thinking(content).trim().to_string()
+    // A reply cut off while it still thinks has said nothing.
+    let text = if content.contains("</think>") { without_thinking(content) } else { shown_so_far(content) };
+    text.trim().to_string()
 }
 
 /// `content` after a reasoning model's thinking (`<think>…</think>`), which
@@ -1464,11 +1513,31 @@ mod tests {
         let body = request(&model, &asked, Some("NOVÉ stránka z firma.cz"), SMALL_TEXT_CHARS).unwrap();
         let messages = body["messages"].as_array().unwrap();
         let roles: Vec<&str> = messages.iter().map(|m| m["role"].as_str().unwrap()).collect();
-        assert_eq!(roles, ["system", "assistant", "user"], "the outline is kept, cut to the room");
-        let kept = messages[1]["content"].as_str().unwrap();
-        assert!(kept.starts_with("Kolo 1: Praha.") && kept.chars().count() == SMALL_TEXT_CHARS);
-        let found = messages[2]["content"][1]["text"].as_str().unwrap();
+        assert_eq!(roles, ["system", "user", "assistant", "user"], "the outline is kept, cut to the room, after a turn of the quizmaster's");
+        let kept = messages[2]["content"].as_str().unwrap();
+        assert!(kept.starts_with("Kolo 1: Praha.") && kept.chars().count() == SMALL_TEXT_CHARS / 2);
+        let found = messages[3]["content"][1]["text"].as_str().unwrap();
         assert!(found.contains("NOVÉ stránka z firma.cz"), "what was found now comes before the older notes");
+        assert!(found.trim_end().ends_with("poznámka"), "and the newest of the notes after it");
+        assert!(!found.contains("STARÉ"));
+    }
+
+    #[test]
+    fn the_roles_alternate_whatever_the_conversation_holds() {
+        let model = LocalModel::new(DEFAULT_URL, "m");
+        let roles = |conversation: Vec<ChatTurn>, prompt: &str| {
+            let body = chat_request(&model, &QuestionRequest { conversation, ..asked(prompt, vec![]) }, None, MAX_TEXT_CHARS).unwrap();
+            body["messages"].as_array().unwrap().iter().map(|m| m["role"].as_str().unwrap().to_string()).collect::<Vec<_>>()
+        };
+        // Files sent without words, then the model's reply.
+        assert_eq!(roles(vec![turn(ChatRole::User, ""), turn(ChatRole::Assistant, "Vidím most.")], "A dál?"), ["system", "user", "assistant", "user"]);
+        // Questions asked for and never answered, then a new message.
+        let unanswered = vec![turn(ChatRole::User, "Kvíz o Praze"), turn(ChatRole::Assistant, "Návrh."), turn(ChatRole::User, "10 otázek")];
+        assert_eq!(roles(unanswered.clone(), "Ještě kolo o mostech"), ["system", "user", "assistant", "user"]);
+        let body = chat_request(&model, &QuestionRequest { conversation: unanswered, ..asked("Ještě kolo o mostech", vec![]) }, None, MAX_TEXT_CHARS).unwrap();
+        assert_eq!(body["messages"][3]["content"][0]["text"], "10 otázek");
+        // Two replies in a row are one.
+        assert_eq!(roles(vec![turn(ChatRole::User, "a"), turn(ChatRole::Assistant, "b"), turn(ChatRole::Assistant, "c")], "d"), ["system", "user", "assistant", "user"]);
     }
 
     #[test]
@@ -1521,7 +1590,16 @@ mod tests {
     }
 
     #[test]
+    fn ollama_short_of_memory_is_known() {
+        assert!(short_of_memory("model requires more system memory (12.3 GiB) than is available (8.0 GiB)"));
+        assert!(short_of_memory("CUDA error: out of memory"));
+        assert!(!short_of_memory("model 'x' not found"));
+    }
+
+    #[test]
     fn thoughts_in_the_reply_are_not_shown_as_said() {
+        assert_eq!(said("<think>hmm, Praha"), "", "a reply cut off while thinking said nothing");
+        assert_eq!(said("<think>hmm</think> Navrhuji"), "Navrhuji");
         assert_eq!(shown_so_far("Navrhuji"), "Navrhuji");
         assert_eq!(shown_so_far(""), "");
         assert_eq!(shown_so_far("<thi"), "", "a think tag may be beginning");

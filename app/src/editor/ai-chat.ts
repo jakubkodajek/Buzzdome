@@ -22,11 +22,16 @@ export function entry(made: NewEntry): ChatEntry {
   return { ...made, id: nextId++ } as ChatEntry;
 }
 
-/** The turns the model gets of `entries`: the quizmaster's and its own, not the app's notes, nor a turn with no words. */
+/**
+ * The turns the model gets of `entries`: the quizmaster's (files sent
+ * without words too) and its own, not the app's notes, nor a reply with no
+ * words.
+ */
 export function turnsOf(entries: readonly ChatEntry[]): ChatTurn[] {
   const turns: ChatTurn[] = [];
   for (const shown of entries) {
-    if (shown.role === "note" || shown.text.trim() === "") continue;
+    if (shown.role === "note" || (shown.role === "assistant" && shown.text.trim() === "")) continue;
+    if (shown.role === "user" && shown.text.trim() === "" && shown.files.length === 0) continue;
     turns.push({ role: shown.role, text: shown.text });
   }
   return turns;

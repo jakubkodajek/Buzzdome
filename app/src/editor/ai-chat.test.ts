@@ -34,7 +34,10 @@ describe("the AI panel's conversation", () => {
     const files = [{ id: 7 }, { id: 8 }, { id: 9 }];
     const sent = [entry({ role: "user", text: "", files: [7] }), entry({ role: "user", text: "A tohle?", files: [9] })];
     expect(unsent(files, sent)).toEqual([{ id: 8 }]);
-    expect(turnsOf(sent)).toEqual([{ role: "user", text: "A tohle?" }]);
+    expect(turnsOf(sent)).toEqual([
+      { role: "user", text: "" },
+      { role: "user", text: "A tohle?" },
+    ]);
   });
 
   it("takes back a message the model did not answer, and only that", () => {

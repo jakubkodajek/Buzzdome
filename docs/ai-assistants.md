@@ -370,7 +370,18 @@ API (`/api/chat`, Ollama, "Chat", https://docs.ollama.com/api/chat;
 32,768 for a long request, never more than the model's own context
 (`/api/show`, `model_info.<architecture>.context_length`). The same value
 for most requests, as Ollama loads a model again for another. Other servers
-keep the OpenAI API and the context they were started with.
+keep the OpenAI API and the context they were started with. A request that
+would not fit that context is asked again shorter, as Ollama would
+otherwise cut its start (the instructions) without an error
+(`local_model::ollama_fits`); a computer without the memory for 16,384
+tokens ("requires more system memory") is asked again with 8,192.
+
+The conversation, the files' text and what was found share one text
+budget, the conversation up to half of it, newest turns first. Turns are
+sent with alternating roles, as strict chat templates refuse anything else:
+files sent without words count as a turn of the quizmaster's, and a last
+message never answered (questions asked for) joins the next. A turn cut off
+at the model's length limit is shown as it is, marked, not asked again.
 
 The research plan stops a model that reasons over it for more than 3,000
 characters (`asking::Reading::PLAN`): then nothing is looked up for that
@@ -378,7 +389,10 @@ message in the conversation, and Make questions searches the quizmaster's
 messages as they are written. What was found during the conversation goes
 back with each message and with Make questions (`notes`, the newest 14,000
 characters), so the questions are written from the same pages as the
-proposal.
+proposal. Page text in the notes can try to steer the model (a prompt
+injection) for the rest of the conversation; the model has no tools, reads
+only sites the quizmaster typed and searches only DuckDuckGo, and
+everything it writes is checked as slides, so New conversation clears it.
 
 ### Checking it with a real model
 
