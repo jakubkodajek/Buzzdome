@@ -1110,6 +1110,7 @@ pub fn run() {
             local_model::ai_set_local_model,
             editor::editor_add_dropped_media,
             local_model::editor_ask_local_model,
+            local_model::editor_chat_local_model,
             local_model::editor_ask_local_model_cancel,
             local_model::editor_read_text,
             listen::listener_model,

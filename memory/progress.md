@@ -202,3 +202,48 @@ Template:
   1024x700; `maxLength` in `reply_schema` (BF212) was left out, as no real
   model could be asked with it here; the layout script does not open the
   AI panel; no test that a show's start cancels the panel's request.
+
+## 2026-11-24 - ai-panel-chat (release 1.4.0)
+
+- Done: Studio's AI panel (QZ-14) is a chat: talk, a proposal, refine it,
+  then Make questions from the conversation (PR #88). One + button for all
+  files; files sent move into the message's bubble; replies drawn with
+  paragraphs, lists and bold, a copy button, Stop while the model works.
+  Ollama is asked through its own `/api/chat` with `num_ctx` 16k/32k
+  (8k when short of memory), so reasoning models (qwen3-vl) have room.
+  Two review rounds (fresh context, then code and security) fixed: role
+  alternation, one text budget, newest notes kept, local redirects only
+  to addresses typed in the message, chat reply cap. Version 1.4.0
+  (Jakub's OK, 2026-11-24).
+- State: make check green; layout check clean (editor).
+- Next: Jakub pushes tag `v1.4.0`; try qwen3-vl through Ollama on his Mac
+  and on the event laptop (memory for 16k context).
+- Blockers / open questions: pictures are sent with every turn and not
+  dropped on the shorter retry; no UI test of the panel's run/cancel flow.
+
+## 2026-11-24 - ai-quiz-changes (release 1.4.0)
+
+- Done: the AI panel and the MCP server change anything the editor can
+  (Jakub: "uplne vsechno jako v editoru", also fonts and looks). The
+  model sees the whole quiz (`quiz_edits::quiz_view`) and replies with
+  changes (add, edit as a JSON merge patch, delete, move, quiz fields);
+  `quiz_edits::resolve` checks them with the quiz model and the editor
+  applies them as one undo step (`editor/ai-changes.ts`). MCP gained
+  `change_quiz` (same changes) and `list_fonts`. A test checks the guide
+  names every field of the quiz format. Review findings CR-1..CR-11
+  fixed (edits build on each other, insert order, deleted anchors, view
+  budget, correct answers by text, stale snapshot kept as the
+  quizmaster's, media and category checks). Guard findings BF215-BF223
+  fixed: `resolve` gives a slide its category's look once, under the
+  style the model wrote, and the changes carry final slides (neither
+  `apply` nor `changeEdits` restyles); `Quiz::drop_unsafe_media` covers
+  the quiz's own fields; the shared cases in
+  `crates/quiz-ai/tests/fixtures/quiz-changes.json` run in cargo test and
+  vitest; cut-off changes are counted as left out; at most
+  `MAX_ADDED_SLIDES` per reply.
+- State: make check green; layout check clean (editor).
+- Next: Jakub pushes tag `v1.4.0`; try "change" requests (time, theme,
+  fonts, move a round) with a real model on his Mac.
+- Blockers / open questions: MCP cannot measure loudness (gainDb is set
+  blind), transcribe recordings, or render a slide; it works on quiz
+  folders, not on the draft open in Studio.

@@ -47,6 +47,13 @@ impl Category {
         self.background.as_ref().map(|background| background.file.as_str())
     }
 
+    /// Forgets a background outside the quiz's media folder (`is_safe_reference`).
+    pub fn drop_unsafe_media(&mut self) {
+        if self.media().is_some_and(|file| !crate::is_safe_reference(file)) {
+            self.background = None;
+        }
+    }
+
     /// The same media reference as `media`, to change in place.
     pub(crate) fn media_mut(&mut self) -> Option<&mut String> {
         self.background.as_mut().map(|background| &mut background.file)

@@ -164,10 +164,12 @@ a `.quiz` file.
 | Tool | What it does |
 | --- | --- |
 | `quiz_format` | The quizmaster's instructions, then the format guide and the JSON Schema of `quiz.json`. |
+| `list_fonts` | The fonts installed on this computer, which a slide's or category's style can name. |
 | `list_media_files` | The pictures, sounds and videos in a folder and the folders in it (4 deep, the nearest 1000 files; folders it cannot read are passed over). |
 | `look_at_picture` | Shows the assistant a PNG, JPEG, GIF or WebP picture of up to 3 MB. |
 | `add_media` | Copies files into a quiz folder and returns their names in the quiz (`media/...`). |
 | `write_quiz` | Writes a whole quiz as the folder's `quiz.json` and lists its problems. |
+| `change_quiz` | Changes a folder's `quiz.json` as Studio's editor does: adds, edits (a JSON merge patch, RFC 7386), deletes and moves slides by their number, and changes the quiz's title, theme, settings, sounds, welcome screen and categories; the same changes Studio's AI assistant makes (`quiz_ai::quiz_edits`). A slide given a category takes on its look, as in the editor. It says how many were made and left out, and lists the quiz's problems. |
 | `read_quiz` | Returns a quiz folder's `quiz.json`. |
 | `check_quiz` | Checks a quiz folder or `.quiz` file as the app does, without unpacking the file's media. |
 | `save_quiz_file` | Makes the `.quiz` file; refuses a quiz with problems, and an existing file unless `replace` is given. |
@@ -198,9 +200,25 @@ Buzzdome through their own apps and the MCP server above.
 Which model to use is the quizmaster's choice; the app and these docs
 name none.
 
-In the panel, the quizmaster adds pictures, videos, sound recordings and
-text files (`.txt`, `.md`, `.csv`; at most 12), types what they want ("10 questions
-about the trip photos, in two rounds") and presses Make questions:
+The panel is a chat (Jakub's choice, 2026-11-24). The quizmaster says
+what quiz they want ("a quiz about Prague for a company party, 3 rounds of
+5"), adds pictures, videos, sound recordings and text files (`.txt`,
+`.md`, `.csv`; at most 12) with the + button or by dropping them on the
+panel, and sends the message (Enter; Shift+Enter starts a new line). The
+model replies with a proposal: rounds, their topics and numbers of
+questions, a few example questions, and a question or two where something
+is unclear (`editor_chat_local_model`, `quiz_ai::local_model::chat_request`:
+the conversation so far, newest turns first within the text budget, then
+the message with the files; plain text, streamed word by word to the
+panel). The quizmaster refines it in more messages. The model sees the whole quiz
+in every message (`quiz_edits::quiz_view`: the quiz's own fields as
+`quiz.json` writes them, each slide on a line numbered from 1; within the
+text budget the slides nearest the selected one in full, then in short,
+and the farthest left out by their numbers; the themes and the fonts
+installed on this computer), so it can talk
+about changing what is there as well as about new questions. Make changes
+(Ctrl+Enter) then has the model make the changes agreed in the
+conversation: anything the editor can do (Jakub, 2026-11-24):
 
 1. Pictures and videos are copied into the draft (`editor_add_dropped_media`),
    so the slides can show them.
@@ -209,31 +227,54 @@ about the trip photos, in two rounds") and presses Make questions:
    window cannot play goes by its name only.
 3. `editor_ask_local_model` sends one chat completion request
    (`quiz_ai::local_model::request`): instructions for a buzzer quiz in the
-   quiz's language, the request, each file as "Attachment n" with its
-   pictures, and a small JSON Schema of the reply (`reply_schema`) as
-   `response_format`, at a low temperature (0.2). The schema has the model
-   write, for each question, the attachment it is about, the question, the
-   fact that answers it and only then the right answer and 1 to 3 wrong
-   ones: a model writes the fields in the schema's order, and stating the
-   fact first is a chain of thought (Wei et al., "Chain-of-Thought
-   Prompting Elicits Reasoning in Large Language Models",
-   https://arxiv.org/abs/2201.11903). With gemma3:4b on a 16 GB Mac, the
-   former schema (answers first) marked a wrong answer right in 1 or 2 of
-   4 questions. A server that refuses the format is asked again
+   quiz's language with a guide to the slide types and their fields and
+   to the quiz's settings, sounds, welcome screen, categories and slide
+   styles (`quiz_edits::format_guide`, from the quiz model's own JSON
+   Schemas, so it follows the format), the quiz, the request, each file as
+   "Attachment n" with its pictures, and a small JSON Schema of the reply
+   (`quiz_edits::edits_schema`) as `response_format`, at a low temperature
+   (0.2). The reply is a list of changes and a summary for the
+   quizmaster: `add` (slides after slide N), `edit` (fields of slide N as a
+   JSON merge patch, RFC 7386: `null` removes a field), `delete`, `move`
+   and `quiz` (the quiz's own fields). A new question may be written with
+   the fact that answers it (`reason`, kept in the notes) before the right
+   answer and the wrong ones: stating the fact first is a chain of thought
+   (Wei et al., "Chain-of-Thought Prompting Elicits Reasoning in Large
+   Language Models", https://arxiv.org/abs/2201.11903); with gemma3:4b on a
+   16 GB Mac, answers written first marked a wrong answer right in 1 or 2
+   of 4 questions. A server that refuses the format is asked again
    without it. The reply is streamed, so the panel shows how many
-   questions the model has begun. Cancel frees the panel at once; the
+   changes the model has begun. Cancel frees the panel at once; the
    request's connection closes as the server next writes, which stops the
    server too (while a model is still loading or reading a long request,
    it writes nothing for a while, and keeps the processor busy until it
    does). A show that begins cancels the request the same way and says so
    with a caution, as it does for a recording being written down.
-4. The model's questions become rows of a sheet
-   (`draft_table`) that the spreadsheet import reads, so they get its
-   defaults and checks: answers shuffled, a section for each named round,
-   and in an empty quiz an end of round after each and the results at the
-   end. A question about an attachment shows its picture or video.
-5. The editor inserts the slides after the selected one as one change.
-   Slides asked for one quiz are not put into another opened meanwhile.
+4. The changes are read leniently (`quiz_edits::read_edits`: words such
+   as `remove` or `insert`, numbers written as text) and resolved against
+   the slides' ids (`quiz_edits::resolve`): every slide and value is read
+   by the quiz model itself, so the model can write only what a quiz file
+   holds, and a change it cannot read, or of a slide that is not there,
+   is left out and counted. Slide numbers are those of the quiz the model
+   saw. `right` and `wrong` become shuffled answers with the right one
+   correct; `attachment:N` becomes the file copied into the draft (a
+   picture, video or sound as what the file is); a theme must be one the
+   app has; a new category gets an id. A second change of a slide or of
+   the settings builds on the first, slides added at one place keep the
+   order written, and a place after a slide deleted is after the slide
+   before it. A slide keeps only files in the quiz's media folder, a
+   picture or a video, and a category the quiz has. A test checks that the
+   guide names every field of the quiz format (fonts, colours, fills,
+   clocks, clip parts, sounds of each moment), so the model can set
+   whatever the editor can.
+5. The editor makes the changes as one undo step (`editor/ai-changes.ts`,
+   a `batch` of its own edits): new slides get fresh ids and their
+   category's look, the categories change first, and what was added is
+   selected. A slide or field of the quiz the quizmaster changed while the
+   model wrote keeps the quizmaster's change. The panel shows the model's
+   summary and how many changes were made, left out and kept as the
+   quizmaster had them. Changes asked for one quiz are not made in another
+   opened meanwhile.
 
 A request stays small (at most 16 pictures and 20,000 characters of
 text), as the model reads it within its context: Ollama gives a model 4k
@@ -246,13 +287,8 @@ keep to the schema (LM Studio, "Structured Output",
 https://lmstudio.ai/docs/developer/openai-compat/structured-output); the
 reply is read also when the JSON is wrapped in a code block or a sentence
 or follows a reasoning model's `<think>` block, and a field written oddly
-(`null`, a number for a text) loses only itself. A question whose first
-(right) answer is empty, or that has fewer than two answers, is left out;
-an answer given twice or that is itself a question is dropped, and a
-numbering a model adds to each question's round ("Geography (2/3)") is
-taken off, so the round stays one. Round names that make rounds of about one question each
-(8 questions in 7 rounds, which a 4B model wrote when asked for none) are
-dropped (`has_rounds`).
+(`null`, a number for a text) loses only its change. An answer given twice
+or that is itself a question is dropped from `right` and `wrong`.
 An error the server sends midway (a model out of memory) is shown as such,
 and a model that does not stop is stopped after 400,000 characters. The
 address must be `http` or `https` with no user name or password, and
@@ -262,7 +298,7 @@ Ollama takes pictures but no video (Ollama, "Ollama's new engine for
 multimodal models", https://registry.ollama.ai/blog/multimodal-models), hence
 the frames.
 
-A request that does not fit (`asking::write_questions`) is asked once
+A request that does not fit (`asking::write_changes`) is asked once
 more with its texts and what was found on the internet cut to 4,000
 characters (`SMALL_TEXT_CHARS`) and with `reasoning_effort: "none"`,
 which Ollama turns into thinking off for a model that can turn it off
@@ -344,6 +380,46 @@ The panel shows each step and lists the pages read with the questions; a
 search or page that failed is said so. With it unticked, nothing leaves
 the computer.
 
+### Ollama's own API
+
+Ollama's OpenAI-compatible API cannot set a model's context length (Ollama,
+"OpenAI compatibility", https://docs.ollama.com/api/openai-compatibility),
+and Ollama's default is 4096 tokens on a computer with less than 24 GiB of
+graphics memory (https://docs.ollama.com/context-length). A reasoning model
+reasons for thousands of tokens before it answers, so in 4k it ran out of
+room at every step in our test (2026-11-23), even when asked not to reason
+(`reasoning_effort: "none"`, and `think: false` in Ollama's own API: the
+model reasoned anyway). So when `/api/version` at the server's address
+without `/v1` answers as Ollama does, the panel talks to Ollama's own chat
+API (`/api/chat`, Ollama, "Chat", https://docs.ollama.com/api/chat;
+`quiz_ai::local_model::for_ollama`) and sets `num_ctx` to 16,384 tokens, or
+32,768 for a long request, never more than the model's own context
+(`/api/show`, `model_info.<architecture>.context_length`). The same value
+for most requests, as Ollama loads a model again for another. Other servers
+keep the OpenAI API and the context they were started with. A request that
+would not fit that context is asked again shorter, as Ollama would
+otherwise cut its start (the instructions) without an error
+(`local_model::ollama_fits`); a computer without the memory for 16,384
+tokens ("requires more system memory") is asked again with 8,192.
+
+The conversation, the files' text and what was found share one text
+budget, the conversation up to half of it, newest turns first. Turns are
+sent with alternating roles, as strict chat templates refuse anything else:
+files sent without words count as a turn of the quizmaster's, and a last
+message never answered (questions asked for) joins the next. A turn cut off
+at the model's length limit is shown as it is, marked, not asked again.
+
+The research plan stops a model that reasons over it for more than 3,000
+characters (`asking::Reading::PLAN`): then nothing is looked up for that
+message in the conversation, and Make changes searches the quizmaster's
+messages as they are written. What was found during the conversation goes
+back with each message and with Make changes (`notes`, the newest 14,000
+characters), so the changes are written from the same pages as the
+proposal. Page text in the notes can try to steer the model (a prompt
+injection) for the rest of the conversation; the model has no tools, reads
+only sites the quizmaster typed and searches only DuckDuckGo, and
+everything it writes is checked as slides, so New conversation clears it.
+
 ### Checking it with a real model
 
 The tests use a fake server on this computer
@@ -361,13 +437,17 @@ Studio). Without `BUZZDOME_LIVE_MODEL` the test does nothing. By hand, in
 
 1. File › AI assistants: Load models lists Ollama's models; choose one and Use.
 2. In an empty quiz, Home › AI assistant: add two photos, a short video and
-   a `.txt` file, ask for "8 questions in two rounds", press Make questions.
-   The status says the model reads, then counts questions; the slides come
+   a `.txt` file with +, write "8 questions in two rounds" and send it; the
+   model proposes the rounds. Ask for a change, then press Make changes.
+   The status says the model reads, then counts changes; the slides come
    in after the selected one: sections, questions with the photos and the
    video, an end of round after each round and the results.
-3. Undo (Ctrl+Z) takes all of them out as one change.
+3. Undo (Ctrl+Z) takes all of them out as one change. Then ask for "give
+   questions 2 to 4 20 seconds and delete the last slide", "move the
+   second round to the start", "use another theme" and "rename the quiz":
+   each is made as one undo step.
 4. Ask again and press Cancel while the model reads: the panel is free at
-   once and Make questions works again.
+   once and Make changes works again.
 5. Quit Ollama and ask: the panel says the server does not answer, with its
    address. Choose a model name that is not pulled: it says so.
 6. Start a show while a request runs: the request is cancelled, and a

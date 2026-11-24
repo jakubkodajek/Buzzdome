@@ -70,6 +70,16 @@ impl Welcome {
         logo.into_iter().chain(self.intro.as_deref().map(|file| (WelcomeFile::Intro, file)))
     }
 
+    /// Forgets the logo or the intro when it is outside the quiz's media
+    /// folder (`is_safe_reference`).
+    pub fn drop_unsafe_media(&mut self) {
+        for file in [&mut self.logo, &mut self.intro] {
+            if file.as_deref().is_some_and(|name| !crate::is_safe_reference(name)) {
+                *file = None;
+            }
+        }
+    }
+
     /// Points the files in `renamed` (old reference to new one) to their new names.
     pub fn rename_media(&mut self, renamed: &BTreeMap<String, String>) {
         for file in [&mut self.logo, &mut self.intro].into_iter().flatten() {

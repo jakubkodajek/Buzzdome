@@ -72,6 +72,7 @@ const COMMANDS: &[&str] = &[
     "ai_set_local_model",
     "editor_add_dropped_media",
     "editor_ask_local_model",
+    "editor_chat_local_model",
     "editor_ask_local_model_cancel",
     "editor_read_text",
     "listener_model",

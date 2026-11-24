@@ -1,10 +1,12 @@
 //! The AI panel's request from start to reply (docs/ai-assistants.md):
-//! what is looked up on the internet (`research`), how the questions are
-//! asked again of a model whose context the request did not fit
-//! (`write_questions`) and how a streamed reply is read (`read_stream`).
+//! what is looked up on the internet (`research`), how the model's turn of
+//! the conversation (`chat`) and the changes to the quiz (`write_changes`) are
+//! asked again of a model whose context the request did not fit, and how a
+//! streamed reply is read (`read_stream`).
 //! The network is the caller's: it passes in how to ask the model and how
 //! to fetch a page, so all of this runs in tests without one.
 
+use crate::quiz_edits::AttachedFile;
 use crate::local_model::{self, AttachmentContent, LocalModel, QuestionRequest, RequestError, StreamLine};
 use crate::web_page::{self, Page, SearchResult, Source, Url};
 use quiz_core::MediaKind;
@@ -16,7 +18,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use ts_rs::TS;
 
 /// Most characters of a model's reply, reasoning included: far more than
-/// `MAX_QUESTIONS` questions take, so a model that keeps writing is stopped.
+/// `quiz_edits::MAX_CHANGES` changes take, so a model that keeps writing is stopped.
 pub const MAX_REPLY_CHARS: usize = 400_000;
 /// How many more characters the model writes before the panel is told again.
 const TELL_EVERY: usize = 200;
@@ -34,9 +36,47 @@ pub enum LocalModelProgress {
     Reading { url: String },
     /// The model reasons before it answers (a reasoning model): characters so far.
     Thinking { characters: usize },
-    /// The model writes the questions: characters so far, questions begun.
-    Writing { characters: usize, questions: usize },
+    /// The model writes the changes: characters so far, changes begun.
+    Writing { characters: usize, changes: usize },
+    /// More of the model's turn of the conversation (`Reading::words`).
+    Said { text: String },
 }
+
+/// How a streamed reply is read (`read_stream`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Reading {
+    /// Most characters a model may reason before it answers.
+    pub max_thought: usize,
+    /// Whether the panel is told the reply's words as they come (`LocalModelProgress::Said`).
+    pub words: bool,
+    /// Most characters of the reply itself; past them it is read as cut off.
+    pub max_reply: usize,
+}
+
+impl Reading {
+    /// The changes: a reasoning model may reason as long as it needs.
+    pub const CHANGES: Reading = Reading { max_thought: MAX_REPLY_CHARS, words: false, max_reply: MAX_REPLY_CHARS };
+    /// The model's turn of the conversation, shown as it is written.
+    pub const CHAT: Reading = Reading { max_thought: MAX_REPLY_CHARS, words: true, max_reply: CHAT_REPLY_CHARS };
+    /// The research plan: a few search queries, which need no long
+    /// reasoning; a model that reasons on anyway (some cannot stop, whatever
+    /// they are asked) is stopped, and the plan made without it.
+    pub const PLAN: Reading = Reading { max_thought: PLAN_THOUGHT_CHARS, words: false, max_reply: MAX_REPLY_CHARS };
+}
+
+/// Most characters of a turn of the conversation: a proposal is a few
+/// thousand, so a model that runs on past these is looping [no source -
+/// estimate], and the panel is not made to draw it all.
+pub const CHAT_REPLY_CHARS: usize = 40_000;
+
+/// Bytes of the reply gathered before the panel is told them, so that a
+/// model writing a word at a time does not redraw the panel for each.
+const SAID_EVERY: usize = 64;
+
+/// Most characters a model may reason over the research plan [no source -
+/// estimate: an 8B reasoning model thought 9,000 to 14,000 characters,
+/// 97 to 157 s, over it in our test, which no plan needs].
+pub const PLAN_THOUGHT_CHARS: usize = 3_000;
 
 /// Why a request stopped, as this module finds it; the caller's error
 /// type says it in its own words (`From<Halt>`).
@@ -48,7 +88,7 @@ pub enum Halt {
     /// The server stopped the reply with an error (`StreamLine::Failed`).
     Failed { detail: String },
     /// A reply that is not a chat completion.
-    NotQuestions,
+    NotACompletion,
 }
 
 /// What was found on the internet for a request (`research`).
@@ -78,8 +118,9 @@ impl Research {
 /// request it is given (`local_model::research_plan_request`), telling the
 /// progress it is given, and the model says what to search for
 /// (`local_model::research_plan`); a model that gives no plan (it reasoned
-/// past its limit, say) has the request itself searched, unless the
-/// failure is a cancel (`is_cancel`). The sites the request names are read
+/// past its limit, say) has the request itself searched when the questions
+/// are to be written (`for_quiz`), unless the failure is a cancel; in the conversation it then looks up nothing. The sites
+/// the latest message names (all the quizmaster's messages, `for_quiz`) are read
 /// with a few of their pages that say most about the company
 /// (`web_page::links_to_follow`), then the searches' best results, at most
 /// `web_page::MAX_PAGES` pages in all, none of them a legal page
@@ -87,15 +128,16 @@ impl Research {
 /// named it (`web_page::may_read`). `fetch` gets a page's address and
 /// gives back the address it was read at and its HTML, or None. A search
 /// or page that fails is passed over, and said so.
-pub fn research<E: From<Halt>>(
+pub fn research<E: From<Halt> + PartialEq>(
     model: &LocalModel,
     asked: &QuestionRequest,
     stop: &AtomicBool,
     tell: &impl Fn(LocalModelProgress),
     plan: impl FnOnce(Value, &dyn Fn(LocalModelProgress)) -> Result<(String, bool), E>,
     fetch: impl Fn(&str) -> Option<(String, String)>,
-    is_cancel: impl Fn(&E) -> bool,
+    for_quiz: bool,
 ) -> Result<Research, E> {
+    let written = asked.read_from(for_quiz);
     tell(LocalModelProgress::Planning);
     let thinking = |step: LocalModelProgress| {
         if matches!(step, LocalModelProgress::Thinking { .. }) {
@@ -104,10 +146,11 @@ pub fn research<E: From<Halt>>(
     };
     let queries = match plan(local_model::research_plan_request(model, asked), &thinking) {
         Ok((reply, _)) => local_model::research_plan(&reply).queries,
-        Err(e) if is_cancel(&e) => return Err(e),
-        Err(_) => local_model::plain_search(&asked.prompt).into_iter().collect(),
+        Err(e) if e == Halt::Cancelled.into() => return Err(e),
+        Err(_) if for_quiz => local_model::plain_search(&written).into_iter().collect(),
+        Err(_) => Vec::new(),
     };
-    let sites = web_page::addresses_in(&asked.prompt);
+    let sites = web_page::addresses_in(&written);
     if queries.is_empty() && sites.is_empty() {
         return Ok(Research::default());
     }
@@ -170,7 +213,7 @@ pub fn research<E: From<Halt>>(
     Ok(found)
 }
 
-/// Asks `model` for the questions `asked` for, with what was `found` on the
+/// Asks `model` for the changes `asked` for, with what was `found` on the
 /// internet, through `ask`. Asked once more, with the texts shortened
 /// (`local_model::SMALL_TEXT_CHARS`) and the model asked not to reason
 /// first (`local_model::thinking_off`), when the request does not fit
@@ -179,19 +222,45 @@ pub fn research<E: From<Halt>>(
 /// a model in Ollama has 4096 tokens unless the quizmaster gives it more,
 /// for the request, the model's reasoning and its reply together. If that
 /// fails too, its failure is given back.
-pub fn write_questions<E: From<RequestError>>(
+pub fn write_changes<E: From<RequestError>>(
     model: &LocalModel,
     asked: &QuestionRequest,
     found: &Research,
-    mut ask: impl FnMut(Value) -> Result<(String, bool), E>,
+    ask: impl FnMut(Value) -> Result<(String, bool), E>,
     too_much: impl Fn(&E) -> bool,
 ) -> Result<(String, bool), E> {
-    let body = local_model::request(model, asked, found.text(local_model::MAX_TEXT_CHARS).as_deref(), local_model::MAX_TEXT_CHARS)?;
-    let shorter = local_model::request(model, asked, found.text(local_model::SMALL_TEXT_CHARS).as_deref(), local_model::SMALL_TEXT_CHARS)?;
+    ask_fitting(|room| local_model::request(model, asked, found.text(room).as_deref(), room), ask, too_much, true)
+}
+
+/// Asks `model` for its next turn of the conversation `asked` holds, with
+/// what was `found` on the internet for it, as `write_changes` asks for
+/// the changes.
+pub fn chat<E: From<RequestError>>(
+    model: &LocalModel,
+    asked: &QuestionRequest,
+    found: &Research,
+    ask: impl FnMut(Value) -> Result<(String, bool), E>,
+    too_much: impl Fn(&E) -> bool,
+) -> Result<(String, bool), E> {
+    // A turn cut off is shown as it is (`ChatReply::cut_off`) rather than asked again.
+    ask_fitting(|room| local_model::chat_request(model, asked, found.text(room).as_deref(), room), ask, too_much, false)
+}
+
+/// Asks the request `build` makes with `MAX_TEXT_CHARS` of text, and once
+/// more with `SMALL_TEXT_CHARS` and reasoning off when it does not fit
+/// (`write_changes`).
+fn ask_fitting<E: From<RequestError>>(
+    build: impl Fn(usize) -> Result<Value, RequestError>,
+    mut ask: impl FnMut(Value) -> Result<(String, bool), E>,
+    too_much: impl Fn(&E) -> bool,
+    again_when_cut_off: bool,
+) -> Result<(String, bool), E> {
+    let body = build(local_model::MAX_TEXT_CHARS)?;
+    let shorter = build(local_model::SMALL_TEXT_CHARS)?;
     let shortened = shorter != body;
     match ask(body) {
         Err(e) if too_much(&e) => ask(local_model::thinking_off(shorter)),
-        Ok((_, true)) if shortened => ask(local_model::thinking_off(shorter)),
+        Ok((_, true)) if shortened && again_when_cut_off => ask(local_model::thinking_off(shorter)),
         done => done,
     }
 }
@@ -199,14 +268,18 @@ pub fn write_questions<E: From<RequestError>>(
 /// Reads a streamed chat completion line by line: the model's text and
 /// whether it stopped at its length limit. `progress` hears when the model
 /// begins a question, every few hundred characters, and while a reasoning
-/// model only reasons. A server that sends the whole reply at once is read
-/// too. `cancelled` is looked at after each line; a line that cannot be
-/// read fails with what `read_failed` makes of it.
-pub fn read_stream<E: From<Halt>>(mut reader: impl BufRead, cancelled: &AtomicBool, progress: impl Fn(LocalModelProgress), read_failed: impl Fn(std::io::Error) -> E) -> Result<(String, bool), E> {
+/// model only reasons, and, as `reading` says, each piece of text as it
+/// comes; a model that reasons past `reading.max_thought` before it answers
+/// is stopped (`Halt::ThoughtTooLong`). A server that sends the whole
+/// reply at once is read too. `cancelled` is looked at after each line; a
+/// line that cannot be read fails with what `read_failed` makes of it.
+pub fn read_stream<E: From<Halt>>(mut reader: impl BufRead, cancelled: &AtomicBool, reading: Reading, progress: impl Fn(LocalModelProgress), read_failed: impl Fn(std::io::Error) -> E) -> Result<(String, bool), E> {
     let (mut content, mut cut_off) = (String::new(), false);
     // Characters written and questions begun, now and when last told; characters reasoned, now and when told.
     let (mut now, mut told) = ((0, 0), (0, 0));
     let (mut thought, mut told_thought) = (0, 0);
+    // Bytes of the reply told as said (`LocalModelProgress::Said`).
+    let mut told_words = 0;
     let mut line = String::new();
     loop {
         line.clear();
@@ -224,16 +297,27 @@ pub fn read_stream<E: From<Halt>>(mut reader: impl BufRead, cancelled: &AtomicBo
                     progress(LocalModelProgress::Thinking { characters: thought });
                     told_thought = thought;
                 }
+                if content.trim().is_empty() && thought > reading.max_thought {
+                    return Err(Halt::ThoughtTooLong.into());
+                }
                 let had = content.len();
                 content.push_str(&text);
+                if reading.words {
+                    // Thoughts in the reply's own text (`<think>`) are not told as said.
+                    let shown = local_model::shown_so_far(&content);
+                    if shown.len() >= told_words + SAID_EVERY {
+                        progress(LocalModelProgress::Said { text: shown[told_words..].to_string() });
+                        told_words = shown.len();
+                    }
+                }
                 cut_off |= at_limit;
                 now.0 += text.chars().count();
-                now.1 += local_model::questions_begun(&content, had);
+                now.1 += crate::quiz_edits::changes_begun(&content, had);
                 if now.1 != told.1 || now.0 >= told.0 + TELL_EVERY {
-                    progress(LocalModelProgress::Writing { characters: now.0, questions: now.1 });
+                    progress(LocalModelProgress::Writing { characters: now.0, changes: now.1 });
                     told = now;
                 }
-                if now.0 + thought > MAX_REPLY_CHARS {
+                if now.0 > reading.max_reply || now.0 + thought > MAX_REPLY_CHARS {
                     // A model that does not stop: what it wrote is read as cut off.
                     return if content.trim().is_empty() { Err(Halt::ThoughtTooLong.into()) } else { Ok((content, true)) };
                 }
@@ -244,7 +328,7 @@ pub fn read_stream<E: From<Halt>>(mut reader: impl BufRead, cancelled: &AtomicBo
             StreamLine::NotStreamed => {
                 let mut whole = line.clone();
                 reader.read_to_string(&mut whole).map_err(&read_failed)?;
-                let not_questions = || E::from(Halt::NotQuestions);
+                let not_questions = || E::from(Halt::NotACompletion);
                 let reply: Value = serde_json::from_str(&whole).map_err(|_| not_questions())?;
                 let choice = reply.pointer("/choices/0").ok_or_else(not_questions)?;
                 let text = choice.pointer("/message/content").and_then(Value::as_str).ok_or_else(not_questions)?;
@@ -255,20 +339,32 @@ pub fn read_stream<E: From<Halt>>(mut reader: impl BufRead, cancelled: &AtomicBo
     if cut_off && content.trim().is_empty() && thought > 0 {
         return Err(Halt::ThoughtTooLong.into());
     }
+    if reading.words {
+        let shown = local_model::shown_so_far(&content);
+        if shown.len() > told_words {
+            progress(LocalModelProgress::Said { text: shown[told_words..].to_string() });
+        }
+    }
     Ok((content, cut_off))
 }
 
-/// The picture or video each of the `attachments` shows on its questions'
-/// slides: its reference in the draft as `found` there, and whether it is
-/// a video. A slide shows a file as what it is, whatever the attachment
-/// says; a text, a recording or a file not in the draft shows none.
-pub fn slide_media(attachments: &[local_model::Attachment], found: Vec<Option<String>>) -> Vec<Option<(String, bool)>> {
+/// The file each of the `attachments` is on a slide that uses it
+/// (`quiz_edits::AttachedFile`): its reference in the draft as `found`
+/// there, and whether it is a picture, a video or a sound. A slide uses a
+/// file as what it is, whatever the attachment says; a text or a file not
+/// in the draft is none.
+pub fn slide_media(attachments: &[local_model::Attachment], found: Vec<Option<String>>) -> Vec<Option<AttachedFile>> {
     attachments
         .iter()
         .zip(found)
-        .map(|(attachment, found)| match (&attachment.content, found.as_deref().and_then(MediaKind::of)) {
-            (AttachmentContent::Picture { .. } | AttachmentContent::Video { .. }, Some(kind @ (MediaKind::Image | MediaKind::Video))) => found.map(|reference| (reference, kind == MediaKind::Video)),
-            _ => None,
+        .map(|(attachment, found)| {
+            let kind = found.as_deref().and_then(MediaKind::of)?;
+            let usable = match &attachment.content {
+                AttachmentContent::Picture { .. } | AttachmentContent::Video { .. } => matches!(kind, MediaKind::Image | MediaKind::Video),
+                AttachmentContent::Recording { .. } => matches!(kind, MediaKind::Audio | MediaKind::Video),
+                AttachmentContent::Text { .. } => false,
+            };
+            usable.then_some(AttachedFile { reference: found?, kind })
         })
         .collect()
 }
@@ -276,7 +372,7 @@ pub fn slide_media(attachments: &[local_model::Attachment], found: Vec<Option<St
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::local_model::{Attachment, DEFAULT_URL};
+    use crate::local_model::{Attachment, ChatRole, ChatTurn, DEFAULT_URL};
     use quiz_core::QuizLanguage;
     use std::cell::RefCell;
 
@@ -305,7 +401,7 @@ mod tests {
     }
 
     fn asked(prompt: &str, internet: bool) -> QuestionRequest {
-        QuestionRequest { prompt: prompt.into(), attachments: vec![], language: QuizLanguage::Cs, whole_quiz: false, internet }
+        QuestionRequest { prompt: prompt.into(), attachments: vec![], language: QuizLanguage::Cs, internet, ..Default::default() }
     }
 
     /// A model's reply: its text and whether it stopped at its limit.
@@ -318,7 +414,7 @@ mod tests {
 
     fn read(stream: &str) -> (Result<(String, bool), Failure>, Vec<LocalModelProgress>) {
         let steps = RefCell::new(Vec::new());
-        let read = read_stream(std::io::Cursor::new(stream.to_string()), &AtomicBool::new(false), |step| steps.borrow_mut().push(step), |_| Failure::Refused);
+        let read = read_stream(std::io::Cursor::new(stream.to_string()), &AtomicBool::new(false), Reading::CHANGES, |step| steps.borrow_mut().push(step), |_| Failure::Refused);
         (read, steps.into_inner())
     }
 
@@ -338,7 +434,7 @@ mod tests {
             }
         };
         let steps = RefCell::new(Vec::new());
-        let found = research(&model(), &asked("Kvíz o firmě podle webu pekarna.cz/firma", true), &AtomicBool::new(false), &|step| steps.borrow_mut().push(step), plan(&[]), fetch, |_| false).unwrap();
+        let found = research(&model(), &asked("Kvíz o firmě podle webu pekarna.cz/firma", true), &AtomicBool::new(false), &|step| steps.borrow_mut().push(step), plan(&[]), fetch, true).unwrap();
         assert_eq!(found.sources.iter().map(|s| s.title.as_str()).collect::<Vec<_>>(), ["Pekárna Novák", "O nás"]);
         assert_eq!(fetched.into_inner(), ["https://pekarna.cz/firma", "https://pekarna.cz/o-nas"]);
         assert!(!found.failed);
@@ -361,7 +457,7 @@ mod tests {
                 Some((url.to_string(), "<title>Kontakt</title><p>Hybešova 35</p>".to_string()))
             }
         };
-        let found = research(&model(), &asked("Kvíz o pekárně Bakerini", true), &AtomicBool::new(false), &|_| {}, plan(&["Bakerini Brno"]), fetch, |_| false).unwrap();
+        let found = research(&model(), &asked("Kvíz o pekárně Bakerini", true), &AtomicBool::new(false), &|_| {}, plan(&["Bakerini Brno"]), fetch, true).unwrap();
         let fetched = fetched.into_inner();
         assert_eq!(fetched.len(), 2, "{fetched:?}");
         assert_eq!(fetched[1], "https://www.bakerini.cz/kontakt/");
@@ -376,17 +472,17 @@ mod tests {
             None
         };
         let thinking = |_: Value, _: &dyn Fn(LocalModelProgress)| Err(Failure::Halt(Halt::ThoughtTooLong));
-        let found = research(&model(), &asked("Kvíz o firmě Bakchus aktivity", true), &AtomicBool::new(false), &|_| {}, thinking, fetch, |e| *e == Failure::Halt(Halt::Cancelled)).unwrap();
+        let found = research(&model(), &asked("Kvíz o firmě Bakchus aktivity", true), &AtomicBool::new(false), &|_| {}, thinking, fetch, true).unwrap();
         assert!(searched.into_inner()[0].contains("Bakchus+aktivity") || found.results[0].0.contains("Bakchus aktivity"));
         assert!(found.failed, "no result is a failed search");
         let cancelled = |_: Value, _: &dyn Fn(LocalModelProgress)| Err(Failure::Halt(Halt::Cancelled));
-        let stopped = research(&model(), &asked("Kvíz", true), &AtomicBool::new(false), &|_| {}, cancelled, |_| None, |e| *e == Failure::Halt(Halt::Cancelled));
+        let stopped = research(&model(), &asked("Kvíz", true), &AtomicBool::new(false), &|_| {}, cancelled, |_| None, true);
         assert_eq!(stopped.unwrap_err(), Failure::Halt(Halt::Cancelled));
     }
 
     #[test]
     fn a_request_that_needs_no_internet_reads_nothing() {
-        let found = research(&model(), &asked("Kvíz o Praze", true), &AtomicBool::new(false), &|_| {}, plan(&[]), |_| panic!("nothing is fetched"), |_| false).unwrap();
+        let found = research(&model(), &asked("Kvíz o Praze", true), &AtomicBool::new(false), &|_| {}, plan(&[]), |_| panic!("nothing is fetched"), true).unwrap();
         assert!(found.text(local_model::MAX_TEXT_CHARS).is_none() && found.sources.is_empty() && !found.failed);
     }
 
@@ -404,12 +500,12 @@ mod tests {
             }
         };
         let full = |e: &Failure| matches!(e, Failure::ContextFull | Failure::Halt(Halt::ThoughtTooLong));
-        assert!(write_questions(&model(), &asked, &Research::default(), ask(vec![Err(Failure::ContextFull), Ok(("{}".into(), false))]), full).is_ok());
+        assert!(write_changes(&model(), &asked, &Research::default(), ask(vec![Err(Failure::ContextFull), Ok(("{}".into(), false))]), full).is_ok());
         let sizes = sent.take();
         assert!(sizes[0] > local_model::MAX_TEXT_CHARS && sizes[1] < local_model::MAX_TEXT_CHARS, "{sizes:?}");
-        assert_eq!(write_questions(&model(), &asked, &Research::default(), ask(vec![Err(Failure::ContextFull), Err(Failure::ContextFull)]), full), Err(Failure::ContextFull));
+        assert_eq!(write_changes(&model(), &asked, &Research::default(), ask(vec![Err(Failure::ContextFull), Err(Failure::ContextFull)]), full), Err(Failure::ContextFull));
         assert_eq!(sent.take().len(), 2, "asked twice, not more");
-        assert_eq!(write_questions(&model(), &asked, &Research::default(), ask(vec![Err(Failure::Refused)]), full), Err(Failure::Refused));
+        assert_eq!(write_changes(&model(), &asked, &Research::default(), ask(vec![Err(Failure::Refused)]), full), Err(Failure::Refused));
     }
 
     #[test]
@@ -428,16 +524,16 @@ mod tests {
         let full = |e: &Failure| matches!(e, Failure::ContextFull | Failure::Halt(Halt::ThoughtTooLong));
         let cut = || Ok(("{\"questions\": [".to_string(), true));
         let whole = || Ok(("{}".to_string(), false));
-        assert_eq!(write_questions(&model(), &long, &Research::default(), ask(vec![cut(), whole()]), full), whole());
+        assert_eq!(write_changes(&model(), &long, &Research::default(), ask(vec![cut(), whole()]), full), whole());
         let bodies = sent.take();
         assert!(bodies[1].to_string().len() < bodies[0].to_string().len());
         assert_eq!((bodies[0].get("reasoning_effort"), &bodies[1]["reasoning_effort"]), (None, &serde_json::json!("none")));
         // A short request cut off is not shortened: it is what the model wrote.
-        assert_eq!(write_questions(&model(), &asked("Kvíz", false), &Research::default(), ask(vec![cut()]), full), cut());
+        assert_eq!(write_changes(&model(), &asked("Kvíz", false), &Research::default(), ask(vec![cut()]), full), cut());
         assert_eq!(sent.take().len(), 1);
         // A model that reasons to its limit is asked once more not to.
         let thought = || Err(Failure::Halt(Halt::ThoughtTooLong));
-        assert_eq!(write_questions(&model(), &asked("Kvíz", false), &Research::default(), ask(vec![thought(), whole()]), full), whole());
+        assert_eq!(write_changes(&model(), &asked("Kvíz", false), &Research::default(), ask(vec![thought(), whole()]), full), whole());
         assert_eq!(sent.take()[1]["reasoning_effort"], "none");
     }
 
@@ -448,10 +544,10 @@ mod tests {
 
     #[test]
     fn a_streamed_reply_is_put_together_and_its_progress_told() {
-        let stream = format!("{}{}data: [DONE]\n\n", chunk(serde_json::json!({ "content": "{\"questions\":[{\"question\"" }), None), chunk(serde_json::json!({ "content": ":\"Kde?\"}]}" }), Some("stop")));
+        let stream = format!("{}{}data: [DONE]\n\n", chunk(serde_json::json!({ "content": "{\"changes\":[{\"action\"" }), None), chunk(serde_json::json!({ "content": ":\"add\"}]}" }), Some("stop")));
         let (reply, steps) = read(&stream);
-        assert_eq!(reply, Ok(("{\"questions\":[{\"question\":\"Kde?\"}]}".to_string(), false)));
-        assert!(steps.contains(&LocalModelProgress::Writing { characters: 25, questions: 1 }), "{steps:?}");
+        assert_eq!(reply, Ok(("{\"changes\":[{\"action\":\"add\"}]}".to_string(), false)));
+        assert!(steps.contains(&LocalModelProgress::Writing { characters: 21, changes: 1 }), "{steps:?}");
     }
 
     #[test]
@@ -471,7 +567,7 @@ mod tests {
         assert_eq!(failed, Err(Failure::Halt(Halt::Failed { detail: "out of memory".into() })));
         let whole = serde_json::json!({ "choices": [{ "message": { "content": "[]" }, "finish_reason": "length" }] }).to_string();
         assert_eq!(read(&whole).0, Ok(("[]".to_string(), true)));
-        assert_eq!(read("not json at all").0, Err(Failure::Halt(Halt::NotQuestions)));
+        assert_eq!(read("not json at all").0, Err(Failure::Halt(Halt::NotACompletion)));
         let endless = chunk(serde_json::json!({ "content": "x".repeat(MAX_REPLY_CHARS / 4) }), None).repeat(5);
         let (stopped, _) = read(&endless);
         assert!(matches!(stopped, Ok((_, true))));
@@ -487,6 +583,74 @@ mod tests {
             attachment(AttachmentContent::Recording { words: String::new() }),
         ];
         let found = vec![Some("media/a.mp4".into()), Some("media/b.jpg".into()), None, Some("media/c.mp3".into())];
-        assert_eq!(slide_media(&attachments, found), [Some(("media/a.mp4".into(), true)), Some(("media/b.jpg".into(), false)), None, None]);
+        let file = |reference: &str, kind| Some(AttachedFile { reference: reference.into(), kind });
+        assert_eq!(slide_media(&attachments, found), [file("media/a.mp4", MediaKind::Video), file("media/b.jpg", MediaKind::Image), None, file("media/c.mp3", MediaKind::Audio)]);
+        // A text is on no slide, and a picture is not a sound.
+        let text = [attachment(AttachmentContent::Text { text: String::new() }), attachment(AttachmentContent::Recording { words: String::new() })];
+        assert_eq!(slide_media(&text, vec![Some("media/a.txt".into()), Some("media/b.png".into())]), [None, None]);
+    }
+
+    #[test]
+    fn in_the_conversation_a_model_that_gives_no_plan_looks_up_nothing() {
+        let thinking = |_: Value, _: &dyn Fn(LocalModelProgress)| Err(Failure::Halt(Halt::ThoughtTooLong));
+        let found = research(&model(), &asked("A co jejich historie?", true), &AtomicBool::new(false), &|_| {}, thinking, |_| panic!("nothing is fetched"), false).unwrap();
+        assert!(found.sources.is_empty() && found.results.is_empty() && !found.failed);
+    }
+
+    #[test]
+    fn the_quiz_reads_the_sites_named_earlier_in_the_conversation_and_a_turn_only_its_own() {
+        let earlier = vec![ChatTurn { role: ChatRole::User, text: "Kvíz o firmě podle pekarna.cz".into() }, ChatTurn { role: ChatRole::Assistant, text: "Navrhuji 3 kola.".into() }];
+        let turn = QuestionRequest { conversation: earlier, ..asked("Přidej kolo o historii", true) };
+        let read = RefCell::new(Vec::new());
+        let fetch = |url: &str| {
+            read.borrow_mut().push(url.to_string());
+            None
+        };
+        research(&model(), &turn, &AtomicBool::new(false), &|_| {}, plan(&[]), fetch, false).unwrap();
+        assert!(read.take().is_empty());
+        research(&model(), &turn, &AtomicBool::new(false), &|_| {}, plan(&[]), fetch, true).unwrap();
+        assert_eq!(read.take(), ["https://pekarna.cz/"]);
+    }
+
+    #[test]
+    fn a_turn_of_the_conversation_is_told_as_it_comes_and_asked_again_shorter() {
+        let (said, steps) = {
+            let steps = RefCell::new(Vec::new());
+            let stream = format!("{}{}data: [DONE]\n\n", chunk(serde_json::json!({ "content": "Navrhuji " }), None), chunk(serde_json::json!({ "content": "3 kola." }), Some("stop")));
+            let said = read_stream(std::io::Cursor::new(stream), &AtomicBool::new(false), Reading::CHAT, |step| steps.borrow_mut().push(step), |_| Failure::Refused);
+            (said, steps.into_inner())
+        };
+        assert_eq!(said, Ok(("Navrhuji 3 kola.".to_string(), false)));
+        let words: Vec<_> = steps.iter().filter_map(|step| if let LocalModelProgress::Said { text } = step { Some(text.as_str()) } else { None }).collect();
+        assert_eq!(words, ["Navrhuji 3 kola."], "told in a few pieces, the last at the end");
+        let long = "slovo ".repeat(40);
+        let steps = RefCell::new(Vec::new());
+        let stream: String = long.split_inclusive(' ').map(|word| chunk(serde_json::json!({ "content": word }), None)).collect::<String>() + "data: [DONE]\n\n";
+        let (told, _) = read_stream(std::io::Cursor::new(stream), &AtomicBool::new(false), Reading::CHAT, |step| steps.borrow_mut().push(step), |_| Failure::Refused).unwrap();
+        let pieces: Vec<String> = steps.into_inner().into_iter().filter_map(|step| if let LocalModelProgress::Said { text } = step { Some(text) } else { None }).collect();
+        assert_eq!((pieces.concat(), told.clone()), (long.clone(), long));
+        assert!(pieces.len() < 10, "40 words told in {} pieces", pieces.len());
+        let looping = chunk(serde_json::json!({ "content": "x".repeat(CHAT_REPLY_CHARS / 2) }), None).repeat(3);
+        let (_, cut_off) = read_stream(std::io::Cursor::new(looping), &AtomicBool::new(false), Reading::CHAT, |_| {}, |_| Failure::Refused).unwrap();
+        assert!(cut_off, "a turn that runs on is cut off long before a quiz's questions would be");
+        let sent = RefCell::new(Vec::new());
+        let mut answers = vec![Err(Failure::ContextFull), Ok(("Dobře.".to_string(), false))].into_iter();
+        let reply = chat(&model(), &asked("Kvíz o Praze", false), &Research::default(), |body: Value| {
+            sent.borrow_mut().push(body);
+            answers.next().unwrap()
+        }, |e| *e == Failure::ContextFull);
+        assert_eq!(reply, Ok(("Dobře.".to_string(), false)));
+        let sent = sent.into_inner();
+        assert!(sent[0].get("response_format").is_none(), "a turn of the conversation is plain text");
+        assert_eq!(sent[1]["reasoning_effort"], "none");
+    }
+
+    #[test]
+    fn a_model_that_reasons_too_long_over_the_plan_is_stopped() {
+        let thought = format!("{}data: [DONE]\n\n", chunk(serde_json::json!({ "reasoning": "Hmm. ".repeat(PLAN_THOUGHT_CHARS / 5 + 1) }), None));
+        let read = |reading| read_stream(std::io::Cursor::new(thought.clone()), &AtomicBool::new(false), reading, |_| {}, |_| Failure::Refused);
+        assert_eq!(read(Reading::PLAN), Err(Failure::Halt(Halt::ThoughtTooLong)));
+        // Questions may be reasoned over as long as a model needs: it ends without an answer, and no limit is said.
+        assert_eq!(read(Reading::CHANGES), Ok((String::new(), false)));
     }
 }
