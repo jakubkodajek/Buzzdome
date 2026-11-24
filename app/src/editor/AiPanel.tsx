@@ -25,7 +25,7 @@ import { MAX_DROPPED_MB } from "../bindings/Constants";
 import { keyCombo } from "../keyboard";
 import { tooltip } from "./actions";
 import { addFiles, aiFileKind, attachmentFor, hasSound, soundOf, thumbnailOf, type AiFile } from "./ai-files";
-import { canCreate, canSend, entry, turnsOf, type ChatEntry } from "./ai-chat";
+import { canCreate, canSend, takeBack, entry, turnsOf, type ChatEntry } from "./ai-chat";
 
 /** The keys that make the questions (Cmd on a Mac, `keyCombo`); Enter alone sends the message, as in a chat. */
 const CREATE_KEYS = ["Ctrl+Enter"];
@@ -35,6 +35,8 @@ type Job = ({ step: "preparing" } | { step: "listening"; name: string } | { step
 
 interface PanelState {
   entries: ChatEntry[];
+  /** The quizmaster's message the running request answers, taken back if it fails or is cancelled (`takeBack`). */
+  pending: number | null;
   /** The message being typed. */
   message: string;
   files: AiFile[];
@@ -51,7 +53,7 @@ interface PanelState {
   listenerDownload: VoiceDownload | null | undefined;
 }
 
-const START: PanelState = { entries: [], message: "", files: [], internet: true, notes: null, job: null, saying: "", failed: null, listenerDownload: undefined };
+const START: PanelState = { entries: [], pending: null, message: "", files: [], internet: true, notes: null, job: null, saying: "", failed: null, listenerDownload: undefined };
 const panelState = createStore<PanelState>(START);
 const change = (next: Partial<PanelState>) => panelState.set({ ...panelState.get(), ...next });
 
@@ -201,11 +203,14 @@ export function AiPanel({ draftId, language, emptyQuiz, onInsert, onChooseModel,
     const named = new Set(state.entries.flatMap((shown) => (shown.role === "user" ? shown.files : [])));
     const added = state.files.map((file) => file.file.name).filter((name) => !named.has(name));
     const sent = prompt === "" ? [] : [entry({ role: "user", text: prompt, files: added })];
-    change({ entries: [...state.entries, ...sent], message: "", job: { step: "preparing", making }, saying: "", failed: null });
+    change({ entries: [...state.entries, ...sent], pending: sent[0]?.id ?? null, message: "", job: { step: "preparing", making }, saying: "", failed: null });
     try {
       const attachments = await prepare(current, making, draft);
       // Cancelled while a file was prepared: nothing is asked.
-      if (!attachments || !current()) return;
+      if (!attachments || !current()) {
+        if (current()) withdraw();
+        return;
+      }
       change({ job: { step: "waiting", making } });
       const asked: QuestionRequest = { prompt, attachments, language, wholeQuiz: emptyQuiz, internet: panelState.get().internet, conversation, notes: panelState.get().notes };
       const progress = (step: LocalModelProgress) => {
@@ -229,17 +234,25 @@ export function AiPanel({ draftId, language, emptyQuiz, onInsert, onChooseModel,
         if (reply.webFailed) caution(t(reply.sources.length > 0 ? "aiPanelWebPartly" : "aiPanelWebFailed"));
       }
     } catch (error) {
+      if (current()) withdraw();
       if (isAppError(error) && error.code === "localModelStoppedForShow") caution(errorText(t, error));
       else if (current() && !(isAppError(error) && error.code === "localModelCancelled")) change({ failed: errorNotice(t, error) });
     } finally {
-      if (current()) change({ job: null, saying: "" });
+      if (current()) change({ job: null, pending: null, saying: "" });
     }
+  };
+  /** Takes back the unanswered message, so it can be changed and sent again rather than asked twice. */
+  const withdraw = () => {
+    const now = panelState.get();
+    const back = now.pending === null ? null : takeBack(now.entries, now.pending, now.message);
+    change({ ...back, pending: null });
   };
   const cancel = () => {
     // The panel is free again at once; files being prepared stop at the
     // next, and a request under way ends in the backend too.
     const step = job?.step;
     latestRun++;
+    withdraw();
     change({ job: null, saying: "" });
     if (step === "listening") void api.editorTranscribeCancel();
     else if (step !== "preparing") void api.editorAskLocalModelCancel();

@@ -538,7 +538,8 @@ fn messages(system: String, asked: &QuestionRequest, research: Option<&str>, max
 
         }
     }
-    let found: Vec<&str> = [asked.notes.as_deref(), research].into_iter().flatten().map(str::trim).filter(|text| !text.is_empty()).collect();
+    // What was found now comes first, so a shorter request keeps it over older notes.
+    let found: Vec<&str> = [research, asked.notes.as_deref()].into_iter().flatten().map(str::trim).filter(|text| !text.is_empty()).collect();
     if !found.is_empty() {
         let research = found.join("\n\n");
         // Taken out of what text files left, so the request stays its size.
@@ -566,6 +567,11 @@ fn conversation(turns: &[ChatTurn], max_chars: usize) -> Vec<Value> {
             continue;
         }
         if length > left {
+            // The newest turn is kept in part rather than the conversation dropped.
+            if kept.is_empty() && left > 0 {
+                let part: String = text.chars().take(left).collect();
+                kept.push(json!({ "role": if turn.role == ChatRole::User { "user" } else { "assistant" }, "content": part }));
+            }
             break;
         }
         left -= length;
@@ -838,7 +844,7 @@ const EXTRAS: [&str; 4] = ["response_format", "reasoning_effort", "format", "thi
 /// instructions alone ask for the JSON.
 pub fn refuses_extras(detail: &str) -> bool {
     let detail = detail.to_lowercase();
-    ["response_format", "json_schema", "structured output", "grammar", "reasoning_effort", "think"].iter().any(|word| detail.contains(word))
+    ["response_format", "json_schema", "structured output", "grammar", "reasoning_effort", "support think"].iter().any(|word| detail.contains(word))
 }
 
 /// Whether `body` has any of the `EXTRAS`.
@@ -898,13 +904,27 @@ const IMAGE_TOKENS: usize = 1_024;
 /// for the reply need more; never more than the model's own `most`. The
 /// same for most requests, as Ollama loads a model again for another.
 pub fn ollama_context(body: &Value, most: Option<u32>) -> u32 {
+    let needed = ollama_prompt_tokens(body) + REPLY_TOKENS;
+    let wanted = if needed <= OLLAMA_CONTEXT as usize { OLLAMA_CONTEXT } else { OLLAMA_LARGE_CONTEXT };
+    most.filter(|most| *most >= 2_048).map_or(wanted, |most| wanted.min(most))
+}
+
+/// About how many tokens `body` (as `for_ollama` sends it) takes before
+/// the reply.
+fn ollama_prompt_tokens(body: &Value) -> usize {
     let messages = body.get("messages").and_then(Value::as_array).map(Vec::as_slice).unwrap_or_default();
     let chars: usize = messages.iter().map(|m| m.get("content").and_then(Value::as_str).map_or(0, |t| t.chars().count())).sum();
     let images: usize = messages.iter().map(|m| m.get("images").and_then(Value::as_array).map_or(0, Vec::len)).sum();
     // About 3 characters a token [no source - estimate for Czech and English].
-    let needed = chars / 3 + images * IMAGE_TOKENS + REPLY_TOKENS;
-    let wanted = if needed <= OLLAMA_CONTEXT as usize { OLLAMA_CONTEXT } else { OLLAMA_LARGE_CONTEXT };
-    most.filter(|most| *most >= 2_048).map_or(wanted, |most| wanted.min(most))
+    chars / 3 + images * IMAGE_TOKENS
+}
+
+/// Whether `body` leaves room for a reply in `context` tokens: Ollama
+/// would otherwise cut the start of the request (the instructions) without
+/// an error, so a request that does not fit is asked again shorter. A
+/// quarter of `REPLY_TOKENS` is the least room kept [no source - estimate].
+pub fn ollama_fits(body: &Value, context: u32) -> bool {
+    ollama_prompt_tokens(body) + REPLY_TOKENS / 4 <= context as usize
 }
 
 /// The model's longest context from Ollama's `/api/show` reply
@@ -994,6 +1014,21 @@ pub fn said(content: &str) -> String {
 
 /// `content` after a reasoning model's thinking (`<think>…</think>`), which
 /// some servers leave in the text before the answer.
+/// What of `content`, a reply still coming, is said rather than thought:
+/// nothing while a `<think>` it begins with is open (or may be beginning),
+/// what follows the `</think>` once it closes. It only grows as `content`
+/// does, so its new end is what was said since.
+pub fn shown_so_far(content: &str) -> &str {
+    let start = content.trim_start();
+    if start.starts_with("<think>") {
+        return content.find("</think>").map_or("", |end| &content[end + "</think>".len()..]);
+    }
+    if "<think>".starts_with(start) {
+        return "";
+    }
+    content
+}
+
 fn without_thinking(content: &str) -> &str {
     match content.rfind("</think>") {
         Some(end) => &content[end + "</think>".len()..],
@@ -1379,6 +1414,8 @@ mod tests {
         assert!(refuses_extras("'response_format.type' must be 'json_schema' or 'text'"));
         assert!(refuses_extras("Unrecognized request argument supplied: reasoning_effort"));
         assert!(!refuses_extras("model 'x' not found"));
+        assert!(refuses_extras("\"gemma3:4b\" does not support thinking"));
+        assert!(!refuses_extras("think of a shorter prompt"), "only a refused setting is asked again without it");
         let model = LocalModel::new(DEFAULT_URL, "m");
         let body = request(&model, &asked("x", vec![]), None, MAX_TEXT_CHARS).unwrap();
         assert!(without_extras(body.clone()).get("response_format").is_none());
@@ -1413,6 +1450,25 @@ mod tests {
         assert!(chat.get("response_format").is_none());
         assert!(chat["messages"][0]["content"].as_str().unwrap().contains("Propose a concrete outline"));
         assert_eq!(request(&model, &QuestionRequest { conversation: vec![], ..asked }, None, MAX_TEXT_CHARS), Err(RequestError::Empty));
+    }
+
+    #[test]
+    fn a_shorter_request_keeps_the_newest_turn_in_part_and_what_was_found_now() {
+        let model = LocalModel::new(DEFAULT_URL, "m");
+        let outline = format!("Kolo 1: Praha. {}", "Otázka. ".repeat(600));
+        let asked = QuestionRequest {
+            conversation: vec![turn(ChatRole::User, "Kvíz o Praze"), turn(ChatRole::Assistant, &outline)],
+            notes: Some(format!("STARÉ {}", "poznámka ".repeat(1_500))),
+            ..asked("", vec![])
+        };
+        let body = request(&model, &asked, Some("NOVÉ stránka z firma.cz"), SMALL_TEXT_CHARS).unwrap();
+        let messages = body["messages"].as_array().unwrap();
+        let roles: Vec<&str> = messages.iter().map(|m| m["role"].as_str().unwrap()).collect();
+        assert_eq!(roles, ["system", "assistant", "user"], "the outline is kept, cut to the room");
+        let kept = messages[1]["content"].as_str().unwrap();
+        assert!(kept.starts_with("Kolo 1: Praha.") && kept.chars().count() == SMALL_TEXT_CHARS);
+        let found = messages[2]["content"][1]["text"].as_str().unwrap();
+        assert!(found.contains("NOVÉ stránka z firma.cz"), "what was found now comes before the older notes");
     }
 
     #[test]
@@ -1456,9 +1512,22 @@ mod tests {
         assert_eq!(ollama_context(&body(40_000, 2), None), OLLAMA_LARGE_CONTEXT);
         assert_eq!(ollama_context(&body(40_000, 2), Some(8_192)), 8_192);
         assert_eq!(ollama_context(&body(100, 0), Some(0)), OLLAMA_CONTEXT, "a context too small to be true is not taken");
+        assert!(ollama_fits(&body(40_000, 2), OLLAMA_LARGE_CONTEXT));
+        assert!(!ollama_fits(&body(60_000, 16), OLLAMA_LARGE_CONTEXT), "Ollama would cut the instructions off without a word");
+        assert!(!ollama_fits(&body(40_000, 2), 8_192));
         let show = json!({ "model_info": { "general.architecture": "gemma3", "gemma3.context_length": 131_072 } });
         assert_eq!(model_context(&show), Some(131_072));
         assert_eq!(model_context(&json!({})), None);
+    }
+
+    #[test]
+    fn thoughts_in_the_reply_are_not_shown_as_said() {
+        assert_eq!(shown_so_far("Navrhuji"), "Navrhuji");
+        assert_eq!(shown_so_far(""), "");
+        assert_eq!(shown_so_far("<thi"), "", "a think tag may be beginning");
+        assert_eq!(shown_so_far("<think>hmm"), "");
+        assert_eq!(shown_so_far("<think>hmm</think>Navrhuji"), "Navrhuji");
+        assert_eq!(shown_so_far("<b>tučně</b>"), "<b>tučně</b>");
     }
 
     #[test]

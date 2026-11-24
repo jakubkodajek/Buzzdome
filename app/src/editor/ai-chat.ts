@@ -43,3 +43,15 @@ export function canSend(message: string, files: number, entries: readonly ChatEn
 export function canCreate(message: string, files: number, entries: readonly ChatEntry[]): boolean {
   return message.trim() !== "" || files > 0 || turnsOf(entries).some((turn) => turn.role === "user");
 }
+
+/**
+ * The conversation without the quizmaster's message `id` when it is still
+ * the last entry, unanswered (the model failed or was cancelled), and the
+ * message box with its words again when nothing new was typed meanwhile;
+ * null when it was answered or other entries came after it.
+ */
+export function takeBack(entries: readonly ChatEntry[], id: number, message: string): { entries: ChatEntry[]; message: string } | null {
+  const last = entries[entries.length - 1];
+  if (last?.id !== id || last.role !== "user") return null;
+  return { entries: entries.slice(0, -1), message: message.trim() === "" ? last.text : message };
+}

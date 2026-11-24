@@ -288,12 +288,14 @@ fn too_much(error: &AppError) -> bool {
     matches!(error, AppError::LocalModelContextFull { .. } | AppError::LocalModelThoughtTooLong)
 }
 
-/// Looks up on the internet what `asked` needs when it may and nothing was
-/// found earlier in the conversation, then asks `model` for the questions
+/// Looks up on the internet what `asked` needs when it may (with notes from
+/// the conversation, only the sites its latest message names), then asks `model` for the questions
 /// (`asking::write_questions`): the model's text, whether it stopped at its
 /// length limit, and what was found.
 fn find_and_write(model: &LocalModel, server: &Server, asked: &QuestionRequest, stop: &AtomicBool, tell: impl Fn(LocalModelProgress)) -> CmdResult<(String, bool, Research)> {
-    let found = if asked.internet && asked.notes.is_none() { look_up(model, server, asked, stop, &tell, true)? } else { Research::default() };
+    // With notes from the conversation, only sites named in the latest message are read.
+    let fresh = asked.notes.is_none();
+    let found = if asked.internet && (fresh || !web_page::addresses_in(&asked.prompt).is_empty()) { look_up(model, server, asked, stop, &tell, fresh)? } else { Research::default() };
     let (content, cut_off) = asking::write_questions(model, asked, &found, |body| ask(model, server, body, stop, Reading::QUESTIONS, &tell), too_much)?;
     Ok((content, cut_off, found))
 }
@@ -471,7 +473,11 @@ fn ask(model: &LocalModel, server: &Server, body: Value, cancelled: &AtomicBool,
         Server::OpenAi => (model.chat_url(), local_model::streamed(body)),
         Server::Ollama { root, most } => {
             let mut native = local_model::for_ollama(&local_model::streamed(body), 0);
-            native["options"]["num_ctx"] = json!(local_model::ollama_context(&native, *most));
+            let context = local_model::ollama_context(&native, *most);
+            if !local_model::ollama_fits(&native, context) {
+                return Err(AppError::LocalModelContextFull { model: model.model.clone() });
+            }
+            native["options"]["num_ctx"] = json!(context);
             (format!("{root}/api/chat"), native)
         }
     };

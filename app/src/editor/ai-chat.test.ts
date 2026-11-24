@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canCreate, canSend, entry, turnsOf } from "./ai-chat";
+import { canCreate, canSend, entry, takeBack, turnsOf } from "./ai-chat";
 
 describe("the AI panel's conversation", () => {
   const talk = [
@@ -29,5 +29,16 @@ describe("the AI panel's conversation", () => {
     expect(canCreate("", 0, [])).toBe(false);
     expect(canCreate("", 1, [])).toBe(true);
     expect(canCreate("", 0, [entry({ role: "note", text: "x" })])).toBe(false);
+  });
+
+  it("takes back a message the model did not answer, and only that", () => {
+    const asked = entry({ role: "user", text: "A co historie?", files: [] });
+    const back = takeBack([...talk, asked], asked.id, "");
+    expect(back).toEqual({ entries: talk, message: "A co historie?" });
+    // Words typed meanwhile stay in the box.
+    expect(takeBack([...talk, asked], asked.id, "Jiný nápad")?.message).toBe("Jiný nápad");
+    // Answered: nothing is taken back.
+    const answer = entry({ role: "assistant", text: "Tady je.", cutOff: false, sources: [] });
+    expect(takeBack([...talk, asked, answer], asked.id, "")).toBeNull();
   });
 });

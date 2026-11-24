@@ -264,6 +264,8 @@ pub fn read_stream<E: From<Halt>>(mut reader: impl BufRead, cancelled: &AtomicBo
     // Characters written and questions begun, now and when last told; characters reasoned, now and when told.
     let (mut now, mut told) = ((0, 0), (0, 0));
     let (mut thought, mut told_thought) = (0, 0);
+    // Bytes of the reply told as said (`LocalModelProgress::Said`).
+    let mut told_words = 0;
     let mut line = String::new();
     loop {
         line.clear();
@@ -284,11 +286,16 @@ pub fn read_stream<E: From<Halt>>(mut reader: impl BufRead, cancelled: &AtomicBo
                 if content.trim().is_empty() && thought > reading.max_thought {
                     return Err(Halt::ThoughtTooLong.into());
                 }
-                if reading.words && !text.is_empty() {
-                    progress(LocalModelProgress::Said { text: text.clone() });
-                }
                 let had = content.len();
                 content.push_str(&text);
+                if reading.words {
+                    // Thoughts in the reply's own text (`<think>`) are not told as said.
+                    let shown = local_model::shown_so_far(&content);
+                    if shown.len() > told_words {
+                        progress(LocalModelProgress::Said { text: shown[told_words..].to_string() });
+                        told_words = shown.len();
+                    }
+                }
                 cut_off |= at_limit;
                 now.0 += text.chars().count();
                 now.1 += local_model::questions_begun(&content, had);
