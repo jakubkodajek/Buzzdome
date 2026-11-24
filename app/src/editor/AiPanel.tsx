@@ -326,7 +326,7 @@ export function AiPanel({ draftId, language, quiz, selected, onChange, onChooseM
         <div className="ai-panel-body">
           <div className="ai-panel-setup">
             <p>{t("aiPanelNoModel")}</p>
-            <LocalModelPicker chosen={null} onChosen={(chosen) => setInfo((now) => (now ? { ...now, chosen } : now))} />
+            <LocalModelPicker autoUse chosen={null} onChosen={(chosen) => setInfo((now) => (now ? { ...now, chosen } : now))} />
             <button type="button" className="browse" onClick={onChooseModel}>
               {t("aiPanelChooseModel")}
             </button>

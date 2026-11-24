@@ -137,12 +137,13 @@ pub fn ai_local_model(saved: State<'_, SavedAiSettings>) -> LocalModelInfo {
 /// The models the server at `url` offers.
 #[tauri::command]
 pub async fn ai_local_models(url: String) -> CmdResult<Vec<String>> {
-    off_ui(move || models_at(&url, LIST_TIMEOUT)).await
+    off_ui(move || models_at(&url, Wait::FirstWord(LIST_TIMEOUT))).await
 }
 
-/// How long a server on this computer may take to say what models it has
-/// when the app looks for servers: one that is there answers at once.
-const FIND_TIMEOUT: Duration = Duration::from_secs(3);
+/// How long the app waits for one address in all (connecting, the reply
+/// and its body) when it looks for servers: a server that is there answers
+/// at once, and a closed or silent address must not hold the search.
+const FIND_TIMEOUT: Duration = Duration::from_millis(2_500);
 
 /// The model servers running on this computer, with their models: those at
 /// the usual addresses (`local_model::KNOWN_SERVERS`) and the chosen one's,
@@ -154,20 +155,33 @@ pub async fn ai_find_local_models(saved: State<'_, SavedAiSettings>) -> CmdResul
     off_ui(move || {
         let asking: Vec<_> = addresses
             .into_iter()
-            .map(|(name, url)| std::thread::spawn(move || models_at(&url, FIND_TIMEOUT).ok().map(|models| FoundServer { name, url, models })))
+            .map(|(name, url)| std::thread::spawn(move || models_at(&url, Wait::AtMost(FIND_TIMEOUT)).ok().map(|models| FoundServer { name, url, models })))
             .collect();
         Ok(asking.into_iter().filter_map(|thread| thread.join().ok().flatten()).collect())
     })
     .await
 }
 
-/// The models the server at `url` offers, waiting at most `timeout`.
-fn models_at(url: &str, timeout: Duration) -> CmdResult<Vec<String>> {
+/// How long a request for a server's models may wait.
+#[derive(Clone, Copy)]
+enum Wait {
+    /// For the reply to begin; then as long as any reply.
+    FirstWord(Duration),
+    /// For everything.
+    AtMost(Duration),
+}
+
+/// The models the server at `url` offers, waiting as `wait` says.
+fn models_at(url: &str, wait: Wait) -> CmdResult<Vec<String>> {
     if !LocalModel::usable_url(url) {
         return Err(AppError::LocalModelBadUrl { url: url.to_string() });
     }
     let address = LocalModel::models_url(url);
-    let mut response = agent(&address, timeout).get(&address).call().map_err(|e| unreachable(url, e))?;
+    let agent = match wait {
+        Wait::FirstWord(first_word) => agent(&address, first_word),
+        Wait::AtMost(all) => agent_within(&address, all),
+    };
+    let mut response = agent.get(&address).call().map_err(|e| unreachable(url, e))?;
     let body = read_body(&mut response, url)?;
     if !response.status().is_success() {
         return Err(AppError::LocalModelRefused { status: response.status().as_u16(), detail: local_model::error_detail(&body) });
@@ -577,13 +591,21 @@ fn ask(model: &LocalModel, server: &Server, body: Value, cancelled: &AtomicBool,
 /// server is usually this computer; a proxy set for the system is not used
 /// for this computer's own address.
 fn agent(address: &str, first_word: Duration) -> ureq::Agent {
-    let config = ureq::Agent::config_builder()
+    client(address, ureq::Agent::config_builder().timeout_recv_response(Some(first_word)).timeout_recv_body(Some(REPLY_TIMEOUT)))
+}
+
+/// A client like `agent` whose request may take `all` in all.
+fn agent_within(address: &str, all: Duration) -> ureq::Agent {
+    client(address, ureq::Agent::config_builder().timeout_global(Some(all)))
+}
+
+/// A client for a model's server at `address`, with `config`'s timeouts.
+fn client(address: &str, config: ureq::config::ConfigBuilder<ureq::typestate::AgentScope>) -> ureq::Agent {
+    let config = config
         .http_status_as_error(false)
         // The address the quizmaster gave, and no other it sends on to.
         .max_redirects(0)
-        .timeout_connect(Some(CONNECT_TIMEOUT))
-        .timeout_recv_response(Some(first_word))
-        .timeout_recv_body(Some(REPLY_TIMEOUT));
+        .timeout_connect(Some(CONNECT_TIMEOUT));
     let config = if is_this_computer(address) { config.proxy(None) } else { config };
     config.build().into()
 }

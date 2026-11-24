@@ -197,11 +197,13 @@ speaks the OpenAI chat completions API, with no account and no API key:
 | vLLM and others | their `/v1` address | |
 
 The app looks for a server at each of these addresses, and at the chosen
-one's, all at once with a 3-second limit (`ai_find_local_models`,
+one's, all at once, each within 2.5 seconds in all (`ai_find_local_models`,
 `local_model::KNOWN_SERVERS`), and lists the models of every server that
-answers `GET /models`. File › AI assistants and the AI panel (until a model
-is chosen) show them; one click uses a model, and while none is chosen the
-only model found is used at once. Another address goes under "A server at
+answers `GET /models`. The same server under another spelling of this
+computer (`127.0.0.1` for `localhost`) is asked once. File › AI assistants
+and the AI panel (until a model is chosen) show them; one click uses a
+model. In the AI panel, while none is chosen, the only model found is used
+at once; File › AI assistants only lists them. Another address goes under "A server at
 another address". The choice is kept in `ai.json` (`localModel`). Signing in with a ChatGPT,
 Claude or Gemini subscription is not offered: Anthropic and Google forbid
 using those logins in other apps (The Register, 2026-02-20,
@@ -384,12 +386,16 @@ writes. No address is needed:
 
 What a page says is data, never instructions (prompt injection, OWASP
 LLM01, https://genai.owasp.org/llmrisk/llm01-prompt-injection/): the text
-goes between `<<<WEB TEXT` and `WEB TEXT>>>` (marks a page cannot write,
-`web_text` removes them from it), and both the questions' and the chat's
+goes between `<<<WEB TEXT` and `WEB TEXT>>>`; `web_text` cuts every run
+of three or more `<` or `>` in the page (also full-width and guillemet
+look-alikes) to two, so the page has nothing that reads like those marks,
+and both the questions' and the chat's
 instructions tell the model to take only facts from it and to ignore what
-it asks. The research plan reads only the quizmaster's own messages, not
-the model's replies, so a page repeated in a reply cannot choose what is
-looked up next. This makes an injected page harder to obey, not
+it asks. Once anything was read from the internet in a conversation, the
+research plan reads only the quizmaster's own messages, not the model's
+replies, so a page repeated in a reply cannot choose what is looked up
+next; before that it reads the model's replies too, so "Yes, look it up"
+keeps the subject the model proposed. This makes an injected page harder to obey, not
 impossible; what it could still do is limited: the model has no tools,
 its reply is only quiz changes the app checks, and one undo takes them
 back.
