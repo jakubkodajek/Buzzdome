@@ -96,6 +96,14 @@ impl AiSettings {
 
 /// The instructions assistants follow until the quizmaster writes their own:
 /// enough for a whole quiz from a topic alone.
+/// How the quizmaster's instructions name slides and questions (the app's
+/// own words, as the editor shows them), in the quiz format's terms: told
+/// to a model with the instructions, so they can be written in plain words.
+pub const SLIDE_WORDS: &str = "The quizmaster's instructions name slides as the app does: an info slide (informační snímek) is a \
+     billboard; End of round (Konec kola) is endOfRound; Final ranking (Konečné pořadí) is final; Answer explanation \
+     (Vysvětlení odpovědi) is explanation; a question everyone answers (otázka, na kterou odpovídají všichni) has mode \
+     everyone; a fastest-finger question (otázka s rychlou odpovědí) has mode fastestFinger.";
+
 pub fn default_instructions(language: Language) -> &'static str {
     match language {
         Language::Cs => include_str!("instructions/cs.md"),
@@ -115,9 +123,24 @@ mod tests {
         for language in [Language::Cs, Language::En] {
             let instructions = default_instructions(language);
             assert!(instructions.chars().count() < MAX_INSTRUCTIONS_CHARS / 2, "{language:?}");
-            for slide in ["billboard", "endOfRound", "final", "everyone", "fastestFinger", "explanation", ".quiz"] {
-                assert!(instructions.contains(slide), "{language:?} names {slide}");
-            }
+        }
+        // Every kind of slide and question, in the words the app shows, which SLIDE_WORDS gives the format's names of.
+        let words: [(&str, &str, &str); 6] = [
+            ("informačním snímkem", "info slide", "billboard"),
+            ("Konec kola", "End of round", "endOfRound"),
+            ("Konečné pořadí", "Final ranking", "final"),
+            ("Vysvětlení odpovědi", "Answer explanation", "explanation"),
+            ("odpovídají všichni", "everyone answers", "everyone"),
+            ("rychlou odpovědí", "fastest-finger", "fastestFinger"),
+        ];
+        for (cs, en, format) in words {
+            assert!(default_instructions(Language::Cs).contains(cs), "{cs}");
+            assert!(default_instructions(Language::En).contains(en), "{en}");
+            assert!(SLIDE_WORDS.contains(&format!(" {format};")) || SLIDE_WORDS.contains(&format!(" {format}.")), "{format}");
+        }
+        // Plain words for people: no field names of the quiz format.
+        for language in [Language::Cs, Language::En] {
+            assert!(!default_instructions(language).contains('`'), "{language:?}");
         }
     }
 

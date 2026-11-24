@@ -793,14 +793,14 @@ const strings = {
     aiConfigNotCopied: "Nastavení nejde zkopírovat automaticky: označte ho níže a zkopírujte.",
     aiInstructionsTitle: "3. Vaše pokyny pro kvízy",
     aiInstructionsHint:
-      "AI se jimi řídí u každého kvízu, a tak v chatu stačí napsat téma. Co napíšete v chatu, má přednost. Uložené pokyny platí od dalšího kvízu, bez restartu aplikace.",
+      "Řídí se jimi AI asistent ve Studiu i připojené AI aplikace u každého kvízu, a tak v chatu stačí napsat téma. Pište obyčejně, jako byste je říkali kolegovi, třeba: „Kvízy dělám pro děti na táboře: 2 kola po 5 lehkých otázkách, 30 sekund na odpověď.“ Co napíšete v chatu, má přednost. Uložené pokyny platí od další zprávy, bez restartu aplikace.",
     aiSaveInstructions: "Uložit pokyny",
     aiDefaultInstructions: "Vrátit výchozí",
     aiDefaultInstructionsConfirm: "Nahradit vaše pokyny výchozími? Vaše pokyny se smažou.",
     aiDefaultInstructionsDone: "Platí výchozí pokyny.",
     aiLocalTitle: "AI asistent ve Studiu: model v tomto počítači",
     aiLocalHint:
-      "AI asistent ve Studiu (Domů › AI asistent) vytváří a upravuje kvíz podle vašich zpráv, obrázků, videí a textů. Používá model, který běží přímo v tomto počítači, bez účtu a bez API klíče. Nainstalujte Ollama nebo LM Studio a stáhněte v něm model podle svého výběru (na obrázky a videa takový, který umí číst obrázky). Aplikace ho tu sama najde a vy ho jen vyberete.",
+      "AI asistent ve Studiu (Domů › AI asistent) vytváří a upravuje kvíz podle vašich zpráv, obrázků, videí a textů. Používá model, který běží přímo v tomto počítači, bez účtu a bez API klíče. Nainstalujte Ollama nebo LM Studio a stáhněte v něm model podle svého výběru (na obrázky a videa takový, který umí číst obrázky). Aplikace ho tu najde automaticky a vy ho jen vyberete.",
     aiLocalUrl: "Adresa serveru",
     aiLocalUrlHint: "Ollama: http://localhost:11434/v1 · LM Studio: http://localhost:1234/v1 (v LM Studiu zapněte server).",
     aiLocalLoad: "Načíst modely",
@@ -2441,7 +2441,7 @@ const strings = {
     aiConfigNotCopied: "The settings could not be copied automatically: select them below and copy them.",
     aiInstructionsTitle: "3. Your instructions for quizzes",
     aiInstructionsHint:
-      "The AI follows them for every quiz, so a topic is all you type in the chat. What you write in the chat wins. Saved instructions apply from the next quiz, with no restart.",
+      "Studio's AI assistant and the connected AI apps follow them for every quiz, so a topic is all you type in the chat. Write them plainly, as you would tell a colleague, for example: “My quizzes are for children at a summer camp: 2 rounds of 5 easy questions, 30 seconds to answer.” What you write in the chat wins. Saved instructions apply from the next message, with no restart.",
     aiSaveInstructions: "Save instructions",
     aiDefaultInstructions: "Restore default",
     aiDefaultInstructionsConfirm: "Replace your instructions with the default ones? Yours will be deleted.",

@@ -7,6 +7,8 @@ import { clearMocks, mockIPC, mockWindows } from "@tauri-apps/api/mocks";
 import React from "react";
 import ReactDOM from "react-dom/client";
 import demoQuiz from "../../../samples/demo-quiz.json";
+import csInstructions from "../../../crates/quiz-ai/src/instructions/cs.md?raw";
+import enInstructions from "../../../crates/quiz-ai/src/instructions/en.md?raw";
 import { installBrowserGuard } from "../browser-guard";
 import { setBodyText } from "../editor/slides";
 import { rightAnswers } from "../quiz";
@@ -1010,7 +1012,7 @@ mockIPC(
         return {
           folder: "C:\\Users\\Eva\\Documents\\Buzzdome",
           instructions: aiInstructions,
-          defaultInstructions: "When I give you only a topic, make the whole quiz without asking me anything.\n\n- 3 rounds of 6 questions.",
+          defaultInstructions: (payload as { language: string }).language === "cs" ? csInstructions : enInstructions,
           maxInstructionsChars: 4000,
           assistants: [
             { assistant: "claudeDesktop", name: "Claude Desktop", maker: "Claude / Anthropic", state: "connected", configFiles: ["C:\\Users\\Eva\\AppData\\Roaming\\Claude\\claude_desktop_config.json"] },

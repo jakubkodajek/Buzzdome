@@ -472,11 +472,14 @@ pub fn resolve(quiz: &Quiz, edits: &ModelEdits, attachments: &[Option<AttachedFi
         let is_there = |id: &String| working.slides.iter().any(|slide| slide.id == *id);
         let made: Vec<QuizChange> = match change.action {
             Some(Action::Add) => {
+                let readable: Vec<Slide> = change.slides.iter().filter_map(|written| new_slide(written, attachments, &working.categories, &mut shuffle)).collect();
+                // Slides past MAX_ADDED_SLIDES are left out: a change that loses some counts as left out.
                 let room = MAX_ADDED_SLIDES - slides_added;
-                let slides: Vec<Slide> = change
-                    .slides
-                    .iter()
-                    .filter_map(|written| new_slide(written, attachments, &working.categories, &mut shuffle))
+                if readable.len() > room && room > 0 {
+                    resolved.left_out += 1;
+                }
+                let slides: Vec<Slide> = readable
+                    .into_iter()
                     .take(room)
                     .map(|mut slide| {
                         added += 1;
@@ -701,7 +704,7 @@ fn new_slide(written: &Map<String, Value>, attachments: &[Option<AttachedFile>],
     fields.insert("id".into(), json!(""));
     plain_fields(&mut fields, attachments, shuffle, None);
     let slide: Slide = serde_json::from_value(Value::Object(fields.clone())).ok()?;
-    with_category_look(slide, None, &fields, categories).map(playable)
+    with_category_look(slide, None, true, &fields, categories).map(playable)
 }
 
 /// `slide` with the fields `set` changes (a merge patch: null removes a
@@ -715,29 +718,31 @@ fn edited_slide(slide: &Slide, set: &Map<String, Value>, attachments: &[Option<A
     merge(&mut value, &Value::Object(patch.clone()));
     let mut edited: Slide = serde_json::from_value(value).ok()?;
     edited.id = slide.id.clone();
-    with_category_look(edited, slide.category.as_deref(), &patch, categories).map(playable)
+    with_category_look(edited, slide.category.as_deref(), false, &patch, categories).map(playable)
 }
 
 /// `slide`, which had the category `had`, with the look of a category it
-/// takes on (`format_imported`, as the editor gives it), and then the
-/// style `written` sets over that look, so a style the model wrote with
-/// the category stays. A slide that keeps its category keeps its look.
-fn with_category_look(slide: Slide, had: Option<&str>, written: &Map<String, Value>, categories: &[Category]) -> Option<Slide> {
-    if slide.category.as_deref() == had || !categories.iter().any(|category| Some(&category.id) == slide.category.as_ref()) {
+/// takes on as the editor gives it, and then the fields `written` sets
+/// (a merge patch, so again is the same) over that look, so what the
+/// model wrote with the category stays. A slide `added` keeps a background of its own
+/// (`format_imported`, as an imported row); an edited one takes the
+/// category's when it has one (`format_like`, as the editor's category
+/// field does). A slide that keeps its category keeps its look.
+fn with_category_look(slide: Slide, had: Option<&str>, added: bool, written: &Map<String, Value>, categories: &[Category]) -> Option<Slide> {
+    let Some(category) = categories.iter().find(|category| Some(&category.id) == slide.category.as_ref()).filter(|_| slide.category.as_deref() != had) else {
         return Some(slide);
-    }
+    };
     let id = slide.id.clone();
-    let formatted = format_imported(slide, categories);
-    let Some(style) = written.get("style") else { return Some(formatted) };
+    let formatted = if added { format_imported(slide, categories) } else { format_like(slide, category) };
     let mut value = serde_json::to_value(&formatted).ok()?;
-    merge(&mut value, &json!({ "style": style }));
+    merge(&mut value, &Value::Object(written.clone()));
     let mut styled: Slide = serde_json::from_value(value).ok()?;
     styled.id = id;
     Some(styled)
 }
 
 /// `change` without a media reference outside the quiz's media folder
-/// (`Quiz::drop_unsafe_media`, part by part), wherever it has one.
+/// (`drop_unsafe_media` of each part), wherever it has one.
 fn without_unsafe_media(change: &mut QuizChange) {
     match change {
         QuizChange::InsertSlides { slides, .. } => slides.iter_mut().for_each(Slide::drop_unsafe_media),
@@ -1122,6 +1127,7 @@ mod tests {
         let two = json!([{ "action": "add", "after": 3, "slides": slides }, { "action": "add", "after": 3, "slides": [{ "type": "explanation", "text": "x" }, { "type": "explanation", "text": "y" }] }]);
         let resolved = resolve(&quiz, &edits(two), &[], None, &[], 1);
         assert_eq!(apply(&quiz, &resolved.changes).slides.len(), 3 + MAX_ADDED_SLIDES);
+        assert_eq!(resolved.left_out, 1, "the change that lost a slide says so");
     }
 
     #[test]

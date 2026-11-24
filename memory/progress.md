@@ -236,8 +236,8 @@ Template:
   quizmaster's, media and category checks). Guard findings BF215-BF223
   fixed: `resolve` gives a slide its category's look once, under the
   style the model wrote, and the changes carry final slides (neither
-  `apply` nor `changeEdits` restyles); `Quiz::drop_unsafe_media` covers
-  the quiz's own fields; the shared cases in
+  `apply` nor `changeEdits` restyles); `drop_unsafe_media` on slides,
+  categories, sounds and the welcome screen covers the quiz's own fields; the shared cases in
   `crates/quiz-ai/tests/fixtures/quiz-changes.json` run in cargo test and
   vitest; cut-off changes are counted as left out; at most
   `MAX_ADDED_SLIDES` per reply.
@@ -247,3 +247,19 @@ Template:
 - Blockers / open questions: MCP cannot measure loudness (gainDb is set
   blind), transcribe recordings, or render a slide; it works on quiz
   folders, not on the draft open in Studio.
+
+## 2026-11-24 - ai-connect-simpler (local AI found automatically, web text as data)
+
+- Done (Jakub: "co nejintuitivnejsi a jednoduche z pohledu UI i UX"): the
+  app looks for model servers at their usual addresses (Ollama, LM Studio,
+  Jan, llama.cpp; `local_model::KNOWN_SERVERS`, `ai_find_local_models`) and
+  lists their models in File › AI assistants and in the AI panel
+  (`editor/LocalModelPicker.tsx`); one click uses a model, the only model
+  found is used at once. Web text goes to the model between marks a page
+  cannot write, as data; the research plan reads only the quizmaster's
+  messages. The default instructions are plain words (Jakub chose "Jen
+  srozumitelnější text"), `settings::SLIDE_WORDS` maps them to the format,
+  MCP adds `QUIZ_RULES`, and Studio's AI assistant follows them too. Guard
+  nits BF224 (edited slide takes the category's background, as the
+  editor) and BF225 fixed.
+- Next: Fable review, guard round, then merge and a new version (Jakub OK'd).

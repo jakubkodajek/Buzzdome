@@ -217,6 +217,7 @@ pub async fn editor_ask_local_model(app: AppHandle, draft: String, mut asked: Qu
     let themes = app.state::<Themes>().0.iter().map(|theme| (theme.id.clone(), theme_name(theme, asked.language))).collect();
     asked.themes = themes;
     asked.fonts = crate::fonts::installed_fonts().await;
+    asked.instructions = app.state::<SavedAiSettings>().get().instructions().to_string();
     // Checked before anything is looked up.
     local_model::request(&model, &asked, None, local_model::MAX_TEXT_CHARS)?;
     let media = editor::draft_media(app.clone(), draft, asked.attachments.iter().map(|a| a.media.clone()).collect()).await?;
@@ -280,6 +281,7 @@ pub async fn editor_chat_local_model(app: AppHandle, mut asked: QuestionRequest,
     let model = chosen_model(&app)?;
     asked.themes = app.state::<Themes>().0.iter().map(|theme| (theme.id.clone(), theme_name(theme, asked.language))).collect();
     asked.fonts = crate::fonts::installed_fonts().await;
+    asked.instructions = app.state::<SavedAiSettings>().get().instructions().to_string();
     // Checked before anything is looked up.
     local_model::chat_request(&model, &asked, None, local_model::MAX_TEXT_CHARS)?;
     off_ui(move || {
