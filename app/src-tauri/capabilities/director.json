@@ -75,6 +75,7 @@
     "allow-ai-set-instructions",
     "allow-ai-local-model",
     "allow-ai-local-models",
+    "allow-ai-find-local-models",
     "allow-ai-set-local-model",
     "allow-editor-add-dropped-media",
     "allow-editor-ask-local-model",

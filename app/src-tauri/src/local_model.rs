@@ -21,7 +21,7 @@ use crate::editor;
 use crate::error::{AppError, CmdResult};
 use crate::{off_ui, refuse_during_show};
 use quiz_ai::asking::{self, Halt, Reading, Research};
-use quiz_ai::local_model::{self, LocalModel, LocalModelInfo, QuestionRequest, ReplyError, RequestError};
+use quiz_ai::local_model::{self, FoundServer, LocalModel, LocalModelInfo, QuestionRequest, ReplyError, RequestError};
 use quiz_ai::web_page::{self, Source, Url};
 use crate::themes::Themes;
 use quiz_ai::quiz_edits::{self, QuizChange};
@@ -137,19 +137,42 @@ pub fn ai_local_model(saved: State<'_, SavedAiSettings>) -> LocalModelInfo {
 /// The models the server at `url` offers.
 #[tauri::command]
 pub async fn ai_local_models(url: String) -> CmdResult<Vec<String>> {
+    off_ui(move || models_at(&url, LIST_TIMEOUT)).await
+}
+
+/// How long a server on this computer may take to say what models it has
+/// when the app looks for servers: one that is there answers at once.
+const FIND_TIMEOUT: Duration = Duration::from_secs(3);
+
+/// The model servers running on this computer, with their models: those at
+/// the usual addresses (`local_model::KNOWN_SERVERS`) and the chosen one's,
+/// all asked at once. A server that does not answer, or not with a list of
+/// models, is left out.
+#[tauri::command]
+pub async fn ai_find_local_models(saved: State<'_, SavedAiSettings>) -> CmdResult<Vec<FoundServer>> {
+    let addresses = local_model::server_addresses(saved.get().local_model.as_ref());
     off_ui(move || {
-        if !LocalModel::usable_url(&url) {
-            return Err(AppError::LocalModelBadUrl { url });
-        }
-        let address = LocalModel::models_url(&url);
-        let mut response = agent(&address, LIST_TIMEOUT).get(&address).call().map_err(|e| unreachable(&url, e))?;
-        let body = read_body(&mut response, &url)?;
-        if !response.status().is_success() {
-            return Err(AppError::LocalModelRefused { status: response.status().as_u16(), detail: local_model::error_detail(&body) });
-        }
-        local_model::read_models(&body).ok_or(AppError::LocalModelNoList { url })
+        let asking: Vec<_> = addresses
+            .into_iter()
+            .map(|(name, url)| std::thread::spawn(move || models_at(&url, FIND_TIMEOUT).ok().map(|models| FoundServer { name, url, models })))
+            .collect();
+        Ok(asking.into_iter().filter_map(|thread| thread.join().ok().flatten()).collect())
     })
     .await
+}
+
+/// The models the server at `url` offers, waiting at most `timeout`.
+fn models_at(url: &str, timeout: Duration) -> CmdResult<Vec<String>> {
+    if !LocalModel::usable_url(url) {
+        return Err(AppError::LocalModelBadUrl { url: url.to_string() });
+    }
+    let address = LocalModel::models_url(url);
+    let mut response = agent(&address, timeout).get(&address).call().map_err(|e| unreachable(url, e))?;
+    let body = read_body(&mut response, url)?;
+    if !response.status().is_success() {
+        return Err(AppError::LocalModelRefused { status: response.status().as_u16(), detail: local_model::error_detail(&body) });
+    }
+    local_model::read_models(&body).ok_or(AppError::LocalModelNoList { url: url.to_string() })
 }
 
 /// Keeps the model the AI panel asks.

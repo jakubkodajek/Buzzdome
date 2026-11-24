@@ -19,6 +19,7 @@ import type {
   Cue,
   DeviceInfo,
   EditorDraft,
+  FoundServer,
   GameView,
   HostProblem,
   IconColor,
@@ -293,6 +294,7 @@ export const api = {
   aiLocalModel: () => invoke<LocalModelInfo>("ai_local_model"),
   /** The models the server at `url` (Ollama, LM Studio...) offers, sorted. */
   aiLocalModels: (url: string) => invoke<string[]>("ai_local_models", { url }),
+  aiFindLocalModels: () => invoke<FoundServer[]>("ai_find_local_models"),
   /** Keeps the server and model the AI panel asks; returns them as kept. */
   aiSetLocalModel: (url: string, model: string) => invoke<LocalModel>("ai_set_local_model", { url, model }),
   /** Copies a picture or video dropped into the AI panel into the draft; returns its reference. */

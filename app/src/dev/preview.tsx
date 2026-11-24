@@ -76,6 +76,8 @@ const saving = params.get("saving");
 const draft = params.get("draft");
 /** The AI assistant's model: `none` is not chosen yet; `offline`: its server does not answer; `slow`: asking it never ends; `fail`: its answer is not changes; `webpartly`: some web pages could not be read. */
 const aiModel = params.get("ai");
+/** `found=none|empty|one`: the model servers the AI settings find on this computer (default: Ollama with three models and LM Studio with one). */
+const aiFound = params.get("found");
 /** Whether the speech recognition model is downloaded in the preview (`listener=missing` for not). */
 let listenerInstalled = params.get("listener") !== "missing";
 /** `problems=warnings`: the editor's quiz has warnings only (it plays); `both`: a problem to fix too. */
@@ -1047,6 +1049,25 @@ mockIPC(
         return aiModel === "offline"
           ? Promise.reject({ code: "localModelUnreachable", url: (payload as { url: string }).url, detail: "Connection refused (os error 111)" })
           : ["gemma3:12b", "llama3.2:3b", "qwen3-vl:8b"];
+      case "ai_find_local_models":
+        return new Promise((resolve) =>
+          setTimeout(
+            () =>
+              resolve(
+                aiFound === "none"
+                  ? []
+                  : aiFound === "empty"
+                    ? [{ name: "Ollama", url: "http://localhost:11434/v1", models: [] }]
+                    : aiFound === "one"
+                      ? [{ name: "Ollama", url: "http://localhost:11434/v1", models: ["qwen3-vl:8b"] }]
+                      : [
+                          { name: "Ollama", url: "http://localhost:11434/v1", models: ["gemma3:12b", "llama3.2:3b", "qwen3-vl:8b"] },
+                          { name: "LM Studio", url: "http://localhost:1234/v1", models: ["mistral-small-3.2"] },
+                        ],
+              ),
+            400,
+          ),
+        );
       case "ai_set_local_model":
         called.push({ cmd, ...(payload as object) });
         return { url: (payload as { url: string }).url, model: (payload as { model: string }).model };

@@ -69,6 +69,7 @@ const COMMANDS: &[&str] = &[
     "ai_set_instructions",
     "ai_local_model",
     "ai_local_models",
+    "ai_find_local_models",
     "ai_set_local_model",
     "editor_add_dropped_media",
     "editor_ask_local_model",
