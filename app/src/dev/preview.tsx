@@ -1079,8 +1079,10 @@ mockIPC(
         if (aiModel === "offline") return Promise.reject({ code: "localModelUnreachable", url: "http://localhost:11434/v1", detail: "Connection refused (os error 111)" });
         // A proposal, said word by word as a model streams it.
         const progress = (payload as { progress?: { onmessage?: (step: unknown) => void } }).progress;
-        const text =
-          "Navrhuji kvíz o Praze ve 3 kolech po 5 otázkách:\n\n1. Památky: Karlův most, Pražský hrad, orloj.\n2. Historie: od Karla IV. po sametovou revoluci.\n3. Praha dnes: metro, čtvrti, slavné podniky.\n\nMají být otázky spíš lehké, nebo pro znalce?";
+        const later = ((payload as { asked?: { conversation?: unknown[] } }).asked?.conversation?.length ?? 0) > 0;
+        const text = later
+          ? "Dobře, otázky budou **lehké** a přidám čtvrté kolo:\n\n1. **Památky**: Karlův most, Pražský hrad, orloj.\n2. **Historie**: od Karla IV. po sametovou revoluci.\n3. **Praha dnes**: metro, čtvrti, slavné podniky.\n4. **Pražské mosty**: Karlův, Nuselský, Trojská lávka.\n\nPo 5 otázkách v kole to dá 20 otázek. Mám je vytvořit?"
+          : "Navrhuji kvíz o Praze ve **3 kolech po 5 otázkách**:\n\n1. **Památky**: Karlův most, Pražský hrad, orloj.\n2. **Historie**: od Karla IV. po sametovou revoluci.\n3. **Praha dnes**: metro, čtvrti, slavné podniky.\n\nMají být otázky spíš lehké, nebo pro znalce?";
         const words = text.split(/(?<= )/);
         progress?.onmessage?.({ step: "thinking", characters: 600 });
         words.forEach((word, i) => setTimeout(() => progress?.onmessage?.({ step: "said", text: word }), 300 + i * 25));

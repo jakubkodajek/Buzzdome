@@ -899,10 +899,82 @@
   gap: 10px;
 }
 
-.ai-bubble {
+/* The start of a conversation: what the panel is for, and ideas that fill the message box. */
+.ai-welcome {
+  margin: auto 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 4px;
+  text-align: center;
+}
+
+.ai-welcome-icon {
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.ai-welcome-icon svg {
+  width: 22px;
+  height: 22px;
+}
+
+.ai-welcome h2 {
+  margin: 4px 0 0;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.ai-welcome p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.ai-ideas {
+  display: flex;
+  flex-direction: column;
+  align-self: stretch;
+  gap: 6px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.studio .ai-ideas button {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+  text-align: left;
+  line-height: 1.35;
+}
+
+.studio .ai-ideas button:hover {
+  border-color: var(--hover-line);
+  background: var(--hover);
+}
+
+/* The quizmaster's message: the files sent with it, then the words in a bubble on the right. */
+.ai-asked {
+  align-self: flex-end;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
   max-width: 88%;
-  padding: 8px 10px;
-  border-radius: 10px;
+}
+
+.ai-bubble {
+  padding: 8px 12px;
+  border-radius: 16px;
   line-height: 1.45;
   overflow-wrap: anywhere;
 }
@@ -912,22 +984,70 @@
   white-space: pre-wrap;
 }
 
-.ai-bubble small {
-  display: block;
-  margin-top: 4px;
-  color: var(--muted);
-}
-
 .ai-bubble.user {
-  align-self: flex-end;
-  border-bottom-right-radius: 3px;
+  border-bottom-right-radius: 4px;
   background: var(--accent-soft);
 }
 
-.ai-bubble.assistant {
-  align-self: flex-start;
-  border-bottom-left-radius: 3px;
-  background: #f1f1f1;
+/* The model's reply: text across the panel, as in a chat app. */
+.ai-reply {
+  align-self: stretch;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.ai-reply p,
+.ai-reply ul,
+.ai-reply ol {
+  margin: 0 0 8px;
+}
+
+.ai-reply ul,
+.ai-reply ol {
+  padding-left: 20px;
+}
+
+.ai-reply li + li {
+  margin-top: 2px;
+}
+
+.ai-reply h3 {
+  margin: 10px 0 4px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.ai-reply > :first-child {
+  margin-top: 0;
+}
+
+.ai-reply > small {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--muted);
+}
+
+/* A caret after the words still coming. */
+.ai-reply.writing > :last-child::after {
+  content: "";
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-left: 4px;
+  border-radius: 50%;
+  background: currentcolor;
+  vertical-align: middle;
+}
+
+.ai-reply-actions {
+  display: flex;
+  margin-left: -6px;
+}
+
+.ai-reply-actions .ai-panel-icon {
+  width: 28px;
+  height: 28px;
+  color: var(--muted);
 }
 
 .ai-note {
@@ -936,6 +1056,12 @@
   font-size: 12px;
   color: var(--muted);
   text-align: center;
+}
+
+.ai-sources {
+  margin-bottom: 6px;
+  font-size: 12px;
+  color: var(--muted);
 }
 
 .ai-sources ul {
@@ -964,23 +1090,90 @@
   pointer-events: none;
 }
 
+/* Files waiting in the message box, as tiles: a picture as itself, another file with its kind's icon and name. */
 .ai-files {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
-  max-height: 112px;
+  flex-wrap: wrap;
+  gap: 6px;
+  max-height: 136px;
   overflow-y: auto;
   margin: 0;
-  padding: 0 0 6px;
+  padding: 2px 0 8px;
   list-style: none;
 }
 
 .ai-file {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 8px;
   min-width: 0;
+  max-width: 100%;
+  padding: 4px 30px 4px 4px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
 }
+
+.ai-file.picture {
+  padding: 0;
+  border: 0;
+}
+
+.ai-files .ai-file.picture .ai-file-thumb {
+  width: 56px;
+  height: 56px;
+  border-radius: 10px;
+}
+
+.ai-file.picture .ai-file-name {
+  display: none;
+}
+
+.studio .ai-files .ai-file.picture button {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: rgb(0 0 0 / 60%);
+  color: #fff;
+}
+
+.studio .ai-file button {
+  position: absolute;
+  top: 50%;
+  right: 4px;
+  transform: translateY(-50%);
+}
+
+.studio .ai-files .ai-file.picture button {
+  transform: none;
+}
+
+/* Files sent with a message, in its bubble: pictures as pictures, other files by name. */
+.ai-sent-files {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ai-sent-files .ai-file:not(.picture) {
+  padding-right: 10px;
+}
+
+.ai-sent-files .ai-file.picture .ai-file-thumb {
+  width: 120px;
+  height: 90px;
+  border-radius: 6px;
+}
+
 
 .ai-file-thumb {
   flex: none;
@@ -1062,9 +1255,10 @@
 .ai-composer {
   display: flex;
   flex-direction: column;
-  padding: 8px 8px 6px;
+  padding: 8px 8px 6px 10px;
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: 20px;
+  box-shadow: 0 1px 4px rgb(0 0 0 / 6%);
 }
 
 .ai-composer:focus-within {

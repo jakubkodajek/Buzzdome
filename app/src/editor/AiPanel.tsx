@@ -14,7 +14,7 @@ import { useEffect, useRef, useState, type DragEvent } from "react";
 import { api } from "../api";
 import { useApp } from "../app-context";
 import { carriesFiles } from "../director/media-parts";
-import { AddIcon, ArrowUpIcon, CrossIcon, EditIcon, GlobeIcon, PictureIcon, SoundIcon, SparkleIcon, TextIcon, VideoIcon } from "../icons";
+import { AddIcon, ArrowUpIcon, CheckIcon, CopyIcon, CrossIcon, EditIcon, GlobeIcon, PictureIcon, SoundIcon, SparkleIcon, StopIcon, TextIcon, VideoIcon } from "../icons";
 import { diskSize } from "../format";
 import { errorNotice, errorText, isAppError, type Notice } from "../messages";
 import { NoticeBox } from "../notice";
@@ -25,7 +25,7 @@ import { MAX_DROPPED_MB } from "../bindings/Constants";
 import { keyCombo } from "../keyboard";
 import { tooltip } from "./actions";
 import { addFiles, aiFileKind, attachmentFor, hasSound, soundOf, thumbnailOf, type AiFile } from "./ai-files";
-import { canCreate, canSend, takeBack, entry, turnsOf, type ChatEntry } from "./ai-chat";
+import { canCreate, canSend, takeBack, entry, replyBlocks, turnsOf, unsent, type ChatEntry, type Run } from "./ai-chat";
 
 /** The keys that make the questions (Cmd on a Mac, `keyCombo`); Enter alone sends the message, as in a chat. */
 const CREATE_KEYS = ["Ctrl+Enter"];
@@ -87,6 +87,7 @@ export function AiPanel({ draftId, language, emptyQuiz, onInsert, onChooseModel,
   const [dropping, setDropping] = useState(false);
   const [picked, setPicked] = useState<HTMLInputElement | null>(null);
   const end = useRef<HTMLDivElement | null>(null);
+  const typing = useRef<HTMLTextAreaElement | null>(null);
   useEffect(() => {
     // Read again each time the panel opens: the model may have been chosen meanwhile.
     api.aiLocalModel().then(setInfo, (error: unknown) => change({ failed: errorNotice(t, error) }));
@@ -189,7 +190,8 @@ export function AiPanel({ draftId, language, emptyQuiz, onInsert, onChooseModel,
   const run = async (making: boolean) => {
     const state = panelState.get();
     if (!info?.chosen || state.job) return;
-    if (making ? !canCreate(state.message, state.files.length, state.entries) : !canSend(state.message, state.files.length, state.entries)) return;
+    const added = unsent(state.files, state.entries);
+    if (making ? !canCreate(state.message, state.files.length, state.entries) : !canSend(state.message, added.length)) return;
     if (!listener?.installed && state.files.some((file) => file.kind === "recording")) {
       caution(t("aiPanelListenerRequired"));
       return;
@@ -199,10 +201,8 @@ export function AiPanel({ draftId, language, emptyQuiz, onInsert, onChooseModel,
     const current = () => run === latestRun;
     const prompt = state.message.trim();
     const conversation = turnsOf(state.entries);
-    // What was typed joins the conversation at once, as in a chat, naming the files added since the last message.
-    const named = new Set(state.entries.flatMap((shown) => (shown.role === "user" ? shown.files : [])));
-    const added = state.files.map((file) => file.file.name).filter((name) => !named.has(name));
-    const sent = prompt === "" ? [] : [entry({ role: "user", text: prompt, files: added })];
+    // What was typed joins the conversation at once, as in a chat, with the files added since the last message, which leave the message box for its bubble.
+    const sent = prompt === "" && added.length === 0 ? [] : [entry({ role: "user", text: prompt, files: added.map((file) => file.id) })];
     change({ entries: [...state.entries, ...sent], pending: sent[0]?.id ?? null, message: "", job: { step: "preparing", making }, saying: "", failed: null });
     try {
       const attachments = await prepare(current, making, draft);
@@ -264,7 +264,8 @@ export function AiPanel({ draftId, language, emptyQuiz, onInsert, onChooseModel,
 
   const chosen = info?.chosen ?? null;
   const status = job ? jobStatus(t, job) : null;
-  const sendable = canSend(message, files.length, entries);
+  const fresh = unsent(files, entries);
+  const sendable = canSend(message, fresh.length);
   const creatable = canCreate(message, files.length, entries);
   const removeFile = (id: number) => change({ files: panelState.get().files.filter((f) => f.id !== id) });
 
@@ -311,11 +312,40 @@ export function AiPanel({ draftId, language, emptyQuiz, onInsert, onChooseModel,
       ) : (
         <>
           <div className="ai-panel-body ai-chat" role="log" aria-label={t("aiPanelConversation")}>
-            {entries.length === 0 && !job && <p className="ai-panel-hint">{t("aiPanelHint")}</p>}
+            {entries.length === 0 && !job && (
+              <div className="ai-welcome">
+                <span className="ai-welcome-icon" aria-hidden="true">
+                  <SparkleIcon />
+                </span>
+                <h2>{t("aiPanelWelcome")}</h2>
+                <p>{t("aiPanelHint")}</p>
+                {chosen && (
+                  <ul className="ai-ideas" aria-label={t("aiPanelIdeas")}>
+                    {(["aiPanelIdeaPub", "aiPanelIdeaPictures", "aiPanelIdeaCompany"] as const).map((idea) => (
+                      <li key={idea}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            change({ message: t(idea) });
+                            typing.current?.focus();
+                          }}
+                        >
+                          {t(idea)}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
             {entries.map((shown) => (
-              <ChatBubble key={shown.id} entry={shown} t={t} />
+              <ChatBubble key={shown.id} entry={shown} files={files} t={t} />
             ))}
-            {job && (saying ? <ChatBubble entry={{ id: 0, role: "assistant", text: saying, cutOff: false, sources: [] }} t={t} /> : null)}
+            {job && saying && (
+              <div className="ai-reply writing">
+                <ReplyText text={saying} />
+              </div>
+            )}
             {status && (
               <p className="ai-panel-status" role="status">
                 <span className="ai-spinner" aria-hidden="true" />
@@ -346,16 +376,17 @@ export function AiPanel({ draftId, language, emptyQuiz, onInsert, onChooseModel,
                 </div>
               )}
               <div className="ai-composer">
-                {files.length > 0 && (
+                {fresh.length > 0 && (
                   <ul className="ai-files" aria-label={t("aiPanelFiles")}>
-                    {files.map((file) => (
-                      <FileChip key={file.id} file={file} disabled={job !== null} label={t("aiPanelRemoveFile", { name: file.file.name })} onRemove={() => removeFile(file.id)} />
+                    {fresh.map((file) => (
+                      <FileChip key={file.id} file={file} remove={{ disabled: job !== null, label: t("aiPanelRemoveFile", { name: file.file.name }), onRemove: () => removeFile(file.id) }} />
                     ))}
                   </ul>
                 )}
                 <textarea
+                  ref={typing}
                   value={message}
-                  rows={3}
+                  rows={1}
                   maxLength={info?.maxPromptChars}
                   aria-label={t("aiPanelMessage")}
                   placeholder={t(entries.length === 0 ? "aiPanelMessageFirst" : "aiPanelMessageNext")}
@@ -400,19 +431,17 @@ export function AiPanel({ draftId, language, emptyQuiz, onInsert, onChooseModel,
                     <GlobeIcon />
                   </button>
                   <span className="ai-composer-gap" />
+                  <button type="button" className="ai-make" disabled={job !== null || !creatable} title={tooltip({ label: t("aiPanelGenerate"), keys: CREATE_KEYS })} onClick={() => void run(true)}>
+                    <SparkleIcon /> {t("aiPanelGenerate")}
+                  </button>
                   {job ? (
-                    <button type="button" className="browse" onClick={cancel}>
-                      {t("aiPanelCancel")}
+                    <button type="button" className="ai-send stop" title={t("aiPanelStop")} aria-label={t("aiPanelStop")} onClick={cancel}>
+                      <StopIcon />
                     </button>
                   ) : (
-                    <>
-                      <button type="button" className="ai-make" disabled={!creatable} title={tooltip({ label: t("aiPanelGenerate"), keys: CREATE_KEYS })} onClick={() => void run(true)}>
-                        <SparkleIcon /> {t("aiPanelGenerate")}
-                      </button>
-                      <button type="button" className="ai-send" disabled={!sendable} title={tooltip({ label: t("aiPanelSend"), keys: ["Enter"] })} aria-label={t("aiPanelSend")} onClick={() => void run(false)}>
-                        <ArrowUpIcon />
-                      </button>
-                    </>
+                    <button type="button" className="ai-send" disabled={!sendable} title={tooltip({ label: t("aiPanelSend"), keys: ["Enter"] })} aria-label={t("aiPanelSend")} onClick={() => void run(false)}>
+                      <ArrowUpIcon />
+                    </button>
                   )}
                 </div>
               </div>
@@ -468,15 +497,37 @@ function hostOf(url: string): string {
   }
 }
 
-/** One entry of the conversation: the quizmaster's on the right, the model's on the left, the app's notes in between. */
-function ChatBubble({ entry: shown, t }: { entry: ChatEntry; t: Translate }) {
+/**
+ * One entry of the conversation, as in a chat app: the quizmaster's in a
+ * bubble on the right with the files sent with it above, the model's as
+ * text across the panel with a copy button, the app's notes in between.
+ */
+function ChatBubble({ entry: shown, files, t }: { entry: ChatEntry; files: readonly AiFile[]; t: Translate }) {
   if (shown.role === "note") return <p className="ai-note">{shown.text}</p>;
+  if (shown.role === "user") {
+    const sent = files.filter((file) => shown.files.includes(file.id));
+    return (
+      <div className="ai-asked">
+        {sent.length > 0 && (
+          <ul className="ai-sent-files" aria-label={t("aiPanelFiles")}>
+            {sent.map((file) => (
+              <FileChip key={file.id} file={file} />
+            ))}
+          </ul>
+        )}
+        {shown.text !== "" && (
+          <div className="ai-bubble user">
+            <p>{shown.text}</p>
+          </div>
+        )}
+      </div>
+    );
+  }
   return (
-    <div className={`ai-bubble ${shown.role}`}>
-      <p>{shown.text}</p>
-      {shown.role === "user" && shown.files.length > 0 && <small>{shown.files.join(", ")}</small>}
-      {shown.role === "assistant" && shown.cutOff && <small>{t("aiPanelCutOff")}</small>}
-      {shown.role === "assistant" && shown.sources.length > 0 && (
+    <div className="ai-reply">
+      <ReplyText text={shown.text} />
+      {shown.cutOff && <small>{t("aiPanelCutOff")}</small>}
+      {shown.sources.length > 0 && (
         <div className="ai-sources">
           <small>{t("aiPanelSources")}</small>
           <ul>
@@ -488,12 +539,89 @@ function ChatBubble({ entry: shown, t }: { entry: ChatEntry; t: Translate }) {
           </ul>
         </div>
       )}
+      <CopyButton text={shown.text} t={t} />
     </div>
   );
 }
 
-/** A file going with the conversation: a small picture or the kind's icon, its name, and a button that takes it out. */
-function FileChip({ file, disabled, label, onRemove }: { file: AiFile; disabled: boolean; label: string; onRemove: () => void }) {
+/** Copies the model's reply as it wrote it, and says so for a moment. */
+function CopyButton({ text, t }: { text: string; t: Translate }) {
+  const [copied, setCopied] = useState(false);
+  useEffect(() => {
+    if (!copied) return;
+    const shown = setTimeout(() => setCopied(false), 1500);
+    return () => clearTimeout(shown);
+  }, [copied]);
+  const label = t(copied ? "aiPanelCopied" : "aiPanelCopy");
+  return (
+    <div className="ai-reply-actions">
+      <button
+        type="button"
+        className="ai-panel-icon"
+        title={label}
+        aria-label={label}
+        onClick={() => {
+          navigator.clipboard?.writeText(text).then(
+            () => setCopied(true),
+            () => {},
+          );
+        }}
+      >
+        {copied ? <CheckIcon /> : <CopyIcon />}
+      </button>
+    </div>
+  );
+}
+
+/** The model's reply with its paragraphs, headings, lists and bold text (`replyBlocks`). */
+function ReplyText({ text }: { text: string }) {
+  return (
+    <>
+      {replyBlocks(text).map((block, index) => {
+        switch (block.kind) {
+          case "heading":
+            return (
+              <h3 key={index}>
+                <Runs runs={block.runs} />
+              </h3>
+            );
+          case "list": {
+            const items = block.items.map((item, at) => (
+              <li key={at}>
+                <Runs runs={item} />
+              </li>
+            ));
+            return block.ordered ? (
+              <ol key={index} start={block.start}>
+                {items}
+              </ol>
+            ) : (
+              <ul key={index}>{items}</ul>
+            );
+          }
+          case "paragraph":
+            return (
+              <p key={index}>
+                {block.lines.map((line, at) => (
+                  <span key={at}>
+                    {at > 0 && <br />}
+                    <Runs runs={line} />
+                  </span>
+                ))}
+              </p>
+            );
+        }
+      })}
+    </>
+  );
+}
+
+function Runs({ runs }: { runs: Run[] }) {
+  return runs.map((run, at) => (run.bold ? <strong key={at}>{run.text}</strong> : <span key={at}>{run.text}</span>));
+}
+
+/** A file going with the conversation: a small picture or the kind's icon, its name, and, before it is sent, a button that takes it out. */
+function FileChip({ file, remove }: { file: AiFile; remove?: { disabled: boolean; label: string; onRemove: () => void } }) {
   const [preview, setPreview] = useState<string | null>(null);
   useEffect(() => {
     if (file.kind !== "picture") return;
@@ -504,16 +632,18 @@ function FileChip({ file, disabled, label, onRemove }: { file: AiFile; disabled:
     };
   }, [file.file, file.kind]);
   return (
-    <li className="ai-file">
+    <li className={`ai-file ${file.kind}`} title={file.file.name}>
       <span className="ai-file-thumb" aria-hidden="true">
         {preview ? <img src={preview} alt="" /> : file.kind === "video" ? <VideoIcon /> : file.kind === "recording" ? <SoundIcon /> : file.kind === "text" ? <TextIcon /> : <PictureIcon />}
       </span>
       <span className="ai-file-name" title={file.file.name}>
         {file.file.name}
       </span>
-      <button type="button" title={label} aria-label={label} disabled={disabled} onClick={onRemove}>
-        <CrossIcon />
-      </button>
+      {remove && (
+        <button type="button" title={remove.label} aria-label={remove.label} disabled={remove.disabled} onClick={remove.onRemove}>
+          <CrossIcon />
+        </button>
+      )}
     </li>
   );
 }

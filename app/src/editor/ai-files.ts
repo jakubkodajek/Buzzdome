@@ -131,7 +131,7 @@ async function pictureFor(file: File, info: LocalModelInfo): Promise<string> {
 }
 
 /** Longest side of a picture's thumbnail in the panel, in CSS pixels at twice their density. */
-const THUMBNAIL_PX = 96;
+const THUMBNAIL_PX = 240;
 
 /** A small copy of the picture `file` for the panel's list; null when it cannot be decoded. */
 export async function thumbnailOf(file: File): Promise<string | null> {
