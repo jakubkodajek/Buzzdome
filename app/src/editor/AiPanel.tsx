@@ -87,7 +87,6 @@ export function AiPanel({ draftId, language, emptyQuiz, onInsert, onChooseModel,
   const [dropping, setDropping] = useState(false);
   const [picked, setPicked] = useState<HTMLInputElement | null>(null);
   const end = useRef<HTMLDivElement | null>(null);
-  const typing = useRef<HTMLTextAreaElement | null>(null);
   useEffect(() => {
     // Read again each time the panel opens: the model may have been chosen meanwhile.
     api.aiLocalModel().then(setInfo, (error: unknown) => change({ failed: errorNotice(t, error) }));
@@ -319,23 +318,6 @@ export function AiPanel({ draftId, language, emptyQuiz, onInsert, onChooseModel,
                 </span>
                 <h2>{t("aiPanelWelcome")}</h2>
                 <p>{t("aiPanelHint")}</p>
-                {chosen && (
-                  <ul className="ai-ideas" aria-label={t("aiPanelIdeas")}>
-                    {(["aiPanelIdeaPub", "aiPanelIdeaPictures", "aiPanelIdeaCompany"] as const).map((idea) => (
-                      <li key={idea}>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            change({ message: t(idea) });
-                            typing.current?.focus();
-                          }}
-                        >
-                          {t(idea)}
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
               </div>
             )}
             {entries.map((shown) => (
@@ -384,7 +366,6 @@ export function AiPanel({ draftId, language, emptyQuiz, onInsert, onChooseModel,
                   </ul>
                 )}
                 <textarea
-                  ref={typing}
                   value={message}
                   rows={1}
                   maxLength={info?.maxPromptChars}
