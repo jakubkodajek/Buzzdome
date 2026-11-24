@@ -21,7 +21,7 @@ use crate::editor;
 use crate::error::{AppError, CmdResult};
 use crate::{off_ui, refuse_during_show};
 use quiz_ai::asking::{self, Halt, Reading, Research};
-use quiz_ai::local_model::{self, LocalModel, LocalModelInfo, QuestionRequest, ReplyError, RequestError};
+use quiz_ai::local_model::{self, FoundServer, LocalModel, LocalModelInfo, QuestionRequest, ReplyError, RequestError};
 use quiz_ai::web_page::{self, Source, Url};
 use crate::themes::Themes;
 use quiz_ai::quiz_edits::{self, QuizChange};
@@ -137,19 +137,56 @@ pub fn ai_local_model(saved: State<'_, SavedAiSettings>) -> LocalModelInfo {
 /// The models the server at `url` offers.
 #[tauri::command]
 pub async fn ai_local_models(url: String) -> CmdResult<Vec<String>> {
+    off_ui(move || models_at(&url, Wait::FirstWord(LIST_TIMEOUT))).await
+}
+
+/// How long the app waits for one address in all (connecting, the reply
+/// and its body) when it looks for servers: a server that is there answers
+/// at once, and a closed or silent address must not hold the search.
+const FIND_TIMEOUT: Duration = Duration::from_millis(2_500);
+
+/// The model servers running on this computer, with their models: those at
+/// the usual addresses (`local_model::KNOWN_SERVERS`) and the chosen one's,
+/// all asked at once. A server that does not answer, or not with a list of
+/// models, is left out.
+#[tauri::command]
+pub async fn ai_find_local_models(saved: State<'_, SavedAiSettings>) -> CmdResult<Vec<FoundServer>> {
+    let addresses = local_model::server_addresses(saved.get().local_model.as_ref());
     off_ui(move || {
-        if !LocalModel::usable_url(&url) {
-            return Err(AppError::LocalModelBadUrl { url });
-        }
-        let address = LocalModel::models_url(&url);
-        let mut response = agent(&address, LIST_TIMEOUT).get(&address).call().map_err(|e| unreachable(&url, e))?;
-        let body = read_body(&mut response, &url)?;
-        if !response.status().is_success() {
-            return Err(AppError::LocalModelRefused { status: response.status().as_u16(), detail: local_model::error_detail(&body) });
-        }
-        local_model::read_models(&body).ok_or(AppError::LocalModelNoList { url })
+        let asking: Vec<_> = addresses
+            .into_iter()
+            .map(|(name, url)| std::thread::spawn(move || models_at(&url, Wait::AtMost(FIND_TIMEOUT)).ok().map(|models| FoundServer { name, url, models })))
+            .collect();
+        Ok(asking.into_iter().filter_map(|thread| thread.join().ok().flatten()).collect())
     })
     .await
+}
+
+/// How long a request for a server's models may wait.
+#[derive(Clone, Copy)]
+enum Wait {
+    /// For the reply to begin; then as long as any reply.
+    FirstWord(Duration),
+    /// For everything.
+    AtMost(Duration),
+}
+
+/// The models the server at `url` offers, waiting as `wait` says.
+fn models_at(url: &str, wait: Wait) -> CmdResult<Vec<String>> {
+    if !LocalModel::usable_url(url) {
+        return Err(AppError::LocalModelBadUrl { url: url.to_string() });
+    }
+    let address = LocalModel::models_url(url);
+    let agent = match wait {
+        Wait::FirstWord(first_word) => agent(&address, first_word),
+        Wait::AtMost(all) => agent_within(&address, all),
+    };
+    let mut response = agent.get(&address).call().map_err(|e| unreachable(url, e))?;
+    let body = read_body(&mut response, url)?;
+    if !response.status().is_success() {
+        return Err(AppError::LocalModelRefused { status: response.status().as_u16(), detail: local_model::error_detail(&body) });
+    }
+    local_model::read_models(&body).ok_or(AppError::LocalModelNoList { url: url.to_string() })
 }
 
 /// Keeps the model the AI panel asks.
@@ -194,6 +231,7 @@ pub async fn editor_ask_local_model(app: AppHandle, draft: String, mut asked: Qu
     let themes = app.state::<Themes>().0.iter().map(|theme| (theme.id.clone(), theme_name(theme, asked.language))).collect();
     asked.themes = themes;
     asked.fonts = crate::fonts::installed_fonts().await;
+    asked.instructions = app.state::<SavedAiSettings>().get().instructions().to_string();
     // Checked before anything is looked up.
     local_model::request(&model, &asked, None, local_model::MAX_TEXT_CHARS)?;
     let media = editor::draft_media(app.clone(), draft, asked.attachments.iter().map(|a| a.media.clone()).collect()).await?;
@@ -257,6 +295,7 @@ pub async fn editor_chat_local_model(app: AppHandle, mut asked: QuestionRequest,
     let model = chosen_model(&app)?;
     asked.themes = app.state::<Themes>().0.iter().map(|theme| (theme.id.clone(), theme_name(theme, asked.language))).collect();
     asked.fonts = crate::fonts::installed_fonts().await;
+    asked.instructions = app.state::<SavedAiSettings>().get().instructions().to_string();
     // Checked before anything is looked up.
     local_model::chat_request(&model, &asked, None, local_model::MAX_TEXT_CHARS)?;
     off_ui(move || {
@@ -552,13 +591,21 @@ fn ask(model: &LocalModel, server: &Server, body: Value, cancelled: &AtomicBool,
 /// server is usually this computer; a proxy set for the system is not used
 /// for this computer's own address.
 fn agent(address: &str, first_word: Duration) -> ureq::Agent {
-    let config = ureq::Agent::config_builder()
+    client(address, ureq::Agent::config_builder().timeout_recv_response(Some(first_word)).timeout_recv_body(Some(REPLY_TIMEOUT)))
+}
+
+/// A client like `agent` whose request may take `all` in all.
+fn agent_within(address: &str, all: Duration) -> ureq::Agent {
+    client(address, ureq::Agent::config_builder().timeout_global(Some(all)))
+}
+
+/// A client for a model's server at `address`, with `config`'s timeouts.
+fn client(address: &str, config: ureq::config::ConfigBuilder<ureq::typestate::AgentScope>) -> ureq::Agent {
+    let config = config
         .http_status_as_error(false)
         // The address the quizmaster gave, and no other it sends on to.
         .max_redirects(0)
-        .timeout_connect(Some(CONNECT_TIMEOUT))
-        .timeout_recv_response(Some(first_word))
-        .timeout_recv_body(Some(REPLY_TIMEOUT));
+        .timeout_connect(Some(CONNECT_TIMEOUT));
     let config = if is_this_computer(address) { config.proxy(None) } else { config };
     config.build().into()
 }

@@ -1107,6 +1107,7 @@ pub fn run() {
             ai::ai_set_instructions,
             local_model::ai_local_model,
             local_model::ai_local_models,
+            local_model::ai_find_local_models,
             local_model::ai_set_local_model,
             editor::editor_add_dropped_media,
             local_model::editor_ask_local_model,

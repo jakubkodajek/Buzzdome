@@ -281,6 +281,17 @@ fn path_property(description: &str) -> Value {
 const QUIZMASTER_INSTRUCTIONS: &str =
     "The quizmaster's instructions for every quiz, which they write in Buzzdome. Follow them; what the quizmaster asks for in the chat wins over them:";
 
+/// The quizmaster's `instructions` as `quiz_format` gives them: with how
+/// they name slides and what every quiz needs.
+fn given(instructions: &str) -> String {
+    format!("{QUIZMASTER_INSTRUCTIONS}\n\n{instructions}\n\n{}\n{QUIZ_RULES}", crate::settings::SLIDE_WORDS)
+}
+
+/// What every quiz written over MCP needs, whatever the quizmaster's instructions say.
+const QUIZ_RULES: &str = "Set settings.language to the quiz's language (cs or en), so that the voice reads it in that language. \
+     Use pictures, sounds and videos only from the folders and never make up file names; without any, make a quiz of text only. \
+     Save the quiz as a .quiz file named after its topic, then tell the quizmaster where it is and what its rounds are.";
+
 const TOOLS: [Tool; 12] = [
     Tool {
         name: "quiz_format",
@@ -290,8 +301,7 @@ const TOOLS: [Tool; 12] = [
         input: || object(json!({}), &[]),
         run: |arguments| {
             let settings = AiSettings::read(&arguments.context.settings);
-            let instructions = format!("{QUIZMASTER_INSTRUCTIONS}\n\n{}", settings.instructions());
-            Ok(vec![text_block(&instructions), text_block(crate::FORMAT_GUIDE), text_block(&serde_json::to_string_pretty(&crate::quiz_schema()).expect("JSON serializes"))])
+            Ok(vec![text_block(&given(settings.instructions())), text_block(crate::FORMAT_GUIDE), text_block(&serde_json::to_string_pretty(&crate::quiz_schema()).expect("JSON serializes"))])
         },
     },
     Tool {
@@ -567,12 +577,13 @@ mod tests {
         };
         let blocks = format();
         assert_eq!(blocks.len(), 3);
-        assert!(blocks[0].starts_with(QUIZMASTER_INSTRUCTIONS) && blocks[0].ends_with(crate::settings::default_instructions(crate::settings::Language::En)), "{}", blocks[0]);
+        assert_eq!(blocks[0], given(crate::settings::default_instructions(crate::settings::Language::En)));
+        assert!(blocks[0].contains("settings.language") && blocks[0].contains(".quiz file") && blocks[0].contains("is a billboard"), "{}", blocks[0]);
         assert_eq!(blocks[1], crate::FORMAT_GUIDE);
         std::fs::write(&settings, r#"{ "language": "cs" }"#).unwrap();
-        assert!(format()[0].ends_with(crate::settings::default_instructions(crate::settings::Language::Cs)), "the default ones in the quizmaster's language");
+        assert_eq!(format()[0], given(crate::settings::default_instructions(crate::settings::Language::Cs)), "the default ones in the quizmaster's language");
         std::fs::write(&settings, r#"{ "instructions": "Two rounds for children." }"#).unwrap();
-        assert_eq!(format()[0], format!("{QUIZMASTER_INSTRUCTIONS}\n\nTwo rounds for children."), "read again, with no restart");
+        assert_eq!(format()[0], given("Two rounds for children."), "read again, with no restart");
         let initialize = answer(&request(2, "initialize", json!({})).to_string(), &context).unwrap();
         let start: String = initialize["result"]["instructions"].as_str().unwrap().chars().take(512).collect();
         assert!(start.contains("call quiz_format") && start.contains("only a topic") && start.contains(&context.roots.describe()), "{start}");

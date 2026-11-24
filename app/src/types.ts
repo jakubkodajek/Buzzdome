@@ -23,6 +23,7 @@ export type { AiConnected } from "./bindings/AiConnected";
 export type { AiPage } from "./bindings/AiPage";
 export type { Attachment } from "./bindings/Attachment";
 export type { AttachmentContent } from "./bindings/AttachmentContent";
+export type { FoundServer } from "./bindings/FoundServer";
 export type { LocalModel } from "./bindings/LocalModel";
 export type { LocalModelInfo } from "./bindings/LocalModelInfo";
 export type { LocalModelProgress } from "./bindings/LocalModelProgress";

@@ -10,6 +10,7 @@ import { useApp, useRun } from "../app-context";
 import type { StringKey } from "../i18n";
 import { aiConnectionText, aiRestartText, errorNotice, settingsLostNotice } from "../messages";
 import { NoticeBox } from "../notice";
+import { LocalModelPicker } from "./LocalModelPicker";
 import { readPreference, writePreference } from "../preferences";
 import { createStore, useStore } from "../store";
 import type { AiPage as AiPageInfo, AssistantInfo, ConnectionState, LocalModelInfo } from "../types";
@@ -193,7 +194,8 @@ export function AiPage() {
 
 /**
  * The model on this computer that Studio's AI assistant asks (AiPanel.tsx):
- * the server's address, its models, and the one chosen.
+ * the models of the servers found here (`LocalModelPicker`), or of a server
+ * at another address.
  */
 function LocalModelChoice() {
   const { t, notify } = useApp();
@@ -231,10 +233,8 @@ function LocalModelChoice() {
       const address = read.chosen?.url ?? read.defaultUrl;
       setUrl(address);
       setModel(read.chosen?.model ?? "");
-      // A server already running lists its models at once; one that is not is said only when asked.
-      list(address).catch(() => undefined);
     });
-  }, [list]);
+  }, []);
   if (!info) return null;
   const use = () =>
     run(
@@ -250,39 +250,50 @@ function LocalModelChoice() {
       <h2>{t("aiLocalTitle")}</h2>
       <p className="backstage-hint">{t("aiLocalHint")}</p>
       <p className="ai-local-state">{info.chosen ? t("aiLocalInUse", { model: info.chosen.model, url: info.chosen.url }) : t("aiLocalNotSet")}</p>
-      <div className="ai-local">
-        <label>
-          <span>{t("aiLocalUrl")}</span>
-          <input
-            type="url"
-            value={url}
-            spellCheck={false}
-            onChange={(e) => {
-              setUrl(e.target.value);
-              setModels(null);
-            }}
-            onKeyDown={(e) => e.key === "Enter" && run(list(url))}
-          />
-        </label>
-        <button type="button" className="browse" disabled={loading || url.trim() === ""} onClick={() => run(list(url))}>
-          {t("aiLocalLoad")}
-        </button>
-        <label>
-          <span>{t("aiLocalModel")}</span>
-          <select value={model} disabled={!models || models.length === 0} onChange={(e) => setModel(e.target.value)}>
-            {!models?.includes(model) && <option value={model}>{model || t("aiLocalPick")}</option>}
-            {models?.map((name) => (
-              <option key={name} value={name}>
-                {name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <button type="button" className="browse" disabled={model === "" || url.trim() === "" || unchanged} onClick={use}>
-          {t("aiLocalUse")}
-        </button>
-      </div>
-      <p className="backstage-hint">{models?.length === 0 ? t("aiLocalNoModels") : t("aiLocalUrlHint")}</p>
+      <LocalModelPicker
+        chosen={info.chosen}
+        onChosen={(chosen) => {
+          setInfo((now) => (now ? { ...now, chosen } : now));
+          setUrl(chosen.url);
+          setModel(chosen.model);
+        }}
+      />
+      <details className="ai-local-other">
+        <summary>{t("aiLocalOther")}</summary>
+        <div className="ai-local">
+          <label>
+            <span>{t("aiLocalUrl")}</span>
+            <input
+              type="url"
+              value={url}
+              spellCheck={false}
+              onChange={(e) => {
+                setUrl(e.target.value);
+                setModels(null);
+              }}
+              onKeyDown={(e) => e.key === "Enter" && run(list(url))}
+            />
+          </label>
+          <button type="button" className="browse" disabled={loading || url.trim() === ""} onClick={() => run(list(url))}>
+            {t("aiLocalLoad")}
+          </button>
+          <label>
+            <span>{t("aiLocalModel")}</span>
+            <select value={model} disabled={!models || models.length === 0} onChange={(e) => setModel(e.target.value)}>
+              {!models?.includes(model) && <option value={model}>{model || t("aiLocalPick")}</option>}
+              {models?.map((name) => (
+                <option key={name} value={name}>
+                  {name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button type="button" className="browse" disabled={model === "" || url.trim() === "" || unchanged} onClick={use}>
+            {t("aiLocalUse")}
+          </button>
+        </div>
+        <p className="backstage-hint">{models?.length === 0 ? t("aiLocalNoModels") : t("aiLocalUrlHint")}</p>
+      </details>
     </>
   );
 }

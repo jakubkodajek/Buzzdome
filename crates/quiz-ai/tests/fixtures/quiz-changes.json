@@ -709,6 +709,206 @@
           "on": true
         }
       }
+    },
+    {
+      "name": "an edited slide with a background of its own takes on its new category's background, as the editor's category field gives it",
+      "quiz": {
+        "categories": [
+          {
+            "background": {
+              "file": "media/film.mp4",
+              "muted": true,
+              "repeat": true,
+              "sync": false
+            },
+            "id": "c1",
+            "name": "Film",
+            "style": {
+              "headline": {
+                "color": "#0000FF"
+              }
+            }
+          }
+        ],
+        "schemaVersion": 5,
+        "slides": [
+          {
+            "background": {
+              "file": "media/own.mp4",
+              "muted": true,
+              "repeat": true,
+              "sync": false
+            },
+            "id": "a",
+            "notes": "",
+            "picture": null,
+            "sound": null,
+            "text": "",
+            "title": "A",
+            "type": "billboard",
+            "video": null
+          },
+          {
+            "background": {
+              "file": "media/own.mp4",
+              "muted": true,
+              "repeat": true,
+              "sync": false
+            },
+            "id": "b",
+            "notes": "",
+            "picture": null,
+            "sound": null,
+            "text": "",
+            "title": "B",
+            "type": "billboard",
+            "video": null
+          }
+        ],
+        "theme": null,
+        "title": "Q"
+      },
+      "edits": {
+        "changes": [
+          {
+            "action": "edit",
+            "set": {
+              "category": "c1"
+            },
+            "slide": 1
+          },
+          {
+            "action": "edit",
+            "set": {
+              "background": {
+                "file": "media/kept.mp4"
+              },
+              "category": "c1"
+            },
+            "slide": 2
+          }
+        ]
+      },
+      "changes": [
+        {
+          "slide": {
+            "background": {
+              "file": "media/film.mp4",
+              "muted": true,
+              "repeat": true,
+              "sync": false
+            },
+            "category": "c1",
+            "id": "a",
+            "notes": "",
+            "picture": null,
+            "sound": null,
+            "style": {
+              "headline": {
+                "color": "#0000FF"
+              }
+            },
+            "text": "",
+            "title": "A",
+            "type": "billboard",
+            "video": null
+          },
+          "type": "replaceSlide"
+        },
+        {
+          "slide": {
+            "background": {
+              "file": "media/kept.mp4",
+              "muted": true,
+              "repeat": true,
+              "sync": false
+            },
+            "category": "c1",
+            "id": "b",
+            "notes": "",
+            "picture": null,
+            "sound": null,
+            "style": {
+              "headline": {
+                "color": "#0000FF"
+              }
+            },
+            "text": "",
+            "title": "B",
+            "type": "billboard",
+            "video": null
+          },
+          "type": "replaceSlide"
+        }
+      ],
+      "expected": {
+        "categories": [
+          {
+            "background": {
+              "file": "media/film.mp4",
+              "muted": true,
+              "repeat": true,
+              "sync": false
+            },
+            "id": "c1",
+            "name": "Film",
+            "style": {
+              "headline": {
+                "color": "#0000FF"
+              }
+            }
+          }
+        ],
+        "schemaVersion": 5,
+        "slides": [
+          {
+            "background": {
+              "file": "media/film.mp4",
+              "muted": true,
+              "repeat": true,
+              "sync": false
+            },
+            "category": "c1",
+            "id": "a",
+            "notes": "",
+            "picture": null,
+            "sound": null,
+            "style": {
+              "headline": {
+                "color": "#0000FF"
+              }
+            },
+            "text": "",
+            "title": "A",
+            "type": "billboard",
+            "video": null
+          },
+          {
+            "background": {
+              "file": "media/kept.mp4",
+              "muted": true,
+              "repeat": true,
+              "sync": false
+            },
+            "category": "c1",
+            "id": "b",
+            "notes": "",
+            "picture": null,
+            "sound": null,
+            "style": {
+              "headline": {
+                "color": "#0000FF"
+              }
+            },
+            "text": "",
+            "title": "B",
+            "type": "billboard",
+            "video": null
+          }
+        ],
+        "theme": null,
+        "title": "Q"
+      }
     }
   ]
 }

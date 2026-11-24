@@ -106,11 +106,18 @@ rather than replacing them:
 
 The page's instructions say what a quiz looks like when the quizmaster
 gives only a topic: how many rounds and questions, which kinds, time and
-points, difficulty, and where to save it. The defaults are in the app's
+points and difficulty. The defaults are in the app's
 language (`crates/quiz-ai/src/instructions/`) and make three rounds of six
 questions; the quizmaster changes them in the page (up to 4000 characters)
 and *Restore default* brings the defaults back. What they ask for in the
-chat wins over them.
+chat wins over them. They are written in plain words, with the app's own
+names for slides (info slide, End of round, Final ranking, Answer
+explanation, questions everyone answers, fastest-finger questions);
+`settings::SLIDE_WORDS` tells a model which format names those are. Studio's
+AI assistant follows them too: they go after its instructions. What only a
+quiz written over MCP needs (its `settings.language`, media only from the
+folders, saving the `.quiz` file) the server adds to them itself
+(`mcp.rs` `QUIZ_RULES`).
 
 The app keeps them in `ai.json` in its data folder, with the folder the AI
 works in. The server's `quiz_format` tool gives them first, before the
@@ -185,10 +192,19 @@ speaks the OpenAI chat completions API, with no account and no API key:
 | --- | --- | --- |
 | Ollama | `http://localhost:11434/v1` (the default) | Ollama, "OpenAI compatibility", https://docs.ollama.com/api/openai-compatibility |
 | LM Studio (start its server) | `http://localhost:1234/v1` | LM Studio, "OpenAI Compatibility Endpoints", https://lmstudio.ai/docs/developer/openai-compat |
-| llama.cpp's `llama-server`, vLLM and others | their `/v1` address | |
+| Jan | `http://localhost:1337/v1` | Jan, "API Server", https://jan.ai/docs/desktop/api-server |
+| llama.cpp's `llama-server` | `http://localhost:8080/v1` | llama.cpp, "llama-server", https://github.com/ggml-org/llama.cpp/tree/master/tools/server |
+| vLLM and others | their `/v1` address | |
 
-File › AI assistants lists the server's models (`GET /models`) and keeps
-the one chosen in `ai.json` (`localModel`). Signing in with a ChatGPT,
+The app looks for a server at each of these addresses, and at the chosen
+one's, all at once, each within 2.5 seconds in all (`ai_find_local_models`,
+`local_model::KNOWN_SERVERS`), and lists the models of every server that
+answers `GET /models`. The same server under another spelling of this
+computer (`127.0.0.1` for `localhost`) is asked once. File › AI assistants
+and the AI panel (until a model is chosen) show them; one click uses a
+model. In the AI panel, while none is chosen, the only model found is used
+at once; File › AI assistants only lists them. Another address goes under "A server at
+another address". The choice is kept in `ai.json` (`localModel`). Signing in with a ChatGPT,
 Claude or Gemini subscription is not offered: Anthropic and Google forbid
 using those logins in other apps (The Register, 2026-02-20,
 https://www.theregister.com/software/2026/02/20/anthropic-clarifies-ban-on-third-party-tool-access-to-claude/5014546;
@@ -367,6 +383,22 @@ writes. No address is needed:
 4. The search results and the pages' text, without menus repeated from
    page to page, go to the model after the files, at most 14,000
    characters, each page its share.
+
+What a page says is data, never instructions (prompt injection, OWASP
+LLM01, https://genai.owasp.org/llmrisk/llm01-prompt-injection/): the text
+goes between `<<<WEB TEXT` and `WEB TEXT>>>`; `web_text` cuts every run
+of three or more `<` or `>` in the page (also full-width and guillemet
+look-alikes) to two, so the page has nothing that reads like those marks,
+and both the questions' and the chat's
+instructions tell the model to take only facts from it and to ignore what
+it asks. Once anything was read from the internet in a conversation, the
+research plan reads only the quizmaster's own messages, not the model's
+replies, so a page repeated in a reply cannot choose what is looked up
+next; before that it reads the model's replies too, so "Yes, look it up"
+keeps the subject the model proposed. This makes an injected page harder to obey, not
+impossible; what it could still do is limited: the model has no tools,
+its reply is only quiz changes the app checks, and one undo takes them
+back.
 
 Pages on this computer or the local network are read only when the request
 names their address. A search result, a link or a redirect cannot lead

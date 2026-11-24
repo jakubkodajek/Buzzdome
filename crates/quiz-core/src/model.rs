@@ -962,21 +962,6 @@ impl Quiz {
         self.welcome.rename_media(renamed);
     }
 
-    /// Forgets every media reference outside the quiz's media folder
-    /// (`is_safe_reference`), wherever `media_files` finds one: on the
-    /// slides, the categories, the sounds and the welcome screen. For a quiz
-    /// written by someone the app does not trust, such as an AI model.
-    pub fn drop_unsafe_media(&mut self) {
-        for slide in &mut self.slides {
-            slide.drop_unsafe_media();
-        }
-        for category in &mut self.categories {
-            category.drop_unsafe_media();
-        }
-        self.sounds.drop_unsafe_media();
-        self.welcome.drop_unsafe_media();
-    }
-
     /// What looks unfinished but plays (`Problem::is_warning`): no slides,
     /// a question with no text, an empty answer. Never in `validate`.
     pub fn warnings(&self) -> Vec<ValidationError> {
@@ -1847,7 +1832,11 @@ mod tests {
         quiz.sounds.slots.insert(SoundSlot::Wrong, SoundChoice::File("media/no.wav".into()));
         quiz.welcome.logo = Some("..\\x.png".into());
         quiz.welcome.intro = Some("media/intro.mp4".into());
-        quiz.drop_unsafe_media();
+        // Each part forgets its own: what quiz_edits does with an AI model's changes.
+        quiz.slides.iter_mut().for_each(Slide::drop_unsafe_media);
+        quiz.categories.iter_mut().for_each(Category::drop_unsafe_media);
+        quiz.sounds.drop_unsafe_media();
+        quiz.welcome.drop_unsafe_media();
         assert_eq!(quiz.media_files().into_iter().collect::<Vec<_>>(), ["media/hall.mp4", "media/intro.mp4", "media/no.wav", "media/song.mp3"]);
         assert_eq!((quiz.slides[0].picture.as_deref(), quiz.welcome.logo.as_deref()), (None, None));
     }
