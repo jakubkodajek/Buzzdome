@@ -15,8 +15,8 @@ const quiz: Quiz = {
 const ids = (q: Quiz) => q.slides.map((s) => s.id);
 let n = 0;
 const random = () => `n${++n}`;
-const made = (q: Quiz, changes: QuizChange[]) => {
-  const result = changeEdits(q, changes, random);
+const made = (q: Quiz, changes: QuizChange[], asked: Quiz = q) => {
+  const result = changeEdits(q, asked, changes, random);
   return { ...result, quiz: applyEdit(q, result.edit) };
 };
 
@@ -34,7 +34,7 @@ describe("the AI assistant's changes", () => {
     expect(ids(result.quiz)).toEqual(["c", "b", result.added[0]]);
     expect(result.quiz.slides[1].notes).toBe("nové");
     expect(result.quiz.title).toBe("Města");
-    expect(result.counts).toEqual({ added: 1, changed: 1, removed: 1, moved: 1, quiz: 1 });
+    expect(result.counts).toEqual({ added: 1, changed: 1, removed: 1, moved: 1, quiz: 1, skipped: 0 });
     expect(changeCount(result.counts)).toBe(5);
     let history = startHistory(quiz);
     history = historyReducer(history, { type: "edit", edit: result.edit, at: 0 });
@@ -66,6 +66,19 @@ describe("the AI assistant's changes", () => {
     ]);
     expect(result.edit).toEqual({ type: "batch", edits: [] });
     expect(changeCount(result.counts)).toBe(0);
+  });
+
+  it("keep what the quizmaster changed while the model wrote", () => {
+    const typed: Quiz = { ...quiz, title: "Můj název", slides: quiz.slides.map((s) => (s.id === "b" ? { ...s, notes: "moje" } : s)) };
+    const result = made(typed, [
+      { type: "replaceSlide", slide: { ...quiz.slides[1], notes: "modelu" } },
+      { type: "replaceSlide", slide: { ...quiz.slides[0], notes: "modelu" } },
+      { type: "setTitle", title: "Model" },
+    ], quiz);
+    expect(result.quiz.title).toBe("Můj název");
+    expect(result.quiz.slides[1].notes).toBe("moje");
+    expect(result.quiz.slides[0].notes).toBe("modelu");
+    expect(result.counts).toMatchObject({ changed: 1, quiz: 0, skipped: 2 });
   });
 
   it("change the categories first, so new slides take on a new category's look", () => {

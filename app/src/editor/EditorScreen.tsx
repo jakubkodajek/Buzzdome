@@ -29,7 +29,7 @@ import { ThemeContext } from "../theme/context";
 import { useLatest, useWindowTitle } from "../hooks";
 import { createStore, useStore } from "../store";
 import type { StringKey } from "../i18n";
-import type { Checked, EditorDraft, QuizChange, Slide, ValidationError } from "../types";
+import type { Checked, EditorDraft, Quiz, QuizChange, Slide, ValidationError } from "../types";
 import type { DraftOperation } from "./draft-session";
 import { actionButton, tooltip, useActionKeys, type Action, type ActionId, type Actions } from "./actions";
 import { Backstage, type BackstagePage } from "./Backstage";
@@ -260,15 +260,15 @@ function Studio({ editor, open, ask, onExit }: { editor: QuizEditor; open: OpenQ
     return inserted;
   });
   // The AI assistant's changes go only into the draft they were asked for: their media are copied into it.
-  const changeAsked = (draft: string, changes: QuizChange[]) => {
+  const changeAsked = (draft: string, asked: Quiz, changes: QuizChange[]) => {
     const { quiz: now, draftId } = latest.current;
     if (draftId !== draft || !now) return null;
-    const made = changeEdits(now, changes);
+    const made = changeEdits(now, asked, changes);
     editor.edit(made.edit);
     // What was added is selected, so the quizmaster sees it.
     const first = made.added.length > 0 ? applyEdit(now, made.edit).slides.findIndex((s) => s.id === made.added[0]) : -1;
     if (first >= 0) list.select(first);
-    return changeCount(made.counts);
+    return { made: changeCount(made.counts), skipped: made.counts.skipped };
   };
   const aiPanelShown = aiOpen && view !== "categories" && open !== null;
   // The backend refuses what a show cannot play (not a category's problems,

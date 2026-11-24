@@ -43,8 +43,8 @@ copy the media the quiz uses into its folder with add_media, \
 write the quiz with write_quiz and fix the problems it reports (change_quiz changes a quiz written before, slide by slide, as the editor does), then save_quiz_file makes the .quiz file \
 the quizmaster opens in Buzzdome (File > Open). Use absolute paths. \
 add_media copies only files inside those folders: save a file you make or download into one of them first. \
-A quiz can set everything the format describes, such as its theme (list_themes shows them), welcome screen, sounds, \
-reading aloud and jokers; leave out what the quizmaster's instructions do not ask for.",
+A quiz can set everything the format describes, such as its theme (list_themes shows them), slides' look and fonts \
+(list_fonts lists the installed ones), welcome screen, sounds, reading aloud and jokers; leave out what the quizmaster's instructions do not ask for.",
         roots.describe()
     )
 }
@@ -60,6 +60,8 @@ pub struct Context {
     pub settings: PathBuf,
     /// The themes this app has, the default first (the app's `list_themes`).
     pub themes: Vec<quiz_core::Theme>,
+    /// Reads the fonts installed on this computer, when the assistant asks.
+    pub fonts: fn() -> Vec<String>,
 }
 
 /// JSON-RPC error codes.
@@ -279,7 +281,7 @@ fn path_property(description: &str) -> Value {
 const QUIZMASTER_INSTRUCTIONS: &str =
     "The quizmaster's instructions for every quiz, which they write in Buzzdome. Follow them; what the quizmaster asks for in the chat wins over them:";
 
-const TOOLS: [Tool; 11] = [
+const TOOLS: [Tool; 12] = [
     Tool {
         name: "quiz_format",
         title: "Read the quiz format",
@@ -300,6 +302,15 @@ const TOOLS: [Tool; 11] = [
         read_only: true,
         input: || object(json!({}), &[]),
         run: |args| Ok(json_block(&theme_choices(&args.context.themes))),
+    },
+    Tool {
+        name: "list_fonts",
+        title: "List fonts",
+        description: "The fonts installed on this computer, which a slide's or category's style can name as \"font\". \
+                      A font that is not installed where the quiz is shown falls back to the theme's.",
+        read_only: true,
+        input: || object(json!({}), &[]),
+        run: |args| Ok(json_block(&(args.context.fonts)())),
     },
     Tool {
         name: "list_media_files",
@@ -387,15 +398,16 @@ const TOOLS: [Tool; 11] = [
             let themes: Vec<String> = args.context.themes.iter().map(|theme| theme.id.clone()).collect();
             let seed = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(1, |t| t.as_nanos() as u64);
             let resolved = crate::quiz_edits::resolve(&quiz, &edits, &[], None, &themes, seed);
+            let made = edits.changes.len() - resolved.left_out;
+            let told = format!("Made {made} of {} changes; {} could not be read and were left out.", edits.changes.len(), resolved.left_out);
+            if resolved.changes.is_empty() {
+                // Nothing to write: quiz.json stays as it is.
+                return Ok(vec![text_block(&told)]);
+            }
             let changed = crate::quiz_edits::apply(&quiz, &resolved.changes);
             let json = serde_json::to_string_pretty(&changed).expect("a quiz serializes");
             let check = workbench::write_quiz(&folder, &json).map_err(worded)?;
-            let mut content = vec![text_block(&format!(
-                "Made {} of {} changes; {} could not be read and were left out.",
-                resolved.changes.len(),
-                edits.changes.len(),
-                resolved.left_out
-            ))];
+            let mut content = vec![text_block(&told)];
             content.extend(checked(&noted(check, args.context), "The quiz is ready: save_quiz_file makes the .quiz file."));
             Ok(content)
         },
@@ -490,7 +502,7 @@ mod tests {
     /// A server that works in `roots`, with the settings in `settings`.
     fn context(roots: &[&Path], settings: PathBuf) -> Context {
         let roots = Roots::new(roots.iter().map(|root| crate::roots::allow(root, &[]).unwrap()).collect());
-        Context { version: "1.2.3".into(), roots, settings, themes: Vec::new() }
+        Context { version: "1.2.3".into(), roots, settings, themes: Vec::new(), fonts: || vec!["Arial".into(), "Segoe UI".into()] }
     }
 
     /// The replies to `messages`, sent one per line, as a client reads them,
@@ -532,9 +544,9 @@ mod tests {
         let tools: Vec<&str> = replies[1]["result"]["tools"].as_array().unwrap().iter().map(|t| t["name"].as_str().unwrap()).collect();
         assert_eq!(
             tools,
-            ["quiz_format", "list_themes", "list_media_files", "look_at_picture", "add_media", "write_quiz", "change_quiz", "read_quiz", "check_quiz", "save_quiz_file", "unpack_quiz_file"]
+            ["quiz_format", "list_themes", "list_fonts", "list_media_files", "look_at_picture", "add_media", "write_quiz", "change_quiz", "read_quiz", "check_quiz", "save_quiz_file", "unpack_quiz_file"]
         );
-        let write = &replies[1]["result"]["tools"][5]["inputSchema"];
+        let write = &replies[1]["result"]["tools"][6]["inputSchema"];
         assert_eq!(write["$defs"]["Quiz"]["required"], json!(["schemaVersion", "title"]));
         assert!(write["$defs"]["Slide"].is_object());
         assert_eq!(replies[2], json!({ "jsonrpc": "2.0", "id": 3, "result": {} }));
@@ -598,6 +610,13 @@ mod tests {
         assert!(text(&replies[7]).contains("exists already"), "{}", text(&replies[7]));
         assert_eq!(replies[8]["result"]["isError"], false, "{}", text(&replies[8]));
         assert!(text(&replies[9]).contains("Capital of Moravia?"));
+    }
+
+    #[test]
+    fn the_assistant_hears_which_fonts_are_installed() {
+        let dir = scratch("mcp-fonts");
+        let replies = session(&[&dir], &[call_tool(1, "list_fonts", json!({}))]);
+        assert!(text(&replies[0]).contains("Segoe UI"), "{}", text(&replies[0]));
     }
 
     #[test]
@@ -719,7 +738,7 @@ mod tests {
         input.extend(vec![b'x'; MAX_MESSAGE_BYTES as usize + 10]);
         input.extend(b"\n{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"ping\"}\n");
         let mut output = Vec::new();
-        let context = Context { version: "1".into(), roots: Roots::default(), settings: PathBuf::new(), themes: Vec::new() };
+        let context = Context { version: "1".into(), roots: Roots::default(), settings: PathBuf::new(), themes: Vec::new(), fonts: Vec::new };
         serve(&input[..], &mut output, &context).unwrap();
         let replies: Vec<Value> = String::from_utf8(output).unwrap().lines().map(|l| serde_json::from_str(l).unwrap()).collect();
         let codes: Vec<&Value> = replies.iter().map(|r| &r["error"]["code"]).collect();

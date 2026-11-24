@@ -18,7 +18,7 @@ pub async fn installed_fonts() -> Vec<String> {
     FONTS.get_or_init(|| fonts).clone()
 }
 
-fn read_installed() -> Vec<String> {
+pub(crate) fn read_installed() -> Vec<String> {
     let mut fonts = fontdb::Database::new();
     fonts.load_system_fonts();
     family_names(fonts.faces().filter_map(|face| face.families.first().map(|(name, _)| name.clone())))

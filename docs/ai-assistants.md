@@ -164,11 +164,12 @@ a `.quiz` file.
 | Tool | What it does |
 | --- | --- |
 | `quiz_format` | The quizmaster's instructions, then the format guide and the JSON Schema of `quiz.json`. |
+| `list_fonts` | The fonts installed on this computer, which a slide's or category's style can name. |
 | `list_media_files` | The pictures, sounds and videos in a folder and the folders in it (4 deep, the nearest 1000 files; folders it cannot read are passed over). |
 | `look_at_picture` | Shows the assistant a PNG, JPEG, GIF or WebP picture of up to 3 MB. |
 | `add_media` | Copies files into a quiz folder and returns their names in the quiz (`media/...`). |
 | `write_quiz` | Writes a whole quiz as the folder's `quiz.json` and lists its problems. |
-| `change_quiz` | Changes a folder's `quiz.json` as Studio's editor does: adds, edits (a JSON merge patch, RFC 7386), deletes and moves slides by their number, and changes the quiz's title, theme, settings, sounds, welcome screen and categories; the same changes Studio's AI assistant makes (`quiz_ai::quiz_edits`). It says how many were made and left out, and lists the quiz's problems. |
+| `change_quiz` | Changes a folder's `quiz.json` as Studio's editor does: adds, edits (a JSON merge patch, RFC 7386), deletes and moves slides by their number, and changes the quiz's title, theme, settings, sounds, welcome screen and categories; the same changes Studio's AI assistant makes (`quiz_ai::quiz_edits`). A slide given a category takes on its look, as in the editor. It says how many were made and left out, and lists the quiz's problems. |
 | `read_quiz` | Returns a quiz folder's `quiz.json`. |
 | `check_quiz` | Checks a quiz folder or `.quiz` file as the app does, without unpacking the file's media. |
 | `save_quiz_file` | Makes the `.quiz` file; refuses a quiz with problems, and an existing file unless `replace` is given. |
@@ -211,8 +212,10 @@ the conversation so far, newest turns first within the text budget, then
 the message with the files; plain text, streamed word by word to the
 panel). The quizmaster refines it in more messages. The model sees the whole quiz
 in every message (`quiz_edits::quiz_view`: the quiz's own fields as
-`quiz.json` writes them, each slide on a line numbered from 1, in short
-when the quiz is long, the selected slide and the themes), so it can talk
+`quiz.json` writes them, each slide on a line numbered from 1; within the
+text budget the slides nearest the selected one in full, then in short,
+and the farthest left out by their numbers; the themes and the fonts
+installed on this computer), so it can talk
 about changing what is there as well as about new questions. Make changes
 (Ctrl+Enter) then has the model make the changes agreed in the
 conversation: anything the editor can do (Jakub, 2026-11-24):
@@ -256,12 +259,21 @@ conversation: anything the editor can do (Jakub, 2026-11-24):
    saw. `right` and `wrong` become shuffled answers with the right one
    correct; `attachment:N` becomes the file copied into the draft (a
    picture, video or sound as what the file is); a theme must be one the
-   app has; a new category gets an id.
+   app has; a new category gets an id. A second change of a slide or of
+   the settings builds on the first, slides added at one place keep the
+   order written, and a place after a slide deleted is after the slide
+   before it. A slide keeps only files in the quiz's media folder, a
+   picture or a video, and a category the quiz has. A test checks that the
+   guide names every field of the quiz format (fonts, colours, fills,
+   clocks, clip parts, sounds of each moment), so the model can set
+   whatever the editor can.
 5. The editor makes the changes as one undo step (`editor/ai-changes.ts`,
    a `batch` of its own edits): new slides get fresh ids and their
    category's look, the categories change first, and what was added is
-   selected. The panel shows the model's summary and how many changes were
-   made and left out. Changes asked for one quiz are not made in another
+   selected. A slide or field of the quiz the quizmaster changed while the
+   model wrote keeps the quizmaster's change. The panel shows the model's
+   summary and how many changes were made, left out and kept as the
+   quizmaster had them. Changes asked for one quiz are not made in another
    opened meanwhile.
 
 A request stays small (at most 16 pictures and 20,000 characters of

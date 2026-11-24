@@ -1,13 +1,12 @@
-//! Questions from a model running on the quizmaster's computer (Studio's AI
-//! panel, docs/ai-assistants.md): Ollama, LM Studio, llama.cpp's server or
-//! any other server that speaks the OpenAI chat completions API. No key and
-//! no account: the quizmaster gives the server's address and picks a model.
+//! Studio's AI panel asking a model running on the quizmaster's computer
+//! (docs/ai-assistants.md): Ollama, LM Studio, llama.cpp's server or any
+//! other server that speaks the OpenAI chat completions API. No key and no
+//! account: the quizmaster gives the server's address and picks a model.
 //!
-//! Pure: the app sends the requests. Here are what is sent (`request`), what
-//! is made of the reply (`read_reply`) and how its questions become slides:
-//! as rows of a sheet with English headings (`draft_table`), which
-//! `quiz_core::import_tables` reads as it reads a spreadsheet, so a question
-//! from a model gets the same defaults and checks as one from a sheet.
+//! Pure: the app sends the requests. Here are what is sent for the
+//! conversation (`chat_request`) and for the changes to the quiz
+//! (`request`), and how the reply is read (`said`, `read_changes`); the
+//! changes themselves are `quiz_edits`.
 
 use crate::quiz_edits::{self, text_of, JSON_STARTS};
 use quiz_core::{Quiz, QuizLanguage};
@@ -46,9 +45,6 @@ pub const MAX_TEXT_CHARS: usize = 20_000;
 /// leaves room there for the instructions, a few pictures and the reply
 /// [no source - estimate: about 3 to 4 characters a token in Czech].
 pub const SMALL_TEXT_CHARS: usize = 4_000;
-/// Most questions taken from one reply.
-pub const MAX_QUESTIONS: usize = 100;
-
 /// Characters of the quiz the model reads at least, even when a request is
 /// asked again shorter (`quiz_edits::quiz_view`).
 pub const MIN_QUIZ_VIEW_CHARS: usize = 6_000;
@@ -213,6 +209,10 @@ pub struct QuestionRequest {
     #[serde(skip)]
     #[ts(skip)]
     pub themes: Vec<(String, String)>,
+    /// The fonts installed on this computer, which the app adds.
+    #[serde(skip)]
+    #[ts(skip)]
+    pub fonts: Vec<String>,
     /// Whether the app may look up on the internet what the request needs
     /// (`research_plan`).
     #[serde(default)]
@@ -428,7 +428,7 @@ fn one_line(text: &str) -> String {
 /// (`web_page::research_text`), and at most `max_text` characters of text
 /// files and of the conversation each.
 pub fn request(model: &LocalModel, asked: &QuestionRequest, research: Option<&str>, max_text: usize) -> Result<Value, RequestError> {
-    let ask = if asked.conversation.is_empty() { "Write questions about the attachments." } else { "Make the changes we agreed on above." };
+    let ask = if asked.conversation.is_empty() { "Make the quiz about the attachments." } else { "Make the changes we agreed on above." };
     Ok(json!({
         "model": model.model,
         "messages": messages(instructions(asked.language), asked, research, max_text, ask)?,
@@ -473,6 +473,7 @@ fn messages(system: String, asked: &QuestionRequest, research: Option<&str>, max
     if let Some(quiz) = &asked.quiz {
         // The quiz has a budget of its own: without it the model cannot change it.
         parts.push(text_part(quiz_edits::quiz_view(quiz, asked.selected, &asked.themes, max_text.max(MIN_QUIZ_VIEW_CHARS))));
+        parts.extend(quiz_edits::fonts_line(&asked.fonts).map(text_part));
     }
     // The conversation, files' text and what was found share `max_text`: the conversation up to half.
     let (mut history, used) = conversation(&asked.conversation, max_text / 2);
@@ -1049,10 +1050,11 @@ mod tests {
     fn the_quiz_goes_with_the_request_and_with_the_chat() {
         let quiz = Quiz::new("Praha", vec![serde_json::from_value(json!({ "id": "s1", "type": "billboard", "title": "Úvod", "text": "" })).unwrap()]);
         let model = LocalModel::new(DEFAULT_URL, "m");
-        let with_quiz = QuestionRequest { quiz: Some(quiz), selected: Some(0), themes: vec![("classic".into(), "Classic".into())], ..asked("Přidej otázku", vec![]) };
+        let with_quiz = QuestionRequest { quiz: Some(quiz), selected: Some(0), themes: vec![("classic".into(), "Classic".into())], fonts: vec!["Segoe UI".into()], ..asked("Přidej otázku", vec![]) };
         for body in [request(&model, &with_quiz, None, MAX_TEXT_CHARS).unwrap(), chat_request(&model, &with_quiz, None, MAX_TEXT_CHARS).unwrap()] {
             let texts: Vec<&str> = body["messages"].as_array().unwrap().last().unwrap()["content"].as_array().unwrap().iter().filter_map(|p| p["text"].as_str()).collect();
             assert!(texts.iter().any(|t| t.contains("\"Praha\"") && t.contains("Úvod") && t.contains("classic")), "{texts:?}");
+            assert!(texts.iter().any(|t| t.contains("Fonts installed") && t.contains("Segoe UI")), "{texts:?}");
         }
         assert!(request(&model, &with_quiz, None, MAX_TEXT_CHARS).unwrap()["messages"][0]["content"].as_str().unwrap().contains("\"action\":\"edit\""));
     }

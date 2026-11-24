@@ -74,8 +74,13 @@ export interface AiPanelProps {
   quiz: Quiz;
   /** The selected slide's index, -1 for none. */
   selected: number;
-  /** Makes the model's changes in the draft `draft` as one undo step; how many it made, or null when another draft is open now. */
-  onChange: (draft: string, changes: QuizChange[]) => number | null;
+  /**
+   * Makes the model's changes, written for the quiz `asked`, in the draft
+   * `draft` as one undo step: how many it made and skipped (the
+   * quizmaster changed the same meanwhile), or null when another draft is
+   * open now.
+   */
+  onChange: (draft: string, asked: Quiz, changes: QuizChange[]) => { made: number; skipped: number } | null;
   /** Opens File › AI assistants, where the model is chosen. */
   onChooseModel: () => void;
   onClose: () => void;
@@ -231,14 +236,16 @@ export function AiPanel({ draftId, language, quiz, selected, onChange, onChooseM
       if (making) {
         const made = await api.editorAskLocalModel(draft, asked, progress);
         if (!current()) return;
-        const changed = onChange(draft, made.changes);
+        const changed = onChange(draft, quiz, made.changes);
         if (made.webFailed) caution(t(made.sources.length > 0 ? "aiPanelWebPartly" : "aiPanelWebFailed"));
         // Said in the conversation, where the quizmaster looks; a quiz opened meanwhile is told apart.
         if (changed === null) caution(t("aiPanelOtherQuiz"));
         else {
           const summary = made.summary === "" ? [] : [entry({ role: "assistant", text: made.summary, cutOff: false, sources: made.sources })];
-          const done = t(changed > 0 ? "aiPanelChanged" : "aiPanelNothingChanged", { n: changed });
-          const note = made.leftOut > 0 ? `${done} ${t("aiPanelLeftOut", { n: made.leftOut })}` : done;
+          const done = t(changed.made > 0 ? "aiPanelChanged" : "aiPanelNothingChanged", { n: changed.made });
+          const left = made.leftOut > 0 ? [t("aiPanelLeftOut", { n: made.leftOut })] : [];
+          const kept = changed.skipped > 0 ? [t("aiPanelKeptYours", { n: changed.skipped })] : [];
+          const note = [done, ...left, ...kept].join(" ");
           change({ entries: [...panelState.get().entries, ...summary, entry({ role: "note", text: note })] });
         }
       } else {
